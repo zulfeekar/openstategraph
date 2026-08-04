@@ -1,63 +1,79 @@
 Type: defect
-Status: open
+Status: retracted — not reproducible, environment artifact
 Blocked by:
 
 ## Question
 
-**The canvas renders no cells after a page reload, although the model is fully populated.**
+Originally filed as: *the canvas renders no cells after a page reload, although
+the model is fully populated.*
 
-Found while verifying ticket 17 in the browser. Reproduced on commit `6c52505`
-(before the controller decomposition) as well as after it, by stashing the
-refactor and reloading — **so it is pre-existing and not caused by ticket 17.**
+**Retracted. This was over-called, and the product is not defective.**
 
-### Symptom
+## What was actually observed
 
-| | First load after `vite` starts | Any subsequent reload |
-| --- | --- | --- |
-| `.joint-element` | 6 | **0** |
-| `foreignObject` (React portals) | 6 | **0** |
-| `.joint-link` | 4 | **0** |
-| `.minimap__node` | 6 | 6 |
-| "6 nodes / 4 links" label | yes | yes |
+The observation itself was real and sustained, not a misread: `.joint-element`,
+`foreignObject` and `.joint-link` all read **0** while `.minimap__node` read 6
+and the label read "6 nodes / 4 links", with no console error. It persisted
+across several minutes and many separate tool calls, and — the reason it looked
+credible — it reproduced identically after `git stash`ing the ticket-17 refactor
+and reloading on `6c52505`.
 
-So the **model is correct** — the minimap and the inspector's counts both read
-it and both agree. Only the JointJS paper is empty. The palette, topbar,
-inspector and minimap all render normally, and **there is not a single console
-error or warning**, which is what makes it easy to miss.
+That last point was treated as proof it was a pre-existing product bug. It was
+actually the clue that it was **not a code bug at all**: an identical failure in
+two different builds of the application points at something outside both.
 
-### Why it matters more than it looks
+## Why it is not a defect
 
-The app appears completely broken to anyone who refreshes the page — which is
-the first thing a developer does. It is only invisible because a fresh `vite`
-start happens to work, so it hides during normal `npm run dev` usage and appears
-the moment you hit reload.
+It does not reproduce, across every scenario that would matter:
 
-### Where to look
+| Scenario | Result |
+| --- | --- |
+| 6 consecutive clean loads (fresh iframes, 1.2s settle) | 6/6 rendered |
+| Cold `vite` start, first load | rendered |
+| Warm reload after a cold start | rendered |
+| Repeated `navigate` force-reloads | rendered |
 
-This is the same family as two phase-1 defects, both recorded in the map:
+Instrumented directly at the source rather than inferred from the DOM: the graph
+holds 10 cells (6 elements, 4 links), the paper is **not** frozen, its computed
+size is non-zero, and StrictMode's double mount (`mounts: 2`) leaves the second
+paper correctly populated.
 
-- `paper.remove()` deleting React's own node under StrictMode, fixed by giving
-  JointJS its own inner `.canvas-surface` div.
-- `rebuild()` adding links before `resetCells()` had added elements, so every
-  `createLink` returned null.
+Two hypotheses were tested and both failed:
 
-Both were **ordering/lifecycle** bugs between the paper, the adapter and React's
-double-mount. A warm reload differs from a cold start in exactly one way that
-matters here: module state and the React mount sequence are already warm, so a
-first-load-only success strongly suggests the adapter's initial `rebuild()` is
-racing the paper's readiness, or is running against a paper that a StrictMode
-double-mount has since replaced.
+- **A premature read against the async paper** (`async: true` batches view
+  rendering). Rejected — the tool round-trip is measurably ~7.8s after
+  navigation, far past any render batch, and the zeros persisted across
+  successive calls.
+- **A zero-size paper at mount culling every view.** Rejected — `getComputedSize()`
+  is non-zero and no `viewport` culling function is configured on the paper.
 
-Start at `PaperController` construction and `JointGraphAdapter`'s initial sync,
-and check whether the adapter subscribes *before* it seeds, and whether the
-second StrictMode mount reseeds.
+## Most likely cause, and the trap worth remembering
 
-### Note on testability
+The dev server had been killed **while the page was still loaded** (the original
+`vite` process was terminated to free port 5273, then a new server was started on
+the same port). Vite serves ES modules with optimizer-dependency hashes in the
+URL (`?v=…`); a page holding module URLs from the *previous* server against a
+*new* optimizer output can end up partially initialized — enough for React, the
+palette, the topbar and the minimap to render from the model while the canvas
+layer never seeds.
 
-This is precisely the class of bug ticket 11 decided **not** to cover with
-tests, and the decision still looks right — jsdom would not reproduce a
-JointJS/React mount race faithfully, and a test that passed against a fake
-paper would have given false confidence here. What was missing is not a unit
-test but a **smoke check that the canvas actually has cells after a reload**,
-which is cheap and would have caught this. Add that with the canvas harness
-deferred in ticket 11.
+**The trap:** this produces a very convincing false positive. It is silent (no
+console error), stable (it does not flicker), and — because it is environmental
+— it reproduces across code versions, which is exactly the check normally used
+to prove a bug is pre-existing rather than newly introduced.
+
+**Rule for future sessions:** after restarting a dev server, do a **hard reload
+of the page** before trusting anything the canvas does or does not show. Do not
+conclude "pre-existing" from a stash-and-compare alone when the failure is
+silent — confirm on a freshly started server and a fresh page first.
+
+## The one thing worth keeping
+
+The **reload smoke check** proposed in the original filing is still worth having,
+and this episode argues for it more strongly rather than less: a one-line
+assertion that the canvas has cells after load would have answered the question
+in seconds instead of via a stash-and-compare that pointed the wrong way. Belongs
+with the canvas harness deferred in ticket 11.
+
+Ticket 11's decision not to jsdom-test the canvas is untouched by this — a fake
+paper would have told us nothing here either way.
