@@ -76,17 +76,18 @@
 
 **Done:**
 - Phase 1 editor built and verified end to end — canvas, design system, MVC engine, 4 LLM providers, runs the seeded demo against Mock (424 tokens, renders a Markdown table).
-- 8 of 25 tickets resolved — **all research tickets**. See `map.md` → *Decisions so far*.
+- **9 of 25 tickets resolved** — all research, plus the git baseline. See `map.md` → *Decisions so far*.
 - `CLAUDE.md` written: architecture non-negotiables.
+- **Git initialised.** Baseline commit `b86018a`, 149 files. `git log` is now a valid way to see state.
 
 **Frontier (takeable now):**
+- `11-tdd-strategy` — `grilling`; **newly unblocked by the git baseline**
 - `08-entity-hierarchy` — `grilling`, **the crux**; 5 tickets unblock behind it
 - `12-repo-topology` — `grilling`
 - `15-codegen-strategy` — `research`
-- `01-git-baseline` — `task`
 
-**Immediate next:** `01-git-baseline`, then `11-tdd-strategy` (tests are themselves the best handover artifact — a cold session can run them and know the state), then `08-entity-hierarchy`.
+**Immediate next:** `11-tdd-strategy`. Reason: there are zero tests, CLAUDE.md forbids refactoring load-bearing code without them, and **a test suite is itself the best handover artifact** — a cold session runs `npm test` and learns the state in seconds rather than reading 17k lines. It also unblocks `17` (god-class decomposition) and `19` (canonical serialization), both of which are prerequisites for the file layout.
 
-**Open question waiting on the human:** the performance budget in ticket 11 is *proposed, not agreed* — 500 nodes / 800 edges / 60fps pan. Confirm or veto.
+**Open question waiting on the human:** the performance budget in ticket 11 is *proposed, not agreed* — 500 nodes / 800 edges / 60fps pan / <16ms keystroke-to-paint / zero heap growth over 100 add-delete-undo cycles. Confirm or veto before writing the perf tests.
 
 **Nothing is claimed.** No work in progress.
