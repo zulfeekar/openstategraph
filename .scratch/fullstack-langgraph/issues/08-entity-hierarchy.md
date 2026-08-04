@@ -136,3 +136,100 @@ Decide concretely:
 - **`resolveMiddleware(config) -> list` on the base**, as the single place config becomes middleware. Then settle the hard part: **how a subclass contributes middleware at a specific position**, given LangChain middleware order is significant and `super() + [mine]` can only append. Options: an ordered slot/priority scheme, an explicit pipeline the base assembles from named stages, or subclasses declaring `(stage, middleware)` pairs. Pick one — appending-only will not survive contact with HITL, which must wrap tool calls rather than sit at the end.
 - **The cross-family cases.** Retry, token accounting and logging are wanted by agent nodes *and* tool nodes, which are different families. Per CLAUDE.md these are collaborators, not a shared superclass. Decide the mechanism (middleware registry? decorator applied at compile time?) and prove it does not force a common ancestor to fatten.
 - **Where this lives in Python vs TypeScript.** The Python side composes real LangChain middleware; the TypeScript side only ever holds *config* (it never runs middleware). So the "shared base" means two different things per language — the TS base shares the schema, the Python base shares the resolution. Make that split explicit, and confirm it survives ticket 02's finding that Pydantic flattens inheritance in generated output.
+
+---
+
+## Middleware composition — resolved from the docs, and it reshapes the class tree
+
+Verified against `docs-langchain`. Two findings, the second decisive.
+
+### 1. List position means three different things at once
+
+| Hook | Order |
+| --- | --- |
+| `before_*` | first to last |
+| `after_*` | **last to first (reverse)** |
+| `wrap_*` | nested — first middleware wraps all others |
+
+So `super().resolveMiddleware() + [mine]` does **not** mean "mine runs last". It
+means: my `before_*` runs last, my `after_*` runs **first**, and I am the
+*innermost* wrapper. The ticket's worry that appending "will not survive contact
+with HITL" is confirmed, but the reason is worse than stated: **there is no
+single positional semantic to reason about**, so any scheme that expresses
+position as one number — append, prepend, or a priority integer — is
+expressing something that does not exist. A developer setting
+`priority=10` cannot know what they have ordered.
+
+### 2. `create_deep_agent` already solved this, and its answer is not inheritance
+
+`createDeepAgent` "builds middleware in a **fixed order**" — 12 documented
+slots, each conditional on whether the matching config was supplied:
+
+`Skills → Filesystem → SubAgent → Summarization → PatchToolCalls →
+AsyncSubAgent → **your middleware** → harness-profile extras → excluded-tool
+filtering → prompt caching → Memory → HumanInTheLoop`
+
+Three details that carry directly into our design:
+
+- **The order encodes real constraints, with documented reasons.** Skills sits
+  before Filesystem "so skill metadata is available before file tools run";
+  `MemoryMiddleware` sits *after* prompt caching "so updates to injected memory
+  are less likely to invalidate the cache prefix"; HITL is last, which — given
+  `after_*` runs in reverse — is what puts its approval gate *first* among
+  after-model hooks. These are semantic, not arbitrary. A numeric priority
+  exposed to users would let them express an invalid order silently.
+- **User middleware occupies one named slot** (7), not an arbitrary index.
+- **Name-keyed replacement, not accumulation:** "An instance whose `.name`
+  matches one of the built-in entries above **replaces that instance in place**
+  instead of duplicating it."
+
+### Decision
+
+**`resolveMiddleware()` returns an ordered, name-keyed slot table — not a list.**
+The abstract base owns the canonical slot order and the resolution from config; a
+subclass or plugin contributes by *naming a slot*, never by appending. The
+compiler flattens the table to a list as its last step. Replacement is by slot
+name, mirroring the library.
+
+This is CLAUDE.md's rule made concrete: **inherit the capability to compose, do
+not inherit the composition.** The slot table is the capability; the filled
+slots are the composition.
+
+### Consequence: the (A)/(B) tension collapses, and (A) wins on stronger grounds
+
+The ticket proposed (A) siblings vs (B) `DeepAgentNode extends ReactAgentNode`,
+and reasoned that (A) is "likely correct" because authoring and runtime
+construction are different concerns. The docs make it firmer than that:
+
+**`create_deep_agent` is not `create_agent` plus subclassing — it is
+`create_agent` plus a fixed slot assembly.** The relationship the library
+actually expresses is *data*, not inheritance. So `DeepAgentNode` is not
+"`ReactAgentNode` with more behaviour"; it is the same base configuration with a
+different **slot preset**.
+
+Adopt **(A)**, and the class tree stays deliberately shallow:
+
+```
+INode -> BaseNode -> AbstractAgentNode          shared config schema + slot table
+                     |- ReactAgentNode          preset: empty (user slots only)
+                     '- DeepAgentNode           preset: the 12-slot deep stack
+```
+
+A preset is a named, ordered slot table — a value in a `Registry`, not a class.
+This means a third harness arrives as a *registered preset*, touching no class
+and no `core/` file, which is the Open/Closed rule this project already applies
+everywhere else.
+
+It also removes the reason the tree wanted to be deep. Depth was being proposed
+to model "deep agent = react agent + stack"; once the stack is data, the depth
+buys nothing. Per CLAUDE.md — "inheritance must earn itself" — it does not here.
+
+### Still open (needs the user)
+
+- Whether agent *type* is a distinct registered node type per tier or a
+  discriminant on one type. Affects the palette and the inspector, not the
+  compiler.
+- Whether prebuilt agent *shapes* (single loop, orchestrator, router-style) are
+  classes or presets. Note they differ in **topology**, which presets cannot
+  express — a preset changes middleware, not the graph.
+- The `_abstract/` directory name.
