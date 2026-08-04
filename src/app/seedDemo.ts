@@ -79,7 +79,7 @@ export function seedDemoWorkflow(workbench: Workbench): void {
       position: { x: 810, y: 250 },
     });
 
-    // Wired directly rather than through `controller.connect`: the seed is
+    // Wired directly rather than through `controller.edges.connect`: the seed is
     // known-valid, and going through commands would fill the undo stack.
     const connect = (
       source: AbstractNodeModel,

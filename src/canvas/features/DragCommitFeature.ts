@@ -95,10 +95,10 @@ export class DragCommitFeature extends PaperFeature {
         for (const [nodeId, from] of this.snapshot) {
           adapter.element(nodeId)?.position(from.x, from.y);
         }
-        controller.moveNodes(moves);
+        controller.nodes.move(moves);
         // Containment is decided by where the node landed, in the same
         // undo step as the move.
-        controller.reparentByGeometry(moves.map((move) => move.nodeId));
+        controller.grouping.reparentByGeometry(moves.map((move) => move.nodeId));
       }
 
       this.reset();

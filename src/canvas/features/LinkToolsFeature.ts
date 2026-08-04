@@ -86,7 +86,7 @@ export class LinkToolsFeature extends PaperFeature {
             ],
             // Routed through the controller so removing a link is undoable
             // like every other edit, rather than JointJS deleting the cell.
-            action: () => controller.disconnect([edgeId]),
+            action: () => controller.edges.disconnect([edgeId]),
           }),
         ],
       }),

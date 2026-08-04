@@ -76,8 +76,8 @@ export class AutoLayout {
 
     if (moves.length === 0) return;
 
-    this.controller.commands.transact('Auto layout', () => {
-      this.controller.moveNodes(moves, false);
+    this.controller.history.transact('Auto layout', () => {
+      this.controller.nodes.move(moves, false);
     });
   }
 }

@@ -45,7 +45,7 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
   const id = useFieldId('field-');
 
   const set = useCallback(
-    (value: FieldValue) => controller.setField(nodeId, schema.key, value),
+    (value: FieldValue) => controller.nodes.setField(nodeId, schema.key, value),
     [controller, nodeId, schema.key],
   );
 
@@ -192,7 +192,7 @@ function FileField({
     const file = event.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    controller.setFields(
+    controller.nodes.setFields(
       nodeId,
       { [schema.key]: file.name, [schema.contentKey]: text },
       `Load ${file.name}`,

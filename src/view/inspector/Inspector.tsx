@@ -77,7 +77,7 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
             <TextInput
               value={node.title}
               placeholder={definition.label}
-              onChange={(event) => controller.setNodeTitle(node.id, event.target.value)}
+              onChange={(event) => controller.nodes.setTitle(node.id, event.target.value)}
             />
           </Field>
           <p className="inspector__description">{definition.description}</p>
@@ -146,8 +146,8 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
             icon={<Icon glyph={Trash2} size="sm" />}
             onClick={() =>
               node.kind === 'container'
-                ? controller.deleteNodeTree(node.id)
-                : controller.deleteNodes([node.id])
+                ? controller.nodes.deleteTree(node.id)
+                : controller.nodes.delete([node.id])
             }
           >
             Delete node
@@ -166,7 +166,7 @@ function WorkflowInspector({ count }: { count: number }) {
   // recomputed on any change rather than memoised on a narrow dependency.
   const version = useWorkflowVersion();
   const diagnostics = useMemo(
-    () => controller.diagnostics(),
+    () => controller.document.diagnostics(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [controller, version],
   );
@@ -183,7 +183,7 @@ function WorkflowInspector({ count }: { count: number }) {
           <Field label="Name">
             <TextInput
               value={workbench.model.name}
-              onChange={(event) => controller.setWorkflowName(event.target.value)}
+              onChange={(event) => controller.document.setName(event.target.value)}
             />
           </Field>
           <div className="inspector__stats">
@@ -219,8 +219,8 @@ function WorkflowInspector({ count }: { count: number }) {
                 diagnostic={diagnostic}
                 onSelect={() => {
                   if (!diagnostic.nodeId) return;
-                  controller.selectNodes([diagnostic.nodeId]);
-                  paper?.viewport.fit(controller.selectionBounds());
+                  controller.selectionActions.selectNodes([diagnostic.nodeId]);
+                  paper?.viewport.fit(controller.selectionActions.bounds());
                 }}
               />
             ))

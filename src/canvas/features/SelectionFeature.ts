@@ -35,11 +35,11 @@ export class SelectionFeature extends PaperFeature {
       const nodeId = String(view.model.id);
       const additive = event.shiftKey || event.metaKey || event.ctrlKey;
       if (additive) {
-        controller.selectNodes([nodeId], 'toggle');
+        controller.selectionActions.selectNodes([nodeId], 'toggle');
       } else if (!controller.selection.hasNode(nodeId)) {
         // Clicking an already-selected node keeps the whole selection, so a
         // multi-node drag isn't collapsed the moment it starts.
-        controller.selectNodes([nodeId]);
+        controller.selectionActions.selectNodes([nodeId]);
       }
     }) as never);
 
@@ -91,7 +91,7 @@ export class SelectionFeature extends PaperFeature {
             // the user is selecting inside it, not selecting it.
             .filter((element) => !enclosesFully(toRect(element), rect))
             .map((element) => String(element.id));
-          controller.selectNodes(hits, this.bandAdditive ? 'add' : 'replace');
+          controller.selectionActions.selectNodes(hits, this.bandAdditive ? 'add' : 'replace');
         }
       }
       this.hideBand();

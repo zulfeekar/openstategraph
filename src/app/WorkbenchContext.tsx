@@ -183,14 +183,10 @@ export function useNode(nodeId: NodeId): AbstractNodeModel | undefined {
 /** Undo/redo availability, for toolbar enablement. */
 export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
   const { workbench } = useWorkbenchValue();
-  const { commands } = workbench.controller;
+  const { history } = workbench.controller;
   const [state, setState] = useState({ canUndo: false, canRedo: false });
 
-  useEffect(
-    () =>
-      commands.on('changed', ({ canUndo, canRedo }) => setState({ canUndo, canRedo })),
-    [commands],
-  );
+  useEffect(() => history.onChange(setState), [history]);
 
   return state;
 }

@@ -59,7 +59,7 @@ export class KeyboardFeature extends PaperFeature {
 export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonly Shortcut[] {
   const nudge = (dx: number, dy: number, big: boolean) => (ctx: PaperFeatureContext) => {
     const step = big ? CANVAS.gridSize * 5 : CANVAS.gridSize;
-    ctx.controller.nudgeSelection(dx * step, dy * step);
+    ctx.controller.selectionActions.nudge(dx * step, dy * step);
   };
 
   return [
@@ -68,32 +68,32 @@ export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonl
       label: 'Undo',
       group: 'Edit',
       allowInTextEntry: true,
-      run: (ctx) => ctx.controller.undo(),
+      run: (ctx) => ctx.controller.history.undo(),
     },
     {
       keys: 'Mod+Shift+Z',
       label: 'Redo',
       group: 'Edit',
       allowInTextEntry: true,
-      run: (ctx) => ctx.controller.redo(),
+      run: (ctx) => ctx.controller.history.redo(),
     },
     {
       keys: 'Mod+A',
       label: 'Select all',
       group: 'Edit',
-      run: (ctx) => ctx.controller.selectAll(),
+      run: (ctx) => ctx.controller.selectionActions.selectAll(),
     },
     {
       keys: 'Mod+C',
       label: 'Copy',
       group: 'Edit',
-      run: (ctx) => ctx.controller.copySelection(),
+      run: (ctx) => ctx.controller.clipboard.copy(),
     },
     {
       keys: 'Mod+X',
       label: 'Cut',
       group: 'Edit',
-      run: (ctx) => ctx.controller.cutSelection(),
+      run: (ctx) => ctx.controller.clipboard.cut(),
     },
     {
       keys: 'Mod+V',
@@ -103,7 +103,7 @@ export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonl
       // not at the coordinates they were copied from.
       run: (ctx) => {
         const visible = ctx.viewport.visibleRect;
-        ctx.controller.paste({
+        ctx.controller.clipboard.paste({
           x: visible.x + visible.width / 2,
           y: visible.y + visible.height / 2,
         });
@@ -113,19 +113,19 @@ export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonl
       keys: 'Mod+D',
       label: 'Duplicate',
       group: 'Edit',
-      run: (ctx) => ctx.controller.duplicateNodes(ctx.controller.selection.nodes),
+      run: (ctx) => ctx.controller.clipboard.duplicate(ctx.controller.selection.nodes),
     },
     {
       keys: 'Backspace',
       label: 'Delete selection',
       group: 'Edit',
-      run: (ctx) => ctx.controller.deleteSelection(),
+      run: (ctx) => ctx.controller.selectionActions.deleteSelection(),
     },
     {
       keys: 'Delete',
       label: 'Delete selection',
       group: 'Edit',
-      run: (ctx) => ctx.controller.deleteSelection(),
+      run: (ctx) => ctx.controller.selectionActions.deleteSelection(),
     },
     {
       keys: 'Escape',
@@ -185,7 +185,7 @@ export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonl
       keys: 'Mod+Shift+1',
       label: 'Fit to selection',
       group: 'View',
-      run: (ctx) => ctx.viewport.fit(ctx.controller.selectionBounds()),
+      run: (ctx) => ctx.viewport.fit(ctx.controller.selectionActions.bounds()),
     },
 
     ...extra,

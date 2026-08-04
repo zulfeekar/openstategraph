@@ -197,7 +197,7 @@ export function TopBar({
             label="Undo"
             disabled={!canUndo}
             icon={<Icon glyph={Undo2} size="md" />}
-            onClick={() => controller.undo()}
+            onClick={() => controller.history.undo()}
           />
         </Tooltip>
         <Tooltip content="Redo" shortcut={shortcutText('Mod+Shift+Z')}>
@@ -205,7 +205,7 @@ export function TopBar({
             label="Redo"
             disabled={!canRedo}
             icon={<Icon glyph={Redo2} size="md" />}
-            onClick={() => controller.redo()}
+            onClick={() => controller.history.redo()}
           />
         </Tooltip>
 

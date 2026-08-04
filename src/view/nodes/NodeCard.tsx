@@ -111,7 +111,7 @@ export function NodeCard({ node }: NodeCardProps) {
     // Keep the document's idea of the node's height in step with what was
     // rendered, so an export or a reload reproduces the same layout.
     if (Math.abs(node.size.height - height) >= 1) {
-      controller.applyMeasuredSize(node.id, { width: node.size.width, height });
+      controller.nodes.applyMeasuredSize(node.id, { width: node.size.width, height });
     }
   }, [controller, node, paper]);
 
@@ -147,15 +147,15 @@ export function NodeCard({ node }: NodeCardProps) {
       label: 'Duplicate',
       icon: Copy,
       shortcut: '⌘D',
-      onSelect: () => controller.duplicateNodes([node.id]),
+      onSelect: () => controller.clipboard.duplicate([node.id]),
     },
     {
       id: 'focus',
       label: 'Zoom to node',
       icon: Focus,
       onSelect: () => {
-        controller.selectNodes([node.id]);
-        paper?.viewport.fit(controller.selectionBounds());
+        controller.selectionActions.selectNodes([node.id]);
+        paper?.viewport.fit(controller.selectionActions.bounds());
       },
     },
     ...(node.kind === 'container'
@@ -164,7 +164,7 @@ export function NodeCard({ node }: NodeCardProps) {
             id: 'ungroup',
             label: 'Release contents',
             icon: Ungroup,
-            onSelect: () => controller.ungroup(node.id),
+            onSelect: () => controller.grouping.ungroup(node.id),
           } satisfies MenuEntry,
         ]
       : []),
@@ -180,8 +180,8 @@ export function NodeCard({ node }: NodeCardProps) {
       shortcut: '⌫',
       onSelect: () =>
         node.kind === 'container'
-          ? controller.deleteNodeTree(node.id)
-          : controller.deleteNodes([node.id]),
+          ? controller.nodes.deleteTree(node.id)
+          : controller.nodes.delete([node.id]),
     },
   ];
 
@@ -347,7 +347,7 @@ function ResizeGrip({ node }: { node: AbstractNodeModel }) {
         target.setPointerCapture(event.pointerId);
 
         const onMove = (move: PointerEvent) => {
-          controller.resizeNode(node.id, {
+          controller.nodes.resize(node.id, {
             width: Math.max(200, origin.width + (move.clientX - start.x) / zoom),
             height: Math.max(140, origin.height + (move.clientY - start.y) / zoom),
           });

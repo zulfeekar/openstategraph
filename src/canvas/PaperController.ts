@@ -127,7 +127,7 @@ export class PaperController implements IDisposable {
       markAvailable: true,
       validateMagnet,
       validateConnection: createConnectionValidator((source, target) =>
-        controller.canConnect(source, target),
+        controller.edges.canConnect(source, target),
       ),
 
       // ---- embedding ----

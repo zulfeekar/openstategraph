@@ -38,7 +38,7 @@ export class ConnectionFeature extends PaperFeature {
 
       if (!source || !target) return;
 
-      const outcome = controller.connect(source, target);
+      const outcome = controller.edges.connect(source, target);
       if (!outcome.ok) this.setRejection(outcome.message ?? 'Invalid connection');
       else this.setRejection(null);
     }) as never);

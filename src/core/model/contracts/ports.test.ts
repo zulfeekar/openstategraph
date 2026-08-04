@@ -125,11 +125,11 @@ describe('capacity is enforced on the tool bus', () => {
     const first = addNode(workbench, TYPE.redditSearch);
     const second = addNode(workbench, TYPE.redditSearch);
 
-    workbench.controller.connect(
+    workbench.controller.edges.connect(
       { nodeId: first.id, portId: 'tool' },
       { nodeId: agent.id, portId: 'tools' },
     );
-    workbench.controller.connect(
+    workbench.controller.edges.connect(
       { nodeId: second.id, portId: 'tool' },
       { nodeId: agent.id, portId: 'tools' },
     );

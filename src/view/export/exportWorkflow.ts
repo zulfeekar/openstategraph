@@ -25,7 +25,7 @@ export function slugify(name: string): string {
 }
 
 export function exportJSON(controller: WorkflowController): void {
-  const json = controller.exportJSON();
+  const json = controller.document.exportJSON();
   download(
     new Blob([json], { type: 'application/json' }),
     `${slugify(controller.model.name)}.json`,
@@ -43,7 +43,7 @@ export function importJSON(
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (!file) return;
-    void file.text().then((text) => onDone(controller.importJSON(text)));
+    void file.text().then((text) => onDone(controller.document.importJSON(text)));
   });
   input.click();
 }

@@ -52,7 +52,7 @@ export function Palette({ onNotify }: PaletteProps) {
 
   const add = (definition: INodeDefinition) => {
     const at = paper?.viewportCenter() ?? { x: 120, y: 120 };
-    const outcome = controller.addNode(definition.id, at);
+    const outcome = controller.nodes.add(definition.id, at);
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };
 

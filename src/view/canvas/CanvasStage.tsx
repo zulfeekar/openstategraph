@@ -127,7 +127,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
         const typeId = event.dataTransfer.getData(PALETTE_DRAG_TYPE);
         if (!typeId || !paper) return;
         const at = paper.clientToLocal(event.clientX, event.clientY);
-        const outcome = controller.addNode(typeId, at);
+        const outcome = controller.nodes.add(typeId, at);
         if (!outcome.ok && outcome.message) onNotify(outcome.message);
       }}
     >

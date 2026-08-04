@@ -17,7 +17,7 @@ describe('test harness', () => {
   it('stands up a workbench with no DOM', () => {
     const workbench = makeWorkbench();
     expect(workbench.model.nodeCount).toBe(0);
-    expect(workbench.controller.canUndo).toBe(false);
+    expect(workbench.controller.history.canUndo).toBe(false);
   });
 
   it('registers the full node catalogue', () => {
