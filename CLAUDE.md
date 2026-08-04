@@ -128,7 +128,37 @@ LangChain publishes three tiers — *framework, runtime, harness*. A developer p
 | LangChain (framework) | `create_agent` — minimal configurable harness | `ReactAgentNode` |
 | Deep Agents (harness) | `create_deep_agent` — batteries-included | `DeepAgentNode` |
 
-`create_deep_agent` **pre-assembles a middleware stack on top of `create_agent`**, so `DeepAgentNode extends ReactAgentNode` is not a modelling preference — it mirrors the library.
+`create_deep_agent` **pre-assembles a middleware stack on top of `create_agent`** — but read that precisely: it is `create_agent` **plus a fixed slot assembly, not plus subclassing**. The library expresses the relationship as *data*, so `DeepAgentNode` is a **sibling** of `ReactAgentNode` under `AbstractAgentNode`, differing only by which middleware preset it declares. (An earlier draft here said `DeepAgentNode extends ReactAgentNode`; that was wrong and is superseded — it broke leaf semantics for no gain once the stack is data.)
+
+### Middleware order is a slot table, never a list position
+
+Because list position means **three different things at once**:
+
+| Hook | Order |
+| --- | --- |
+| `before_*` | first to last |
+| `after_*` | **last to first (reverse)** |
+| `wrap_*` | nested — the first middleware wraps all others |
+
+So `super().resolveMiddleware() + [mine]` does *not* mean "mine runs last". It means: my `before_*` runs last, my `after_*` runs **first**, and I am the innermost wrapper. **Any scheme expressing position as one number — append, prepend, or a priority integer — is expressing something that does not exist.**
+
+Therefore `resolveMiddleware()` returns an **ordered, name-keyed slot table**; the base owns the canonical slot order, a subclass or plugin contributes by *naming a slot*, and replacement is by slot name. The compiler flattens to a list last. This mirrors `create_deep_agent`, whose 12-slot order encodes documented semantic constraints (Skills before Filesystem so skill metadata precedes file tools; Memory after prompt caching so injected memory does not invalidate the cache prefix). Never expose a raw ordering number to a user — it would let them express an invalid order silently.
+
+### Retry, timeout and caching are graph-assembly parameters, not node concerns
+
+`retry_policy`, `timeout`, `error_handler` and `cache_policy` are parameters of **`StateGraph.add_node`**, available to every node of every family, and `StateGraph.set_node_defaults(...)` applies them graph-wide with per-node override. So they live on the **workflow** and compile to graph assembly — never on an agent base, a tool base, or a shared ancestor.
+
+This is the cross-family boundary rule confirmed by the runtime: putting `retry` on an agent base would force a duplicate onto the tool base and then two spellings of one feature. Token accounting and logging stay deliberately **not** unified — middleware for agents, callbacks/tracing elsewhere — because unifying them would invent an abstraction LangGraph does not have.
+
+### Never send a user's graph to a third party
+
+`draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()` — `xray=True` expands subgraph internals, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
+
+### Cycles are gated by port *type*, and the step budget is not an iteration count
+
+A loop is drawable only where a node declares a typed feedback input (`GraderNode.revise: feedback` → `AgentNode.feedback`). The type system stays the gate, so an *accidental* cycle remains inexpressible while the evaluator-optimizer pattern is two clicks. A cycle must contain at least one conditional edge — an all-static cycle can never terminate.
+
+`recursion_limit` is a **standalone `config` key, not inside `configurable`** (default 1000 in Python since 1.0.6, 25 in JS; raises `GraphRecursionError`). It counts **supersteps, not iterations** — with fan-out, one lap of a loop can cost several supersteps — so never label it "max iterations" in the UI. Prefer generating a `RemainingSteps` guard so a runaway loop routes to `END` instead of crashing.
 
 ### State flows down; subagents do not receive it
 
