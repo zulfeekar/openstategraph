@@ -1,6 +1,7 @@
 import { EventBus } from '@core/kernel/EventBus';
 import type { Unsubscribe } from '@core/kernel/Disposable';
 import { unionRects, type Point, type Rect, type Size } from '@core/kernel/geometry';
+import { sortByIdNatural } from '@core/kernel/ordering';
 import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
 import type { FieldValue, NodeData } from './contracts/fields';
@@ -397,12 +398,35 @@ export class WorkflowModel implements IWorkflowModel {
     return this.bus.batch(fn);
   }
 
+  /**
+   * A link's sort key: everything that identifies it, source before target.
+   *
+   * NUL separates the parts so a port named `a-b` cannot collide with a
+   * node `a` and port `b`.
+   */
+  private static endpointKey(edge: IEdgeModel): string {
+    const { source, target } = edge;
+    return [source.nodeId, source.portId, target.nodeId, target.portId].join('\u0000');
+  }
+
+  /**
+   * Serialises the document in a canonical order.
+   *
+   * Rows are sorted rather than emitted in `Map` insertion order. Insertion
+   * order is not stable for a given graph: deleting a node and undoing
+   * re-inserts it at the end, so an identical document would
+   * serialise differently. Since `workflow.json` is git-tracked and read in
+   * diffs, that would turn every save into a whole-file change and make
+   * review — human or agent — impossible.
+   */
   toJSON(): SerializedWorkflow {
     return {
       version: WORKFLOW_SCHEMA_VERSION,
       name: this._name,
-      nodes: this.nodes().map((node) => node.toJSON()),
-      edges: this.edges().map((edge) => edge.toJSON()),
+      nodes: sortByIdNatural(this.nodes(), (node) => node.id).map((node) => node.toJSON()),
+      // Edges sort by endpoints, not by id — the id is a creation counter and
+      // is not written to the file at all.
+      edges: sortByIdNatural(this.edges(), WorkflowModel.endpointKey).map((edge) => edge.toJSON()),
     };
   }
 

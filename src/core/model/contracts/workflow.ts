@@ -21,8 +21,16 @@ export interface IEdgeModel {
   toJSON(): SerializedEdge;
 }
 
+/**
+ * A link on disk, identified by its endpoints rather than by an id.
+ *
+ * An edge's id is an internal handle: nodes are referenced by edges, but an
+ * edge is referenced by nothing, so the id carries no information a reader or
+ * a reloader needs. Writing it would leak the creation counter into a tracked
+ * file — two people drawing the same graph in a different order would get
+ * different bytes, and inserting one link would renumber the rest of the diff.
+ */
 export interface SerializedEdge {
-  readonly id: EdgeId;
   readonly source: PortRef;
   readonly target: PortRef;
   readonly label?: string | null;

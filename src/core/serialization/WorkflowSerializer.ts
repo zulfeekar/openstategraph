@@ -119,8 +119,11 @@ export class WorkflowSerializer {
 
       // Ids come from the file, so the local counters must be re-seeded or
       // the next new node could collide with an imported one.
+      // Node ids come from the file, so the local counters must be re-seeded
+      // or the next new node could collide with an imported one. Edges are
+      // not seeded: their ids are minted fresh below.
       resetIds();
-      seedIds([...document.nodes.map((n) => n.id), ...document.edges.map((e) => e.id)]);
+      seedIds(document.nodes.map((n) => n.id));
 
       const created = new Map<string, AbstractNodeModel>();
 
@@ -169,7 +172,9 @@ export class WorkflowSerializer {
         }
         model.addEdge(
           new EdgeModel({
-            id: serialized.id,
+            // No id: an edge is identified by its endpoints, so a fresh
+            // handle is minted. Files written before this carried one; it is
+            // ignored rather than migrated, since nothing referenced it.
             source: serialized.source,
             target: serialized.target,
             label: serialized.label ?? null,

@@ -1,4 +1,5 @@
 import { nextId } from '@core/kernel/id';
+import { withSortedKeys } from '@core/kernel/ordering';
 import type { Point, Size } from '@core/kernel/geometry';
 import { defaultsFrom, mergeData, type FieldValue, type NodeData } from './contracts/fields';
 import type { IPortDescriptor } from './contracts/ports';
@@ -191,7 +192,10 @@ export abstract class AbstractNodeModel implements INodeModel {
       position: { ...this._position },
       size: { ...this._size },
       parentId: this._parentId,
-      data: { ...this._data },
+      // Sorted, not spread: `JSON.stringify` follows insertion order, so two
+      // nodes holding identical values would serialise differently depending
+      // on which field the user happened to edit first.
+      data: withSortedKeys(this._data),
       ...(this._title != null ? { title: this._title } : {}),
     };
   }

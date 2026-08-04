@@ -46,7 +46,6 @@ export class EdgeModel implements IEdgeModel {
 
   toJSON(): SerializedEdge {
     return {
-      id: this.id,
       source: { ...this.source },
       target: { ...this.target },
       ...(this._label != null ? { label: this._label } : {}),
