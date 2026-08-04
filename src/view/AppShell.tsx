@@ -1,0 +1,150 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Theme } from '@design/tokens';
+import type { Shortcut } from '@canvas/features/KeyboardFeature';
+import { usePaperController, useWorkbench } from '@app/WorkbenchContext';
+import { TopBar } from './topbar/TopBar';
+import { Palette } from './palette/Palette';
+import { Inspector } from './inspector/Inspector';
+import { CanvasStage } from './canvas/CanvasStage';
+import { Minimap } from './minimap/Minimap';
+import { ShortcutsDrawer } from './overlays/ShortcutsDrawer';
+import { CredentialsDialog } from './overlays/CredentialsDialog';
+import { AccessibilityCheck } from './overlays/AccessibilityCheck';
+import { Toaster, useToaster } from './overlays/Toaster';
+import './AppShell.css';
+
+const THEME_STORAGE_KEY = 'dyflow.theme';
+
+/**
+ * The application layout.
+ *
+ * Owns only chrome-level state — theme, which panels are open, transient
+ * toasts. Everything about the document lives in the model, and everything
+ * about the canvas lives in the paper controller, so this component stays a
+ * layout and never becomes the place logic accumulates.
+ */
+export function AppShell() {
+  const workbench = useWorkbench();
+  const paper = usePaperController();
+  const { toasts, notify, dismiss } = useToaster();
+
+  const [theme, setTheme] = useState<Theme>(readInitialTheme);
+  const [showGrid, setShowGrid] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+
+  /* ---------------- theme ---------------- */
+
+  useEffect(() => {
+    document.documentElement.dataset['theme'] = theme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Storage unavailable — the theme still applies for this session.
+    }
+  }, [theme]);
+
+  /* ---------------- shell shortcuts ----------------
+   * Contributed into the canvas keyboard feature rather than handled here,
+   * so every binding in the app lives in one table and shows up in the
+   * shortcuts drawer automatically. */
+
+  const shellShortcuts = useMemo<readonly Shortcut[]>(
+    () => [
+      {
+        keys: 'Mod+B',
+        label: 'Toggle palette',
+        group: 'View',
+        run: () => setPaletteOpen((value) => !value),
+      },
+      {
+        keys: 'Mod+I',
+        label: 'Toggle inspector',
+        group: 'View',
+        run: () => setInspectorOpen((value) => !value),
+      },
+      {
+        keys: 'Mod+Shift+G',
+        label: 'Toggle grid',
+        group: 'View',
+        run: () => setShowGrid((value) => !value),
+      },
+      {
+        keys: 'Mod+Shift+D',
+        label: 'Toggle theme',
+        group: 'View',
+        run: () => setTheme((current) => (current === 'dark' ? 'light' : 'dark')),
+      },
+      {
+        keys: 'Mod+Enter',
+        label: 'Run workflow',
+        group: 'Run',
+        allowInTextEntry: true,
+        run: () => void workbench.engine.run(),
+      },
+      {
+        keys: 'Mod+K',
+        label: 'Models and credentials',
+        group: 'Run',
+        run: () => setCredentialsOpen(true),
+      },
+    ],
+    [workbench],
+  );
+
+  /* ---------------- run feedback ---------------- */
+
+  useEffect(() => {
+    const off = workbench.engine.on('run:finish', ({ ok, usage }) => {
+      if (ok) notify(`Run finished · ${usage.totalTokens.toLocaleString()} tokens`);
+    });
+    return off;
+  }, [workbench, notify]);
+
+  const onNotify = useCallback((message: string) => notify(message), [notify]);
+
+  return (
+    <div className="app-shell">
+      <TopBar
+        theme={theme}
+        onThemeChange={setTheme}
+        showGrid={showGrid}
+        onGridChange={setShowGrid}
+        paletteOpen={paletteOpen}
+        onPaletteToggle={() => setPaletteOpen((value) => !value)}
+        inspectorOpen={inspectorOpen}
+        onInspectorToggle={() => setInspectorOpen((value) => !value)}
+        onOpenCredentials={() => setCredentialsOpen(true)}
+        onNotify={onNotify}
+      />
+
+      <div className="app-shell__body">
+        {paletteOpen ? <Palette onNotify={onNotify} /> : null}
+
+        <main className="app-shell__canvas">
+          <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
+          {paper ? <Minimap /> : null}
+          <ShortcutsDrawer shortcuts={paper?.shortcuts ?? []} />
+          <AccessibilityCheck />
+        </main>
+
+        {inspectorOpen ? <Inspector /> : null}
+      </div>
+
+      {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
+      <Toaster toasts={toasts} onDismiss={dismiss} />
+    </div>
+  );
+}
+
+/** Stored preference, else the OS setting. */
+function readInitialTheme(): Theme {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // Fall through to the media query.
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}

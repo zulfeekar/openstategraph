@@ -1,0 +1,122 @@
+/* ------------------------------------------------------------------ *
+ * Panel — the chrome shell shared by the palette and the inspector.
+ * ------------------------------------------------------------------ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-bg-surface);
+  z-index: var(--z-panel);
+}
+
+.panel--left {
+  border-right: 1px solid var(--color-border-default);
+}
+
+.panel--right {
+  border-left: 1px solid var(--color-border-default);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.panel__header--bordered {
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.panel__title {
+  flex: 1 1 auto;
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel__footer {
+  flex: none;
+  padding: var(--space-2-5) var(--space-3);
+  border-top: 1px solid var(--color-border-default);
+}
+
+/* ---------- Grouped section inside a panel body ---------- */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.panel-section + .panel-section {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.panel-section__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.panel-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+/* ---------- Empty state ---------- */
+.panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-tertiary);
+}
+
+.panel-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-quaternary);
+}
+
+.panel-empty__title {
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.panel-empty__body {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  max-width: 28ch;
+  line-height: var(--line-height-snug);
+}

@@ -1,0 +1,200 @@
+/* ------------------------------------------------------------------ *
+ * Tier 1 — Primitives.
+ *
+ * Raw, theme-independent values. Nothing in the app references these
+ * directly; `theme.css` maps them onto semantic roles. Changing a ramp
+ * here re-tints the whole product without touching a component.
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* ---------- Typeface ---------- */
+  --font-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, 'Cascadia Mono', 'Roboto Mono',
+    Consolas, monospace;
+
+  /* ---------- Type scale ----------
+   * Tuned for a dense, information-rich canvas: a 10 → 20px ramp where
+   * every step is legible at 100% zoom. Optical letter-spacing tightens
+   * as size grows, loosens as it shrinks — the usual trick for keeping
+   * small UI text readable and large text from looking gappy. */
+  --font-size-10: 0.625rem; /*  10px — micro labels, table heads   */
+  --font-size-11: 0.6875rem; /*  11px — captions, node subtitles    */
+  --font-size-12: 0.75rem; /*  12px — secondary UI               */
+  --font-size-13: 0.8125rem; /*  13px — the workhorse body size    */
+  --font-size-14: 0.875rem; /*  14px — emphasis, panel titles     */
+  --font-size-16: 1rem; /*  16px — section headings           */
+  --font-size-20: 1.25rem; /*  20px — display                    */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.35;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.65;
+
+  --letter-spacing-tighter: -0.02em;
+  --letter-spacing-tight: -0.011em;
+  --letter-spacing-normal: 0em;
+  --letter-spacing-wide: 0.01em;
+  --letter-spacing-wider: 0.06em; /* uppercase micro-labels */
+
+  /* ---------- Composite type roles ----------
+   * Shorthand bundles so a component writes one declaration instead of
+   * four, and can never drift out of the scale.                       */
+  --type-display: var(--font-weight-semibold) var(--font-size-20) / var(--line-height-tight)
+    var(--font-sans);
+  --type-heading-lg: var(--font-weight-semibold) var(--font-size-16) / var(--line-height-snug)
+    var(--font-sans);
+  --type-heading-sm: var(--font-weight-semibold) var(--font-size-14) / var(--line-height-snug)
+    var(--font-sans);
+  --type-body-md: var(--font-weight-regular) var(--font-size-13) / var(--line-height-normal)
+    var(--font-sans);
+  --type-body-sm: var(--font-weight-regular) var(--font-size-12) / var(--line-height-normal)
+    var(--font-sans);
+  --type-title-node: var(--font-weight-semibold) var(--font-size-13) / var(--line-height-snug)
+    var(--font-sans);
+  --type-caption: var(--font-weight-regular) var(--font-size-11) / var(--line-height-snug)
+    var(--font-sans);
+  --type-label: var(--font-weight-semibold) var(--font-size-10) / var(--line-height-tight)
+    var(--font-sans);
+  --type-mono-sm: var(--font-weight-regular) var(--font-size-11) / var(--line-height-normal)
+    var(--font-mono);
+
+  /* ---------- Space — 4px base, no arbitrary values ---------- */
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 0.125rem; /*  2px */
+  --space-1: 0.25rem; /*  4px */
+  --space-1-5: 0.375rem; /*  6px */
+  --space-2: 0.5rem; /*  8px */
+  --space-2-5: 0.625rem; /* 10px */
+  --space-3: 0.75rem; /* 12px */
+  --space-3-5: 0.875rem; /* 14px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
+
+  /* ---------- Radius ---------- */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 9px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 999px;
+
+  /* ---------- Neutral ramp (slate, very slightly cool) ---------- */
+  --neutral-0: #ffffff;
+  --neutral-25: #fcfcfd;
+  --neutral-50: #f8f9fb;
+  --neutral-75: #f4f5f8;
+  --neutral-100: #eef0f4;
+  --neutral-150: #e6e8ee;
+  --neutral-200: #dcdfe6;
+  --neutral-300: #c7ccd6;
+  --neutral-400: #9aa1ae;
+  --neutral-500: #767e8c;
+  --neutral-600: #5a6270;
+  --neutral-700: #414855;
+  --neutral-800: #2b313c;
+  --neutral-850: #21262f;
+  --neutral-900: #191d25;
+  --neutral-950: #11141a;
+  --neutral-1000: #0a0c10;
+
+  /* ---------- Accent ramps ----------
+   * One ramp per node family, so a node's identity colour and its
+   * soft icon-tile tint always come from the same source. */
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-200: #bfdbfe;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+
+  --indigo-50: #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+
+  --green-50: #ecfdf3;
+  --green-100: #d1fadf;
+  --green-500: #16a34a;
+  --green-600: #15803d;
+  --green-700: #126e33;
+
+  --amber-50: #fffaeb;
+  --amber-100: #fef0c7;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+
+  --orange-50: #fff5ed;
+  --orange-100: #ffe6d5;
+  --orange-500: #f97316;
+  --orange-600: #ea580c;
+
+  --red-50: #fef3f2;
+  --red-100: #fee4e2;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+
+  --violet-50: #f5f3ff;
+  --violet-100: #ede9fe;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+
+  --teal-50: #effefa;
+  --teal-100: #ccfbef;
+  --teal-500: #14b8a6;
+  --teal-600: #0d9488;
+
+  /* ---------- Motion ----------
+   * Short, mechanical easings. Canvas UI should feel instant; only
+   * viewport moves get a longer, decelerating curve. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --duration-instant: 60ms;
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 280ms;
+  --duration-viewport: 420ms;
+
+  --transition-colors:
+    color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+
+  /* ---------- Focus ring ---------- */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* ---------- Z-index — one ordered list, no magic numbers ---------- */
+  --z-canvas: 0;
+  --z-canvas-overlay: 10;
+  --z-panel: 20;
+  --z-topbar: 30;
+  --z-floating: 40;
+  --z-dragging: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+  --z-modal: 80;
+  --z-toast: 90;
+
+  /* ---------- Layout constants ----------
+   * Shared by CSS and read back by TS (see design/layout.ts) so the
+   * canvas viewport maths and the stylesheet can never disagree. */
+  --layout-topbar-height: 48px;
+  --layout-palette-width: 232px;
+  --layout-inspector-width: 300px;
+}

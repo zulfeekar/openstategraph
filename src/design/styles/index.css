@@ -1,0 +1,9 @@
+/* Design-system entry point. Order matters: primitives, then semantic
+ * roles, then reset (which consumes both), then role utilities. */
+
+@import '@fontsource-variable/inter/index.css';
+
+@import './tokens.css';
+@import './theme.css';
+@import './reset.css';
+@import './typography.css';

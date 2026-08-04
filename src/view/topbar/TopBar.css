@@ -1,0 +1,79 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  height: var(--layout-topbar-height);
+  padding-inline: var(--space-3);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border-default);
+  z-index: var(--z-topbar);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-right: var(--space-1);
+}
+
+.topbar__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  background: var(--color-text-primary);
+  color: var(--color-bg-surface);
+}
+
+.topbar__product {
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tighter);
+  color: var(--color-text-primary);
+}
+
+.topbar__doc {
+  font: var(--type-body-md);
+  color: var(--color-text-secondary);
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+/* Hairline separator between control clusters. */
+.topbar__divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin-inline: var(--space-1-5);
+  background: var(--color-border-default);
+}
+
+.topbar__spacer {
+  flex: 1 1 auto;
+}
+
+/* Below this width the document name is the first thing to go — the
+ * controls all still need to be reachable. */
+@media (max-width: 900px) {
+  .topbar__doc,
+  .topbar__brand .topbar__divider {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar__product {
+    display: none;
+  }
+}

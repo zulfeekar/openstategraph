@@ -1,0 +1,145 @@
+import type { Accent } from '@design/tokens';
+import type { IIdentifiable } from '@core/kernel/Registry';
+import type { Point, Size } from '@core/kernel/geometry';
+import type { FieldSchema, FieldValue, NodeData } from './fields';
+import type { IPortDescriptor } from './ports';
+
+export type NodeTypeId = string;
+export type NodeId = string;
+
+/** Palette grouping. Registered separately so plugins can add sections. */
+export type NodeCategoryId = string;
+
+export interface INodeCategory extends IIdentifiable {
+  readonly id: NodeCategoryId;
+  readonly label: string;
+  /** Lower sorts first in the palette. */
+  readonly order: number;
+}
+
+/**
+ * How the canvas treats a node structurally.
+ *
+ * `standard` — a card with ports.
+ * `container` — can embed other nodes and resizes to fit them.
+ * `annotation` — decorative; excluded from execution and from validation.
+ */
+export type NodeKind = 'standard' | 'container' | 'annotation';
+
+/** Per-node execution state, surfaced as the status dot on the card. */
+export type NodeStatus = 'idle' | 'ready' | 'running' | 'success' | 'warning' | 'error';
+
+/** Live execution result attached to a node between runs. */
+export interface NodeRuntimeState {
+  readonly status: NodeStatus;
+  /** Value produced on the node's primary output port. */
+  readonly output: unknown;
+  readonly error: string | null;
+  /** Tokens attributed to this node in the last run. */
+  readonly tokens: number;
+  /** Wall-clock duration of the last run, in ms. */
+  readonly durationMs: number | null;
+  /** Human-readable trace lines for the run log. */
+  readonly log: readonly string[];
+}
+
+export const IDLE_RUNTIME: NodeRuntimeState = {
+  status: 'idle',
+  output: null,
+  error: null,
+  tokens: 0,
+  durationMs: null,
+  log: [],
+};
+
+/**
+ * The read-only view of a node that everything outside the model sees.
+ * Mutation goes exclusively through commands on the controller, so the
+ * canvas and the React tree are handed this narrow interface.
+ */
+export interface INodeModel {
+  readonly id: NodeId;
+  readonly type: NodeTypeId;
+  readonly kind: NodeKind;
+  readonly definition: INodeDefinition;
+  readonly position: Point;
+  readonly size: Size;
+  /** Container this node is embedded in, if any. */
+  readonly parentId: NodeId | null;
+  readonly data: Readonly<NodeData>;
+  readonly runtime: NodeRuntimeState;
+  /** Ports for the node's *current* data — a node type may vary them. */
+  readonly ports: readonly IPortDescriptor[];
+  /** Card title; may be overridden per-instance. */
+  readonly title: string;
+  readonly subtitle: string;
+
+  getField<T extends FieldValue>(key: string): T;
+  port(portId: string): IPortDescriptor | undefined;
+  toJSON(): SerializedNode;
+}
+
+/**
+ * Everything the app needs to know about a node *type*.
+ *
+ * This is the extension point: `NodeTypeRegistry.register(definition)` is
+ * the whole cost of adding a node. The palette, canvas, inspector,
+ * serializer and execution engine all read from here, so none of them
+ * needs a branch per node type.
+ */
+export interface INodeDefinition extends IIdentifiable {
+  readonly id: NodeTypeId;
+  readonly kind: NodeKind;
+  readonly category: NodeCategoryId;
+  /** Palette + card title. */
+  readonly label: string;
+  /** One-line palette + card description. */
+  readonly description: string;
+  /** Icon token resolved by the view's icon registry. */
+  readonly iconId: string;
+  readonly accent: Accent;
+  readonly fields: readonly FieldSchema[];
+  /** Ports for a given data state; static for most node types. */
+  readonly ports: (data: Readonly<NodeData>) => readonly IPortDescriptor[];
+  readonly defaultSize: Size;
+  /** Instances allowed on one canvas. Omit for unlimited. */
+  readonly maxInstances?: number;
+  /** Hide from the palette (used by container/annotation helpers). */
+  readonly hiddenInPalette?: boolean;
+  /** Custom card body component id, resolved by the view's body registry. */
+  readonly bodyId?: string;
+  /** Keywords that should match this node in palette search. */
+  readonly keywords?: readonly string[];
+  /**
+   * Constructs the instance. Concrete node classes are reached only
+   * through here, which is what keeps the model open for extension and
+   * closed for modification.
+   */
+  readonly create: (init: NodeInit) => INodeModel;
+}
+
+export interface NodeInit {
+  readonly id?: NodeId;
+  readonly position: Point;
+  readonly size?: Size;
+  readonly parentId?: NodeId | null;
+  /** Partial data merged over the schema defaults. */
+  readonly data?: Partial<NodeData>;
+  readonly title?: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Serialization shapes — the on-disk contract. Versioned separately
+ * from the model classes so a stored workflow keeps loading after the
+ * classes are refactored.
+ * ------------------------------------------------------------------ */
+
+export interface SerializedNode {
+  readonly id: NodeId;
+  readonly type: NodeTypeId;
+  readonly position: Point;
+  readonly size: Size;
+  readonly parentId: NodeId | null;
+  readonly data: NodeData;
+  readonly title?: string;
+}

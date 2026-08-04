@@ -1,0 +1,173 @@
+# Dyflow — architecture principles
+
+Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph runtime.
+
+**Before planning anything, read `.scratch/fullstack-langgraph/map.md`** — the multi-session plan. Resolve one ticket per session (research excepted).
+
+**Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is ~17k lines; reading files to orient is a waste of context.
+
+---
+
+## Non-negotiables
+
+### No god classes
+
+A class with many public members is a design failure, not a convenience. If it can be described only with "and", split it.
+
+**Ceiling: ~10 public members, one reason to change.** Current known violations, to be decomposed (see the map):
+
+| Class | Public members | Responsibilities mixed |
+| --- | --- | --- |
+| `WorkflowController` | 38 | nodes, edges, clipboard, grouping, selection, history, document I/O |
+| `WorkflowModel` | 41 | node CRUD, edge CRUD, adjacency, topology, geometry, transactions, events |
+
+Do not add to either. Extend by adding a collaborator, not a method.
+
+### Interface → Abstract → Base → Concrete
+
+Every entity family declares this ladder, and every layer earns its place:
+
+- **`I*` interface** — the contract consumers depend on. Consumers import the interface, never the class.
+- **`Abstract*`** — shared behaviour with genuinely abstract members subclasses must supply.
+- **`Base*`** — a usable default implementation.
+- **Concrete** — one node type, one tool, one provider.
+
+This applies to **every** concept — node, edge, tool, provider, workflow — not only agents. Mirrored in Python and TypeScript.
+
+Inheritance must earn itself. Where a hierarchy exists only to share two fields, use composition and say so. Depth is not a virtue.
+
+### Shared concerns live on the base — but inherit the *capability*, not the *composition*
+
+Anything used by every member of a family — middleware, model resolution, token accounting, retry, error handling, logging — is declared **once** on the abstract base. Never re-declared per concrete type. That is the anti-duplication rule and it is not negotiable.
+
+The precise form matters, because LangChain middleware is a **list whose order is significant**:
+
+- **The base owns the schema and the resolution.** `AbstractAgentNode` declares the shared config fields once and implements `resolveMiddleware(config) -> list`, the single place config becomes middleware.
+- **The base does not own a hardcoded middleware list.** A base that instantiates middleware directly is a fragile base class: adding one silently changes every subclass, and a subclass has no clean way to insert its own middleware anywhere but the end.
+
+So: **inherit the capability to compose; do not inherit the composition.**
+
+### The boundary — where inheritance stops
+
+Sharing has two axes, and only one of them is inheritance:
+
+| Shared… | Mechanism |
+| --- | --- |
+| **within** a family (all agents need summarization config) | abstract base class |
+| **across** families (an agent *and* a tool node both want retry) | composition — a shared middleware/registry, a mixin, a decorator |
+
+Pushing cross-family concerns up into a common ancestor is how "OOP everywhere" becomes a **god base class** — which violates the no-god-classes rule above and forces members to carry capabilities they do not use (an Interface Segregation failure). When a concern is needed by two *different* families, it is a collaborator, not a superclass.
+
+### SOLID, applied concretely here
+
+- **S** — one reason to change. See the god-class table.
+- **O** — extend by **registering**, never by editing the engine. Every extension point is a `Registry<T>`: node types, executors, providers, connection rules, validation rules, canvas features, card bodies. A new capability must not require touching `core/`.
+- **L** — a subclass must be substitutable for its base. If an override throws or no-ops, the hierarchy is wrong.
+- **I** — narrow interfaces. `INodeExecutor` and `IToolExecutor` are separate so a node opts into being a tool without carrying unused methods. Keep doing that.
+- **D** — depend on abstractions. `core/` imports **neither React nor JointJS**. Never break that.
+
+### DRY — but not by accident
+
+Duplication of *knowledge* is the defect; duplication of *shape* is often fine. Two things that look alike but change for different reasons should stay apart.
+
+Hard rules:
+- Node configuration is declared **once** as a field schema; card, inspector, defaults and validation all derive from it.
+- Pydantic is the **single source of truth**; TypeScript types are **generated**. Never hand-mirror a type across the boundary.
+- One binding table drives both the keyboard dispatcher and the shortcuts drawer.
+
+### Cardinality belongs to the port, not the node
+
+A node has ports with different cardinalities at the same time — an agent's `prompt` takes exactly one link, its `tools` bus takes many, its `result` fans out to many. So there is no node-level "multiple edges" flag. Cardinality is `maxConnections` on the **port descriptor** (default: in = 1, out = unlimited), enforced by `capacityRule`.
+
+Two distinct mechanisms, kept distinct:
+- **A port that accepts many links** (a bus) → `maxConnections` on that port.
+- **A node whose *number* of ports varies with config** → `ports: (data) => IPortDescriptor[]`.
+
+Prefer varying the number of ports over toggling one port's cardinality. If a port sometimes carries a scalar and sometimes a list, its *type* changes at runtime and the executor must branch — which is what typed ports exist to prevent.
+
+### Never put a non-finite number in a serialisable field
+
+`Infinity` and `NaN` are not representable in JSON, and Pydantic/JSON Schema cannot express them. Use `int | None` with `None` meaning unbounded. (`maxConnections` currently violates this — see ticket 08.)
+
+### Small, named packages
+
+Directory = bounded context, with an explicit public surface. No `utils/` dumping grounds. If a module has no one-sentence description, it has no reason to exist.
+
+---
+
+## Layering — the rule that holds it together
+
+```
+gesture → Controller → ICommand → Model → event → Adapter → canvas
+```
+
+The canvas is a **one-way projection** of the model. No gesture writes to the graph and hopes the model catches up. Consequences: undo is generic, the graph is disposable, and the two cannot drift.
+
+`core/` is framework-free TypeScript. `canvas/` owns JointJS. `view/` owns React. `design/` owns tokens and primitives and contains no app logic.
+
+**PureMVC the framework is rejected** — layering kept, framework not adopted. Reasoning: `.scratch/fullstack-langgraph/decisions/puremvc.md`. Do not reintroduce it.
+
+---
+
+## LangGraph
+
+All LangGraph and LangChain facts come from the **`docs-langchain` MCP server**. Never from memory, never invented.
+
+Settled vocabulary:
+- **Graph** = `StateGraph` — nodes, conditional edges, shared state, `Send` fan-out, subgraphs.
+- **Loop** = `create_agent` (ReAct). It returns a compiled LangGraph, so it drops into a `StateGraph` as a node.
+- Therefore **canvas = StateGraph, Agent node = the loop, workflow composition = subgraphs.**
+
+### Agent type is a developer choice, and it mirrors the library's own layering
+
+LangChain publishes three tiers — *framework, runtime, harness*. A developer picks which one an Agent node is:
+
+| Tier | Construct | Node type |
+| --- | --- | --- |
+| LangGraph (runtime) | hand-written `StateGraph` node | `CustomGraphNode` |
+| LangChain (framework) | `create_agent` — minimal configurable harness | `ReactAgentNode` |
+| Deep Agents (harness) | `create_deep_agent` — batteries-included | `DeepAgentNode` |
+
+`create_deep_agent` **pre-assembles a middleware stack on top of `create_agent`**, so `DeepAgentNode extends ReactAgentNode` is not a modelling preference — it mirrors the library.
+
+### State flows down; subagents do not receive it
+
+Two distinct mechanisms, easy to conflate and important not to:
+
+- **Graph state** flows to *nodes* through the shared state schema and reducers.
+- **Subagents are isolated.** A subagent is invoked as a *tool*; its result comes back as a `ToolMessage` (JSON when `response_format` is set, otherwise its last message text). It never sees the parent's message history or graph state — it receives a task and reports a result.
+
+Never build UI or state plumbing that implies a subagent shares the parent's context.
+
+### Portability guardrails
+
+We go **deep on LangGraph** deliberately — no `IOrchestrator` abstraction, because no competing framework accepts a serialisable graph, so such an interface is unbindable rather than merely leaky. Portability is preserved instead by keeping `workflow.json` the vendor-neutral layer and obeying four rules that cost nothing now and are expensive to retrofit:
+
+1. **Expressions are a JSON AST, never host-language code.** A router predicate is serialisable data — never a Python or JavaScript lambda. Storing a function kills portability *and* serialisability in one move.
+2. **Reducers are a named enum**, not arbitrary functions.
+3. **The compile seam is one-directional**: `workflow.json` → runtime. Nothing reads runtime objects back into the model.
+4. **Our own runtime vocabulary.** Do not leak LangGraph type names into `workflow.json` or into `core/`.
+
+Adding a second runtime later is roughly an engineer-quarter, and permanently multiplies the cost of every new node type. Do not pay it speculatively.
+
+### We are a compiler, not a runtime
+
+Three distinct approaches exist. Know which one this is:
+
+| Approach | Who executes | Examples |
+| --- | --- | --- |
+| Own your executor | you write the engine | n8n, Dify, Langflow, Flowise |
+| Multi-runtime compiler | abstract over several | Oracle Agent Spec (the only one) |
+| **Single-target compiler** | someone else's | **this project → LangGraph** |
+
+**Never write an execution engine.** We compile `workflow.json` to a LangGraph `StateGraph` and inherit its checkpointing, time-travel, `interrupt()`, `Send` fan-out, reducer merging and streaming. Any proposal to "just interpret the graph ourselves" is a proposal to reimplement all of that — reject it.
+
+The consequence worth protecting: those four tools are closed systems, where a workflow runs inside their platform or not at all. Our output is a standard Python object that runs anywhere Python runs — importable from a script, testable with pytest, deployable without this editor. **The compiler is not portable; the output is.** That is what makes `functions/`, `tools/` and `tests/` real code rather than decoration.
+
+---
+
+## Tests
+
+TDD. Tests before implementation. `core/` is pure TypeScript and directly unit-testable — there is no excuse for untested logic there.
+
+Never refactor a god class without tests in place first.

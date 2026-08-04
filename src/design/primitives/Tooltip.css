@@ -1,0 +1,45 @@
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 260px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  animation: tooltip-in var(--duration-fast) var(--ease-out);
+}
+
+.tooltip--multiline {
+  display: block;
+  white-space: normal;
+  line-height: var(--line-height-snug);
+}
+
+/* Shortcut hint riding along inside the tooltip. */
+.tooltip__kbd {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

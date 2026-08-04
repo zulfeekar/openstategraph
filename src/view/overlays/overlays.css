@@ -1,0 +1,277 @@
+/* ================================================================== *
+ * Floating shell surfaces: the shortcuts drawer, the credentials dialog,
+ * the accessibility report and toasts.
+ * ================================================================== */
+
+/* ---------- Shortcuts drawer ---------- */
+
+.shortcuts {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+  max-width: 340px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-lg);
+  overflow: hidden;
+}
+
+.shortcuts__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  transition: var(--transition-colors);
+}
+
+.shortcuts__trigger:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.shortcuts__panel {
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.shortcuts__group + .shortcuts__group {
+  margin-top: var(--space-3);
+}
+
+.shortcuts__group-title {
+  padding: var(--space-2) 0 var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Dialog ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: rgba(9, 12, 17, 0.45);
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(640px, 100%);
+  border-radius: var(--radius-2xl);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-xl);
+  animation: dialog-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+
+.dialog__heading {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dialog__title {
+  font: var(--type-heading-lg);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+.dialog__subtitle {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-relaxed);
+}
+
+.dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border-default);
+}
+
+/* ---------- Provider rows ---------- */
+
+.provider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+}
+
+.provider__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.provider__name {
+  flex: 1 1 auto;
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.provider__hint {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.provider__models {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* A security note the user should actually read, not a decorative aside. */
+.dialog__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-status-warning) 10%, transparent);
+  color: color-mix(in srgb, var(--color-status-warning) 90%, var(--color-text-primary));
+  font: var(--type-caption);
+  line-height: var(--line-height-relaxed);
+}
+
+/* ---------- Accessibility report ---------- */
+
+.a11y-trigger {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+}
+
+.a11y-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.a11y-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  font: var(--type-caption);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.a11y-item--fail {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.a11y-item--pass {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.a11y-item__detail {
+  display: block;
+  margin-top: 2px;
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* ---------- Toasts ---------- */
+
+.toaster {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 420px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  font: var(--type-body-sm);
+  box-shadow: var(--shadow-xl);
+  pointer-events: auto;
+  animation: toast-in var(--duration-normal) var(--ease-spring);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}

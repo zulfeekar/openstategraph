@@ -1,0 +1,92 @@
+# Handover — resume state
+
+**Purpose.** Any agent, model or person can pick this effort up from cold. Deliberately tool-agnostic: plain markdown in the repo, so it works whether the next session is Claude Code, another assistant, a local model via Ollama, or a human.
+
+**Keep it current.** Update the *Status* block at the end of every session, before the session ends. It is the only part that goes stale.
+
+---
+
+## Resume in five steps
+
+1. **Read `CLAUDE.md`** (repo root) — the binding architecture principles. Non-negotiables live there.
+2. **Read `.scratch/fullstack-langgraph/map.md`** — destination, decisions already made, fog not yet specified, out of scope.
+3. **Rebuild the code graph** so you can navigate without burning context:
+   ```bash
+   graphify update .
+   ```
+   Then query it instead of reading files: `graphify explain "WorkflowController"`, `graphify path "AgentNode" "ExecutionEngine"`.
+4. **Find the frontier** — open, unblocked, unclaimed tickets:
+   ```bash
+   cd .scratch/fullstack-langgraph/issues
+   for f in *.md; do
+     st=$(grep -m1 '^Status:' "$f" | sed 's/Status: //')
+     [ "$st" = "open" ] || continue
+     blk=$(grep -m1 '^Blocked by:' "$f" | sed 's/Blocked by: //')
+     echo "$f  [blocked by: $blk]"
+   done
+   ```
+   A ticket is takeable when every id in `Blocked by:` is `Status: resolved`.
+5. **Claim one ticket** — set `Status: claimed` and save *before* doing any work. Resolve **one ticket per session** (research tickets excepted).
+
+## Resolving a ticket
+
+1. Read its `## Question`.
+2. Do the work. For `grilling` tickets, interview the human one question at a time — never answer on their behalf.
+3. Append the answer under `## Answer`, set `Status: resolved`.
+4. Add a one-line gist plus link to `map.md` → *Decisions so far*.
+5. Graduate any fog the answer made specifiable into new tickets; clear it from *Not yet specified*.
+6. Update the *Status* block below.
+
+## Ticket types
+
+| Type | Driven by | Meaning |
+| --- | --- | --- |
+| `research` | agent alone | establish a fact a decision waits on |
+| `grilling` | **with the human** | a decision reached by conversation |
+| `prototype` | **with the human** | build something cheap and concrete to react to |
+| `task` | agent, or a checklist for the human | manual work unblocking a decision |
+
+## Hard rules that are easy to violate
+
+- **LangGraph/LangChain facts come only from the `docs-langchain` MCP server.** Never from memory. If unavailable, say so rather than guessing.
+- **Never write an execution engine.** We compile to LangGraph. See CLAUDE.md.
+- **Tests before implementation.** Never refactor load-bearing code without tests first.
+- **Pydantic is the single source of truth**; TypeScript types are generated, never hand-mirrored.
+- **One ticket per session.** The pull to do more is the signal to hand over instead.
+
+## Environment
+
+| Thing | State |
+| --- | --- |
+| Dev server | `npm run dev` → http://localhost:5273 |
+| Typecheck | `npm run typecheck` — currently clean |
+| Build | `npm run build` — currently clean |
+| Tests | **none yet** — the largest gap; ticket 11 designs them |
+| Code graph | `graphify update .` (output is gitignored; rebuild is cheap) |
+| Backend | **does not exist yet** — phase 1 is the editor only |
+| Providers | Mock (default, offline) · Ollama (local, auto-discovers models) · Anthropic · OpenAI |
+
+---
+
+## Status
+
+**Last updated:** 2026-08-04
+
+**Phase:** planning complete for the research half; first build step starting.
+
+**Done:**
+- Phase 1 editor built and verified end to end — canvas, design system, MVC engine, 4 LLM providers, runs the seeded demo against Mock (424 tokens, renders a Markdown table).
+- 8 of 25 tickets resolved — **all research tickets**. See `map.md` → *Decisions so far*.
+- `CLAUDE.md` written: architecture non-negotiables.
+
+**Frontier (takeable now):**
+- `08-entity-hierarchy` — `grilling`, **the crux**; 5 tickets unblock behind it
+- `12-repo-topology` — `grilling`
+- `15-codegen-strategy` — `research`
+- `01-git-baseline` — `task`
+
+**Immediate next:** `01-git-baseline`, then `11-tdd-strategy` (tests are themselves the best handover artifact — a cold session can run them and know the state), then `08-entity-hierarchy`.
+
+**Open question waiting on the human:** the performance budget in ticket 11 is *proposed, not agreed* — 500 nodes / 800 edges / 60fps pan. Confirm or veto.
+
+**Nothing is claimed.** No work in progress.

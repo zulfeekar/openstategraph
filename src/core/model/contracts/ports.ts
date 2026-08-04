@@ -1,0 +1,86 @@
+import type { Accent } from '@design/tokens';
+import type { IIdentifiable } from '@core/kernel/Registry';
+
+/**
+ * Ports carry typed values. A port *type* is a first-class, registered
+ * concept rather than a string on a node, because three separate concerns
+ * need to agree about it: connection validity, the glyph and colour shown
+ * next to the port, and how the execution engine coerces a value flowing
+ * across a link.
+ */
+export type PortTypeId = string;
+
+export type PortDirection = 'in' | 'out';
+
+/** Which edge of the card a port's dot sits on. */
+export type PortSide = 'left' | 'right' | 'top' | 'bottom';
+
+export interface IPortTypeDefinition extends IIdentifiable {
+  readonly id: PortTypeId;
+  readonly label: string;
+  /** Resolved to a concrete glyph by the view's icon registry. */
+  readonly iconId: string;
+  readonly accent: Accent;
+  /**
+   * Port types this one accepts input from. Defaults to "only itself".
+   * `'*'` accepts anything — used by pass-through and debug nodes.
+   */
+  readonly accepts?: readonly (PortTypeId | '*')[];
+}
+
+/**
+ * A port as declared by a node type. Static shape; the runtime instance
+ * (`PortInstance`) pairs this with its owning node id.
+ */
+export interface IPortDescriptor {
+  /** Unique within its node. */
+  readonly id: string;
+  readonly direction: PortDirection;
+  readonly type: PortTypeId;
+  /** Shown in the node's port footer, e.g. "prompt". */
+  readonly label: string;
+  /**
+   * Cap on simultaneous connections. Inputs default to 1 (a node field
+   * cannot be fed two values at once); outputs default to unlimited,
+   * since fanning one result into several consumers is normal.
+   */
+  readonly maxConnections?: number;
+  /** An unconnected required input makes the workflow invalid. */
+  readonly required?: boolean;
+  /** Defaults to `left` for inputs and `right` for outputs. */
+  readonly side?: PortSide;
+  /**
+   * `row`  — a labelled row in the node footer with a dot on the card edge.
+   * `pill` — a detached labelled capsule below the card, used for the
+   *          agent's tool bus where several tools converge on one point.
+   */
+  readonly appearance?: 'row' | 'pill';
+  /** Tooltip / inspector help text. */
+  readonly description?: string;
+}
+
+export interface PortInstance extends IPortDescriptor {
+  readonly nodeId: string;
+}
+
+/** Fully-qualified endpoint of an edge. */
+export interface PortRef {
+  readonly nodeId: string;
+  readonly portId: string;
+}
+
+export const portRefEquals = (a: PortRef, b: PortRef): boolean =>
+  a.nodeId === b.nodeId && a.portId === b.portId;
+
+export const portRefKey = (ref: PortRef): string => `${ref.nodeId}/${ref.portId}`;
+
+/** Resolves the effective connection cap for a port. */
+export function maxConnectionsOf(port: IPortDescriptor): number {
+  if (port.maxConnections != null) return port.maxConnections;
+  return port.direction === 'in' ? 1 : Number.POSITIVE_INFINITY;
+}
+
+/** Resolves the effective side for a port. */
+export function sideOf(port: IPortDescriptor): PortSide {
+  return port.side ?? (port.direction === 'in' ? 'left' : 'right');
+}

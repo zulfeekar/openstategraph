@@ -1,0 +1,327 @@
+/* ================================================================== *
+ * Node card.
+ *
+ * Rendered inside a foreignObject, so this is ordinary CSS laying out
+ * ordinary HTML — which is the whole reason for that indirection: real
+ * type rendering, real form controls, real Markdown.
+ * ================================================================== */
+
+.node-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-node);
+  /* The card is measured to derive the element's height, so its own box must
+   * be content-sized rather than stretched to the SVG element's height. */
+  height: max-content;
+  transition:
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  /* Rendering hint: a card being dragged is composited rather than repainted. */
+  contain: layout style;
+}
+
+.joint-element:hover .node {
+  box-shadow: var(--shadow-node-hover);
+}
+
+.joint-element.is-selected .node {
+  box-shadow: var(--shadow-node-selected);
+}
+
+/* ---------- Header ---------- */
+
+.node__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5) var(--space-3) var(--space-2);
+}
+
+.node__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.node__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.node__title {
+  font: var(--type-title-node);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__subtitle {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__menu {
+  flex: none;
+  margin-top: -2px;
+  margin-right: -4px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* The kebab appears on hover, focus or selection — always reachable by
+ * keyboard, never adding noise to a canvas at rest. */
+.joint-element:hover .node__menu,
+.joint-element.is-selected .node__menu,
+.node__menu:focus-within {
+  opacity: 1;
+}
+
+/* ---------- Body ---------- */
+
+.node__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.node__body:empty {
+  display: none;
+}
+
+/* ---------- Port footer ----------
+ * A two-column grid: inputs left, outputs right. One row can hold both,
+ * which is what puts "prompt" and "result" on the same line the way the
+ * reference layout does. */
+
+.node__ports {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-2);
+  padding: var(--space-1-5) var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.node__ports:empty {
+  display: none;
+}
+
+.node__port {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--space-6);
+  min-width: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.node__port--in {
+  grid-column: 1;
+  justify-content: flex-start;
+}
+
+.node__port--out {
+  grid-column: 2;
+  justify-content: flex-end;
+}
+
+.node__port-icon {
+  display: flex;
+  flex: none;
+  color: var(--accent-on-tint);
+}
+
+.node__port-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__port--required .node__port-label::after {
+  content: '*';
+  margin-left: 2px;
+  color: var(--color-status-warning);
+}
+
+/* ---------- Tool bus pill ----------
+ * Straddles the card's bottom edge, centred, so several tools can converge
+ * on one obvious point instead of crowding the footer with rows. */
+
+.node__pill {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-xs);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.node--has-pill {
+  /* Room for the pill to overhang without the next node overlapping it. */
+  margin-bottom: 10px;
+}
+
+/* ---------- Status ---------- */
+
+.node[data-status='running'] {
+  box-shadow: var(--shadow-node), 0 0 0 1.5px var(--color-status-running);
+}
+
+.node[data-status='error'] {
+  box-shadow: var(--shadow-node), 0 0 0 1.5px var(--color-status-error);
+}
+
+.node__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  margin: 0 var(--space-3) var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+}
+
+.node__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2-5);
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Output card ---------- */
+
+.node--output .node__body {
+  gap: var(--space-2);
+}
+
+.node__result {
+  position: relative;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+}
+
+.node__result-empty {
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border-strong);
+}
+
+.node__expand {
+  position: absolute;
+  top: var(--space-1-5);
+  right: var(--space-1-5);
+  z-index: 1;
+}
+
+/* ---------- Container (group) ---------- */
+
+.node--container {
+  height: 100%;
+  border-radius: var(--radius-xl);
+  background: var(--color-group-fill);
+  box-shadow: inset 0 0 0 1px var(--color-group-border);
+  padding: var(--space-4);
+  gap: var(--space-2);
+}
+
+.joint-element.is-selected .node--container {
+  box-shadow:
+    inset 0 0 0 1px var(--color-group-border),
+    0 0 0 1.5px var(--color-border-focus);
+}
+
+.node--container .node__group-title {
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-group-text);
+}
+
+.node--container .prose,
+.node--container .prose p,
+.node--container .prose li {
+  color: var(--color-group-text);
+}
+
+.node--container .prose li::marker {
+  color: color-mix(in srgb, var(--color-group-text) 55%, transparent);
+}
+
+/* Bottom-right resize grip. Containers are sized by hand — see
+ * DragCommitFeature for why they don't auto-fit. */
+.node__resize {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: 2px solid var(--color-group-border);
+  border-bottom: 2px solid var(--color-group-border);
+  border-bottom-right-radius: 4px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.joint-element:hover .node__resize,
+.joint-element.is-selected .node__resize {
+  opacity: 1;
+}
+
+/* ---------- Note ---------- */
+
+.node--annotation {
+  background: var(--color-note-fill);
+  box-shadow: inset 0 0 0 1px var(--color-note-border);
+  padding: var(--space-3);
+}
+
+.node--annotation .node__body {
+  padding: 0;
+}
+
+.node__note-placeholder {
+  font: var(--type-caption);
+  font-style: italic;
+  color: var(--color-text-quaternary);
+}

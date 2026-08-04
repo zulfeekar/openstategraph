@@ -1,0 +1,53 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg-canvas);
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The canvas column is the flexible one; both panels are fixed width. It
+ * also establishes the positioning context for the minimap, the shortcuts
+ * drawer and the accessibility button, all of which float over the paper. */
+.app-shell__canvas {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The shortcuts drawer and the accessibility button share the bottom-left
+ * corner; the drawer sits above the button. */
+.app-shell__canvas .shortcuts {
+  bottom: calc(var(--space-4) + 36px);
+}
+
+/* Narrow windows: the panels overlay the canvas rather than squeezing it
+ * down to nothing. */
+@media (max-width: 1100px) {
+  .app-shell__body {
+    position: relative;
+  }
+
+  .app-shell__body > .panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .app-shell__body > .panel--left {
+    left: 0;
+  }
+
+  .app-shell__body > .panel--right {
+    right: 0;
+  }
+}

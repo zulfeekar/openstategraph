@@ -1,0 +1,87 @@
+.minimap {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-lg);
+}
+
+.minimap__surface {
+  position: relative;
+  margin: var(--space-2) var(--space-2) 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  cursor: crosshair;
+  overflow: hidden;
+}
+
+.minimap__node {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--accent-solid, var(--color-text-quaternary));
+  opacity: 0.7;
+}
+
+.minimap__node--container {
+  background: transparent;
+  border: 1px solid var(--color-group-border);
+  opacity: 1;
+}
+
+.minimap__node--annotation {
+  opacity: 0.4;
+}
+
+/* The current viewport. Outline only — a filled box would hide the nodes
+ * it is supposed to be locating. */
+.minimap__viewport {
+  position: absolute;
+  border: 1.5px solid var(--color-border-focus);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-border-focus) 8%, transparent);
+  pointer-events: none;
+}
+
+.minimap__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-1);
+}
+
+.minimap__divider {
+  width: 1px;
+  height: 16px;
+  margin-inline: var(--space-1);
+  background: var(--color-border-default);
+}
+
+.minimap__zoom {
+  min-width: 44px;
+  padding: 0 var(--space-1);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-colors);
+}
+
+.minimap__zoom:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.minimap[data-collapsed] .minimap__controls {
+  padding: var(--space-1);
+}
+
+.is-flipped {
+  transform: rotate(180deg);
+}

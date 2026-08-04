@@ -1,0 +1,227 @@
+/* ------------------------------------------------------------------ *
+ * Typography roles + the `prose` block used wherever the app renders
+ * model-authored Markdown (output node, setup notes, inspector help).
+ * ------------------------------------------------------------------ */
+
+.text-display {
+  font: var(--type-display);
+  letter-spacing: var(--letter-spacing-tighter);
+  color: var(--color-text-primary);
+}
+
+.text-heading-lg {
+  font: var(--type-heading-lg);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+.text-heading-sm {
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+.text-body {
+  font: var(--type-body-md);
+  color: var(--color-text-primary);
+}
+
+.text-body-sm {
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.text-caption {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* The small uppercase field label. Uppercase at 10px needs generous
+ * tracking or it turns into a grey smear. */
+.text-label {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.text-mono {
+  font: var(--type-mono-sm);
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Tabular figures keep numeric readouts from shifting as they tick. */
+.text-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ------------------------------------------------------------------ *
+ * Prose — Markdown rendered inside a node body or panel.
+ * Sized down from the document defaults to sit inside a 260px card.
+ * ------------------------------------------------------------------ */
+
+.prose {
+  font: var(--type-body-md);
+  color: var(--color-text-primary);
+}
+
+.prose > * + * {
+  margin-top: var(--space-2-5);
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-primary);
+}
+
+.prose h1 {
+  font-size: var(--font-size-14);
+}
+.prose h2 {
+  font-size: var(--font-size-13);
+}
+.prose h3,
+.prose h4 {
+  font-size: var(--font-size-12);
+}
+
+.prose p {
+  color: var(--color-text-secondary);
+}
+
+.prose strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.prose a {
+  color: var(--color-text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose ol,
+.prose ul {
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.prose ol {
+  list-style: decimal;
+}
+
+.prose ul {
+  list-style: disc;
+}
+
+.prose li {
+  color: var(--color-text-secondary);
+}
+
+.prose li::marker {
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+.prose code {
+  font: var(--type-mono-sm);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-muted);
+  color: var(--color-text-primary);
+}
+
+.prose pre {
+  padding: var(--space-2-5);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  overflow-x: auto;
+}
+
+.prose pre code {
+  padding: 0;
+  background: none;
+}
+
+.prose blockquote {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border-strong);
+  color: var(--color-text-tertiary);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Tables are the point of the output node, so they get real attention:
+ * hairline rules, uppercase micro-header, tabular numerals, and their
+ * own horizontal scroll container so a wide table never widens a node. */
+.prose table {
+  width: 100%;
+  font-size: var(--font-size-13);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: table;
+}
+
+.prose thead {
+  background: var(--color-bg-surface-sunken);
+}
+
+.prose th {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-default);
+  white-space: nowrap;
+}
+
+.prose td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  vertical-align: top;
+}
+
+.prose tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* First column of a generated table is nearly always an index. */
+.prose td:first-child {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  width: 1%;
+  white-space: nowrap;
+}

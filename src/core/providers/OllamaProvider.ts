@@ -1,0 +1,196 @@
+import { Err, Ok, type Result } from '@core/kernel/Result';
+import {
+  AbstractLLMProvider,
+  type CompletionRequest,
+  type CompletionResult,
+  type ModelDescriptor,
+  type StopReason,
+  type ToolCall,
+} from './ILLMProvider';
+
+const DEFAULT_HOST = 'http://localhost:11434';
+
+/* ---- Ollama wire types (only the fields we consume) ---- */
+
+interface OllamaToolCall {
+  function: { name: string; arguments: Record<string, unknown> };
+}
+
+interface OllamaChatResponse {
+  message?: { content?: string; tool_calls?: OllamaToolCall[]; thinking?: string };
+  done_reason?: string;
+  prompt_eval_count?: number;
+  eval_count?: number;
+}
+
+interface OllamaTagsResponse {
+  models?: { name: string; model?: string; details?: { parameter_size?: string } }[];
+}
+
+/**
+ * Local models via Ollama.
+ *
+ * No credentials — the trade is that the daemon has to allow browser
+ * origins. Ollama rejects cross-origin requests by default, and the failure
+ * is indistinguishable from "not running" at the `fetch` level, so the
+ * error path below names both causes and the exact fix.
+ *
+ * Uses `fetch` rather than an SDK deliberately: the two endpoints needed
+ * here are trivial, and this keeps a local-only provider from adding weight
+ * to the bundle for users who never touch it.
+ */
+export class OllamaProvider extends AbstractLLMProvider {
+  readonly id = 'ollama';
+  readonly label = 'Ollama · Local';
+  readonly requiresApiKey = false;
+  override readonly credentialsHint =
+    'Start Ollama with OLLAMA_ORIGINS="*" so the browser can reach it';
+  override readonly allowsCustomModel = true;
+
+  private discovered: readonly ModelDescriptor[] | null = null;
+
+  /** Common local tags, replaced by whatever is actually pulled. */
+  private readonly seed: readonly ModelDescriptor[] = [
+    'llama3.2',
+    'qwen2.5',
+    'mistral',
+    'gemma2',
+  ].map((id) => ({
+    id,
+    label: id,
+    providerId: 'ollama',
+    contextWindow: 32_768,
+    maxOutputTokens: 8_192,
+    supportsTools: true,
+  }));
+
+  get models(): readonly ModelDescriptor[] {
+    return this.discovered ?? this.seed;
+  }
+
+  private get host(): string {
+    return (this.baseUrl ?? DEFAULT_HOST).replace(/\/$/, '');
+  }
+
+  /** Reads the locally pulled models from `/api/tags`. */
+  async listModels(): Promise<readonly ModelDescriptor[]> {
+    try {
+      const response = await fetch(`${this.host}/api/tags`);
+      if (!response.ok) return this.seed;
+      const payload = (await response.json()) as OllamaTagsResponse;
+      const local = (payload.models ?? []).map((model) => ({
+        id: model.name,
+        label: model.details?.parameter_size
+          ? `${model.name} · ${model.details.parameter_size}`
+          : model.name,
+        providerId: 'ollama',
+        contextWindow: 32_768,
+        maxOutputTokens: 8_192,
+        supportsTools: true,
+      }));
+      if (local.length > 0) this.discovered = local;
+      return this.models;
+    } catch {
+      return this.seed;
+    }
+  }
+
+  /** True when the daemon answers — used by the credentials dialog. */
+  async probe(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.host}/api/tags`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async complete(request: CompletionRequest): Promise<Result<CompletionResult, string>> {
+    const { system, messages } = this.splitSystem(request);
+
+    const body = {
+      model: request.model,
+      stream: false,
+      options: { num_predict: request.maxTokens },
+      messages: [
+        ...(system ? [{ role: 'system', content: system }] : []),
+        ...messages.map((message) => ({
+          // Ollama has no dedicated tool role in its chat history; a result
+          // is fed back as a tool-authored message keyed by name.
+          role: message.role === 'tool' ? 'tool' : message.role,
+          content: message.content,
+          ...(message.name ? { name: message.name } : {}),
+        })),
+      ],
+      ...(request.tools && request.tools.length > 0
+        ? {
+            tools: request.tools.map((tool) => ({
+              type: 'function',
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+              },
+            })),
+          }
+        : {}),
+    };
+
+    try {
+      const response = await fetch(`${this.host}/api/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        ...(request.signal ? { signal: request.signal } : {}),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        if (response.status === 404) {
+          return Err(
+            `Ollama has no model "${request.model}" — pull it first: ollama pull ${request.model}`,
+          );
+        }
+        return Err(`Ollama returned ${response.status}${detail ? `: ${truncate(detail)}` : ''}`);
+      }
+
+      const payload = (await response.json()) as OllamaChatResponse;
+
+      const toolCalls: ToolCall[] = (payload.message?.tool_calls ?? []).map((call, index) => ({
+        // Ollama does not mint call ids; synthesise stable ones so the
+        // tool-result pairing works the same as with the other providers.
+        id: `ollama-call-${index}`,
+        name: call.function.name,
+        arguments: call.function.arguments ?? {},
+      }));
+
+      const inputTokens = payload.prompt_eval_count ?? 0;
+      const outputTokens = payload.eval_count ?? 0;
+
+      return Ok({
+        text: payload.message?.content ?? '',
+        toolCalls,
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens },
+        stopReason: mapDoneReason(payload.done_reason, toolCalls.length > 0),
+        ...(payload.message?.thinking ? { reasoning: payload.message.thinking } : {}),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Failed to fetch')) {
+        return Err(
+          `Couldn't reach Ollama at ${this.host}. Start it with OLLAMA_ORIGINS="*" to allow browser requests.`,
+        );
+      }
+      return Err(this.describeError(error));
+    }
+  }
+}
+
+function mapDoneReason(reason: string | undefined, hasToolCalls: boolean): StopReason {
+  if (hasToolCalls) return 'tool_use';
+  if (reason === 'length') return 'max_tokens';
+  return 'end_turn';
+}
+
+function truncate(text: string, max = 160): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}

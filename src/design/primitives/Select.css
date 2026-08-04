@@ -1,0 +1,71 @@
+.select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  transition: var(--transition-colors);
+}
+
+.select:hover {
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.select:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-focus),
+    0 0 0 3px color-mix(in srgb, var(--color-border-focus) 18%, transparent);
+}
+
+.select[data-disabled='true'] {
+  background: var(--color-bg-subtle);
+  opacity: 0.7;
+}
+
+/* The native <select> stays the interactive element — free keyboard
+ * support, free platform popup, free mobile behaviour. Only its skin is
+ * ours. Padding-right leaves room for the chevron. */
+.select__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: var(--space-1-5) var(--space-7, 28px) var(--space-1-5) var(--space-2-5);
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.select__control:disabled {
+  cursor: default;
+}
+
+.select__control option {
+  /* Popup rows are drawn by the OS; only colour is reliably ours. */
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-regular);
+}
+
+.select__chevron {
+  position: absolute;
+  right: var(--space-2);
+  display: flex;
+  color: var(--color-text-quaternary);
+  pointer-events: none;
+}
+
+.select__leading {
+  display: flex;
+  flex: none;
+  padding-left: var(--space-2-5);
+  color: var(--accent-on-tint, var(--color-text-tertiary));
+}
+
+.select__leading + .select__control {
+  padding-left: var(--space-1-5);
+}

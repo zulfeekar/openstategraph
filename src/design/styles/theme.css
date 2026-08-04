@@ -1,0 +1,285 @@
+/* ------------------------------------------------------------------ *
+ * Tier 2 — Semantic roles.
+ *
+ * Components only ever reference the names in this file. Each theme
+ * re-points the same role set at a different slice of the primitive
+ * ramps, so a component is themed for free and can't leak a raw hex.
+ * ------------------------------------------------------------------ */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* ---------- Surfaces ---------- */
+  --color-bg-canvas: #f7f8fa;
+  --color-bg-surface: var(--neutral-0);
+  --color-bg-surface-raised: var(--neutral-0);
+  --color-bg-surface-sunken: var(--neutral-50);
+  --color-bg-subtle: var(--neutral-75);
+  --color-bg-muted: var(--neutral-100);
+  --color-bg-inverse: var(--neutral-900);
+
+  /* Interaction states, expressed as overlays so they stack on any bg. */
+  --color-bg-hover: rgba(17, 20, 26, 0.04);
+  --color-bg-active: rgba(17, 20, 26, 0.07);
+  --color-bg-selected: var(--blue-50);
+
+  /* ---------- Text ---------- */
+  --color-text-primary: #14171d;
+  --color-text-secondary: var(--neutral-600);
+  --color-text-tertiary: var(--neutral-500);
+  --color-text-quaternary: var(--neutral-400);
+  --color-text-placeholder: var(--neutral-400);
+  --color-text-inverse: var(--neutral-0);
+  --color-text-link: var(--blue-600);
+
+  /* ---------- Borders ---------- */
+  --color-border-subtle: var(--neutral-100);
+  --color-border-default: #e4e7ec;
+  --color-border-strong: var(--neutral-200);
+  --color-border-emphasis: var(--neutral-300);
+  --color-border-focus: var(--blue-500);
+  --color-focus-ring: var(--blue-500);
+
+  /* ---------- Brand / primary action ---------- */
+  --color-primary: var(--green-500);
+  --color-primary-hover: var(--green-600);
+  --color-primary-active: var(--green-700);
+  --color-primary-subtle: var(--green-50);
+  --color-primary-text: var(--neutral-0);
+
+  /* ---------- Status ---------- */
+  --color-status-idle: var(--neutral-300);
+  --color-status-ready: var(--teal-500);
+  --color-status-running: var(--blue-500);
+  --color-status-success: var(--green-500);
+  --color-status-warning: var(--amber-500);
+  --color-status-error: var(--red-500);
+
+  --color-danger: var(--red-600);
+  --color-danger-subtle: var(--red-50);
+
+  /* ---------- Canvas chrome ---------- */
+  --color-canvas-grid-dot: #d5dae2;
+  --color-canvas-link: #b3b9c4;
+  --color-canvas-link-hover: var(--neutral-500);
+  --color-canvas-link-active: var(--blue-500);
+  --color-canvas-link-flow: var(--green-500);
+  --color-port: #3d434f;
+  --color-port-ring: var(--neutral-0);
+  --color-port-hover: var(--blue-600);
+  --color-port-valid: var(--green-500);
+  --color-port-invalid: var(--red-500);
+  --color-snapline: var(--violet-500);
+  --color-selection-band: rgba(59, 130, 246, 0.08);
+  --color-selection-band-border: var(--blue-500);
+  --color-group-fill: #e8f1fd;
+  --color-group-border: #c6ddf8;
+  --color-group-text: #16324f;
+  --color-note-fill: var(--amber-50);
+  --color-note-border: var(--amber-100);
+
+  /* ---------- Elevation ----------
+   * Two-layer shadows: a tight contact shadow for edge definition plus
+   * a wide ambient one for lift. Kept low-opacity so cards read crisp
+   * against the light canvas rather than smudged. */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm:
+    0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md:
+    0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 10px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg:
+    0 2px 4px rgba(16, 24, 40, 0.05), 0 10px 24px -4px rgba(16, 24, 40, 0.1);
+  --shadow-xl:
+    0 4px 8px rgba(16, 24, 40, 0.05), 0 20px 40px -8px rgba(16, 24, 40, 0.14);
+  --shadow-node:
+    0 0 0 1px var(--color-border-default), 0 1px 2px rgba(16, 24, 40, 0.05),
+    0 4px 12px -4px rgba(16, 24, 40, 0.08);
+  --shadow-node-hover:
+    0 0 0 1px var(--color-border-emphasis), 0 2px 4px rgba(16, 24, 40, 0.06),
+    0 8px 20px -6px rgba(16, 24, 40, 0.12);
+  --shadow-node-selected:
+    0 0 0 1.5px var(--blue-500), 0 2px 4px rgba(37, 99, 235, 0.1),
+    0 8px 20px -6px rgba(37, 99, 235, 0.16);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg-canvas: #0e1116;
+  --color-bg-surface: #171b22;
+  --color-bg-surface-raised: #1c2129;
+  --color-bg-surface-sunken: #12161c;
+  --color-bg-subtle: #1f242d;
+  --color-bg-muted: #262c36;
+  --color-bg-inverse: var(--neutral-75);
+
+  --color-bg-hover: rgba(255, 255, 255, 0.05);
+  --color-bg-active: rgba(255, 255, 255, 0.09);
+  --color-bg-selected: rgba(59, 130, 246, 0.16);
+
+  --color-text-primary: #e8eaee;
+  --color-text-secondary: #9aa2b1;
+  --color-text-tertiary: #7d8695;
+  --color-text-quaternary: #626b79;
+  --color-text-placeholder: #5d6673;
+  --color-text-inverse: var(--neutral-950);
+  --color-text-link: #7aa7f5;
+
+  --color-border-subtle: #22272f;
+  --color-border-default: #2b313b;
+  --color-border-strong: #363d49;
+  --color-border-emphasis: #454e5c;
+  --color-border-focus: #5b93f0;
+  --color-focus-ring: #5b93f0;
+
+  --color-primary: #1fa855;
+  --color-primary-hover: #24b95e;
+  --color-primary-active: #189347;
+  --color-primary-subtle: rgba(31, 168, 85, 0.14);
+  --color-primary-text: #ffffff;
+
+  --color-status-idle: #454e5c;
+  --color-status-ready: #2dd4bf;
+  --color-status-running: #60a5fa;
+  --color-status-success: #34d399;
+  --color-status-warning: #fbbf24;
+  --color-status-error: #f87171;
+
+  --color-danger: #f87171;
+  --color-danger-subtle: rgba(248, 113, 113, 0.14);
+
+  --color-canvas-grid-dot: #262c36;
+  --color-canvas-link: #3d4552;
+  --color-canvas-link-hover: #5c6675;
+  --color-canvas-link-active: #60a5fa;
+  --color-canvas-link-flow: #34d399;
+  --color-port: #8b95a5;
+  --color-port-ring: #171b22;
+  --color-port-hover: #7aa7f5;
+  --color-port-valid: #34d399;
+  --color-port-invalid: #f87171;
+  --color-snapline: #a78bfa;
+  --color-selection-band: rgba(96, 165, 250, 0.1);
+  --color-selection-band-border: #60a5fa;
+  --color-group-fill: rgba(59, 130, 246, 0.09);
+  --color-group-border: rgba(96, 165, 250, 0.26);
+  --color-group-text: #c4d9f7;
+  --color-note-fill: rgba(245, 158, 11, 0.09);
+  --color-note-border: rgba(245, 158, 11, 0.22);
+
+  /* Dark surfaces get their definition from a light hairline, not from a
+   * shadow — so the shadows shrink and the ring carries the edge. */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4), 0 12px 28px -6px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.55);
+  --shadow-node:
+    0 0 0 1px var(--color-border-default), 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 4px 12px -4px rgba(0, 0, 0, 0.35);
+  --shadow-node-hover:
+    0 0 0 1px var(--color-border-emphasis), 0 2px 4px rgba(0, 0, 0, 0.4),
+    0 8px 20px -6px rgba(0, 0, 0, 0.45);
+  --shadow-node-selected:
+    0 0 0 1.5px #5b93f0, 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px -6px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------------------ *
+ * Accent palettes.
+ *
+ * A node family declares `data-accent="blue"` once; every child reads
+ * the four resolved slots below. Adding a family means adding a block
+ * here — no component changes.
+ * ------------------------------------------------------------------ */
+
+[data-accent] {
+  --accent-solid: var(--neutral-500);
+  --accent-strong: var(--neutral-600);
+  --accent-tint: var(--neutral-100);
+  --accent-on-tint: var(--neutral-700);
+}
+
+[data-accent='blue'] {
+  --accent-solid: var(--blue-500);
+  --accent-strong: var(--blue-600);
+  --accent-tint: var(--blue-50);
+  --accent-on-tint: var(--blue-600);
+}
+[data-accent='indigo'] {
+  --accent-solid: var(--indigo-500);
+  --accent-strong: var(--indigo-600);
+  --accent-tint: var(--indigo-50);
+  --accent-on-tint: var(--indigo-600);
+}
+[data-accent='green'] {
+  --accent-solid: var(--green-500);
+  --accent-strong: var(--green-600);
+  --accent-tint: var(--green-50);
+  --accent-on-tint: var(--green-600);
+}
+[data-accent='amber'] {
+  --accent-solid: var(--amber-500);
+  --accent-strong: var(--amber-600);
+  --accent-tint: var(--amber-50);
+  --accent-on-tint: var(--amber-600);
+}
+[data-accent='orange'] {
+  --accent-solid: var(--orange-500);
+  --accent-strong: var(--orange-600);
+  --accent-tint: var(--orange-50);
+  --accent-on-tint: var(--orange-600);
+}
+[data-accent='red'] {
+  --accent-solid: var(--red-500);
+  --accent-strong: var(--red-600);
+  --accent-tint: var(--red-50);
+  --accent-on-tint: var(--red-600);
+}
+[data-accent='violet'] {
+  --accent-solid: var(--violet-500);
+  --accent-strong: var(--violet-600);
+  --accent-tint: var(--violet-50);
+  --accent-on-tint: var(--violet-600);
+}
+[data-accent='teal'] {
+  --accent-solid: var(--teal-500);
+  --accent-strong: var(--teal-600);
+  --accent-tint: var(--teal-50);
+  --accent-on-tint: var(--teal-600);
+}
+
+/* Dark mode needs the tints rebuilt from alpha rather than the 50-step,
+ * which would glow against a dark surface. */
+[data-theme='dark'] [data-accent='blue'] {
+  --accent-tint: rgba(59, 130, 246, 0.15);
+  --accent-on-tint: #7aa7f5;
+}
+[data-theme='dark'] [data-accent='indigo'] {
+  --accent-tint: rgba(99, 102, 241, 0.15);
+  --accent-on-tint: #9ca0f8;
+}
+[data-theme='dark'] [data-accent='green'] {
+  --accent-tint: rgba(22, 163, 74, 0.16);
+  --accent-on-tint: #4ade80;
+}
+[data-theme='dark'] [data-accent='amber'] {
+  --accent-tint: rgba(245, 158, 11, 0.16);
+  --accent-on-tint: #fbbf24;
+}
+[data-theme='dark'] [data-accent='orange'] {
+  --accent-tint: rgba(249, 115, 22, 0.16);
+  --accent-on-tint: #fb923c;
+}
+[data-theme='dark'] [data-accent='red'] {
+  --accent-tint: rgba(239, 68, 68, 0.16);
+  --accent-on-tint: #f87171;
+}
+[data-theme='dark'] [data-accent='violet'] {
+  --accent-tint: rgba(139, 92, 246, 0.16);
+  --accent-on-tint: #a78bfa;
+}
+[data-theme='dark'] [data-accent='teal'] {
+  --accent-tint: rgba(20, 184, 166, 0.16);
+  --accent-on-tint: #2dd4bf;
+}

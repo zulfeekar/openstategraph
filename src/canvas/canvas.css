@@ -1,0 +1,251 @@
+/* ================================================================== *
+ * Canvas chrome: the paper surface, ports, links, and the overlays the
+ * feature plugins paint (rubber band, snaplines).
+ * ================================================================== */
+
+.canvas-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--color-bg-canvas);
+  /* The dot grid is drawn by JointJS; this is the flat base beneath it. */
+  cursor: default;
+  touch-action: none;
+}
+
+.canvas-stage[data-pan-ready='true'] {
+  cursor: grab;
+}
+
+.canvas-stage[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.canvas-stage[data-drop-active='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--color-border-focus);
+  background: color-mix(in srgb, var(--color-border-focus) 4%, transparent);
+}
+
+/* The paper's own mount node, created by PaperController rather than React
+ * so JointJS can remove it on teardown without touching the React tree. */
+.canvas-surface {
+  position: absolute;
+  inset: 0;
+}
+
+/* JointJS injects its own root; make it fill the stage. */
+.canvas-stage .joint-paper {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-stage svg {
+  display: block;
+  overflow: visible;
+}
+
+/* ---------- Nodes ---------- */
+
+.joint-element {
+  /* Cards carry their own shadow; the SVG group must not clip it. */
+  overflow: visible;
+}
+
+.joint-element foreignObject {
+  overflow: visible;
+}
+
+/* JointJS applies this while a cell is being dragged. */
+.joint-element.is-dragging .node,
+.joint-dragging .node {
+  box-shadow: var(--shadow-xl), 0 0 0 1.5px var(--color-border-focus);
+  cursor: grabbing;
+}
+
+/* ---------- Ports ----------
+ *
+ * All port and link colour lives here rather than in the shape definitions:
+ * SVG presentation attributes don't support `var()`, so a themed colour has
+ * to arrive as a CSS property. The shapes carry geometry and data attributes;
+ * these rules turn those into the palette. */
+
+.joint-port {
+  cursor: crosshair;
+}
+
+[joint-selector='portHit'] {
+  fill: transparent;
+  stroke: none;
+}
+
+[joint-selector='portDot'] {
+  fill: var(--color-port);
+  stroke: var(--color-port-ring);
+  transition:
+    r var(--duration-fast) var(--ease-out),
+    fill var(--duration-fast) var(--ease-out);
+}
+
+/* Each port type gets its own hue, matching the icon beside its label. */
+[joint-selector='portDot'][data-accent='amber'] {
+  fill: var(--amber-500);
+}
+[joint-selector='portDot'][data-accent='orange'] {
+  fill: var(--orange-500);
+}
+[joint-selector='portDot'][data-accent='violet'] {
+  fill: var(--violet-500);
+}
+[joint-selector='portDot'][data-accent='green'] {
+  fill: var(--green-500);
+}
+[joint-selector='portDot'][data-accent='blue'] {
+  fill: var(--blue-500);
+}
+[joint-selector='portDot'][data-accent='teal'] {
+  fill: var(--teal-500);
+}
+[joint-selector='portDot'][data-accent='indigo'] {
+  fill: var(--indigo-500);
+}
+[joint-selector='portDot'][data-accent='red'] {
+  fill: var(--red-500);
+}
+
+.joint-port:hover [joint-selector='portDot'],
+.joint-port.is-dragging [joint-selector='portDot'] {
+  r: 6;
+  fill: var(--color-port-hover);
+}
+
+/* `markAvailable` adds this class to every magnet a dragged link may land on
+ * — the affordance that turns "guess and drop" into "aim at a target". */
+.joint-port.is-available [joint-selector='portDot'] {
+  r: 6.5;
+  fill: var(--color-port-valid);
+}
+
+.joint-port.is-available [joint-selector='portHit'] {
+  fill: color-mix(in srgb, var(--color-port-valid) 18%, transparent);
+}
+
+/* ---------- Links ---------- */
+
+.joint-link [joint-selector='outline'] {
+  stroke: transparent;
+}
+
+.joint-link [joint-selector='line'] {
+  stroke: var(--color-canvas-link);
+  transition: stroke var(--duration-fast) var(--ease-out);
+}
+
+.joint-link:hover [joint-selector='line'] {
+  stroke: var(--color-canvas-link-hover);
+  stroke-width: 2;
+}
+
+.joint-link.is-selected [joint-selector='line'] {
+  stroke: var(--color-canvas-link-active);
+  stroke-width: 2;
+}
+
+/* Applied while a run is in flight so data visibly flows along the graph. */
+.joint-link.is-active [joint-selector='line'] {
+  stroke: var(--color-canvas-link-flow);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  animation: link-flow 0.6s linear infinite;
+}
+
+@keyframes link-flow {
+  to {
+    stroke-dashoffset: -9;
+  }
+}
+
+/* The link being dragged out of a port, before it lands. */
+.joint-link.joint-temporary-link [joint-selector='line'] {
+  stroke: var(--color-canvas-link-active);
+  stroke-dasharray: 4 3;
+}
+
+/* ---------- Overlays ---------- */
+
+.selection-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--z-canvas-overlay);
+  pointer-events: none;
+  border: 1px solid var(--color-selection-band-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-selection-band);
+  transform-origin: top left;
+}
+
+.snapline-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-canvas-overlay);
+  pointer-events: none;
+}
+
+.snapline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--color-snapline);
+  transform-origin: top left;
+}
+
+.snapline--x {
+  width: 1px;
+}
+
+.snapline--y {
+  height: 1px;
+}
+
+/* ---------- Empty state ---------- */
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  pointer-events: none;
+  color: var(--color-text-tertiary);
+}
+
+.canvas-empty__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  color: var(--color-text-quaternary);
+}
+
+.canvas-empty__title {
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.canvas-empty__hint {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
