@@ -48,8 +48,15 @@ export class WorkflowSerializer {
     return model.toJSON();
   }
 
+  /**
+   * The exact bytes written to disk.
+   *
+   * Two-space indent and a trailing newline: this is a text file under
+   * version control, and one that ends mid-line reports "\ No newline at end
+   * of file" on every diff and rewrites its last line on any append.
+   */
   toJSONString(model: WorkflowModel, pretty = true): string {
-    return JSON.stringify(this.serialize(model), null, pretty ? 2 : 0);
+    return `${JSON.stringify(this.serialize(model), null, pretty ? 2 : 0)}\n`;
   }
 
   parse(text: string): Result<SerializedWorkflow, string> {

@@ -99,7 +99,8 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           // a shared bus rather than as one more row in the footer.
           side: 'bottom',
           appearance: 'pill',
-          maxConnections: Number.POSITIVE_INFINITY,
+          // Unlimited. `null`, not `Infinity`, so the descriptor survives JSON.
+          maxConnections: null,
           description: 'Tools the agent may call.',
         },
         {

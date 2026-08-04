@@ -43,8 +43,14 @@ export interface IPortDescriptor {
    * Cap on simultaneous connections. Inputs default to 1 (a node field
    * cannot be fed two values at once); outputs default to unlimited,
    * since fanning one result into several consumers is normal.
+   *
+   * `null` declares *unlimited* explicitly — an agent's tool bus, where many
+   * tools converge on one input. It is `null` and not `Infinity` because a
+   * port descriptor is data that reaches `workflow.json`, and
+   * `JSON.stringify(Infinity)` is `"null"`: the value would not survive its
+   * own round trip, and nothing would report the loss.
    */
-  readonly maxConnections?: number;
+  readonly maxConnections?: number | null;
   /** An unconnected required input makes the workflow invalid. */
   readonly required?: boolean;
   /** Defaults to `left` for inputs and `right` for outputs. */
@@ -74,10 +80,16 @@ export const portRefEquals = (a: PortRef, b: PortRef): boolean =>
 
 export const portRefKey = (ref: PortRef): string => `${ref.nodeId}/${ref.portId}`;
 
-/** Resolves the effective connection cap for a port. */
-export function maxConnectionsOf(port: IPortDescriptor): number {
-  if (port.maxConnections != null) return port.maxConnections;
-  return port.direction === 'in' ? 1 : Number.POSITIVE_INFINITY;
+/**
+ * Resolves the effective connection cap for a port. `null` means unlimited.
+ *
+ * The check is `=== undefined`, not `!= null`: `null` is a meaningful
+ * declaration (unlimited) rather than an absent one, and `0` is a real cap, so
+ * neither may fall through to the direction default.
+ */
+export function maxConnectionsOf(port: IPortDescriptor): number | null {
+  if (port.maxConnections !== undefined) return port.maxConnections;
+  return port.direction === 'in' ? 1 : null;
 }
 
 /** Resolves the effective side for a port. */

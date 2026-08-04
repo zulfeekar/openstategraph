@@ -173,12 +173,15 @@ export const capacityRule: IConnectionRule = {
   id: 'capacity',
   order: 50,
   check({ model, target, targetPort, sourcePort, source }) {
+    // `null` is unlimited, so there is nothing to compare against.
     const outMax = maxConnectionsOf(sourcePort);
-    if (Number.isFinite(outMax) && model.edgesFrom(source).length >= outMax) {
+    if (outMax !== null && model.edgesFrom(source).length >= outMax) {
       return { reason: `This output accepts ${outMax} connection${outMax === 1 ? '' : 's'}` };
     }
 
     const inMax = maxConnectionsOf(targetPort);
+    if (inMax === null) return null;
+
     const occupying = model.edgesInto(target);
     if (occupying.length < inMax) return null;
 

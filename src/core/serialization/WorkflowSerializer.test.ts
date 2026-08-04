@@ -158,6 +158,13 @@ describe('WorkflowSerializer', () => {
       expect(ids).toEqual([...ids].sort(compareNatural));
     });
 
+    it('ends with a newline, as a text file on disk should', () => {
+      seed();
+      // Without it git reports "\ No newline at end of file" on every diff,
+      // and appending anything rewrites the last line.
+      expect(workbench.controller.exportJSON().endsWith('}\n')).toBe(true);
+    });
+
     it('does not write edge ids, which are creation-order handles', () => {
       seed();
       const document = JSON.parse(workbench.controller.exportJSON()) as {

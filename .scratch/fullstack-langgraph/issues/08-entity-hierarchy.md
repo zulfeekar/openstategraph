@@ -94,11 +94,18 @@ A single boolean on the node cannot express that. The capability is right; the l
 
 Settle: which node types are buses, and which expose configurable arity via dynamic ports.
 
-### Bug to fix while typing this: `Infinity` is not JSON
+### Bug to fix while typing this: `Infinity` is not JSON — **FIXED**
 
 `AgentNode.ts:102` sets `maxConnections: Number.POSITIVE_INFINITY`, and `maxConnectionsOf()` returns `Number.POSITIVE_INFINITY` as the output default. **`Infinity` is not representable in JSON** — `JSON.stringify` emits `null`, and Pydantic/JSON Schema cannot express it either. It happens to survive today only because port descriptors live in code and are never serialised; the moment the node-type manifest is emitted (ticket 18) it becomes a silent coercion.
 
 Fix as part of the Pydantic model: **`max_connections: int | None`, where `None` means unlimited.** Never put a non-finite float in a serialisable field. Cross-reference ticket 19 (canonical serialization) and ticket 02 (generated types).
+
+**Done ahead of the Pydantic work**, since it was a one-line type change guarded by a test sweep and the TypeScript side is the source the generator will mirror. `maxConnections?: number | null`, `maxConnectionsOf(): number | null`, `null` = unlimited. Two details worth carrying into the Pydantic model:
+
+- The resolution check is `=== undefined`, not `!= null`. `null` is a *declaration* (unlimited) and `0` is a real cap; a `!= null` or truthiness check would silently fall both through to the direction default.
+- `capacityRule` no longer leans on `Number.isFinite`; it branches on `null` explicitly, and returns early for an unlimited input before counting occupants.
+
+Guarded by `core/model/contracts/ports.test.ts`, which sweeps **every registered node type's ports** and asserts each descriptor survives `JSON.parse(JSON.stringify(...))`. That sweep is the part that keeps this fixed — it fails for any future node type that declares a non-finite cap, rather than relying on anyone remembering this note. It reads ports via `definition.ports(defaultsFrom(definition.fields))`, since port sets are a function of data.
 
 **Tension to resolve — and it reverses an earlier proposal in this ticket.** Above, `DeepAgentNode extends ReactAgentNode` was proposed because `create_deep_agent` wraps `create_agent`. That breaks `Final*` = leaf: `ReactAgentNode` would be both a registered leaf *and* a base.
 
