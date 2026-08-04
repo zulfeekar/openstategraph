@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 02, 03, 06
 
 ## Question
@@ -233,3 +233,210 @@ buys nothing. Per CLAUDE.md — "inheritance must earn itself" — it does not h
   classes or presets. Note they differ in **topology**, which presets cannot
   express — a preset changes middleware, not the graph.
 - The `_abstract/` directory name.
+
+---
+
+## Answer
+
+### 1. The universal root already exists, is one field wide, and must stay that way
+
+The requirement was "every concept derives from one extensible base". It already
+does: `IIdentifiable { id }`, which `INodeDefinition` and every `Registry<T>`
+entry extends. **Do not invent an `IEntity` on top of it.**
+
+The tempting additions — `kind`, `version`, `metadata`, lifecycle hooks — each
+fail for at least one family. An edge has no position; a provider is never placed
+on a canvas; a tool is not selectable; only the discriminated families need
+`kind`. A root carrying all of it is precisely the **god base class** CLAUDE.md
+forbids, and an Interface Segregation failure: members would inherit capabilities
+they cannot use.
+
+So: **one shared field (`id`), and per-family interfaces below it.** The
+hierarchy the requirement asks for is real, but it is *shallow at the root and
+deep only inside a family* — which is where shared behaviour actually exists.
+
+### 2. Where inheritance earns itself — and where it does not
+
+Honest accounting, as the ticket demanded:
+
+| Concern | Mechanism | Why |
+| --- | --- | --- |
+| Agent config schema (60+ fields, ticket 22) | **inheritance** — `AbstractAgentNode` | Genuinely shared by every agent; one reason to change |
+| Middleware assembly | **data** — an ordered slot table | See the middleware section above; the library models it as data, not a class tree |
+| Harness tier (react / deep) | **sibling leaves + a registered preset** | `create_deep_agent` is `create_agent` + a fixed slot assembly, not + subclassing |
+| Retry / timeout / caching | **graph-assembly parameter** | Not a node concern at all — see §5 |
+| Token accounting, logging | **middleware for agents; callbacks/tracing otherwise** | Different runtime mechanisms per family; a shared ancestor would be a lie |
+
+Two structural reasons the tree stays shallow, both from the runtime rather than
+from taste:
+
+- **A LangGraph node is a function, not a class.** So a Python class tree over
+  "nodes" models *authoring configuration*, never runtime behaviour. Deepening
+  it adds no dispatch, only ceremony.
+- **Pydantic flattens inheritance** (ticket 02, [pydantic#12071]): base classes
+  never reach the generated schema. So any depth we add is *invisible* across the
+  boundary — it cannot be relied on by a consumer of the generated types.
+
+### 3. Agent tiers: three registered node types — decided
+
+`ReactAgentNode`, `DeepAgentNode`, `CustomGraphNode` are separately registered
+leaves, each with its own card, inspector and compile target.
+
+Chosen over a `tier` discriminant on one type because the union of the three
+config surfaces is 60+ fields, and a single card rendering all three makes
+invalid combinations *expressible* — every one of which then needs a cross-field
+validation rule to un-express. Three types make illegal states unrepresentable
+instead, and give clean Liskov substitution with distinct compile targets.
+
+**Accepted cost, recorded so it is not a surprise:** switching tier means
+replacing the node, which drops its edges. Mitigation for ticket 13/25 — a
+"convert tier" command that mints the new node, copies the fields the target tier
+shares, and re-attaches every edge whose port survives. That is a command on the
+existing stack, so it is one undo step.
+
+```
+INode -> BaseNode -> AbstractAgentNode        shared schema + middleware slot table
+                     |- ReactAgentNode        -> create_agent
+                     '- DeepAgentNode         -> create_deep_agent (deep slot preset)
+         BaseNode -> CustomGraphNode          -> hand-written StateGraph node
+         BaseNode -> ToolNode                 -> ToolNode / @tool
+         BaseNode -> FunctionNode             -> plain callable
+         BaseNode -> RouterNode               -> add_conditional_edges
+         BaseNode -> GraderNode               -> evaluator-optimizer (ticket 24)
+         BaseNode -> WorkflowNode             -> subgraph (ticket 05)
+```
+
+`DeepAgentNode` is a sibling of `ReactAgentNode`, not its subclass — reasoning in
+the middleware section. A fourth harness arrives as a registered preset plus a
+leaf, touching no `core/` file.
+
+### 4. Prebuilt shapes are canvas templates — decided
+
+A "shape" (single loop, orchestrator, router-style) differs in **topology**, and
+a middleware preset cannot express topology. So shapes are **multi-node canvas
+templates**: stamping one drops several wired nodes the developer then edits
+freely. No new class, nothing opaque, and the result stays composable — which is
+the property the whole use case rests on.
+
+Rejected: a single `OrchestratorNode` compiling to a hidden subgraph. It reads
+tidier and is worse — the internals are exactly what a developer needs to reach.
+
+A template is therefore a `workflow.json` fragment plus paste-with-remapped-ids,
+which the clipboard already does. Little new machinery.
+
+### 5. Cross-family concerns: retry is not a node concern — it belongs to graph assembly
+
+The ticket asked how retry/token-accounting/logging reach both agent nodes and
+tool nodes without fattening a common ancestor. Verified against the docs, and
+the answer is that **the premise was wrong for retry**: it is not an agent
+capability at all.
+
+`retry_policy=RetryPolicy(...)` is a parameter of **`StateGraph.add_node`**, so
+it applies to *any* node of *any* family, and `StateGraph.set_node_defaults(...)`
+applies retry, timeout and `error_handler` to **every node in a graph** without
+repeating them per node (per-node values still win). `CachePolicy` works the same
+way, and `error_handler` (needs `langgraph>=1.2`) runs a compensation branch
+after retries are exhausted.
+
+So the design is:
+
+- **Workflow-level defaults** — `retry`, `timeout`, `error_handler`, `cache` live
+  on the *workflow*, compiled to `set_node_defaults`. Declared once, inherited by
+  every node, with no base class involved.
+- **Per-node override** — an optional fragment on `BaseNode`, compiled to the
+  `add_node` keyword.
+
+This is CLAUDE.md's boundary rule confirmed by the library: a concern needed by
+two different families turned out to be a **collaborator** (a graph-assembly
+parameter), not a superclass. Anyone who had put `retry` on an agent base would
+have had to duplicate it onto the tool base, and then reconcile two spellings of
+one runtime feature.
+
+Token accounting and logging stay genuinely per-family — middleware for agents,
+LangGraph callbacks/tracing for everything else — so they are **not** unified.
+Unifying them would mean inventing an abstraction the runtime does not have.
+
+### 6. Authored entity vs runtime behaviour: the split survives in Python and dies in TypeScript
+
+Phase 1 split `INodeDefinition` (serialisable authoring data) from
+`INodeExecutor` (behaviour). Keep the split — ticket 23's one-directional compile
+seam depends on it, and `INodeExecutor` / `IToolExecutor` being separate is the
+Interface Segregation example CLAUDE.md cites.
+
+But be explicit about a consequence nobody has written down yet: **ticket 07
+ruled that the browser must never execute a workflow**, so the *TypeScript*
+executor tier has no job once the FastAPI runtime lands. `core/execution` and
+`core/providers` are phase-1 artefacts — which is exactly why ticket 11 recorded
+their 10%/17% coverage as a stated gap rather than a debt. They are scheduled for
+deletion, not for tests.
+
+What survives on the TS side is `INodeDefinition` — schema, ports, defaults,
+validation. Authoring only.
+
+### 7. Which ports are buses
+
+Only one today, and one that should become one:
+
+| Port | Verdict |
+| --- | --- |
+| `tools` (agent) | **Bus.** `maxConnections: null`. Confirmed. |
+| `skill` (agent) | **Should become `skills`, a bus.** `SkillsMiddleware` takes a *list*, and the project rule is that anything plural is a list by default. A single-slot `skill` port silently caps a list-valued config at one. |
+| `prompt` (agent) | Single. Two prompts is meaningless. |
+| `result` and all outputs | Unlimited by default. Fan-out is normal. |
+
+Everything else varies **port count**, never port cardinality — a port whose type
+changes between scalar and list at runtime is what typed ports exist to prevent.
+
+Renaming `skill` → `skills` changes the shipped catalogue and any saved file
+referencing that port id. It is cheap now and gets expensive the moment real
+workflows exist, so it belongs in the next implementation ticket, with a
+serializer migration. Filed as its own concern rather than done here, because
+ticket 19's loader already drops links to vanished ports *with a warning* — so
+without a migration, every existing file would silently lose its skill wiring.
+
+### 8. Python vs TypeScript: the base means two different things
+
+Made explicit, as the ticket required:
+
+| | TypeScript | Python |
+| --- | --- | --- |
+| What the base owns | the **config schema** | the **resolution** — config to middleware |
+| Runs middleware | never | always |
+| Hierarchy source | hand-written | hand-written |
+| Field types | **generated** from Pydantic | source of truth |
+
+The subtlety that follows from ticket 02: because Pydantic flattens inheritance,
+**the generated TypeScript can never express our ladder.** So the ladder is
+hand-written on the TS side and *consumes* generated flat field types. The
+generator owns data shapes; it does not own the class tree. Anyone expecting
+`generated.ts` to contain `extends` will be confused — it never will.
+
+### 9. Directory convention: `abc/` — decided
+
+```
+workflows/text-to-sql/
+  nodes/          concrete node classes — registered in the palette
+  functions/      concrete callables
+  tools/          concrete tools
+  abc/            I* interfaces and Base*/Abstract* classes — never registered
+```
+
+Mirrors Python's stdlib `abc`, and the same word works in both languages.
+
+**Checked the obvious hazard rather than assuming it:** a workflow-local `abc/`
+package does **not** shadow stdlib `abc`, even with the workflow directory as
+`sys.path[0]`. `abc` is imported during interpreter startup and is already in
+`sys.modules` before any user code runs, so `from abc import ABC` resolves to the
+stdlib every time. Verified directly.
+
+Worth noting the rule this *doesn't* generalise to: a directory named after a
+stdlib module that is **not** pre-imported — `json/`, `csv/`, `secrets/` — would
+shadow it. `abc/` is safe specifically because of the startup import. Discovery
+(ticket 18) should still import workflows as a package rather than putting the
+workflow directory on `sys.path`, which makes the question moot regardless.
+
+### Downstream
+
+Unblocks 09, 10, 18, 20, 24. Ticket 20 (cardinality fields) is now largely
+answered — the `skills` bus and the "vary port count, not cardinality" rule are
+settled here; what remains for it is the repeatable-group UI for subagent specs.
