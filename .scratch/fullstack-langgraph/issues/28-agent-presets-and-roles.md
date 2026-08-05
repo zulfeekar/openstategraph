@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved — every role this ticket named is now a built, tested node type
 Blocked by: 08
 
 ## Question
@@ -129,3 +129,37 @@ explicit in the card is a feature, not a limitation.
   discriminated union? Ticket 02: a required `Literal` with no default.
 - Is `Grader` a role or just an Agent with a structured verdict schema? It has a
   distinctive *port* shape (`revise: feedback`), which argues role.
+
+## Resolved (2026-08-05) — settled by what got built, recorded here
+
+Every role this ticket asked for exists as a real, tested node type:
+`agent.llm` (plain Agent + system prompt = "the generic path", per this
+ticket's own requirement 1), `route.classifier` (Router, ticket 13),
+`route.grader` (Grader, ticket 24 — including a working `deep` tier as of
+this session, not just a cosmetic field), `orchestrate.supervisor` +
+`orchestrate.worker` (this session). Tier-as-config-field / role-as-node-type
+holds exactly as this ticket argued: switching tier changes which factory a
+node compiles through, never its ports or edges.
+
+**Naming, settled**: the node is **Orchestrator** (label) /
+`orchestrate.supervisor` (type id) — not "Supervisor" or "Parent Agent", the
+other two names the user tried during grilling. "Orchestrator pattern" as a
+multi-node **topology** (Orchestrator → Worker → report → Grader) is
+demonstrated as a hand-wired document in
+`backend/tests/test_intent_routed_workflow.py`, not shipped as a
+one-click canvas **template** — dragging four nodes and wiring them is not
+onerous enough yet to justify a template mechanism that does not otherwise
+exist in this codebase. Revisit if template-worthy multi-node patterns
+accumulate.
+
+**Is Grader a role or "just an Agent with a schema"?** Settled as **role**:
+its `revise: feedback` port shape is the only thing in the catalogue that can
+close a cycle (ticket 09), which is a structural property no generic Agent
+config could express without becoming the Grader in disguise.
+
+**Confirmed still holding**: predicate-on-node/branch-key-on-edge (ticket 09)
+survived the config-driven branch list unchanged — `RouterNode.ts`'s branch
+port ids are still literally the branch names. The `tier` field's home in the
+schema (a required `Literal`, no default) has not been re-verified against
+generated TypeScript this session, since no codegen step exists yet (ticket
+02's own recorded gap) — nothing to check against.
