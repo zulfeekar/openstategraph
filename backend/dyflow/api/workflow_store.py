@@ -85,7 +85,14 @@ class WorkflowStore:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or DEFAULT_WORKFLOWS_ROOT
 
-    def _dir_for(self, slug: str) -> Path:
+    def directory_for(self, slug: str) -> Path:
+        """The validated, resolved directory a slug maps to.
+
+        Public — capability discovery (ticket 18) needs the directory to scan
+        `tools/`/`functions/` under, and reaching for a `_`-prefixed method
+        from outside the class would be the wrong kind of coupling for a
+        genuinely reusable operation.
+        """
         if not slug or slug != slugify(slug) or "/" in slug or "\\" in slug:
             raise InvalidSlugError(f"{slug!r} is not a valid workflow slug")
         candidate = (self.root / slug).resolve()
@@ -122,7 +129,7 @@ class WorkflowStore:
         return sorted(summaries, key=lambda s: s.saved_at, reverse=True)
 
     def load(self, slug: str) -> dict[str, Any]:
-        path = self._dir_for(slug) / "workflow.json"
+        path = self.directory_for(slug) / "workflow.json"
         if not path.is_file():
             raise WorkflowNotFoundError(slug)
         payload = json.loads(path.read_text())
@@ -131,7 +138,7 @@ class WorkflowStore:
         return payload.get("document", payload)
 
     def save(self, slug: str, *, name: str, document: dict[str, Any], saved_at: str) -> None:
-        directory = self._dir_for(slug)
+        directory = self.directory_for(slug)
         is_new = not directory.exists()
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -153,7 +160,7 @@ class WorkflowStore:
             (directory / "AGENTS.md").write_text(_agents_md(name, slug))
 
     def delete(self, slug: str) -> None:
-        directory = self._dir_for(slug)
+        directory = self.directory_for(slug)
         if not directory.exists():
             raise WorkflowNotFoundError(slug)
         shutil.rmtree(directory)

@@ -443,3 +443,59 @@ class TestWorkflowPersistence:
 
         assert len(client.get("/api/workflows").json()) == 1
         assert client.get("/api/workflows/my-flow").json()["document"] == {"nodes": [], "edges": []}
+
+
+class TestCapabilities:
+    """Ticket 18: `GET /api/workflows/{slug}/capabilities` discovers a saved
+    workflow's own `tools/`/`functions/` folders by importing them for real.
+    """
+
+    @staticmethod
+    def _client(tmp_path: Path) -> TestClient:
+        return TestClient(create_app(workflows_root=tmp_path))
+
+    def test_discovers_a_real_tool_and_function_on_disk(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/my-flow", json={"name": "My Flow", "document": {"nodes": [], "edges": []}})
+
+        tools_dir = tmp_path / "my-flow" / "tools"
+        tools_dir.mkdir()
+        (tools_dir / "greet.py").write_text(
+            "from dyflow.abc.tool import BaseTool, ToolResult\n"
+            "from pydantic import BaseModel\n\n"
+            "class GreetArgs(BaseModel):\n    name: str\n\n"
+            "class GreetTool(BaseTool):\n"
+            "    name = 'greet'\n    description = 'Greets someone.'\n    Args = GreetArgs\n"
+            "    def _execute(self, args):\n        return ToolResult(content=f'Hi {args.name}')\n"
+        )
+        functions_dir = tmp_path / "my-flow" / "functions"
+        functions_dir.mkdir()
+        (functions_dir / "share.py").write_text(
+            "def share_of_total(part: float, total: float) -> float:\n    return part / total\n"
+        )
+
+        response = client.get("/api/workflows/my-flow/capabilities")
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        assert body["tools"] == [
+            {
+                "id": "my-flow/tools.GreetTool",
+                "name": "greet",
+                "description": "Greets someone.",
+                "args_schema": body["tools"][0]["args_schema"],
+            }
+        ]
+        assert "name" in body["tools"][0]["args_schema"]["properties"]
+        assert body["functions"][0]["id"] == "my-flow/functions.share_of_total"
+
+    def test_an_unsaved_workflow_is_a_404_not_an_empty_list(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        response = client.get("/api/workflows/never-saved/capabilities")
+        assert response.status_code == 404
+
+    def test_a_workflow_with_no_tools_or_functions_folders_reports_empty(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/bare", json={"name": "Bare", "document": {"nodes": [], "edges": []}})
+        response = client.get("/api/workflows/bare/capabilities")
+        assert response.json() == {"tools": [], "functions": []}

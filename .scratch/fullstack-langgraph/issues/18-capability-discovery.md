@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: partly resolved — capability discovery (tools/functions) built; node-type discovery is not
 Blocked by: 08, 16
 
 ## Question
@@ -66,3 +66,46 @@ What must still be settled:
 A concrete hazard from folder-scoped discovery: two workflows can each define `nodes/summarizer.py` with a class `Summarizer`. If `workflow.json` records the bare class name, references are ambiguous across workflows and break when a file is renamed.
 
 Decide the qualified id — something like `text-to-sql/nodes.Summarizer` — and confirm it satisfies the stability rule from ticket 04/05 (node names are identity; renaming breaks an interrupted thread). Specifically: does renaming the *file* or the *class* change the type id, and what diagnostic fires for a workflow referencing a type that no longer exists?
+
+## Partly resolved (2026-08-05) — capabilities built; node-type discovery is not
+
+Built `backend/dyflow/api/capability_discovery.py` +
+`GET /api/workflows/{slug}/capabilities`, answering the ticket's stated
+requirement directly: a `BaseTool` subclass dropped into
+`workflows/<slug>/tools/*.py` is discovered by importing it and checking
+`issubclass(obj, BaseTool)` — the ticket's own "folder scopes where, subclass
+decides what counts" predicate, using the `ITool -> BaseTool` ladder that
+already existed rather than inventing a new marker. `functions/*.py` uses the
+looser convention the ticket also named (any top-level, non-underscore
+function), since there is no class to subclass a bare callable against.
+
+Settled, as decisions:
+- **What marks a callable as exposed**: folder + subclass for tools (no
+  decorator needed); folder + naming convention for functions.
+- **Schema derivation**: `Args.model_json_schema()` — Pydantic stays the
+  single source of truth, consistent with ticket 02.
+- **Qualified ids**: `<slug>/tools.<ClassName>` / `<slug>/functions.<name>`.
+  Verified two workflows with an identically-named `tools/greet.py` do not
+  collide, and a class re-exported through `__init__.py` is not
+  double-counted (checked via `__module__`).
+- **Import executes code**: confirmed and accepted, same trust model as
+  `pytest` collecting `conftest.py` — no sandboxing exists or is proposed for
+  local dev use.
+
+Verified live against the **real** `chinook-nl-to-sql` workflow (not just
+test fixtures): all three of its actual `BaseTool` subclasses
+(`ListTablesTool`, `GetTableSchemaTool`, `ExecuteSqlTool`) were discovered
+correctly through the running HTTP endpoint, schemas and all.
+
+**Left open, honestly — this is the half of the ticket not built:**
+- **Node-type discovery** (a hand-written `Final*` class appearing as a new
+  palette entry) — the ticket's own harder target. The SSE-broadcast +
+  `NodeTypeRegistry.upsert()` design it sketches is unbuilt; there is no
+  manifest-changed event, no frontend consumer.
+- **The frontend never calls this endpoint.** The palette does not yet show
+  a workflow's discovered tools as usable nodes — this session built the
+  discovery mechanism and its HTTP surface, not the palette integration.
+- **Hot reload / referential integrity / `WorkflowValidator` diagnostics**
+  for a renamed or deleted capability a node still references — none of this
+  exists. `uvicorn --reload` during development is the answer the ticket
+  itself settled on; not verified here.

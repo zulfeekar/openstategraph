@@ -141,4 +141,4 @@ class TestSlugSafety:
         nested_root.mkdir()
         store = WorkflowStore(root=nested_root)
         with pytest.raises(InvalidSlugError):
-            store._dir_for("..")
+            store.directory_for("..")

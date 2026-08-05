@@ -106,6 +106,25 @@ class WorkflowDocumentResponse(BaseModel):
     document: dict[str, Any]
 
 
+class ToolCapabilityResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    args_schema: dict[str, Any]
+
+
+class FunctionCapabilityResponse(BaseModel):
+    id: str
+    name: str
+    docstring: str
+    signature: str
+
+
+class CapabilitiesResponse(BaseModel):
+    tools: list[ToolCapabilityResponse]
+    functions: list[FunctionCapabilityResponse]
+
+
 class AskResponse(BaseModel):
     """What the editor renders.
 
@@ -237,6 +256,37 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
         except InvalidSlugError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/workflows/{slug}/capabilities", response_model=CapabilitiesResponse)
+    def get_capabilities(slug: str) -> CapabilitiesResponse:
+        """Ticket 18: what a workflow's own `tools/`/`functions/` folders
+        offer, discovered by importing them — not a static registration.
+
+        Requires the workflow to already be saved (so its directory exists);
+        an unsaved, canvas-only workflow has no folder to scan yet.
+        """
+        from dyflow.api.capability_discovery import discover_functions, discover_tools
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            workflow_dir = workflow_store.directory_for(slug)
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not workflow_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from WorkflowNotFoundError(slug)
+
+        tools = discover_tools(workflow_dir, slug=slug)
+        functions = discover_functions(workflow_dir, slug=slug)
+        return CapabilitiesResponse(
+            tools=[
+                ToolCapabilityResponse(id=t.id, name=t.name, description=t.description, args_schema=t.args_schema)
+                for t in tools
+            ],
+            functions=[
+                FunctionCapabilityResponse(id=f.id, name=f.name, docstring=f.docstring, signature=f.signature)
+                for f in functions
+            ],
+        )
 
     @app.get("/api/workflows/chinook-nl-to-sql/graph")
     def graph_preview() -> dict[str, str]:
