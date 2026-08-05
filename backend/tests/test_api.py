@@ -106,30 +106,36 @@ class TestModelResolution:
     def test_an_explicit_model_wins(self) -> None:
         assert resolve_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
 
-    def test_no_configuration_is_a_clear_503_not_a_silent_fallback(
+    def test_no_configuration_defaults_to_ollama_cloud_not_an_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Ollama cloud is the default now, not an opt-in: a developer with no
+        Anthropic or OpenAI key configured still gets a working model with
+        zero configuration, since `ollama` authenticates from its own local
+        credentials rather than an env var this process needs to see.
+        """
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
+        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
 
-        from fastapi import HTTPException
-
-        with pytest.raises(HTTPException) as excinfo:
-            resolve_model(None)
-        # A surprise provider means a surprise bill and a surprise data path.
-        assert excinfo.value.status_code == 503
-        assert "No model configured" in str(excinfo.value.detail)
+        assert resolve_model(None) == OLLAMA_CLOUD_MODEL
 
     def test_it_picks_up_an_anthropic_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         assert resolve_model(None).startswith("anthropic:")
 
+    def test_an_anthropic_key_wins_over_the_ollama_cloud_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
+        assert not resolve_model(None).startswith("ollama:")
+
     def test_ollama_resolves_to_a_cloud_model_never_a_local_one(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("DYFLOW_USE_OLLAMA", "1")
         monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
 
         resolved = resolve_model(None)
@@ -141,6 +147,14 @@ class TestModelResolution:
         assert resolved == OLLAMA_CLOUD_MODEL
         assert resolved.endswith("-cloud")
         assert "8b" not in resolved
+
+    def test_dyflow_ollama_model_overrides_the_cloud_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("DYFLOW_OLLAMA_MODEL", "ollama:gpt-oss:20b-cloud")
+        assert resolve_model(None) == "ollama:gpt-oss:20b-cloud"
 
     def test_a_local_model_must_be_named_explicitly(self) -> None:
         # Possible, but never the default — the friction is deliberate for a
@@ -198,9 +212,14 @@ class TestRunPostedWorkflow:
             "edges": [e("node:input.text-1", "text", "node:output.formatted-1", "result")],
         }
 
-    def test_it_runs_without_a_model_so_shape_can_be_checked_first(
+    def test_it_runs_with_no_provider_keys_configured_at_all(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Ollama cloud is the default now, so this document (which has no
+        agent/worker node to call a model at all) runs the same with or
+        without an Anthropic/OpenAI key — resolving *a* model no longer
+        depends on any of them being set.
+        """
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
         client = TestClient(create_app())
@@ -209,28 +228,8 @@ class TestRunPostedWorkflow:
             "/api/runs", json={"workflow": self._doc(), "question": "hello"}
         )
 
-        # Unlike /ask, a missing model is not fatal here — a developer should be
-        # able to verify a workflow's structure before configuring a provider.
         assert response.status_code == 200, response.text
         assert response.json()["answer"] == "hello"
-
-    def test_a_missing_model_is_explained_not_just_an_empty_answer(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Found live: a workflow with an AI Agent node still runs
-        successfully with no provider configured — the agent just returns
-        immediately with nothing. Without a warning, "no answer was
-        produced" is indistinguishable from a genuine bug.
-        """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
-            monkeypatch.delenv(var, raising=False)
-        client = TestClient(create_app())
-
-        body = client.post(
-            "/api/runs", json={"workflow": self._doc(), "question": "hello"}
-        ).json()
-
-        assert any("No model provider is configured" in w for w in body["warnings"])
 
     def test_it_returns_the_mermaid_of_what_it_actually_compiled(self) -> None:
         client = TestClient(create_app())
@@ -310,19 +309,6 @@ class TestRunStream:
         done = next(data for name, data in events if name == "done")
         assert done["answer"] == "hello"
         assert "node:input.text-1" in done["outputs"]
-
-    def test_a_missing_model_is_explained_in_the_done_event(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
-            monkeypatch.delenv(var, raising=False)
-        client = TestClient(create_app())
-        response = client.post(
-            "/api/runs/stream", json={"workflow": self._doc(), "question": "hi"}
-        )
-
-        done = next(data for name, data in self._events(response.text) if name == "done")
-        assert any("No model provider is configured" in w for w in done["warnings"])
 
     @staticmethod
     def _fan_out_doc() -> dict[str, Any]:

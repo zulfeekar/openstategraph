@@ -45,20 +45,6 @@ ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]
 #: friction for a choice that changes the result this much.
 OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
 
-#: Surfaced on `/api/runs` and `/api/runs/stream` whenever a run completes
-#: with no model resolved. Found necessary live: a workflow with no provider
-#: configured runs *successfully* (router, grader and fan-out logic need no
-#: model) but every agent/worker node returns immediately with nothing, which
-#: without this warning is indistinguishable from a real bug — "no answer was
-#: produced" reads the same whether the model failed or was never asked.
-_NO_MODEL_WARNING = (
-    "No model provider is configured on the runtime, so nodes that need one "
-    "(AI Agent, Worker) produced no output. Set ANTHROPIC_API_KEY or "
-    "OPENAI_API_KEY, set DYFLOW_USE_OLLAMA=1 for Ollama cloud, or pass a "
-    "model explicitly."
-)
-
-
 class AskRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -115,8 +101,15 @@ class AskResponse(BaseModel):
 def resolve_model(requested: str | None) -> str:
     """Picks a model, preferring an explicit request.
 
-    Raises rather than silently falling back to a provider the caller did not ask
-    for — a surprise provider means a surprise bill and a surprise data path.
+    **Ollama cloud is the default**, not an opt-in — a developer with neither
+    an Anthropic nor an OpenAI key still gets a working model with zero
+    configuration, because `ollama` authenticates from its own local
+    credentials (verified live: `init_chat_model("ollama:gpt-oss:120b-cloud")`
+    works with no `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`OLLAMA_HOST` env vars
+    set at all). This never falls back to a *local* model — see
+    `OLLAMA_CLOUD_MODEL`'s own comment for why that standing rule exists —
+    and an explicit `model` argument still always wins, so a surprise
+    provider is only possible by asking for one.
     """
     if requested:
         return requested
@@ -124,16 +117,7 @@ def resolve_model(requested: str | None) -> str:
         return "anthropic:claude-haiku-4-5"
     if os.getenv("OPENAI_API_KEY"):
         return "openai:gpt-4.1-mini"
-    if os.getenv("OLLAMA_HOST") or os.getenv("DYFLOW_USE_OLLAMA"):
-        # Cloud, not local. See OLLAMA_CLOUD_MODEL.
-        return os.getenv("DYFLOW_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
-    raise HTTPException(
-        status_code=503,
-        detail=(
-            "No model configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, set "
-            "DYFLOW_USE_OLLAMA=1 to use Ollama cloud, or pass `model` in the request."
-        ),
-    )
+    return os.getenv("DYFLOW_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
 
 
 #: Injectable so tests can exercise the HTTP layer without a provider.
@@ -163,7 +147,12 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "model_configured": _model_available()}
+        # Always true now: Ollama cloud is the default, not an opt-in, so
+        # `resolve_model` never fails to name *a* model. Kept in the response
+        # rather than removed, since the frontend already reads this field
+        # and a provider actually being reachable is a separate question this
+        # endpoint was never answering anyway.
+        return {"ok": True, "model_configured": True}
 
     @app.get("/api/workflows/chinook-nl-to-sql/graph")
     def graph_preview() -> dict[str, str]:
@@ -186,15 +175,14 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
         from dyflow.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
         from dyflow.compile.workflow_compiler import WorkflowCompiler
 
-        # A model is optional here, unlike /ask: the compiler and the routing
-        # fallbacks work without one, so a developer can check the *shape* of a
-        # workflow before configuring a provider.
-        model = None
-        if request.model or _model_available():
-            from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
-            from langchain.chat_models import init_chat_model
+        # Ollama cloud is the default (see `resolve_model`), so a model is
+        # always resolved here — never `None`. A document with no
+        # model-calling node still runs fine; `init_chat_model` builds a
+        # client lazily and nothing calls it until an agent/worker node does.
+        from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+        from langchain.chat_models import init_chat_model
 
-            model = init_chat_model(resolve_model(request.model))
+        model = init_chat_model(resolve_model(request.model))
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(request.workflow)
@@ -210,8 +198,6 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
         warnings = list(plan.warnings)
-        if model is None:
-            warnings.append(_NO_MODEL_WARNING)
         for tool_type in runtime.unresolved_tools:
             # The agent ran without this tool. Saying so is the difference
             # between a wrong answer and an explained one.
@@ -270,12 +256,12 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
         )
         from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
 
-        model = None
-        if request.model or _model_available():
-            from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
-            from langchain.chat_models import init_chat_model
+        # Ollama cloud is the default (see `resolve_model`) — a model is
+        # always resolved, never `None`.
+        from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+        from langchain.chat_models import init_chat_model
 
-            model = init_chat_model(resolve_model(request.model))
+        model = init_chat_model(resolve_model(request.model))
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(request.workflow)
@@ -356,8 +342,6 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
                 return
 
             warnings = list(plan.warnings)
-            if model is None:
-                warnings.append(_NO_MODEL_WARNING)
             for tool_type in runtime.unresolved_tools:
                 warnings.append(
                     f'No implementation for tool "{tool_type}" — the agent ran without it, '
@@ -416,15 +400,6 @@ def _sse(event: str, data: dict[str, Any]) -> str:
     an unescaped newline would silently split one event into two.
     """
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
-
-
-def _model_available() -> bool:
-    return bool(
-        os.getenv("ANTHROPIC_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("OLLAMA_HOST")
-        or os.getenv("DYFLOW_USE_OLLAMA")
-    )
 
 
 #: For `uvicorn dyflow.api.main:app --reload`.
