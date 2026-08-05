@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved (authoring half) — files, backend-owned; runtime-state persistence deferred, honestly, as out of scope
 Blocked by: 04, 07, 08
 
 ## Question
@@ -38,3 +38,38 @@ Consequences this ticket must now carry rather than debate:
 - **Live multi-viewer run observation is in scope** and is cheap: runtime state is already in Postgres, so several clients can watch one run without any CRDT. Decide the subscription shape here (Realtime channel per thread? or reuse the SSE run-stream from ticket 07 — note ticket 07 found at most one run per thread concurrently).
 - **Advisory locking is optional and deferred.** If concurrent edits prove to be a real problem, a "who is editing this" flag is a small addition. Do not build it pre-emptively.
 - Still to settle here: where the workspace index lives (does Postgres list the workflows, or is the filesystem the index?), and whether a workflow can be opened without the backend running at all.
+
+## Resolved (2026-08-05) — files, backend-owned, no Postgres yet
+
+Built exactly the split already ratified above, minus the Postgres half —
+runtime state (checkpoints/threads) is genuinely out of scope for this pass,
+since no run currently persists a thread at all (each `/api/runs` call is a
+one-shot `graph.invoke`, not a resumed thread). So this closes the
+**authoring** half of the ticket only, honestly:
+
+- **Where**: `workflows/<slug>/workflow.json`, backend-owned
+  (`backend/dyflow/api/workflow_store.py`), never written from the browser.
+- **Identity/versioning**: no version history — a save overwrites. Versioning
+  is what git already gives a file on disk; a second, in-app version log
+  would be a second, competing history. Not built, and not proposed.
+- **Autosave vs. explicit save**: unchanged and kept **both**, since they
+  solve different problems. `WorkbenchContext.tsx`'s existing debounced
+  `localStorage` autosave is reload/crash continuity for whatever is open
+  right now; explicit Save in the Workflow Manager is the durable, named,
+  file-backed save. Neither replaces the other.
+- **"Many workflows" in the UI**: the existing Workflow Manager panel — list,
+  save, load, delete — now backed by `GET/PUT/DELETE /api/workflows/{slug}`
+  instead of a `localStorage` key. A workflow referencing another (ticket 05)
+  is still unbuilt and out of scope here.
+- **Workspace index**: the filesystem is the index — `GET /api/workflows`
+  lists directories under `workflows/`, there is no separate index to keep in
+  sync. A workflow **cannot** currently be opened without the backend
+  running, by construction: the browser has no filesystem access at all
+  (ticket 16's own hard constraint).
+
+**Deferred, stated plainly:** Postgres/runtime-state persistence, workflow
+versioning, live multi-viewer run observation, advisory locking. None of
+these are needed for what got built (single-user, single-session authoring
+against real files), and building them now would be speculative — CLAUDE.md's
+own rule against building for a future requirement rather than the current
+one.

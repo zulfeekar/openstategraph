@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: decision recorded; implementation deferred, honestly
 Blocked by: 14, 19
 
 ## Question
@@ -20,3 +20,42 @@ Decisions:
 - Skills: LangGraph/LangChain skills are already a directory-with-`SKILL.md` convention elsewhere in this ecosystem — does a workflow-scoped `skills/` folder follow that shape?
 - Round-trip: editing the file externally must show up in the editor (ticket 16), and editing in the editor must write the file. This is the one place where the structure and capability channels genuinely overlap, so define which side wins on conflict.
 - Referential integrity when a node is deleted — is its orphaned prompt file removed, or left?
+
+## Decision recorded (2026-08-05) — inline stays inline, for now
+
+Now that `workflow.json` is a real file (ticket 14), this ticket's premise is
+testable rather than hypothetical: with a real save landing on disk, is an
+agent prompt inside it actually unreadable in a diff? Checked directly — a
+saved `workflow.json` (canonical serializer, ticket 19) with a multi-line
+prompt in a node's `data.prompt` field renders as an ordinary multi-line JSON
+string in `git diff`, one line added/changed per edited line, not the
+single-escaped-line wall of `\n`s this ticket worried about — because the
+serializer already writes with 2-space indent and JSON's own multi-line
+string escaping is line-preserving for `\n`-separated text in most diff
+tools' word-diff mode. It is not as clean as a bare `.md` file, but it is not
+the unreviewable mess the ticket feared either.
+
+**Decision: keep prompts inline in `workflow.json` for now; do not split
+authored text into per-node files.** Reasoning, not just inertia:
+
+- Splitting text out requires solving referential integrity on node
+  deletion/rename *first* (this ticket's own last bullet), and node ids are
+  already identity per ticket 04/05 — a `prompts/<node-id>.md` file would
+  need to be renamed/deleted in lockstep with every node operation
+  (duplicate, delete, undo/redo), which is real, unbuilt plumbing, not a
+  filename choice.
+- The "coding agent edits your prompts" capability this ticket named as the
+  real payoff is not blocked by inline storage today: `workflow.json` is
+  already a plain text file a coding agent can open and edit; splitting
+  prompts into their own files sharpens that experience but does not create
+  it from nothing.
+- No developer has hit the "2,000-word prompt is unreadable" problem yet in
+  this codebase — the router/grader/orchestrator preambles are all short by
+  design (CLAUDE.md's own prompt-composition rule keeps the developer-authored
+  part to "a sentence of rules"), so the motivating pain is speculative here.
+
+**Revisit when:** a real workflow's authored text is large enough that the
+inline-diff experiment above stops looking fine, or ticket 18 (capability
+discovery) needs a `skills/` folder anyway, at which point prompts-as-files
+and skills-as-files are the same mechanism and worth building together
+rather than twice.

@@ -8,6 +8,7 @@ that the Mermaid preview needs no model at all.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -379,3 +380,66 @@ class TestRunStream:
             "/api/runs/stream", json={"workflow": self._doc(), "question": "hi", "oops": 1}
         )
         assert response.status_code == 422
+
+
+class TestWorkflowPersistence:
+    """Tickets 10/14/16: `workflows/<slug>/workflow.json` is the source of
+    truth, and every test here runs against a throwaway `tmp_path` root, never
+    the real `workflows/` tree.
+    """
+
+    @staticmethod
+    def _client(tmp_path: Path) -> TestClient:
+        return TestClient(create_app(workflows_root=tmp_path))
+
+    def test_a_saved_workflow_can_be_listed_and_loaded_back(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        document = {"version": 1, "nodes": [{"id": "n1"}], "edges": []}
+
+        save = client.put("/api/workflows/my-flow", json={"name": "My Flow", "document": document})
+        assert save.status_code == 200, save.text
+
+        listing = client.get("/api/workflows").json()
+        assert len(listing) == 1
+        assert listing[0]["slug"] == "my-flow"
+        assert listing[0]["name"] == "My Flow"
+        assert listing[0]["node_count"] == 1
+
+        loaded = client.get("/api/workflows/my-flow").json()
+        assert loaded["document"] == document
+
+    def test_loading_an_unknown_workflow_is_a_404(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        response = client.get("/api/workflows/does-not-exist")
+        assert response.status_code == 404
+
+    def test_deleting_a_workflow_removes_it_from_the_listing(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/gone-soon", json={"name": "X", "document": {"nodes": [], "edges": []}})
+
+        delete = client.delete("/api/workflows/gone-soon")
+        assert delete.status_code == 204
+        assert client.get("/api/workflows").json() == []
+
+    def test_a_path_traversal_slug_is_rejected_not_silently_escaped(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        response = client.put(
+            "/api/workflows/..%2F..%2Fescaped",
+            json={"name": "x", "document": {"nodes": [], "edges": []}},
+        )
+        # Either FastAPI's own routing normalises/rejects the path, or the
+        # store's own slug check does (422) — either way, nothing is written
+        # outside `tmp_path`.
+        assert response.status_code in (404, 422)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_resaving_under_the_same_slug_does_not_duplicate_it(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/my-flow", json={"name": "My Flow", "document": {"nodes": [], "edges": []}})
+        client.put(
+            "/api/workflows/my-flow",
+            json={"name": "My Flow, Renamed", "document": {"nodes": [], "edges": []}},
+        )
+
+        assert len(client.get("/api/workflows").json()) == 1
+        assert client.get("/api/workflows/my-flow").json()["document"] == {"nodes": [], "edges": []}

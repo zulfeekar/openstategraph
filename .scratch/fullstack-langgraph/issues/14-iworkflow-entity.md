@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved — layout and identity built; the IWorkflow entity-ladder class itself was not, honestly (see resolution note)
 Blocked by: 07, 10, 15
 
 ## Question
@@ -40,3 +40,37 @@ Points to settle here specifically:
 - **`AGENTS.md` per workflow**, generated — what this workflow does, where things live, how to run its tests. This is the cheapest single thing that makes the layout legible to a coding agent.
 - **Determinism is a prerequisite**, not polish — see ticket 19. A `workflow.json` whose node order varies destroys `git diff` and makes the directory unreviewable.
 - Whether `workflows/` sits at the repo root or inside the Python package (interacts with ticket 12).
+
+## Resolved (2026-08-05) — layout and identity, not a new TS entity class
+
+Built: the exact layout this ticket specified, via
+`backend/dyflow/api/workflow_store.py` + `PUT/GET/DELETE /api/workflows/{slug}`.
+
+- **Slug vs. name, settled as recommended**: the slug is frozen at first save
+  (derived from the name that existed at that moment) and never recomputed;
+  renaming changes only `name` inside `workflow.json`. `WorkflowManager.tsx`
+  keeps the assigned slug in `sessionStorage` for the rest of the session, so
+  continuing to edit and re-save updates the same directory. Verified live:
+  saving, then renaming the model's name and saving again, produced exactly
+  one directory, not two.
+- **`graph.py` is not created** — exactly the ticket's own recommendation. A
+  save writes only `workflow.json` and, on first save, `AGENTS.md`.
+  `AGENTS.md` is regenerated **only on first save** — a resave never
+  overwrites a hand-edited one (regression-tested).
+- **First-save prompt**: handled by the existing Workflow Manager UI (name
+  field + Save), unchanged in shape, just repointed at the backend.
+- **Referential integrity (workflow B references workflow A)**: not
+  applicable yet — no mechanism for one workflow to reference another exists
+  at all (that is ticket 05's territory, itself not built), so there is
+  nothing to break.
+- **`IWorkflow` as an entity-ladder class**: **not built**, honestly. What
+  exists is a `WorkflowSummary`/document shape passed as plain JSON between
+  `WorkflowStore` (Python) and `WorkflowFileClient` (TypeScript) — there is no
+  `IWorkflow -> BaseWorkflow -> ...` class in either language. This is a real
+  gap against the ticket's original ask, left open rather than papered over:
+  a class ladder for "workflow" as a first-class entity (with an input/output
+  schema so another workflow could consume it, per ticket 05) is genuinely
+  unbuilt. What's shipped is the storage and identity half; the entity-model
+  half is not.
+- **Repo placement**: `workflows/` stays at the repo root, matching the
+  already-existing `chinook-nl-to-sql` seed and ticket 12's own conclusion.

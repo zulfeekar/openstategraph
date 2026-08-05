@@ -82,6 +82,30 @@ class RunResponse(BaseModel):
     warnings: list[str] = []
 
 
+class SaveWorkflowRequest(BaseModel):
+    """The whole document plus the display name — never the slug: the slug
+    is the URL path parameter, frozen at creation (see `workflow_store.py`).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(min_length=1)
+    document: dict[str, Any]
+
+
+class WorkflowSummaryResponse(BaseModel):
+    slug: str
+    name: str
+    saved_at: str
+    node_count: int
+    edge_count: int
+
+
+class WorkflowDocumentResponse(BaseModel):
+    slug: str
+    document: dict[str, Any]
+
+
 class AskResponse(BaseModel):
     """What the editor renders.
 
@@ -130,18 +154,26 @@ def _default_factory(model: str) -> Any:
     return build_live_graph(model)
 
 
-def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
+def create_app(
+    graph_factory: GraphFactory | None = None,
+    workflows_root: Any = None,
+) -> FastAPI:
     """Builds the app.
 
     A factory rather than a module-level singleton so tests get an isolated
-    instance and can inject a stub graph.
+    instance and can inject a stub graph — and, since tickets 10/14/16, an
+    isolated `workflows_root` so a test never touches the real `workflows/`
+    tree at the repo root.
     """
+    from dyflow.api.workflow_store import WorkflowStore
+
     factory = graph_factory or _default_factory
+    workflow_store = WorkflowStore(root=workflows_root)
     app = FastAPI(title="Dyflow runtime", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["content-type"],
     )
 
@@ -153,6 +185,58 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
         # and a provider actually being reachable is a separate question this
         # endpoint was never answering anyway.
         return {"ok": True, "model_configured": True}
+
+    @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
+    def list_workflows() -> list[WorkflowSummaryResponse]:
+        from dyflow.api.workflow_store import WorkflowSummary
+
+        def to_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
+            return WorkflowSummaryResponse(
+                slug=s.slug, name=s.name, saved_at=s.saved_at,
+                node_count=s.node_count, edge_count=s.edge_count,
+            )
+
+        return [to_response(s) for s in workflow_store.list()]
+
+    @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
+    def get_workflow(slug: str) -> WorkflowDocumentResponse:
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            document = workflow_store.load(slug)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return WorkflowDocumentResponse(slug=slug, document=document)
+
+    @app.put("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
+    def save_workflow(slug: str, request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
+        from datetime import datetime, timezone
+
+        from dyflow.api.workflow_store import InvalidSlugError
+
+        try:
+            workflow_store.save(
+                slug,
+                name=request.name,
+                document=request.document,
+                saved_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return WorkflowDocumentResponse(slug=slug, document=request.document)
+
+    @app.delete("/api/workflows/{slug}", status_code=204)
+    def delete_workflow(slug: str) -> None:
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            workflow_store.delete(slug)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/workflows/chinook-nl-to-sql/graph")
     def graph_preview() -> dict[str, str]:
