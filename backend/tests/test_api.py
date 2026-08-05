@@ -214,6 +214,24 @@ class TestRunPostedWorkflow:
         assert response.status_code == 200, response.text
         assert response.json()["answer"] == "hello"
 
+    def test_a_missing_model_is_explained_not_just_an_empty_answer(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Found live: a workflow with an AI Agent node still runs
+        successfully with no provider configured — the agent just returns
+        immediately with nothing. Without a warning, "no answer was
+        produced" is indistinguishable from a genuine bug.
+        """
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+            monkeypatch.delenv(var, raising=False)
+        client = TestClient(create_app())
+
+        body = client.post(
+            "/api/runs", json={"workflow": self._doc(), "question": "hello"}
+        ).json()
+
+        assert any("No model provider is configured" in w for w in body["warnings"])
+
     def test_it_returns_the_mermaid_of_what_it_actually_compiled(self) -> None:
         client = TestClient(create_app())
         body = client.post(
@@ -292,6 +310,19 @@ class TestRunStream:
         done = next(data for name, data in events if name == "done")
         assert done["answer"] == "hello"
         assert "node:input.text-1" in done["outputs"]
+
+    def test_a_missing_model_is_explained_in_the_done_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+            monkeypatch.delenv(var, raising=False)
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "hi"}
+        )
+
+        done = next(data for name, data in self._events(response.text) if name == "done")
+        assert any("No model provider is configured" in w for w in done["warnings"])
 
     @staticmethod
     def _fan_out_doc() -> dict[str, Any]:

@@ -28,6 +28,21 @@ interface ChatTurn {
 let nextTurnId = 0;
 
 /**
+ * Floor on how long a node's "running" glow stays visible.
+ *
+ * Without this, a node that needs no model (a router, a grader's
+ * deterministic checks) or an agent with no model configured at all
+ * resolves in single-digit milliseconds — the exact case that prompted this:
+ * a run with no provider configured streamed and finished so fast that the
+ * canvas animation was imperceptible, even though it fired correctly. This
+ * paces the *visual* transition only; the activity list, streamed thinking
+ * text and final result are never delayed by it.
+ */
+const MIN_HIGHLIGHT_MS = 350;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
  * Chat with the workflow, and watch it run.
  *
  * A **thread**, not a single-shot form: every question becomes a new turn
@@ -107,24 +122,36 @@ export function AskPanel() {
     const seen = new Set<string>();
     let activeNode: string | null = null;
 
-    const onEvent = (event: RunStreamEvent) => {
-      if (event.type === 'update') {
+    // Queues node highlights so each one is visible for at least
+    // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
+    // arrive — see the constant's own comment for why this exists.
+    let highlightChain: Promise<void> = Promise.resolve();
+    const activate = (nodeId: string) => {
+      highlightChain = highlightChain.then(async () => {
         // One node glows at a time, in the order the stream reports — the
         // previous node's card returns to its resting state exactly as it
         // would after a local preview run finishes with it.
-        if (activeNode && activeNode !== event.node) {
+        if (activeNode && activeNode !== nodeId) {
           controller.model.setNodeRuntime(activeNode, { status: 'success' });
         }
-        controller.model.setNodeRuntime(event.node, { status: 'running' });
-        activeNode = event.node;
-        seen.add(event.node);
-
+        controller.model.setNodeRuntime(nodeId, { status: 'running' });
         // Highlight whichever node just acted — the "currently in charge"
         // the ticket asks for. A dispatched worker's `taskId` still selects
         // the one static Worker node on the canvas; there is nowhere else
         // for a runtime task instance to be shown (ticket 27's own finding:
         // `Send` creates tasks, never new canvas nodes).
-        controller.selectionActions.selectNodes([event.node]);
+        controller.selectionActions.selectNodes([nodeId]);
+        activeNode = nodeId;
+        await sleep(MIN_HIGHLIGHT_MS);
+      });
+    };
+
+    const onEvent = (event: RunStreamEvent) => {
+      if (event.type === 'update') {
+        seen.add(event.node);
+        activate(event.node);
+        // Data collection is never delayed by the animation pacing above —
+        // only the visual glow is paced, not the record of what happened.
         setTurns((all) =>
           all.map((turn) =>
             turn.id === id
@@ -143,6 +170,10 @@ export function AskPanel() {
 
     const outcome = await client.runStream({ workflow: document, question: trimmed }, onEvent);
 
+    // Waits for the last queued highlight's minimum-visible window before
+    // finalising, so the very last node to act does not flash and vanish
+    // the instant the run's own answer arrives.
+    await highlightChain;
     if (activeNode) {
       controller.model.setNodeRuntime(activeNode, { status: outcome.ok ? 'success' : 'error' });
     }
@@ -247,6 +278,17 @@ function Answer({ result }: { result: RunResult }) {
 
   return (
     <div className="ask__answer-block">
+      {/* Rendered first and styled like an error, not a footnote: an empty
+          or ungrounded answer with the *reason* buried below it reads as a
+          bug. Found live — "No answer was produced" with no explanation is
+          indistinguishable from a real failure. */}
+      {result.warnings.map((warning) => (
+        <p key={warning} className="ask__warning">
+          <Icon glyph={TriangleAlert} size="sm" />
+          {warning}
+        </p>
+      ))}
+
       <pre className="ask__answer">{result.answer || '_No answer was produced._'}</pre>
 
       {result.attempts > 1 ? (
@@ -265,14 +307,6 @@ function Answer({ result }: { result: RunResult }) {
           ))}
         </div>
       ) : null}
-
-      {result.warnings.length > 0
-        ? result.warnings.map((warning) => (
-            <p key={warning} className="ask__meta">
-              {warning}
-            </p>
-          ))
-        : null}
     </div>
   );
 }

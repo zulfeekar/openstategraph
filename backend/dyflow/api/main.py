@@ -45,6 +45,19 @@ ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]
 #: friction for a choice that changes the result this much.
 OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
 
+#: Surfaced on `/api/runs` and `/api/runs/stream` whenever a run completes
+#: with no model resolved. Found necessary live: a workflow with no provider
+#: configured runs *successfully* (router, grader and fan-out logic need no
+#: model) but every agent/worker node returns immediately with nothing, which
+#: without this warning is indistinguishable from a real bug — "no answer was
+#: produced" reads the same whether the model failed or was never asked.
+_NO_MODEL_WARNING = (
+    "No model provider is configured on the runtime, so nodes that need one "
+    "(AI Agent, Worker) produced no output. Set ANTHROPIC_API_KEY or "
+    "OPENAI_API_KEY, set DYFLOW_USE_OLLAMA=1 for Ollama cloud, or pass a "
+    "model explicitly."
+)
+
 
 class AskRequest(BaseModel):
     model_config = {"extra": "forbid"}
@@ -197,6 +210,8 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
         warnings = list(plan.warnings)
+        if model is None:
+            warnings.append(_NO_MODEL_WARNING)
         for tool_type in runtime.unresolved_tools:
             # The agent ran without this tool. Saying so is the difference
             # between a wrong answer and an explained one.
@@ -341,6 +356,8 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
                 return
 
             warnings = list(plan.warnings)
+            if model is None:
+                warnings.append(_NO_MODEL_WARNING)
             for tool_type in runtime.unresolved_tools:
                 warnings.append(
                     f'No implementation for tool "{tool_type}" — the agent ran without it, '
