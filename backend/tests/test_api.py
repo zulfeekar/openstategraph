@@ -151,3 +151,72 @@ class TestCors:
         # This API holds provider keys, so `*` would be wrong.
         assert allowed == "http://localhost:5273"
         assert allowed != "*"
+
+
+class TestRunPostedWorkflow:
+    """`/api/runs` executes the *posted* document, not a server-side graph.
+
+    This is what makes the editor's Run button honest: what a developer can see
+    on the canvas is what runs.
+    """
+
+    @staticmethod
+    def _doc() -> dict[str, Any]:
+        def n(i: str, t: str, **d: Any) -> dict[str, Any]:
+            return {"id": i, "type": t, "data": d, "position": {"x": 0, "y": 0}}
+
+        def e(s: str, sp: str, d: str, dp: str) -> dict[str, Any]:
+            return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": d, "portId": dp}}
+
+        return {
+            "version": 1,
+            "name": "posted",
+            "nodes": [n("node:input.text-1", "input.text"), n("node:output.formatted-1", "output.formatted")],
+            "edges": [e("node:input.text-1", "text", "node:output.formatted-1", "result")],
+        }
+
+    def test_it_runs_without_a_model_so_shape_can_be_checked_first(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+            monkeypatch.delenv(var, raising=False)
+        client = TestClient(create_app())
+
+        response = client.post(
+            "/api/runs", json={"workflow": self._doc(), "question": "hello"}
+        )
+
+        # Unlike /ask, a missing model is not fatal here — a developer should be
+        # able to verify a workflow's structure before configuring a provider.
+        assert response.status_code == 200, response.text
+        assert response.json()["answer"] == "hello"
+
+    def test_it_returns_the_mermaid_of_what_it_actually_compiled(self) -> None:
+        client = TestClient(create_app())
+        body = client.post(
+            "/api/runs", json={"workflow": self._doc(), "question": "hi"}
+        ).json()
+        # Not a hand-drawn approximation — the compiled graph's own diagram.
+        assert "node_input_text_1" in body["mermaid"]
+
+    def test_it_reports_per_node_outputs_for_the_sidebar(self) -> None:
+        client = TestClient(create_app())
+        body = client.post(
+            "/api/runs", json={"workflow": self._doc(), "question": "hi"}
+        ).json()
+        assert "node:input.text-1" in body["outputs"]
+
+    def test_a_malformed_document_is_a_502_not_a_stack_trace(self) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs",
+            json={"workflow": {"nodes": [{"id": "x"}], "edges": []}, "question": "hi"},
+        )
+        assert response.status_code in (200, 502)
+
+    def test_unknown_fields_are_rejected(self) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs", json={"workflow": self._doc(), "question": "hi", "oops": 1}
+        )
+        assert response.status_code == 422

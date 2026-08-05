@@ -172,6 +172,75 @@ curl -X POST localhost:8000/api/workflows/chinook-nl-to-sql/ask \
   from the canvas.
 - Ticket 17 part 2 (`WorkflowModel` split) still designed, not cut.
 
+## THE LOOP IS CLOSED: canvas → HTTP → real answer (2026-08-05)
+
+A workflow **authored on the canvas** now compiles and runs. Posted to
+`POST /api/runs`, no hardcoded graph anywhere in the path:
+
+```
+Canvas: input -> agent (+2 Chinook tools bound) -> grader -> output
+        grader.revise -> agent.feedback          (the loop)
+
+POST /api/runs {workflow: <that document>, question: "...", model: "ollama:gpt-oss:120b-cloud"}
+
+200 in 42.7s   attempts: 2   decisions: {grader: pass}
+
+**Top-3 revenue-generating music genres**
+| Rank | Genre | Revenue (USD) |
+| 1 | Rock  | 826.65 |
+| 2 | Latin | 382.14 |
+| 3 | Metal | 261.36 |
+```
+
+`attempts: 2` again, and this time for a **developer-authored reason**: the grader
+criterion was "- Must cite a figure from the rows." It rejected the first answer,
+the retry cited the figures, and it passed. So prebuilt-plus-override criteria
+work on a live run, not only in tests.
+
+The figures match `sqlite3` run independently before any model was involved.
+
+### What now exists end to end
+
+| Piece | State |
+| --- | --- |
+| Router node (config-driven ports) | built, 22 tests |
+| Grader node (+ the legal cycle) | built, 13 tests |
+| `IRouter/IGrader -> Base -> concrete` | built, 49 pytest |
+| `workflow.json` -> `StateGraph` compiler | built, 24 tests |
+| Node runtime (behaviour per type) | built, 12 tests |
+| `POST /api/runs` (posted document) | built, 5 tests |
+| Real Chinook tools, read-only driver | built, 28 tests |
+
+**164 Vitest + 148 pytest, tsc clean.**
+
+### Two bugs the real path found that fixtures could not
+
+1. **LangGraph reserves `:` in node names.** Our ids are `node:agent.llm-1`, so
+   `add_node` raised. Every hand-written fixture used tidy ids and sailed past it.
+2. **A bound tool became an entry node.** Excluded from `exits` but not from
+   `nodes`, it had no incoming edge, so it was treated as an entry and wired from
+   `START` — reintroducing the exact doubling the binding rule exists to prevent.
+   **The unit tests passed while that was live**, because they only asserted
+   `exits`.
+
+Reusable lesson: fixtures agree with the code that produced them. A real export is
+the only thing that disagrees.
+
+### Still outstanding
+
+- **The frontend Run button still calls the old in-browser engine**, not
+  `/api/runs`. The backend is ready; the wiring is not. This is the last step
+  before a developer can do all of the above without a terminal.
+- The **chat sidebar** with node highlighting (ticket 27) — `decisions` and
+  `outputs` are already returned per node for exactly this, and SSE streaming with
+  `subgraphs=True` is the remaining piece.
+- **Orchestrator / `Send` fan-out** — charted in ticket 27, not built.
+- **`DEFAULT_PORT_SPECS` duplicates TS port types** (ticket 02 owns generation).
+  Injectable, and a test asserts the seam stays open.
+- The **code generator** (`graph.py` as a read-only export). The `CompiledPlan` is
+  the right input; the property test is that generated and interpreted graphs
+  produce identical Mermaid.
+
 ## Course correction: execution is Python, not the browser (2026-08-05)
 
 **The user caught a drift, and they were right.** I had started implementing the

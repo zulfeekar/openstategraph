@@ -40,6 +40,33 @@ class AskRequest(BaseModel):
     recursion_limit: int = Field(default=50, ge=10, le=1000)
 
 
+class RunRequest(BaseModel):
+    """Run **the posted document**, not a server-side graph.
+
+    This is what makes the editor's Run button honest: the workflow the developer
+    can see on the canvas is the workflow that executes. The document is
+    vendor-neutral `workflow.json`, so the compile seam stays one-directional.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    workflow: dict[str, Any] = Field(description="A workflow.json document.")
+    question: str = Field(min_length=1)
+    model: str | None = None
+    recursion_limit: int = Field(default=50, ge=10, le=1000)
+
+
+class RunResponse(BaseModel):
+    answer: str
+    #: node id -> branch taken, so the editor can highlight the path that ran.
+    decisions: dict[str, str] = {}
+    #: node id -> that node's output, for per-node inspection in the sidebar.
+    outputs: dict[str, str] = {}
+    attempts: int = 0
+    mermaid: str = ""
+    warnings: list[str] = []
+
+
 class AskResponse(BaseModel):
     """What the editor renders.
 
@@ -123,6 +150,44 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
 
         return {"mermaid": mermaid(build_graph(_noop, _noop))}
 
+    @app.post("/api/runs", response_model=RunResponse)
+    def run_workflow(request: RunRequest) -> RunResponse:
+        """Compiles and runs a canvas-authored workflow."""
+        from dyflow.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
+        from dyflow.compile.workflow_compiler import WorkflowCompiler
+
+        # A model is optional here, unlike /ask: the compiler and the routing
+        # fallbacks work without one, so a developer can check the *shape* of a
+        # workflow before configuring a provider.
+        model = None
+        if request.model or _model_available():
+            from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+            from langchain.chat_models import init_chat_model
+
+            model = init_chat_model(resolve_model(request.model))
+
+        compiler = WorkflowCompiler()
+        plan = compiler.plan(request.workflow)
+        runtime = NodeRuntime(model=model, tools=chinook_tool_registry())
+
+        try:
+            graph = compiler.build(request.workflow, RunState, runtime.factory(request.workflow))
+            final = graph.invoke(
+                {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
+                {"recursion_limit": request.recursion_limit},
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+        return RunResponse(
+            answer=str(final.get("answer") or ""),
+            decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
+            outputs={k: str(v) for k, v in (final.get("outputs") or {}).items()},
+            attempts=int(final.get("attempts") or 0),
+            mermaid=graph.get_graph().draw_mermaid(),
+            warnings=plan.warnings,
+        )
+
     @app.post("/api/workflows/chinook-nl-to-sql/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
         model = resolve_model(request.model)
@@ -165,4 +230,12 @@ def _model_available() -> bool:
 #: For `uvicorn dyflow.api.main:app --reload`.
 app = create_app()
 
-__all__ = ["AskRequest", "AskResponse", "app", "create_app", "resolve_model"]
+__all__ = [
+    "AskRequest",
+    "AskResponse",
+    "RunRequest",
+    "RunResponse",
+    "app",
+    "create_app",
+    "resolve_model",
+]
