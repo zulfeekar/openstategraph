@@ -11,6 +11,9 @@ import {
   Blocks,
   GitBranch,
   ShieldCheck,
+  Split,
+  Users,
+  FileOutput,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -36,6 +39,9 @@ const ICONS: Record<string, LucideIcon> = {
   'node-database': Database,
   'node-router': GitBranch,
   'node-grader': ShieldCheck,
+  'node-orchestrator': Split,
+  'node-worker': Users,
+  'node-format-report': FileOutput,
   'port-feedback': ShieldCheck,
 
   // Port types
@@ -43,6 +49,7 @@ const ICONS: Record<string, LucideIcon> = {
   'port-skill': FileCode2,
   'port-tool': Wrench,
   'port-result': FileText,
+  'port-worker': Users,
 };
 
 /** Shown when a definition names an icon this build doesn't have. */

@@ -14,6 +14,9 @@ import { formattedOutputExecutor, formattedOutputNode } from './output/Formatted
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
+import { orchestratorExecutor, orchestratorNode } from './orchestrate/OrchestratorNode';
+import { workerExecutor, workerNode } from './orchestrate/WorkerNode';
+import { formatReportExecutor, formatReportNode } from './orchestrate/FormatReportNode';
 
 /**
  * The catalogue's single registration point.
@@ -46,6 +49,10 @@ export function registerNodeCatalogue(
     // Chinook tools, which belong to their workflow (ticket 08 scoping).
     routerNode,
     graderNode,
+    // Loop/graph engineering: split -> fan-out -> dispatch -> join.
+    orchestratorNode,
+    workerNode,
+    formatReportNode,
     formattedOutputNode,
     groupNode,
     noteNode,
@@ -60,6 +67,9 @@ export function registerNodeCatalogue(
     redditSearchExecutor,
     routerExecutor,
     graderExecutor,
+    orchestratorExecutor,
+    workerExecutor,
+    formatReportExecutor,
     formattedOutputExecutor,
     // Chinook database executors
     ...CHINOOK_NODES.map((n) => n.executor),
@@ -74,6 +84,9 @@ export const NODE_TYPE = {
   redditSearch: redditSearchNode.id,
   router: routerNode.id,
   grader: graderNode.id,
+  orchestrator: orchestratorNode.id,
+  worker: workerNode.id,
+  formatReport: formatReportNode.id,
   formattedOutput: formattedOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,

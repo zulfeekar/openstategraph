@@ -135,6 +135,40 @@ class TestBindingsAreNotSteps:
         assert plan.skill_bindings == {"ag1": ["md1"]}
         assert ("md1", "ag1") not in plan.edges
 
+    def test_a_tool_bound_to_a_worker_is_bound_not_sequenced(self, compiler) -> None:
+        """Regression: `WORKER_TYPE`'s port spec never declared `tools`/`skill`.
+
+        Found live: an edge into either fell through `default_port_resolver`'s
+        "unknown port" fallback and was treated as ordinary control flow, so
+        `plan.tool_bindings` never saw it — a worker wired to Chinook tools on
+        the canvas silently ran with none, and the model answered from
+        parametric knowledge with nothing to ground it. The agent's own
+        `tools`/`skill` ports were covered by `test_a_tool_is_bound_not_sequenced`
+        above; the worker's identically-named ports were not, and that gap is
+        exactly where the bug lived.
+        """
+        document = doc(
+            [
+                node("in1", "input.text"),
+                node("orch1", "orchestrate.supervisor"),
+                node("w1", "orchestrate.worker"),
+                node("t1", "tool.chinook-execute-sql"),
+                node("md1", "input.markdown"),
+            ],
+            [
+                edge("in1", "text", "orch1", "instruction"),
+                edge("orch1", "workers", "w1", "dispatch"),
+                edge("t1", "tool", "w1", "tools"),
+                edge("md1", "skill", "w1", "skill"),
+            ],
+        )
+        plan = compiler.plan(document)
+
+        assert plan.tool_bindings == {"w1": ["t1"]}
+        assert plan.skill_bindings == {"w1": ["md1"]}
+        assert ("t1", "w1") not in plan.edges
+        assert ("md1", "w1") not in plan.edges
+
 
 class TestRouter:
     def test_each_branch_becomes_a_declared_destination(self, compiler) -> None:

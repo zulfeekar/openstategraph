@@ -33,6 +33,12 @@ export const PORT = {
   result: 'result',
   /** Carries a grader's rejection back upstream. The only type a cycle may close on. */
   feedback: 'feedback',
+  /**
+   * A fan-out declaration, not control flow — matches the compiler's
+   * `WORKER_PORT_TYPE`. An edge landing here becomes a `Send` dispatch
+   * target, never a `workflow.json` graph edge.
+   */
+  worker: 'worker',
 } as const;
 
 export const PORT_TYPES: readonly IPortTypeDefinition[] = [
@@ -59,6 +65,12 @@ export const PORT_TYPES: readonly IPortTypeDefinition[] = [
     label: 'Feedback',
     iconId: 'port-feedback',
     accent: 'red',
+  },
+  {
+    id: PORT.worker,
+    label: 'Worker',
+    iconId: 'port-worker',
+    accent: 'blue',
   },
   {
     id: PORT.result,

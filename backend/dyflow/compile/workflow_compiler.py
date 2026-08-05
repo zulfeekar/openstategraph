@@ -107,6 +107,15 @@ DEFAULT_PORT_SPECS: dict[str, dict[str, PortSpec]] = {
     },
     WORKER_TYPE: {
         "dispatch": PortSpec(WORKER_PORT_TYPE, "in"),
+        # Found live: these two were missing entirely, so an edge into either
+        # fell through `default_port_resolver`'s "unknown port" fallback and
+        # was treated as ordinary control flow rather than a binding — a
+        # worker with tools wired on the canvas silently ran with none,
+        # because `plan.tool_bindings` never saw the edge. `lc_tools` came
+        # back empty, `default_prompt` fell back to `""`, and the model
+        # answered from parametric knowledge with nothing to ground it.
+        "skill": PortSpec("skill", "in"),
+        "tools": PortSpec("tool", "in"),
         "result": PortSpec("result", "out"),
     },
     "function.format_report": {

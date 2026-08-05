@@ -291,14 +291,28 @@ And subtask ids collided across replans (`Orchestrator.plan()` always started
 at `task-1`), silently blending a rejected attempt's stale results with the
 fresh replan's — fixed by folding the attempt count into every id.
 
-**Left open, stated plainly rather than glossed over:** whether a live model
-reliably calls its bound tools instead of answering from parametric knowledge
-is a prompting/model question, separate from the wiring — two of three
-worker runs against `ollama:gpt-oss:120b-cloud` still answered from general
-knowledge after a first prompt strengthening. And there is **no TypeScript
-side yet** — `orchestrate.supervisor`/`orchestrate.worker`/`function.format_report`
-exist only in the Python compiler; authoring them means hand-writing
-`workflow.json`, not dragging a node. 182 pytest passing total.
+**What looked like a model-reliability limitation turned out to be a third
+wiring bug, found by refusing to accept the first live result as inconclusive
+and chasing it further.** `WORKER_TYPE`'s compiler port-spec table never
+declared `tools`/`skill` ports at all — an edge into either fell through the
+"unknown port" fallback and was silently treated as control flow, so a
+worker's bound Chinook tools never reached it regardless of prompt wording.
+Fixed with two added `PortSpec` entries plus a regression test mirroring the
+agent's own binding coverage. Verified live, twice, against
+`ollama:gpt-oss:120b-cloud`, by inspecting each message's `tool_calls`
+directly: the real sequence ran (`chinook_list_tables` →
+`chinook_get_table_schema` → `chinook_execute_sql`) and produced correct,
+grounded answers.
+
+**TypeScript node types now exist for all three** — `OrchestratorNode.ts`,
+`WorkerNode.ts`, `FormatReportNode.ts` (`src/nodes/orchestrate/`), following
+the Router/Grader shape (Orchestrator and Worker refuse to execute in the
+browser preview; Format Report genuinely runs there). A new `PORT.worker`
+port type was added, capped at one connection on the orchestrator's `workers`
+output since the compiler records at most one dispatch target per
+orchestrator. A developer can now drag all three onto the canvas. 137 pytest
++ 192 Vitest passing, `tsc` clean. Only the streaming/sidebar contract from
+ticket 27's original shape remains unbuilt.
 
 ## Not yet specified
 

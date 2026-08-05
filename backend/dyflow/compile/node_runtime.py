@@ -363,9 +363,21 @@ class NodeRuntime:
         whenever no skill is wired to it; a worker has no equivalent skill
         input at all, so it needs a floor. The skill binding, when present,
         still wins — this default only fills the gap when nobody supplied one.
+
+        **The prompt is passed as `create_agent(system_prompt=...)`, not
+        prepended as a message.** The first version of this fix kept the
+        prompt text but delivered it as a `SystemMessage` stitched into the
+        per-invocation `messages` list, on an agent built once with no
+        `system_prompt` at all — unlike `workflows/chinook-nl-to-sql/agents.py`'s
+        `build_sql_agent`, the one place this exact directive style was
+        already proven to work, which passes its prompt as `create_agent`'s
+        own `system_prompt` parameter. Matching that shape (agent built fresh
+        per invocation, since the skill text can vary by run) rather than
+        approximating it with a hand-assembled message list removes a
+        variable between the working case and this one.
         """
         from langchain.agents import create_agent
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import HumanMessage
 
         lc_tools = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
@@ -387,34 +399,32 @@ class NodeRuntime:
             "You have tools that give you the REAL, current answer — you do "
             "not have this information memorised, and any figure you recall "
             "without calling a tool is almost certainly wrong for this "
-            "specific dataset. Before answering:\n"
+            "specific dataset. Always work in this order:\n"
             "1. Call the list-tables tool to see what exists.\n"
             "2. Call the schema tool on the tables you need.\n"
-            "3. Call the SQL tool with a query that answers the question.\n"
+            "3. Call the SQL tool with a single query that answers the question.\n"
             "Only after that sequence, answer using the numbers the tools "
-            "returned. Do not answer from general knowledge."
+            "returned. Do not answer from general knowledge, and do not "
+            "invent a table or column name the schema tool did not show you."
             if lc_tools
             else ""
         )
-
-        agent = None
-        if self.model is not None:
-            agent = create_agent(model=self.model, tools=lc_tools, name=f"worker_{node_id}")
 
         def run(state: RunState) -> dict[str, Any]:
             task_id = state.get("task_id", "")
             instruction = state.get("task_instruction", "")
 
-            if agent is None:
+            if self.model is None:
                 return {"worker_results": {task_id: ""}}
 
-            skill = _upstream_text(state, skills) or default_prompt
-            messages: list[Any] = []
-            if skill:
-                messages.append(SystemMessage(content=skill))
-            messages.append(HumanMessage(content=instruction))
-
-            result = agent.invoke({"messages": messages})
+            system_prompt = _upstream_text(state, skills) or default_prompt
+            agent = create_agent(
+                model=self.model,
+                tools=lc_tools,
+                system_prompt=system_prompt,
+                name=f"worker_{node_id}",
+            )
+            result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
             text = out[-1].content if out else ""
             return {"worker_results": {task_id: text if isinstance(text, str) else str(text)}}

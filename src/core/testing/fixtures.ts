@@ -119,4 +119,9 @@ export const TYPE = {
   output: 'output.formatted',
   group: 'annotate.group',
   note: 'annotate.note',
+  router: 'route.classifier',
+  grader: 'route.grader',
+  orchestrator: 'orchestrate.supervisor',
+  worker: 'orchestrate.worker',
+  formatReport: 'function.format_report',
 } as const;

@@ -141,16 +141,78 @@ a bare scalar or `LastValue` field.** `decisions`, `outputs`, `subtasks` and
 latent until a real graph exercised it. Applies to every future compiled
 workflow state schema, not just this one.
 
+## Resolved after further investigation: the worker's tools were never bound
+
+The "tool-use reliability" finding above turned out not to be a model or
+prompting problem at all — it was a second, more basic wiring bug, and
+finding it required treating the earlier truncated live result as unresolved
+rather than as an accepted limitation of the model.
+
+**`WORKER_TYPE`'s entry in `WorkflowCompiler.DEFAULT_PORT_SPECS` never declared
+a `tools` or `skill` port.** Only `dispatch` and `result` were listed. An edge
+into either port therefore fell through `default_port_resolver`'s "unknown
+port" fallback and was classified as ordinary control flow rather than a
+binding — so `plan.tool_bindings` never saw it, `_worker`'s `lc_tools` came
+back empty regardless of what was wired on the canvas, `default_prompt` fell
+back to `""` (its ternary is `if lc_tools else ""`), and the model received
+no tools and no directive, and answered from parametric knowledge with
+nothing to ground it. This is exactly the same shape of bug as the
+`answer`-channel collision and the id-collision bug above: correct in every
+scripted fixture, because no fixture happened to wire a tool onto a worker
+and assert on the binding — `test_a_tool_is_bound_not_sequenced` covered the
+**agent's** identically-named `tools`/`skill` ports, and nothing covered the
+worker's.
+
+Fixed by adding both entries to `WORKER_TYPE`'s port spec table
+(`backend/dyflow/compile/workflow_compiler.py`), with a regression test
+mirroring the agent's own (`test_a_tool_bound_to_a_worker_is_bound_not_sequenced`,
+`backend/tests/test_workflow_compiler.py`) proving the binding is registered
+and the edge is excluded from `plan.edges`.
+
+Separately, `_worker` was also changed to pass its prompt as
+`create_agent(system_prompt=...)`, matching `workflows/chinook-nl-to-sql/agents.py`'s
+proven `build_sql_agent` shape, rather than prepending a `SystemMessage` to
+the per-invocation `messages` list on an agent built with no `system_prompt`
+at construction. This did not turn out to be the load-bearing fix — the port
+spec gap was — but it removes a real difference from the one place this exact
+directive-prompt style was already known to work, and costs rebuilding the
+agent once per dispatched task rather than once per compile, which is
+negligible next to an LLM call.
+
+**Verified live, twice, after the port-spec fix**, against
+`ollama:gpt-oss:120b-cloud` with real Chinook tools bound to a worker node:
+correct answers ("top genre by revenue" → Rock, $826.65; "which genre has
+the most tracks" → Rock, 1,297 tracks) produced by the exact tool sequence
+the prompt asks for — `chinook_list_tables` → `chinook_get_table_schema` (as
+needed) → `chinook_execute_sql` with a correct joined, grouped, sorted,
+limited query — inspected directly via each message's `tool_calls` and
+`ToolMessage` content, not inferred from the final answer's plausibility.
+Two other live attempts failed with Ollama cloud's own transient `500`/`-1`
+`ResponseError`, unrelated to this fix; retrying reproduced success. This is
+now closed, not merely mitigated.
+
+## TypeScript node types — built
+
+`OrchestratorNode.ts`, `WorkerNode.ts` and `FormatReportNode.ts`
+(`src/nodes/orchestrate/`) register `orchestrate.supervisor`,
+`orchestrate.worker` and `function.format_report` in the canvas catalogue,
+following the same shape as `RouterNode.ts`/`GraderNode.ts`: Orchestrator and
+Worker refuse to execute in the browser preview (Python owns `Send`
+fan-out — ticket 07), while Format Report genuinely runs there, since joining
+text needs no model and no LangGraph runtime. A new `PORT.worker` port type
+was added to `vocabulary.ts`, matching the compiler's `WORKER_PORT_TYPE`; the
+orchestrator's `workers` output is capped at `maxConnections: 1` because the
+compiler records at most one dispatch target per orchestrator — a single
+wire, not a bus, unlike the `tools` pill both the Agent and Worker nodes
+carry. 13 new Vitest tests plus a fixture-registry update; 192 Vitest + 137
+pytest passing, `tsc -b --noEmit` clean.
+
 ## Not done, honestly listed
 
-- The worker's tool-use reliability needs either a stronger, task-specific
-  prompt (reusing `agents.py`'s proven `SQL_SYSTEM_PROMPT` verbatim rather than
-  a generic directive) or `create_agent`'s own `system_prompt=` parameter
-  instead of a prepended `SystemMessage` — worth an isolated A/B, not more
-  live iteration inside this session.
-- No TypeScript node types for Orchestrator/Worker yet — only the Python
-  compiler/runtime side exists. A developer cannot yet drag these onto the
-  canvas; they can only be authored as raw `workflow.json`.
 - Model-driven decomposition (a `BaseOrchestrator` subclass whose `split()`
   calls a model) is a legitimate, cheap extension once wanted — not built,
   since the deterministic default covers the tested cases.
+- The streaming/chat-sidebar contract from ticket 27's original shape
+  (`updates` + `messages` multiplexed over one SSE connection, `subgraphs=True`)
+  is still unbuilt — this session closed the graph-engineering and node-
+  registration gaps, not the observability ones.

@@ -1,5 +1,5 @@
 Type: grilling
-Status: backend graph mechanics resolved (2026-08-05); TS node registration and canvas wiring still open
+Status: backend graph mechanics + TS node registration + worker tool-use bug resolved (2026-08-05); streaming/sidebar contract still open
 Blocked by: 13, 24
 
 ## Question
@@ -151,10 +151,26 @@ Both open questions above are answered and built, backend-only, per
   reducer — `test_answer_channel_concurrency.py`), and subtask ids colliding
   across replans, silently blending stale and fresh results (fixed with
   generation-scoped ids — `test_orchestrator.py`).
-- **Still open, honestly**: worker tool-use reliability against a live model is
-  a prompting/harness question, not a wiring one — see the decision doc's
-  "not done" section. And **none of this has a TypeScript node type yet** —
-  `orchestrate.supervisor`/`orchestrate.worker`/`function.format_report` exist
-  only in the Python compiler/runtime; a developer can author them only via raw
-  `workflow.json`, not by dragging them onto the canvas. That, plus the
-  streaming/sidebar contract, is the remaining scope of this ticket.
+## Worker tool-use bug — root-caused and fixed (2026-08-05)
+
+The "worker tool-use reliability" gap noted above was not a model/prompting
+limitation after all: `WORKER_TYPE`'s compiler port-spec table never declared
+a `tools` or `skill` port, so an edge into either silently fell through to
+"ordinary control flow" instead of registering as a binding — a worker with
+Chinook tools wired on the canvas ran with **zero** tools every time,
+regardless of prompt wording. Fixed in `workflow_compiler.py`
+(`DEFAULT_PORT_SPECS[WORKER_TYPE]`), with a regression test mirroring the
+agent's own binding coverage. Verified live, twice, against
+`ollama:gpt-oss:120b-cloud`: correct answers produced by the real tool
+sequence (`chinook_list_tables` → `chinook_get_table_schema` →
+`chinook_execute_sql`), confirmed by inspecting each message's `tool_calls`
+directly, not by the answer's plausibility. Full account in
+[the decision doc](decisions/loop-graph-harness.md).
+
+## TypeScript node registration — done (2026-08-05)
+
+`OrchestratorNode.ts`, `WorkerNode.ts`, `FormatReportNode.ts`
+(`src/nodes/orchestrate/`), registered in the palette alongside Router and
+Grader. A developer can now drag all three onto the canvas; only the
+streaming/sidebar contract (SSE `updates`+`messages`, `subgraphs=True`) from
+this ticket's original shape remains unbuilt.
