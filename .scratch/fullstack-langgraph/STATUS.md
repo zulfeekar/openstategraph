@@ -1,6 +1,7 @@
 # Dyflow Status — VERIFIED handover
 
 **Verified by:** Claude (Opus 5) session, 2026-08-05
+**Repairs committed:** `0487724` — see "Fixed and committed" below
 **Context:** The document below this divider was written by **Qwen** (via Claude Code
 terminal) in a parallel session. The user stated they cannot trust it. This section is
 an evidence-based audit of its claims. Qwen's original text is preserved untouched
@@ -75,6 +76,33 @@ so nobody "fixes" typing by deleting a `.trim()` and letting whitespace into the
    have **no tests at all**. Confirmed by search. In a repo whose CLAUDE.md mandates TDD.
 3. **Workflow identity is `sessionStorage`-scoped**, as Qwen admits — closing the tab orphans
    the entry. This is not workflow CRUD in the sense asked for; it is per-tab browser state.
+
+## Fixed and committed (`0487724`) — 127 tests passing, tsc clean
+
+| Defect | State | Verified how |
+| --- | --- | --- |
+| Cards never re-rendered (the real "rename doesn't reflect") | **FIXED** | `NodeCard` resolves via `useNode`; previously Undo went enabled (model changed) while the card kept the old title |
+| Name inputs ate every space | **FIXED** | Typed "Chinook NL to SQL" — 3 spaces kept, `.topbar__doc` propagated |
+| localStorage duplicated the graph on every tab open | **FIXED** | 3 fresh tab opens: entry count stayed **2 → 2 → 2 → 2** (previously +1 each) |
+| Persistence untestable / untested | **FIXED** | `workflowStore.ts` with injectable storage + **16 tests** (round trip, corrupt entry, quota, ordering, session resolution) |
+| Save claimed success on quota failure | **FIXED** | `saveWorkflow` returns an outcome; manager reports the real result |
+| Two competing storage layers | **FIXED** | `autoSave.ts` deleted; `WorkflowManager` repointed at the tested store |
+
+Key design note for whoever continues: `resolveSession` **adopts** an existing
+workflow id instead of minting a new one. Minting was what duplicated the graph.
+Trade-off accepted: two tabs then share an id and the last write wins, which is a
+smaller problem than unbounded duplicate entries.
+
+## Still outstanding
+
+1. **Chinook tools are registered globally** in `src/nodes/index.ts` — wrong side of
+   the generic/workflow-scoped line settled below. Needs the workflow-scoped registry
+   overlay. *Not yet done.*
+2. **`execute_sql_query` is a mock and there is no sqlite dependency**, so the
+   NL-to-SQL flow still cannot query Chinook. Options: `sql.js` (WASM SQLite, MIT) in
+   the browser, or defer to the Python backend. *Not yet done.*
+3. `ChinookDatabaseNode.ts` and `WorkflowManager.tsx` still have **no tests**.
+4. Ticket 17 part 2 — the `WorkflowModel` split — designed, not cut.
 
 ## Node scope: generic vs workflow-specific — SETTLED (user, 2026-08-05)
 
