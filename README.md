@@ -5,18 +5,36 @@ A visual AI-agent workflow editor built on the **open-source** JointJS core
 without any commercial packages.
 
 Phase 1 (this repo) is the editor: canvas, design system, MVC engine, and a
-pluggable provider layer that already runs workflows end to end. Phase 2 moves
-execution behind a Python LangGraph/LangChain backend.
+pluggable provider layer that already runs workflows end to end. Phase 2 —
+now live alongside phase 1 — is the Python LangGraph/LangChain backend that
+actually compiles and runs a canvas-authored workflow, persists it to real
+files, and streams a run back to the chat panel.
+
+Two processes, two languages, run separately (ticket 12: no single unified
+dev command exists — a `Vite` process and a `uvicorn` process have little in
+common to unify, and a Makefile wrapping "run these two things" would be one
+more thing to keep in sync with the two `npm`/`pip` scripts below):
 
 ```bash
+# Terminal 1 — the editor
 npm install
 npm run dev        # http://localhost:5273
+
+# Terminal 2 — the runtime (optional: the editor works read-only without it,
+# but Chat and saving workflows both need it)
+cd backend
+pip install -e .
+PYTHONPATH=backend:workflows/chinook-nl-to-sql uvicorn dyflow.api.main:app --port 8000 --app-dir backend
+
 npm run build      # tsc -b && vite build
 npm run typecheck
 ```
 
-Opens on a seeded demo that **runs with no credentials** — the default model is
-`Mock · Offline`, a deterministic simulator that exercises the real agent loop.
+Opens on a seeded demo that **runs with no credentials** on the canvas
+preview — the default model there is `Mock · Offline`, a deterministic
+simulator. The real backend, once running, defaults to **Ollama cloud** with
+zero configuration (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` override it if set —
+see `resolve_model` in `backend/dyflow/api/main.py`).
 
 ---
 

@@ -1,0 +1,30 @@
+[project]
+name = "dyflow-backend"
+version = "0.1.0"
+description = "The Python LangGraph/LangChain runtime behind the Dyflow editor."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.9",
+    "langgraph>=1.0",
+    "langchain>=1.0",
+    "langchain-core>=1.0",
+    "deepagents>=0.7",
+    # Provider packages. Ollama cloud is the default (see api/main.py's
+    # resolve_model) so langchain-ollama is not optional in practice, even
+    # though init_chat_model resolves the others lazily too.
+    "langchain-ollama>=1.0",
+    "langchain-anthropic>=1.0",
+    "langchain-openai>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+# Test configuration lives in the repo-root pytest.ini, not here — it already
+# covers both roots (backend/ and the workflow's own tools/), and pytest.ini
+# takes precedence over this file's [tool.pytest.ini_options] table when both
+# exist, so duplicating it here would be dead weight, not a real override.
