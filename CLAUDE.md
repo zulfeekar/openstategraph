@@ -47,6 +47,25 @@ The precise form matters, because LangChain middleware is a **list whose order i
 
 So: **inherit the capability to compose; do not inherit the composition.**
 
+### A prompt is composed, and the machinery is not editable
+
+Applies to **every** node that drives a model, not just agents. Split the system prompt in two and keep them apart:
+
+| Part | Owner | Editable? |
+| --- | --- | --- |
+| **Preamble** — what this node *is* | the base | **no** |
+| **Context** — branch list, table schema, rubric | generated | no |
+| **Rules** — the domain logic | the developer | **yes, and only this** |
+| **Output contract** — the shape of the answer | the base | **no** |
+
+`resolvePrompt()` on the base is the single place config becomes a prompt, exactly as `resolveMiddleware()` is for middleware. A developer supplies a sentence of rules and inherits a working node; a new kind of router is *configuration*, never a new class.
+
+**Order is the substance: the output contract goes last.** Prompts are order-sensitive the way middleware is — later instructions win ties. If developer text came last, a rule like "explain your reasoning" would countermand the output format and every parse would fail. Their rules shape the *decision*; the base keeps the *shape of the answer*.
+
+**Never ship the contract as a pre-filled editable field.** That was the original `RouterNode` bug: one `instruction` textarea pre-filled with the output contract, so clearing it — the first thing anyone does when writing their own rules — produced a router whose answer could not be parsed. Surface the locked sections **read-only** beside the editable one, so a developer can see what the machinery already says instead of duplicating or contradicting it.
+
+**But prompt composition is a collaborator, not a base class.** Router, Grader and Agent compile to *different graph constructs*, so they are different families, and the boundary rule below applies: a shared `AbstractPromptedNode` would begin the god base class, and would force a prompt onto `CustomGraphNode`, which has none. Each family *composes* a `SystemPrompt`; nothing inherits it.
+
 ### The boundary — where inheritance stops
 
 Sharing has two axes, and only one of them is inheritance:

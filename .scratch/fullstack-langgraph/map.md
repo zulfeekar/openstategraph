@@ -150,6 +150,44 @@ here and settling ticket 20 by accident.
 
 The Python compile target belongs to ticket 15.
 
+## Prompt composition — the machinery is not editable (2026-08-05)
+
+The user's correction, and it applies to **every** node that drives a model: the
+generic part of a prompt belongs to the base and must not be an editable field; the
+developer supplies only domain rules. `IRouter -> BaseRouter -> Router` with default
+behaviour, so a new kind of router is *configuration*, not a new class.
+
+**It caught a real bug in the Router I had just shipped.** It had one editable
+`instruction` textarea **pre-filled with the output contract** — so clearing it, which
+is the first thing anyone does when writing their own rules, produced a router whose
+answer could not be parsed. Now the field is `rules` only; preamble and contract are
+locked constants.
+
+Four parts, and **order is the substance**: `preamble -> context -> developer rules ->
+output contract`, with the contract **last**. Prompts are order-sensitive like
+middleware — later instructions win ties — so if developer text came last, a rule such
+as "explain your reasoning" would countermand the output format and every parse would
+fail. Their rules shape the *decision*; the base keeps the *shape of the answer*.
+
+**"If generic, think twice" changed the answer on where it lives.** The natural move is
+an `AbstractPromptedNode` shared by Router, Grader and Agent. But those compile to
+*different graph constructs* — conditional edge, conditional edge with a feedback port,
+node — so they are different **families**, and CLAUDE.md's own boundary rule says a
+cross-family concern is a **collaborator, not a superclass**. A shared ancestor would
+begin the god base class that rule exists to prevent, and would force a prompt onto
+`CustomGraphNode`, which has none. So `SystemPrompt` is a composed value object
+(`backend/dyflow/abc/prompt.py`); nothing inherits it.
+
+Also built: `BaseRouter.normalise()` is **deliberately tolerant** — a router is the
+entry point, so a strict parse is a total outage, which is exactly how the live Chinook
+run failed on `response_format`. It accepts `"dataquery."`, `'"dataquery"'`,
+`"DataQuery"` and a branch name inside a chatty sentence, and falls back with a reason
+when genuinely ambiguous. A misroute is recoverable; a crash is not. And
+`compile_path_map()` **omits unwired branches** rather than pointing them at `END`, so a
+half-wired router shows as a missing destination instead of silently terminating a run.
+
+Now in CLAUDE.md as a binding principle. 24 router tests + 7 TS prompt-composition tests.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

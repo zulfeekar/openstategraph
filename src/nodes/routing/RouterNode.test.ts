@@ -3,7 +3,14 @@ import { defaultsFrom } from '@core/model/contracts/fields';
 import { maxConnectionsOf } from '@core/model/contracts/ports';
 import { makeWorkbench } from '@core/testing/fixtures';
 import type { Workbench } from '@app/Workbench';
-import { branchesOf, routerNode, ROUTER_TYPE } from './RouterNode';
+import {
+  branchesOf,
+  routerNode,
+  ROUTER_OUTPUT_CONTRACT,
+  ROUTER_PREAMBLE,
+  ROUTER_TYPE,
+  type RouterNodeModel,
+} from './RouterNode';
 
 /**
  * The Router — the first *role* preset (ticket 28).
@@ -139,5 +146,78 @@ describe('routerNode registration', () => {
 
     const fresh = workbench.model.node(node.id)!;
     expect(fresh.ports.filter((p) => p.direction === 'out')).toHaveLength(4);
+  });
+});
+
+/**
+ * Prompt composition — the base owns the machinery, the developer owns the rules.
+ *
+ * This is the mental model for **every** node that drives a model, not just the
+ * router: whatever must be true for the node to work at all is locked on the
+ * base and is not a field. Before this, the router shipped one editable
+ * `instruction` textarea pre-filled with the output contract — so clearing it,
+ * which is the first thing anyone does when writing their own rules, produced a
+ * router whose answer could not be parsed.
+ */
+describe('router prompt composition', () => {
+  let workbench: Workbench;
+
+  const router = (): RouterNodeModel => {
+    workbench.controller.nodes.add(ROUTER_TYPE, { x: 0, y: 0 });
+    return workbench.model.nodes().find((n) => n.type === ROUTER_TYPE) as RouterNodeModel;
+  };
+
+  beforeEach(() => {
+    workbench = makeWorkbench();
+  });
+
+  it('starts with no rules, because rules are the developer\'s to write', () => {
+    expect(router().rules).toBe('');
+  });
+
+  it('still produces a complete prompt with no rules at all', () => {
+    const prompt = router().systemPrompt;
+    expect(prompt).toContain(ROUTER_PREAMBLE);
+    expect(prompt).toContain(ROUTER_OUTPUT_CONTRACT);
+    expect(prompt).toContain('dataquery');
+  });
+
+  it('includes the developer rules verbatim', () => {
+    const node = router();
+    workbench.controller.nodes.setField(node.id, 'rules', 'Revenue questions are dataquery.');
+    const fresh = workbench.model.node(node.id) as RouterNodeModel;
+    expect(fresh.systemPrompt).toContain('Revenue questions are dataquery.');
+  });
+
+  it('keeps the output contract even when the rules field is cleared', () => {
+    const node = router();
+    workbench.controller.nodes.setField(node.id, 'rules', '');
+    const fresh = workbench.model.node(node.id) as RouterNodeModel;
+    // The reason the contract is not a field at all.
+    expect(fresh.systemPrompt).toContain(ROUTER_OUTPUT_CONTRACT);
+  });
+
+  it('puts the output contract AFTER the rules, so rules cannot countermand it', () => {
+    const node = router();
+    workbench.controller.nodes.setField(node.id, 'rules', 'Explain your reasoning at length.');
+    const prompt = (workbench.model.node(node.id) as RouterNodeModel).systemPrompt;
+
+    // Later instructions win ties. Contract last, or that rule breaks parsing.
+    expect(prompt.indexOf('Explain your reasoning')).toBeLessThan(
+      prompt.indexOf(ROUTER_OUTPUT_CONTRACT),
+    );
+  });
+
+  it('names the fallback in the prompt so the model knows the escape hatch', () => {
+    expect(router().systemPrompt).toContain('nothing else matches');
+  });
+
+  it('exposes no field that can delete the machinery', () => {
+    const editable = routerNode.fields.map((f) => f.key);
+    expect(editable).toContain('rules');
+    // Nothing named for the preamble or contract — they are not authorable.
+    expect(editable).not.toContain('instruction');
+    expect(editable).not.toContain('preamble');
+    expect(editable).not.toContain('outputContract');
   });
 });

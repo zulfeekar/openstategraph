@@ -13,7 +13,7 @@ import { CATEGORY, PORT } from '../vocabulary';
 
 export const ROUTER_TYPE = 'route.classifier';
 
-const FIELD_INSTRUCTION = 'instruction';
+const FIELD_RULES = 'rules';
 const FIELD_BRANCHES = 'branches';
 const FIELD_FALLBACK = 'fallback';
 const FIELD_TIER = 'tier';
@@ -65,9 +65,46 @@ export function branchesOf(data: Readonly<NodeData>): string[] {
   return names.length > 0 ? names : ['default'];
 }
 
+/** Locked. Not a field, so it cannot be cleared or contradicted. */
+export const ROUTER_PREAMBLE =
+  'You are a router. Your only job is to decide which single branch a message ' +
+  'belongs to. You never answer the message itself.';
+
+/** Locked, and rendered **last** so developer rules cannot override it. */
+export const ROUTER_OUTPUT_CONTRACT =
+  'Reply with exactly one branch name from the list above. No punctuation, no ' +
+  'explanation, no quotes — the branch name alone.';
+
 export class RouterNodeModel extends AbstractNodeModel {
-  get instruction(): string {
-    return this.getText(FIELD_INSTRUCTION);
+  /** The one part the developer writes. */
+  get rules(): string {
+    return this.getText(FIELD_RULES);
+  }
+
+  /**
+   * The whole prompt, assembled.
+   *
+   * Mirrors `BaseRouter.system_prompt()` in Python, and the ordering is the
+   * substance: preamble, then the branch list, then the developer's rules, then
+   * the output contract **last**. Later instructions win ties, so a rule such as
+   * "explain your reasoning" must not be able to come after the contract or
+   * every classification would fail to parse.
+   *
+   * Exposed so the inspector can show the locked sections read-only beside the
+   * editable one — a developer writing rules needs to see what the machinery
+   * already says, or they duplicate and contradict it.
+   */
+  get systemPrompt(): string {
+    const listed = this.branches
+      .map((name) => (name === this.fallback ? `- ${name}  (used when nothing else matches)` : `- ${name}`))
+      .join('\n');
+    const rules = this.rules.trim();
+    return [
+      ROUTER_PREAMBLE,
+      `Branches:\n${listed}`,
+      ...(rules ? [`Rules:\n${rules}`] : []),
+      ROUTER_OUTPUT_CONTRACT,
+    ].join('\n\n');
   }
 
   get branches(): readonly string[] {
@@ -111,12 +148,14 @@ export const routerNode: INodeDefinition = defineNode(
     fields: [
       {
         kind: 'textarea',
-        key: FIELD_INSTRUCTION,
-        label: 'Classification instruction',
-        placeholder: 'Decide which branch this question belongs to…',
-        defaultValue:
-          'Classify the question into exactly one branch. Answer with the branch name only.',
-        minRows: 2,
+        key: FIELD_RULES,
+        label: 'Routing rules',
+        // Rules *only*. The preamble and the output contract are locked on the
+        // base and are not fields, because a developer who cleared them would
+        // get a router whose answer cannot be parsed.
+        placeholder: 'If it mentions revenue or tables → dataquery. A hello → greeting.',
+        defaultValue: '',
+        minRows: 3,
       },
       {
         kind: 'textarea',
