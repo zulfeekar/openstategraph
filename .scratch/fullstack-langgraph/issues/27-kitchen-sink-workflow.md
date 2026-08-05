@@ -218,3 +218,49 @@ than this ticket; the component is thin glue over the now-well-tested
 deliberately untested, core is unit-tested" split (ticket 11).
 
 This closes every part of the ticket's original shape.
+
+## It wasn't actually a chat — corrected (2026-08-05)
+
+The user's direct question after the above ("WHERE IS THE CHAT?") caught a
+real gap: what shipped was a single-question **form** — one text box, one
+answer slot that the next question overwrote — not the "chat sidebar" the
+ticket actually asked for. Fixed, same file
+(`src/view/ask/AskPanel.tsx`, still exported as `AskPanel` to avoid touching
+`AppShell.tsx`'s wiring, but now a real multi-turn thread):
+
+- **Turns append, never overwrite.** Each send creates a `ChatTurn`
+  (question, live activity, streamed "thinking" text, final answer/error)
+  appended to a list, auto-scrolled to the newest.
+- **The chat's "first contact" is the canvas's own entry node**, not a
+  side channel: sending a message calls
+  `controller.nodes.setField(entryNode.id, 'prompt', message)` on the
+  document's `input.text` node before running — verified live that the node's
+  textarea shows the exact sent text. `TEXT_INPUT_TYPE` was exported from
+  `TextInputNode.ts` for this lookup rather than hardcoding the string a
+  second place.
+- **Node/edge animation, and it needed no new CSS or canvas feature.**
+  `CanvasStage.tsx`'s edge-highlight effect was rewired from
+  `workbench.engine.on('run:node')` to `controller.model.on('node:runtime')`
+  — the *same* signal, since the local mock engine already calls
+  `setNodeRuntime()` at every one of its own `run:node` emit sites (checked
+  1:1 in `ExecutionEngine.ts` before touching anything). The chat panel now
+  calls `setNodeRuntime(nodeId, {status: 'running'})` per SSE `update` event,
+  which (a) lights up the existing `node[data-status='running']` box-shadow
+  glow on the card (`NodeCard.css`, already shipped, built for local runs)
+  and (b) drives the existing `.is-active` flowing-dashed-edge CSS animation
+  (`canvas.css`, also already shipped). A live backend run and a local
+  preview run now animate through one shared channel instead of two.
+- **Live "thinking" transcript.** `token` SSE events append to the active
+  turn's streamed text, shown in a capped-height scrollable block — a peek at
+  the model's reasoning, not competing with the answer for space.
+
+Verified live in the browser end to end: sending a message wrote the exact
+text onto the Text Input node, a three-attempt revise loop streamed with each
+node visibly listed as it ran, the canvas selection followed along, a second
+message appended as a new turn below the first rather than replacing it, and
+after completion every touched node settled at `data-status="success"` with
+no node stuck `"running"` and no edge stuck `.is-active` — confirmed via a
+direct DOM query, not just visually. 199 Vitest + 187 pytest still passing,
+`tsc` clean. No new tests for the chat UI itself, for the same
+already-recorded reason: no React component test infrastructure exists
+anywhere in this codebase.

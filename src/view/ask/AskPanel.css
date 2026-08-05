@@ -1,5 +1,90 @@
-/* The ask panel. Kept close to the inspector's visual language so the two
+/* The chat panel. Kept close to the inspector's visual language so the two
    right-hand panels read as the same surface rather than two apps. */
+
+.ask .panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  /* `.panel__body` scrolls by default; overridden here because only the
+     thread should scroll — the composer stays anchored at the bottom. */
+  overflow: hidden;
+}
+
+.ask__thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ask__empty {
+  padding: var(--space-3) 0;
+}
+
+.ask__turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ask__turn:last-child {
+  border-bottom: none;
+}
+
+.ask__question {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-violet-soft, var(--surface-sunken));
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: var(--type-body-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ask__composer {
+  flex-shrink: 0;
+}
+
+.ask__activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ask__thinking {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font: var(--type-mono-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Capped so one verbose turn's raw token stream can't push the whole
+     thread out of view — a developer wants a peek at the reasoning, not a
+     full transcript competing with the answer for space. */
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.ask__answer-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ask__decisions {
+  display: flex;
+  flex-direction: column;
+}
 
 .ask__answer {
   margin: 0;

@@ -9,6 +9,8 @@ import type {
 } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
+export const TEXT_INPUT_TYPE = 'input.text';
+
 const FIELD_PROMPT = 'prompt';
 
 /**
@@ -26,7 +28,7 @@ export class TextInputNodeModel extends AbstractNodeModel {
 
 export const textInputNode: INodeDefinition = defineNode(
   {
-    id: 'input.text',
+    id: TEXT_INPUT_TYPE,
     category: CATEGORY.inputs,
     label: 'Text Input',
     description: 'The starting prompt for the flow.',

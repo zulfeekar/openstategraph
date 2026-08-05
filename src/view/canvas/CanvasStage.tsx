@@ -74,7 +74,6 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
 
   useEffect(() => {
     if (!paper) return;
-    const { engine } = workbench;
 
     // Light up the links leaving whichever node is running, so the eye can
     // follow execution rather than hunting for the active card.
@@ -86,17 +85,25 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
       }
     };
 
-    const offNode = engine.on('run:node', ({ nodeId, status }) => {
-      markActive(status === 'running' ? nodeId : null);
+    // Driven by `node.runtime`, not the local mock engine directly — the
+    // engine already writes every status change through
+    // `WorkflowModel.setNodeRuntime()` (one-for-one with its own `run:node`
+    // bus event), so this is the same signal, not a second one. The reason
+    // to key off the model instead: a **backend-streamed** run (the chat
+    // panel, ticket 27) has no local `ExecutionEngine` run at all — it calls
+    // `setNodeRuntime()` directly as each SSE `update` frame arrives — and
+    // this is the one channel both a local preview run and a live backend
+    // run pass through, so the flowing-edge animation works for either
+    // without the canvas needing to know which kind of run is happening.
+    const off = controller.model.on('node:runtime', ({ nodeId, runtime }) => {
+      markActive(runtime.status === 'running' ? nodeId : null);
     });
-    const offFinish = engine.on('run:finish', () => markActive(null));
 
     return () => {
-      offNode();
-      offFinish();
+      off();
       markActive(null);
     };
-  }, [paper, workbench]);
+  }, [paper, controller]);
 
   /* ---------------- palette drop ---------------- */
 
