@@ -1,0 +1,320 @@
+"""Tests for the workflow compiler.
+
+The behaviour that matters most is the one that is easy to get silently wrong:
+**not every canvas edge is a graph edge.** A tool wired to an agent is a binding,
+not a step. If the compiler sequenced it, the tool would run once on its own
+before the agent ever called it — and the agent would call it too, doubling the
+work and producing a plausible-looking result.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any, TypedDict
+
+import pytest
+from langgraph.graph.message import add_messages
+
+from dyflow.compile.workflow_compiler import (
+    CompiledPlan,
+    WorkflowCompiler,
+    default_port_resolver,
+    safe_name,
+)
+
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+    decisions: dict
+
+
+def node(node_id: str, type_: str, **data: Any) -> dict[str, Any]:
+    return {"id": node_id, "type": type_, "data": data, "position": {"x": 0, "y": 0}}
+
+
+def edge(src: str, src_port: str, dst: str, dst_port: str) -> dict[str, Any]:
+    return {
+        "source": {"nodeId": src, "portId": src_port},
+        "target": {"nodeId": dst, "portId": dst_port},
+    }
+
+
+def doc(nodes: list[dict], edges: list[dict]) -> dict[str, Any]:
+    return {"version": 1, "name": "test", "nodes": nodes, "edges": edges}
+
+
+LINEAR = doc(
+    [
+        node("in1", "input.text"),
+        node("ag1", "agent.llm"),
+        node("out1", "output.formatted"),
+    ],
+    [edge("in1", "text", "ag1", "prompt"), edge("ag1", "result", "out1", "result")],
+)
+
+
+@pytest.fixture
+def compiler() -> WorkflowCompiler:
+    return WorkflowCompiler()
+
+
+def build(compiler: WorkflowCompiler, document: dict[str, Any]) -> Any:
+    return compiler.build(document, State, lambda _id, _n, _p: (lambda s: {}))
+
+
+class TestControlFlow:
+    def test_a_linear_workflow_becomes_a_linear_graph(self, compiler) -> None:
+        plan = compiler.plan(LINEAR)
+        assert plan.nodes == ["ag1", "in1", "out1"]
+        assert plan.edges == [("ag1", "out1"), ("in1", "ag1")]
+        assert plan.entry == ["in1"]
+        assert plan.exits == ["out1"]
+
+    def test_it_compiles_to_a_runnable_graph(self, compiler) -> None:
+        graph = build(compiler, LINEAR)
+        diagram = graph.get_graph().draw_mermaid()
+        for name in ("in1", "ag1", "out1"):
+            assert name in diagram
+
+    def test_annotations_are_not_graph_nodes(self, compiler) -> None:
+        document = doc([*LINEAR["nodes"], node("note1", "annotate.note")], LINEAR["edges"])
+        assert "note1" not in compiler.plan(document).nodes
+
+    def test_an_edge_with_an_unknown_endpoint_is_dropped_with_a_warning(self, compiler) -> None:
+        document = doc(LINEAR["nodes"], [*LINEAR["edges"], edge("ghost", "text", "ag1", "prompt")])
+        plan = compiler.plan(document)
+        assert any("unknown endpoint" in w for w in plan.warnings)
+        assert len(plan.edges) == 2
+
+
+class TestBindingsAreNotSteps:
+    """The distinction that would be a silent, doubling bug if missed."""
+
+    def test_a_tool_is_bound_not_sequenced(self, compiler) -> None:
+        document = doc(
+            [*LINEAR["nodes"], node("t1", "tool.chinook-execute-sql")],
+            [*LINEAR["edges"], edge("t1", "tool", "ag1", "tools")],
+        )
+        plan = compiler.plan(document)
+
+        assert plan.tool_bindings == {"ag1": ["t1"]}
+        # Not an edge. Sequencing it would run the tool once on its own *and*
+        # let the agent call it — the same work twice.
+        assert ("t1", "ag1") not in plan.edges
+
+    def test_a_bound_tool_is_not_wired_to_end_either(self, compiler) -> None:
+        document = doc(
+            [*LINEAR["nodes"], node("t1", "tool.chinook-execute-sql")],
+            [*LINEAR["edges"], edge("t1", "tool", "ag1", "tools")],
+        )
+        plan = compiler.plan(document)
+        # It has no control-flow successor, but it is not an exit — otherwise
+        # every tool would terminate the graph.
+        assert "t1" not in plan.exits
+
+    def test_several_tools_bind_to_one_agent(self, compiler) -> None:
+        document = doc(
+            [
+                *LINEAR["nodes"],
+                node("t1", "tool.chinook-get-schema"),
+                node("t2", "tool.chinook-execute-sql"),
+            ],
+            [
+                *LINEAR["edges"],
+                edge("t1", "tool", "ag1", "tools"),
+                edge("t2", "tool", "ag1", "tools"),
+            ],
+        )
+        assert compiler.plan(document).tool_bindings["ag1"] == ["t1", "t2"]
+
+    def test_a_skill_is_bound_not_sequenced(self, compiler) -> None:
+        document = doc(
+            [*LINEAR["nodes"], node("md1", "input.markdown")],
+            [*LINEAR["edges"], edge("md1", "skill", "ag1", "skill")],
+        )
+        plan = compiler.plan(document)
+        assert plan.skill_bindings == {"ag1": ["md1"]}
+        assert ("md1", "ag1") not in plan.edges
+
+
+class TestRouter:
+    def test_each_branch_becomes_a_declared_destination(self, compiler) -> None:
+        document = doc(
+            [
+                node("in1", "input.text"),
+                node("r1", "route.classifier", branches="dataquery\nhelp"),
+                node("ag1", "agent.llm"),
+                node("out1", "output.formatted"),
+            ],
+            [
+                edge("in1", "text", "r1", "question"),
+                edge("r1", "branch:dataquery", "ag1", "prompt"),
+                edge("r1", "branch:help", "out1", "result"),
+            ],
+        )
+        plan = compiler.plan(document)
+
+        # The complete declared destination set — without it every renderer must
+        # assume the router reaches any node (ticket 03).
+        assert plan.conditional["r1"] == {"dataquery": "ag1", "help": "out1"}
+        assert not any(src == "r1" for src, _ in plan.edges)
+
+    def test_the_branch_prefix_is_stripped_to_the_label(self, compiler) -> None:
+        document = doc(
+            [node("r1", "route.classifier"), node("out1", "output.formatted")],
+            [edge("r1", "branch:off-topic", "out1", "result")],
+        )
+        assert compiler.plan(document).conditional["r1"] == {"off-topic": "out1"}
+
+    def test_it_compiles_to_conditional_edges(self, compiler) -> None:
+        document = doc(
+            [
+                node("in1", "input.text"),
+                node("r1", "route.classifier"),
+                node("a", "agent.llm"),
+                node("b", "output.formatted"),
+            ],
+            [
+                edge("in1", "text", "r1", "question"),
+                edge("r1", "branch:x", "a", "prompt"),
+                edge("r1", "branch:y", "b", "result"),
+            ],
+        )
+        diagram = build(compiler, document).get_graph().draw_mermaid()
+        # Dotted lines are how Mermaid renders a conditional edge.
+        assert "-.->" in diagram or "-." in diagram
+
+
+class TestGraderLoop:
+    def _document(self) -> dict[str, Any]:
+        return doc(
+            [
+                node("in1", "input.text"),
+                node("ag1", "agent.llm"),
+                node("g1", "route.grader"),
+                node("out1", "output.formatted"),
+            ],
+            [
+                edge("in1", "text", "ag1", "prompt"),
+                edge("ag1", "result", "g1", "candidate"),
+                edge("g1", "pass", "out1", "result"),
+                edge("g1", "revise", "ag1", "feedback"),
+            ],
+        )
+
+    def test_pass_and_revise_become_one_conditional_edge(self, compiler) -> None:
+        plan = compiler.plan(self._document())
+        assert plan.conditional["g1"] == {"pass": "out1", "revise": "ag1"}
+
+    def test_the_revise_edge_does_not_steal_the_entry_node(self, compiler) -> None:
+        plan = compiler.plan(self._document())
+        # The loop target is usually the entry node. Counting the revise edge as
+        # "incoming" would leave the graph with nothing wired to START.
+        assert plan.entry == ["in1"]
+        assert not plan.warnings
+
+    def test_the_loop_compiles(self, compiler) -> None:
+        graph = build(compiler, self._document())
+        diagram = graph.get_graph().draw_mermaid()
+        assert "g1" in diagram and "ag1" in diagram
+
+
+class TestNodeNaming:
+    def test_graph_node_names_are_workflow_ids_not_labels(self, compiler) -> None:
+        # LangGraph treats node names as identity: renaming one hard-breaks an
+        # interrupted thread (ticket 04). Ids survive renames and re-layouts.
+        document = doc([node("ag1", "agent.llm", title="My Agent")], [])
+        assert compiler.plan(document).nodes == ["ag1"]
+
+
+class TestPortResolution:
+    def test_a_router_branch_port_resolves_by_prefix(self) -> None:
+        spec = default_port_resolver("route.classifier", "branch:anything")
+        assert spec.direction == "out"
+
+    def test_an_unknown_node_type_defaults_to_control_flow(self) -> None:
+        # Safe direction: an extra sequencing edge is visible in the preview,
+        # whereas a missed one silently drops a step.
+        assert default_port_resolver("some.future.node", "in").type == "text"
+
+    def test_the_table_is_injectable_so_it_can_be_replaced_by_generated_output(self) -> None:
+        # The duplication with the TypeScript catalogue is deliberate and
+        # temporary (ticket 02). It must be replaceable without touching the
+        # compiler, or it becomes permanent.
+        from dyflow.compile.workflow_compiler import PortSpec
+
+        calls: list[tuple[str, str]] = []
+
+        def resolver(node_type: str, port_id: str) -> PortSpec:
+            calls.append((node_type, port_id))
+            return PortSpec("text", "in")
+
+        WorkflowCompiler(port_resolver=resolver).plan(LINEAR)
+        assert calls, "the compiler must go through the injected resolver"
+
+
+class TestPlanIsInspectable:
+    def test_the_plan_is_data_the_generator_can_reuse(self, compiler) -> None:
+        # The interpreter and the future code generator must agree. Sharing this
+        # plan makes that true by construction rather than by discipline.
+        plan = compiler.plan(LINEAR)
+        assert isinstance(plan, CompiledPlan)
+        assert plan.edges and plan.entry and plan.exits
+
+
+class TestRealCanvasIds:
+    """Regressions from compiling a document actually exported from the canvas.
+
+    Both of these sailed past every hand-written fixture, because fixtures use
+    tidy ids like `ag1` and wire only what the test is about. Neither bug was
+    hypothetical — the first raised, the second silently doubled work.
+    """
+
+    REAL_ID = "node:agent.llm-1"
+
+    def test_a_real_node_id_is_made_graph_legal(self) -> None:
+        # LangGraph reserves ':' in node names, so `add_node` raised outright.
+        assert ":" not in safe_name(self.REAL_ID)
+        assert safe_name(self.REAL_ID) == "node_agent_llm_1"
+
+    def test_distinct_ids_stay_distinct_after_sanitising(self) -> None:
+        assert safe_name("node:a.b-1") != safe_name("node:a.b-2")
+
+    def test_a_document_with_real_ids_compiles(self, compiler) -> None:
+        document = doc(
+            [node("node:input.text-1", "input.text"), node(self.REAL_ID, "agent.llm")],
+            [edge("node:input.text-1", "text", self.REAL_ID, "prompt")],
+        )
+        graph = build(compiler, document)
+        assert "node_agent_llm_1" in graph.get_graph().draw_mermaid()
+
+    def test_a_bound_tool_is_not_a_graph_node_at_all(self, compiler) -> None:
+        document = doc(
+            [*LINEAR["nodes"], node("t1", "tool.reddit-search")],
+            [*LINEAR["edges"], edge("t1", "tool", "ag1", "tools")],
+        )
+        plan = compiler.plan(document)
+
+        # The bug this replaces: excluding it from `exits` but not from `nodes`
+        # left it with no incoming edge, so it became an `entry` and was wired
+        # from START — the tool ran once at graph start *and* again when the
+        # agent called it. The earlier tests only asserted `exits`, so they
+        # passed while the doubling was live.
+        assert "t1" not in plan.nodes
+        assert "t1" not in plan.entry
+        assert plan.bound_only == ["t1"]
+
+    def test_a_node_that_is_both_bound_and_sequenced_stays_a_graph_node(
+        self, compiler
+    ) -> None:
+        # A markdown file feeding an agent's skill *and* an output node is a real
+        # step as well as a binding, so excluding it would drop the step.
+        document = doc(
+            [*LINEAR["nodes"], node("md1", "input.markdown")],
+            [
+                *LINEAR["edges"],
+                edge("md1", "skill", "ag1", "skill"),
+                edge("md1", "skill", "out1", "result"),
+            ],
+        )
+        plan = compiler.plan(document)
+        assert "md1" in plan.nodes

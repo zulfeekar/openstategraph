@@ -221,6 +221,48 @@ real catalogue and **the type graph is doing the work, not the rule**. Pinned by
 asserting the message is a *type* error and not a loop error, plus one asserting the
 grader is the only node type that can emit `feedback`.
 
+## Compile target: interpret to execute, generate to read (ticket 15, 2026-08-05)
+
+**Chose (c) both**, decided by the ticket's own three questions. Does a stale
+`graph.py` ever execute? Under generate-only yes — under (c) **never**, because the
+file is not imported; staleness is only dangerous on the execution path, so take it
+off that path rather than managing it. Can a user hand-edit it? **No**, and say so
+plainly — it is regenerated; hand-written code lives in `tools/`/`functions/`, which
+are user-owned and referenced by name. What does `git diff` show after moving a node?
+**Nothing** — which is a *requirement on the generator*: geometry must never reach
+emitted code, or every drag becomes a code diff and the export is worthless for
+review.
+
+**Built the interpreter** (`workflow_compiler.py`, 24 tests). `plan()` yields an
+inspectable `CompiledPlan`, `build()` turns it into a `StateGraph`; the plan is
+separate so the future generator consumes the *same* plan, making
+interpreter/generator agreement true by construction.
+
+**The load-bearing finding: not every canvas edge is a graph edge.** A `tool` or
+`skill` link is a **binding** — no node, no edge; `text`/`result` is control flow;
+`feedback` is part of a conditional edge. Sequencing a tool would run it standalone
+*and* let the agent call it — the same work twice, with a plausible result.
+
+**Two bugs found only by compiling a document exported from the real canvas**, both
+invisible to hand-written fixtures: (1) **LangGraph reserves `:` in node names** and
+our ids are `node:agent.llm-1`, so `add_node` raised — now sanitised from the *id*,
+not the label, because a node name is identity and a rename breaks an interrupted
+thread; (2) **a bound tool became an entry node** — excluded from `exits` but not
+from `nodes`, so it had no incoming edge, was treated as an entry and wired from
+`START`, reintroducing the exact doubling the binding rule prevents. **The unit tests
+passed while that was live**, because they only asserted `exits`. Reusable lesson:
+fixtures agree with the code that produced them; a real export is the only thing that
+disagrees.
+
+Verified end to end — input → router → agent (+ bound tool) → grader with `revise`
+looping back compiles to labelled conditional edges, the loop intact, the tool absent
+from the topology, `START`/`END` correct, no warnings. **What you drag is now what
+runs.**
+
+`DEFAULT_PORT_SPECS` duplicates TS port types, which CLAUDE.md forbids — marked
+temporary, the resolver is **injectable**, and a test asserts the compiler goes
+through the injection point so the seam cannot rot shut (ticket 02 owns generation).
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
