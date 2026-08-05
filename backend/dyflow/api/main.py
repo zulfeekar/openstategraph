@@ -179,13 +179,22 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
+        warnings = list(plan.warnings)
+        for tool_type in runtime.unresolved_tools:
+            # The agent ran without this tool. Saying so is the difference
+            # between a wrong answer and an explained one.
+            warnings.append(
+                f'No implementation for tool "{tool_type}" — the agent ran without it, '
+                "so its answer may not be grounded in that data source."
+            )
+
         return RunResponse(
             answer=str(final.get("answer") or ""),
             decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
             outputs={k: str(v) for k, v in (final.get("outputs") or {}).items()},
             attempts=int(final.get("attempts") or 0),
             mermaid=graph.get_graph().draw_mermaid(),
-            warnings=plan.warnings,
+            warnings=warnings,
         )
 
     @app.post("/api/workflows/chinook-nl-to-sql/ask", response_model=AskResponse)

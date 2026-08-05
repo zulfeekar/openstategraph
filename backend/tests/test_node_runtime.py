@@ -196,6 +196,12 @@ class TestToolBinding:
         WorkflowCompiler().build(document, RunState, runtime.factory(document))
         # No tools, but a runnable graph — a degraded run beats a crash.
         assert runtime.last_bound_tools == []
+        # ...and the loss is *reported*, because an agent that silently loses its
+        # tools answers from parametric knowledge, confidently and wrongly.
+        # Observed for real: a Reddit tool node with no Python implementation
+        # produced an authoritative answer about global music revenue instead of
+        # querying anything.
+        assert runtime.unresolved_tools == ["tool.unknown"]
 
 
 class TestDegradedInputs:

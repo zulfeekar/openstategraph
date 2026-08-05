@@ -97,6 +97,14 @@ class NodeRuntime:
         self.max_attempts = max_attempts
         #: node id -> node type, populated by `factory()`.
         self._types: dict[str, str] = {}
+        #: Tool nodes wired on the canvas with no implementation available.
+        #:
+        #: Surfaced rather than swallowed. An agent that silently loses its tools
+        #: does not fail — it answers from parametric knowledge, confidently and
+        #: wrongly. Observed exactly that: a Reddit tool node wired to an agent
+        #: produced an authoritative-sounding answer about global music revenue
+        #: instead of querying anything. A visible warning beats a plausible lie.
+        self.unresolved_tools: list[str] = []
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             "input.markdown": self._input,
@@ -154,9 +162,12 @@ class NodeRuntime:
         # canvas is exactly what gives the agent that capability.
         lc_tools = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
-            tool = self.tools.get(self._types.get(tool_node_id, ""))
+            tool_type = self._types.get(tool_node_id, "")
+            tool = self.tools.get(tool_type)
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
+            elif tool_type not in self.unresolved_tools:
+                self.unresolved_tools.append(tool_type)
 
         agent = None
         if self.model is not None:

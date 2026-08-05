@@ -9,6 +9,7 @@ import {
 } from '@app/WorkbenchContext';
 import { TopBar } from './topbar/TopBar';
 import { Palette } from './palette/Palette';
+import { AskPanel } from './ask/AskPanel';
 import { Inspector } from './inspector/Inspector';
 import { CanvasStage } from './canvas/CanvasStage';
 import { Minimap } from './minimap/Minimap';
@@ -17,7 +18,7 @@ import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
-import { FileText } from 'lucide-react';
+import { FileText, MessageSquareText } from 'lucide-react';
 import { IconButton, Icon, Tooltip } from '@design/primitives';
 import './AppShell.css';
 
@@ -46,6 +47,9 @@ export function AppShell() {
   const [showGrid, setShowGrid] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  // A second right-hand panel rather than a mode on the inspector: a developer
+  // wants to see a node's config *and* the answer at the same time.
+  const [askOpen, setAskOpen] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
@@ -72,6 +76,15 @@ export function AppShell() {
         label: 'Toggle palette',
         group: 'View',
         run: () => setPaletteOpen((value) => !value),
+      },
+      {
+        // Not Mod+K: Chrome claims it for the address bar, so the shortcut
+        // registered correctly and simply never reached the page. Verified in a
+        // real browser rather than assumed.
+        keys: 'Mod+Shift+K',
+        label: 'Toggle ask panel',
+        group: 'View',
+        run: () => setAskOpen((value) => !value),
       },
       {
         keys: 'Mod+I',
@@ -141,6 +154,17 @@ export function AppShell() {
           onNotify={onNotify}
         />
         <div className="app-shell__workflow-btn">
+          {/* A button as well as a shortcut: asking the workflow a question is
+              the primary action, and a chord nobody can guess is not
+              discoverable. */}
+          <Tooltip content="Ask the workflow" shortcut="Mod+Shift+K">
+            <IconButton
+              label="Ask the workflow"
+              icon={<Icon glyph={MessageSquareText} size="md" />}
+              onClick={() => setAskOpen((value) => !value)}
+              active={askOpen}
+            />
+          </Tooltip>
           <Tooltip content="Manage workflows" shortcut="Mod+Shift+F">
             <IconButton
               label="Manage workflows"
@@ -162,6 +186,7 @@ export function AppShell() {
           <AccessibilityCheck />
         </main>
 
+        {askOpen ? <AskPanel /> : null}
         {inspectorOpen ? <Inspector /> : null}
         {workflowManagerOpen ? (
           <WorkflowManager

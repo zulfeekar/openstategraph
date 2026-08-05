@@ -1,0 +1,50 @@
+/* The ask panel. Kept close to the inspector's visual language so the two
+   right-hand panels read as the same surface rather than two apps. */
+
+.ask__answer {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font: var(--type-body);
+  /* An answer is prose, not code, so it wraps rather than scrolling sideways. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ask__error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--text-danger);
+  font: var(--type-body-sm);
+}
+
+.ask__meta {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--type-body-sm);
+}
+
+.ask__decision {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.ask__decision-node {
+  color: var(--text-muted);
+  font: var(--type-mono-sm);
+}
+
+.ask__decision-branch {
+  padding: 0 var(--space-2);
+  background: var(--accent-violet-soft);
+  border-radius: var(--radius-sm);
+  color: var(--accent-violet-strong);
+  font: var(--type-mono-sm);
+}
