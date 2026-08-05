@@ -326,6 +326,54 @@ on the canvas as each update arrives — verified live against a running
 `uvicorn` backend, not only in tests. 187 pytest + 199 Vitest passing, `tsc`
 clean. Ticket 27 is now fully resolved.
 
+## Ticket sweep — deep grader, per-intent grading, file persistence, capability discovery (2026-08-05)
+
+Closed or advanced every open ticket in one pass, at the user's request, with
+a standing instruction to test everything live rather than ask before
+finishing. Full account per-ticket lives on each ticket file; summarized
+here:
+
+- **New feature, live-verified end to end**: a router classifying into
+  `dataquery`/`off_topic`/`general_knowledge`/`greeting`, the `dataquery`
+  branch fanning through Orchestrator → Worker → report → a **deep-tier**
+  Grader, the other three intents each with their own lighter grader —
+  "a different grader per intent" answered as ordinary canvas composition
+  (multiple `route.grader` nodes), not a new field or node type. The Grader's
+  `tier: deep` field, previously cosmetic, now actually routes judgement
+  through `create_deep_agent` (`_DeepAgentAsChatModel`, built at the
+  compiler/runtime boundary so `BaseGrader` stays model-agnostic).
+- **Tickets 10/14 (persistence, resolved — authoring half only)**: workflows
+  now live at `workflows/<slug>/workflow.json`, backend-owned, slug frozen at
+  creation. Runtime-state persistence and an `IWorkflow` entity-ladder class
+  are real, named gaps, not fabricated as done.
+- **Ticket 16 (partly resolved)**: editor-writes-file direction works;
+  watching for external changes does not exist.
+- **Ticket 21 (decision recorded)**: prompts stay inline in `workflow.json` —
+  checked directly against a real saved file that the "unreadable diff" fear
+  does not hold yet, rather than assumed.
+- **Ticket 18 (partly resolved)**: `tools/`/`functions/` discovery works,
+  verified live against the real Chinook tools through the running API;
+  node-type discovery (a hand-written class becoming a new palette entry) is
+  unbuilt.
+- **Ticket 12 (resolved)**: mostly recording what was already true, plus one
+  real gap it surfaced and fixed — no Python dependency manifest existed
+  anywhere; added `backend/pyproject.toml`.
+- **Ticket 28 (resolved)**: every role it asked for is now a built, tested
+  node type; naming settled.
+- **Tickets 20, 25 (decisions recorded, not implemented)**: 20's motivating
+  examples turned out to be already solved a different way (ports and node
+  composition, not a new field kind) — building the primitive now would have
+  no consumer. 25's splice-insert design is fully settled but the canvas
+  drop-on-edge gesture itself was not risked into sensitive interaction code
+  without dedicated testing time.
+- **Ticket 17 not attempted this pass** — `WorkflowModel`'s decomposition is
+  a real refactor of load-bearing code with an already-recorded design
+  (`AdjacencyIndex` + `GraphQueries` + `topology.ts`); rushing it without the
+  TDD-first treatment CLAUDE.md requires would have been a worse outcome than
+  leaving it exactly where it already was.
+
+237 pytest + 208 Vitest passing, `tsc` clean, throughout.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
