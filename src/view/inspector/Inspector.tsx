@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   CircleAlert,
   Info,
@@ -21,6 +21,7 @@ import {
   type StatusTone,
 } from '@design/primitives';
 import { isInInspector, validateFields } from '@core/model/contracts/fields';
+import { useDraftValue } from '@view/hooks/useDraftValue';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
 import {
   useController,
@@ -74,10 +75,10 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
       <PanelBody>
         <PanelSection heading="Identity">
           <Field label="Name">
-            <TextInput
-              value={node.title}
+            <NodeTitleInput
+              nodeId={node.id}
+              title={node.title}
               placeholder={definition.label}
-              onChange={(event) => controller.nodes.setTitle(node.id, event.target.value)}
             />
           </Field>
           <p className="inspector__description">{definition.description}</p>
@@ -181,10 +182,7 @@ function WorkflowInspector({ count }: { count: number }) {
       <PanelBody>
         <PanelSection heading="Document">
           <Field label="Name">
-            <TextInput
-              value={workbench.model.name}
-              onChange={(event) => controller.document.setName(event.target.value)}
-            />
+            <WorkflowNameInput name={workbench.model.name} />
           </Field>
           <div className="inspector__stats">
             <span>
@@ -287,4 +285,53 @@ function describeStatus(status: string): string {
     default:
       return 'Not run yet';
   }
+}
+
+/**
+ * The node's display name.
+ *
+ * Its own component so `useDraftValue` has somewhere to live — and because the
+ * draft must reset when the selection moves to a different node, which a `key`
+ * on `nodeId` gives for free.
+ */
+function NodeTitleInput({
+  nodeId,
+  title,
+  placeholder,
+}: {
+  nodeId: string;
+  title: string;
+  placeholder: string;
+}) {
+  const controller = useController();
+  const commit = useCallback(
+    (value: string) => controller.nodes.setTitle(nodeId, value),
+    [controller, nodeId],
+  );
+  const draft = useDraftValue(title, commit);
+
+  return (
+    <TextInput
+      key={nodeId}
+      value={draft.value}
+      placeholder={placeholder}
+      onChange={(event) => draft.onChange(event.target.value)}
+      onBlur={draft.onBlur}
+    />
+  );
+}
+
+/** The document's name. Same buffering problem — `setName` also normalises. */
+function WorkflowNameInput({ name }: { name: string }) {
+  const controller = useController();
+  const commit = useCallback((value: string) => controller.document.setName(value), [controller]);
+  const draft = useDraftValue(name, commit);
+
+  return (
+    <TextInput
+      value={draft.value}
+      onChange={(event) => draft.onChange(event.target.value)}
+      onBlur={draft.onBlur}
+    />
+  );
 }

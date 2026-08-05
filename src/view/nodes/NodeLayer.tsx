@@ -30,11 +30,12 @@ export function NodeLayer() {
   return (
     <>
       {mounts.map(([nodeId, element]) => {
-        const node = workbench.model.node(nodeId);
         // A mount can briefly outlive its node — the view is removed on the
-        // next JointJS frame, so skip rather than crash.
-        if (!node) return null;
-        return createPortal(<NodeCard node={node} />, element, nodeId);
+        // next JointJS frame, so skip rather than render a card for nothing.
+        if (!workbench.model.hasNode(nodeId)) return null;
+        // Pass the id, not the model: the card subscribes to its own node so
+        // that an edit re-renders that card and no other.
+        return createPortal(<NodeCard nodeId={nodeId} />, element, nodeId);
       })}
     </>
   );

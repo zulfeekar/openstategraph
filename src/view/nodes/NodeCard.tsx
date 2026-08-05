@@ -15,14 +15,34 @@ import { isOnCard, validateFields } from '@core/model/contracts/fields';
 import { sideOf, type IPortDescriptor } from '@core/model/contracts/ports';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeGeometry } from '@canvas/shapes/HtmlNode';
-import { useController, usePaperController, useWorkbench } from '@app/WorkbenchContext';
+import type { NodeId } from '@core/model/contracts/node';
+import {
+  useController,
+  useNode,
+  usePaperController,
+  useWorkbench,
+} from '@app/WorkbenchContext';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { FieldRenderer } from './FieldRenderer';
 import { resolveNodeBody } from './nodeBodyRegistry';
 import './NodeCard.css';
 
 interface NodeCardProps {
-  node: AbstractNodeModel;
+  /**
+   * The node's id, not the node itself.
+   *
+   * The card resolves its own model through `useNode`, which is what makes it
+   * re-render when that node changes. Taking the model as a prop looked
+   * equivalent and was not: `NodeLayer` only re-renders when the *mount
+   * registry* changes — that is, on add and remove — so a card given a `node`
+   * prop never re-rendered for a title, data, port or run-status change.
+   *
+   * That bug hid because a card's own fields still looked right: typing into a
+   * card's textarea leaves the text in the DOM, and since React never
+   * re-rendered it never reverted it. Editing the same field from the inspector
+   * exposed it immediately — the model changed and the card did not move.
+   */
+  nodeId: NodeId;
 }
 
 /**
@@ -33,20 +53,23 @@ interface NodeCardProps {
  * adapter — that measurement loop is what makes the cards content-driven and
  * keeps port dots welded to the rows they label, whatever the content does.
  */
-export function NodeCard({ node }: NodeCardProps) {
+export function NodeCard({ nodeId }: NodeCardProps) {
+  const node = useNode(nodeId);
+  // A mount can briefly outlive its node, so resolving can legitimately miss.
+  if (!node) return null;
+  return <NodeCardBody node={node} />;
+}
+
+function NodeCardBody({ node }: { node: AbstractNodeModel }) {
   const controller = useController();
   const workbench = useWorkbench();
   const paper = usePaperController();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const menu = useMenu<HTMLButtonElement>();
 
-  const definition = node.definition;
-  const Body = resolveNodeBody(definition);
-  const cardFields = definition.fields.filter(isOnCard);
-
   const fieldErrors = useMemo(
-    () => validateFields(definition.fields, node.data),
-    [definition.fields, node.data],
+    () => (node ? validateFields(node.definition.fields, node.data) : ({} as Record<string, string>)),
+    [node],
   );
 
   /* ---------------- geometry reporting ----------------
@@ -68,7 +91,7 @@ export function NodeCard({ node }: NodeCardProps) {
 
   const report = useCallback(() => {
     const card = cardRef.current;
-    if (!card || !paper) return;
+    if (!card || !paper || !node) return;
 
     const cardRect = card.getBoundingClientRect();
     const zoom = paper.viewport.zoom || 1;
@@ -138,6 +161,16 @@ export function NodeCard({ node }: NodeCardProps) {
       report();
     });
   }, [paper, report]);
+
+  // A mount can briefly outlive its node — the view is removed on the next
+  // JointJS frame, so guard here, after the hooks, rather than dereference a
+  // node that is already gone. `NodeLayer` filters with `hasNode`, but the
+  // subscription in `useNode` can still read `undefined` for one render.
+  if (!node) return null;
+
+  const definition = node.definition;
+  const Body = resolveNodeBody(definition);
+  const cardFields = definition.fields.filter(isOnCard);
 
   /* ---------------- menu ---------------- */
 

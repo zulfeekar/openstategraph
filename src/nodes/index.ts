@@ -11,6 +11,7 @@ import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
+import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 
 /**
  * The catalogue's single registration point.
@@ -42,6 +43,8 @@ export function registerNodeCatalogue(
     formattedOutputNode,
     groupNode,
     noteNode,
+    // Chinook database tools
+    ...CHINOOK_NODES.map((n) => n.definition),
   ]);
 
   executors.registerAll([
@@ -50,6 +53,8 @@ export function registerNodeCatalogue(
     agentExecutor,
     redditSearchExecutor,
     formattedOutputExecutor,
+    // Chinook database executors
+    ...CHINOOK_NODES.map((n) => n.executor),
   ]);
 }
 
@@ -62,6 +67,10 @@ export const NODE_TYPE = {
   formattedOutput: formattedOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,
+  // Chinook database tools
+  chinookGetSchema: 'tool.chinook-get-schema',
+  chinookGetAllTables: 'tool.chinook-get-all-tables',
+  chinookExecuteSql: 'tool.chinook-execute-sql',
 } as const;
 
 export { TextInputNodeModel } from './inputs/TextInputNode';

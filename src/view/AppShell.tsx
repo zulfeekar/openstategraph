@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Theme } from '@design/tokens';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
-import { usePaperController, useWorkbench } from '@app/WorkbenchContext';
+import {
+  usePaperController,
+  useWorkbench,
+  useWorkflowSession,
+  useController,
+} from '@app/WorkbenchContext';
 import { TopBar } from './topbar/TopBar';
 import { Palette } from './palette/Palette';
 import { Inspector } from './inspector/Inspector';
@@ -11,6 +16,9 @@ import { ShortcutsDrawer } from './overlays/ShortcutsDrawer';
 import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
+import { WorkflowManager } from './workflow/WorkflowManager';
+import { FileText } from 'lucide-react';
+import { IconButton, Icon, Tooltip } from '@design/primitives';
 import './AppShell.css';
 
 const THEME_STORAGE_KEY = 'dyflow.theme';
@@ -26,13 +34,20 @@ const THEME_STORAGE_KEY = 'dyflow.theme';
 export function AppShell() {
   const workbench = useWorkbench();
   const paper = usePaperController();
+  useController();
   const { toasts, notify, dismiss } = useToaster();
+
+  // Enable auto-save and auto-load for the current workflow
+  // Restores this tab's workflow, then keeps it saved. One hook, because
+  // identity has to be resolved before either behaviour runs.
+  useWorkflowSession();
 
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
   /* ---------------- theme ---------------- */
 
@@ -77,6 +92,12 @@ export function AppShell() {
         run: () => setTheme((current) => (current === 'dark' ? 'light' : 'dark')),
       },
       {
+        keys: 'Mod+Shift+F',
+        label: 'Workflow manager',
+        group: 'View',
+        run: () => setWorkflowManagerOpen((value) => !value),
+      },
+      {
         keys: 'Mod+Enter',
         label: 'Run workflow',
         group: 'Run',
@@ -106,18 +127,30 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <TopBar
-        theme={theme}
-        onThemeChange={setTheme}
-        showGrid={showGrid}
-        onGridChange={setShowGrid}
-        paletteOpen={paletteOpen}
-        onPaletteToggle={() => setPaletteOpen((value) => !value)}
-        inspectorOpen={inspectorOpen}
-        onInspectorToggle={() => setInspectorOpen((value) => !value)}
-        onOpenCredentials={() => setCredentialsOpen(true)}
-        onNotify={onNotify}
-      />
+      <div className="app-shell__topbar-row">
+        <TopBar
+          theme={theme}
+          onThemeChange={setTheme}
+          showGrid={showGrid}
+          onGridChange={setShowGrid}
+          paletteOpen={paletteOpen}
+          onPaletteToggle={() => setPaletteOpen((value) => !value)}
+          inspectorOpen={inspectorOpen}
+          onInspectorToggle={() => setInspectorOpen((value) => !value)}
+          onOpenCredentials={() => setCredentialsOpen(true)}
+          onNotify={onNotify}
+        />
+        <div className="app-shell__workflow-btn">
+          <Tooltip content="Manage workflows" shortcut="Mod+Shift+F">
+            <IconButton
+              label="Manage workflows"
+              icon={<Icon glyph={FileText} size="md" />}
+              onClick={() => setWorkflowManagerOpen((value) => !value)}
+              active={workflowManagerOpen}
+            />
+          </Tooltip>
+        </div>
+      </div>
 
       <div className="app-shell__body">
         {paletteOpen ? <Palette onNotify={onNotify} /> : null}
@@ -130,6 +163,13 @@ export function AppShell() {
         </main>
 
         {inspectorOpen ? <Inspector /> : null}
+        {workflowManagerOpen ? (
+          <WorkflowManager
+            open={workflowManagerOpen}
+            onClose={() => setWorkflowManagerOpen(false)}
+            onNotify={onNotify}
+          />
+        ) : null}
       </div>
 
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}

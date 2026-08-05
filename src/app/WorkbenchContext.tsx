@@ -1,19 +1,16 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Workbench } from './Workbench';
 import type { WorkflowController } from '@controller/WorkflowController';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeId } from '@core/model/contracts/node';
 import type { WorkflowEvents } from '@core/model/contracts/workflow';
 import type { PaperController } from '@canvas/PaperController';
+import {
+  loadWorkflow,
+  mostRecentWorkflowId,
+  resolveSession,
+  saveWorkflow,
+} from './workflowStore';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -190,3 +187,82 @@ export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
 
   return state;
 }
+
+/**
+ * Ties this tab to one stored workflow: restore it, then keep it saved.
+ *
+ * Deliberately a *single* hook. It replaced two — an auto-save hook and an
+ * auto-load hook — whose interaction was the bug:
+ *
+ *   1. the save hook minted a fresh `wf-<timestamp>` id whenever the session had
+ *      none, and saved unconditionally on mount, so the seeded demo was written
+ *      under a brand-new key;
+ *   2. the load hook then imported the *most recent* workflow over the top;
+ *   3. auto-save wrote that content under the new id as well.
+ *
+ * Every tab open therefore left another complete copy of the graph in storage.
+ * Ordering them correctly is not enough — identity has to be resolved **once**,
+ * before either behaviour runs, which is what `resolveSession` does.
+ *
+ * Restoring also clears the undo stack (`importJSON` must), so it happens at most
+ * once per mount and never for a freshly minted id.
+ */
+export function useWorkflowSession(): { restored: boolean; workflowId: string | null } {
+  const controller = useController();
+  const workbench = useWorkbench();
+  const [state, setState] = useState<{ restored: boolean; workflowId: string | null }>({
+    restored: false,
+    workflowId: null,
+  });
+  // StrictMode mounts effects twice; restoring twice would be visible.
+  const done = useRef(false);
+
+  useEffect(() => {
+    if (done.current) return;
+    done.current = true;
+
+    const session = resolveSession({
+      sessionId: sessionStorage.getItem(SESSION_KEY),
+      mostRecentId: mostRecentWorkflowId(localStorage),
+      mintId: () => `wf-${Date.now()}`,
+    });
+
+    if (session.shouldRestore) {
+      const json = loadWorkflow(localStorage, session.id);
+      // A missing or corrupt entry leaves the current document alone rather
+      // than blanking the canvas.
+      if (json != null) controller.document.importJSON(json);
+    }
+
+    sessionStorage.setItem(SESSION_KEY, session.id);
+    setState({ restored: session.shouldRestore, workflowId: session.id });
+  }, [controller]);
+
+  // Saving starts only once identity is settled, so nothing is ever written
+  // under a placeholder id.
+  const workflowId = state.workflowId;
+  useEffect(() => {
+    if (workflowId == null) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer != null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        saveWorkflow(localStorage, workflowId, workbench.model, workbench.serializer);
+      }, SAVE_DELAY_MS);
+    };
+
+    // No initial save: a mount is not an edit, and saving on mount is what
+    // wrote the demo into storage under a fresh id.
+    const off = controller.onChange(schedule);
+    return () => {
+      off();
+      if (timer != null) clearTimeout(timer);
+    };
+  }, [controller, workbench, workflowId]);
+
+  return state;
+}
+
+const SESSION_KEY = 'dyflow-current-workflow-id';
+const SAVE_DELAY_MS = 1000;

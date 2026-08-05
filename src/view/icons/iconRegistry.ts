@@ -1,5 +1,6 @@
 import {
   Bot,
+  Database,
   FileCode2,
   FileText,
   Frame,
@@ -29,6 +30,8 @@ const ICONS: Record<string, LucideIcon> = {
   'node-output': FileText,
   'node-group': Frame,
   'node-note': StickyNote,
+  // Chinook database nodes
+  'node-database': Database,
 
   // Port types
   'port-text': Type,
