@@ -8,6 +8,7 @@ import { textInputExecutor, textInputNode } from './inputs/TextInputNode';
 import { markdownFileExecutor, markdownFileNode } from './inputs/MarkdownFileNode';
 import { agentExecutor, createAgentNode } from './agent/AgentNode';
 import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode';
+import { graderExecutor, graderNode } from './routing/GraderNode';
 import { routerExecutor, routerNode } from './routing/RouterNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
@@ -44,6 +45,7 @@ export function registerNodeCatalogue(
     // Routing is the editor's grammar, so it ships globally — unlike the
     // Chinook tools, which belong to their workflow (ticket 08 scoping).
     routerNode,
+    graderNode,
     formattedOutputNode,
     groupNode,
     noteNode,
@@ -57,6 +59,7 @@ export function registerNodeCatalogue(
     agentExecutor,
     redditSearchExecutor,
     routerExecutor,
+    graderExecutor,
     formattedOutputExecutor,
     // Chinook database executors
     ...CHINOOK_NODES.map((n) => n.executor),
@@ -70,6 +73,7 @@ export const NODE_TYPE = {
   agent: 'agent.llm',
   redditSearch: redditSearchNode.id,
   router: routerNode.id,
+  grader: graderNode.id,
   formattedOutput: formattedOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,

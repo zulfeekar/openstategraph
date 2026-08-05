@@ -10,6 +10,7 @@ import {
   Wrench,
   Blocks,
   GitBranch,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -34,6 +35,8 @@ const ICONS: Record<string, LucideIcon> = {
   // Chinook database nodes
   'node-database': Database,
   'node-router': GitBranch,
+  'node-grader': ShieldCheck,
+  'port-feedback': ShieldCheck,
 
   // Port types
   'port-text': Type,

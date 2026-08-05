@@ -193,24 +193,38 @@ export const capacityRule: IConnectionRule = {
 };
 
 /**
- * Rejects links that would make the graph cyclic.
+ * Rejects a cycle unless it closes on a **feedback** port.
  *
- * Walks forward from the proposed target looking for the source. Cheap in
- * practice — it stops at the first hit and visits each node once — and the
- * alternative is discovering the cycle only at run time, when the
- * scheduler stalls and the user has no idea which link caused it.
+ * Previously this forbade every cycle, and was unreachable dead code: no input
+ * accepted a `result`, so no cycle was type-expressible in the first place.
+ * Adding the grader's `revise: feedback` output and the agent's `feedback` input
+ * made cycles expressible, which woke this rule up — and it would then have
+ * blocked the evaluator-optimizer loop the product exists to support.
+ *
+ * So the gate is the **port type**, exactly as ticket 09 settled. An *accidental*
+ * cycle stays impossible to draw, because nothing else accepts `feedback`, while
+ * a deliberate revise loop is two clicks. That is stricter than a flag and needs
+ * no escape hatch.
+ *
+ * What is still forbidden: a cycle of ordinary edges, which can never terminate.
  */
 export const acyclicRule: IConnectionRule = {
   id: 'acyclic',
   order: 60,
-  check({ model, source, target }) {
+  check({ model, source, target, sourcePort }) {
+    // A feedback edge is the declared way to close a loop.
+    if (sourcePort.type === 'feedback') return null;
+
     const seen = new Set<string>([target.nodeId]);
     const queue = [target.nodeId];
     while (queue.length > 0) {
       const current = queue.shift();
       if (current == null) continue;
       if (current === source.nodeId) {
-        return { reason: 'That would create a loop' };
+        return {
+          reason:
+            'That would create a loop. Route it through a Grader’s “revise” output instead.',
+        };
       }
       for (const next of model.successorsOf(current)) {
         if (seen.has(next.id)) continue;

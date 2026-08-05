@@ -31,6 +31,8 @@ export const PORT = {
   skill: 'skill',
   tool: 'tool',
   result: 'result',
+  /** Carries a grader's rejection back upstream. The only type a cycle may close on. */
+  feedback: 'feedback',
 } as const;
 
 export const PORT_TYPES: readonly IPortTypeDefinition[] = [
@@ -51,6 +53,12 @@ export const PORT_TYPES: readonly IPortTypeDefinition[] = [
     label: 'Tool',
     iconId: 'port-tool',
     accent: 'violet',
+  },
+  {
+    id: PORT.feedback,
+    label: 'Feedback',
+    iconId: 'port-feedback',
+    accent: 'red',
   },
   {
     id: PORT.result,

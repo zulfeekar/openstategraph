@@ -104,6 +104,17 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           description: 'Tools the agent may call.',
         },
         {
+          id: 'feedback',
+          direction: 'in',
+          type: PORT.feedback,
+          label: 'feedback',
+          // The other half of the only legal cycle. A grader's `revise` output
+          // is the sole `feedback` source, and `acyclicRule` permits a loop only
+          // when it closes on one — so the type system gates the cycle, and an
+          // accidental loop stays impossible to draw.
+          description: 'A grader’s rejection, to revise against.',
+        },
+        {
           id: 'result',
           direction: 'out',
           type: PORT.result,

@@ -50,8 +50,23 @@ class SystemPrompt:
     #: Machine-generated situational detail: the branch list, a table schema,
     #: the rubric. Not authored free-hand, so it is not "rules".
     context: tuple[str, ...] = field(default_factory=tuple)
+    #: Prebuilt domain rules the node ships with, so a developer inherits
+    #: something that already works instead of a blank field.
+    default_rules: str = ""
     #: The one part a developer writes.
     rules: str = ""
+    #: Whether `rules` **adds to** `default_rules` or **replaces** them.
+    #:
+    #: Extending is the default because it is the safe direction: a developer
+    #: adding a criterion keeps everything the node already knew. Replacing is
+    #: explicit, and deliberately possible — prebuilt behaviour that cannot be
+    #: overridden is a straitjacket, and someone will eventually need a grader
+    #: that ignores our defaults entirely.
+    #:
+    #: Note what it does **not** reach: the preamble and the output contract are
+    #: machinery, never rules, so `replace` cannot break the node's ability to
+    #: produce a parseable answer.
+    replace_defaults: bool = False
 
     def with_context(self, *sections: str) -> SystemPrompt:
         kept = tuple(s.strip() for s in sections if s and s.strip())
@@ -59,22 +74,56 @@ class SystemPrompt:
             preamble=self.preamble,
             output_contract=self.output_contract,
             context=self.context + kept,
+            # Every field must be carried forward. Because this type is frozen
+            # and rebuilt, a forgotten field here silently resets to its default
+            # — which is how `with_context` briefly dropped the developer's
+            # override and made a `replace` behave like an `extend`.
+            default_rules=self.default_rules,
             rules=self.rules,
+            replace_defaults=self.replace_defaults,
         )
 
-    def with_rules(self, rules: str) -> SystemPrompt:
+    def with_defaults(self, default_rules: str) -> SystemPrompt:
+        """The prebuilt rules a node ships with."""
         return SystemPrompt(
             preamble=self.preamble,
             output_contract=self.output_contract,
             context=self.context,
-            rules=(rules or "").strip(),
+            default_rules=(default_rules or "").strip(),
+            rules=self.rules,
+            replace_defaults=self.replace_defaults,
         )
+
+    def with_rules(self, rules: str, *, replace_defaults: bool = False) -> SystemPrompt:
+        """The developer's rules, either added to the defaults or replacing them."""
+        return SystemPrompt(
+            preamble=self.preamble,
+            output_contract=self.output_contract,
+            context=self.context,
+            default_rules=self.default_rules,
+            rules=(rules or "").strip(),
+            replace_defaults=replace_defaults,
+        )
+
+    def effective_rules(self) -> str:
+        """What the model actually sees as rules.
+
+        Replacing with an *empty* string falls back to the defaults rather than
+        producing a node with no rules at all — clearing a field is far more
+        often a mistake than a deliberate request for no guidance.
+        """
+        if self.replace_defaults and self.rules:
+            return self.rules
+        if not self.rules:
+            return self.default_rules
+        return "\n".join(part for part in (self.default_rules, self.rules) if part)
 
     def render(self) -> str:
         """Flattens to the string a model sees. The only place order is decided."""
         parts = [self.preamble.strip(), *self.context]
-        if self.rules:
-            parts.append(f"Rules:\n{self.rules}")
+        rules = self.effective_rules()
+        if rules:
+            parts.append(f"Rules:\n{rules}")
         parts.append(self.output_contract.strip())
         return "\n\n".join(part for part in parts if part)
 
@@ -88,9 +137,13 @@ class SystemPrompt:
         return {
             "preamble": self.preamble.strip(),
             "context": list(self.context),
+            "default_rules": self.default_rules,
             "rules": self.rules,
+            "replace_defaults": self.replace_defaults,
+            "effective_rules": self.effective_rules(),
             "output_contract": self.output_contract.strip(),
-            "editable": ["rules"],
+            # Only these two. Everything else is machinery.
+            "editable": ["rules", "replace_defaults"],
         }
 
 

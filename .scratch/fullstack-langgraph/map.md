@@ -188,6 +188,39 @@ half-wired router shows as a missing destination instead of silently terminating
 
 Now in CLAUDE.md as a binding principle. 24 router tests + 7 TS prompt-composition tests.
 
+## Grader node + prebuilt-and-overridable criteria (ticket 24, 2026-08-05)
+
+Built in both languages: `IGrader -> BaseGrader -> Grader` (25 pytest) and
+`GraderNode.ts` (13 Vitest). Criteria are **prebuilt** so a grader works before
+configuration, and the developer **extends** them (default) or **replaces** them
+(explicit) — because prebuilt behaviour that cannot be overridden is a
+straitjacket. Two guards: replacing with an *empty* string keeps the defaults (a
+cleared field is usually a slip), and an override **cannot reach the output
+contract**, since criteria are rules while preamble and contract are machinery. So
+`replace` can never yield an unparseable grader, and the contract still renders last
+so "ignore formatting, write an essay" loses the tie. Generalised onto `SystemPrompt`
+(`default_rules` + `replace_defaults`) so every node composing one gets extend/replace
+free — and that surfaced a latent bug: `with_context` did not carry the new fields
+forward, and because the type is frozen and rebuilt, that silently turned a `replace`
+back into an `extend`.
+
+Also: **deterministic checks run before the model** (empty answer, transported error —
+the failure modes actually seen in the Chinook run), with tests asserting the model is
+*not* called for them. `Verdict.reject()` defaults feedback to the reason, because a
+rejection with nothing actionable makes the revise loop pure cost; and an *unreadable*
+verdict **passes**, since a grader that cannot decide must not discard work the agent
+did.
+
+**The cycle is now drawable** — `PORT.feedback` + grader `revise` + agent `feedback`,
+with `acyclicRule` scoped to permit a cycle only when it closes on a feedback port.
+**But the prediction that this would wake `acyclicRule`'s rejection branch was wrong:**
+the obvious accidental loop (grader `pass` -> agent `prompt`) is refused by
+`typeCompatibilityRule` first, because `result` cannot feed `text`, so the cycle check
+never runs. Ticket 11's finding still holds — that branch stays unreachable through the
+real catalogue and **the type graph is doing the work, not the rule**. Pinned by a test
+asserting the message is a *type* error and not a loop error, plus one asserting the
+grader is the only node type that can emit `feedback`.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
