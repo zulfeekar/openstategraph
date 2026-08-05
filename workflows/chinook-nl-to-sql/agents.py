@@ -73,20 +73,32 @@ def as_model(model: Any) -> Any:
     return model
 
 
-def build_sql_agent(model: Any, middleware: tuple = ()) -> Any:
+def build_sql_agent(model: Any, middleware: tuple = (), *, structured: bool = False) -> Any:
     """Tier: **LangChain framework** — `create_agent`, a minimal ReAct harness.
 
     Returns a *compiled graph*, which is why it can be dropped into a
     `StateGraph` as a node. `middleware` is threaded through rather than
     hardcoded: the base owns the capability to compose, never the composition.
+
+    `structured` is **off by default**, which was a correction rather than a
+    preference. With `response_format=SqlAnswer`, a model that emits slightly
+    malformed JSON makes `create_agent` raise
+    `StructuredOutputValidationError` and the whole run dies — observed with a
+    real model on the first live query.
+
+    The node does not need the model to restate its work anyway: the SQL is in
+    the `chinook_execute_sql` tool call and the rows are in the `ToolMessage` it
+    produced. Reading that evidence is both model-agnostic and more trustworthy
+    than a paraphrase, since the grader then judges what the database actually
+    returned. Set `structured=True` only for a model known to be reliable at it.
     """
     return create_agent(
         model=as_model(model),
         tools=CHINOOK_TOOLS,
         system_prompt=SQL_SYSTEM_PROMPT,
-        response_format=SqlAnswer,
         middleware=middleware,
         name="chinook_sql_agent",
+        **({"response_format": SqlAnswer} if structured else {}),
     )
 
 

@@ -104,6 +104,74 @@ smaller problem than unbounded duplicate entries.
 3. `ChinookDatabaseNode.ts` and `WorkflowManager.tsx` still have **no tests**.
 4. Ticket 17 part 2 — the `WorkflowModel` split — designed, not cut.
 
+## END-TO-END NL-to-SQL WORKING (2026-08-05)
+
+Real question in, real answer out, **no API key** — via an Ollama *cloud* model
+(local 8B was too slow and could not hold structured output).
+
+```
+Question: "Which music genre earned the most revenue? Give the top 3."
+
+attempts: 2   verdict: {'passed': True, 'reason': 'Rows returned.'}
+
+SQL (written by the model):
+  SELECT g.Name AS Genre, SUM(il.UnitPrice * il.Quantity) AS Revenue
+  FROM InvoiceLine il
+  JOIN Track t ON il.TrackId = t.TrackId
+  JOIN Genre g ON t.GenreId = g.GenreId
+  GROUP BY g.GenreId, g.Name ORDER BY Revenue DESC LIMIT 3
+
+Rows: Rock 826.65 | Latin 382.14 | Metal 261.36
+
+Answer: "The three highest-earning music genres are: 1. Rock $826.65,
+         2. Latin $382.14, 3. Metal $261.36."
+
+23.6s
+```
+
+**`attempts: 2` is the important number** — the evaluator-optimizer cycle fired for
+real, the grader rejected the first attempt, the retry carried the reason, and the
+second attempt succeeded. The loop is not just unit-tested with stubs; it recovered
+a live run.
+
+The figures match what `sqlite3` returns independently, checked before any model was
+involved. That is the difference from the mock: a right answer is distinguishable
+from a plausible one.
+
+### Two corrections the live run forced
+
+1. **`response_format` is now opt-in, off by default.** With
+   `response_format=SqlAnswer`, a model emitting slightly malformed JSON makes
+   `create_agent` raise `StructuredOutputValidationError` and the entire run dies.
+   Observed on the first live query.
+2. **The node reads the tool call, not the model's summary.** The SQL is in the
+   `chinook_execute_sql` tool call and the rows are in the `ToolMessage` it
+   produced. Reading that is model-agnostic *and* more trustworthy — the grader
+   judges what the database actually returned rather than a paraphrase. It also
+   takes the **last** successful execution, because a ReAct loop routinely runs a
+   query, sees the error, and fixes it.
+
+### How to run it
+
+```bash
+python3 -m pytest -q                       # 58 tests, no API key needed
+uvicorn dyflow.api.main:app --reload       # from backend/, with backend on PYTHONPATH
+curl -X POST localhost:8000/api/workflows/chinook-nl-to-sql/ask \
+  -H 'content-type: application/json' \
+  -d '{"question":"Which genre earns the most?","model":"ollama:gpt-oss:120b-cloud"}'
+```
+
+### Still outstanding
+
+- **Orchestrator and router patterns** are not built yet — only the
+  single-ReAct-loop + grader-cycle + deep-agent synthesis shape.
+- The **TypeScript** Chinook nodes are still globally registered and still
+  describe the old mock; they must become authoring-only metadata generated from
+  these Pydantic schemas, scoped to the workflow.
+- The editor is not wired to this API yet — the flow runs over HTTP/pytest, not
+  from the canvas.
+- Ticket 17 part 2 (`WorkflowModel` split) still designed, not cut.
+
 ## Course correction: execution is Python, not the browser (2026-08-05)
 
 **The user caught a drift, and they were right.** I had started implementing the

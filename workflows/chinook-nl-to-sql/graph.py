@@ -167,15 +167,25 @@ def make_sql_node(agent: Any) -> AgentNode:
         prompt = _sql_prompt(state)
         result = agent.invoke({"messages": [HumanMessage(content=prompt)]})
 
-        structured = result.get("structured_response")
-        if structured is not None:
-            sql = getattr(structured, "sql", "") or ""
-            rows = getattr(structured, "rows_markdown", "") or ""
-        else:
-            # No `response_format` support, or the model declined it: fall back
-            # to the last message and re-run the SQL ourselves.
-            text = _last_text(result)
-            match = _SELECT.search(text)
+        messages = result.get("messages") or []
+
+        # Preferred: read what actually happened. The SQL is in the
+        # `chinook_execute_sql` tool call and the rows are in the ToolMessage it
+        # returned, so the grader judges the database's real output rather than
+        # the model's paraphrase of it. Works with any model, and needs no
+        # structured-output support.
+        sql, rows = _from_tool_calls(messages)
+
+        if not sql:
+            structured = result.get("structured_response")
+            if structured is not None:
+                sql = getattr(structured, "sql", "") or ""
+                rows = getattr(structured, "rows_markdown", "") or ""
+
+        if not sql:
+            # Last resort: the model described the query without calling the
+            # tool. Run it ourselves so the grader has rows to judge.
+            match = _SELECT.search(_last_text(result))
             sql = match.group(0).strip() if match else ""
             rows = ExecuteSqlTool().run(query=sql).content if sql else ""
 
@@ -209,6 +219,31 @@ def make_synthesis_node(agent: Any) -> AgentNode:
         return {"answer": _last_text(result), "messages": result.get("messages", [])[-1:]}
 
     return synthesise
+
+
+def _from_tool_calls(messages: list[Any]) -> tuple[str, str]:
+    """Recovers the last executed query and its rows from the message history.
+
+    Returns the *last* successful execution, because a ReAct loop routinely runs
+    a query, sees an error, and fixes it — the earlier attempts are not the
+    answer.
+    """
+    sql_by_call_id: dict[str, str] = {}
+    for message in messages:
+        for call in getattr(message, "tool_calls", None) or []:
+            if call.get("name") == "chinook_execute_sql":
+                sql_by_call_id[call.get("id", "")] = (call.get("args") or {}).get("query", "")
+
+    for message in reversed(messages):
+        if getattr(message, "type", "") != "tool":
+            continue
+        call_id = getattr(message, "tool_call_id", "")
+        if call_id not in sql_by_call_id:
+            continue
+        content = message.content
+        return sql_by_call_id[call_id], content if isinstance(content, str) else str(content)
+
+    return "", ""
 
 
 def _sql_prompt(state: QueryState) -> str:
