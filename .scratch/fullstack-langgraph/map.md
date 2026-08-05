@@ -50,6 +50,36 @@ They cannot collide because they own different things: the canvas never writes `
 - [Canonical serialization](issues/19-canonical-serialization.md) — Fixed, red-first. **Three independent sources of drift, not one.** (1) Rows were emitted in `Map` insertion order, which is not stable for a given graph — delete-then-undo re-inserts at the end. Nodes now sort by id through `compareNatural`, so `-2` precedes `-10`; a lexical sort would be *equally deterministic and unreadable*, which is a worse failure because it looks correct. (2) `data` was spread, and `JSON.stringify` follows insertion order, so identical values serialised differently depending on which field was edited first. (3) The one needing a design decision: **edge ids were written to the file.** An edge id is a global creation counter and nothing references an edge by id (edges reference nodes; nothing references edges), so writing it leaked build order — two people drawing the same graph in a different order got different bytes, and inserting one link renumbered every row after it. Edges are now **content-addressed**: identified and sorted by their endpoint tuple, no `id` emitted, fresh handle minted on load. Older files still load — their edge ids are ignored rather than migrated, which needs no version bump because it only *narrows* what is read. Format fixed at two-space indent plus trailing newline.
 - [PureMVC as a framework — rejected](decisions/puremvc.md) — Keep the MVC *layering*; do not adopt the framework. Its notification bus is string-keyed with untyped bodies (destroys the value of both TS and Pydantic); Mediator-per-component is a re-render storm on a large canvas (reproduced in phase 1 at only 6 nodes); a PureMVC `Command` is a notification handler with no `undo`, so adopting it would cost the undo stack; and in Python LangGraph already owns control flow and state, so PureMVC would be a second, competing orchestrator. Feature-frozen since 2008.
 
+## Destination update — the cookbook workflow (2026-08-05)
+
+The acceptance target is now a **kitchen-sink workflow**: question -> router
+(`greeting | help | offtopic | info | dataquery`) -> orchestrator -> dynamically
+spawned subagents -> grader (loop) -> synthesise -> report, with multiple tools
+*and* functions, streamed into a chat sidebar that highlights whichever node is
+currently in charge. Charted as [ticket 27](issues/27-kitchen-sink-workflow.md).
+
+**Two of its requirements collide with LangGraph and had to be resolved before any
+code:**
+
+1. **"Subagents appear as nodes" rules out tool-subagents.** `SubAgentMiddleware`
+   invokes subagents *inside tool functions*, and the docs are explicit that
+   LangGraph therefore "cannot statically discover them" — `get_state(subgraphs=True)`
+   returns nothing for them. Only **`Send` fan-out to a declared worker node** is
+   observable. Ticket 08's "subagents are isolated, invoked as tools" is right about
+   semantics but is the wrong *mechanism* when the editor must watch.
+2. **LangGraph never adds a node at runtime.** `Send` creates dynamic **tasks**, not
+   nodes. So the UI model is one static `worker` node with N runtime task instances
+   rendered under it — and those instances are **view state, never document state**.
+   Implementing "the frontend adds nodes" literally would mean writing runtime
+   events back into `workflow.json`, breaking ticket 23's one-directional seam.
+
+Also settled there: the orchestrator should be **hand-written**, not a harness, for
+the same reason tool-subagents are rejected — a planner that plans internally is
+opaque, and the point is that the editor can see the fan-out. And the sidebar needs
+`updates` + `messages` multiplexed over one SSE stream with **`subgraphs=True`**,
+without which the inner agents' tokens never surface — the most likely way this
+feature ships looking broken.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
