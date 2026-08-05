@@ -104,6 +104,76 @@ smaller problem than unbounded duplicate entries.
 3. `ChinookDatabaseNode.ts` and `WorkflowManager.tsx` still have **no tests**.
 4. Ticket 17 part 2 — the `WorkflowModel` split — designed, not cut.
 
+## Course correction: execution is Python, not the browser (2026-08-05)
+
+**The user caught a drift, and they were right.** I had started implementing the
+Chinook SQL tool in TypeScript with `sql.js` (WASM SQLite) running in the browser.
+That is wrong on three counts, all of them already written down:
+
+- CLAUDE.md: *"We are a compiler, not a runtime. Never write an execution engine."*
+- Ticket 07: the browser must never reach a runtime directly.
+- Tools are LangChain tools — Python. A TypeScript tool implementation has nothing
+  to compile *to*.
+
+It would also have grown `core/execution` + `core/providers`, the exact layer
+ticket 11 records as phase-1 artefacts scheduled for deletion.
+
+**Reverted:** `sql.js` uninstalled, the TypeScript query service deleted.
+
+### What replaced it — real SQL in Python, 28 tests
+
+```
+backend/dyflow/abc/tool.py                     ITool (Protocol) -> BaseTool (ABC)
+workflows/chinook-nl-to-sql/
+  data/Chinook_Sqlite.sqlite                   the real 1MB database, committed
+  tools/chinook.py                             ListTables / GetTableSchema / ExecuteSql
+  tests/test_chinook_tools.py                  28 tests against the REAL database
+scripts/fetch_chinook.sh                       re-fetch if ever needed
+```
+
+`sqlite3` is in the Python stdlib, so real SQL needed **no dependency at all** —
+whereas the browser approach needed a WASM package *and* violated the layering.
+
+Three things worth carrying forward:
+
+1. **Safety is enforced by the driver, not by string matching.** The connection is
+   opened `file:...?mode=ro`, so SQLite itself refuses writes however the statement
+   is spelled. Qwen's version scanned the SQL for `DROP`/`DELETE` — trivially
+   bypassed (`/**/dRoP`, subqueries, casing) and worse, it *looked* like
+   protection. Tests assert the real boundary, including a write that defeats
+   keyword scanning.
+2. **Foreign keys are in the schema tool.** Almost every interesting Chinook
+   question needs a join (`InvoiceLine -> Track -> Genre`); without FKs a model
+   guesses, and that is the biggest single cause of wrong generated SQL. Qwen's
+   version omitted them.
+3. **Errors are data, not exceptions.** `BaseTool.run` turns validation and SQL
+   errors into a `ToolResult`, so the agent reads the error and retries instead of
+   the graph node aborting. Declared once on the base, never per tool.
+
+The ladder holds and is tested: every tool satisfies `ITool`, and every tool
+publishes a `manifest()` whose `args_schema` comes from Pydantic — the single
+source of truth the generated TypeScript will be built from.
+
+**Verified independently:** "top genres by revenue" returns Rock 826.65, Latin
+382.14, Metal 261.36 from the real database — a two-join `GROUP BY` that the mock
+could not have answered at all.
+
+### Known shortcut, recorded so it is not mistaken for design
+
+`pytest.ini` puts `workflows/chinook-nl-to-sql` on `pythonpath`, so its `tools`
+package imports directly. Fine for one workflow; **two workflows would collide on
+`tools`**. Capability discovery (ticket 18) must load each workflow under a
+synthetic module name via `importlib.util.spec_from_file_location`.
+
+### Still outstanding
+
+- The **TypeScript** Chinook node definitions are still registered globally in
+  `src/nodes/index.ts` and still describe the mock. They must become authoring-only
+  metadata generated from these Pydantic schemas, scoped to the workflow.
+- No FastAPI endpoint yet — the tools run under pytest, not over HTTP.
+- No LangGraph agent wired to them, so the NL question is not yet answered
+  end-to-end by a model.
+
 ## Node scope: generic vs workflow-specific — SETTLED (user, 2026-08-05)
 
 The user's framing, adopted: **generic nodes are part of the builder's vocabulary and

@@ -33,8 +33,9 @@
       "@canvas/*": ["src/canvas/*"],
       "@controller/*": ["src/controller/*"],
       "@view/*": ["src/view/*"],
-      "@nodes/*": ["src/nodes/*"]
+      "@nodes/*": ["src/nodes/*"],
+      "@workflows/*": ["workflows/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "workflows"]
 }
