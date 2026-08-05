@@ -35,8 +35,44 @@ export interface RunResult {
   readonly warnings: readonly string[];
 }
 
+/**
+ * One frame of `/api/runs/stream`'s Server-Sent-Events feed.
+ *
+ * `node`/`namespace`/`taskId` mirror the backend's own finding (verified
+ * live against LangGraph): a `namespace` alone cannot tell two concurrently
+ * `Send`-dispatched instances of the *same* worker node apart, because a
+ * `Send` task shares its parent's checkpoint namespace rather than getting
+ * its own — unlike an actual nested subgraph. `taskId` is what a Worker
+ * node's dispatched instances carry instead, and is `null` for every other
+ * node type.
+ */
+export type RunStreamEvent =
+  | {
+      readonly type: 'update';
+      readonly node: string;
+      readonly namespace: readonly string[];
+      readonly taskId: string | null;
+      readonly output: string | null;
+    }
+  | {
+      readonly type: 'token';
+      readonly node: string;
+      readonly namespace: readonly string[];
+      readonly content: string;
+    }
+  | { readonly type: 'error'; readonly detail: string };
+
 export interface IRuntimeClient {
   run(request: RunRequest): Promise<Result<RunResult, string>>;
+  /**
+   * Runs the same request, but calls `onEvent` as each node acts — what lets
+   * the canvas highlight whichever node is currently in charge instead of
+   * only learning the outcome once the whole run has finished.
+   */
+  runStream(
+    request: RunRequest,
+    onEvent: (event: RunStreamEvent) => void,
+  ): Promise<Result<RunResult, string>>;
   health(): Promise<Result<{ modelConfigured: boolean }, string>>;
 }
 
@@ -87,6 +123,104 @@ export class RuntimeClient implements IRuntimeClient {
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
     }
+  }
+
+  async runStream(
+    request: RunRequest,
+    onEvent: (event: RunStreamEvent) => void,
+  ): Promise<Result<RunResult, string>> {
+    const body = {
+      workflow: request.workflow,
+      question: request.question,
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+    };
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/runs/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+    }
+
+    if (!response.ok) return Err(await describeFailure(response));
+    if (!response.body) return Err('The runtime did not stream a response body.');
+
+    // SSE, not JSON: frames arrive as `event: <name>\ndata: <json>\n\n`, and
+    // a frame can straddle two chunk boundaries, so this buffers text and
+    // only parses complete frames (split on the blank-line terminator).
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let done: RunResult | null = null;
+    let failure: string | null = null;
+
+    const consumeFrame = (frame: string): void => {
+      let eventName = '';
+      let dataLine = '';
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event: ')) eventName = line.slice('event: '.length);
+        else if (line.startsWith('data: ')) dataLine = line.slice('data: '.length);
+      }
+      if (eventName === '' || dataLine === '') return;
+
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(dataLine) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+
+      if (eventName === 'update') {
+        onEvent({
+          type: 'update',
+          node: asString(payload['node']),
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
+          taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
+          output: typeof payload['output'] === 'string' ? payload['output'] : null,
+        });
+      } else if (eventName === 'token') {
+        onEvent({
+          type: 'token',
+          node: asString(payload['node']),
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
+          content: asString(payload['content']),
+        });
+      } else if (eventName === 'error') {
+        failure = asString(payload['detail']) || 'The workflow failed while streaming.';
+        onEvent({ type: 'error', detail: failure });
+      } else if (eventName === 'done') {
+        done = {
+          answer: asString(payload['answer']),
+          decisions: asRecord(payload['decisions']),
+          outputs: asRecord(payload['outputs']),
+          attempts: typeof payload['attempts'] === 'number' ? payload['attempts'] : 0,
+          mermaid: asString(payload['mermaid']),
+          warnings: Array.isArray(payload['warnings']) ? payload['warnings'].map(asString) : [],
+        };
+      }
+    };
+
+    for (;;) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary !== -1) {
+        consumeFrame(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+
+    if (failure) return Err(failure);
+    if (done) return Ok(done);
+    return Err('The runtime closed the stream without reporting a result.');
   }
 
   async health(): Promise<Result<{ modelConfigured: boolean }, string>> {

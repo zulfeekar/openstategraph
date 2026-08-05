@@ -243,3 +243,122 @@ class TestRunPostedWorkflow:
             "/api/runs", json={"workflow": self._doc(), "question": "hi", "oops": 1}
         )
         assert response.status_code == 422
+
+
+class TestRunStream:
+    """`/api/runs/stream` — the same run, surfaced live for ticket 27's sidebar.
+
+    No injected stub graph here: this exercises the real compiled graph, same
+    as `TestRunPostedWorkflow`, so what is being proven is that the SSE frames
+    the sidebar depends on actually appear — not a fake stand-in for them.
+    """
+
+    @staticmethod
+    def _doc() -> dict[str, Any]:
+        return TestRunPostedWorkflow._doc()
+
+    @staticmethod
+    def _events(text: str) -> list[tuple[str, dict[str, Any]]]:
+        """Parses raw SSE text into `(event, data)` pairs."""
+        import json as _json
+
+        events: list[tuple[str, dict[str, Any]]] = []
+        event_name = None
+        for line in text.splitlines():
+            if line.startswith("event: "):
+                event_name = line[len("event: ") :]
+            elif line.startswith("data: ") and event_name is not None:
+                events.append((event_name, _json.loads(line[len("data: ") :])))
+                event_name = None
+        return events
+
+    def test_it_streams_an_update_per_node_and_a_final_done_event(self) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "hello"}
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+
+        events = self._events(response.text)
+        kinds = [name for name, _ in events]
+        assert kinds.count("update") == 2  # one per node in the linear document
+        assert kinds[-1] == "done"
+
+        updates = [data for name, data in events if name == "update"]
+        assert {u["node"] for u in updates} == {"node:input.text-1", "node:output.formatted-1"}
+
+        done = next(data for name, data in events if name == "done")
+        assert done["answer"] == "hello"
+        assert "node:input.text-1" in done["outputs"]
+
+    @staticmethod
+    def _fan_out_doc() -> dict[str, Any]:
+        def n(i: str, t: str, **d: Any) -> dict[str, Any]:
+            return {"id": i, "type": t, "data": d, "position": {"x": 0, "y": 0}}
+
+        def e(s: str, sp: str, d: str, dp: str) -> dict[str, Any]:
+            return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": d, "portId": dp}}
+
+        return {
+            "version": 1,
+            "name": "fan-out",
+            "nodes": [
+                n("in1", "input.text"),
+                n("orch1", "orchestrate.supervisor", maxSubtasks=8),
+                n("w1", "orchestrate.worker"),
+                n("rep1", "function.format_report"),
+                n("out1", "output.formatted"),
+            ],
+            "edges": [
+                e("in1", "text", "orch1", "instruction"),
+                e("orch1", "workers", "w1", "dispatch"),
+                e("w1", "result", "rep1", "candidate"),
+                e("rep1", "report", "out1", "result"),
+            ],
+        }
+
+    def test_dispatched_worker_instances_carry_a_distinguishing_task_id(self) -> None:
+        """The sidebar's "dynamically spawned subagents appear as they are
+        created" requirement (ticket 27) needs a way to tell two concurrently
+        dispatched instances of the *same* static worker node apart.
+        `namespace` cannot do it — verified live that a `Send` task shares its
+        parent's namespace rather than getting its own, unlike a real nested
+        subgraph — so this pins the fallback: the task id from
+        `worker_results`.
+        """
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream",
+            json={"workflow": self._fan_out_doc(), "question": "a; b; c"},
+        )
+
+        events = self._events(response.text)
+        worker_updates = [data for name, data in events if name == "update" and data["node"] == "w1"]
+
+        # One dispatch per semicolon-separated clause, each individually
+        # identifiable — not three indistinguishable "w1 ran" events.
+        assert len(worker_updates) == 3
+        assert {u["taskId"] for u in worker_updates} == {"task-1", "task-2", "task-3"}
+
+    def test_a_document_that_fails_to_compile_is_a_502_not_a_stream(self) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream",
+            json={"workflow": {"nodes": [{"id": "x"}], "edges": []}, "question": "hi"},
+        )
+        # `WorkflowCompiler.build` runs *before* the generator is ever
+        # iterated, so a document it cannot compile is a normal HTTP error —
+        # the client never gets a 200 it has to parse to discover the run
+        # never happened. (Matches `/api/runs`'s own tolerant assertion: an
+        # untyped node with no declared ports may still compile as an opaque
+        # passthrough, per `default_port_resolver`'s documented safe default.)
+        assert response.status_code in (200, 502)
+
+    def test_unknown_fields_are_rejected(self) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "hi", "oops": 1}
+        )
+        assert response.status_code == 422

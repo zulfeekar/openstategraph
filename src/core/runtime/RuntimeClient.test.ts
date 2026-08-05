@@ -193,6 +193,126 @@ describe('RuntimeClient.run', () => {
   });
 });
 
+/** Builds an SSE body from `(event, data)` pairs, exactly as the backend frames them. */
+const sseBody = (frames: readonly [string, Record<string, unknown>][]): string =>
+  frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+
+/**
+ * A streamed `Response` whose body arrives across two chunks, split
+ * mid-frame — the case a naive line-by-line parser gets wrong, and exactly
+ * what a real network read can do regardless of how the server wrote it.
+ */
+const streamedResponse = (text: string, splitAt: number): Response => {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(text);
+  const first = bytes.slice(0, splitAt);
+  const second = bytes.slice(splitAt);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(first);
+      controller.enqueue(second);
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+};
+
+describe('RuntimeClient.runStream', () => {
+  const FRAMES: [string, Record<string, unknown>][] = [
+    ['update', { node: 'node:input.text-1', namespace: [], taskId: null, output: 'hello' }],
+    [
+      'update',
+      { node: 'node:orchestrate.worker-1', namespace: [], taskId: 'task-1', output: null },
+    ],
+    ['token', { node: 'node:agent.llm-1', namespace: [], content: 'Ro' }],
+    ['token', { node: 'node:agent.llm-1', namespace: [], content: 'ck' }],
+    [
+      'done',
+      {
+        answer: 'Rock earns the most.',
+        decisions: { 'node:route.grader-1': 'pass' },
+        outputs: { 'node:input.text-1': 'hello' },
+        attempts: 1,
+        mermaid: 'graph TD;',
+        warnings: [],
+      },
+    ],
+  ];
+
+  it('calls onEvent for every update and token frame, in order', async () => {
+    const text = sseBody(FRAMES);
+    const client = new RuntimeClient('http://rt', () =>
+      Promise.resolve(streamedResponse(text, Math.floor(text.length / 2))),
+    );
+
+    const seen: string[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => seen.push(event.type));
+
+    expect(seen).toEqual(['update', 'update', 'token', 'token']);
+  });
+
+  it('resolves with the final result from the done frame', async () => {
+    const text = sseBody(FRAMES);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 5)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.answer).toBe('Rock earns the most.');
+    expect(result.value.decisions['node:route.grader-1']).toBe('pass');
+  });
+
+  it('surfaces the task id that tells two dispatched worker instances apart', async () => {
+    const text = sseBody(FRAMES);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 1)));
+
+    const updates: unknown[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'update') updates.push(event.taskId);
+    });
+
+    expect(updates).toEqual([null, 'task-1']);
+  });
+
+  it('a frame split exactly at the blank-line boundary still parses correctly', async () => {
+    // The boundary the parser looks for is "\n\n" — splitting the byte stream
+    // exactly there is the sharpest edge case for a buffering parser.
+    const text = sseBody(FRAMES);
+    const boundary = text.indexOf('\n\n') + 2;
+    const client = new RuntimeClient('http://rt', () =>
+      Promise.resolve(streamedResponse(text, boundary)),
+    );
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(true);
+  });
+
+  it('resolves with an error when the server emits an error frame', async () => {
+    const text = sseBody([['error', { detail: 'KeyError: prompt' }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 3)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('KeyError: prompt');
+  });
+
+  it('is a failure, not a hang, if the stream closes with no done frame', async () => {
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse('', 0)));
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports unreachability the same way run() does', async () => {
+    const client = new RuntimeClient('http://rt', () => Promise.reject(new Error('down')));
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Is the backend running?');
+  });
+});
+
 describe('RuntimeClient.health', () => {
   it('reports whether a model is configured', async () => {
     const client = new RuntimeClient(

@@ -310,9 +310,21 @@ the Router/Grader shape (Orchestrator and Worker refuse to execute in the
 browser preview; Format Report genuinely runs there). A new `PORT.worker`
 port type was added, capped at one connection on the orchestrator's `workers`
 output since the compiler records at most one dispatch target per
-orchestrator. A developer can now drag all three onto the canvas. 137 pytest
-+ 192 Vitest passing, `tsc` clean. Only the streaming/sidebar contract from
-ticket 27's original shape remains unbuilt.
+orchestrator. A developer can now drag all three onto the canvas.
+
+**The streaming/sidebar contract is also built.** `POST /api/runs/stream`
+streams `graph.stream(stream_mode=["updates","messages"], subgraphs=True)` as
+SSE, folding the incremental payloads through the *same* reducers `RunState`
+declares so the streamed and blocking endpoints cannot disagree about the
+final answer. One assumption checked and corrected against the real
+LangGraph: `namespace` does **not** distinguish two `Send`-dispatched
+instances of the same worker node (only an actual nested subgraph gets its
+own), so the sidebar keys on the worker's task id instead.
+`RuntimeClient.runStream()` consumes it (`fetch` + manual SSE framing, since
+`EventSource` cannot POST a body), and `AskPanel.tsx` selects the active node
+on the canvas as each update arrives — verified live against a running
+`uvicorn` backend, not only in tests. 187 pytest + 199 Vitest passing, `tsc`
+clean. Ticket 27 is now fully resolved.
 
 ## Not yet specified
 

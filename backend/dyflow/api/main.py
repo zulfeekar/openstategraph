@@ -19,11 +19,13 @@ model.
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
@@ -212,6 +214,153 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
             warnings=warnings,
         )
 
+    @app.post("/api/runs/stream")
+    def run_workflow_stream(request: RunRequest) -> StreamingResponse:
+        """The same run as `/api/runs`, surfaced as it happens.
+
+        Ticket 27's sidebar needs to show **which node is currently in
+        charge**, live — not just the final answer — and dynamically
+        dispatched worker instances need to appear as they are created. A
+        single blocking `/api/runs` response cannot do either: everything
+        arrives at once, after the fact.
+
+        `stream_mode=["updates", "messages"]` with `subgraphs=True` is what
+        the docs (and ticket 27's own notes) call mandatory for streaming a
+        graph containing an *actual* nested subgraph — without it, an inner
+        graph's tokens never surface. Verified directly against the installed
+        LangGraph before writing this, against **both** shapes: a nested
+        subgraph does get its own `namespace_tuple`, but a `Send`-dispatched
+        worker does not — every concurrently dispatched instance of the same
+        static worker node reports `namespace: ()`, because `Send` fans out
+        *tasks* against one node, not separate subgraphs. So `namespace`
+        alone cannot tell two dispatched worker instances apart; the task id
+        pulled from `worker_results` below is what actually does that.
+        `subgraphs=True` is kept anyway, both for correctness if a future
+        node type nests a real subgraph and because it costs nothing when
+        there is none.
+
+        No second LLM run to compute the final answer: the same reducers
+        `RunState` declares (`keep_latest_nonempty`, `merge_decisions`) are
+        applied here, by hand, to fold the incremental `updates` payloads into
+        the same shape `/api/runs` returns — replicating the *documented*
+        reducer, not reimplementing new logic, so the two endpoints cannot
+        silently disagree about what "the final answer" means.
+        """
+        from dyflow.compile.node_runtime import (
+            NodeRuntime,
+            RunState,
+            chinook_tool_registry,
+            keep_latest_nonempty,
+            merge_decisions,
+        )
+        from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
+
+        model = None
+        if request.model or _model_available():
+            from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+            from langchain.chat_models import init_chat_model
+
+            model = init_chat_model(resolve_model(request.model))
+
+        compiler = WorkflowCompiler()
+        plan = compiler.plan(request.workflow)
+        runtime = NodeRuntime(model=model, tools=chinook_tool_registry())
+
+        try:
+            graph = compiler.build(request.workflow, RunState, runtime.factory(request.workflow))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+        # LangGraph node names are `safe_name(node_id)` (colons are illegal),
+        # so events are translated back to the canvas's own ids — otherwise
+        # the sidebar could not tell the frontend which node to highlight.
+        node_ids_by_name = {safe_name(n): n for n in plan.nodes}
+
+        def events():
+            answer = ""
+            decisions: dict[str, str] = {}
+            outputs: dict[str, str] = {}
+            attempts = 0
+
+            try:
+                stream = graph.stream(
+                    {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
+                    {"recursion_limit": request.recursion_limit},
+                    stream_mode=["updates", "messages"],
+                    subgraphs=True,
+                )
+                for namespace, mode, payload in stream:
+                    if mode == "updates":
+                        for raw_name, update in payload.items():
+                            node_id = node_ids_by_name.get(raw_name, raw_name)
+                            answer = keep_latest_nonempty(answer, str(update.get("answer") or ""))
+                            decisions = merge_decisions(
+                                decisions, {k: str(v) for k, v in (update.get("decisions") or {}).items()}
+                            )
+                            outputs = merge_decisions(
+                                outputs, {k: str(v) for k, v in (update.get("outputs") or {}).items()}
+                            )
+                            if "attempts" in update:
+                                attempts = int(update["attempts"])
+                            # `namespace` alone does not distinguish concurrent
+                            # `Send` dispatches to the *same* static worker
+                            # node — verified directly: unlike an actual
+                            # nested subgraph, a `Send` task shares its
+                            # parent's checkpoint namespace, so every
+                            # dispatched instance reports `namespace: []`
+                            # here. The task id from `worker_results` is what
+                            # actually tells two dispatched instances apart.
+                            task_ids = list((update.get("worker_results") or {}).keys())
+                            yield _sse(
+                                "update",
+                                {
+                                    "node": node_id,
+                                    "namespace": list(namespace),
+                                    "taskId": task_ids[0] if task_ids else None,
+                                    "output": (update.get("outputs") or {}).get(node_id)
+                                    or (update.get("worker_results") or {}).get(
+                                        task_ids[0] if task_ids else "", None
+                                    ),
+                                },
+                            )
+                    elif mode == "messages":
+                        message, metadata = payload
+                        content = getattr(message, "content", "")
+                        if isinstance(content, str) and content:
+                            raw_name = metadata.get("langgraph_node", "")
+                            yield _sse(
+                                "token",
+                                {
+                                    "node": node_ids_by_name.get(raw_name, raw_name),
+                                    "namespace": list(namespace),
+                                    "content": content,
+                                },
+                            )
+            except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
+                yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
+                return
+
+            warnings = list(plan.warnings)
+            for tool_type in runtime.unresolved_tools:
+                warnings.append(
+                    f'No implementation for tool "{tool_type}" — the agent ran without it, '
+                    "so its answer may not be grounded in that data source."
+                )
+
+            yield _sse(
+                "done",
+                {
+                    "answer": answer,
+                    "decisions": decisions,
+                    "outputs": outputs,
+                    "attempts": attempts,
+                    "mermaid": graph.get_graph().draw_mermaid(),
+                    "warnings": warnings,
+                },
+            )
+
+        return StreamingResponse(events(), media_type="text/event-stream")
+
     @app.post("/api/workflows/chinook-nl-to-sql/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
         model = resolve_model(request.model)
@@ -240,6 +389,16 @@ def create_app(graph_factory: GraphFactory | None = None) -> FastAPI:
         )
 
     return app
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
+
+    `json.dumps` rather than string interpolation, because a node's output can
+    contain newlines and quotes, and SSE's `data:` line is newline-delimited —
+    an unescaped newline would silently split one event into two.
+    """
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def _model_available() -> bool:

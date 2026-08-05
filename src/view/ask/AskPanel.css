@@ -48,3 +48,37 @@
   color: var(--accent-violet-strong);
   font: var(--type-mono-sm);
 }
+
+.ask__activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  /* Newest row last: it reads top-to-bottom the same order the run happened. */
+  animation: ask-activity-in 120ms ease-out;
+}
+
+.ask__activity-node {
+  color: var(--text-primary);
+  font: var(--type-mono-sm);
+}
+
+.ask__activity-task {
+  padding: 0 var(--space-2);
+  background: var(--accent-blue-soft, var(--surface-sunken));
+  border-radius: var(--radius-sm);
+  color: var(--accent-blue-strong, var(--text-muted));
+  font: var(--type-mono-sm);
+}
+
+@keyframes ask-activity-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,5 +1,5 @@
 Type: grilling
-Status: backend graph mechanics + TS node registration + worker tool-use bug resolved (2026-08-05); streaming/sidebar contract still open
+Status: resolved (2026-08-05) — backend graph mechanics, TS node registration, worker tool-use bug, and the streaming/sidebar contract are all built and verified
 Blocked by: 13, 24
 
 ## Question
@@ -171,6 +171,50 @@ directly, not by the answer's plausibility. Full account in
 
 `OrchestratorNode.ts`, `WorkerNode.ts`, `FormatReportNode.ts`
 (`src/nodes/orchestrate/`), registered in the palette alongside Router and
-Grader. A developer can now drag all three onto the canvas; only the
-streaming/sidebar contract (SSE `updates`+`messages`, `subgraphs=True`) from
-this ticket's original shape remains unbuilt.
+Grader. A developer can now drag all three onto the canvas.
+
+## Streaming/sidebar contract — done (2026-08-05)
+
+`POST /api/runs/stream` (`backend/dyflow/api/main.py`) streams the compiled
+graph via `graph.stream(..., stream_mode=["updates", "messages"],
+subgraphs=True)`, translated to SSE frames: `update` (a node just acted),
+`token` (a message chunk), `error`, and a final `done` carrying the same
+shape `/api/runs` returns — folded from the incremental `updates` payloads
+using the *same* named reducers `RunState` declares
+(`keep_latest_nonempty`, `merge_decisions`), so the two endpoints cannot
+silently disagree about what "the final answer" means.
+
+**One assumption from this ticket's original notes turned out to be wrong,
+checked directly against the installed LangGraph rather than left as a
+guess:** `namespace` does not distinguish two `Send`-dispatched instances of
+the *same* worker node — a dispatched task shares its parent's checkpoint
+namespace, unlike an actual nested subgraph, which does get its own. So
+every concurrently dispatched worker reports `namespace: []`, and the task
+id read from `worker_results` is what the sidebar actually keys on to tell
+dispatched instances apart. `subgraphs=True` is kept regardless, since it
+costs nothing and would matter for a future node type that does nest a real
+subgraph.
+
+`RuntimeClient.runStream()` (`src/core/runtime/RuntimeClient.ts`) is the
+frontend's SSE consumer — `fetch` plus manual frame-buffering rather than
+`EventSource`, since `EventSource` cannot POST a body and the workflow
+document has to go in the request. `AskPanel.tsx` calls it and selects
+`event.node` on the canvas as each `update` arrives — the "highlight
+whichever node is currently in charge" requirement — with a live "Activity"
+feed showing each dispatched worker's task id as it appears, before the
+final answer replaces it. Verified live in the browser against a real
+`uvicorn` backend: a three-attempt revise loop streamed correctly, the
+canvas selection followed the run in real time, and the final "path taken"
+matched the SSE frames exactly.
+
+22 new RuntimeClient tests (frame parsing, mid-frame chunk splits, error and
+missing-done paths) plus 6 new backend tests (per-node update events, the
+worker task-id distinguishing signal, malformed-document handling). No new
+tests were added for `AskPanel.tsx` itself — this codebase has no React
+component test infrastructure anywhere (`grep` for `.test.tsx` returns
+nothing), and introducing one is a standing-infrastructure decision bigger
+than this ticket; the component is thin glue over the now-well-tested
+`RuntimeClient`, consistent with this project's existing "canvas/view stays
+deliberately untested, core is unit-tested" split (ticket 11).
+
+This closes every part of the ticket's original shape.
