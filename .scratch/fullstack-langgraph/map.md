@@ -118,6 +118,38 @@ a result out. A Supervisor's config declares what each worker is *sent*, and tha
 is the entire context the worker has. Any inspector affordance implying a subagent
 inherits parent history would teach developers something false about their own workflow.
 
+## Router node — built (ticket 13, 2026-08-05)
+
+`src/nodes/routing/RouterNode.ts` + 22 tests, and it went straight to a real node
+type because the mechanism needed **no new engine concept**: `INodeDefinition.ports`
+has always been `(data) => IPortDescriptor[]`, and the Router is the first type to
+use it. So the whole "drag a router, name your branches, wire them" experience is
+one node file, producing ticket 03's complete declared destination set from ordinary
+config with no `core/` edit — ticket 28's Open/Closed claim demonstrated rather than
+asserted. The tier renders as **Runtime · `Agent · create_agent`** in the inspector,
+so role-as-node-type + tier-as-field is visibly working.
+
+**A simplification ticket 09 did not anticipate: the port ID *is* the branch key.**
+Ticket 09 settled "predicate on the node, branch key on the edge"; with a
+config-driven branch list, an edge's branch is decided by which port it leaves from,
+so no separate edge field is needed at all. Verified in the browser: 5 branches is a
+292px card with all six labels legible; capped at 12 rather than scrollable, since a
+router with twenty destinations is a design problem to surface.
+
+**Two findings.** (1) A `standard` node with **no TypeScript executor is silently
+skipped** by the preview engine — the harness test caught it immediately. Rather
+than weaken the invariant the Router ships an executor that *refuses with a clear
+message*, because it compiles to `add_conditional_edges` in Python and the browser
+must not execute (ticket 07); it deliberately does not classify via the mock
+provider, which would fake a decision the real runtime makes differently. (2)
+**Renaming a branch drops its edge** — port ids derive from branch names, so a
+rename changes the id and ticket 19's loader discards links to vanished ports. Needs
+stable per-branch ids, which is precisely ticket 20's repeatable-group field;
+branches stay newline-separated text until then rather than inventing a field kind
+here and settling ticket 20 by accident.
+
+The Python compile target belongs to ticket 15.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

@@ -9,6 +9,7 @@ import {
   Type,
   Wrench,
   Blocks,
+  GitBranch,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ const ICONS: Record<string, LucideIcon> = {
   'node-note': StickyNote,
   // Chinook database nodes
   'node-database': Database,
+  'node-router': GitBranch,
 
   // Port types
   'port-text': Type,
