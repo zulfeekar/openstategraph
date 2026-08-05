@@ -29,6 +29,20 @@ from pydantic import BaseModel, Field
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
 ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]
 
+#: The Ollama model to use — a **cloud** model, never a local one.
+#:
+#: Standing project instruction: local models are not performant enough for this
+#: workload, and the evidence is direct. `llama3.1:8b` locally could not hold
+#: structured output at all, took minutes per run, and produced a confidently
+#: wrong answer about global music revenue when asked a database question. The
+#: same workflow on `gpt-oss:120b-cloud` wrote a correct two-join `GROUP BY` and
+#: answered in 23s.
+#:
+#: So a bare `ollama:` fallback must resolve to cloud. Anyone wanting a local
+#: model has to name it explicitly in the request, which is the right amount of
+#: friction for a choice that changes the result this much.
+OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
+
 
 class AskRequest(BaseModel):
     model_config = {"extra": "forbid"}
@@ -96,12 +110,13 @@ def resolve_model(requested: str | None) -> str:
     if os.getenv("OPENAI_API_KEY"):
         return "openai:gpt-4.1-mini"
     if os.getenv("OLLAMA_HOST") or os.getenv("DYFLOW_USE_OLLAMA"):
-        return "ollama:llama3.1:8b"
+        # Cloud, not local. See OLLAMA_CLOUD_MODEL.
+        return os.getenv("DYFLOW_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
     raise HTTPException(
         status_code=503,
         detail=(
-            "No model configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or set "
-            "DYFLOW_USE_OLLAMA=1 for a local model, or pass `model` in the request."
+            "No model configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, set "
+            "DYFLOW_USE_OLLAMA=1 to use Ollama cloud, or pass `model` in the request."
         ),
     )
 
@@ -240,6 +255,7 @@ def _model_available() -> bool:
 app = create_app()
 
 __all__ = [
+    "OLLAMA_CLOUD_MODEL",
     "AskRequest",
     "AskResponse",
     "RunRequest",

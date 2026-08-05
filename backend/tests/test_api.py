@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from dyflow.api.main import create_app, resolve_model
+from dyflow.api.main import OLLAMA_CLOUD_MODEL, create_app, resolve_model
 
 
 class StubGraph:
@@ -123,6 +123,29 @@ class TestModelResolution:
     def test_it_picks_up_an_anthropic_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         assert resolve_model(None).startswith("anthropic:")
+
+    def test_ollama_resolves_to_a_cloud_model_never_a_local_one(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("DYFLOW_USE_OLLAMA", "1")
+        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
+
+        resolved = resolve_model(None)
+
+        # Standing project instruction, and the evidence is direct: llama3.1:8b
+        # locally could not hold structured output, took minutes, and answered a
+        # database question from parametric knowledge. The cloud model wrote a
+        # correct two-join GROUP BY in 23s.
+        assert resolved == OLLAMA_CLOUD_MODEL
+        assert resolved.endswith("-cloud")
+        assert "8b" not in resolved
+
+    def test_a_local_model_must_be_named_explicitly(self) -> None:
+        # Possible, but never the default — the friction is deliberate for a
+        # choice that changes the result this much.
+        assert resolve_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
 
 
 class TestGraphPreview:

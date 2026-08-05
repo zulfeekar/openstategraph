@@ -72,23 +72,47 @@ export class OllamaProvider extends AbstractLLMProvider {
     return (this.baseUrl ?? DEFAULT_HOST).replace(/\/$/, '');
   }
 
-  /** Reads the locally pulled models from `/api/tags`. */
+  /**
+   * Reads the available models from `/api/tags`, **cloud first**.
+   *
+   * Ollama lists locally pulled models and cloud-hosted ones together, and the
+   * distinction matters more than it looks: a local `llama3.1:8b` could not hold
+   * structured output at all here, took minutes per run, and answered a database
+   * question from parametric knowledge. The same workflow on a `-cloud` model
+   * wrote correct SQL in 23 seconds.
+   *
+   * So cloud models are sorted to the top and labelled, and local ones are marked
+   * as such rather than silently offered as equals. A developer can still pick a
+   * local model — it just should not be the easy accident.
+   */
   async listModels(): Promise<readonly ModelDescriptor[]> {
     try {
       const response = await fetch(`${this.host}/api/tags`);
       if (!response.ok) return this.seed;
       const payload = (await response.json()) as OllamaTagsResponse;
-      const local = (payload.models ?? []).map((model) => ({
-        id: model.name,
-        label: model.details?.parameter_size
-          ? `${model.name} · ${model.details.parameter_size}`
-          : model.name,
-        providerId: 'ollama',
-        contextWindow: 32_768,
-        maxOutputTokens: 8_192,
-        supportsTools: true,
-      }));
-      if (local.length > 0) this.discovered = local;
+      const found = (payload.models ?? []).map((model) => {
+        const cloud = model.name.endsWith('-cloud') || model.name.includes(':cloud');
+        const size = model.details?.parameter_size;
+        return {
+          id: model.name,
+          label: cloud
+            ? `${model.name} · cloud${size ? ` · ${size}` : ''}`
+            : `${model.name}${size ? ` · ${size}` : ''} · local`,
+          providerId: 'ollama',
+          contextWindow: 32_768,
+          maxOutputTokens: 8_192,
+          supportsTools: true,
+          cloud,
+        };
+      });
+      // Stable: cloud before local, then alphabetical, so the ordering does not
+      // shift between reads and the first option is always a capable one.
+      const sorted = [...found].sort(
+        (a, b) => Number(b.cloud) - Number(a.cloud) || a.id.localeCompare(b.id),
+      );
+      if (sorted.length > 0) {
+        this.discovered = sorted.map(({ cloud: _cloud, ...rest }) => rest);
+      }
       return this.models;
     } catch {
       return this.seed;

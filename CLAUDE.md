@@ -169,6 +169,20 @@ Therefore `resolveMiddleware()` returns an **ordered, name-keyed slot table**; t
 
 This is the cross-family boundary rule confirmed by the runtime: putting `retry` on an agent base would force a duplicate onto the tool base and then two spellings of one feature. Token accounting and logging stay deliberately **not** unified — middleware for agents, callbacks/tracing elsewhere — because unifying them would invent an abstraction LangGraph does not have.
 
+### Ollama means Ollama **cloud**, never a local model
+
+Standing instruction, with direct evidence. `llama3.1:8b` running locally could not
+hold `response_format` at all, took minutes per run, and answered a Chinook database
+question from parametric knowledge — confidently, about global music revenue, having
+queried nothing. The same workflow on `gpt-oss:120b-cloud` wrote a correct two-join
+`GROUP BY` and answered in 23 seconds.
+
+So: a bare `ollama:` fallback resolves to `OLLAMA_CLOUD_MODEL`, the model picker sorts
+`-cloud` models first and labels local ones as local, and a local model must be named
+explicitly to be used. Never benchmark, demo or debug against a local model and treat
+the result as representative — a weak model turns a wiring bug and a capability gap
+into the same symptom.
+
 ### Never send a user's graph to a third party
 
 `draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()` — `xray=True` expands subgraph internals, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
