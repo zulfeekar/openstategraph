@@ -202,6 +202,19 @@ Two distinct mechanisms, easy to conflate and important not to:
 
 Never build UI or state plumbing that implies a subagent shares the parent's context.
 
+### A state key more than one node type can write needs a named reducer
+
+A bare scalar field (`answer: str`) is only safe for state exactly one node
+type ever produces. The moment two node kinds can legitimately write the same
+key, use `Annotated[T, reducer]` — never a plain `LastValue` field. This was
+found live, not hypothetically: a real graph combining a router, `Send`
+fan-out, and multiple tool-using workers scheduled two `answer`-writing nodes
+in the same superstep, and LangGraph raised `InvalidUpdateError` on a field
+every scripted, single-writer-at-a-time test had exercised without incident.
+`decisions`/`outputs`/`subtasks`/`worker_results` already followed this rule;
+`answer` did not, and the gap was invisible until a real fan-out/join subgraph
+ran. Applies to every future compiled workflow state schema.
+
 ### Portability guardrails
 
 We go **deep on LangGraph** deliberately — no `IOrchestrator` abstraction, because no competing framework accepts a serialisable graph, so such an interface is unbindable rather than merely leaky. Portability is preserved instead by keeping `workflow.json` the vendor-neutral layer and obeying four rules that cost nothing now and are expensive to retrofit:

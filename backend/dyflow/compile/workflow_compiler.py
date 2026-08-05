@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 #: Port types that carry **control flow**. Everything else is a binding.
 CONTROL_PORT_TYPES = frozenset({"text", "result"})
@@ -36,6 +37,13 @@ BINDING_PORT_TYPES = frozenset({"tool", "skill"})
 
 ROUTER_TYPE = "route.classifier"
 GRADER_TYPE = "route.grader"
+ORCHESTRATOR_TYPE = "orchestrate.supervisor"
+WORKER_TYPE = "orchestrate.worker"
+
+#: The port type that marks a fan-out declaration rather than control flow or a
+#: capability binding. An edge landing on a `worker`-typed port means "this is
+#: the node Send() dispatches to," not "this runs next."
+WORKER_PORT_TYPE = "worker"
 
 
 def safe_name(node_id: str) -> str:
@@ -87,6 +95,24 @@ DEFAULT_PORT_SPECS: dict[str, dict[str, PortSpec]] = {
         "revise": PortSpec("feedback", "out"),
     },
     ROUTER_TYPE: {"question": PortSpec("text", "in")},
+    ORCHESTRATOR_TYPE: {
+        "instruction": PortSpec("text", "in"),
+        # The other half of the only legal cycle (ticket 09): a grader's
+        # `revise` may close a loop here too, so a failed report can send the
+        # orchestrator back to re-plan with more subtasks — a strictly harder
+        # case than looping over one agent node, since the cycle re-enters a
+        # fan-out/join subgraph rather than a single call.
+        "feedback": PortSpec("feedback", "in"),
+        "workers": PortSpec(WORKER_PORT_TYPE, "out"),
+    },
+    WORKER_TYPE: {
+        "dispatch": PortSpec(WORKER_PORT_TYPE, "in"),
+        "result": PortSpec("result", "out"),
+    },
+    "function.format_report": {
+        "candidate": PortSpec("result", "in"),
+        "report": PortSpec("result", "out"),
+    },
 }
 
 
@@ -127,6 +153,13 @@ class CompiledPlan:
     skill_bindings: dict[str, list[str]] = field(default_factory=dict)
     #: Nodes that compile into a binding rather than a step, so are not graph nodes.
     bound_only: list[str] = field(default_factory=list)
+    #: orchestrator node id -> the single worker node it dispatches `Send` to.
+    #:
+    #: A dict rather than a list, because the whole point is that exactly one
+    #: static worker node absorbs however many dynamic task instances an
+    #: orchestrator plans at runtime — LangGraph has no concept of a node that
+    #: exists N times, only tasks dispatched N times against one node.
+    fan_out: dict[str, str] = field(default_factory=dict)
     entry: list[str] = field(default_factory=list)
     exits: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -181,6 +214,23 @@ class WorkflowCompiler:
             dst_type = str(executable[dst_id].get("type", ""))
             dst_port = self._port(dst_type, dst.get("portId", ""))
             src_port = self._port(src_type, src.get("portId", ""))
+
+            # --- fan-out: a dispatch target, not a step and not a binding ---
+            #
+            # Checked before BINDING_PORT_TYPES because a worker's "dispatch"
+            # port is its own type, not a tool/skill capability — conflating
+            # them would make the worker bind to the orchestrator as if it were
+            # a tool, which is a different (and wrong) relationship.
+            if dst_port.type == WORKER_PORT_TYPE:
+                plan.fan_out[src_id] = dst_id
+                has_outgoing.add(src_id)
+                # The worker has no *static* incoming edge — LangGraph dispatches
+                # it dynamically via Send — but it is reached, so it must not be
+                # treated as an entry and wired from START. Same precedent as the
+                # grader's `revise` edge.
+                has_incoming.add(dst_id)
+                in_control_flow.update((src_id, dst_id))
+                continue
 
             # --- bindings: capability, not sequence ---
             if dst_port.type in BINDING_PORT_TYPES:
@@ -286,12 +336,55 @@ class WorkflowCompiler:
                 {label: safe_name(dst) for label, dst in destinations.items()},
             )
 
+        for orchestrator_id, worker_id in plan.fan_out.items():
+            builder.add_conditional_edges(
+                safe_name(orchestrator_id),
+                self._fan_out_router(orchestrator_id, safe_name(worker_id)),
+                # The declared destination set is one entry, always — that is
+                # the point: N dynamic tasks, one static worker (ticket 27).
+                [safe_name(worker_id)],
+            )
+
         for node_id in plan.entry:
             builder.add_edge(START, safe_name(node_id))
         for node_id in plan.exits:
             builder.add_edge(safe_name(node_id), END)
 
         return builder.compile() if compile_graph else builder
+
+    @staticmethod
+    def _fan_out_router(orchestrator_id: str, worker_name: str) -> Callable[[Any], list[Any]]:
+        """Reads the orchestrator's plan and dispatches one `Send` per subtask.
+
+        This is the one place `Send` is constructed, deliberately outside the
+        orchestrator node itself. The node writes *what to do*
+        (`state["subtasks"][id]`); this reads it and decides *how many times to
+        do it* — the same node-decides / edge-dispatches split already used for
+        the router and the grader, so all three "which branch" mechanisms share
+        one shape.
+
+        **The payload is the worker's entire visible state — nothing more.**
+        Verified directly against the installed langgraph: a `Send` payload does
+        **not** merge with the parent graph state, it *replaces* what the
+        dispatched node sees. So every worker instance receives exactly
+        `task_id` and `task_instruction` and nothing else — no question, no
+        schema hint, no upstream output — unless the orchestrator explicitly
+        packs it into the subtask. This is stricter isolation than a
+        tool-subagent, which at least receives the whole task description in
+        its ToolMessage; here the isolation is structural, not a convention.
+        """
+
+        def route(state: Any) -> list[Any]:
+            subtasks = (state.get("subtasks") or {}).get(orchestrator_id) or []
+            return [
+                Send(
+                    worker_name,
+                    {"task_id": task["id"], "task_instruction": task["instruction"]},
+                )
+                for task in subtasks
+            ]
+
+        return route
 
     @staticmethod
     def _router_for(node_id: str, destinations: dict[str, str]) -> Callable[[Any], str]:

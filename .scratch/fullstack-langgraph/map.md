@@ -263,6 +263,43 @@ runs.**
 temporary, the resolver is **injectable**, and a test asserts the compiler goes
 through the injection point so the seam cannot rot shut (ticket 02 owns generation).
 
+## Orchestrator + `Send` fan-out/join — backend built (ticket 27, 2026-08-05)
+
+Grounded against a shared external framework (a DevCompass "loop/graph/harness"
+deck the user supplied) before building anything — see
+[the decision doc](decisions/loop-graph-harness.md). It confirmed, rather than
+changed, the architecture already in place: Router/Grader are the loop layer,
+the compiler+FastAPI seam is the harness layer, and it sharpened one point —
+"the state schema and how parallel results merge" is a graph-engineering
+decision, which is exactly the class of bug found below.
+
+Built: `IOrchestrator -> BaseOrchestrator -> Orchestrator` (16 pytest,
+deterministic decomposition, no model required for the default) plus a third
+compiler-recognised edge category — a `worker`-typed port is a **fan-out
+declaration**, compiling to `add_conditional_edges` returning `langgraph.types.Send`
+objects, alongside the existing control-flow and tool/skill-binding
+categories. Proven with a revise loop that re-enters the fan-out/join subgraph
+itself, not just a single node (`test_orchestrator_graph.py`, 10 tests) —
+the harder graph-engineering case implied by ticket 27's original shape.
+
+**Two real bugs, found only by running this live, not by any fixture:** a bare
+`answer: str` field written by two nodes in the same superstep raised
+`InvalidUpdateError` — fixed with a named reducer
+(`keep_latest_nonempty`) and now a **standing rule**: any state key more than
+one node type can write must be `Annotated[T, reducer]`, never a bare scalar.
+And subtask ids collided across replans (`Orchestrator.plan()` always started
+at `task-1`), silently blending a rejected attempt's stale results with the
+fresh replan's — fixed by folding the attempt count into every id.
+
+**Left open, stated plainly rather than glossed over:** whether a live model
+reliably calls its bound tools instead of answering from parametric knowledge
+is a prompting/model question, separate from the wiring — two of three
+worker runs against `ollama:gpt-oss:120b-cloud` still answered from general
+knowledge after a first prompt strengthening. And there is **no TypeScript
+side yet** — `orchestrate.supervisor`/`orchestrate.worker`/`function.format_report`
+exist only in the Python compiler; authoring them means hand-writing
+`workflow.json`, not dragging a node. 182 pytest passing total.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

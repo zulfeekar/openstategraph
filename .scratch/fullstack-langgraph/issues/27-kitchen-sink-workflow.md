@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: backend graph mechanics resolved (2026-08-05); TS node registration and canvas wiring still open
 Blocked by: 13, 24
 
 ## Question
@@ -121,3 +121,40 @@ Also wants, but is not blocked by:
 - the TypeScript Chinook nodes moved to workflow scope and generated from the
   Pydantic schemas (currently global, and still describing the deleted mock)
 - the canvas wired to `POST /ask`
+
+## Backend resolution (2026-08-05)
+
+Both open questions above are answered and built, backend-only, per
+[the loop/graph/harness decision doc](decisions/loop-graph-harness.md):
+
+- **`Send` fan-out to a declared worker node** — recommended above, now real.
+  `IOrchestrator -> BaseOrchestrator -> Orchestrator` (`backend/dyflow/abc/orchestrator.py`,
+  the same ladder as Router/Grader) plans a bounded, generation-scoped subtask
+  list; `WorkflowCompiler` recognises a `worker`-typed port as a fan-out
+  declaration (a third category alongside control flow and tool/skill binding)
+  and compiles it to `add_conditional_edges` returning `Send` objects. Verified
+  against the real installed LangGraph, not assumed: a `Send` payload replaces,
+  never merges with, the dispatched node's state.
+- **Functions vs. tools, settled as recommended**: `function.format_report` is
+  a deterministic graph step the compiler always runs (no model in the
+  decision); Chinook's SQL execution stays a tool, chosen by the worker agent
+  mid-loop. Different node types, not one type with a flag, exactly as
+  recommended.
+- **The revise loop re-enters the fan-out/join subgraph**, not just a single
+  agent node — proven in `backend/tests/test_orchestrator_graph.py` (10 tests):
+  dispatch count, result-join-by-id, deterministic report ordering, a real
+  replan (not a bare retry) on `revise`, and that the recursion budget still
+  terminates a persistently-failing loop with fan-out inside it.
+- **Two real bugs surfaced only by combining fan-out with a revise loop**, both
+  now fixed and regression-tested: a bare-scalar `answer` field written by two
+  nodes in the same superstep (`InvalidUpdateError`, fixed with a named
+  reducer — `test_answer_channel_concurrency.py`), and subtask ids colliding
+  across replans, silently blending stale and fresh results (fixed with
+  generation-scoped ids — `test_orchestrator.py`).
+- **Still open, honestly**: worker tool-use reliability against a live model is
+  a prompting/harness question, not a wiring one — see the decision doc's
+  "not done" section. And **none of this has a TypeScript node type yet** —
+  `orchestrate.supervisor`/`orchestrate.worker`/`function.format_report` exist
+  only in the Python compiler/runtime; a developer can author them only via raw
+  `workflow.json`, not by dragging them onto the canvas. That, plus the
+  streaming/sidebar contract, is the remaining scope of this ticket.

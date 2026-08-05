@@ -19,6 +19,7 @@ from typing import Annotated, Any, Callable, TypedDict
 from langgraph.graph.message import add_messages
 
 from dyflow.abc.grader import Grader
+from dyflow.abc.orchestrator import Orchestrator
 from dyflow.abc.router import Router
 from dyflow.compile.workflow_compiler import CompiledPlan
 
@@ -34,6 +35,27 @@ def merge_decisions(left: dict, right: dict) -> dict:
     return {**left, **right}
 
 
+def keep_latest_nonempty(left: str, right: str) -> str:
+    """Reducer for `answer` — a scalar with more than one legitimate writer.
+
+    `_agent`, `_format_report_function` and `_output` can each produce a final
+    answer, depending on the graph's shape. As a bare `LastValue` field this
+    looked safe in every hand-built test, because none of them happened to run
+    in the same tick — until a **real** graph (router + orchestrator + tools,
+    two `Send`-dispatched workers with real tool loops) did exactly that and
+    LangGraph raised `InvalidUpdateError: At key 'answer': Can receive only one
+    value per step`.
+    
+    The fix is not to make the collision impossible — two nodes legitimately
+    writing an answer candidate in the same step is a real shape a developer
+    can build — but to make it resolvable: keep whichever write is non-empty,
+    preferring the later one when both are. This is the `merge` reducer member
+    CLAUDE.md requires for any state two nodes might write concurrently; a bare
+    scalar field is only safe for state exactly one node type can ever produce.
+    """
+    return right or left
+
+
 class RunState(TypedDict, total=False):
     """The shared state schema for a compiled workflow."""
 
@@ -43,9 +65,24 @@ class RunState(TypedDict, total=False):
     decisions: Annotated[dict, merge_decisions]
     #: node id -> that node's textual output, so a downstream node can read it.
     outputs: Annotated[dict, merge_decisions]
-    answer: str
+    answer: Annotated[str, keep_latest_nonempty]
     feedback: str
     attempts: int
+    #: orchestrator node id -> the subtasks it planned. Read by the compiler's
+    #: fan-out routing function to build the `Send` list.
+    subtasks: Annotated[dict, merge_decisions]
+    #: task id -> that worker instance's output. Joined by whatever reads it.
+    #:
+    #: Deliberately **not** keyed by node id: many dynamic worker *instances*
+    #: share one static worker *node*, so node id would collide every one of
+    #: them onto a single key. The task id — unique per dispatched Send — is
+    #: what keeps every instance's result addressable.
+    worker_results: Annotated[dict, merge_decisions]
+    #: Set only inside a dispatched worker instance, from the Send payload.
+    #: Absent everywhere else — a worker cannot see the parent's other state,
+    #: only what the orchestrator explicitly packed into its Send (see below).
+    task_id: str
+    task_instruction: str
 
 
 #: Maps a tool node type to the Python tool that implements it.
@@ -111,6 +148,9 @@ class NodeRuntime:
             "agent.llm": self._agent,
             "route.classifier": self._router,
             "route.grader": self._grader,
+            "orchestrate.supervisor": self._orchestrator,
+            "orchestrate.worker": self._worker,
+            "function.format_report": self._format_report_function,
             "output.formatted": self._output,
         }
 
@@ -256,6 +296,165 @@ class NodeRuntime:
                 "feedback": "" if branch == "pass" else verdict.feedback,
                 "outputs": {node_id: candidate},
             }
+
+        return run
+
+    def _orchestrator(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """Splits its instruction into subtasks and writes the plan to state.
+
+        Does **not** dispatch. Dispatch is the compiler's `_fan_out_router`,
+        reading exactly what this writes — the same node-decides /
+        edge-dispatches split as the router and the grader.
+        """
+        data = node.get("data") or {}
+        cap = int(data.get("maxSubtasks") or 8)
+        orchestrator = Orchestrator(max_subtasks=cap)
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+
+        def run(state: RunState) -> dict[str, Any]:
+            instruction = _upstream_text(state, upstream) or state.get("question", "")
+            feedback = state.get("feedback", "")
+            if feedback:
+                # Appended as a **new semicolon-delimited clause**, not fused in
+                # as prose. This is not cosmetic: `Orchestrator.split()` is
+                # deterministic and only recognises structural separators
+                # (numbers, semicolons, "and"). Prose glue like "Additionally:
+                # ..." produces a string with no recognisable separator when
+                # the original instruction had none either, so the replanned
+                # instruction would still be exactly one subtask — the
+                # orchestrator would repeat the identical single-subtask plan
+                # every attempt, having incorporated nothing, until the budget
+                # ran out. That is precisely the "keep trying" cost leak the
+                # checklist warns about. A semicolon makes the feedback a
+                # genuinely new, separately dispatchable subtask.
+                instruction = f"{instruction}; {feedback}"
+            generation = state.get("attempts", 0)
+            subtasks = orchestrator.plan(instruction, generation=generation)
+            return {
+                "subtasks": {node_id: [t.model_dump() for t in subtasks]},
+                "outputs": {node_id: f"Planned {len(subtasks)} subtask(s)."},
+                "attempts": generation + 1,
+            }
+
+        return run
+
+    def _worker(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """One dispatched instance of the static worker node.
+
+        Every `Send` targets this same node id, so this factory runs **once**
+        at compile time and the closure it returns runs **once per dispatched
+        task** — the tools it binds are shared by every instance, which is
+        correct: they are the worker archetype's capabilities, not a
+        per-instance choice.
+
+        Reads only `task_id` / `task_instruction` from state, because a `Send`
+        payload does not inherit the parent's other state keys (verified
+        against the installed langgraph — see `_fan_out_router`). If a worker
+        needed the original question too, the orchestrator would have to pack
+        it into every subtask's instruction explicitly; there is no other way
+        for it to arrive.
+
+        **Ships a default system prompt, unlike a bare tool-bound agent.**
+        Found live: a worker given SQL tools but no instruction to use them
+        answered a Chinook question from general knowledge about the
+        entertainment industry rather than querying the database — the tools
+        were resolved and available, the model simply had no reason to reach
+        for them over its own training data. `_agent` has the same exposure
+        whenever no skill is wired to it; a worker has no equivalent skill
+        input at all, so it needs a floor. The skill binding, when present,
+        still wins — this default only fills the gap when nobody supplied one.
+        """
+        from langchain.agents import create_agent
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        lc_tools = []
+        for tool_node_id in plan.tool_bindings.get(node_id, []):
+            tool = self.tools.get(self._types.get(tool_node_id, ""))
+            if tool is not None:
+                lc_tools.append(tool.as_langchain_tool())
+            elif self._types.get(tool_node_id, "") not in self.unresolved_tools:
+                self.unresolved_tools.append(self._types.get(tool_node_id, ""))
+
+        skills = plan.skill_bindings.get(node_id, [])
+        # Directive, not a nudge. A weaker version of this ("use tools if
+        # available") was tried live first and the model answered a database
+        # question from general industry knowledge anyway — a vague
+        # instruction competes with a large model's confident training-data
+        # recall and loses. Naming the tools and the exact sequence, the way
+        # the proven-reliable Chinook skill text does, is what actually
+        # changes the behaviour; a preference stated in the abstract does not.
+        default_prompt = (
+            "You have tools that give you the REAL, current answer — you do "
+            "not have this information memorised, and any figure you recall "
+            "without calling a tool is almost certainly wrong for this "
+            "specific dataset. Before answering:\n"
+            "1. Call the list-tables tool to see what exists.\n"
+            "2. Call the schema tool on the tables you need.\n"
+            "3. Call the SQL tool with a query that answers the question.\n"
+            "Only after that sequence, answer using the numbers the tools "
+            "returned. Do not answer from general knowledge."
+            if lc_tools
+            else ""
+        )
+
+        agent = None
+        if self.model is not None:
+            agent = create_agent(model=self.model, tools=lc_tools, name=f"worker_{node_id}")
+
+        def run(state: RunState) -> dict[str, Any]:
+            task_id = state.get("task_id", "")
+            instruction = state.get("task_instruction", "")
+
+            if agent is None:
+                return {"worker_results": {task_id: ""}}
+
+            skill = _upstream_text(state, skills) or default_prompt
+            messages: list[Any] = []
+            if skill:
+                messages.append(SystemMessage(content=skill))
+            messages.append(HumanMessage(content=instruction))
+
+            result = agent.invoke({"messages": messages})
+            out = result.get("messages") or []
+            text = out[-1].content if out else ""
+            return {"worker_results": {task_id: text if isinstance(text, str) else str(text)}}
+
+        return run
+
+    def _format_report_function(
+        self, node_id: str, node: dict[str, Any], plan: CompiledPlan
+    ) -> Any:
+        """A deterministic **function** node — distinct from a *tool*.
+
+        The distinction the cookbook (ticket 27) drew and this makes concrete: a
+        *tool* is model-callable, chosen by an agent mid-loop; a *function* is a
+        graph step the compiler always runs, with no model in the decision. This
+        one has nothing to decide — it joins whatever worker results exist into
+        one report, in task-id order, with no LLM call and therefore no
+        variance. Determinism here is a feature: the same worker results always
+        produce the same report text, which is what makes the graph-engineering
+        proof below assertable byte-for-byte.
+        """
+        title = (node.get("data") or {}).get("title") or "Report"
+
+        def run(state: RunState) -> dict[str, Any]:
+            results = state.get("worker_results") or {}
+            # Scoped to ids the *current* plan(s) declared, not every id ever
+            # written across every past attempt. `subtasks[orchestrator_id]` is
+            # overwritten (not accumulated) on each replan, so this discards
+            # stale results from a rejected attempt rather than silently
+            # blending them into a report about the latest one.
+            current_ids = {
+                task["id"]
+                for plan_list in (state.get("subtasks") or {}).values()
+                for task in plan_list
+            }
+            scoped = {k: v for k, v in results.items() if k in current_ids}
+            body = "\n\n".join(
+                f"### {task_id}\n{text}" for task_id, text in sorted(scoped.items())
+            )
+            report = f"# {title}\n\n{body}" if body else f"# {title}\n\n_No results._"
+            return {"outputs": {node_id: report}, "answer": report}
 
         return run
 
