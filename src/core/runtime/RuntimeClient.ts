@@ -116,7 +116,15 @@ async function describeFailure(response: Response): Promise<string> {
     return detail || 'The runtime rejected the workflow or question as invalid.';
   }
   if (response.status === 502) {
-    return detail || 'The workflow failed while running.';
+    if (detail === '') return 'The workflow failed while running.';
+    // A provider's own 5xx is transient far more often than it is a bug in the
+    // workflow — observed once from Ollama cloud on a request that succeeded on
+    // the next attempt. Saying "try again" is more useful than surfacing a raw
+    // `ResponseError: Internal Server Error` and implying the workflow is broken.
+    if (/\b5\d\d\b|internal server error/i.test(detail)) {
+      return `The model provider returned an error — this is usually transient, so try again. (${detail})`;
+    }
+    return detail;
   }
   return detail || `The runtime returned ${response.status}`;
 }

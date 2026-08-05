@@ -139,6 +139,30 @@ describe('RuntimeClient.run', () => {
       expect(result.error).toContain('bad node');
     });
 
+    it('marks a provider 5xx as transient rather than blaming the workflow', async () => {
+      const detail = 'ResponseError: Internal Server Error (status code: 500)';
+      const client = new RuntimeClient('http://rt', stubFetch(jsonResponse({ detail }, 502)).fetch);
+      const result = await client.run({ workflow: {}, question: 'q' });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      // Seen for real from Ollama cloud on a request that succeeded next try.
+      // Surfacing the raw string implied the workflow was broken when it was not.
+      expect(result.error).toMatch(/transient/i);
+      expect(result.error).toContain(detail);
+    });
+
+    it('still reports a genuine workflow failure plainly', async () => {
+      const client = new RuntimeClient(
+        'http://rt',
+        stubFetch(jsonResponse({ detail: 'KeyError: prompt' }, 502)).fetch,
+      );
+      const result = await client.run({ workflow: {}, question: 'q' });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe('KeyError: prompt');
+    });
+
     it('falls back to the status when the body carries no detail', async () => {
       const client = new RuntimeClient('http://rt', stubFetch(new Response('', { status: 500 })).fetch);
       const result = await client.run({ workflow: {}, question: 'q' });

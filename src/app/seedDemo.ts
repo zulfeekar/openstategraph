@@ -5,16 +5,24 @@ import type { Workbench } from './Workbench';
 import { NODE_TYPE } from '@nodes/index';
 
 /**
- * The workflow the editor opens with.
+ * The workflow the editor opens with: natural language to SQL over Chinook.
  *
- * Reproduces the reference layout: two inputs feeding an agent that sits
- * inside a titled setup frame, a Reddit tool wired to the agent's tool bus,
- * and a formatted output node rendering the result.
+ * Chosen over the previous Reddit example because it **actually works end to
+ * end**. The Reddit tool node has no Python implementation, so the agent silently
+ * lost its tools and answered a database question from parametric knowledge —
+ * confidently, about global music revenue, having queried nothing. A demo whose
+ * first answer is a hallucination teaches the wrong thing about the product.
  *
- * Built by writing straight to the model rather than through commands, so
- * opening the app leaves an empty undo stack — the first Cmd-Z a user presses
- * should undo *their* first edit, not dismantle the example. It runs
- * end-to-end against the mock provider with no credentials.
+ * This one exercises the parts worth showing:
+ *
+ * - a **tool bus** with three tools converging on one port,
+ * - a **grader** carrying the developer's own criterion, and
+ * - the **revise loop** — `grader.revise` back to `agent.feedback`, the only
+ *   cycle the port types permit.
+ *
+ * Built by writing straight to the model rather than through commands, so opening
+ * the app leaves an empty undo stack: the first Cmd-Z should undo the *user's*
+ * first edit, not dismantle the example.
  */
 export function seedDemoWorkflow(workbench: Workbench): void {
   const { model, registry } = workbench;
@@ -27,56 +35,72 @@ export function seedDemoWorkflow(workbench: Workbench): void {
   };
 
   model.transact(() => {
-    const textInput = create(NODE_TYPE.textInput, {
-      position: { x: 40, y: 200 },
+    const question = create(NODE_TYPE.textInput, {
+      position: { x: 40, y: 180 },
       data: {
-        prompt: 'Give me the most trending topics in the React community on Reddit.',
+        prompt: 'Which music genre earned the most revenue? Give the top 3.',
       },
     });
 
     const skill = create(NODE_TYPE.markdownFile, {
-      position: { x: 40, y: 480 },
+      position: { x: 40, y: 460 },
       data: {
-        filename: 'agent-skill.md',
-        instruction:
-          'You are a senior React analyst. Summarise the findings as a clean Markdown table.',
+        filename: 'sql-analyst.md',
+        instruction: [
+          'You answer questions by querying the Chinook database.',
+          'List the tables, read the schema of the ones you need — the foreign keys',
+          'tell you how to join — then run a single SELECT. State the SQL you used.',
+        ].join(' '),
       },
     });
 
-    // The frame is created before the agent so it renders behind it, and is
-    // sized to leave room for its notes above the embedded card: 340 wide
-    // gives the 252px card an even 44px gutter each side.
-    const group = create(NODE_TYPE.group, {
+    // Created before the agent so it renders behind it. 340 wide leaves the
+    // 252px card an even gutter, and the height clears the notes above it.
+    const frame = create(NODE_TYPE.group, {
       position: { x: 400, y: 20 },
       size: { width: 340, height: 470 },
       data: {
-        title: '🤖 AI agent setup',
+        title: '🗄️ Ask the database',
         notes: [
-          '1. **Choose a model**',
-          '2. **Set token budget**',
-          '3. **Connect prompt & skill**',
-          '4. **Add agent tools**',
-          '5. **Run & view result**',
+          '1. Open **Ask** in the toolbar',
+          '2. Type a question about the music store',
+          '3. The agent reads the schema, writes SQL, runs it',
+          '4. The **grader** checks the answer cites real figures',
+          '5. If not, it goes back for a revision',
           '',
-          '💡 Tip: runs with mock data by default — add your Anthropic or OpenAI key to use a real LLM.',
+          '💡 Needs the Python backend running — the browser never executes a workflow.',
         ].join('\n'),
       },
     });
 
-    // Sits below the frame's notes, which need roughly 240px for the title
-    // plus the six-step list.
-    const agent = create(NODE_TYPE.agent, {
-      position: { x: 444, y: 260 },
-    });
-    model.setNodeParent(agent.id, group.id);
+    const agent = create(NODE_TYPE.agent, { position: { x: 444, y: 260 } });
+    model.setNodeParent(agent.id, frame.id);
 
-    const tool = create(NODE_TYPE.redditSearch, {
-      position: { x: 444, y: 570 },
-      data: { subreddit: 'reactjs', topicLimit: 10 },
+    // Three tools on one bus, which is the point: `tools` is uncapped, so the
+    // agent gains a capability per link rather than per node type.
+    const listTables = create(NODE_TYPE.chinookGetAllTables, {
+      position: { x: 200, y: 640 },
+    });
+    const getSchema = create(NODE_TYPE.chinookGetSchema, {
+      position: { x: 480, y: 640 },
+    });
+    const runSql = create(NODE_TYPE.chinookExecuteSql, {
+      position: { x: 760, y: 640 },
+    });
+
+    const grader = create(NODE_TYPE.grader, {
+      position: { x: 830, y: 200 },
+      data: {
+        // The developer's criterion, *added* to the built-in ones rather than
+        // replacing them — the default, and the safe direction.
+        criteria: '- Must name the genres and quote their revenue figures.',
+        criteriaMode: 'extend',
+        maxAttempts: 3,
+      },
     });
 
     const output = create(NODE_TYPE.formattedOutput, {
-      position: { x: 810, y: 250 },
+      position: { x: 1180, y: 200 },
     });
 
     // Wired directly rather than through `controller.edges.connect`: the seed is
@@ -95,11 +119,17 @@ export function seedDemoWorkflow(workbench: Workbench): void {
       );
     };
 
-    connect(textInput, 'text', agent, 'prompt');
+    connect(question, 'text', agent, 'prompt');
     connect(skill, 'skill', agent, 'skill');
-    connect(tool, 'tool', agent, 'tools');
-    connect(agent, 'result', output, 'result');
+    connect(listTables, 'tool', agent, 'tools');
+    connect(getSchema, 'tool', agent, 'tools');
+    connect(runSql, 'tool', agent, 'tools');
+    connect(agent, 'result', grader, 'candidate');
+    connect(grader, 'pass', output, 'result');
+    // The loop. Legal only because `revise` is a `feedback` port and
+    // `agent.feedback` is the one input that accepts it.
+    connect(grader, 'revise', agent, 'feedback');
 
-    model.setName('React trend report');
+    model.setName('Chinook · natural language to SQL');
   });
 }
