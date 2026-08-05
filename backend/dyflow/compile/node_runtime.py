@@ -14,6 +14,7 @@ the other works.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Annotated, Any, Callable, TypedDict
 
 from langgraph.graph.message import add_messages
@@ -103,6 +104,46 @@ def chinook_tool_registry() -> ToolRegistry:
         "tool.chinook-get-all-tables": ListTablesTool(),
         "tool.chinook-execute-sql": ExecuteSqlTool(),
     }
+
+
+class _DeepAgentAsChatModel:
+    """Makes a compiled deep agent look like the chat model `BaseGrader.grade()`
+    expects — a bare `.invoke(messages) -> object with .content`.
+
+    `BaseGrader` (`dyflow/abc/grader.py`) is deliberately model-agnostic: it
+    knows nothing about `create_deep_agent`, tiers, or LangChain harness
+    tiers, and should not have to. So the adaptation lives here, at the
+    compiler/runtime boundary, rather than teaching the grader ladder about a
+    concrete agent construction — the same boundary rule CLAUDE.md states for
+    cross-family concerns (a collaborator, not a shared ancestor).
+
+    Built fresh **per grading call**, not once at compile time, because the
+    system prompt — `messages[0]` — varies with the question being judged
+    (`BaseGrader.resolve_system_prompt` appends it as context). Mirrors the
+    worker's own fix for the identical shape of problem: `create_agent`'s
+    `system_prompt=` construction parameter is the proven-working way to
+    deliver a directive prompt, not a hand-assembled message list.
+    """
+
+    def __init__(self, model: Any, name: str) -> None:
+        self._model = model
+        self._name = name
+
+    def invoke(self, messages: list[Any]) -> Any:
+        from deepagents import create_deep_agent
+
+        system_prompt = messages[0].content if messages else ""
+        candidate_message = messages[-1]
+        agent = create_deep_agent(
+            model=self._model,
+            tools=[],
+            system_prompt=system_prompt,
+            name=self._name,
+        )
+        result = agent.invoke({"messages": [candidate_message]})
+        out = result.get("messages") or []
+        text = out[-1].content if out else ""
+        return SimpleNamespace(content=text if isinstance(text, str) else str(text))
 
 
 def _text(data: dict[str, Any], key: str, default: str = "") -> str:
@@ -273,12 +314,23 @@ class NodeRuntime:
         return run
 
     def _grader(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Judges, and chooses `pass` or `revise`."""
+        """Judges, and chooses `pass` or `revise`.
+
+        The card's `tier` field (react/deep/custom) previously did nothing on
+        this side — `Grader.grade()` always made one bare chat-model call
+        regardless of what a developer picked. `tier: "deep"` now actually
+        builds a `create_deep_agent` for the judgement, via
+        `_DeepAgentAsChatModel` rather than by teaching `BaseGrader` about
+        deep agents.
+        """
         data = node.get("data") or {}
+        grading_model = self.model
+        if _text(data, "tier") == "deep" and self.model is not None:
+            grading_model = _DeepAgentAsChatModel(self.model, name=f"grader_{node_id}")
         grader = Grader(
             criteria=_text(data, "criteria"),
             replace_defaults=_text(data, "criteriaMode") == "replace",
-            model=self.model,
+            model=grading_model,
         )
         cap = int(data.get("maxAttempts") or self.max_attempts)
         upstream = [src for src, dst in plan.edges if dst == node_id]

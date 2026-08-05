@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from dyflow.compile.node_runtime import NodeRuntime, RunState
@@ -154,6 +155,81 @@ class TestGraderLoop:
         # GraphRecursionError.
         final = run(GRADED, "impossible", ScriptedModel(*(["bad", "FAIL\nno"] * 8)))
         assert final["attempts"] <= 3
+        assert final["decisions"]["node:route.grader-1"] == "pass"
+
+
+#: Same shape as `GRADED`, but the grader's tier is `deep`.
+GRADED_DEEP = {
+    **GRADED,
+    "nodes": [
+        node("node:input.text-1", "input.text"),
+        node("node:agent.llm-1", "agent.llm"),
+        node("node:route.grader-1", "route.grader", criteria="", maxAttempts=3, tier="deep"),
+        node("node:output.formatted-1", "output.formatted"),
+    ],
+}
+
+
+class TestDeepGrader:
+    """`tier: "deep"` previously did nothing on the backend — `Grader.grade()`
+    always made one bare chat-model call no matter what a developer picked
+    on the card. This is the regression test for the fix: `deep` actually
+    routes the judgement through `create_deep_agent`.
+
+    `deepagents.create_deep_agent` is monkeypatched rather than exercised for
+    real, because its own internal call count/shape is not this project's
+    concern to pin — only that the grader's wiring reaches it, with the
+    resolved system prompt, and reads its answer back correctly.
+    """
+
+    def test_deep_tier_routes_the_judgement_through_create_deep_agent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import deepagents
+        from langchain_core.messages import AIMessage
+
+        calls: list[dict[str, Any]] = []
+
+        class StubDeepAgent:
+            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+                calls.append(payload)
+                return {"messages": [AIMessage(content="FAIL\nName the genre.")]}
+
+        def fake_create_deep_agent(**kwargs: Any) -> StubDeepAgent:
+            calls.append({"construction": kwargs})
+            return StubDeepAgent()
+
+        monkeypatch.setattr(deepagents, "create_deep_agent", fake_create_deep_agent)
+
+        # The stub always fails, so the agent (a real `create_agent`, unaffected
+        # by the grader's tier) runs once per attempt up to the cap.
+        final = run(
+            GRADED_DEEP, "Which genre earns most?", ScriptedModel(*(["Some artist"] * 3))
+        )
+
+        assert final["attempts"] == 3
+        construction_calls = [c for c in calls if "construction" in c]
+        assert construction_calls, "create_deep_agent was never called"
+        assert construction_calls[0]["construction"]["tools"] == []
+        assert "grader" in construction_calls[0]["construction"]["system_prompt"].lower()
+
+    def test_deep_tier_reads_a_pass_back_correctly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import deepagents
+        from langchain_core.messages import AIMessage
+
+        class StubDeepAgent:
+            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+                return {"messages": [AIMessage(content="PASS")]}
+
+        monkeypatch.setattr(
+            deepagents, "create_deep_agent", lambda **kwargs: StubDeepAgent()
+        )
+
+        final = run(GRADED_DEEP, "Which genre earns most?", ScriptedModel("Rock, at 826.65"))
+
+        assert final["attempts"] == 1
         assert final["decisions"]["node:route.grader-1"] == "pass"
 
 
