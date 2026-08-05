@@ -80,6 +80,44 @@ opaque, and the point is that the editor can see the fan-out. And the sidebar ne
 without which the inner agents' tokens never surface — the most likely way this
 feature ships looking broken.
 
+## Roles vs tiers — ticket 08 partly superseded (2026-08-05)
+
+The user's requirement: a plain Agent plus a system prompt, structured output and
+three out-edges *is* a router (nothing special-cased in the engine) — **and** ship
+prebuilt **Router / Supervisor / Orchestrator** nodes so the common case is
+drag-and-drop. Plus: pick the tier (simple / deep / custom) per node. Charted as
+[ticket 28](issues/28-agent-presets-and-roles.md).
+
+Both paths coexist because **a preset is a registration, never engine code** — the
+Open/Closed rule already used everywhere here.
+
+**But it reverses part of ticket 08, arithmetically.** Ticket 08 made *tier* the node
+type (three registered types). If *role* is also a node type the palette becomes
+role x tier — twelve entries for two independent axes, multiplying with every future
+role. So: **role is the node type** (it decides ports and compile target, and cannot
+change without rewiring, so it is identity); **tier is a config field** (it picks the
+factory, changes no ports, no edges). Ticket 08's real concern survives — validation
+is per role, and the 60+ field surface uses ticket 22's progressive disclosure keyed
+on tier. Recorded as an explicit supersession on ticket 08, not a silent edit.
+
+**No new mechanism is needed for a router's N outputs:** `ports: (data) => IPortDescriptor[]`
+is already a function of node data, so a router configured with four branches exposes
+four output ports — exactly the "vary the number of ports, never toggle a port's
+cardinality" rule CLAUDE.md already sets, and it yields ticket 03's complete declared
+destination set from ordinary config.
+
+**Node type vs canvas template, settled test:** stays *one node* whose behaviour is
+config -> node type (Router, Supervisor, Grader); needs *several wired nodes* -> template
+(the "Orchestrator pattern" is a topology, and a preset cannot express a topology). This
+refines ticket 08's canvas-template answer rather than replacing it.
+
+**Memory drill-down rules, restated because the UI can easily lie about them:** graph
+state flows to **nodes** via the shared schema + named reducers; thread memory is the
+checkpointer; cross-thread memory is `Store`; and **subagents get nothing** — a task in,
+a result out. A Supervisor's config declares what each worker is *sent*, and that payload
+is the entire context the worker has. Any inspector affordance implying a subagent
+inherits parent history would teach developers something false about their own workflow.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

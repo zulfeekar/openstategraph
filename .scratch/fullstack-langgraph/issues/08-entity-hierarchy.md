@@ -277,7 +277,18 @@ from taste:
   never reach the generated schema. So any depth we add is *invisible* across the
   boundary — it cannot be relied on by a consumer of the generated types.
 
-### 3. Agent tiers: three registered node types — decided
+### 3. Agent tiers: three registered node types — decided, then PARTLY SUPERSEDED
+
+> **Superseded by [ticket 28](28-agent-presets-and-roles.md) (2026-08-05).** The
+> user added a requirement this did not anticipate: prebuilt **Router**,
+> **Supervisor** and **Orchestrator** nodes, draggable with behaviour already
+> wired. If *role* is also a node type, the palette becomes role x tier — twelve
+> entries for two independent axes, growing multiplicatively. So **role becomes
+> the node type and tier becomes a config field**. The concern below is preserved
+> (validation is per role; the 60+ field surface uses ticket 22's progressive
+> disclosure keyed on tier). What was wrong here was assuming tier was the only
+> axis — it is the one that should have been a field. The reasoning below is kept
+> because the trade-off it weighs is still the right trade-off.
 
 `ReactAgentNode`, `DeepAgentNode`, `CustomGraphNode` are separately registered
 leaves, each with its own card, inspector and compile target.
