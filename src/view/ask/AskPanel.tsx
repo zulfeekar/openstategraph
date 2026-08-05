@@ -126,7 +126,7 @@ export function AskPanel() {
     // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
     // arrive — see the constant's own comment for why this exists.
     let highlightChain: Promise<void> = Promise.resolve();
-    const activate = (nodeId: string) => {
+    const activate = (nodeId: string, output: string | null) => {
       highlightChain = highlightChain.then(async () => {
         // One node glows at a time, in the order the stream reports — the
         // previous node's card returns to its resting state exactly as it
@@ -134,7 +134,19 @@ export function AskPanel() {
         if (activeNode && activeNode !== nodeId) {
           controller.model.setNodeRuntime(activeNode, { status: 'success' });
         }
-        controller.model.setNodeRuntime(nodeId, { status: 'running' });
+        // The SSE `update` frame reports a node that has *already* produced
+        // its output — LangGraph's `updates` stream mode fires after a node
+        // completes, not before — so the value is written here, at the same
+        // moment the card starts to glow, rather than waiting for a later
+        // event that never carries it. Without this, the local preview run
+        // populates `node.runtime.output` (`ExecutionEngine` does the same
+        // thing) but a backend-streamed run never did, so cards like
+        // Formatted Output stayed on their empty "Run the workflow to see
+        // the result here" placeholder even after a real answer streamed in.
+        controller.model.setNodeRuntime(nodeId, {
+          status: 'running',
+          ...(output != null ? { output } : {}),
+        });
         // Highlight whichever node just acted — the "currently in charge"
         // the ticket asks for. A dispatched worker's `taskId` still selects
         // the one static Worker node on the canvas; there is nowhere else
@@ -149,7 +161,7 @@ export function AskPanel() {
     const onEvent = (event: RunStreamEvent) => {
       if (event.type === 'update') {
         seen.add(event.node);
-        activate(event.node);
+        activate(event.node, event.output);
         // Data collection is never delayed by the animation pacing above —
         // only the visual glow is paced, not the record of what happened.
         setTurns((all) =>
