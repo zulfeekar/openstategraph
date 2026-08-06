@@ -84,7 +84,14 @@ class RunState(TypedDict, total=False):
     #: node id -> that node's textual output, so a downstream node can read it.
     outputs: Annotated[dict, merge_decisions]
     answer: Annotated[str, keep_latest_nonempty]
-    feedback: str
+    #: Same hazard, same fix as `answer`: this document alone has four
+    #: `_grader` instances (one per intent), each writing `feedback` on
+    #: every step — "" on pass, real text on revise. Found live: two
+    #: graders landed in the same superstep and LangGraph raised
+    #: `InvalidUpdateError: At key 'feedback': Can receive only one value
+    #: per step`, with the raw error then rendered into the chat panel as
+    #: if it were the model's own answer.
+    feedback: Annotated[str, keep_latest_nonempty]
     attempts: Annotated[int, keep_max]
     #: orchestrator node id -> the subtasks it planned. Read by the compiler's
     #: fan-out routing function to build the `Send` list.
