@@ -35,13 +35,44 @@ describe('ExecutionEngine.run — pre-flight rejection is observable', () => {
     expect(events).toEqual(['start', 'finish:false']);
   });
 
-  it('a cyclic graph still emits run:start and run:finish, with a message that says to use Chat', async () => {
+  it('an unescapable cycle emits run:start/run:finish, without suggesting Chat', async () => {
+    // Neither node has any edge leaving {a, b} — this loop cannot finish on
+    // *any* engine, backend included, so "try Chat instead" would be wrong
+    // advice. `acyclicGraphRule` reports this shape as a blocking `error`.
     const workbench = makeWorkbench();
     registerLoopableType(workbench);
     const a = addNode(workbench, LOOPABLE_TYPE);
     const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
     connect(workbench, a, 'out', b, 'in');
     connect(workbench, b, 'out', a, 'in');
+
+    const events: string[] = [];
+    workbench.engine.on('run:start', () => events.push('start'));
+    workbench.engine.on('run:finish', (payload) => events.push(`finish:${payload.ok}`));
+
+    const outcome = await workbench.engine.run();
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toMatch(/loop/i);
+    expect(outcome.error).toMatch(/no way out/i);
+    expect(outcome.error).not.toMatch(/Chat/i);
+    expect(events).toEqual(['start', 'finish:false']);
+  });
+
+  it('an escapable cycle (a revise loop with a way out) still says to use Chat', async () => {
+    // `a` fans out to both `b` (closing the cycle) and `c` (escaping it) —
+    // the same shape as a grader's `pass` exiting a `revise` loop.
+    // `acyclicGraphRule` reports this as a `warning`, not a blocking
+    // `error`, so this path is only reachable via the engine's own
+    // belt-and-suspenders `topologicalOrder()` check.
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    const c = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+    connect(workbench, a, 'out', c, 'in');
 
     const events: string[] = [];
     workbench.engine.on('run:start', () => events.push('start'));

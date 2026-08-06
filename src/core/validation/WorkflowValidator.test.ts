@@ -7,7 +7,7 @@ import {
   registerLoopableType,
   TYPE,
 } from '@core/testing/fixtures';
-import { hasOutputRule } from './WorkflowValidator';
+import { acyclicGraphRule, hasOutputRule } from './WorkflowValidator';
 
 /**
  * Found live, not hypothetically: a real chat run answered a question and
@@ -61,5 +61,51 @@ describe('hasOutputRule', () => {
     const diagnostics = hasOutputRule.check({ model: workbench.model, registry: workbench.registry });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.code).toBe('no-output');
+  });
+});
+
+/**
+ * Found live: the diagnostics panel showed 11 identical "X is part of a
+ * loop" `error`s for the intent-routed demo's real, intentional revise
+ * loops (a grader's `revise` port feeding back into its own agent, with a
+ * `pass` port that escapes the same cycle) — reading exactly as broken as
+ * a real, unescapable infinite loop, even though the backend runs it fine.
+ * CLAUDE.md's own rule: a cycle needs a conditional edge to be valid at
+ * all. `acyclicGraphRule` now tells the two shapes apart.
+ */
+describe('acyclicGraphRule', () => {
+  it('downgrades an escapable loop (one with a way out) to a warning', () => {
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    const c = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+    // `a`'s escape hatch — the same shape as a grader's `pass` port.
+    connect(workbench, a, 'out', c, 'in');
+
+    const diagnostics = acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
+    expect(diagnostics).toHaveLength(2);
+    for (const d of diagnostics) {
+      expect(d.severity).toBe('warning');
+      expect(d.code).toBe('escapable-loop');
+    }
+  });
+
+  it('keeps an unescapable loop (no way out at all) as a blocking error', () => {
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+
+    const diagnostics = acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
+    expect(diagnostics).toHaveLength(2);
+    for (const d of diagnostics) {
+      expect(d.severity).toBe('error');
+      expect(d.code).toBe('cycle');
+    }
   });
 });

@@ -4,6 +4,27 @@ import type { WorkflowModel } from '@core/model/WorkflowModel';
 import { validateFields } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
 
+/** True if a path exists from `start` back to itself, staying within `candidates`. */
+function canReachSelf(model: WorkflowModel, candidates: ReadonlySet<NodeId>, start: NodeId): boolean {
+  const stack: NodeId[] = [start];
+  const visited = new Set<NodeId>();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current == null) continue;
+    for (const edge of model.edgesOf(current)) {
+      if (edge.source.nodeId !== current) continue;
+      const next = edge.target.nodeId;
+      if (!candidates.has(next)) continue;
+      if (next === start) return true;
+      if (!visited.has(next)) {
+        visited.add(next);
+        stack.push(next);
+      }
+    }
+  }
+  return false;
+}
+
 export type DiagnosticSeverity = 'error' | 'warning' | 'info';
 
 export interface Diagnostic {
@@ -132,18 +153,64 @@ export const fieldValidationRule: IWorkflowRule = {
  * `ConnectionValidator` already refuses to draw one, but a document can
  * arrive cyclic from an import or a hand-edited file, so the runnable check
  * cannot assume acyclicity.
+ *
+ * Not every cycle is the same *kind* of problem. CLAUDE.md's own rule: "a
+ * cycle must contain at least one conditional edge — an all-static cycle
+ * can never terminate." A grader's `revise` port looping back to its own
+ * agent is exactly the valid case — the same node also has a `pass` port
+ * that escapes the cycle, so the loop terminates the moment the grader
+ * passes. That shape is legitimate for the backend LangGraph compiler,
+ * just unrunnable by this engine's local, sequential DAG preview.
+ *
+ * A cycle with **no** escaping edge at all — every node in it only ever
+ * feeds back into the cycle, never out — is the other case: an accidental,
+ * genuinely infinite loop, which is a real bug regardless of which engine
+ * runs it. Flagging both identically as `error` made a legitimate,
+ * intentional revise loop (in a graph that runs correctly through the
+ * backend) look exactly as broken as one that can never produce an answer
+ * on any engine. Only the second kind should block a static "is this
+ * runnable" check; the first is a `warning` — noteworthy, not broken.
  */
 export const acyclicGraphRule: IWorkflowRule = {
   id: 'acyclic-graph',
   check({ model }) {
-    const { cycle } = model.topologicalOrder();
-    if (!cycle || cycle.length === 0) return [];
-    return cycle.map((nodeId) => ({
-      code: 'cycle',
-      severity: 'error' as const,
-      nodeId,
-      message: `${model.node(nodeId)?.title ?? nodeId} is part of a loop`,
-    }));
+    const { cycle: blocked } = model.topologicalOrder();
+    if (!blocked || blocked.length === 0) return [];
+
+    // `topologicalOrder()`'s `cycle` is Kahn's leftover set: every node
+    // whose in-degree never reached zero. That over-includes anything
+    // merely *downstream* of a cycle (blocked because its dependency never
+    // finished), not only the cycle's own members — found by this rule's
+    // own escape check misfiring: a node three hops past the actual loop,
+    // with no edge back into anything, still landed in that set and made
+    // the escape look absent. A node is truly *in* the cycle only if a
+    // path exists from it back to itself using edges between other members
+    // of the leftover set.
+    const candidates = new Set(blocked);
+    const cycle = blocked.filter((start) => canReachSelf(model, candidates, start));
+    const inCycle = new Set(cycle);
+    const hasEscape = cycle.some((nodeId) =>
+      model
+        .edgesOf(nodeId)
+        .some((edge) => edge.source.nodeId === nodeId && !inCycle.has(edge.target.nodeId)),
+    );
+
+    return cycle.map((nodeId) => {
+      const title = model.node(nodeId)?.title ?? nodeId;
+      return hasEscape
+        ? {
+            code: 'escapable-loop',
+            severity: 'warning' as const,
+            nodeId,
+            message: `${title} can loop back before continuing — valid for the backend, but the canvas preview can't run it`,
+          }
+        : {
+            code: 'cycle',
+            severity: 'error' as const,
+            nodeId,
+            message: `${title} is part of a loop with no way out — this can never finish`,
+          };
+    });
   },
 };
 

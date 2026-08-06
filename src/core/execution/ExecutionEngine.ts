@@ -72,23 +72,26 @@ export class ExecutionEngine {
 
     const blocking = this.validator.validate().filter((d) => d.severity === 'error');
     if (blocking.length > 0) {
-      // `acyclicGraphRule` reports a loop as a per-node "X is part of a
-      // loop" diagnostic — accurate, but it reads like the graph is broken
-      // rather than like a legitimate shape this *engine* just can't preview.
-      // This engine is a sequential DAG walk; a revise loop is valid for the
-      // backend LangGraph compiler (CLAUDE.md: "a cycle must contain a
-      // conditional edge") and only unrunnable *here*. Say so plainly rather
-      // than leaving "Run" looking broken with no clue why.
+      // `acyclicGraphRule`'s `error`-severity `cycle` code means the escape
+      // check found none — every node in the loop only ever feeds back into
+      // it. That is a real bug on *any* engine, backend included, so "try
+      // Chat instead" would be actively wrong advice here; an escapable
+      // revise loop (a `pass` that exits it) is a `warning`, not an `error`,
+      // and never reaches this branch — see the `cycle` check below for that
+      // case instead.
       const first = blocking.some((d) => d.code === 'cycle')
-        ? 'This graph has a loop (e.g. a grader revise step) that the canvas preview cannot run — try Chat instead.'
+        ? 'This graph has a loop with no way out — it can never finish, on this engine or the backend.'
         : blocking[0]?.message ?? 'Workflow is not runnable';
       return this.rejectBeforeStart(first);
     }
 
     const { order, cycle } = this.workflow.topologicalOrder();
     if (cycle && cycle.length > 0) {
-      // Belt-and-suspenders: reachable only if a future rule change ever
-      // stops flagging cycles as blocking errors above.
+      // The common path for an *escapable* loop (a revise loop with a `pass`
+      // that exits it) — `acyclicGraphRule` reports that shape as a
+      // `warning`, not a blocking `error`, so it never reaches the check
+      // above. This engine still cannot preview a real cycle regardless of
+      // severity, so it is caught here instead, with the same message.
       return this.rejectBeforeStart(
         'This graph has a loop (e.g. a grader revise step) that the canvas preview cannot run — try Chat instead.',
       );
