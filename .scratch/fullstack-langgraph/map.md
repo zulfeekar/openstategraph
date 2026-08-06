@@ -754,6 +754,51 @@ structural change to how tools are resolved, not a fix scoped to this pass.
 
 215 pytest + 257 Vitest passing, `tsc` clean.
 
+## The real cause of "13 diagnostics" — a slug bug, not a design tradeoff (2026-08-06)
+
+User asked directly why the intent-routed demo shows 13 diagnostics. My
+first answer (in this same session) was wrong: I explained the two "AI
+Agent needs a 'prompt' input" errors as an intentional validator/backend
+semantics gap (the frontend not knowing an agent fed only via a router's
+conditional edge is fine on the backend). That explanation was invented,
+not verified — checking the actual edges live showed `agent-general` and
+`agent-offtopic` had **zero** edges into their `prompt` port at all, not
+"a conditional edge the validator doesn't understand."
+
+Tracing further: the file on disk (`workflows/intent-routed-demo/workflow.json`)
+has all 4 router branch edges, confirmed by reading it directly and by
+querying the backend API. But every time the editor **imported** that same
+document, two of the four edges vanished. Root cause, in
+`RouterNode.ts`'s port-id `slug()`: it collapsed every non-alphanumeric
+character, including `_`, into `-`, so branch `off_topic` computed port id
+`branch:off-topic` — but the saved document's edges pointed at
+`branch:off_topic` (underscore), because the backend compiler recovers the
+literal branch label by stripping `branch:` off the port id
+(`workflow_compiler.py`: `portId.removeprefix("branch:")`) and matches it
+against the router's own classification output verbatim. `fromJSON` then
+dropped both underscore-named branches' edges as pointing to "a port that
+no longer exists" — an honest warning, for the wrong reason: the port
+never moved, the slug function just stopped agreeing with itself after
+some prior, unrecorded change.
+
+Not cosmetic: re-saving the document from the editor in that broken state
+would have made the loss **permanent** in the backend-stored file. Fixed
+by excluding `_` from the slug's collapse pattern. Regression tests at
+both the port-id unit level and the full serializer round-trip level.
+Verified live: the real saved document now imports with 22 edges (was 20)
+and 12 diagnostics (was 13) — the two false "needs a prompt input" errors
+are gone, and both previously-starved branches confirmed working end to
+end through the real backend.
+
+The separate 11 "X is part of a loop" diagnostics are genuinely correct —
+those are the intentional grader revise loops, valid for the backend
+LangGraph compiler and unrunnable by the local DAG-only preview engine
+(already surfaced as a clear toast by the earlier Run-button fix). That
+part of the original explanation was right; only the prompt-input part
+was a bug in disguise.
+
+259 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
