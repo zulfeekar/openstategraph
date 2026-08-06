@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy, Send
+from langgraph.types import RetryPolicy, Send, TimeoutPolicy
 
 #: Port types that carry **control flow**. Everything else is a binding.
 CONTROL_PORT_TYPES = frozenset({"text", "result"})
@@ -66,6 +66,50 @@ def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str,
     """
     message = f"{type(error.error).__name__}: {error.error}"
     return {"outputs": {error.node: f"[{error.node} failed after retries: {message}]"}}
+
+
+def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
+    """`add_node` kwargs for one node's own retry/timeout override, if set.
+
+    `set_node_defaults` (in `build`, below) already gives every node the
+    same graph-wide retry policy — this is the *per-node* override the
+    canvas's `maxRetries`/`timeoutSeconds` fields expose (declared once in
+    `ModelRegistry.defineNode` on the TS side, inherited by every executable
+    node type). Per LangGraph's own docs: "Per-node values still take
+    precedence" over `set_node_defaults`, so passing these as `add_node`
+    kwargs is the correct override mechanism, not a parallel one.
+
+    Both fields are blank strings by default (`FieldValue` has no `None`
+    default for a `text` field of this shape) — blank means "no override,
+    use the graph default", not "zero" or "unbounded". A non-numeric or
+    non-positive value is treated the same as blank: the frontend's own
+    `validate` already rejects those before a document can be saved with
+    one, so reaching this function with garbage means the value predates
+    validation being added, not a case to crash on.
+    """
+    overrides: dict[str, Any] = {}
+
+    max_retries = str(data.get("maxRetries") or "").strip()
+    if max_retries:
+        try:
+            n = int(max_retries)
+            if n > 0:
+                overrides["retry_policy"] = RetryPolicy(
+                    max_attempts=n, initial_interval=1.0, backoff_factor=2.0
+                )
+        except ValueError:
+            pass
+
+    timeout_seconds = str(data.get("timeoutSeconds") or "").strip()
+    if timeout_seconds:
+        try:
+            seconds = float(timeout_seconds)
+            if seconds > 0:
+                overrides["timeout"] = TimeoutPolicy(run_timeout=seconds)
+        except ValueError:
+            pass
+
+    return overrides
 
 
 def safe_name(node_id: str) -> str:
@@ -366,7 +410,10 @@ class WorkflowCompiler:
         )
 
         for node_id in plan.nodes:
-            builder.add_node(safe_name(node_id), node_factory(node_id, nodes[node_id], plan))
+            overrides = _node_overrides(nodes[node_id].get("data") or {})
+            builder.add_node(
+                safe_name(node_id), node_factory(node_id, nodes[node_id], plan), **overrides
+            )
 
         for src, dst in plan.edges:
             builder.add_edge(safe_name(src), safe_name(dst))

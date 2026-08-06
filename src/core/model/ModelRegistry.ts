@@ -101,6 +101,62 @@ export interface NodeSpec {
 type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => AbstractNodeModel;
 
 /**
+ * `add_node`'s own per-node overrides (LangGraph: `retry_policy`, `timeout`
+ * — see `StateGraph.set_node_defaults` for the graph-wide default every
+ * node already gets). CLAUDE.md is explicit that these are graph-assembly
+ * parameters, not a node-type concern — declaring them once here, appended
+ * to every *executable* node's fields, is that rule applied: a new node
+ * type inherits the override capability for free, exactly as
+ * `resolveMiddleware()`/`resolvePrompt()` are inherited capabilities rather
+ * than something each concrete type re-declares.
+ *
+ * Empty string means "use the graph's default" — not `0`, which CLAUDE.md's
+ * own rule against non-finite/sentinel numbers in a serialisable field
+ * rules out as a stand-in for "unbounded" or "unset". `int | None` is the
+ * correct shape; a `text` field with an empty-string default is this
+ * schema's way of expressing that same optionality, since `FieldValue` has
+ * no dedicated "unset" for a `SliderFieldSchema`'s required numeric
+ * default.
+ */
+const FIELD_MAX_RETRIES = 'maxRetries';
+const FIELD_TIMEOUT_SECONDS = 'timeoutSeconds';
+
+const positiveIntegerOrEmpty = (value: string): string | null => {
+  if (value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? null : 'Must be a positive whole number, or blank';
+};
+
+const positiveNumberOrEmpty = (value: string): string | null => {
+  if (value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? null : 'Must be a positive number of seconds, or blank';
+};
+
+const EXECUTION_OVERRIDE_FIELDS: readonly FieldSchema[] = [
+  {
+    kind: 'text',
+    key: FIELD_MAX_RETRIES,
+    label: 'Max retries (override)',
+    hint: 'Blank uses the workflow default (3 attempts).',
+    placeholder: '3',
+    defaultValue: '',
+    onCard: false,
+    validate: positiveIntegerOrEmpty,
+  },
+  {
+    kind: 'text',
+    key: FIELD_TIMEOUT_SECONDS,
+    label: 'Timeout, seconds (override)',
+    hint: 'Blank means no per-node timeout.',
+    placeholder: 'e.g. 30',
+    defaultValue: '',
+    onCard: false,
+    validate: positiveNumberOrEmpty,
+  },
+];
+
+/**
  * Binds a spec to the concrete model class that implements it.
  *
  * The definition closes over itself so `create` can hand the instance its
@@ -109,15 +165,20 @@ type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => Abst
  */
 export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinition {
   const ports = spec.ports ?? [];
+  const kind = spec.kind ?? 'standard';
+  // Only nodes the compiler actually schedules (`add_node`) can have a
+  // per-node retry/timeout override — a container or annotation never runs.
+  const fields =
+    kind === 'standard' ? [...(spec.fields ?? []), ...EXECUTION_OVERRIDE_FIELDS] : (spec.fields ?? []);
   const definition: INodeDefinition = {
     id: spec.id,
-    kind: spec.kind ?? 'standard',
+    kind,
     category: spec.category,
     label: spec.label,
     description: spec.description,
     iconId: spec.iconId,
     accent: spec.accent,
-    fields: spec.fields ?? [],
+    fields,
     ports: typeof ports === 'function' ? ports : () => ports,
     defaultSize: spec.defaultSize,
     ...(spec.maxInstances != null ? { maxInstances: spec.maxInstances } : {}),
