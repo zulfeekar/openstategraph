@@ -18,6 +18,7 @@ import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
+import { useWorkflowFileWatch } from '@app/workflowFileWatch';
 import { FileText, MessageSquareText } from 'lucide-react';
 import { IconButton, Icon, Tooltip } from '@design/primitives';
 import './AppShell.css';
@@ -42,6 +43,12 @@ export function AppShell() {
   // Restores this tab's workflow, then keeps it saved. One hook, because
   // identity has to be resolved before either behaviour runs.
   useWorkflowSession();
+
+  // Ticket 16's other half: notices when the saved file changes on disk
+  // underneath this open editor (another tab, a teammate's pull, a
+  // hand-edit) — independent of whether "Manage Workflows" happens to be
+  // open, since an external change can land at any time.
+  useWorkflowFileWatch(notify);
 
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);

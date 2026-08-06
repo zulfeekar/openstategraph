@@ -12,6 +12,11 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
+import {
+  CURRENT_SLUG_KEY,
+  forgetKnownSavedAt,
+  recordKnownSavedAt,
+} from '@app/workflowFileWatch';
 import { slugify, WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import './WorkflowManager.css';
@@ -21,8 +26,6 @@ interface WorkflowManagerProps {
   onClose: () => void;
   onNotify: (message: string) => void;
 }
-
-const CURRENT_SLUG_KEY = 'dyflow-current-workflow-slug';
 
 /**
  * Workflow manager panel — create, save, load, and delete workflows.
@@ -55,10 +58,14 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const refreshList = useCallback(async () => {
+  const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
-    if (outcome.ok) setWorkflows(outcome.value);
-    else onNotify(`Could not list workflows: ${outcome.error}`);
+    if (outcome.ok) {
+      setWorkflows(outcome.value);
+      return outcome.value;
+    }
+    onNotify(`Could not list workflows: ${outcome.error}`);
+    return [];
   }, [client, onNotify]);
 
   // Fetching eagerly on every app load would mean every session error-toasts
@@ -88,7 +95,10 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     if (outcome.ok) {
       sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
       onNotify(`Saved: ${workbench.model.name}`);
-      void refreshList();
+      const list = await refreshList();
+      // This tab's own write — record it as known-good so the file watch
+      // never mistakes this save for an external change.
+      recordKnownSavedAt(slug, list.find((wf) => wf.slug === slug)?.savedAt);
     } else {
       onNotify(`Could not save: ${outcome.error}`);
     }
@@ -113,12 +123,17 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         // Continuing to edit and save now updates *this* workflow, not a new one.
         sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
         onNotify(`Loaded: ${workbench.model.name}`);
+        // Establishes the file watch's baseline for this slug — otherwise
+        // its first poll after a load would have nothing to compare
+        // against and could mistake the file as already-changed.
+        const list = await refreshList();
+        recordKnownSavedAt(slug, list.find((wf) => wf.slug === slug)?.savedAt);
         onClose();
       } catch (error) {
         onNotify(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
-    [client, controller, workbench, onNotify, onClose],
+    [client, controller, workbench, onNotify, onClose, refreshList],
   );
 
   const handleDelete = useCallback(
@@ -129,6 +144,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         if (sessionStorage.getItem(CURRENT_SLUG_KEY) === slug) {
           sessionStorage.removeItem(CURRENT_SLUG_KEY);
         }
+        forgetKnownSavedAt(slug);
         onNotify(`Deleted: ${name}`);
         void refreshList();
       } else {
