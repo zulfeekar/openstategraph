@@ -711,6 +711,49 @@ reading the code directly): every node type's TS field schema
 
 208 pytest + 257 Vitest passing, `tsc` clean.
 
+## Per-node model selection and Router's deep tier, implemented (2026-08-06)
+
+The two remaining flagged missing-feature gaps from the field-diff sweep are
+now built, not just documented:
+
+- **Per-node model selection.** `NodeRuntime._resolve_model(data)` reads a
+  node's own `provider/modelId` selection (the canvas's own format,
+  `ProviderRegistry.selectionFor`), converts it to `init_chat_model`'s
+  colon-joined key, and caches the built client per key. No selection, or
+  still set to Mock (a frontend-only local-preview simulator with no
+  backend equivalent), falls back to the graph's one shared default exactly
+  as before; an unresolvable selection (no key, unknown model) falls back
+  too rather than taking the whole run down. Wired into `_agent` and
+  `_grader` (both already had per-node model-adjacent fields) and `_router`
+  (which did not — see next item).
+- **Router's `tier: "deep"`.** `RouterNode.ts` declares the same `tier`
+  select `GraderNode.ts` does; `_router` never read it. Fixed to mirror
+  `_grader`'s existing `_DeepAgentAsChatModel` wrap exactly.
+
+Unit-tested in isolation (`TestPerNodeModelResolution`: own selection, Mock
+fallback, two distinct models, caching, graceful failure —
+`init_chat_model` monkeypatched, same reasoning `TestDeepGrader` already
+applies to `create_deep_agent`) and `TestDeepRouter` (mirrors
+`TestDeepGrader`). Verified live: the real intent-routed demo, with two AI
+Agent nodes forced onto different real Ollama-cloud models, ran cleanly
+through the actual backend.
+
+**End-to-end sweep against the fully-updated backend** (all fixes from
+this whole session applied): all 4 intent-routed-demo branches plus the
+original artist-question repro — 5/5 clean runs, no crash, no
+`InvalidUpdateError`, no self-contradictory answer.
+
+**Deliberately not changed**: Chinook's canvas `tableName`/`maxRows`
+fields stay inert by design — the real tool lets the *model* supply
+`table`/`max_rows` per call, which is more correct than a fixed per-node
+default for a tool an agent calls dynamically with a different table each
+time. Wiring the canvas value through as a *default* would require tools
+to become per-node-parameterized instances rather than one bare
+type-shared singleton per tool type (`self.tools: ToolRegistry`) — a real
+structural change to how tools are resolved, not a fix scoped to this pass.
+
+215 pytest + 257 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
