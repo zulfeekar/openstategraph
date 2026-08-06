@@ -546,6 +546,53 @@ hazard of this shape remains.
 206 pytest passing throughout. Verified live: 5/5 repeated greeting runs
 against the restarted backend complete cleanly with no crash.
 
+## Framework-wide gap sweep, one real bug fixed, two findings recorded (2026-08-06)
+
+User asked for a broader sweep beyond the immediate repro, and gave one
+directly: "who is the best artist of all time?" through chat.
+
+**Real bug found and fixed**: the orchestrator's revise loop was forking a
+grader's rejection feedback into its own bogus subtask instead of refining
+the existing one. Root cause and fix are detailed in the commit
+("Fix orchestrator revise-loop forking grader feedback into a bogus
+subtask") — briefly: appending feedback as a semicolon clause *before*
+`Orchestrator.split()` handed the deterministic splitter one more clause to
+split on, so ordinary critique prose ("be more decisive") became its own
+`Subtask`, dispatched to a worker as if it were a fresh question. Fixed by
+splitting first, then appending feedback to each resulting subtask
+afterward. `test_orchestrator_graph.py` updated to the corrected behaviour
+plus a new regression test pinning the exact live failure.
+
+**Second real bug found in the same pass, fixed**: `hasOutputRule` checked
+port *descriptors* (does this node type declare zero out-ports) rather than
+actual wiring, so any graph legitimately ending at an Agent/Router/Grader
+without a separate Output node — which the backend supports fine — was a
+false "nothing consumes the result" warning. Fixed to check whether a
+node's out-ports are actually unwired.
+
+**Findings recorded, not acted on** — a background sweep (general-purpose
+agent) additionally reported:
+- The `Send`/join synchronization assumption in `_format_report_function`
+  (all dispatched workers land in one superstep before the join reads
+  `worker_results`) is asserted in code comments as verified against the
+  installed LangGraph, but no test asserts it directly for N>1 workers.
+  Worth a `docs-langchain` check before ever changing retry/timeout
+  semantics near this join; not touched this pass.
+- A full TS-schema-vs-Python-factory field diff (every field a node type
+  declares in `src/nodes/*/` has a matching read in `node_runtime.py`, and
+  vice versa) was not completed — flagged as unexplored, not assumed clean.
+- Zero-subtask orchestrator plans are already guarded by
+  `BaseOrchestrator.plan()`'s "never zero subtasks" fallback, and the API's
+  `question: Field(min_length=1)` means the one input that could produce a
+  truly empty instruction is already rejected before it reaches the
+  compiler — the sweep's concern here is real in principle but not
+  reachable through any path the app currently exposes.
+- `ConnectionValidator`'s cardinality rule and the remaining backend
+  `except Exception` sites were checked and found correct/already visible
+  to the caller — no gap.
+
+207 pytest + 252 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
