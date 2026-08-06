@@ -231,12 +231,27 @@
         }
       },
       {
+        "id": "human1",
+        "type": "human.approval",
+        "data": {
+          "message": "Review the data answer before sending to the user."
+        },
+        "position": {
+          "x": 1820,
+          "y": 40
+        },
+        "size": {
+          "width": 268,
+          "height": 180
+        }
+      },
+      {
         "id": "out1",
         "type": "output.formatted",
         "data": {},
         "position": {
-          "x": 1820,
-          "y": 340
+          "x": 2100,
+          "y": 40
         },
         "size": {
           "width": 320,
@@ -331,8 +346,28 @@
           "portId": "pass"
         },
         "target": {
+          "nodeId": "human1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "human1",
+          "portId": "approved"
+        },
+        "target": {
           "nodeId": "out1",
           "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "human1",
+          "portId": "rejected"
+        },
+        "target": {
+          "nodeId": "orch1",
+          "portId": "feedback"
         }
       },
       {
