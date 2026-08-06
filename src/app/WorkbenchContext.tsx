@@ -11,6 +11,7 @@ import {
   resolveSession,
   saveWorkflow,
 } from './workflowStore';
+import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -231,12 +232,25 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
       const json = loadWorkflow(localStorage, session.id);
       // A missing or corrupt entry leaves the current document alone rather
       // than blanking the canvas.
-      if (json != null) controller.document.importJSON(json);
+      if (json != null) {
+        try {
+          // Same ordering requirement as the named-file Load path: a
+          // workflow-scoped node type must be registered *before* import, or
+          // `fromJSON` silently skips every node of that type.
+          registerNodeTypesForRawDocument(JSON.parse(json), workbench.registry, workbench.engine.executors);
+          controller.document.importJSON(json);
+        } catch (error) {
+          // A corrupt autosave entry must not take the whole app down —
+          // the seeded demo (already on screen) stays, same as the
+          // missing-entry case just above.
+          console.error('Could not restore the autosaved workflow:', error);
+        }
+      }
     }
 
     sessionStorage.setItem(SESSION_KEY, session.id);
     setState({ restored: session.shouldRestore, workflowId: session.id });
-  }, [controller]);
+  }, [controller, workbench]);
 
   // Saving starts only once identity is settled, so nothing is ever written
   // under a placeholder id.

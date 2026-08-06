@@ -17,6 +17,7 @@ import { OpenAIProvider } from '@core/providers/OpenAIProvider';
 import { OllamaProvider } from '@core/providers/OllamaProvider';
 import { WorkflowController } from '@controller/WorkflowController';
 import { registerNodeCatalogue } from '@nodes/index';
+import { syncWorkflowScopedNodes } from '@nodes/workflowScoped';
 import { applyLayoutTokens } from '@design/tokens';
 
 /**
@@ -66,6 +67,17 @@ export class Workbench {
     // The catalogue registers node types *and* their executors, so the
     // engine and the palette can never disagree about what exists.
     registerNodeCatalogue(this.registry, this.engine.executors, this.providers);
+
+    // Workflow-scoped nodes (Chinook's tools) are not part of the global
+    // catalogue above — they are registered only while a document that
+    // actually references them is open, so an unrelated workflow's palette
+    // does not carry every past workflow's tools. Re-synced on every event
+    // that can change which node types the document uses.
+    const sync = () => syncWorkflowScopedNodes(this.model, this.registry, this.engine.executors);
+    this.model.on('workflow:reset', sync);
+    this.model.on('node:added', sync);
+    this.model.on('node:removed', sync);
+    sync();
 
     this.controller = new WorkflowController({
       model: this.model,

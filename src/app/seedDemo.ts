@@ -3,6 +3,7 @@ import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeInit } from '@core/model/contracts/node';
 import type { Workbench } from './Workbench';
 import { NODE_TYPE } from '@nodes/index';
+import { registerChinookNodes } from '@nodes/workflowScoped';
 
 /**
  * The workflow the editor opens with: natural language to SQL over Chinook.
@@ -26,6 +27,13 @@ import { NODE_TYPE } from '@nodes/index';
  */
 export function seedDemoWorkflow(workbench: Workbench): void {
   const { model, registry } = workbench;
+
+  // This demo *is* the Chinook showcase, seeded straight to the model
+  // before any document exists for the usual workflow-scoped registration
+  // (`registerNodeTypesForRawDocument`) to inspect — so it has to ask for
+  // the tools it uses explicitly, rather than being inferred from a
+  // document that doesn't exist yet.
+  registerChinookNodes(registry, workbench.engine.executors);
 
   const create = (typeId: string, init: NodeInit): AbstractNodeModel => {
     const definition = registry.nodeTypes.require(typeId);

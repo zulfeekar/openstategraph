@@ -13,6 +13,7 @@ import {
 } from '@design/primitives';
 import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { slugify, WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
+import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -94,6 +95,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         return;
       }
       try {
+        // Before importing, not after: `fromJSON` skips any node whose type
+        // is not registered yet, so a workflow-scoped type (Chinook's
+        // tools) must exist in the registry before its nodes can be
+        // created at all — registering afterwards would be too late.
+        registerNodeTypesForRawDocument(outcome.value, workbench.registry, workbench.engine.executors);
         controller.document.importJSON(JSON.stringify(outcome.value));
         // Continuing to edit and save now updates *this* workflow, not a new one.
         sessionStorage.setItem(CURRENT_SLUG_KEY, slug);

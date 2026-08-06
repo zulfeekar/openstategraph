@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { Search, X } from 'lucide-react';
 import {
@@ -39,6 +39,17 @@ export function Palette({ onNotify }: PaletteProps) {
   const paper = usePaperController();
   const [query, setQuery] = useState('');
 
+  // Node types are not only registered once at startup: workflow-scoped
+  // node types (Chinook's tools) are registered and unregistered as the
+  // current document changes (`syncWorkflowScopedNodes`), so the palette
+  // has to be reactive to the registry, not just to a query string —
+  // otherwise a workflow-scoped type would never appear until a full
+  // reload, which would make the fix that added it invisible.
+  useSyncExternalStore(
+    (onStoreChange) => workbench.registry.nodeTypes.onChange(onStoreChange),
+    () => workbench.registry.nodeTypes.size,
+  );
+
   const sections = useMemo(() => {
     const all = workbench.registry.paletteSections();
     if (!query.trim()) return all;
@@ -48,7 +59,11 @@ export function Palette({ onNotify }: PaletteProps) {
         nodes: section.nodes.filter((definition) => matchesQuery(definition, query)),
       }))
       .filter((section) => section.nodes.length > 0);
-  }, [workbench, query]);
+    // Recomputed on every render this component takes, including the ones
+    // `useSyncExternalStore` above forces — `workbench.registry` itself
+    // never changes identity, so it cannot be a dependency that triggers this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workbench, query, workbench.registry.nodeTypes.size]);
 
   const add = (definition: INodeDefinition) => {
     const at = paper?.viewportCenter() ?? { x: 120, y: 120 };

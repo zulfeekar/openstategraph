@@ -13,7 +13,6 @@ import { routerExecutor, routerNode } from './routing/RouterNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
-import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 import { orchestratorExecutor, orchestratorNode } from './orchestrate/OrchestratorNode';
 import { workerExecutor, workerNode } from './orchestrate/WorkerNode';
 import { formatReportExecutor, formatReportNode } from './orchestrate/FormatReportNode';
@@ -46,7 +45,9 @@ export function registerNodeCatalogue(
     agentNode,
     redditSearchNode,
     // Routing is the editor's grammar, so it ships globally — unlike the
-    // Chinook tools, which belong to their workflow (ticket 08 scoping).
+    // Chinook tools, which belong to their workflow (ticket 08 scoping) and
+    // are registered only while a document using them is open — see
+    // `syncWorkflowScopedNodes`, called from `Workbench`.
     routerNode,
     graderNode,
     // Loop/graph engineering: split -> fan-out -> dispatch -> join.
@@ -56,8 +57,6 @@ export function registerNodeCatalogue(
     formattedOutputNode,
     groupNode,
     noteNode,
-    // Chinook database tools
-    ...CHINOOK_NODES.map((n) => n.definition),
   ]);
 
   executors.registerAll([
@@ -71,8 +70,6 @@ export function registerNodeCatalogue(
     workerExecutor,
     formatReportExecutor,
     formattedOutputExecutor,
-    // Chinook database executors
-    ...CHINOOK_NODES.map((n) => n.executor),
   ]);
 }
 
