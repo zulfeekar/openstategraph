@@ -519,6 +519,33 @@ the toast immediately.
 
 249 Vitest + 202 pytest passing, `tsc` clean.
 
+## RunState's bare-scalar hazard, closed for good (2026-08-06)
+
+Same investigation thread, continued a third time: the user reported the
+chat panel showing two grader verdicts landing together (a "greeting"
+rejection alongside criteria that reads like the off-topic grader's own),
+then `InvalidUpdateError: At key 'feedback': Can receive only one value per
+step`, with Formatted Output left empty — fully explained by the run
+aborting mid-graph before `out1` was ever reached, not a separate defect.
+
+`feedback: str` had the identical shape as the already-fixed `answer` and
+`attempts`: this document alone has four `_grader` instances, each writing
+it on every step. Annotated it with the existing `keep_latest_nonempty`
+reducer (pass writes `""`, revise writes real text — "keep whichever is
+non-empty" is exactly right, already proven for `answer`).
+
+With three of these found one at a time across one afternoon, audited the
+rest of `RunState` rather than waiting for a fourth report: `question`,
+`task_id` and `task_instruction` are read-only from every node factory
+(`state.get(...)`, never returned in a node's update dict), and `messages`
+already carries LangGraph's own `add_messages` reducer. `answer`,
+`attempts` and `feedback` were the only three actual multi-writer bare
+scalars in the schema, and all three now have named reducers. No open
+hazard of this shape remains.
+
+206 pytest passing throughout. Verified live: 5/5 repeated greeting runs
+against the restarted backend complete cleanly with no crash.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
