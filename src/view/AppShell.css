@@ -39,6 +39,15 @@
   bottom: calc(var(--space-4) + 36px);
 }
 
+/* The Ask panel and the Inspector can both be open at once (chat plus
+ * document diagnostics); grouping them lets the narrow-window rule below lay
+ * them out side by side instead of each independently claiming `right: 0`. */
+.app-shell__right-panels {
+  display: flex;
+  flex: none;
+  height: 100%;
+}
+
 /* Narrow windows: the panels overlay the canvas rather than squeezing it
  * down to nothing. */
 @media (max-width: 1100px) {
@@ -46,7 +55,8 @@
     position: relative;
   }
 
-  .app-shell__body > .panel {
+  .app-shell__body > .panel--left,
+  .app-shell__body > .app-shell__right-panels {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -57,7 +67,7 @@
     left: 0;
   }
 
-  .app-shell__body > .panel--right {
+  .app-shell__body > .app-shell__right-panels {
     right: 0;
   }
 }

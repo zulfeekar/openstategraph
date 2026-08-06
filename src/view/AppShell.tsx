@@ -186,8 +186,16 @@ export function AppShell() {
           <AccessibilityCheck />
         </main>
 
-        {askOpen ? <AskPanel /> : null}
-        {inspectorOpen ? <Inspector /> : null}
+        {askOpen || inspectorOpen ? (
+          // Grouped so the narrow-window overlay rule (AppShell.css) can lay
+          // both out side by side instead of stacking them at an identical
+          // `right: 0`, which made whichever mounted second (Inspector)
+          // silently intercept every click meant for the other.
+          <div className="app-shell__right-panels">
+            {askOpen ? <AskPanel /> : null}
+            {inspectorOpen ? <Inspector /> : null}
+          </div>
+        ) : null}
         {workflowManagerOpen ? (
           <WorkflowManager
             open={workflowManagerOpen}
