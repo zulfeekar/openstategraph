@@ -374,6 +374,57 @@ here:
 
 237 pytest + 208 Vitest passing, `tsc` clean, throughout.
 
+## Production-readiness pass: workflow-scoped registry shipped, chat panel bug found and fixed (2026-08-06)
+
+Closed the gap this file itself flagged (previous section, last sentence) plus
+a production-readiness sweep, at the user's `/goal` request to find and fix
+gaps and to test everything end to end rather than only in Vitest.
+
+- **Workflow-scoped registry overlay, built.** The mechanism the "Not yet
+  specified" entry below describes (`workflow-local shadowing global`) is now
+  real: `src/nodes/workflowScoped.ts`. `syncWorkflowScopedNodes` registers/
+  unregisters Chinook's node family as the model's own nodes change
+  (`workflow:reset`/`node:added`/`node:removed`); `registerNodeTypesForRawDocument`
+  does the same *before* any `importJSON`, because `WorkflowSerializer.fromJSON`
+  resolves each node's type via the registry and **silently skips** any node
+  whose type isn't registered yet — a load-order hazard found by reading the
+  serializer, not by hitting it live. Chinook is no longer in
+  `registerNodeCatalogue`.
+- **Regression this surfaced, fixed**: `seedDemo.ts`'s seeded showcase writes
+  Chinook nodes straight to the model before any document exists, so it threw
+  `unknown id "tool.chinook-get-all-tables"` synchronously at startup — before
+  React ever mounts, so no error boundary can catch it. Root-caused via git-
+  stash bisection → diagnostic logging → a top-level try/catch that captures
+  the real stack. Fixed with `registerChinookNodes`, an unconditional variant
+  `seedDemoWorkflow` calls for itself, since it is the one legitimate case
+  that needs Chinook stated outright rather than inferred from a document.
+- **Gap found in the process, filled**: the app had no error boundary and no
+  pre-mount crash handling anywhere — *any* future unhandled error would
+  blank `#root` with nothing visible. Added `ErrorBoundary.tsx` (the one
+  top-level net) and a `main.tsx` try/catch for the pre-mount case a React
+  boundary structurally cannot reach.
+- **Production-readiness audit** (logging, secrets, README) found: no
+  `.env.example` despite `.gitignore` reserving one; zero backend logging
+  configuration, with silent `except Exception` swallows in
+  `capability_discovery.py` making a broken tool file vanish from discovery
+  with no trace; README missing test commands, env var docs, and
+  prerequisites. All four fixed.
+- **Real bug found by the E2E test itself, not by code reading**: asked the
+  live app a Chinook question through the chat panel at a sub-1100px
+  viewport and the Send button did nothing — no error, no network request.
+  Root cause: the narrow-window overlay rule in `AppShell.css` gives every
+  `.panel--right` `position: absolute; right: 0`, written when Inspector was
+  the only panel that side could ever hold. Since the chat panel shipped,
+  Inspector and chat can both be open at once, and under 1100px they land in
+  the identical rect with Inspector (mounted second) silently intercepting
+  every click meant for chat. Fixed by grouping both under one
+  `.app-shell__right-panels` flex container so the overlay rule positions the
+  *pair*, not each individually. Verified live: both panels visible and
+  independently clickable at 1095px, and a chat message now actually reaches
+  the backend and streams back an answer.
+
+247 Vitest + 197 pytest passing, `tsc` clean, throughout.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
