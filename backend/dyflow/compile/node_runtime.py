@@ -197,6 +197,10 @@ class NodeRuntime:
         self.model = model
         self.tools = tools or {}
         self.max_attempts = max_attempts
+        #: Per-node model overrides, keyed by the resolved LangChain model
+        #: string — cached so ten agents on the same non-default model share
+        #: one client instance rather than each cold-starting its own.
+        self._model_cache: dict[str, Any] = {}
         #: node id -> node type, populated by `factory()`.
         self._types: dict[str, str] = {}
         #: Tool nodes wired on the canvas with no implementation available.
@@ -240,6 +244,49 @@ class NodeRuntime:
 
         return build
 
+    def _resolve_model(self, data: dict[str, Any]) -> Any:
+        """This node's own model, falling back to the graph's shared default.
+
+        Found via a TS-schema-vs-Python-factory diff: every model-calling
+        node's card lets a developer pick its own model
+        (`AgentNode.ts`'s `model` field, the same select `RouterNode.ts`/
+        `GraderNode.ts` use), but this class only ever accepted one `model`
+        for the *entire graph* — the canvas visibly showed three different
+        AI Agent cards set to three different models while every one of
+        them, run through the backend, used whichever single model the
+        `/api/runs` request happened to resolve. This is the fix: read the
+        node's own selection first, the shared default only when it has
+        none.
+
+        `data.get("model")` is the canvas's `provider/modelId` string
+        (`ProviderRegistry.selectionFor`) — slash-separated, because that is
+        the frontend's own format; `init_chat_model` expects a colon. Mock
+        has no backend equivalent (it is a frontend-only deterministic
+        simulator for the local canvas preview, not a real chat model), so a
+        node configured for it falls back to the shared default exactly like
+        a node with no override at all, rather than erroring.
+        """
+        selection = _text(data, "model")
+        if not selection:
+            return self.model
+        provider, _, model_id = selection.partition("/")
+        if not model_id or provider == "mock":
+            return self.model
+        key = f"{provider}:{model_id}"
+        if key not in self._model_cache:
+            from langchain.chat_models import init_chat_model
+
+            try:
+                self._model_cache[key] = init_chat_model(key)
+            except Exception:
+                # An unconfigured provider (no API key) or an unrecognised
+                # model id must not take the whole run down — the shared
+                # default still produces an answer, just not the node's own
+                # choice. Cached too, so one bad selection does not retry
+                # (and re-fail) on every node that shares it.
+                self._model_cache[key] = self.model
+        return self._model_cache[key]
+
     # -- node kinds ------------------------------------------------------- #
 
     def _input(self, node_id: str, node: dict[str, Any], _plan: CompiledPlan) -> Any:
@@ -274,9 +321,10 @@ class NodeRuntime:
             elif tool_type not in self.unresolved_tools:
                 self.unresolved_tools.append(tool_type)
 
+        model = self._resolve_model(node.get("data") or {})
         agent = None
-        if self.model is not None:
-            agent = create_agent(model=self.model, tools=lc_tools, name=f"agent_{node_id}")
+        if model is not None:
+            agent = create_agent(model=model, tools=lc_tools, name=f"agent_{node_id}")
         #: Exposed so a test can assert the wiring produced the tools, without
         #: needing a model to prove it.
         self.last_bound_tools = [t.name for t in lc_tools]
@@ -314,16 +362,28 @@ class NodeRuntime:
         return run
 
     def _router(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Classifies, and writes the branch for the conditional edge to read."""
+        """Classifies, and writes the branch for the conditional edge to read.
+
+        `tier` (react/deep/custom) was declared on `RouterNode.ts` but never
+        read here — found by the same field diff that caught the grader's
+        equivalent gap before this file's own `_DeepAgentAsChatModel` comment
+        was written. `tier: "deep"` now does exactly what it already does
+        for the grader: wraps the classifying model in a compiled deep agent
+        rather than teaching `BaseRouter` about one.
+        """
         data = node.get("data") or {}
         branches = [
             line.strip() for line in _text(data, "branches").split("\n") if line.strip()
         ] or ["default"]
+        base_model = self._resolve_model(data)
+        classifying_model = base_model
+        if _text(data, "tier") == "deep" and base_model is not None:
+            classifying_model = _DeepAgentAsChatModel(base_model, name=f"router_{node_id}")
         router = Router(
             branches,
             fallback=_text(data, "fallback") or None,
             rules=_text(data, "rules"),
-            model=self.model,
+            model=classifying_model,
         )
         upstream = [src for src, dst in plan.edges if dst == node_id]
 
@@ -348,9 +408,10 @@ class NodeRuntime:
         deep agents.
         """
         data = node.get("data") or {}
-        grading_model = self.model
-        if _text(data, "tier") == "deep" and self.model is not None:
-            grading_model = _DeepAgentAsChatModel(self.model, name=f"grader_{node_id}")
+        base_model = self._resolve_model(data)
+        grading_model = base_model
+        if _text(data, "tier") == "deep" and base_model is not None:
+            grading_model = _DeepAgentAsChatModel(base_model, name=f"grader_{node_id}")
         grader = Grader(
             criteria=_text(data, "criteria"),
             replace_defaults=_text(data, "criteriaMode") == "replace",

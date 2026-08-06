@@ -109,6 +109,63 @@ class TestRouterDrivesTheBranch:
         assert "revenue or genres" in model.prompts[0]
 
 
+#: Same shape as ROUTED, with the router's `tier` set to "deep" — the same
+#: field GraderNode already honors, found not to be read at all for Router.
+ROUTED_DEEP = {
+    **ROUTED,
+    "nodes": [
+        node("node:input.text-1", "input.text", prompt=""),
+        node(
+            "node:route.classifier-1",
+            "route.classifier",
+            branches="dataquery\noff_topic",
+            fallback="off_topic",
+            rules="Anything about revenue or genres is a dataquery.",
+            tier="deep",
+        ),
+        node("node:output.formatted-1", "output.formatted"),
+        node("node:output.formatted-2", "output.formatted"),
+    ],
+}
+
+
+class TestDeepRouter:
+    """`tier: "deep"` on a Router card previously did nothing — found by a
+    TS-schema-vs-Python-factory diff, not live: `RouterNode.ts` declares the
+    same `tier` select `GraderNode.ts` does, but `_router` never read it,
+    unlike `_grader`. This is the regression test for the fix: `deep` now
+    routes the classification through `create_deep_agent`, the same way it
+    already does for the grader.
+    """
+
+    def test_deep_tier_routes_the_classification_through_create_deep_agent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import deepagents
+        from langchain_core.messages import AIMessage
+
+        calls: list[dict[str, Any]] = []
+
+        class StubDeepAgent:
+            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+                calls.append(payload)
+                return {"messages": [AIMessage(content="dataquery")]}
+
+        def fake_create_deep_agent(**kwargs: Any) -> StubDeepAgent:
+            calls.append({"construction": kwargs})
+            return StubDeepAgent()
+
+        monkeypatch.setattr(deepagents, "create_deep_agent", fake_create_deep_agent)
+
+        final = run(ROUTED_DEEP, "Which genre earns most?", ScriptedModel("off_topic"))
+
+        construction_calls = [c for c in calls if "construction" in c]
+        assert construction_calls, "create_deep_agent was never called"
+        # The stub, not the ScriptedModel default, decided the branch —
+        # proof the deep agent's answer is what actually got read.
+        assert final["decisions"]["node:route.classifier-1"] == "dataquery"
+
+
 #: An agent judged by a grader, with `revise` looping back — the shape the
 #: evaluator-optimizer pattern produces on the canvas.
 GRADED = {
@@ -318,3 +375,113 @@ class TestDegradedInputs:
         }
         final = run(document, "hello", None)
         assert final["answer"] == "hello"
+
+
+class TestPerNodeModelResolution:
+    """`_resolve_model` — found by a TS-schema-vs-Python-factory diff, not
+    live: `AgentNode.ts`'s per-card `model` field (and the same select on
+    Router/Grader) was fully inert on the backend. `NodeRuntime` only ever
+    accepted one `model` for the *entire graph*, so the canvas visibly
+    letting a developer set three different AI Agent nodes to three
+    different models did nothing once a run actually reached the backend —
+    every one of them used whichever single model `/api/runs` resolved.
+
+    Tested in isolation against `_resolve_model` directly rather than
+    through a full compiled graph, because proving *this* node resolves
+    *its own* model needs no graph, no tools, no state — only the one
+    method that changed. `init_chat_model` is monkeypatched rather than
+    exercised for real, the same reasoning `TestDeepGrader` already applies
+    to `create_deep_agent`: which real model class it returns is not this
+    project's concern to pin, only that the resolution reaches it correctly.
+    """
+
+    def test_a_node_with_no_model_field_uses_the_shared_default(self) -> None:
+        default = object()
+        runtime = NodeRuntime(model=default)
+        assert runtime._resolve_model({}) is default
+
+    def test_a_node_configured_for_mock_falls_back_to_the_shared_default(self) -> None:
+        # Mock has no backend equivalent — it is a frontend-only simulator
+        # for the local canvas preview, not a real chat model.
+        default = object()
+        runtime = NodeRuntime(model=default)
+        assert runtime._resolve_model({"model": "mock/mock-offline"}) is default
+
+    def test_a_node_with_its_own_selection_gets_its_own_instance(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        calls: list[str] = []
+        sentinel = object()
+
+        def fake_init_chat_model(key: str) -> Any:
+            calls.append(key)
+            return sentinel
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        runtime = NodeRuntime(model=object())
+        resolved = runtime._resolve_model({"model": "anthropic/claude-haiku-4-5"})
+
+        # The frontend's slash-separated selection becomes the colon-joined
+        # key `init_chat_model` expects.
+        assert calls == ["anthropic:claude-haiku-4-5"]
+        assert resolved is sentinel
+
+    def test_two_nodes_on_different_models_each_resolve_their_own(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        calls: list[str] = []
+
+        def fake_init_chat_model(key: str) -> Any:
+            calls.append(key)
+            return object()
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        runtime = NodeRuntime(model=object())
+        first = runtime._resolve_model({"model": "anthropic/claude-haiku-4-5"})
+        second = runtime._resolve_model({"model": "openai/gpt-4.1-mini"})
+
+        assert calls == ["anthropic:claude-haiku-4-5", "openai:gpt-4.1-mini"]
+        assert first is not second
+
+    def test_repeated_requests_for_the_same_model_are_cached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        calls: list[str] = []
+
+        def fake_init_chat_model(key: str) -> Any:
+            calls.append(key)
+            return object()
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        runtime = NodeRuntime(model=object())
+        first = runtime._resolve_model({"model": "anthropic/claude-haiku-4-5"})
+        second = runtime._resolve_model({"model": "anthropic/claude-haiku-4-5"})
+
+        assert calls == ["anthropic:claude-haiku-4-5"], "should only build the client once"
+        assert first is second
+
+    def test_an_unresolvable_selection_falls_back_without_raising(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        def fake_init_chat_model(key: str) -> Any:
+            raise ValueError(f"no credentials for {key}")
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        default = object()
+        runtime = NodeRuntime(model=default)
+
+        # An unconfigured provider (no API key) must not take the whole run
+        # down — the run still produces an answer from the shared default.
+        assert runtime._resolve_model({"model": "openai/gpt-4.1-mini"}) is default
