@@ -1,5 +1,5 @@
 Type: grilling
-Status: partly resolved — the editor-writes-file direction is built; watching for external changes is not
+Status: resolved (2026-08-06) — both directions now built: editor-writes-file, and the file-watch back to the editor. See map.md's "Implement ticket 16's other half" entry and `src/app/workflowFileWatch.ts`.
 Blocked by: 07, 14
 
 ## Question

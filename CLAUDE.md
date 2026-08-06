@@ -14,14 +14,25 @@ Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph 
 
 A class with many public members is a design failure, not a convenience. If it can be described only with "and", split it.
 
-**Ceiling: ~10 public members, one reason to change.** Current known violations, to be decomposed (see the map):
+**Ceiling: ~10 public members, one reason to change.**
 
-| Class | Public members | Responsibilities mixed |
-| --- | --- | --- |
-| `WorkflowController` | 38 | nodes, edges, clipboard, grouping, selection, history, document I/O |
-| `WorkflowModel` | 41 | node CRUD, edge CRUD, adjacency, topology, geometry, transactions, events |
+`WorkflowController` (ticket 17) is fixed: 10 public members, each a
+collaborator (`controller.nodes`, `controller.edges`, `controller.history`,
+...). Extend it by adding a collaborator, never a method.
 
-Do not add to either. Extend by adding a collaborator, not a method.
+`WorkflowModel` is a **deliberate, recorded exception**, not a violation
+still awaiting decomposition. Its internals *are* split — `AdjacencyIndex`
+and `GraphQueries` hold the real implementations, independently unit-tested
+— but its own public method count (`addNode`, `edgesOf`,
+`topologicalOrder`, ...) was kept flat on purpose. Ticket 17's own
+analysis concluded that collapsing those onto `model.queries.xxx()` /
+`model.adjacency.xxx()` (the same move that fixed `WorkflowController`) is
+a 100+-call-site rename across canvas, execution, and validation code for
+a smaller public surface rather than a clearer design, and recommended
+against forcing it. Do not re-litigate this without new evidence; do not
+add new *behavior* directly onto `WorkflowModel` either way — a new query
+belongs on `GraphQueries`, a new index on `AdjacencyIndex`, surfaced
+through a thin pass-through only if genuinely needed.
 
 ### Interface → Abstract → Base → Concrete
 

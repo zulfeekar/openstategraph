@@ -1,5 +1,5 @@
 Type: grilling
-Status: design settled; the canvas gesture is not implemented, honestly
+Status: resolved (2026-08-06) — splice-insert implemented exactly per the settled design below. See map.md's "Implement ticket 25" entry, `SpliceInsertCommand` (edgeCommands.ts), `EdgeEditor.insertOnEdge`, `closestEdgeToPoint` (topology.ts). The "think"/trace polymorphic-port question below remains open — that was scoped out of this ticket as a separate ports-and-types decision, not implemented.
 Blocked by: 09
 
 ## Question
