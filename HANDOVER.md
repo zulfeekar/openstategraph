@@ -19,12 +19,12 @@ A visual AI-workflow builder: a TypeScript/React/JointJS canvas editor (`src/`) 
 # Frontend
 npm install
 npx tsc -b --noEmit          # must be clean
-npm test                      # Vitest — should show 295 passing (26 files), as of this handover
+npm test                      # Vitest — should show 301 passing (27 files), as of this handover
 
 # Backend
 cd backend
 pip install -e .
-python -m pytest -q           # should show 222 passing, as of this handover
+python -m pytest -q           # should show 229 passing, as of this handover
 ```
 
 Both counts will have grown by the time you read this if any prior session's work landed — treat a **lower** count than stated here as a real regression to investigate immediately, not a stale number to ignore.
@@ -44,7 +44,7 @@ The canvas preview (local "Run" button) works with zero credentials via the Mock
 
 ## Current state, honestly
 
-As of this handover: **222 pytest + 295 Vitest passing, `tsc` clean.** The flagship demo workflow (`workflows/intent-routed-demo/workflow.json` — router → per-intent agent/grader loops, plus a dataquery branch through an orchestrator/worker/Chinook-SQL fan-out) runs cleanly end-to-end through the real backend across all four of its branches, verified live and pinned by `backend/tests/test_intent_routed_demo_file.py` (loads the real saved file from disk, not a hand-built fixture — this is deliberate, see the "Real-file E2E suite" entry in map.md for why the hand-built fixtures alone missed a real bug).
+As of this handover: **229 pytest + 301 Vitest passing, `tsc` clean.** The flagship demo workflow (`workflows/intent-routed-demo/workflow.json` — router → per-intent agent/grader loops, plus a dataquery branch through an orchestrator/worker/Chinook-SQL fan-out) runs cleanly end-to-end through the real backend across all four of its branches, verified live and pinned by `backend/tests/test_intent_routed_demo_file.py` (loads the real saved file from disk, not a hand-built fixture — this is deliberate, see the "Real-file E2E suite" entry in map.md for why the hand-built fixtures alone missed a real bug).
 
 Its diagnostics panel shows **1 error-severity entry** (the red badge count) plus **11 informational warnings** — all expected, none a bug:
 - The 1 error is "Text Input: Enter a prompt for the agent" — the seeded entry field starts empty, which is expected before a user has typed a question.
@@ -68,13 +68,14 @@ Everything in `.scratch/fullstack-langgraph/issues/` marked `Status: resolved`. 
 - **Ticket 25** (splice-insert) — dropping a palette node onto an existing edge now inserts it inline, one undo step, type-checked before creation. `SpliceInsertCommand` (`src/core/commands/edgeCommands.ts`), `EdgeEditor.insertOnEdge`, `closestEdgeToPoint` (`src/core/model/topology.ts`).
 - **Ticket 27** (kitchen-sink workflow) — the intent-routed demo itself, fully working, is this ticket's deliverable.
 - **Ticket 18** (capability discovery), for tool capabilities — a workflow's discovered `tools/` capabilities register as real, connectable palette node types (`DiscoveredToolNode.ts`, `registerDiscoveredCapabilities`), and the palette now auto-updates when a new tool file appears on disk (`decideCapabilityRefresh` in `workflowFileWatch.ts` — polling, not SSE, reusing ticket 16's existing poll loop; same user-visible outcome as the ticket's own SSE sketch, no new backend wiring). Verified live both ways: against `chinook-nl-to-sql`'s three real tools, and by dropping a brand-new tool file into an open workflow's `tools/` folder with zero manual reload. What's still open, by the ticket's own drawn boundary: true node-*class* discovery for a hand-written `Final*` type outside the `BaseTool` ladder — a genuinely separate, larger question.
+- **Per-node retry/timeout override UI** — `maxRetries`/`timeoutSeconds` fields, declared once in `ModelRegistry.defineNode` and inherited by every executable node type, surface in the Inspector and reach `add_node(retry_policy=, timeout=)` on the backend (`workflow_compiler.py`'s `_node_overrides`). Verified live end to end, including a backend integration test proving the override is actually applied (invocation-count assertion), not just parsed.
 
 ## What's genuinely still open, roughly by priority
 
-**P1 — real, scoped, unstarted:**
-- **Human-in-the-loop**: how `interrupt()`/`HumanInTheLoopMiddleware` surfaces as a canvas affordance. Not specified at all yet — this needs a design pass (possibly via a `feature-design`-style interview) before any code.
-- **Streaming/observability enhancements**: token streams and per-node traces already flow to the chat panel (ticket 27); a live LangSmith-style trace view or deeper per-node observability on the canvas itself is unbuilt and unspecified.
-- **Per-node retry/timeout UI**: `retry_policy`/`timeout` are already wired at the graph-assembly level (`StateGraph.set_node_defaults`, CLAUDE.md's own rule that these are workflow-level, not node-level, concerns) — but there's no canvas UI to configure per-node overrides yet.
+Every P1 item that was *code-shaped* is now done. What remains needs a design decision before more code is meaningful — don't start implementing either of these without first pinning down the actual UX/architecture question, the way `feature-design` or a similar interview would:
+
+- **Human-in-the-loop**: how `interrupt()`/`HumanInTheLoopMiddleware` surfaces as a canvas affordance. Not specified at all — what does the canvas show while a run is paused? Does the user respond from the chat panel, the node card, or a dedicated modal? Does the paused state survive a page reload (it should, since LangGraph checkpoints it)?
+- **Streaming/observability enhancements**: token streams and per-node traces already flow to the chat panel (ticket 27); a live LangSmith-style trace view or deeper per-node observability on the canvas itself is unbuilt and unspecified — what would it show that the chat panel's activity feed doesn't already?
 
 **P2 — decided against or deferred with a recorded reason, don't just "finish" them without re-reading the ticket:**
 - **Ticket 20** (cardinality-fields) — decision recorded: the generic field-schema primitive stays unbuilt because every motivating example was solved a different way (ports and composition). Don't build it speculatively.

@@ -937,6 +937,42 @@ separate, larger question, not a missing piece of what was built here.
 
 295 Vitest passing, `tsc` clean.
 
+## Implement per-node retry/timeout override UI (2026-08-06)
+
+The last remaining code-shaped P1 gap: `set_node_defaults` already gives
+every node the same graph-wide retry policy, but there was no per-node
+*override* UI for it, despite LangGraph's own `add_node(retry_policy=,
+timeout=)` supporting exactly that (confirmed via `docs-langchain`: "Per-
+node values still take precedence" over `set_node_defaults`).
+
+Two fields (`maxRetries`, `timeoutSeconds`) declared once in
+`ModelRegistry.defineNode` and appended automatically to every
+*standard*-kind node's field schema — CLAUDE.md's "a graph-assembly
+concern, inherited by every executable node type" rule, applied the same
+way `resolveMiddleware()`/`resolvePrompt()` are inherited capabilities
+rather than something each concrete type re-declares. Blank means "use
+the workflow default" — not `0` or `-1`, which CLAUDE.md's own rule
+against non-finite sentinel numbers in a serialisable field rules out.
+Backend's `_node_overrides(data)` (`workflow_compiler.py`) parses both and
+passes them as `add_node` kwargs; garbage values (already rejected by the
+frontend's own field validation before a save) are treated as blank
+rather than raising.
+
+Verified live: set both fields on a real node in the running intent-
+routed demo via the Inspector, confirmed serialization round-trips them,
+and a real `/api/runs` call against the backend with those fields present
+completed cleanly. Backend integration test proves the override actually
+reaches `add_node`, not just that it parses: a node with `maxRetries="1"`
+that always throws is invoked exactly once, versus the graph default of 3
+without an override.
+
+**Every P1 item from this session's own "genuinely still open" list is
+now either resolved or requires a design decision before more code is
+meaningful** (human-in-the-loop, streaming/observability enhancements —
+both unspecified, not unbuilt).
+
+301 Vitest + 229 pytest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
