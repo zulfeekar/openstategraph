@@ -36,6 +36,23 @@ def merge_decisions(left: dict, right: dict) -> dict:
     return {**left, **right}
 
 
+def keep_max(left: int, right: int) -> int:
+    """Reducer for `attempts` — a counter with more than one legitimate writer.
+
+    `_agent` and `_orchestrator` each bump `attempts` for their own retry/
+    replan budget, and both can be live in the same graph (an agent branch's
+    revise loop alongside a dataquery branch's orchestrator). As a bare
+    scalar this is the identical hazard CLAUDE.md already documents for
+    `answer`: safe in every test where only one writer happened to fire per
+    step, until a graph shape lets two fire in the same step and LangGraph
+    raises `InvalidUpdateError: At key 'attempts': Can receive only one value
+    per step`. `max` matches the field's meaning — a budget counter should
+    only ever grow, so the higher of two concurrent writes is correct
+    regardless of which node produced it.
+    """
+    return max(left, right)
+
+
 def keep_latest_nonempty(left: str, right: str) -> str:
     """Reducer for `answer` — a scalar with more than one legitimate writer.
 
@@ -68,7 +85,7 @@ class RunState(TypedDict, total=False):
     outputs: Annotated[dict, merge_decisions]
     answer: Annotated[str, keep_latest_nonempty]
     feedback: str
-    attempts: int
+    attempts: Annotated[int, keep_max]
     #: orchestrator node id -> the subtasks it planned. Read by the compiler's
     #: fan-out routing function to build the `Send` list.
     subtasks: Annotated[dict, merge_decisions]
