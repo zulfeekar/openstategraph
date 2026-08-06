@@ -19,7 +19,7 @@ A visual AI-workflow builder: a TypeScript/React/JointJS canvas editor (`src/`) 
 # Frontend
 npm install
 npx tsc -b --noEmit          # must be clean
-npm test                      # Vitest — should show 277 passing (24 files), as of this handover
+npm test                      # Vitest — should show 289 passing (26 files), as of this handover
 
 # Backend
 cd backend
@@ -44,7 +44,7 @@ The canvas preview (local "Run" button) works with zero credentials via the Mock
 
 ## Current state, honestly
 
-As of this handover: **222 pytest + 277 Vitest passing, `tsc` clean.** The flagship demo workflow (`workflows/intent-routed-demo/workflow.json` — router → per-intent agent/grader loops, plus a dataquery branch through an orchestrator/worker/Chinook-SQL fan-out) runs cleanly end-to-end through the real backend across all four of its branches, verified live and pinned by `backend/tests/test_intent_routed_demo_file.py` (loads the real saved file from disk, not a hand-built fixture — this is deliberate, see the "Real-file E2E suite" entry in map.md for why the hand-built fixtures alone missed a real bug).
+As of this handover: **222 pytest + 289 Vitest passing, `tsc` clean.** The flagship demo workflow (`workflows/intent-routed-demo/workflow.json` — router → per-intent agent/grader loops, plus a dataquery branch through an orchestrator/worker/Chinook-SQL fan-out) runs cleanly end-to-end through the real backend across all four of its branches, verified live and pinned by `backend/tests/test_intent_routed_demo_file.py` (loads the real saved file from disk, not a hand-built fixture — this is deliberate, see the "Real-file E2E suite" entry in map.md for why the hand-built fixtures alone missed a real bug).
 
 Its diagnostics panel shows **1 error-severity entry** (the red badge count) plus **11 informational warnings** — all expected, none a bug:
 - The 1 error is "Text Input: Enter a prompt for the agent" — the seeded entry field starts empty, which is expected before a user has typed a question.
@@ -67,11 +67,12 @@ Everything in `.scratch/fullstack-langgraph/issues/` marked `Status: resolved`. 
 - **Ticket 17** (god classes) — `WorkflowController` is fixed at 10 public members. `WorkflowModel` is a **deliberate, recorded exception** — its internals are split (`AdjacencyIndex`, `GraphQueries`), but its own flat public method count was kept on purpose after ticket 17's own analysis concluded that flattening it the same way would be a 100+-call-site rename for a smaller-but-not-clearer surface. **Do not attempt this refactor without new evidence that changes that calculus** — re-read ticket 17's resolution note first.
 - **Ticket 25** (splice-insert) — dropping a palette node onto an existing edge now inserts it inline, one undo step, type-checked before creation. `SpliceInsertCommand` (`src/core/commands/edgeCommands.ts`), `EdgeEditor.insertOnEdge`, `closestEdgeToPoint` (`src/core/model/topology.ts`).
 - **Ticket 27** (kitchen-sink workflow) — the intent-routed demo itself, fully working, is this ticket's deliverable.
+- **Ticket 18** (capability discovery), mostly — a workflow's discovered `tools/` capabilities now register as real, connectable palette node types (`DiscoveredToolNode.ts`, `registerDiscoveredCapabilities`), verified live against `chinook-nl-to-sql`'s three real tools. What's still open, by the ticket's own drawn boundary (not attempted): a hot-reload SSE push so the palette updates without a manual re-Load, and true node-*class* discovery for a hand-written `Final*` class outside the tool ladder.
 
 ## What's genuinely still open, roughly by priority
 
 **P1 — real, scoped, unstarted:**
-- **Ticket 18, second half**: capability discovery (a workflow's `tools/`/`functions/` folders becoming palette entries) is built and tested. **Node-type discovery is not** — a hand-written Python node class does not become a new palette entry. Needs an SSE-pushed capability manifest plus a frontend `NodeTypeRegistry.upsert()` consumer. Read the ticket file fully before starting; it has unresolved sub-decisions (what marks a class as exposed, hot-reload behavior on a syntax error).
+- **Ticket 18's remaining slice**: SSE-pushed "capabilities changed" notification (today's answer is `uvicorn --reload` + manually re-Load) and node-*class* discovery beyond `BaseTool` subclasses. Read the ticket file's own design section before starting — it already sketches the SSE + `NodeTypeRegistry.upsert()` shape.
 - **Human-in-the-loop**: how `interrupt()`/`HumanInTheLoopMiddleware` surfaces as a canvas affordance. Not specified at all yet — this needs a design pass (possibly via a `feature-design`-style interview) before any code.
 - **Streaming/observability enhancements**: token streams and per-node traces already flow to the chat panel (ticket 27); a live LangSmith-style trace view or deeper per-node observability on the canvas itself is unbuilt and unspecified.
 - **Per-node retry/timeout UI**: `retry_policy`/`timeout` are already wired at the graph-assembly level (`StateGraph.set_node_defaults`, CLAUDE.md's own rule that these are workflow-level, not node-level, concerns) — but there's no canvas UI to configure per-node overrides yet.

@@ -877,6 +877,38 @@ ceilings in the same document would otherwise clobber each other.
 
 222 pytest + 262 Vitest passing, `tsc` clean.
 
+## Implement ticket 18's node-type discovery for tool capabilities (2026-08-06)
+
+The backend half was built and verified in an earlier session
+(`capability_discovery.py`, `GET /api/workflows/{slug}/capabilities`) but
+the ticket's own "left open" note was accurate: nothing on the frontend
+ever called that endpoint, so a discovered tool never appeared anywhere a
+developer could actually use it.
+
+Added `WorkflowFileClient.capabilities()` (maps the endpoint the same way
+`list()`/`load()` already do), `DiscoveredToolNode.ts` (turns one
+`ToolCapability` into a real, connectable node type generically, reusing
+the existing `AbstractToolNode` ladder rather than a parallel one —
+`invokeTool` refuses honestly, since a discovered tool's Python
+implementation only exists on the backend and local preview cannot call
+it), and `registerDiscoveredCapabilities` in `workflowScoped.ts`
+(registers one node type per capability on load, unregisters the previous
+workflow's on the next one). Wired into `WorkflowManager.handleLoad`
+before `importJSON`, same load-order reasoning as Chinook's own
+registration.
+
+Deliberately not attempted: the harder remaining half the ticket itself
+scoped out — a hot-reload SSE push, or true node-*class* discovery beyond
+the tool ladder. `uvicorn --reload` + re-Load remains today's answer.
+
+Verified live against the real `chinook-nl-to-sql` workflow: fetched its
+three actual discovered tools through the running backend, registered
+them, and confirmed `chinook_list_tables` appears as a real, searchable
+palette card with its live-discovered description — zero hand-authored
+TypeScript for that specific tool.
+
+289 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

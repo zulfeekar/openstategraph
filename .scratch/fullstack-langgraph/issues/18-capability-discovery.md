@@ -1,5 +1,5 @@
 Type: grilling
-Status: partly resolved — capability discovery (tools/functions) built; node-type discovery is not
+Status: mostly resolved (2026-08-06) — backend discovery, the frontend consumer, and tool node-type registration are all built; hot-reload push (SSE manifest-changed event) and true node-*class* discovery beyond the tool ladder remain unbuilt, by the same scope boundary this file already drew. See map.md's "Implement ticket 18's node-type discovery" entry and `src/nodes/tools/DiscoveredToolNode.ts`.
 Blocked by: 08, 16
 
 ## Question
