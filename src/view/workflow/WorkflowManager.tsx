@@ -11,7 +11,7 @@ import {
   PanelSection,
   TextInput,
 } from '@design/primitives';
-import { useController, useWorkbench } from '@app/WorkbenchContext';
+import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { slugify, WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import './WorkflowManager.css';
@@ -41,6 +41,15 @@ const CURRENT_SLUG_KEY = 'dyflow-current-workflow-slug';
 export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProps) {
   const workbench = useWorkbench();
   const controller = useController();
+  // `workbench.model.name` is read directly below (not React state), so the
+  // "Save current" button's own label went stale the instant a rename
+  // happened while this panel stayed open — found live, renaming via the
+  // Inspector's Name field with Workflows already open. The rename and the
+  // eventual save were both always correct (`handleSave` reads the name
+  // fresh at click time); only this button's displayed text lagged. This
+  // subscription is the fix — same pattern `useNode` already uses for the
+  // model's other mutable fields.
+  useModelEvents(['workflow:name']);
   const client = useMemo(() => new WorkflowFileClient(), []);
   const [workflows, setWorkflows] = useState<readonly WorkflowSummary[]>([]);
   const [newName, setNewName] = useState('');
