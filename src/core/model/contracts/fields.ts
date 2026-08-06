@@ -12,7 +12,7 @@
  * instead — the schema stays the source of truth for its *data*.
  */
 
-export type FieldValue = string | number | boolean | null;
+export type FieldValue = string | number | boolean | null | Array<Record<string, FieldValue>>;
 
 interface FieldSchemaBase<TValue extends FieldValue> {
   /** Key within the node's `data` record. */
@@ -92,6 +92,24 @@ export interface ReadonlyFieldSchema extends FieldSchemaBase<string> {
   readonly mono?: boolean;
 }
 
+/**
+ * A repeatable group of fields — each row is an object with stable ids.
+ *
+ * Used for lists where each item needs its own identity that survives
+ * reordering and renaming (e.g. router branches, where an edge references
+ * a branch by id, not by name).
+ */
+export interface RepeatableGroupSchema extends Omit<FieldSchemaBase<FieldValue>, 'defaultValue'> {
+  readonly kind: 'repeatable-group';
+  readonly defaultValue?: Array<Record<string, FieldValue>>;
+  /** The sub-fields for each row. */
+  readonly fields: readonly FieldSchema[];
+  /** Label for the "add" button, e.g. "Add branch". */
+  readonly addLabel: string;
+  /** Maximum number of rows. */
+  readonly maxRows?: number;
+}
+
 export type FieldSchema =
   | TextFieldSchema
   | TextAreaFieldSchema
@@ -99,7 +117,8 @@ export type FieldSchema =
   | SliderFieldSchema
   | ToggleFieldSchema
   | FileFieldSchema
-  | ReadonlyFieldSchema;
+  | ReadonlyFieldSchema
+  | RepeatableGroupSchema;
 
 export type FieldKind = FieldSchema['kind'];
 
@@ -122,10 +141,14 @@ export function isInInspector(schema: FieldSchema): boolean {
 export function defaultsFrom(schemas: readonly FieldSchema[]): NodeData {
   const data: NodeData = {};
   for (const schema of schemas) {
-    data[schema.key] = schema.defaultValue;
+    data[schema.key] = schema.defaultValue ?? null;
     // A file field carries two keys: the display name and the content it
     // was loaded from. Seed both so the node is never half-initialised.
     if (schema.kind === 'file') data[schema.contentKey] = '';
+    // A repeatable-group field needs an empty array default if none provided.
+    if (schema.kind === 'repeatable-group' && schema.defaultValue === undefined) {
+      data[schema.key] = [];
+    }
   }
   return data;
 }
@@ -155,7 +178,8 @@ export function validateFields(
   for (const schema of schemas) {
     const validate = schema.validate as ((value: FieldValue) => string | null) | undefined;
     if (!validate) continue;
-    const error = validate(data[schema.key] ?? schema.defaultValue);
+    const value = data[schema.key] ?? schema.defaultValue ?? null;
+    const error = validate(value);
     if (error) errors[schema.key] = error;
   }
   return errors;

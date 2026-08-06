@@ -10,8 +10,8 @@ import {
   type FormatReportNodeModel,
 } from './FormatReportNode';
 
-const emptyData = (definition: { fields: readonly { key: string; defaultValue: unknown }[] }) =>
-  Object.fromEntries(definition.fields.map((f) => [f.key, f.defaultValue])) as never;
+const emptyData = (definition: { fields: readonly { key: string; defaultValue?: unknown }[] }) =>
+  Object.fromEntries(definition.fields.map((f) => [f.key, f.defaultValue ?? null])) as never;
 
 /**
  * The graph-engineering half of the orchestrator ladder

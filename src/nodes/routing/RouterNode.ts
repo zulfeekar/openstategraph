@@ -1,7 +1,7 @@
 import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
-import type { NodeData } from '@core/model/contracts/fields';
+import type { FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { IPortDescriptor } from '@core/model/contracts/ports';
 import type {
@@ -26,7 +26,22 @@ const FIELD_TIER = 'tier';
  */
 export const MAX_BRANCHES = 12;
 
-const DEFAULT_BRANCHES = ['dataquery', 'info', 'help', 'greeting', 'off_topic'].join('\n');
+/** One branch entry with a stable id that survives renames. */
+export interface BranchEntry {
+  /** Stable, generated-once id — survives renames. */
+  id: string;
+  /** The visible branch name — can be renamed freely. */
+  name: string;
+  [key: string]: FieldValue;
+}
+
+const DEFAULT_BRANCHES: BranchEntry[] = [
+  { id: 'b1', name: 'dataquery' },
+  { id: 'b2', name: 'info' },
+  { id: 'b3', name: 'help' },
+  { id: 'b4', name: 'greeting' },
+  { id: 'b5', name: 'off_topic' },
+];
 
 const slug = (name: string): string =>
   name
@@ -51,33 +66,52 @@ const slug = (name: string): string =>
     .replace(/^-+|-+$/g, '') || 'branch';
 
 /**
- * The branch names a router is configured with.
+ * The branch entries a router is configured with.
  *
- * Newline-separated text for now. A repeatable-group field kind is the right
- * home for this and belongs to ticket 20 — inventing one inside a prototype
- * would settle that design by accident. The parsing rules below are the ones
- * that stop a half-typed list from producing a broken node.
+ * Each entry has a stable `id` that survives renames — edges reference the
+ * id, not the name, so renaming a branch no longer drops its edge.
+ *
+ * Backward compatible: if `branches` is a newline-separated string (v1 format),
+ * it is migrated to the array format with generated stable ids.
  */
-export function branchesOf(data: Readonly<NodeData>): string[] {
-  const raw = typeof data[FIELD_BRANCHES] === 'string' ? (data[FIELD_BRANCHES] as string) : '';
-  const seen = new Set<string>();
-  const names: string[] = [];
+export function branchesOf(data: Readonly<NodeData>): BranchEntry[] {
+  const raw = data[FIELD_BRANCHES];
 
-  for (const line of raw.split('\n')) {
-    const name = line.trim();
-    if (name === '') continue;
-    // Dedupe on the slug, not the name: two names that slugify alike would
-    // collide as port ids, and a node cannot have two ports with one id.
-    const key = slug(name);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    names.push(name);
-    if (names.length >= MAX_BRANCHES) break;
+  // Migration: old format was newline-separated text
+  if (typeof raw === 'string') {
+    const seen = new Set<string>();
+    const result: BranchEntry[] = [];
+    for (const line of raw.split('\n')) {
+      const name = line.trim();
+      if (name === '') continue;
+      const id = slug(name);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      result.push({ id, name });
+      if (result.length >= MAX_BRANCHES) break;
+    }
+    return result.length > 0 ? result : [{ id: 'default', name: 'default' }];
   }
 
-  // Never zero outputs. A router with none is unwireable and reads as broken;
-  // one default output is something the user can rename.
-  return names.length > 0 ? names : ['default'];
+  if (!Array.isArray(raw)) return DEFAULT_BRANCHES;
+
+  const entries = raw as Array<Record<string, unknown>>;
+  const seen = new Set<string>();
+  const result: BranchEntry[] = [];
+
+  for (const entry of entries) {
+    const id = typeof entry.id === 'string' ? entry.id : null;
+    const name = typeof entry.name === 'string' ? entry.name : '';
+    if (!id || !name) continue;
+    // Dedupe on id: if two entries somehow got the same id, keep the first.
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push({ id, name });
+    if (result.length >= MAX_BRANCHES) break;
+  }
+
+  // Never zero outputs. A router with none is unwireable and reads as broken.
+  return result.length > 0 ? result : [{ id: 'default', name: 'default' }];
 }
 
 /** Locked. Not a field, so it cannot be cleared or contradicted. */
@@ -111,7 +145,7 @@ export class RouterNodeModel extends AbstractNodeModel {
    */
   get systemPrompt(): string {
     const listed = this.branches
-      .map((name) => (name === this.fallback ? `- ${name}  (used when nothing else matches)` : `- ${name}`))
+      .map((entry) => (entry.name === this.fallback ? `- ${entry.name}  (used when nothing else matches)` : `- ${entry.name}`))
       .join('\n');
     const rules = this.rules.trim();
     return [
@@ -122,7 +156,7 @@ export class RouterNodeModel extends AbstractNodeModel {
     ].join('\n\n');
   }
 
-  get branches(): readonly string[] {
+  get branches(): readonly BranchEntry[] {
     return branchesOf(this.data);
   }
 
@@ -144,11 +178,9 @@ export class RouterNodeModel extends AbstractNodeModel {
  * without it every renderer has to assume the router might reach any node, and
  * draws it connected to everything.
  *
- * **Known sharp edge:** a port id is derived from its branch name, so *renaming*
- * a branch changes the id and the edge attached to it is dropped — the serializer
- * warns and discards links to ports that no longer exist. Stable ids that survive
- * a rename need the repeatable-group field (ticket 20), where each branch can
- * carry its own generated id alongside its label.
+ * **Stable branch ids:** each branch has a generated-once `id` that survives
+ * renames — edges reference `branch:${id}`, so renaming a branch no longer
+ * drops its edge (ticket 20 fix).
  */
 export const routerNode: INodeDefinition = defineNode(
   {
@@ -173,15 +205,27 @@ export const routerNode: INodeDefinition = defineNode(
         minRows: 3,
       },
       {
-        kind: 'textarea',
+        kind: 'repeatable-group',
         key: FIELD_BRANCHES,
         label: 'Branches',
-        placeholder: 'One branch per line',
         defaultValue: DEFAULT_BRANCHES,
-        minRows: 3,
-        // Each line becomes an output port, so this field is what shapes the node.
-        validate: (value) =>
-          value.trim().length === 0 ? 'Add at least one branch' : null,
+        addLabel: 'Add branch',
+        maxRows: MAX_BRANCHES,
+        fields: [
+          {
+            kind: 'text',
+            key: 'name',
+            label: 'Branch name',
+            placeholder: 'e.g. dataquery',
+            defaultValue: '',
+            validate: (value) => (value.trim() ? null : 'Name required'),
+          },
+        ],
+        // Each entry becomes an output port, so this field is what shapes the node.
+        validate: (value) => {
+          if (!Array.isArray(value) || value.length === 0) return 'Add at least one branch';
+          return null;
+        },
       },
       {
         kind: 'text',
@@ -222,35 +266,21 @@ export const routerNode: INodeDefinition = defineNode(
 
       // Declaration order is preserved, because the order the user typed the
       // branches in is the order they expect to see them down the card.
-      const outputs = branches.map((name): IPortDescriptor => {
-        const isFallback = fallback.trim() !== '' && slug(fallback) === slug(name);
+      // Port id uses the stable `id` field, not the slugified name.
+      const outputs = branches.map((entry): IPortDescriptor => {
+        const isFallback = fallback.trim() !== '' && slug(fallback) === slug(entry.name);
         return {
-          id: `branch:${slug(name)}`,
+          id: `branch:${entry.id}`,
           direction: 'out',
           type: PORT.text,
-          label: name,
+          label: entry.name,
           description: isFallback
             ? 'Fallback — taken when no other branch matches.'
-            : `Taken when the input classifies as "${name}".`,
+            : `Taken when the input classifies as "${entry.name}".`,
         };
       });
 
-      // Guard against a slug collision producing duplicate ids, which would
-      // silently drop a port rather than fail loudly.
-      const ids = new Set<string>();
-      const unique = outputs.map((port) => {
-        if (!ids.has(port.id)) {
-          ids.add(port.id);
-          return port;
-        }
-        let suffix = 2;
-        while (ids.has(`${port.id}-${suffix}`)) suffix += 1;
-        const id = `${port.id}-${suffix}`;
-        ids.add(id);
-        return { ...port, id };
-      });
-
-      return [...inputs, ...unique];
+      return [...inputs, ...outputs];
     },
   },
   RouterNodeModel,

@@ -62,6 +62,39 @@ export class Workbench {
 
     this.serializer = new WorkflowSerializer(this.registry);
 
+    // Migration v1 → v2: convert router branches from newline-separated text
+    // to repeatable-group array with stable ids (ticket 20).
+    this.serializer.register({
+      from: 1,
+      to: 2,
+      migrate: (doc: Record<string, unknown>): Record<string, unknown> => {
+        const nodes = Array.isArray(doc['nodes']) ? doc['nodes'] : [];
+        for (const node of nodes) {
+          if (
+            typeof node === 'object' &&
+            node !== null &&
+            typeof node['type'] === 'string' &&
+            node['type'] === 'route.classifier' &&
+            typeof node['data'] === 'object' &&
+            node['data'] !== null
+          ) {
+            const data = node['data'] as Record<string, unknown>;
+            const branches = data['branches'];
+            // Convert newline-separated text to array of {id, name}
+            if (typeof branches === 'string' && branches.trim()) {
+              const entries = branches.split('\n').filter((line) => line.trim()).map((name, idx) => ({
+                id: `b${Date.now()}-${idx}-${name.trim().slice(0, 8).replace(/[^a-z0-9_]/gi, '-')}`,
+                name: name.trim(),
+              }));
+              data['branches'] = entries;
+            }
+          }
+        }
+        doc['version'] = 2;
+        return doc;
+      },
+    });
+
     this.engine = new ExecutionEngine(this.model, this.providers, this.workflowValidator);
 
     // The catalogue registers node types *and* their executors, so the

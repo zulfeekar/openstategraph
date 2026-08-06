@@ -23,7 +23,7 @@ import type {
 } from './contracts/workflow';
 
 /** Current on-disk schema version. Bump alongside a migration. */
-export const WORKFLOW_SCHEMA_VERSION = 1;
+export const WORKFLOW_SCHEMA_VERSION = 2;
 
 /**
  * The document.

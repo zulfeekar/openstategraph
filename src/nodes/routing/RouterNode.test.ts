@@ -27,35 +27,58 @@ import {
  * is exactly what ticket 03 requires the canvas to capture.
  */
 describe('branchesOf', () => {
-  it('parses one branch per line', () => {
-    expect(branchesOf({ branches: 'dataquery\nhelp\ngreeting' })).toEqual([
-      'dataquery',
-      'help',
-      'greeting',
+  it('parses branches from an array with stable ids', () => {
+    expect(branchesOf({ branches: [
+      { id: 'x', name: 'dataquery' },
+      { id: 'y', name: 'help' },
+      { id: 'z', name: 'greeting' },
+    ] })).toEqual([
+      { id: 'x', name: 'dataquery' },
+      { id: 'y', name: 'help' },
+      { id: 'z', name: 'greeting' },
     ]);
   });
 
-  it('ignores blank lines and surrounding whitespace', () => {
-    expect(branchesOf({ branches: '  a  \n\n\n  b \n ' })).toEqual(['a', 'b']);
+  it('ignores blank entries', () => {
+    expect(branchesOf({ branches: [
+      { id: 'a', name: 'a' },
+      { id: 'b', name: '' },
+      { id: 'c', name: 'b' },
+    ] })).toEqual([
+      { id: 'a', name: 'a' },
+      { id: 'c', name: 'b' },
+    ]);
   });
 
-  it('deduplicates, because two ports cannot share an id', () => {
-    expect(branchesOf({ branches: 'a\nb\na' })).toEqual(['a', 'b']);
-  });
-
-  it('is case-insensitive when deduplicating, since ids are slugified', () => {
-    expect(branchesOf({ branches: 'Help\nhelp' })).toEqual(['Help']);
+  it('deduplicates by id, because two ports cannot share an id', () => {
+    expect(branchesOf({ branches: [
+      { id: 'x', name: 'a' },
+      { id: 'y', name: 'b' },
+      { id: 'x', name: 'a-duplicate' },
+    ] })).toEqual([
+      { id: 'x', name: 'a' },
+      { id: 'y', name: 'b' },
+    ]);
   });
 
   it('falls back to a single branch rather than a node with no outputs', () => {
     // A router with zero outputs is unwireable and looks broken. One default
     // output is recoverable; none is a dead end.
-    expect(branchesOf({ branches: '' }).length).toBe(1);
+    expect(branchesOf({ branches: [] }).length).toBe(1);
   });
 
   it('caps the branch count so the card stays readable', () => {
-    const many = Array.from({ length: 30 }, (_, i) => `b${i}`).join('\n');
+    const many = Array.from({ length: 30 }, (_, i) => ({ id: `b${i}`, name: `b${i}` }));
     expect(branchesOf({ branches: many }).length).toBeLessThanOrEqual(12);
+  });
+
+  it('migrates from old newline-separated text format', () => {
+    // Backward compatibility: old documents have branches as newline-separated text
+    const result = branchesOf({ branches: 'dataquery\nhelp\ngreeting' });
+    // Should parse the text and assign stable ids
+    expect(result).toHaveLength(3);
+    expect(result.map((r) => r.name)).toEqual(['dataquery', 'help', 'greeting']);
+    expect(result.every((r) => r.id)).toBe(true);
   });
 });
 
@@ -64,14 +87,25 @@ describe('routerNode ports', () => {
     routerNode.ports({ ...defaultsFrom(routerNode.fields), ...data } as never);
 
   it('exposes exactly one output per branch', () => {
-    const ports = portsFor({ branches: 'dataquery\nhelp\noff_topic' });
+    const ports = portsFor({ branches: [
+      { id: 'x', name: 'dataquery' },
+      { id: 'y', name: 'help' },
+      { id: 'z', name: 'off_topic' },
+    ] });
     const outs = ports.filter((p) => p.direction === 'out');
     expect(outs.map((p) => p.label)).toEqual(['dataquery', 'help', 'off_topic']);
   });
 
   it('changes its port count when the branch list changes', () => {
-    const before = portsFor({ branches: 'a\nb' }).filter((p) => p.direction === 'out');
-    const after = portsFor({ branches: 'a\nb\nc' }).filter((p) => p.direction === 'out');
+    const before = portsFor({ branches: [
+      { id: 'a', name: 'a' },
+      { id: 'b', name: 'b' },
+    ] }).filter((p) => p.direction === 'out');
+    const after = portsFor({ branches: [
+      { id: 'a', name: 'a' },
+      { id: 'b', name: 'b' },
+      { id: 'c', name: 'c' },
+    ] }).filter((p) => p.direction === 'out');
     expect(before).toHaveLength(2);
     expect(after).toHaveLength(3);
   });
@@ -82,28 +116,29 @@ describe('routerNode ports', () => {
     expect(maxConnectionsOf(ins[0]!)).toBe(1);
   });
 
-  it('slugifies a branch name into a port id but keeps the label readable', () => {
-    const ports = portsFor({ branches: 'Data Query' });
+  it('uses the stable id for the port id, not the slugified name', () => {
+    const ports = portsFor({ branches: [{ id: 'my-stable-id', name: 'Data Query' }] });
     const out = ports.find((p) => p.direction === 'out');
-    expect(out?.id).toBe('branch:data-query');
+    // Port id now uses the stable id directly, not a slugified version
+    expect(out?.id).toBe('branch:my-stable-id');
     expect(out?.label).toBe('Data Query');
   });
 
-  it('preserves underscores in a branch name rather than collapsing them into hyphens', () => {
-    // Not cosmetic: the backend compiler recovers the literal branch label
-    // by stripping "branch:" off this exact port id and matches it against
-    // the router's own classification output, which echoes a branch name
-    // verbatim (e.g. "off_topic"). Collapsing "_" into "-" here silently
-    // orphaned every edge from an underscore-named branch on reload — found
-    // live in the intent-routed demo, which classifies into "off_topic" and
-    // "general_knowledge".
-    const ports = portsFor({ branches: 'off_topic\ngeneral_knowledge' });
-    const ids = ports.filter((p) => p.direction === 'out').map((p) => p.id);
-    expect(ids).toEqual(['branch:off_topic', 'branch:general_knowledge']);
+  it('preserves the port id even when the branch name changes', () => {
+    const before = portsFor({ branches: [{ id: 'b1', name: 'off_topic' }] });
+    const after = portsFor({ branches: [{ id: 'b1', name: 'off-topic-renamed' }] });
+    const beforeOut = before.find((p) => p.direction === 'out');
+    const afterOut = after.find((p) => p.direction === 'out');
+    // The port id stays the same because the id is stable
+    expect(beforeOut?.id).toBe(afterOut?.id);
+    expect(beforeOut?.label).not.toBe(afterOut?.label);
   });
 
   it('gives every port a unique id even for names that slugify alike', () => {
-    const ports = portsFor({ branches: 'a b\na-b' });
+    const ports = portsFor({ branches: [
+      { id: 'x', name: 'a b' },
+      { id: 'y', name: 'a-b' },
+    ] });
     const ids = ports.filter((p) => p.direction === 'out').map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -111,12 +146,15 @@ describe('routerNode ports', () => {
   it('lets a branch fan out to several nodes', () => {
     // One branch legitimately feeds two downstream nodes; capping it at one
     // would force a pointless pass-through node.
-    const out = portsFor({ branches: 'a' }).find((p) => p.direction === 'out');
+    const out = portsFor({ branches: [{ id: 'x', name: 'a' }] }).find((p) => p.direction === 'out');
     expect(maxConnectionsOf(out!)).toBeNull();
   });
 
   it('marks the fallback branch, so an unmatched question is visibly handled', () => {
-    const ports = portsFor({ branches: 'dataquery\nhelp', fallback: 'help' });
+    const ports = portsFor({ branches: [
+      { id: 'x', name: 'dataquery' },
+      { id: 'y', name: 'help' },
+    ], fallback: 'help' });
     const fallback = ports.find((p) => p.label === 'help');
     expect(fallback?.description).toMatch(/fallback|unmatched/i);
   });
@@ -155,7 +193,12 @@ describe('routerNode registration', () => {
     workbench.controller.nodes.add(ROUTER_TYPE, { x: 0, y: 0 });
     const node = workbench.model.nodes().find((n) => n.type === ROUTER_TYPE)!;
 
-    workbench.controller.nodes.setField(node.id, 'branches', 'one\ntwo\nthree\nfour');
+    workbench.controller.nodes.setField(node.id, 'branches', [
+      { id: '1', name: 'one' },
+      { id: '2', name: 'two' },
+      { id: '3', name: 'three' },
+      { id: '4', name: 'four' },
+    ]);
 
     const fresh = workbench.model.node(node.id)!;
     expect(fresh.ports.filter((p) => p.direction === 'out')).toHaveLength(4);

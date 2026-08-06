@@ -16,6 +16,7 @@ import {
   type FieldSchema,
   type FieldValue,
   type NodeData,
+  type RepeatableGroupSchema,
 } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
 import { useController } from '@app/WorkbenchContext';
@@ -163,6 +164,19 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
         </Field>
       );
     }
+
+    case 'repeatable-group': {
+      const value = data[schema.key];
+      const rows = Array.isArray(value) ? (value as Array<Record<string, FieldValue>>) : [];
+      return (
+        <RepeatableGroupField
+          nodeId={nodeId}
+          schema={schema}
+          rows={rows}
+          {...common}
+        />
+      );
+    }
   }
 }
 
@@ -237,3 +251,117 @@ const asNumber = (value: FieldValue | undefined, fallback: number): number =>
 
 const asBoolean = (value: FieldValue | undefined, fallback: boolean): boolean =>
   typeof value === 'boolean' ? value : fallback;
+
+/**
+ * Repeatable group field — a list of rows, each with stable ids.
+ *
+ * Used for router branches: each row has {id, name} where id is generated
+ * once and survives renames, so edges referencing `branch:${id}` don't
+ * break when the user renames a branch.
+ */
+function RepeatableGroupField({
+  nodeId,
+  schema,
+  rows,
+  ...common
+}: {
+  nodeId: NodeId;
+  schema: RepeatableGroupSchema;
+  rows: Array<Record<string, FieldValue>>;
+  label?: string;
+  hint?: string;
+  error?: string;
+  htmlFor: string;
+}) {
+  const controller = useController();
+
+  const addRow = () => {
+    const newRow: Record<string, FieldValue> = {};
+    for (const field of schema.fields) {
+      newRow[field.key] = field.defaultValue ?? null;
+    }
+    // Generate a stable id for new rows.
+    if (!newRow.id) {
+      newRow.id = `r${Date.now()}`;
+    }
+    const nextRows = [...rows, newRow];
+    controller.nodes.setField(nodeId, schema.key, nextRows);
+  };
+
+  const removeRow = (index: number) => {
+    const nextRows = rows.filter((_, i) => i !== index);
+    controller.nodes.setField(nodeId, schema.key, nextRows);
+  };
+
+  const updateRow = (index: number, key: string, value: FieldValue) => {
+    const nextRows = rows.map((row, i) =>
+      i === index ? { ...row, [key]: value } : row,
+    );
+    controller.nodes.setField(nodeId, schema.key, nextRows);
+  };
+
+  const canAdd = schema.maxRows === undefined || rows.length < schema.maxRows;
+
+  return (
+    <Field {...common}>
+      <div data-no-drag>
+        <div className="repeatable-group">
+          {rows.map((row, index) => (
+            <div key={(row.id as string) ?? index} className="repeatable-group__row">
+              {schema.fields.map((field) => (
+                <div key={field.key} className="repeatable-group__field">
+                  {field.kind === 'text' && (
+                    <TextInput
+                      value={asString(row[field.key])}
+                      placeholder={field.placeholder}
+                      onChange={(e) => updateRow(index, field.key, e.target.value)}
+                      mono={field.mono}
+                    />
+                  )}
+                  {field.kind === 'textarea' && (
+                    <TextArea
+                      value={asString(row[field.key])}
+                      placeholder={field.placeholder}
+                      minRows={field.minRows}
+                      onChange={(e) => updateRow(index, field.key, e.target.value)}
+                      mono={field.mono}
+                    />
+                  )}
+                  {field.kind === 'select' && (
+                    <Select
+                      options={resolveOptions(field).map((opt) => ({
+                        value: opt.value,
+                        label: opt.label,
+                        group: opt.group,
+                        disabled: opt.disabled,
+                      }))}
+                      value={asString(row[field.key]) || field.defaultValue}
+                      onValueChange={(val) => updateRow(index, field.key, val)}
+                    />
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => removeRow(index)}
+                className="repeatable-group__remove"
+                aria-label="Remove row"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {canAdd && (
+            <button
+              type="button"
+              onClick={addRow}
+              className="repeatable-group__add"
+            >
+              + {schema.addLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </Field>
+  );
+}
