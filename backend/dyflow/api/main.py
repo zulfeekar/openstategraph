@@ -20,6 +20,7 @@ model.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Callable
 
@@ -27,6 +28,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+# `basicConfig` is a no-op if the root logger already has handlers (e.g. under
+# pytest, or when `uvicorn --log-config` sets its own), so this is safe to call
+# unconditionally rather than guessing whether we're the entrypoint.
+logging.basicConfig(level=os.getenv("DYFLOW_LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
 ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]

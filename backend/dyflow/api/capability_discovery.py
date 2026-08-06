@@ -34,11 +34,14 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from dyflow.abc.tool import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,7 @@ def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
             # A syntax error or a bad import in one file must not blank the
             # whole capability list — the same reasoning `WorkflowStore.list`
             # already applies to one unreadable `workflow.json`.
+            logger.warning("Skipping unimportable tool module %s", path, exc_info=True)
             continue
 
         for _, obj in inspect.getmembers(module, inspect.isclass):
@@ -113,6 +117,7 @@ def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
             try:
                 instance = obj()
             except Exception:
+                logger.warning("Skipping tool %s.%s: constructor failed", qualified_module, obj.__name__, exc_info=True)
                 continue
             found.append(
                 ToolCapability(
@@ -150,6 +155,7 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
         try:
             module = _import_module(path, qualified_module)
         except Exception:
+            logger.warning("Skipping unimportable function module %s", path, exc_info=True)
             continue
 
         for name, obj in inspect.getmembers(module, inspect.isfunction):

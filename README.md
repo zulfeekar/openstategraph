@@ -10,6 +10,15 @@ now live alongside phase 1 — is the Python LangGraph/LangChain backend that
 actually compiles and runs a canvas-authored workflow, persists it to real
 files, and streams a run back to the chat panel.
 
+### Prerequisites
+
+- Node 20+ (developed against Node 22)
+- Python 3.13+
+- No local model runtime needed — the backend defaults to **Ollama cloud**
+  (an Ollama account, not a local `ollama serve`; see the "Ollama means
+  Ollama cloud" rule in `CLAUDE.md`). A local Ollama daemon only matters if
+  you pick the **Ollama** provider from the editor's canvas preview.
+
 Two processes, two languages, run separately (ticket 12: no single unified
 dev command exists — a `Vite` process and a `uvicorn` process have little in
 common to unify, and a Makefile wrapping "run these two things" would be one
@@ -35,6 +44,31 @@ preview — the default model there is `Mock · Offline`, a deterministic
 simulator. The real backend, once running, defaults to **Ollama cloud** with
 zero configuration (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` override it if set —
 see `resolve_model` in `backend/dyflow/api/main.py`).
+
+### Environment variables
+
+None are required. Copy [`.env.example`](.env.example) to `.env` to set any
+of these for the backend process:
+
+| Variable | Effect |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
+| `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
+| `DYFLOW_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
+
+The canvas-preview providers (Anthropic/OpenAI/Ollama keys entered in the
+credentials dialog) are separate — see **Providers** below.
+
+### Tests
+
+```bash
+npm test                                  # Vitest — frontend unit tests
+npx tsc -b --noEmit                       # typecheck only, no build output
+cd backend && pip install -e . && pytest  # backend unit tests
+```
+
+Architecture is documented in depth in [`CLAUDE.md`](CLAUDE.md); this README
+covers running the app, not the design rules.
 
 ---
 
