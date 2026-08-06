@@ -799,6 +799,46 @@ was a bug in disguise.
 
 259 Vitest passing, `tsc` clean.
 
+## Real-file E2E suite added, closing the gap the slug bug exposed (2026-08-06)
+
+Every existing test of the intent-routed shape (`test_intent_routed_workflow.py`,
+`test_orchestrator_graph.py`) builds its own document by hand in Python —
+right for pinning the compiler in isolation, but structurally unable to
+catch a defect in what the *editor* actually produces. That is precisely
+why the router slug bug (previous section) went unnoticed by 215 previously-
+green tests: none of them ever touched the real saved file.
+
+Added `test_intent_routed_demo_file.py`: loads
+`workflows/intent-routed-demo/workflow.json` from disk and runs all four of
+its real branches (dataquery, off_topic, general_knowledge, greeting)
+through the compiler with a scripted model, plus a structural check that
+the router's plan declares a conditional edge for all four branches — the
+exact invariant the slug bug violated. This is now a permanent regression
+guard: any future frontend-authoring defect that corrupts the real file on
+import/export will fail this suite, not just get discovered by a user
+asking "why 13 diagnostics."
+
+One test-harness pitfall surfaced and fixed along the way, worth recording
+since it cost real debugging time: `GenericFakeChatModel` (the base fake
+model class) raises on `bind_tools()` by default. `worker1` in the real
+document has three genuine Chinook tool bindings, and `grader-data`'s
+`tier: deep` wraps the model in `create_deep_agent` (which calls
+`bind_tools` even with `tools=[]]`, since it always attaches its own
+built-in filesystem/subagent tools). `test_intent_routed_workflow.py`
+already carries the fix (`bind_tools` overridden to tolerate the call and
+answer from content only) — the new file's first draft omitted it, copying
+a simpler fixture pattern from `test_orchestrator_graph.py` that never
+needed it, and hit the exact `NotImplementedError` this omission predicts.
+Not a production bug — confirmed via `_default_error_handler`'s message
+naming `error.node` under LangGraph's own sanitized node name rather than
+the workflow's literal node id (itself a latent, minor key-mismatch worth
+knowing about if a real node's error message is ever inspected
+programmatically — the failure text still displays correctly to a user,
+it just lands in `outputs["grader_data"]` instead of
+`outputs["grader-data"]`, an orphaned key nothing else reads).
+
+221 pytest passing.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
