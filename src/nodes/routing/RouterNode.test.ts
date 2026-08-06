@@ -89,6 +89,19 @@ describe('routerNode ports', () => {
     expect(out?.label).toBe('Data Query');
   });
 
+  it('preserves underscores in a branch name rather than collapsing them into hyphens', () => {
+    // Not cosmetic: the backend compiler recovers the literal branch label
+    // by stripping "branch:" off this exact port id and matches it against
+    // the router's own classification output, which echoes a branch name
+    // verbatim (e.g. "off_topic"). Collapsing "_" into "-" here silently
+    // orphaned every edge from an underscore-named branch on reload — found
+    // live in the intent-routed demo, which classifies into "off_topic" and
+    // "general_knowledge".
+    const ports = portsFor({ branches: 'off_topic\ngeneral_knowledge' });
+    const ids = ports.filter((p) => p.direction === 'out').map((p) => p.id);
+    expect(ids).toEqual(['branch:off_topic', 'branch:general_knowledge']);
+  });
+
   it('gives every port a unique id even for names that slugify alike', () => {
     const ports = portsFor({ branches: 'a b\na-b' });
     const ids = ports.filter((p) => p.direction === 'out').map((p) => p.id);

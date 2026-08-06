@@ -32,7 +32,22 @@ const slug = (name: string): string =>
   name
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
+    // Underscores are preserved, not collapsed into hyphens: this suffix is
+    // not cosmetic — the backend compiler recovers the literal branch label
+    // by stripping the `branch:` prefix off this exact port id
+    // (`workflow_compiler.py`: `src.get("portId", "").removeprefix("branch:")`)
+    // and matches it against the router's own classification output, which
+    // echoes a branch name verbatim (e.g. "off_topic", "general_knowledge").
+    // Found live: a real saved document (the intent-routed demo) has edges
+    // pointing at `branch:off_topic`, but this function used to produce
+    // `branch:off-topic` for the same branch — a mismatch invisible until
+    // the document was loaded, at which point `fromJSON` silently dropped
+    // both underscore-named branches' edges as pointing to "a port that no
+    // longer exists" (its own honest warning, but for the wrong reason: the
+    // port never actually moved, this function just stopped agreeing with
+    // itself). Re-saving from the editor in that state would have made the
+    // loss permanent.
+    .replace(/[^a-z0-9_]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'branch';
 
 /**

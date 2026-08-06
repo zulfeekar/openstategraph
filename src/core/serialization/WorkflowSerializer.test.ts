@@ -85,6 +85,30 @@ describe('WorkflowSerializer', () => {
       expect(reloaded.model.node(agent.id)?.parentId).toBe(group.id);
     });
 
+    it('round-trips a router edge to an underscore-named branch', () => {
+      // Found live: a real saved document (the intent-routed demo)
+      // classifies into "off_topic"/"general_knowledge" and had edges from
+      // those exact branch ports. `RouterNode`'s port-id slug used to
+      // collapse "_" into "-", so importing that same document back always
+      // produced a *different* port id than the one the edge pointed at —
+      // `fromJSON` then dropped the edge as pointing to "a port that no
+      // longer exists". This is the regression at the serializer's own
+      // load-then-check-warnings level, not just the port-id unit.
+      const router = addNode(workbench, TYPE.router, { data: { branches: 'off_topic\ngreeting' } });
+      const agent = addNode(workbench, TYPE.agent, { at: { x: 200, y: 0 } });
+      connect(workbench, router, 'branch:off_topic', agent, 'prompt');
+
+      const json = workbench.controller.document.exportJSON();
+      const reloaded = makeWorkbench();
+      const outcome = reloaded.controller.document.importJSON(json);
+
+      expect(outcome.ok).toBe(true);
+      // A message only appears when `fromJSON` dropped something — absent
+      // here means the edge survived, not just that loading didn't throw.
+      expect(outcome).not.toHaveProperty('message');
+      expect(reloaded.model.edgesOf(router.id)).toHaveLength(1);
+    });
+
     it('is idempotent — exporting a reloaded document reproduces the bytes', () => {
       seed();
       const first = workbench.controller.document.exportJSON();
