@@ -1,11 +1,13 @@
 import { EventBus } from '@core/kernel/EventBus';
 import type { Unsubscribe } from '@core/kernel/Disposable';
-import { unionRects, type Point, type Rect, type Size } from '@core/kernel/geometry';
+import type { Point, Rect, Size } from '@core/kernel/geometry';
 import { sortByIdNatural } from '@core/kernel/ordering';
+import { AdjacencyIndex } from './AdjacencyIndex';
+import { GraphQueries } from './GraphQueries';
 import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
 import type { FieldValue, NodeData } from './contracts/fields';
-import { portRefEquals, type PortRef } from './contracts/ports';
+import type { PortRef } from './contracts/ports';
 import type {
   INodeModel,
   NodeId,
@@ -32,20 +34,22 @@ export const WORKFLOW_SCHEMA_VERSION = 1;
  * mechanism instead of a per-feature concern, and it keeps this class
  * small enough to reason about.
  *
- * Adjacency is maintained incrementally alongside the edge map. Rebuilding
- * it per query was measurably the hot path while dragging a link across a
- * large graph, since validation walks the neighbours of every port under
- * the pointer.
+ * Two collaborators split off the concerns that do not need this class's
+ * event-emitting or serialisation responsibilities (ticket 17): incidence
+ * bookkeeping (`AdjacencyIndex`) is maintained incrementally alongside the
+ * edge map — rebuilding it per query was measurably the hot path while
+ * dragging a link across a large graph, since validation walks the
+ * neighbours of every port under the pointer — and the read-only graph
+ * algorithms over that bookkeeping (`GraphQueries`). Neither is a second
+ * public surface: this class's own public methods are unchanged and still
+ * answer every one of these questions, just by delegating.
  */
 export class WorkflowModel implements IWorkflowModel {
   private readonly bus = new EventBus<WorkflowEvents>();
   private readonly nodeMap = new Map<NodeId, AbstractNodeModel>();
   private readonly edgeMap = new Map<EdgeId, EdgeModel>();
-
-  /** nodeId → edge ids touching it, for O(degree) neighbour queries. */
-  private readonly incident = new Map<NodeId, Set<EdgeId>>();
-  /** parentId → child ids. */
-  private readonly children = new Map<NodeId, Set<NodeId>>();
+  private readonly adjacency = new AdjacencyIndex();
+  private readonly queries = new GraphQueries(this.nodeMap, this.edgeMap, this.adjacency);
 
   private _name: string;
 
@@ -100,142 +104,45 @@ export class WorkflowModel implements IWorkflowModel {
   }
 
   edgesOf(nodeId: NodeId): readonly EdgeModel[] {
-    const ids = this.incident.get(nodeId);
-    if (!ids) return [];
-    const result: EdgeModel[] = [];
-    for (const id of ids) {
-      const edge = this.edgeMap.get(id);
-      if (edge) result.push(edge);
-    }
-    return result;
+    return this.queries.edgesOf(nodeId);
   }
 
   edgesInto(ref: PortRef): readonly EdgeModel[] {
-    return this.edgesOf(ref.nodeId).filter((edge) => portRefEquals(edge.target, ref));
+    return this.queries.edgesInto(ref);
   }
 
   edgesFrom(ref: PortRef): readonly EdgeModel[] {
-    return this.edgesOf(ref.nodeId).filter((edge) => portRefEquals(edge.source, ref));
+    return this.queries.edgesFrom(ref);
   }
 
   childrenOf(nodeId: NodeId): readonly AbstractNodeModel[] {
-    const ids = this.children.get(nodeId);
-    if (!ids) return [];
-    const result: AbstractNodeModel[] = [];
-    for (const id of ids) {
-      const node = this.nodeMap.get(id);
-      if (node) result.push(node);
-    }
-    return result;
+    return this.queries.childrenOf(nodeId);
   }
 
   /** Children, grandchildren and so on. */
   descendantsOf(nodeId: NodeId): readonly AbstractNodeModel[] {
-    const result: AbstractNodeModel[] = [];
-    const queue = [...this.childrenOf(nodeId)];
-    while (queue.length > 0) {
-      const node = queue.shift();
-      if (!node) continue;
-      result.push(node);
-      queue.push(...this.childrenOf(node.id));
-    }
-    return result;
+    return this.queries.descendantsOf(nodeId);
   }
 
   predecessorsOf(nodeId: NodeId): readonly AbstractNodeModel[] {
-    const seen = new Set<NodeId>();
-    const result: AbstractNodeModel[] = [];
-    for (const edge of this.edgesOf(nodeId)) {
-      if (edge.target.nodeId !== nodeId) continue;
-      const id = edge.source.nodeId;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const node = this.nodeMap.get(id);
-      if (node) result.push(node);
-    }
-    return result;
+    return this.queries.predecessorsOf(nodeId);
   }
 
   successorsOf(nodeId: NodeId): readonly AbstractNodeModel[] {
-    const seen = new Set<NodeId>();
-    const result: AbstractNodeModel[] = [];
-    for (const edge of this.edgesOf(nodeId)) {
-      if (edge.source.nodeId !== nodeId) continue;
-      const id = edge.target.nodeId;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const node = this.nodeMap.get(id);
-      if (node) result.push(node);
-    }
-    return result;
+    return this.queries.successorsOf(nodeId);
   }
 
   countOfType(type: NodeTypeId): number {
-    let count = 0;
-    for (const node of this.nodeMap.values()) if (node.type === type) count += 1;
-    return count;
+    return this.queries.countOfType(type);
   }
 
-  /**
-   * Kahn's algorithm over executable nodes.
-   *
-   * Returns the surviving cycle when one exists rather than throwing — the
-   * UI needs to highlight the offending nodes, and a cyclic graph is a
-   * thing a user can legitimately draw on the way to a valid one.
-   */
+  /** Kahn's algorithm over executable nodes. See `GraphQueries.topologicalOrder`. */
   topologicalOrder(): { order: readonly NodeId[]; cycle: readonly NodeId[] | null } {
-    const indegree = new Map<NodeId, number>();
-    const outgoing = new Map<NodeId, NodeId[]>();
-
-    for (const node of this.nodeMap.values()) {
-      if (!node.isExecutable) continue;
-      indegree.set(node.id, 0);
-      outgoing.set(node.id, []);
-    }
-
-    for (const edge of this.edgeMap.values()) {
-      const from = edge.source.nodeId;
-      const to = edge.target.nodeId;
-      // Skip edges touching non-executable nodes so annotations and
-      // containers cannot stall the schedule.
-      if (!indegree.has(from) || !indegree.has(to)) continue;
-      outgoing.get(from)?.push(to);
-      indegree.set(to, (indegree.get(to) ?? 0) + 1);
-    }
-
-    // Seed in insertion order so an unconstrained graph runs in the order
-    // the user built it — surprising ordering makes runs hard to debug.
-    const queue: NodeId[] = [];
-    for (const [id, degree] of indegree) if (degree === 0) queue.push(id);
-
-    const order: NodeId[] = [];
-    while (queue.length > 0) {
-      const id = queue.shift();
-      if (id == null) continue;
-      order.push(id);
-      for (const next of outgoing.get(id) ?? []) {
-        const remaining = (indegree.get(next) ?? 0) - 1;
-        indegree.set(next, remaining);
-        if (remaining === 0) queue.push(next);
-      }
-    }
-
-    if (order.length === indegree.size) return { order, cycle: null };
-
-    const cycle = [...indegree.entries()]
-      .filter(([, degree]) => degree > 0)
-      .map(([id]) => id);
-    return { order, cycle };
+    return this.queries.topologicalOrder();
   }
 
   bounds(): Rect | null {
-    const rects = [...this.nodeMap.values()].map((node) => ({
-      x: node.position.x,
-      y: node.position.y,
-      width: node.size.width,
-      height: node.size.height,
-    }));
-    return unionRects(rects);
+    return this.queries.bounds();
   }
 
   /* ================================================================ *
@@ -248,8 +155,8 @@ export class WorkflowModel implements IWorkflowModel {
       throw new Error(`[workflow] duplicate node id "${concrete.id}"`);
     }
     this.nodeMap.set(concrete.id, concrete);
-    this.incident.set(concrete.id, new Set());
-    if (concrete.parentId) this.linkChild(concrete.parentId, concrete.id);
+    this.adjacency.registerNode(concrete.id);
+    if (concrete.parentId) this.adjacency.linkChild(concrete.parentId, concrete.id);
     this.bus.emit('node:added', { node: concrete });
   }
 
@@ -264,9 +171,8 @@ export class WorkflowModel implements IWorkflowModel {
     // container is a grouping affordance, not an owner of its contents.
     for (const child of this.childrenOf(id)) this.setNodeParent(child.id, null);
 
-    if (node.parentId) this.unlinkChild(node.parentId, id);
-    this.children.delete(id);
-    this.incident.delete(id);
+    if (node.parentId) this.adjacency.unlinkChild(node.parentId, id);
+    this.adjacency.unregisterNode(id);
     this.nodeMap.delete(id);
     this.bus.emit('node:removed', { nodeId: id, node });
     return node;
@@ -332,10 +238,10 @@ export class WorkflowModel implements IWorkflowModel {
     const previous = node.parentId;
     if (previous === parentId) return;
     // Refuse a cycle: a container cannot end up inside its own subtree.
-    if (parentId && this.isAncestorOf(id, parentId)) return;
-    if (previous) this.unlinkChild(previous, id);
+    if (parentId && this.queries.isAncestorOf(id, parentId)) return;
+    if (previous) this.adjacency.unlinkChild(previous, id);
     node.applyParent(parentId);
-    if (parentId) this.linkChild(parentId, id);
+    if (parentId) this.adjacency.linkChild(parentId, id);
     this.bus.emit('node:parent', { nodeId: id, parentId, previous });
   }
 
@@ -345,8 +251,7 @@ export class WorkflowModel implements IWorkflowModel {
       throw new Error(`[workflow] duplicate edge id "${concrete.id}"`);
     }
     this.edgeMap.set(concrete.id, concrete);
-    this.incident.get(concrete.source.nodeId)?.add(concrete.id);
-    this.incident.get(concrete.target.nodeId)?.add(concrete.id);
+    this.adjacency.registerEdge(concrete);
     this.bus.emit('edge:added', { edge: concrete });
   }
 
@@ -354,8 +259,7 @@ export class WorkflowModel implements IWorkflowModel {
     const edge = this.edgeMap.get(id);
     if (!edge) return undefined;
     this.edgeMap.delete(id);
-    this.incident.get(edge.source.nodeId)?.delete(id);
-    this.incident.get(edge.target.nodeId)?.delete(id);
+    this.adjacency.unregisterEdge(edge);
     this.bus.emit('edge:removed', { edgeId: id, edge });
     return edge;
   }
@@ -379,8 +283,7 @@ export class WorkflowModel implements IWorkflowModel {
     this.transact(() => {
       this.nodeMap.clear();
       this.edgeMap.clear();
-      this.incident.clear();
-      this.children.clear();
+      this.adjacency.clear();
     });
     this.bus.emit('workflow:reset', { workflow: this });
   }
@@ -443,33 +346,5 @@ export class WorkflowModel implements IWorkflowModel {
 
   dispose(): void {
     this.bus.dispose();
-  }
-
-  /* ================================================================ *
-   * Internals
-   * ================================================================ */
-
-  private linkChild(parentId: NodeId, childId: NodeId): void {
-    let set = this.children.get(parentId);
-    if (!set) {
-      set = new Set();
-      this.children.set(parentId, set);
-    }
-    set.add(childId);
-  }
-
-  private unlinkChild(parentId: NodeId, childId: NodeId): void {
-    const set = this.children.get(parentId);
-    set?.delete(childId);
-    if (set?.size === 0) this.children.delete(parentId);
-  }
-
-  private isAncestorOf(ancestorId: NodeId, nodeId: NodeId): boolean {
-    let current = this.nodeMap.get(nodeId)?.parentId ?? null;
-    while (current) {
-      if (current === ancestorId) return true;
-      current = this.nodeMap.get(current)?.parentId ?? null;
-    }
-    return false;
   }
 }

@@ -1,5 +1,5 @@
 Type: grilling
-Status: partly resolved — controller done, model outstanding
+Status: resolved — controller and model both done
 Blocked by: 11
 
 ## Question
@@ -113,6 +113,42 @@ the old controller did not.
 sites in code with no view-layer tests, so it needs its own verification pass —
 including the reload smoke check from ticket 26 — rather than being appended to
 an already-large refactor.
+
+## Answer — part 2 continued: `WorkflowModel`, done (2026-08-06)
+
+Built exactly the split settled above, no deviation:
+
+```
+core/model/
+  WorkflowModel.ts     475 → 350 lines. Node + edge mutation, events, transactions.
+  AdjacencyIndex.ts    incident/children bookkeeping, incrementally maintained.
+  GraphQueries.ts      edgesOf/Into/From, children/descendants/predecessors/
+                       successors, countOfType, isAncestorOf — delegates
+                       topologicalOrder/bounds to topology.ts.
+  topology.ts          pure topologicalOrder(nodes, edges) and bounds(nodes) —
+                        exactly the file `topology.test.ts` was already named for.
+```
+
+Confirmed the two things this was called out as needing to get right: the
+index is still *written* by `WorkflowModel`'s mutators
+(`adjacency.registerNode/registerEdge/linkChild`, ...) and *read* by
+`GraphQueries` and `setNodeParent`'s cycle check
+(`queries.isAncestorOf`) — never a free-floating object recomputed per
+query. And `topologicalOrder`/`bounds` are genuinely pure functions with no
+reason to be methods, now living where they were always going to.
+
+**The honest limit stands, unchanged, and is not "fixed" here**:
+`WorkflowModel`'s own public method count is untouched — still every
+`addNode`/`edgesOf`/`topologicalOrder`/etc. a caller already depends on —
+because this ticket's own prior analysis already concluded that collapsing
+those into `NodeCollection`/`EdgeCollection` is a hundred-plus-call-site
+rename for a smaller number rather than a clearer design, and recommended
+against it. What changed is where the *implementation* of each concern
+lives, verified by two new, independently-tested collaborators (22 tests:
+`AdjacencyIndex.test.ts`, `GraphQueries.test.ts`) plus 5 direct unit tests
+of the pure topology functions (`topology.pure.test.ts`) — none of which
+need a `WorkflowModel`, a registry, or a controller to run. 235 Vitest
+passing, zero regressions, `tsc` clean.
 
 ## Found while verifying: ticket 26
 
