@@ -9,6 +9,7 @@ import {
   graderNode,
   type GraderNodeModel,
 } from './GraderNode';
+import { HUMAN_APPROVAL_TYPE } from './HumanApprovalNode';
 
 /**
  * The Grader — second role preset, and the node that makes loops legal.
@@ -191,7 +192,7 @@ describe('the revise loop', () => {
     expect(reloaded.model.edgesOf(grader.id)).toHaveLength(2);
   });
 
-  it('only the grader can start a feedback edge', () => {
+  it('only the grader and the human approval gate can start a feedback edge', () => {
     const workbench2 = makeWorkbench();
     const feedbackSources = workbench2.registry.nodeTypes
       .list()
@@ -203,7 +204,10 @@ describe('the revise loop', () => {
       );
 
     // If anything else could emit feedback, an accidental cycle would become
-    // drawable and the type gate would stop being a gate.
-    expect(feedbackSources).toEqual([GRADER_TYPE]);
+    // drawable and the type gate would stop being a gate. `human.approval`'s
+    // `rejected` port is the one other deliberate source — a human's reject
+    // decision is, like a grader's verdict, a legitimate reason to route
+    // feedback upstream.
+    expect(feedbackSources).toEqual([GRADER_TYPE, HUMAN_APPROVAL_TYPE]);
   });
 });

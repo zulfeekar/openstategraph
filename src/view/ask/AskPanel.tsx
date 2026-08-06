@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Send, TriangleAlert } from 'lucide-react';
 import { Button, Field, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
-import { RuntimeClient, type RunResult, type RunStreamEvent } from '@core/runtime/RuntimeClient';
+import {
+  RuntimeClient,
+  type RunOutcome,
+  type RunResult,
+  type RunStreamEvent,
+} from '@core/runtime/RuntimeClient';
 import { useController } from '@app/WorkbenchContext';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import './AskPanel.css';
@@ -11,6 +16,13 @@ interface ActivityRow {
   readonly node: string;
   /** Distinguishes concurrently dispatched worker instances (ticket 27). */
   readonly taskId: string | null;
+}
+
+/** A run paused at a `human.approval` node, waiting on this turn. */
+interface PendingApproval {
+  readonly threadId: string;
+  readonly message: string;
+  readonly candidate: string;
 }
 
 /** One question-and-answer exchange in the chat thread. */
@@ -23,6 +35,8 @@ interface ChatTurn {
   readonly thinking: string;
   readonly result: RunResult | null;
   readonly error: string | null;
+  /** Set while this turn's run is paused waiting for a human decision. */
+  readonly pendingApproval: PendingApproval | null;
 }
 
 let nextTurnId = 0;
@@ -83,7 +97,10 @@ export function AskPanel() {
   // configuration exists.
   const client = useMemo(() => new RuntimeClient(), []);
 
-  const running = turns.some((turn) => turn.running);
+  // A paused-on-approval turn is not `running`, but the composer should stay
+  // disabled until it is resolved — sending a new message mid-approval would
+  // overwrite the entry node's `prompt` out from under the paused thread.
+  const running = turns.some((turn) => turn.running || turn.pendingApproval);
 
   const updateTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
     setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
@@ -98,6 +115,159 @@ export function AskPanel() {
     });
   }, []);
 
+  /**
+   * Runs the shared tail of both a fresh send and a resumed approval: wires
+   * `onEvent` to the canvas highlight/activity feed, then settles the turn
+   * into a result, an error, or — new for `human.approval` — a paused
+   * `pendingApproval` state instead of either. Same shape for both callers
+   * because a resumed run can itself pause again at a later approval node.
+   */
+  const streamAndSettle = useCallback(
+    async (
+      id: string,
+      call: (onEvent: (event: RunStreamEvent) => void) => Promise<{
+        readonly ok: boolean;
+        readonly value?: RunOutcome;
+        readonly error?: string;
+      }>,
+    ) => {
+      const seen = new Set<string>();
+      let activeNode: string | null = null;
+
+      // For the per-node duration readout the Inspector already shows (built
+      // for the local preview path, which measures a real start/end) — a
+      // backend-streamed run has no such pair, since LangGraph's `updates`
+      // stream mode reports a node only *after* it finishes, never when it
+      // starts. The honest substitute: the wall-clock gap since the previous
+      // `update` frame arrived. For a sequential chain this is a close
+      // approximation of that node's own run time; for nodes dispatched
+      // concurrently by a fan-out (ticket 27's `Send`) it overstates any one
+      // of them, since several are genuinely running at once behind one gap.
+      // Shown anyway rather than left blank — a labelled approximation beats
+      // no signal at all, and the Inspector's "ms" badge is not claimed
+      // anywhere to be profiler-grade precision.
+      let lastEventAt = performance.now();
+
+      // Queues node highlights so each one is visible for at least
+      // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
+      // arrive — see the constant's own comment for why this exists.
+      let highlightChain: Promise<void> = Promise.resolve();
+      const activate = (nodeId: string, output: string | null) => {
+        const now = performance.now();
+        const durationMs = Math.round(now - lastEventAt);
+        lastEventAt = now;
+
+        highlightChain = highlightChain.then(async () => {
+          // One node glows at a time, in the order the stream reports — the
+          // previous node's card returns to its resting state exactly as it
+          // would after a local preview run finishes with it.
+          if (activeNode && activeNode !== nodeId) {
+            controller.model.setNodeRuntime(activeNode, { status: 'success' });
+          }
+          // The SSE `update` frame reports a node that has *already* produced
+          // its output — LangGraph's `updates` stream mode fires after a node
+          // completes, not before — so the value is written here, at the same
+          // moment the card starts to glow, rather than waiting for a later
+          // event that never carries it. Without this, the local preview run
+          // populates `node.runtime.output` (`ExecutionEngine` does the same
+          // thing) but a backend-streamed run never did, so cards like
+          // Formatted Output stayed on their empty "Run the workflow to see
+          // the result here" placeholder even after a real answer streamed in.
+          // `durationMs` closes the identical gap for the Inspector's "LAST
+          // RUN" timing badge — previously always blank for a Chat-driven run.
+          controller.model.setNodeRuntime(nodeId, {
+            status: 'running',
+            durationMs,
+            ...(output != null ? { output } : {}),
+          });
+          // Highlight whichever node just acted — the "currently in charge"
+          // the ticket asks for. A dispatched worker's `taskId` still selects
+          // the one static Worker node on the canvas; there is nowhere else
+          // for a runtime task instance to be shown (ticket 27's own finding:
+          // `Send` creates tasks, never new canvas nodes).
+          controller.selectionActions.selectNodes([nodeId]);
+          activeNode = nodeId;
+          await sleep(MIN_HIGHLIGHT_MS);
+        });
+      };
+
+      const onEvent = (event: RunStreamEvent) => {
+        if (event.type === 'update') {
+          seen.add(event.node);
+          activate(event.node, event.output);
+          // Data collection is never delayed by the animation pacing above —
+          // only the visual glow is paced, not the record of what happened.
+          setTurns((all) =>
+            all.map((turn) =>
+              turn.id === id
+                ? { ...turn, activity: [...turn.activity, { node: event.node, taskId: event.taskId }] }
+                : turn,
+            ),
+          );
+          scrollToEnd();
+        } else if (event.type === 'token') {
+          setTurns((all) =>
+            all.map((turn) => (turn.id === id ? { ...turn, thinking: turn.thinking + event.content } : turn)),
+          );
+          scrollToEnd();
+        }
+      };
+
+      const outcome = await call(onEvent);
+
+      // Waits for the last queued highlight's minimum-visible window before
+      // finalising, so the very last node to act does not flash and vanish
+      // the instant the run's own answer arrives.
+      await highlightChain;
+
+      if (outcome.ok && outcome.value && 'interrupted' in outcome.value) {
+        // Paused, not finished: the last active node stays highlighted rather
+        // than flipping to "success", since it has not actually completed.
+        updateTurn(id, {
+          running: false,
+          pendingApproval: {
+            threadId: outcome.value.threadId,
+            message: outcome.value.message,
+            candidate: outcome.value.candidate,
+          },
+        });
+        scrollToEnd();
+        return;
+      }
+
+      if (activeNode) {
+        controller.model.setNodeRuntime(activeNode, { status: outcome.ok ? 'success' : 'error' });
+      }
+
+      if (outcome.ok && outcome.value) {
+        // Once finished, show the whole path that ran rather than just the
+        // last node the stream happened to touch.
+        controller.selectionActions.selectNodes([...seen]);
+        updateTurn(id, { running: false, result: outcome.value as RunResult, pendingApproval: null });
+      } else {
+        updateTurn(id, { running: false, error: outcome.error ?? 'The run failed.', pendingApproval: null });
+      }
+      scrollToEnd();
+    },
+    [controller, scrollToEnd, updateTurn],
+  );
+
+  const respondToApproval = useCallback(
+    async (turnId: string, decision: 'approve' | 'reject') => {
+      const turn = turns.find((t) => t.id === turnId);
+      if (!turn || !turn.pendingApproval) return;
+      const { threadId } = turn.pendingApproval;
+
+      updateTurn(turnId, { running: true, pendingApproval: null });
+      const document = JSON.parse(controller.document.exportJSON()) as unknown;
+
+      await streamAndSettle(turnId, (onEvent) =>
+        client.resume({ threadId, workflow: document, decision }, onEvent),
+      );
+    },
+    [client, controller, streamAndSettle, turns, updateTurn],
+  );
+
   const send = useCallback(async () => {
     const trimmed = question.trim();
     if (trimmed === '' || running) return;
@@ -111,7 +281,16 @@ export function AskPanel() {
     const id = `turn-${nextTurnId++}`;
     setTurns((all) => [
       ...all,
-      { id, question: trimmed, running: true, activity: [], thinking: '', result: null, error: null },
+      {
+        id,
+        question: trimmed,
+        running: true,
+        activity: [],
+        thinking: '',
+        result: null,
+        error: null,
+        pendingApproval: null,
+      },
     ]);
     setQuestion('');
     scrollToEnd();
@@ -119,108 +298,9 @@ export function AskPanel() {
     // Serialised through the same path as “export”, so the runtime receives
     // exactly the bytes that would be saved — no second representation.
     const document = JSON.parse(controller.document.exportJSON()) as unknown;
-    const seen = new Set<string>();
-    let activeNode: string | null = null;
 
-    // For the per-node duration readout the Inspector already shows (built
-    // for the local preview path, which measures a real start/end) — a
-    // backend-streamed run has no such pair, since LangGraph's `updates`
-    // stream mode reports a node only *after* it finishes, never when it
-    // starts. The honest substitute: the wall-clock gap since the previous
-    // `update` frame arrived. For a sequential chain this is a close
-    // approximation of that node's own run time; for nodes dispatched
-    // concurrently by a fan-out (ticket 27's `Send`) it overstates any one
-    // of them, since several are genuinely running at once behind one gap.
-    // Shown anyway rather than left blank — a labelled approximation beats
-    // no signal at all, and the Inspector's "ms" badge is not claimed
-    // anywhere to be profiler-grade precision.
-    let lastEventAt = performance.now();
-
-    // Queues node highlights so each one is visible for at least
-    // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
-    // arrive — see the constant's own comment for why this exists.
-    let highlightChain: Promise<void> = Promise.resolve();
-    const activate = (nodeId: string, output: string | null) => {
-      const now = performance.now();
-      const durationMs = Math.round(now - lastEventAt);
-      lastEventAt = now;
-
-      highlightChain = highlightChain.then(async () => {
-        // One node glows at a time, in the order the stream reports — the
-        // previous node's card returns to its resting state exactly as it
-        // would after a local preview run finishes with it.
-        if (activeNode && activeNode !== nodeId) {
-          controller.model.setNodeRuntime(activeNode, { status: 'success' });
-        }
-        // The SSE `update` frame reports a node that has *already* produced
-        // its output — LangGraph's `updates` stream mode fires after a node
-        // completes, not before — so the value is written here, at the same
-        // moment the card starts to glow, rather than waiting for a later
-        // event that never carries it. Without this, the local preview run
-        // populates `node.runtime.output` (`ExecutionEngine` does the same
-        // thing) but a backend-streamed run never did, so cards like
-        // Formatted Output stayed on their empty "Run the workflow to see
-        // the result here" placeholder even after a real answer streamed in.
-        // `durationMs` closes the identical gap for the Inspector's "LAST
-        // RUN" timing badge — previously always blank for a Chat-driven run.
-        controller.model.setNodeRuntime(nodeId, {
-          status: 'running',
-          durationMs,
-          ...(output != null ? { output } : {}),
-        });
-        // Highlight whichever node just acted — the "currently in charge"
-        // the ticket asks for. A dispatched worker's `taskId` still selects
-        // the one static Worker node on the canvas; there is nowhere else
-        // for a runtime task instance to be shown (ticket 27's own finding:
-        // `Send` creates tasks, never new canvas nodes).
-        controller.selectionActions.selectNodes([nodeId]);
-        activeNode = nodeId;
-        await sleep(MIN_HIGHLIGHT_MS);
-      });
-    };
-
-    const onEvent = (event: RunStreamEvent) => {
-      if (event.type === 'update') {
-        seen.add(event.node);
-        activate(event.node, event.output);
-        // Data collection is never delayed by the animation pacing above —
-        // only the visual glow is paced, not the record of what happened.
-        setTurns((all) =>
-          all.map((turn) =>
-            turn.id === id
-              ? { ...turn, activity: [...turn.activity, { node: event.node, taskId: event.taskId }] }
-              : turn,
-          ),
-        );
-        scrollToEnd();
-      } else if (event.type === 'token') {
-        setTurns((all) =>
-          all.map((turn) => (turn.id === id ? { ...turn, thinking: turn.thinking + event.content } : turn)),
-        );
-        scrollToEnd();
-      }
-    };
-
-    const outcome = await client.runStream({ workflow: document, question: trimmed }, onEvent);
-
-    // Waits for the last queued highlight's minimum-visible window before
-    // finalising, so the very last node to act does not flash and vanish
-    // the instant the run's own answer arrives.
-    await highlightChain;
-    if (activeNode) {
-      controller.model.setNodeRuntime(activeNode, { status: outcome.ok ? 'success' : 'error' });
-    }
-
-    if (outcome.ok) {
-      // Once finished, show the whole path that ran rather than just the
-      // last node the stream happened to touch.
-      controller.selectionActions.selectNodes([...seen]);
-      updateTurn(id, { running: false, result: outcome.value });
-    } else {
-      updateTurn(id, { running: false, error: outcome.error });
-    }
-    scrollToEnd();
-  }, [client, controller, question, running, scrollToEnd, updateTurn]);
+    await streamAndSettle(id, (onEvent) => client.runStream({ workflow: document, question: trimmed }, onEvent));
+  }, [client, controller, question, running, scrollToEnd, streamAndSettle]);
 
   return (
     <Panel side="right" className="ask" style={{ width: 'var(--layout-inspector-width)' }}>
@@ -233,7 +313,7 @@ export function AskPanel() {
             </p>
           ) : null}
           {turns.map((turn) => (
-            <Turn key={turn.id} turn={turn} />
+            <Turn key={turn.id} turn={turn} onRespond={respondToApproval} />
           ))}
         </div>
 
@@ -262,7 +342,13 @@ export function AskPanel() {
   );
 }
 
-function Turn({ turn }: { turn: ChatTurn }) {
+function Turn({
+  turn,
+  onRespond,
+}: {
+  turn: ChatTurn;
+  onRespond: (turnId: string, decision: 'approve' | 'reject') => void;
+}) {
   return (
     <div className="ask__turn">
       <div className="ask__question">{turn.question}</div>
@@ -273,6 +359,14 @@ function Turn({ turn }: { turn: ChatTurn }) {
         <pre className="ask__thinking">{turn.thinking}</pre>
       ) : null}
 
+      {turn.pendingApproval ? (
+        <ApprovalPrompt
+          approval={turn.pendingApproval}
+          onApprove={() => onRespond(turn.id, 'approve')}
+          onReject={() => onRespond(turn.id, 'reject')}
+        />
+      ) : null}
+
       {turn.error ? (
         <p className="ask__error">
           <Icon glyph={TriangleAlert} size="sm" />
@@ -281,6 +375,40 @@ function Turn({ turn }: { turn: ChatTurn }) {
       ) : null}
 
       {turn.result ? <Answer result={turn.result} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The canvas affordance for a paused `human.approval` node: the chat panel,
+ * since a run only pauses mid-conversation and the chat is where a developer
+ * is already looking when it happens (the design question the handover left
+ * open — "how does `interrupt()` surface as a canvas affordance" — settled
+ * here rather than a dedicated modal or a node-card control, since the node
+ * card has nowhere to show streamed context and a modal would block the rest
+ * of the canvas for no reason).
+ */
+function ApprovalPrompt({
+  approval,
+  onApprove,
+  onReject,
+}: {
+  approval: PendingApproval;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="ask__approval">
+      <p className="ask__approval-message">{approval.message}</p>
+      {approval.candidate ? <pre className="ask__answer">{approval.candidate}</pre> : null}
+      <div className="ask__approval-actions">
+        <Button variant="primary" onClick={onApprove}>
+          Approve
+        </Button>
+        <Button variant="secondary" onClick={onReject}>
+          Reject
+        </Button>
+      </div>
     </div>
   );
 }

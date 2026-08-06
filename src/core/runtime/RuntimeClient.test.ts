@@ -258,7 +258,7 @@ describe('RuntimeClient.runStream', () => {
     const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || 'interrupted' in result.value) return;
     expect(result.value.answer).toBe('Rock earns the most.');
     expect(result.value.decisions['node:route.grader-1']).toBe('pass');
   });

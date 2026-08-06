@@ -10,6 +10,7 @@ import { agentExecutor, createAgentNode } from './agent/AgentNode';
 import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode';
 import { graderExecutor, graderNode } from './routing/GraderNode';
 import { routerExecutor, routerNode } from './routing/RouterNode';
+import { humanApprovalExecutor, humanApprovalNode } from './routing/HumanApprovalNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
@@ -50,6 +51,7 @@ export function registerNodeCatalogue(
     // `syncWorkflowScopedNodes`, called from `Workbench`.
     routerNode,
     graderNode,
+    humanApprovalNode,
     // Loop/graph engineering: split -> fan-out -> dispatch -> join.
     orchestratorNode,
     workerNode,
@@ -66,6 +68,7 @@ export function registerNodeCatalogue(
     redditSearchExecutor,
     routerExecutor,
     graderExecutor,
+    humanApprovalExecutor,
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
@@ -81,6 +84,7 @@ export const NODE_TYPE = {
   redditSearch: redditSearchNode.id,
   router: routerNode.id,
   grader: graderNode.id,
+  humanApproval: humanApprovalNode.id,
   orchestrator: orchestratorNode.id,
   worker: workerNode.id,
   formatReport: formatReportNode.id,

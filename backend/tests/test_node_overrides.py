@@ -16,7 +16,19 @@ from typing import Any
 
 import pytest
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy, TimeoutPolicy
+from langgraph.types import RetryPolicy
+
+try:
+    from langgraph.types import TimeoutPolicy
+except ImportError:
+    TimeoutPolicy = None  # type: ignore[misc,assignment]
+
+#: `set_node_defaults` and `TimeoutPolicy` require `langgraph>=1.2`.
+_HAS_SET_NODE_DEFAULTS = hasattr(StateGraph, "set_node_defaults")
+_SKIP_IF_OLD = pytest.mark.skipif(
+    not _HAS_SET_NODE_DEFAULTS,
+    reason="`set_node_defaults`/`TimeoutPolicy` require `langgraph>=1.2`",
+)
 from typing_extensions import TypedDict
 
 from dyflow.compile.workflow_compiler import WorkflowCompiler, _node_overrides
@@ -41,12 +53,14 @@ class TestNodeOverridesParsing:
         assert overrides["retry_policy"].max_attempts == 1
         assert "timeout" not in overrides
 
+    @_SKIP_IF_OLD
     def test_a_valid_timeout_becomes_a_timeout_policy(self) -> None:
         overrides = _node_overrides({"timeoutSeconds": "30"})
         assert isinstance(overrides["timeout"], TimeoutPolicy)
         assert overrides["timeout"].run_timeout == 30.0
         assert "retry_policy" not in overrides
 
+    @_SKIP_IF_OLD
     def test_both_together(self) -> None:
         overrides = _node_overrides({"maxRetries": "5", "timeoutSeconds": "12.5"})
         assert overrides["retry_policy"].max_attempts == 5
@@ -68,6 +82,7 @@ class State(TypedDict, total=False):
 
 
 class TestCompilerAppliesTheOverride:
+    @_SKIP_IF_OLD
     def test_a_node_with_maxretries_1_is_invoked_exactly_once_before_erroring(
         self,
     ) -> None:
@@ -102,6 +117,7 @@ class TestCompilerAppliesTheOverride:
 
         assert calls["count"] == 1
 
+    @_SKIP_IF_OLD
     def test_without_an_override_the_graph_wide_default_of_three_attempts_applies(
         self,
     ) -> None:

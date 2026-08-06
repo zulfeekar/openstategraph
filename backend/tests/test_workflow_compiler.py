@@ -12,7 +12,15 @@ from __future__ import annotations
 from typing import Annotated, Any, TypedDict
 
 import pytest
+from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
+
+#: `set_node_defaults`/`error_handler` require `langgraph>=1.2`.
+_HAS_SET_NODE_DEFAULTS = hasattr(StateGraph, "set_node_defaults")
+_SKIP_IF_OLD = pytest.mark.skipif(
+    not _HAS_SET_NODE_DEFAULTS,
+    reason="`set_node_defaults`/`error_handler` require `langgraph>=1.2`",
+)
 
 from dyflow.compile.workflow_compiler import (
     CompiledPlan,
@@ -379,6 +387,7 @@ class TestFaultTolerance:
             ],
         )
 
+    @_SKIP_IF_OLD
     def test_a_node_that_fails_twice_then_succeeds_is_retried_not_aborted(
         self, compiler
     ) -> None:
@@ -402,6 +411,7 @@ class TestFaultTolerance:
         assert calls["n"] == 3
         assert final["outputs"]["n1"] == "recovered"
 
+    @_SKIP_IF_OLD
     def test_a_node_that_never_recovers_still_lets_the_run_finish(
         self, compiler
     ) -> None:
@@ -421,6 +431,7 @@ class TestFaultTolerance:
         assert "failed after retries" in final["outputs"]["n1"]
         assert "boom" in final["outputs"]["n1"]
 
+    @_SKIP_IF_OLD
     def test_the_error_handler_does_not_mask_a_programming_error_by_retrying_it(
         self, compiler
     ) -> None:

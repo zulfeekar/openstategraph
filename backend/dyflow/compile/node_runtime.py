@@ -223,6 +223,7 @@ class NodeRuntime:
             "agent.llm": self._agent,
             "route.classifier": self._router,
             "route.grader": self._grader,
+            "human.approval": self._human_approval,
             "orchestrate.supervisor": self._orchestrator,
             "orchestrate.worker": self._worker,
             "function.format_report": self._format_report_function,
@@ -464,6 +465,45 @@ class NodeRuntime:
             return {
                 "decisions": {node_id: branch},
                 "feedback": "" if branch == "pass" else verdict.feedback,
+                "outputs": {node_id: candidate},
+            }
+
+        return run
+
+    def _human_approval(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """Pauses the run and waits for a person, via LangGraph's own `interrupt()`.
+
+        Same node-decides/edge-dispatches split as the router and the
+        grader — this node *decides* `approved`/`rejected`, and the
+        compiler's conditional edge (`workflow_compiler.py`) *dispatches* on
+        whichever label it wrote to `state["decisions"]`. The difference
+        from the grader is only *who* decides: a human, resumed via
+        `Command(resume=...)`, instead of an LLM's own judgement.
+
+        `interrupt()` requires the compiled graph to have a checkpointer
+        (`WorkflowCompiler.build`'s `checkpointer` param) — without one,
+        LangGraph raises before this ever pauses. Calling it more than once
+        per node invocation is the documented anti-pattern (a resume re-runs
+        the node from its own start), which is exactly why this calls it
+        **exactly once**, unconditionally, rather than inside a retry loop.
+        """
+        data = node.get("data") or {}
+        message = _text(data, "message") or "Approve this result?"
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+
+        def run(state: RunState) -> dict[str, Any]:
+            from langgraph.types import interrupt
+
+            candidate = _upstream_text(state, upstream) or state.get("answer", "")
+            decision = interrupt({"message": message, "candidate": candidate})
+
+            approved = isinstance(decision, dict) and decision.get("decision") == "approve"
+            feedback = ""
+            if not approved:
+                feedback = (decision or {}).get("feedback", "") if isinstance(decision, dict) else ""
+            return {
+                "decisions": {node_id: "approved" if approved else "rejected"},
+                "feedback": feedback,
                 "outputs": {node_id: candidate},
             }
 

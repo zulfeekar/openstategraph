@@ -126,6 +126,26 @@
   font: var(--type-body-sm);
 }
 
+.ask__approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--accent-amber-soft, var(--surface-sunken));
+  border: 1px solid var(--accent-amber-strong, var(--border-subtle));
+  border-radius: var(--radius-md);
+}
+
+.ask__approval-message {
+  margin: 0;
+  font: var(--type-body-sm-strong, var(--type-body-sm));
+}
+
+.ask__approval-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .ask__decision {
   display: flex;
   align-items: center;

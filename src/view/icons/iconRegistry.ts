@@ -14,6 +14,7 @@ import {
   Split,
   Users,
   FileOutput,
+  UserCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -39,6 +40,7 @@ const ICONS: Record<string, LucideIcon> = {
   'node-database': Database,
   'node-router': GitBranch,
   'node-grader': ShieldCheck,
+  'node-human-approval': UserCheck,
   'node-orchestrator': Split,
   'node-worker': Users,
   'node-format-report': FileOutput,

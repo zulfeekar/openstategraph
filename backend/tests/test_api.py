@@ -403,6 +403,146 @@ class TestRunStream:
         assert response.status_code == 422
 
 
+class TestHumanInTheLoop:
+    """`/api/runs/stream` pausing on `human.approval`, resumed via
+    `/api/runs/resume` — the real HTTP surface for the graph-level lifecycle
+    already proven in `test_human_approval.py`.
+
+    Deliberately no `agent.llm` node in this document: `human.approval`
+    reads its candidate from the upstream node's text directly, so
+    `input.text -> human.approval` proves the same pause/resume mechanics
+    without a real model call over the wire (this suite has no fake-model
+    injection seam for `/api/runs/stream`/`/api/runs/resume`, unlike the
+    graph-level tests).
+    """
+
+    @staticmethod
+    def _doc() -> dict[str, Any]:
+        def n(i: str, t: str, **d: Any) -> dict[str, Any]:
+            return {"id": i, "type": t, "data": d, "position": {"x": 0, "y": 0}}
+
+        def e(s: str, sp: str, d: str, dp: str) -> dict[str, Any]:
+            return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": d, "portId": dp}}
+
+        return {
+            "version": 1,
+            "name": "approval-http",
+            "nodes": [
+                n("node:input.text-1", "input.text"),
+                n("node:human.approval-1", "human.approval", message="OK to publish?"),
+                n("node:output.formatted-1", "output.formatted"),
+                n("node:output.formatted-2", "output.formatted"),
+            ],
+            "edges": [
+                e("node:input.text-1", "text", "node:human.approval-1", "candidate"),
+                e("node:human.approval-1", "approved", "node:output.formatted-1", "result"),
+                e("node:human.approval-1", "rejected", "node:output.formatted-2", "result"),
+            ],
+        }
+
+    @staticmethod
+    def _events(text: str) -> list[tuple[str, dict[str, Any]]]:
+        return TestRunStream._events(text)
+
+    def test_a_run_that_reaches_the_approval_node_pauses_with_an_interrupt_event(
+        self,
+    ) -> None:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "draft text"}
+        )
+
+        assert response.status_code == 200
+        events = self._events(response.text)
+        kinds = [name for name, _ in events]
+        assert kinds[-1] == "interrupt"
+        assert "done" not in kinds
+
+        interrupt = next(data for name, data in events if name == "interrupt")
+        assert interrupt["message"] == "OK to publish?"
+        assert interrupt["candidate"] == "draft text"
+        assert interrupt["threadId"]
+
+    def test_resuming_with_approve_completes_the_run_on_the_approved_branch(
+        self,
+    ) -> None:
+        client = TestClient(create_app())
+        first = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "draft text"}
+        )
+        thread_id = next(
+            data for name, data in self._events(first.text) if name == "interrupt"
+        )["threadId"]
+
+        resumed = client.post(
+            "/api/runs/resume",
+            json={"thread_id": thread_id, "workflow": self._doc(), "decision": "approve"},
+        )
+
+        assert resumed.status_code == 200, resumed.text
+        events = self._events(resumed.text)
+        assert [name for name, _ in events][-1] == "done"
+
+        done = next(data for name, data in events if name == "done")
+        assert done["decisions"]["node:human.approval-1"] == "approved"
+        assert done["answer"] == "draft text"
+
+    def test_resuming_with_reject_and_feedback_completes_on_the_rejected_branch(
+        self,
+    ) -> None:
+        client = TestClient(create_app())
+        first = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "draft text"}
+        )
+        thread_id = next(
+            data for name, data in self._events(first.text) if name == "interrupt"
+        )["threadId"]
+
+        resumed = client.post(
+            "/api/runs/resume",
+            json={
+                "thread_id": thread_id,
+                "workflow": self._doc(),
+                "decision": "reject",
+                "feedback": "Too casual.",
+            },
+        )
+
+        assert resumed.status_code == 200, resumed.text
+        done = next(data for name, data in self._events(resumed.text) if name == "done")
+        assert done["decisions"]["node:human.approval-1"] == "rejected"
+
+    def test_two_concurrent_runs_do_not_cross_contaminate_their_pauses(self) -> None:
+        client = TestClient(create_app())
+        first = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "run A"}
+        )
+        second = client.post(
+            "/api/runs/stream", json={"workflow": self._doc(), "question": "run B"}
+        )
+        thread_a = next(
+            data for name, data in self._events(first.text) if name == "interrupt"
+        )["threadId"]
+        thread_b = next(
+            data for name, data in self._events(second.text) if name == "interrupt"
+        )["threadId"]
+        assert thread_a != thread_b
+
+        resumed_a = client.post(
+            "/api/runs/resume",
+            json={"thread_id": thread_a, "workflow": self._doc(), "decision": "approve"},
+        )
+        resumed_b = client.post(
+            "/api/runs/resume",
+            json={"thread_id": thread_b, "workflow": self._doc(), "decision": "reject"},
+        )
+
+        done_a = next(data for name, data in self._events(resumed_a.text) if name == "done")
+        done_b = next(data for name, data in self._events(resumed_b.text) if name == "done")
+        assert done_a["answer"] == "run A"
+        assert done_b["decisions"]["node:human.approval-1"] == "rejected"
+
+
 class TestWorkflowPersistence:
     """Tickets 10/14/16: `workflows/<slug>/workflow.json` is the source of
     truth, and every test here runs against a throwaway `tmp_path` root, never

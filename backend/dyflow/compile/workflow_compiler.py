@@ -26,9 +26,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy, Send, TimeoutPolicy
+from langgraph.types import RetryPolicy, Send
+
+#: `TimeoutPolicy` was added in `langgraph>=1.2`.
+try:
+    from langgraph.types import TimeoutPolicy
+except ImportError:
+    TimeoutPolicy = None  # type: ignore[misc,assignment]
+
+#: `NodeError` was added in `langgraph>=1.2`; gracefully degrade if absent.
+try:
+    from langgraph.errors import NodeError
+except ImportError:
+    NodeError = None  # type: ignore[misc,assignment]
 
 #: Port types that carry **control flow**. Everything else is a binding.
 CONTROL_PORT_TYPES = frozenset({"text", "result"})
@@ -40,6 +51,10 @@ ROUTER_TYPE = "route.classifier"
 GRADER_TYPE = "route.grader"
 ORCHESTRATOR_TYPE = "orchestrate.supervisor"
 WORKER_TYPE = "orchestrate.worker"
+#: Ticket "human-in-the-loop": pauses via `interrupt()` and dispatches on a
+#: human decision, the same node-decides/edge-dispatches split as the router
+#: and the grader — see the conditional-edge handling below.
+HUMAN_APPROVAL_TYPE = "human.approval"
 
 #: The port type that marks a fan-out declaration rather than control flow or a
 #: capability binding. An edge landing on a `worker`-typed port means "this is
@@ -47,7 +62,7 @@ WORKER_TYPE = "orchestrate.worker"
 WORKER_PORT_TYPE = "worker"
 
 
-def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str, Any]:
+def _default_error_handler(state: dict[str, Any], error: Any) -> dict[str, Any]:
     """Runs once a node's retries are exhausted. Recovers, never crashes.
 
     Deliberately returns a plain state update rather than a `Command`: with
@@ -64,8 +79,10 @@ def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str,
     assembly-level version of `_grader`'s own rule: a candidate that failed
     is still evidence, not a reason to discard the run.
     """
-    message = f"{type(error.error).__name__}: {error.error}"
-    return {"outputs": {error.node: f"[{error.node} failed after retries: {message}]"}}
+    exc = getattr(error, "error", error)
+    node = getattr(error, "node", "unknown")
+    message = f"{type(exc).__name__}: {exc}"
+    return {"outputs": {node: f"[{node} failed after retries: {message}]"}}
 
 
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
@@ -101,7 +118,7 @@ def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
             pass
 
     timeout_seconds = str(data.get("timeoutSeconds") or "").strip()
-    if timeout_seconds:
+    if timeout_seconds and TimeoutPolicy is not None:
         try:
             seconds = float(timeout_seconds)
             if seconds > 0:
@@ -187,6 +204,11 @@ DEFAULT_PORT_SPECS: dict[str, dict[str, PortSpec]] = {
     "function.format_report": {
         "candidate": PortSpec("result", "in"),
         "report": PortSpec("result", "out"),
+    },
+    HUMAN_APPROVAL_TYPE: {
+        "candidate": PortSpec("result", "in"),
+        "approved": PortSpec("result", "out"),
+        "rejected": PortSpec("feedback", "out"),
     },
 }
 
@@ -349,6 +371,22 @@ class WorkflowCompiler:
                 in_control_flow.update((src_id, dst_id))
                 continue
 
+            # --- human approval: same node-decides/edge-dispatches split as
+            # the grader, just with a human's decision instead of an LLM's.
+            # Labels are the literal port ids ("approved"/"rejected"), not
+            # translated to "pass"/"revise" — a rejection here does not loop
+            # back to a retry the way a grader's revise does, it takes a
+            # different, deliberately-wired path (e.g. straight to an
+            # explanatory Output), so borrowing the grader's own vocabulary
+            # would misdescribe what actually happens on this edge.
+            if src_type == HUMAN_APPROVAL_TYPE:
+                label = src_port_id if (src_port_id := src.get("portId", "")) else "approved"
+                plan.conditional.setdefault(src_id, {})[label] = dst_id
+                has_outgoing.add(src_id)
+                has_incoming.add(dst_id)
+                in_control_flow.update((src_id, dst_id))
+                continue
+
             # --- ordinary control flow ---
             plan.edges.append((src_id, dst_id))
             has_outgoing.add(src_id)
@@ -383,12 +421,20 @@ class WorkflowCompiler:
         node_factory: Callable[[str, dict[str, Any], CompiledPlan], Any],
         *,
         compile_graph: bool = True,
+        checkpointer: Any = None,
     ) -> Any:
         """Assembles the graph.
 
         `node_factory` supplies the callable for each node, so the compiler owns
         *topology* and knows nothing about models, prompts or tools. That split is
         what lets the whole structure be tested without an API key.
+
+        `checkpointer` is what makes a `human.approval` node's `interrupt()`
+        actually able to pause: LangGraph raises at compile time if a graph
+        containing an interrupt has no checkpointer at all. Optional and
+        `None` by default — a graph with no human-in-the-loop node has
+        nothing to checkpoint, and passing one unconditionally would give
+        every run persisted state it never asked for.
         """
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}
@@ -404,10 +450,15 @@ class WorkflowCompiler:
         # library default) already excludes programming errors
         # (`ValueError`, `TypeError`, ...), so this does not mask a bug by
         # retrying it into a timeout.
-        builder.set_node_defaults(
-            retry_policy=RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0),
-            error_handler=_default_error_handler,
-        )
+        if hasattr(builder, "set_node_defaults"):
+            builder.set_node_defaults(
+                retry_policy=RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0),
+                error_handler=_default_error_handler,
+            )
+        else:
+            # `langgraph<1.2`: no graph-wide defaults; retry_policy is applied
+            # per-node in the loop below via `_node_overrides`.
+            pass
 
         for node_id in plan.nodes:
             overrides = _node_overrides(nodes[node_id].get("data") or {})
@@ -443,7 +494,9 @@ class WorkflowCompiler:
         for node_id in plan.exits:
             builder.add_edge(safe_name(node_id), END)
 
-        return builder.compile() if compile_graph else builder
+        if not compile_graph:
+            return builder
+        return builder.compile(checkpointer=checkpointer) if checkpointer else builder.compile()
 
     @staticmethod
     def _fan_out_router(orchestrator_id: str, worker_name: str) -> Callable[[Any], list[Any]]:

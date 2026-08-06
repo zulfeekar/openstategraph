@@ -36,6 +36,32 @@ export interface RunResult {
 }
 
 /**
+ * A run paused at a `human.approval` node instead of finishing.
+ *
+ * `threadId` is the only thing `resume()` needs to continue this exact run —
+ * LangGraph resumes by replaying the same checkpointed thread, not by
+ * resending the original request.
+ */
+export interface RunInterrupted {
+  readonly interrupted: true;
+  readonly threadId: string;
+  readonly message: string;
+  readonly candidate: string;
+}
+
+/** What a stream settles into: a finished run, or one waiting on a human. */
+export type RunOutcome = RunResult | RunInterrupted;
+
+export interface ResumeRequest {
+  readonly threadId: string;
+  readonly workflow: unknown;
+  readonly decision: 'approve' | 'reject';
+  readonly feedback?: string;
+  readonly model?: string;
+  readonly recursionLimit?: number;
+}
+
+/**
  * One frame of `/api/runs/stream`'s Server-Sent-Events feed.
  *
  * `node`/`namespace`/`taskId` mirror the backend's own finding (verified
@@ -68,11 +94,19 @@ export interface IRuntimeClient {
    * Runs the same request, but calls `onEvent` as each node acts — what lets
    * the canvas highlight whichever node is currently in charge instead of
    * only learning the outcome once the whole run has finished.
+   *
+   * Resolves to a `RunInterrupted` rather than a `RunResult` if the run
+   * pauses at a `human.approval` node — `resume()` continues it from there.
    */
   runStream(
     request: RunRequest,
     onEvent: (event: RunStreamEvent) => void,
-  ): Promise<Result<RunResult, string>>;
+  ): Promise<Result<RunOutcome, string>>;
+  /** Continues a paused run with a human's decision. Same outcome shape as `runStream` — a resumed run can itself pause again at a later approval node. */
+  resume(
+    request: ResumeRequest,
+    onEvent: (event: RunStreamEvent) => void,
+  ): Promise<Result<RunOutcome, string>>;
   health(): Promise<Result<{ modelConfigured: boolean }, string>>;
 }
 
@@ -128,17 +162,39 @@ export class RuntimeClient implements IRuntimeClient {
   async runStream(
     request: RunRequest,
     onEvent: (event: RunStreamEvent) => void,
-  ): Promise<Result<RunResult, string>> {
+  ): Promise<Result<RunOutcome, string>> {
     const body = {
       workflow: request.workflow,
       question: request.question,
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
     };
+    return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent);
+  }
 
+  async resume(
+    request: ResumeRequest,
+    onEvent: (event: RunStreamEvent) => void,
+  ): Promise<Result<RunOutcome, string>> {
+    const body = {
+      thread_id: request.threadId,
+      workflow: request.workflow,
+      decision: request.decision,
+      ...(request.feedback ? { feedback: request.feedback } : {}),
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+    };
+    return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent);
+  }
+
+  private async streamFrom(
+    url: string,
+    body: unknown,
+    onEvent: (event: RunStreamEvent) => void,
+  ): Promise<Result<RunOutcome, string>> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/api/runs/stream`, {
+      response = await this.fetchImpl(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -156,7 +212,7 @@ export class RuntimeClient implements IRuntimeClient {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let done: RunResult | null = null;
+    let outcome: RunOutcome | null = null;
     let failure: string | null = null;
 
     const consumeFrame = (frame: string): void => {
@@ -193,8 +249,15 @@ export class RuntimeClient implements IRuntimeClient {
       } else if (eventName === 'error') {
         failure = asString(payload['detail']) || 'The workflow failed while streaming.';
         onEvent({ type: 'error', detail: failure });
+      } else if (eventName === 'interrupt') {
+        outcome = {
+          interrupted: true,
+          threadId: asString(payload['threadId']),
+          message: asString(payload['message']),
+          candidate: asString(payload['candidate']),
+        };
       } else if (eventName === 'done') {
-        done = {
+        outcome = {
           answer: asString(payload['answer']),
           decisions: asRecord(payload['decisions']),
           outputs: asRecord(payload['outputs']),
@@ -219,7 +282,7 @@ export class RuntimeClient implements IRuntimeClient {
     }
 
     if (failure) return Err(failure);
-    if (done) return Ok(done);
+    if (outcome) return Ok(outcome);
     return Err('The runtime closed the stream without reporting a result.');
   }
 
