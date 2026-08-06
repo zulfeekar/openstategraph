@@ -40,6 +40,16 @@ export function rectCenter(r: Rect): Point {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 }
 
+/** Shortest distance from `p` to the line segment `a`–`b`. */
+export function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared === 0 ? 0 : clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared, 0, 1);
+  const closest = { x: a.x + t * dx, y: a.y + t * dy };
+  return Math.hypot(p.x - closest.x, p.y - closest.y);
+}
+
 export function containsRect(outer: Rect, inner: Rect): boolean {
   return (
     inner.x >= outer.x &&

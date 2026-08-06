@@ -69,6 +69,8 @@ export interface IEdgeEditor {
   connect(source: PortRef, target: PortRef): ActionOutcome;
   disconnect(edgeIds: readonly EdgeId[]): ActionOutcome;
   setLabel(edgeId: EdgeId, label: string | null): void;
+  /** Ticket 25's splice-insert — see `EdgeEditor.insertOnEdge`. */
+  insertOnEdge(edgeId: EdgeId, typeId: NodeTypeId, at: Point): ActionOutcome;
 }
 
 /** Containment — which nodes sit inside which container. */

@@ -144,6 +144,11 @@ export abstract class AbstractNodeModel implements INodeModel {
     return this.outputs[0];
   }
 
+  /** The port an upstream producer feeds by default — e.g. a splice-insert's target. */
+  get primaryInput(): IPortDescriptor | undefined {
+    return this.inputs[0];
+  }
+
   /* ---------------- runtime ---------------- */
 
   get runtime(): NodeRuntimeState {

@@ -96,7 +96,7 @@ export class WorkflowController {
       this.selectionActions,
       this.grouping,
     );
-    this.edges = new EdgeEditor(this.commands, deps.connectionValidator);
+    this.edges = new EdgeEditor(editing, deps.connectionValidator);
     this.history = new HistoryController(this.commands);
     this.document = new DocumentController(
       deps.model,

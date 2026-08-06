@@ -1,6 +1,9 @@
 import { EdgeModel } from '@core/model/EdgeModel';
+import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
+import type { INodeDefinition, NodeInit } from '@core/model/contracts/node';
 import type { PortRef } from '@core/model/contracts/ports';
 import type { EdgeId } from '@core/model/contracts/workflow';
+import { AddNodeCommand } from './nodeCommands';
 import type { CommandContext, ICommand } from './ICommand';
 
 /**
@@ -75,6 +78,85 @@ export class DisconnectCommand implements ICommand {
     ctx.model.transact(() => {
       for (const edge of this.removed) {
         if (!ctx.model.edge(edge.id)) ctx.model.addEdge(edge);
+      }
+    });
+  }
+}
+
+/**
+ * Inserts a new node inline on an existing edge — ticket 25's "splice
+ * insert": dropping a node onto a link that already connects two others
+ * replaces that one edge with two, through the new node, as a single undo
+ * step.
+ *
+ * Not built from `AddNodeCommand` + two `ConnectCommand`s composed via
+ * `CompositeCommand`, because the two new edges need the *real* id of the
+ * node `AddNodeCommand` creates — which does not exist until that command
+ * has actually executed. `CompositeCommand`'s children are fixed at
+ * construction time, before anything has run, so this command builds its
+ * own edges lazily inside `execute`, the same way `ConnectCommand` and
+ * `DisconnectCommand` capture their own undo state rather than relying on
+ * being composed from smaller pieces.
+ */
+export class SpliceInsertCommand implements ICommand {
+  readonly label: string;
+  private readonly add: AddNodeCommand;
+  private removedEdge: EdgeModel | null = null;
+  private inEdge: EdgeModel | null = null;
+  private outEdge: EdgeModel | null = null;
+
+  constructor(
+    private readonly edgeId: EdgeId,
+    definition: INodeDefinition,
+    init: NodeInit,
+  ) {
+    this.add = new AddNodeCommand(definition, init);
+    this.label = `Insert ${definition.label}`;
+  }
+
+  /** The created node, available after the first execute — for selection. */
+  get created(): AbstractNodeModel | null {
+    return this.add.created;
+  }
+
+  execute(ctx: CommandContext): void {
+    ctx.model.transact(() => {
+      const existing = ctx.model.edge(this.edgeId);
+      if (existing) {
+        this.removedEdge ??= existing;
+        ctx.model.removeEdge(this.edgeId);
+      }
+
+      this.add.execute(ctx);
+      const node = this.add.created;
+      if (!node || !this.removedEdge) return;
+
+      const inPort = node.primaryInput;
+      const outPort = node.primaryOutput;
+      if (inPort) {
+        this.inEdge ??= new EdgeModel({
+          source: this.removedEdge.source,
+          target: { nodeId: node.id, portId: inPort.id },
+        });
+        if (!ctx.model.edge(this.inEdge.id)) ctx.model.addEdge(this.inEdge);
+      }
+      if (outPort) {
+        this.outEdge ??= new EdgeModel({
+          source: { nodeId: node.id, portId: outPort.id },
+          target: this.removedEdge.target,
+        });
+        if (!ctx.model.edge(this.outEdge.id)) ctx.model.addEdge(this.outEdge);
+      }
+    });
+  }
+
+  undo(ctx: CommandContext): void {
+    ctx.model.transact(() => {
+      if (this.outEdge) ctx.model.removeEdge(this.outEdge.id);
+      if (this.inEdge) ctx.model.removeEdge(this.inEdge.id);
+      this.add.undo(ctx);
+      if (this.removedEdge && !ctx.model.edge(this.removedEdge.id)) {
+        ctx.model.addEdge(this.removedEdge);
       }
     });
   }

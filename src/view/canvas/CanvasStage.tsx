@@ -3,6 +3,7 @@ import { Workflow } from 'lucide-react';
 import { Icon } from '@design/primitives';
 import { PaperController } from '@canvas/PaperController';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
+import { closestEdgeToPoint } from '@core/model/topology';
 import {
   useController,
   useSetPaperController,
@@ -12,6 +13,17 @@ import {
 import { NodeLayer } from '@view/nodes/NodeLayer';
 import { PALETTE_DRAG_TYPE } from '@view/palette/Palette';
 import '@canvas/canvas.css';
+
+/**
+ * How close a drop must land to an edge's node-centre line before it counts
+ * as a splice-insert (ticket 25) rather than an ordinary drop-on-canvas.
+ * Deliberately generous relative to a card's own footprint — a drop
+ * anywhere clearly *between* two connected cards should splice, not just a
+ * drop on the thin rendered line, which the model has no way to hit-test
+ * exactly anyway (see `closestEdgeToPoint`'s own note on why it uses node
+ * centres rather than the live curve).
+ */
+const SPLICE_DROP_DISTANCE = 40;
 
 interface CanvasStageProps {
   /** Shell-owned shortcuts, merged with the canvas defaults. */
@@ -134,7 +146,18 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
         const typeId = event.dataTransfer.getData(PALETTE_DRAG_TYPE);
         if (!typeId || !paper) return;
         const at = paper.clientToLocal(event.clientX, event.clientY);
-        const outcome = controller.nodes.add(typeId, at);
+
+        // Ticket 25's splice-insert: a drop that lands near an existing
+        // edge inserts inline instead of dropping onto empty canvas.
+        const nearbyEdge = closestEdgeToPoint(
+          (id) => controller.model.node(id),
+          controller.model.edges(),
+          at,
+          SPLICE_DROP_DISTANCE,
+        );
+        const outcome = nearbyEdge
+          ? controller.edges.insertOnEdge(nearbyEdge, typeId, at)
+          : controller.nodes.add(typeId, at);
         if (!outcome.ok && outcome.message) onNotify(outcome.message);
       }}
     >

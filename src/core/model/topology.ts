@@ -1,6 +1,7 @@
-import { unionRects, type Rect } from '@core/kernel/geometry';
+import { distanceToSegment, rectCenter, rectOf, unionRects, type Rect } from '@core/kernel/geometry';
 import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
+import type { EdgeId, IEdgeModel } from './contracts/workflow';
 import type { NodeId } from './contracts/node';
 
 /**
@@ -74,4 +75,37 @@ export function bounds(nodes: Iterable<AbstractNodeModel>): Rect | null {
     height: node.size.height,
   }));
   return unionRects(rects);
+}
+
+/**
+ * The edge whose endpoints' node-centre-to-node-centre line passes closest
+ * to `point`, within `maxDistance` — or `null` if none does.
+ *
+ * Used for ticket 25's splice-insert drop gesture: "is this drop near an
+ * existing link." A deliberate approximation, not the rendered curve's
+ * exact geometry — JointJS may route a link with bends, and hit-testing
+ * that precisely belongs to the canvas layer, not this framework-free
+ * model. Node-centre-to-node-centre is close enough for "did the user aim
+ * at this connection," and keeps the gesture testable against plain model
+ * data with no live paper.
+ */
+export function closestEdgeToPoint(
+  nodes: (id: NodeId) => AbstractNodeModel | undefined,
+  edges: Iterable<IEdgeModel>,
+  point: { readonly x: number; readonly y: number },
+  maxDistance: number,
+): EdgeId | null {
+  let best: { id: EdgeId; distance: number } | null = null;
+  for (const edge of edges) {
+    const source = nodes(edge.source.nodeId);
+    const target = nodes(edge.target.nodeId);
+    if (!source || !target) continue;
+    const a = rectCenter(rectOf(source.position, source.size));
+    const b = rectCenter(rectOf(target.position, target.size));
+    const distance = distanceToSegment(point, a, b);
+    if (distance <= maxDistance && (!best || distance < best.distance)) {
+      best = { id: edge.id, distance };
+    }
+  }
+  return best?.id ?? null;
 }

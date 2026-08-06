@@ -8,6 +8,7 @@ import {
   registerLoopableType,
   TYPE,
 } from '@core/testing/fixtures';
+import { closestEdgeToPoint } from './topology';
 
 /**
  * Execution order and graph queries.
@@ -220,5 +221,73 @@ describe('WorkflowModel adjacency', () => {
 
     // Allowing this would make descendantsOf recurse forever.
     expect(workbench.model.node(outer.id)?.parentId).toBeNull();
+  });
+});
+
+/**
+ * Ticket 25's splice-insert drop gesture: "is this drop point near an
+ * existing link." Tested against plain model data (node centres), not a
+ * live canvas — the approximation this function deliberately makes.
+ */
+describe('closestEdgeToPoint', () => {
+  let workbench: Workbench;
+
+  beforeEach(() => {
+    workbench = makeWorkbench();
+    registerLoopableType(workbench);
+  });
+
+  it('finds the edge whose node-centre line passes near the point', () => {
+    const a = addNode(workbench, LOOPABLE_TYPE, { at: { x: 0, y: 0 } });
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    const edge = connect(workbench, a, 'out', b, 'in');
+
+    const midpoint = {
+      x: (a.position.x + a.size.width / 2 + b.position.x + b.size.width / 2) / 2,
+      y: (a.position.y + a.size.height / 2 + b.position.y + b.size.height / 2) / 2,
+    };
+
+    const found = closestEdgeToPoint(
+      (id) => workbench.model.node(id),
+      workbench.model.edges(),
+      midpoint,
+      20,
+    );
+    expect(found).toBe(edge.id);
+  });
+
+  it('returns null when nothing is within the given distance', () => {
+    const a = addNode(workbench, LOOPABLE_TYPE, { at: { x: 0, y: 0 } });
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+
+    const found = closestEdgeToPoint(
+      (id) => workbench.model.node(id),
+      workbench.model.edges(),
+      { x: 200, y: 500 },
+      20,
+    );
+    expect(found).toBeNull();
+  });
+
+  it('picks the closer of two candidate edges', () => {
+    const a = addNode(workbench, LOOPABLE_TYPE, { at: { x: 0, y: 0 } });
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    const c = addNode(workbench, LOOPABLE_TYPE, { at: { x: 0, y: 200 } });
+    const near = connect(workbench, a, 'out', b, 'in');
+    connect(workbench, a, 'out', c, 'in');
+
+    const nearMidpoint = {
+      x: (a.position.x + a.size.width / 2 + b.position.x + b.size.width / 2) / 2,
+      y: (a.position.y + a.size.height / 2 + b.position.y + b.size.height / 2) / 2,
+    };
+
+    const found = closestEdgeToPoint(
+      (id) => workbench.model.node(id),
+      workbench.model.edges(),
+      nearMidpoint,
+      300,
+    );
+    expect(found).toBe(near.id);
   });
 });
