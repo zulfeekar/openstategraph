@@ -465,6 +465,29 @@ the frontend calls (`/api/runs`, `/api/runs/stream`), not a stub:
   caps" norm — a developer relying on this router for a production intent
   boundary should know it is not 100% deterministic on ambiguous phrasing.
 
+## Real crash found from "the chat did nothing", fixed (2026-08-06)
+
+User reported the chat felt broken ("hello prompt does nothing, are you sure
+the backend is up?"). Backend was up (`/api/health` 200 throughout) — the
+real defect was upstream of that report: an earlier chat turn had actually
+failed, and the chat panel had rendered the raw exception text as if it were
+part of the model's answer, which reads exactly like "nothing happened."
+
+Root cause: `RunState.attempts` (`node_runtime.py`) was a bare `int`, but
+`_agent` and `_orchestrator` both write it for their own retry/replan
+budgets — the identical hazard already documented and fixed for `answer`
+(`keep_latest_nonempty`), just not yet hit for this field. Under a fan-out
+that schedules both writers in one superstep, LangGraph raised
+`InvalidUpdateError: At key 'attempts': Can receive only one value per
+step`. Fixed with `keep_max` (a budget counter should only grow, so the
+higher of two concurrent writes is always correct), mirroring the existing
+`answer` fix exactly. Regression test at the same `StateGraph` level as
+`test_answer_channel_concurrency.py`. Verified live post-fix: a
+multi-clause dataquery question that fans out to two workers now completes
+cleanly (`attempts=2`, no error).
+
+202 pytest passing throughout.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
