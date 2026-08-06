@@ -352,3 +352,94 @@ class TestRealCanvasIds:
         )
         plan = compiler.plan(document)
         assert "md1" in plan.nodes
+
+
+class FaultState(TypedDict, total=False):
+    outputs: dict
+    calls: int
+
+
+class TestFaultTolerance:
+    """`set_node_defaults(retry_policy=..., error_handler=...)` (see `build`).
+
+    Not a theoretical nicety: a live run this session hit a real, transient
+    `ollama._types.ResponseError` mid-workflow, and retrying resolved it on
+    the next attempt. These pin both halves — the retry actually happens,
+    and a node that never recovers still lets the run finish rather than
+    crashing the whole graph.
+    """
+
+    @staticmethod
+    def _linear(node_id: str = "n1") -> dict[str, Any]:
+        return doc(
+            [node("in1", "input.text"), node(node_id, "agent.llm"), node("out1", "output.formatted")],
+            [
+                edge("in1", "text", node_id, "prompt"),
+                edge(node_id, "result", "out1", "result"),
+            ],
+        )
+
+    def test_a_node_that_fails_twice_then_succeeds_is_retried_not_aborted(
+        self, compiler
+    ) -> None:
+        calls = {"n": 0}
+
+        def flaky_factory(node_id: str, _node: dict[str, Any], _plan: Any) -> Any:
+            if node_id != "n1":
+                return lambda state: {}
+
+            def run(state: FaultState) -> dict[str, Any]:
+                calls["n"] += 1
+                if calls["n"] < 3:
+                    raise ConnectionError("transient provider error")
+                return {"outputs": {"n1": "recovered"}}
+
+            return run
+
+        graph = compiler.build(self._linear(), FaultState, flaky_factory)
+        final = graph.invoke({})
+
+        assert calls["n"] == 3
+        assert final["outputs"]["n1"] == "recovered"
+
+    def test_a_node_that_never_recovers_still_lets_the_run_finish(
+        self, compiler
+    ) -> None:
+        def always_fails_factory(node_id: str, _node: dict[str, Any], _plan: Any) -> Any:
+            if node_id != "n1":
+                return lambda state: {}
+
+            def run(state: FaultState) -> dict[str, Any]:
+                raise RuntimeError("boom")
+
+            return run
+
+        graph = compiler.build(self._linear(), FaultState, always_fails_factory)
+        # Must not raise: the error handler recovers and the graph reaches END.
+        final = graph.invoke({})
+
+        assert "failed after retries" in final["outputs"]["n1"]
+        assert "boom" in final["outputs"]["n1"]
+
+    def test_the_error_handler_does_not_mask_a_programming_error_by_retrying_it(
+        self, compiler
+    ) -> None:
+        """`default_retry_on` excludes `ValueError`/`TypeError` etc. — a bug
+        should fail fast, once, not be retried into a longer timeout."""
+        calls = {"n": 0}
+
+        def buggy_factory(node_id: str, _node: dict[str, Any], _plan: Any) -> Any:
+            if node_id != "n1":
+                return lambda state: {}
+
+            def run(state: FaultState) -> dict[str, Any]:
+                calls["n"] += 1
+                raise ValueError("this is a bug, not a flaky network call")
+
+            return run
+
+        graph = compiler.build(self._linear(), FaultState, buggy_factory)
+        final = graph.invoke({})
+
+        assert calls["n"] == 1
+        assert "this is a bug" in final["outputs"]["n1"]

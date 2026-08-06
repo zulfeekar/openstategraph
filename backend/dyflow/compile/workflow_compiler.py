@@ -26,8 +26,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
+from langgraph.types import RetryPolicy, Send
 
 #: Port types that carry **control flow**. Everything else is a binding.
 CONTROL_PORT_TYPES = frozenset({"text", "result"})
@@ -44,6 +45,27 @@ WORKER_TYPE = "orchestrate.worker"
 #: capability binding. An edge landing on a `worker`-typed port means "this is
 #: the node Send() dispatches to," not "this runs next."
 WORKER_PORT_TYPE = "worker"
+
+
+def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str, Any]:
+    """Runs once a node's retries are exhausted. Recovers, never crashes.
+
+    Deliberately returns a plain state update rather than a `Command`: with
+    no `goto`, LangGraph continues along the node's own already-declared
+    edges exactly as if it had returned this value normally — no routing
+    knowledge is needed here, which matters because this handler is generic
+    across every node type a workflow might contain.
+
+    Writing the failure into `outputs[node]` (the same channel every node
+    factory already writes its result to — see `node_runtime.py`) means a
+    failed node still produces *something* a downstream node or the final
+    report can read, instead of the whole run aborting because one Chinook
+    tool call or one dispatched worker had a bad day. This is the graph-
+    assembly-level version of `_grader`'s own rule: a candidate that failed
+    is still evidence, not a reason to discard the run.
+    """
+    message = f"{type(error.error).__name__}: {error.error}"
+    return {"outputs": {error.node: f"[{error.node} failed after retries: {message}]"}}
 
 
 def safe_name(node_id: str) -> str:
@@ -327,6 +349,21 @@ class WorkflowCompiler:
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}
         builder = StateGraph(state_schema)
+
+        # Graph-assembly parameters, never a node concern (CLAUDE.md): every
+        # node gets the same retry/error-recovery policy from one place,
+        # rather than each node factory reimplementing its own backoff loop.
+        # `max_attempts=3` with exponential backoff is not a theoretical
+        # nicety here — a live run this session hit a real, transient
+        # `ollama._types.ResponseError` (a cloud-provider 500) that a bare
+        # retry resolved on the next attempt. `default_retry_on` (the
+        # library default) already excludes programming errors
+        # (`ValueError`, `TypeError`, ...), so this does not mask a bug by
+        # retrying it into a timeout.
+        builder.set_node_defaults(
+            retry_policy=RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0),
+            error_handler=_default_error_handler,
+        )
 
         for node_id in plan.nodes:
             builder.add_node(safe_name(node_id), node_factory(node_id, nodes[node_id], plan))
