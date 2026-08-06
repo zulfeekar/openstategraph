@@ -488,6 +488,37 @@ cleanly (`attempts=2`, no error).
 
 202 pytest passing throughout.
 
+## "Run" gave zero feedback on an unrunnable graph, fixed (2026-08-06)
+
+Same investigation thread as the `attempts` fix above, continued: user
+reported the diagnostics panel's 13 red entries ("AI Agent needs a 'prompt'
+input", "X is part of a loop" ×9) and that clicking **Run** (the canvas
+preview button, not Chat) produced nothing — no toast, no active node, no
+response.
+
+Root cause, in `ExecutionEngine.run()`: a blocking diagnostic or a detected
+cycle correctly computed `{ ok: false, error }`, but both pre-flight paths
+`return`ed *before* calling `bus.emit(...)` — so neither `run:start` nor
+`run:finish` ever fired. `TopBar`'s own `run:finish` listener (which already
+turns a failure into a toast, added for the mid-run failure case) never got
+the chance to run. The intent-routed demo is unrunnable by this engine *by
+design* — it is a sequential DAG walk, and the demo's revise loops are only
+valid for the backend LangGraph compiler — but a legitimate limitation
+silently indistinguishable from a bug is still a bug in the reporting.
+
+Fixed with `rejectBeforeStart()`: both paths now emit the same
+`run:start`/`run:finish` pair a real run would, so the existing listener
+handles them with no new UI plumbing. Also improved the message the acyclic
+case actually shows: `acyclicGraphRule`'s per-node "X is part of a loop"
+diagnostics read like the graph is broken; the toast now says plainly that
+this preview engine can't run a loop and to use Chat instead. Regression
+test at `ExecutionEngine.test.ts` (blocking-diagnostic case and cycle case,
+each asserting the `start`/`finish:false` event pair). Verified live:
+reloading the actual cyclic intent-routed demo and clicking Run now shows
+the toast immediately.
+
+249 Vitest + 202 pytest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
