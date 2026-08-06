@@ -336,6 +336,42 @@ class TestToolBinding:
         # querying anything.
         assert runtime.unresolved_tools == ["tool.unknown"]
 
+    def test_a_bound_sql_tools_max_rows_field_actually_reaches_the_tool(self) -> None:
+        """Found by a TS-schema-vs-Python-factory diff: `ChinookDatabaseNode.ts`'s
+        `maxRows` field was fully inert on the backend — every
+        `tool.chinook-execute-sql` binding always used the bare class
+        default, regardless of what a developer configured on the canvas.
+        `_bound_tool` now reads the canvas field and builds a fresh instance
+        carrying it as `row_cap`.
+        """
+        document = {
+            "version": 1,
+            "name": "tooled",
+            "nodes": [
+                node("node:input.text-1", "input.text"),
+                node("node:agent.llm-1", "agent.llm"),
+                node("node:tool.chinook-execute-sql-1", "tool.chinook-execute-sql", maxRows=7),
+                node("node:output.formatted-1", "output.formatted"),
+            ],
+            "edges": [
+                edge("node:input.text-1", "text", "node:agent.llm-1", "prompt"),
+                edge("node:tool.chinook-execute-sql-1", "tool", "node:agent.llm-1", "tools"),
+                edge("node:agent.llm-1", "result", "node:output.formatted-1", "result"),
+            ],
+        }
+        from dyflow.compile.node_runtime import chinook_tool_registry
+
+        runtime = NodeRuntime(model=ScriptedModel("ok"), tools=chinook_tool_registry())
+        runtime.factory(document)
+        tool = runtime._bound_tool("node:tool.chinook-execute-sql-1")
+
+        assert tool is not None
+        assert tool.row_cap == 7
+        # A fresh instance, not the shared registry one — mutating the
+        # shared object would leak across every other binding of this type
+        # in the same document.
+        assert tool is not runtime.tools["tool.chinook-execute-sql"]
+
 
 class TestDegradedInputs:
     def test_no_model_still_produces_a_runnable_graph(self) -> None:

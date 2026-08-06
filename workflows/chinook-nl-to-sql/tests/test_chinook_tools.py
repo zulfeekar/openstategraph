@@ -95,6 +95,28 @@ class TestExecuteSql:
         assert result.ok, result.error
         assert "Truncated to 5 rows" in result.content
 
+    def test_row_cap_is_the_default_when_the_caller_omits_max_rows(self) -> None:
+        # Found by a TS-schema-vs-Python-factory diff: the canvas node's own
+        # "Max rows" field was fully inert on the backend — every instance
+        # always used the bare class default. `row_cap` is the per-instance
+        # ceiling `node_runtime.py`'s tool binding sets from that field.
+        result = ExecuteSqlTool(row_cap=3).run(query="SELECT TrackId FROM Track")
+        assert result.ok, result.error
+        assert "Truncated to 3 rows" in result.content
+
+    def test_row_cap_is_a_hard_ceiling_even_when_the_caller_asks_for_more(self) -> None:
+        # A developer who set this on the canvas means it — an agent asking
+        # for more than the configured ceiling should still be capped, not
+        # silently granted a bigger window than configured.
+        result = ExecuteSqlTool(row_cap=3).run(query="SELECT TrackId FROM Track", max_rows=100)
+        assert result.ok, result.error
+        assert "Truncated to 3 rows" in result.content
+
+    def test_a_caller_request_below_the_row_cap_is_still_honoured(self) -> None:
+        result = ExecuteSqlTool(row_cap=100).run(query="SELECT TrackId FROM Track", max_rows=3)
+        assert result.ok, result.error
+        assert "Truncated to 3 rows" in result.content
+
     def test_reports_a_syntax_error_as_data_for_the_agent_to_retry(self) -> None:
         result = ExecuteSqlTool().run(query="SELECT nope FROM Track")
         assert not result.ok

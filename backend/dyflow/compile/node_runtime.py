@@ -203,6 +203,12 @@ class NodeRuntime:
         self._model_cache: dict[str, Any] = {}
         #: node id -> node type, populated by `factory()`.
         self._types: dict[str, str] = {}
+        #: node id -> raw node dict, populated by `factory()`. A tool
+        #: binding is resolved by *type* against `self.tools`, which has no
+        #: access to that specific bound node's own `data` — this is how a
+        #: tool factory (e.g. `tool.chinook-execute-sql`'s row cap) reads a
+        #: per-node config value rather than only ever seeing its type.
+        self._nodes: dict[str, dict[str, Any]] = {}
         #: Tool nodes wired on the canvas with no implementation available.
         #:
         #: Surfaced rather than swallowed. An agent that silently loses its tools
@@ -235,6 +241,7 @@ class NodeRuntime:
         self._types = {
             n["id"]: str(n.get("type", "")) for n in document.get("nodes", [])
         }
+        self._nodes = {n["id"]: n for n in document.get("nodes", [])}
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
             builder = self._builders.get(str(node.get("type", "")))
@@ -305,6 +312,35 @@ class NodeRuntime:
 
         return run
 
+    def _bound_tool(self, tool_node_id: str) -> Any | None:
+        """Resolves one bound tool node to the implementation it should use.
+
+        The shared registry (`self.tools`) is keyed by *type*, one instance
+        per type for the whole document — right for a stateless tool, wrong
+        the moment a canvas field varies the instance's own behaviour.
+        `tool.chinook-execute-sql`'s "Max rows" is exactly that case (found
+        by a TS-schema-vs-Python-factory diff: the field was fully inert on
+        the backend, always using the bare class default regardless of what
+        a developer configured). Building a *fresh* instance here rather
+        than mutating the shared one matters the moment a document has two
+        SQL-tool nodes with two different row caps bound to two different
+        agents — mutating the one shared object would let the second bind
+        clobber the first's ceiling.
+        """
+        tool_type = self._types.get(tool_node_id, "")
+        tool = self.tools.get(tool_type)
+        if tool is None:
+            if tool_type not in self.unresolved_tools:
+                self.unresolved_tools.append(tool_type)
+            return None
+
+        if tool_type == "tool.chinook-execute-sql":
+            data = self._nodes.get(tool_node_id, {}).get("data") or {}
+            configured = data.get("maxRows")
+            if isinstance(configured, (int, float)) and configured > 0:
+                return type(tool)(row_cap=int(configured))
+        return tool
+
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """A `create_agent` loop with the tools the canvas bound to it."""
         from langchain.agents import create_agent
@@ -314,12 +350,9 @@ class NodeRuntime:
         # canvas is exactly what gives the agent that capability.
         lc_tools = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
-            tool_type = self._types.get(tool_node_id, "")
-            tool = self.tools.get(tool_type)
+            tool = self._bound_tool(tool_node_id)
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
-            elif tool_type not in self.unresolved_tools:
-                self.unresolved_tools.append(tool_type)
 
         model = self._resolve_model(node.get("data") or {})
         agent = None
@@ -534,11 +567,9 @@ class NodeRuntime:
 
         lc_tools = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
-            tool = self.tools.get(self._types.get(tool_node_id, ""))
+            tool = self._bound_tool(tool_node_id)
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
-            elif self._types.get(tool_node_id, "") not in self.unresolved_tools:
-                self.unresolved_tools.append(self._types.get(tool_node_id, ""))
 
         skills = plan.skill_bindings.get(node_id, [])
         # Directive, not a nudge. A weaker version of this ("use tools if

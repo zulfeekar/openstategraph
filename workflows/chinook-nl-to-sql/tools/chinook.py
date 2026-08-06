@@ -151,8 +151,13 @@ class GetTableSchemaTool(BaseTool):
 class ExecuteSqlArgs(BaseModel):
     model_config = {"extra": "forbid"}
     query: str = Field(description="A single read-only SQL SELECT statement.")
-    max_rows: int = Field(
-        default=DEFAULT_MAX_ROWS, ge=1, le=1000, description="Row cap."
+    # `None`, not a baked-in default: a Pydantic field default is fixed at
+    # class-definition time, which cannot vary per canvas node. Leaving it
+    # unset means "use this tool instance's own configured ceiling" —
+    # resolved in `_execute`, where `self.row_cap` (an __init__ param, not a
+    # class attribute) can actually differ per instance.
+    max_rows: int | None = Field(
+        default=None, ge=1, le=1000, description="Row cap. Omit to use the configured default."
     )
 
 
@@ -167,6 +172,19 @@ class ExecuteSqlTool(BaseTool):
     )
     Args = ExecuteSqlArgs
 
+    def __init__(self, *, row_cap: int = DEFAULT_MAX_ROWS) -> None:
+        # Found by a TS-schema-vs-Python-factory diff: the canvas node's own
+        # "Max rows" field (`ChinookDatabaseNode.ts`) was fully inert on the
+        # backend — every instance always used the bare class default,
+        # regardless of what a developer configured. `row_cap` is this
+        # instance's ceiling, set by whichever node in the document this
+        # particular tool object was built for (see `node_runtime.py`'s
+        # Chinook tool binding). A **hard** ceiling, not merely a fallback
+        # default: if a developer set it on the canvas, an agent asking for
+        # more should still be capped, not silently granted a bigger window
+        # than the developer configured.
+        self.row_cap = row_cap
+
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, ExecuteSqlArgs)
         sql = args.query.strip().rstrip(";").strip()
@@ -178,6 +196,8 @@ class ExecuteSqlTool(BaseTool):
         if not sql.lower().startswith(("select", "with")):
             return ToolResult.failure("Only SELECT queries are allowed")
 
+        effective_max = min(args.max_rows, self.row_cap) if args.max_rows is not None else self.row_cap
+
         with connect_readonly() as conn:
             try:
                 cursor = conn.execute(sql)
@@ -186,11 +206,11 @@ class ExecuteSqlTool(BaseTool):
                 return ToolResult.failure(f"SQL error: {exc}")
 
             columns = [d[0] for d in cursor.description or []]
-            rows = cursor.fetchmany(args.max_rows + 1)
+            rows = cursor.fetchmany(effective_max + 1)
 
-        truncated = len(rows) > args.max_rows
+        truncated = len(rows) > effective_max
         return ToolResult(
-            content=_rows_to_markdown(columns, rows[: args.max_rows], truncated)
+            content=_rows_to_markdown(columns, rows[:effective_max], truncated)
         )
 
 
