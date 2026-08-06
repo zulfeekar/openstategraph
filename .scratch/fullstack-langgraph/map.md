@@ -909,6 +909,34 @@ TypeScript for that specific tool.
 
 289 Vitest passing, `tsc` clean.
 
+## Close ticket 18's hot-reload gap: palette auto-updates (2026-08-06)
+
+The last piece of ticket 18's own design sketch — an SSE "capabilities
+changed" push so the palette updates without a manual re-Load — closed
+without new backend wiring: extended the poll loop ticket 16's file-watch
+already runs to also compare the backend's discovered-tool list against
+what was last known for the open slug (`decideCapabilityRefresh`, a `Set`
+comparison since the backend promises no stable discovery order).
+
+Unlike a document change (never auto-applied, since it could discard
+unsaved edits), a capability change *is* applied automatically and
+silently — registering a node type is additive and doesn't touch the open
+document. A newly added tool gets a one-line toast naming it.
+
+Verified live: dropped a real `BaseTool` subclass into
+`workflows/intent-routed-demo/tools/` while the app sat open on that exact
+workflow, no reload — within one 5s poll cycle it appeared as a real,
+searchable palette card with its live-discovered description. Removed the
+temporary file afterward; `workflows/` has zero tracked diff.
+
+**Ticket 18 is now resolved for tool capabilities** — discovery, frontend
+registration, and hot-reload all built and verified live. What remains,
+by the ticket's own drawn boundary: true node-*class* discovery for a
+hand-written `Final*` type outside the `BaseTool` ladder — a genuinely
+separate, larger question, not a missing piece of what was built here.
+
+295 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**

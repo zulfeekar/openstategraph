@@ -1,5 +1,5 @@
 Type: grilling
-Status: mostly resolved (2026-08-06) — backend discovery, the frontend consumer, and tool node-type registration are all built; hot-reload push (SSE manifest-changed event) and true node-*class* discovery beyond the tool ladder remain unbuilt, by the same scope boundary this file already drew. See map.md's "Implement ticket 18's node-type discovery" entry and `src/nodes/tools/DiscoveredToolNode.ts`.
+Status: resolved for tool capabilities (2026-08-06) — backend discovery, the frontend consumer, tool node-type registration, and hot-reload (polling, not SSE — same user-visible outcome, no new backend wiring) are all built and verified live. True node-*class* discovery beyond the `BaseTool`/tool ladder (a hand-written `Final*` node type of a kind that isn't a tool) remains unbuilt — a genuinely separate, larger question this ticket's own design section flagged. See map.md's "Implement ticket 18's node-type discovery" and "Close ticket 18's hot-reload gap" entries, `src/nodes/tools/DiscoveredToolNode.ts`, `src/app/workflowFileWatch.ts`.
 Blocked by: 08, 16
 
 ## Question
