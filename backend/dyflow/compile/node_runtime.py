@@ -537,7 +537,13 @@ class NodeRuntime:
         produce the same report text, which is what makes the graph-engineering
         proof below assertable byte-for-byte.
         """
-        title = (node.get("data") or {}).get("title") or "Report"
+        # The TS field schema (`FormatReportNode.ts`) calls this key
+        # `reportTitle`, not `title` — found via a TS-schema-vs-Python-factory
+        # diff, not live: a canvas-authored document could never have reached
+        # this field at all, since every real document produces `reportTitle`
+        # and this read silently fell through to the "Report" default every
+        # time.
+        title = (node.get("data") or {}).get("reportTitle") or "Report"
 
         def run(state: RunState) -> dict[str, Any]:
             results = state.get("worker_results") or {}

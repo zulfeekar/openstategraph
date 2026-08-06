@@ -97,7 +97,7 @@ def orchestrator_graph_document(max_subtasks: int) -> dict[str, Any]:
             node("node:input.text-1", "input.text"),
             node("node:orchestrate.supervisor-1", "orchestrate.supervisor", maxSubtasks=max_subtasks),
             node("node:orchestrate.worker-1", "orchestrate.worker"),
-            node("node:function.format_report-1", "function.format_report", title="Genre report"),
+            node("node:function.format_report-1", "function.format_report", reportTitle="Genre report"),
             node("node:route.grader-1", "route.grader", criteria="", maxAttempts=3),
             node("node:output.formatted-1", "output.formatted"),
         ],
@@ -217,6 +217,26 @@ class TestFanOutAndJoin:
 
         assert "WRONG" not in final["answer"]
         assert final["worker_results"]["task-1"] == "Rock"
+
+    def test_the_configured_report_title_actually_reaches_the_report(self) -> None:
+        """Regression: `reportTitle` (the TS field's real key) vs `title`.
+
+        Found by a TS-schema-vs-Python-factory diff, not live: every real
+        canvas-authored document produces `reportTitle` (see
+        `FormatReportNode.ts`'s `FIELD_REPORT_TITLE`), but
+        `_format_report_function` used to read `data.get("title")` — a key no
+        real document ever sets. The field was fully inert; a developer
+        could type any title into the Inspector and every report still fell
+        back to the literal default `"Report"`. `orchestrator_graph_document`
+        already sets `reportTitle="Genre report"`, so this only needed an
+        assertion that the title actually shows up.
+        """
+        model = RespondingModel([(lambda c: "top genre by revenue" in c, "Rock")])
+        document = orchestrator_graph_document(max_subtasks=8)
+
+        final = run(document, "top genre by revenue", model)
+
+        assert final["answer"].startswith("# Genre report")
 
 
 # --------------------------------------------------------------------------- #
