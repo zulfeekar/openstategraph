@@ -122,11 +122,29 @@ export function AskPanel() {
     const seen = new Set<string>();
     let activeNode: string | null = null;
 
+    // For the per-node duration readout the Inspector already shows (built
+    // for the local preview path, which measures a real start/end) — a
+    // backend-streamed run has no such pair, since LangGraph's `updates`
+    // stream mode reports a node only *after* it finishes, never when it
+    // starts. The honest substitute: the wall-clock gap since the previous
+    // `update` frame arrived. For a sequential chain this is a close
+    // approximation of that node's own run time; for nodes dispatched
+    // concurrently by a fan-out (ticket 27's `Send`) it overstates any one
+    // of them, since several are genuinely running at once behind one gap.
+    // Shown anyway rather than left blank — a labelled approximation beats
+    // no signal at all, and the Inspector's "ms" badge is not claimed
+    // anywhere to be profiler-grade precision.
+    let lastEventAt = performance.now();
+
     // Queues node highlights so each one is visible for at least
     // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
     // arrive — see the constant's own comment for why this exists.
     let highlightChain: Promise<void> = Promise.resolve();
     const activate = (nodeId: string, output: string | null) => {
+      const now = performance.now();
+      const durationMs = Math.round(now - lastEventAt);
+      lastEventAt = now;
+
       highlightChain = highlightChain.then(async () => {
         // One node glows at a time, in the order the stream reports — the
         // previous node's card returns to its resting state exactly as it
@@ -143,8 +161,11 @@ export function AskPanel() {
         // thing) but a backend-streamed run never did, so cards like
         // Formatted Output stayed on their empty "Run the workflow to see
         // the result here" placeholder even after a real answer streamed in.
+        // `durationMs` closes the identical gap for the Inspector's "LAST
+        // RUN" timing badge — previously always blank for a Chat-driven run.
         controller.model.setNodeRuntime(nodeId, {
           status: 'running',
+          durationMs,
           ...(output != null ? { output } : {}),
         });
         // Highlight whichever node just acted — the "currently in charge"
