@@ -72,13 +72,26 @@ export class ExecutionEngine {
 
     const blocking = this.validator.validate().filter((d) => d.severity === 'error');
     if (blocking.length > 0) {
-      const first = blocking[0]?.message ?? 'Workflow is not runnable';
-      return { ok: false, usage: ZERO_USAGE, error: first };
+      // `acyclicGraphRule` reports a loop as a per-node "X is part of a
+      // loop" diagnostic — accurate, but it reads like the graph is broken
+      // rather than like a legitimate shape this *engine* just can't preview.
+      // This engine is a sequential DAG walk; a revise loop is valid for the
+      // backend LangGraph compiler (CLAUDE.md: "a cycle must contain a
+      // conditional edge") and only unrunnable *here*. Say so plainly rather
+      // than leaving "Run" looking broken with no clue why.
+      const first = blocking.some((d) => d.code === 'cycle')
+        ? 'This graph has a loop (e.g. a grader revise step) that the canvas preview cannot run — try Chat instead.'
+        : blocking[0]?.message ?? 'Workflow is not runnable';
+      return this.rejectBeforeStart(first);
     }
 
     const { order, cycle } = this.workflow.topologicalOrder();
     if (cycle && cycle.length > 0) {
-      return { ok: false, usage: ZERO_USAGE, error: 'The graph contains a loop' };
+      // Belt-and-suspenders: reachable only if a future rule change ever
+      // stops flagging cycles as blocking errors above.
+      return this.rejectBeforeStart(
+        'This graph has a loop (e.g. a grader revise step) that the canvas preview cannot run — try Chat instead.',
+      );
     }
 
     const runId = `run-${++this.runCounter}`;
@@ -172,6 +185,20 @@ export class ExecutionEngine {
       ...(failure ? { error: failure } : {}),
     });
     return { ok, usage: total, ...(failure ? { error: failure } : {}) };
+  }
+
+  /**
+   * A run that never gets to start still needs to *say so* — found live: a
+   * pre-flight rejection (a blocking diagnostic, a loop) used to bypass the
+   * event bus entirely, so the toolbar's own `run:finish` listener (which
+   * already turns a failure into a toast) never fired, and pressing "Run" on
+   * an unrunnable graph produced no observable feedback at all.
+   */
+  private rejectBeforeStart(error: string): RunOutcome {
+    const runId = `run-${++this.runCounter}`;
+    this.bus.emit('run:start', { runId });
+    this.bus.emit('run:finish', { runId, ok: false, usage: ZERO_USAGE, error });
+    return { ok: false, usage: ZERO_USAGE, error };
   }
 
   on<K extends keyof RunEvents & string>(
