@@ -638,6 +638,79 @@ checker's own claims, and the workflow-manager save/load/rename/delete
 paths. None of these were touched this session; flagging them by name is
 the honest alternative to claiming a coverage this session did not do.
 
+## TS-schema-vs-Python-factory field diff, plus live verification of the
+## remaining named gaps (2026-08-06)
+
+Closed out the last few items this session's "production ready" pass had
+named but not yet checked.
+
+**Live-verified, no bug found:**
+- JSON/SVG/PNG export — all three ran clean in the live app with no
+  console error (this Chromium-based browser rasterises `foreignObject`
+  content, so PNG succeeded too; WebKit's documented refusal is unrelated
+  to this environment).
+- The accessibility checker's own claims — spot-checked "84 interactive
+  controls have accessible names" against a hand-rolled DOM query (86, a
+  close match attributable to a slightly different heuristic, not a
+  fabricated number).
+- The Reddit tool's live-fetch-then-fallback — confirmed directly that
+  `fetch('https://www.reddit.com/...')` genuinely throws `Failed to fetch`
+  from this browser origin, and the code's own fallback path is exactly
+  what the comments claim, correctly labelled as sample data.
+- Undo/redo across a real mixed session (node-add, then a rename, both via
+  the real controller/history APIs) — interleaves correctly across two
+  different command types in proper LIFO order.
+
+**Real bug found and fixed**: the Workflows panel's "Save current" button
+read `workbench.model.name` directly in render, so renaming the document
+via the Inspector while the panel stayed open left the button's own label
+stale until an unrelated re-render happened to refresh it. The rename and
+the eventual save were always functionally correct — verified by actually
+completing a rename-then-save round trip and confirming the backend stored
+the new name — only the button's displayed text lagged. Fixed by
+subscribing to the model's `workflow:name` event, same pattern `useNode`
+already uses for other mutable fields.
+
+**Field-diff sweep** (a background agent, then independently confirmed by
+reading the code directly): every node type's TS field schema
+(`src/nodes/*/`) compared against its Python factory's reads in
+`node_runtime.py`.
+
+- **Real bug, fixed**: `FormatReportNode.ts` declares `reportTitle`;
+  `_format_report_function` read `data.get("title")` — a key no real
+  document has ever produced. The Inspector's title field was fully inert
+  on every backend-executed run, silently falling back to `"Report"`.
+  Fixed the read, added a regression test (none existed that asserted the
+  configured title actually appears — exactly how this went unnoticed).
+- **Real, significant missing-feature gap — flagged, not silently
+  built**: `AgentNode.ts`'s per-card `model` and `tokenBudget` fields are
+  fully inert for backend/Chat execution. `NodeRuntime` receives one
+  `self.model` for the *entire graph* (`main.py`'s `run_workflow` resolves
+  a single model from the request and passes it once), and `_agent` always
+  uses that shared instance — confirmed directly in the code, not inferred.
+  The canvas visibly lets a developer set three different AI Agent nodes
+  to three different models (the intent-routed demo does exactly this),
+  which creates a reasonable expectation that each backend-executed agent
+  uses its own — it doesn't. Implementing real per-node model routing is a
+  feature addition (resolving N models instead of one, handling a missing
+  key for any one of them, deciding whether local-preview parity matters),
+  not a one-line fix, so it was not attempted without checking scope. The
+  local canvas preview (`AgentNode.execute()`) *does* honor its own
+  per-node model field — only the backend path is affected.
+- **Real, lower-severity gap — flagged, not fixed**: `RouterNode.ts`'s
+  `tier` field is declared but `_router` never reads it (contrast
+  `GraderNode`, where `tier: "deep"` genuinely swaps in
+  `_DeepAgentAsChatModel`). Inert exactly like the two above.
+- **Recorded, not a bug**: Chinook's `tableName`/`maxRows` canvas fields
+  are inert by design, not by drift — the real tool classes
+  (`workflows/chinook-nl-to-sql/tools/chinook.py`) let the *model* supply
+  `table`/`max_rows` per call, which is more correct than a fixed
+  per-node default for a tool an agent calls dynamically. Worth a UI
+  affordance question (should the field be relabelled "default" or
+  removed?) but not a runtime bug.
+
+208 pytest + 257 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
