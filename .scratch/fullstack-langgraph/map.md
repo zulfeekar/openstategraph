@@ -425,6 +425,46 @@ gaps and to test everything end to end rather than only in Vitest.
 
 247 Vitest + 197 pytest passing, `tsc` clean, throughout.
 
+### End-to-end sweep, beyond the one query above
+
+The stop-hook feedback correctly flagged that one chat query is not "all
+use cases." Extended the sweep against the real persisted document
+(`workflows/intent-routed-demo/workflow.json`), through the actual endpoints
+the frontend calls (`/api/runs`, `/api/runs/stream`), not a stub:
+
+- **All 4 router branches, scripted against `/api/runs`**: `greeting` →
+  correct casual reply, grader passes first try. `off_topic` (both an
+  explicit "write me a haiku" and literal keyboard-mash nonsense) → correct
+  branch, grader passes. `general_knowledge` ("capital of France", "what does
+  jazz sound like") → correct branch and correct answers. `dataquery`
+  ("highest total sales revenue in the Chinook database") → correct branch,
+  orchestrator fan-out visible (`task-1` in the report), correct answer
+  (**Rock, $826.65**) matching the real Chinook data.
+- **Error paths, all handled cleanly, none silent**: an empty question → 422
+  with a clear Pydantic message; a malformed workflow with no edges → 502
+  with `ValueError: Graph must have an entrypoint`; `recursion_limit=10` on a
+  multi-hop dataquery run → 502 with a clear `GraphRecursionError` pointing at
+  the docs. No crash, no hang, no empty response in any case.
+- **`/api/runs/stream` verified independently of `/api/runs`**: same
+  document, same dataquery question, scripted directly against the SSE
+  endpoint — routed correctly to `worker1`'s tool calls, same as the blocking
+  endpoint.
+- **Multi-turn chat, live in the browser**: three questions sent in one
+  session; the thread correctly grew to three turns, each with its own
+  question, activity feed and answer — the chat-panel fix above holds across
+  repeated sends, not just the first.
+- **A genuine router-classification miss, investigated and ruled out as a
+  code bug**: the live browser chat twice classified a clearly
+  Chinook-flavoured question as `general_knowledge` instead of `dataquery`.
+  Reproduced the *exact* same question against `/api/runs/stream` by script
+  and got the correct `dataquery` routing on the first try — so the
+  misclassification is the router LLM's own run-to-run variance (an already
+  accepted characteristic of a cloud classifier with no `temperature=0`
+  guarantee), not a defect in the routing code, the stream wiring, or the
+  chat panel. Recorded here rather than silently dropped, per the "no silent
+  caps" norm — a developer relying on this router for a production intent
+  boundary should know it is not 100% deterministic on ambiguous phrasing.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
