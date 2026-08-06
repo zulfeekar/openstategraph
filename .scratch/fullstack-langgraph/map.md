@@ -593,6 +593,51 @@ agent) additionally reported:
 
 207 pytest + 252 Vitest passing, `tsc` clean.
 
+## "Production ready" goal — status and explicit scope line (2026-08-06)
+
+The standing `/goal` this session ("production ready, find all gaps and fix
+it and any missing feature, do a proper end to end test with all usecases")
+is open-ended by construction — "all gaps" and "all usecases" have no
+finish line a single session can reach. Recording concretely what this
+session actually covers, so the goal is judged against a stated scope
+rather than an unbounded one:
+
+**Verified clean, this session, against current `main`:**
+- All 4 intent-routed-demo branches (`greeting`, `off_topic`,
+  `general_knowledge`, `dataquery`) run end to end via `/api/runs` with no
+  crash, no `InvalidUpdateError`, no self-contradictory answer.
+- 207 pytest + 252 Vitest passing, `tsc` clean.
+- The live app loads, the seeded demo renders, chat round-trips to the
+  backend and streams a real answer, the canvas "Run" button gives visible
+  feedback either way (success or a clear reason it can't run).
+
+**Real bugs found and fixed this session** (each with a regression test,
+each verified live, not only in a test): the Chinook-global-registration
+architecture violation; the `seedDemo` startup crash it caused; three
+`RunState` bare-scalar reducer hazards (`answer` pre-existing,
+`attempts`/`feedback` found and fixed here); the chat-panel/Inspector
+layout collision under 1100px; the silent `ExecutionEngine.run()` failure
+path; the orchestrator feedback-forking bug; the `hasOutputRule` false
+positive. Also closed: missing `.env.example`, missing backend logging,
+missing error boundary, README gaps (test commands, env vars,
+prerequisites).
+
+**Explicitly not attempted this session** (real, named gaps — not silently
+skipped, see also "Not yet specified" and "Out of scope" below):
+ticket 16 (filesystem watch-back), ticket 25 (canvas splice-insert
+gesture), ticket 17 (further `WorkflowController`/`WorkflowModel`
+decomposition beyond the ticket-40 pass), a full TS-schema-vs-Python-factory
+field diff, and a direct test of the `Send`/join synchronization assumption
+under N>1 concurrent workers.
+
+**What "all usecases" would need beyond this**: every node type exercised
+in isolation (not just the ones the intent-routed demo happens to wire),
+the Reddit tool's live-vs-fallback path, PNG/SVG export on both Chromium
+and WebKit, undo/redo across a real editing session, the accessibility
+checker's own claims, and the workflow-manager save/load/rename/delete
+paths. None of these were touched this session; flagging them by name is
+the honest alternative to claiming a coverage this session did not do.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
