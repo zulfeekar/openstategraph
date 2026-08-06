@@ -225,44 +225,52 @@ class TestFanOutAndJoin:
 
 
 class TestReviseReEntersTheFanOut:
-    def test_a_rejected_report_causes_a_real_replan_not_a_retry_of_one_task(
+    def test_a_rejected_report_replans_with_feedback_folded_into_the_same_subtask(
         self,
     ) -> None:
-        """The harder case this file exists to prove.
+        """The harder case this file exists to prove — corrected.
 
-        The instruction ("top genre by revenue") has no separator a
-        deterministic splitter can see, so the first pass plans exactly **one**
-        subtask — not because of a cap, but because that is genuinely all the
-        instruction asks for. The grader rejects the report as incomplete. The
-        orchestrator consumes that feedback **as a new semicolon-joined
-        clause**, which is what lets a second, genuinely new subtask exist at
-        all — see the comment in `_orchestrator` on why prose feedback alone
-        cannot do this. The second worker dispatch is for a task the first
-        pass never ran, not a retry of the same one.
+        An earlier version of this test pinned the opposite of what should
+        happen: it had the orchestrator turn the grader's feedback into a
+        **second, independently dispatched subtask**, by joining it onto the
+        instruction with a semicolon *before* splitting. That looked
+        reasonable in the abstract (a deterministic splitter needs a
+        structural separator to "notice" new content) but was wrong in
+        practice — found live, not hypothetically, running the actual
+        intent-routed demo through the chat panel: a grader's ordinary
+        prose critique ("be more decisive") got treated exactly like a
+        genuinely separate fact request, so it became its own `Subtask` and
+        got dispatched to a worker as if it were a fresh question. The
+        worker dutifully "answered" the critique sentence, and the joined
+        report read as two disjoint, sometimes contradictory answers to one
+        question.
+
+        The instruction here ("top genre by revenue") still has no
+        separator, so it still plans exactly **one** subtask. What changed
+        is where the feedback goes on a replan: folded into that one
+        subtask's own instruction, not split off as a new one. A single
+        worker call now sees both the original ask and the rejection
+        reason together — which is what `test_worker_by_revenue_and_artist`
+        below proves reaches the model — rather than two workers each
+        seeing only half the context.
         """
-        is_grader = lambda c: "You are a grader" in c  # noqa: E731
         model = RespondingModel(
             [
-                # The grader call comes first, so it takes precedence over the
-                # worker routes below — necessary because the grader's prompt
-                # legitimately echoes the original question verbatim.
+                # The grader call comes first, so it takes precedence over
+                # the worker route below — necessary because the grader's
+                # prompt legitimately echoes the original question verbatim.
                 (
-                    # The feedback text is itself the next subtask, verbatim —
-                    # honest about what a deterministic orchestrator can do
-                    # with it: it has no NLP, so it can only ever fold prior
-                    # feedback in as a literal new clause, never paraphrase it.
-                    #
-                    # Counts report sections rather than checking for a literal
-                    # "task-2" substring: ids carry a generation prefix
-                    # (`task-1-2`, not `task-2`) precisely so a replan's ids
-                    # never collide with the rejected attempt's, which means
-                    # the *label* changes across attempts even though the
-                    # *count* is still the signal that matters here.
-                    lambda c: is_grader(c) and c.count("### task-") == 1,
+                    lambda c: "You are a grader" in c and "### task-1\n" in c,
                     "FAIL\nAlso report the top artist by revenue.",
                 ),
-                (lambda c: "top genre by revenue" in c, "Rock"),
-                (lambda c: "top artist by revenue" in c, "AC/DC"),
+                # One worker call now carries both the instruction and the
+                # folded-in feedback — scripted to answer both in one reply,
+                # the way a real model would.
+                (
+                    lambda c: "top genre by revenue" in c
+                    and "Also report the top artist by revenue" in c,
+                    "Rock. Top artist by revenue: AC/DC.",
+                ),
             ],
         )
 
@@ -271,10 +279,66 @@ class TestReviseReEntersTheFanOut:
 
         assert final["attempts"] == 2, "expected exactly one replan"
         assert final["decisions"]["node:route.grader-1"] == "pass"
-        # The final report has both sections — the replan genuinely added a
-        # subtask the first pass never ran, it did not just repeat task-1.
+        # Still exactly one subtask on the replan — the feedback refined it,
+        # it did not fork the plan.
+        subtasks = final["subtasks"]["node:orchestrate.supervisor-1"]
+        assert len(subtasks) == 1
+        # Two worker calls total — one per attempt (the first attempt, one
+        # subtask with no feedback yet; the replan, the same one subtask
+        # with feedback folded in) — never two *in the same* attempt.
+        worker_calls = [c for c in model.calls if "grader" not in c]
+        assert len(worker_calls) == 2
         assert "Rock" in final["answer"]
         assert "AC/DC" in final["answer"]
+
+    def test_feedback_that_is_pure_critique_no_longer_forks_into_a_bogus_subtask(
+        self,
+    ) -> None:
+        """Pins the exact live failure this fix closes.
+
+        Real repro from the chat panel: "Who is the best artist of all
+        time?" — a single-subtask instruction with no separator. The grader
+        rejected the first attempt with ordinary critique prose (not a
+        request for any new fact). Under the old semicolon-join behaviour,
+        that critique text became its own `Subtask` and got dispatched to a
+        second worker, which produced an answer to the *critique sentence*
+        rather than to the question — a second, unrelated block in the
+        final report. Here, a worker call whose content is anything *other*
+        than the one legitimate instruction plus its folded-in feedback
+        would mean the bug is back.
+        """
+        model = RespondingModel(
+            [
+                (
+                    lambda c: "You are a grader" in c and "### task-1\n" in c,
+                    "FAIL\nGive a single, decisive answer, not a hedge.",
+                ),
+                (
+                    lambda c: "who is the best artist of all time" in c.lower(),
+                    "Leonardo da Vinci.",
+                ),
+            ],
+        )
+
+        document = orchestrator_graph_document(max_subtasks=8)
+        final = run(document, "Who is the best artist of all time?", model)
+
+        # Still exactly one subtask on the replan — the critique refined it,
+        # it did not fork a second, bogus subtask out of the critique
+        # sentence itself (the fixed bug: one attempt legitimately fails
+        # and replans once, which is two *sequential* worker calls, not two
+        # workers dispatched *in the same attempt* from one instruction).
+        subtasks = final["subtasks"]["node:orchestrate.supervisor-1"]
+        assert len(subtasks) == 1
+        # Every worker call answers the real question (each may also carry
+        # the folded-in critique as extra context) — none of them is a
+        # worker answering the critique sentence on its own.
+        worker_calls = [c for c in model.calls if "grader" not in c]
+        assert worker_calls
+        for call in worker_calls:
+            assert "who is the best artist of all time" in call.lower()
+        assert final["answer"].count("### task-") == 1
+        assert "Leonardo da Vinci." in final["answer"]
 
     def test_the_retry_carries_the_reason_into_the_replanned_instruction(self) -> None:
         is_grader = lambda c: "You are a grader" in c  # noqa: E731

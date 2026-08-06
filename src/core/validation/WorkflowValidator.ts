@@ -147,15 +147,32 @@ export const acyclicGraphRule: IWorkflowRule = {
   },
 };
 
-/** A graph with no terminal node produces nothing observable. */
+/**
+ * A graph with no terminal node produces nothing observable.
+ *
+ * "Terminal" means unwired downstream, not "has zero declared out-ports" —
+ * found live: `AgentNode`, `RouterNode` and `GraderNode` all statically
+ * declare a `result`/branch out-port regardless of whether anything is
+ * connected to it, so a workflow that legitimately ends in one of them
+ * without a separate `Output` node (the backend compiler supports this
+ * fine — `_agent`/`_format_report_function` write `answer` directly) was
+ * flagged "nothing consumes the result" even though the run produces a real
+ * answer. Only `output.formatted` has literally zero out-ports; checking
+ * port *descriptors* instead of actual edges made every other node type a
+ * false positive.
+ */
 export const hasOutputRule: IWorkflowRule = {
   id: 'has-output',
   check({ model }) {
     const executable = model.nodes().filter((node) => node.kind === 'standard');
     if (executable.length === 0) return [];
-    const hasSink = executable.some(
-      (node) => node.ports.filter((p) => p.direction === 'out').length === 0,
-    );
+    const hasSink = executable.some((node) => {
+      const outPorts = node.ports.filter((p) => p.direction === 'out');
+      if (outPorts.length === 0) return true;
+      return outPorts.every(
+        (port) => model.edgesFrom({ nodeId: node.id, portId: port.id }).length === 0,
+      );
+    });
     return hasSink
       ? []
       : [

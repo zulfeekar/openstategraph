@@ -20,7 +20,7 @@ from typing import Annotated, Any, Callable, TypedDict
 from langgraph.graph.message import add_messages
 
 from dyflow.abc.grader import Grader
-from dyflow.abc.orchestrator import Orchestrator
+from dyflow.abc.orchestrator import Orchestrator, Subtask
 from dyflow.abc.router import Router
 from dyflow.compile.workflow_compiler import CompiledPlan
 
@@ -390,22 +390,38 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
             feedback = state.get("feedback", "")
-            if feedback:
-                # Appended as a **new semicolon-delimited clause**, not fused in
-                # as prose. This is not cosmetic: `Orchestrator.split()` is
-                # deterministic and only recognises structural separators
-                # (numbers, semicolons, "and"). Prose glue like "Additionally:
-                # ..." produces a string with no recognisable separator when
-                # the original instruction had none either, so the replanned
-                # instruction would still be exactly one subtask — the
-                # orchestrator would repeat the identical single-subtask plan
-                # every attempt, having incorporated nothing, until the budget
-                # ran out. That is precisely the "keep trying" cost leak the
-                # checklist warns about. A semicolon makes the feedback a
-                # genuinely new, separately dispatchable subtask.
-                instruction = f"{instruction}; {feedback}"
             generation = state.get("attempts", 0)
             subtasks = orchestrator.plan(instruction, generation=generation)
+            if feedback:
+                # Refines every subtask the *original* instruction split
+                # into — it does not add one of its own.
+                #
+                # Found live: an earlier version appended feedback as a new
+                # semicolon-delimited clause to the instruction *before*
+                # splitting, reasoning that `Orchestrator.split()` is
+                # deterministic and needs a structural separator to
+                # "incorporate" anything. That reasoning was backwards — a
+                # semicolon there does not revise a subtask, it hands the
+                # deterministic splitter one MORE clause to split on, so the
+                # grader's own rejection text became its own independent
+                # `Subtask` and got dispatched to a worker as if it were a
+                # fresh user question. On a single-subtask instruction ("who
+                # is the best artist of all time?") this produced two
+                # workers answering two unrelated things — one the real
+                # question, one literally the feedback sentence — joined
+                # into one self-contradictory report. Appending to each
+                # subtask's own instruction *after* splitting keeps the
+                # subtask count exactly what the split of the real
+                # instruction implies, with the "why it was rejected"
+                # context carried into the retry rather than dispatched as
+                # a task of its own.
+                subtasks = [
+                    Subtask(
+                        id=t.id,
+                        instruction=f"{t.instruction}\n\nYour previous attempt was rejected: {feedback}",
+                    )
+                    for t in subtasks
+                ]
             return {
                 "subtasks": {node_id: [t.model_dump() for t in subtasks]},
                 "outputs": {node_id: f"Planned {len(subtasks)} subtask(s)."},
