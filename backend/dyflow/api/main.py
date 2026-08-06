@@ -426,7 +426,8 @@ def create_app(
                 )
                 for namespace, mode, payload in stream:
                     if mode == "updates":
-                        for raw_name, update in payload.items():
+                        for raw_name, raw_update in payload.items():
+                            update = _coerce_update(raw_update)
                             node_id = node_ids_by_name.get(raw_name, raw_name)
                             answer = keep_latest_nonempty(answer, str(update.get("answer") or ""))
                             decisions = merge_decisions(
@@ -524,6 +525,21 @@ def create_app(
         )
 
     return app
+
+
+def _coerce_update(raw: Any) -> dict[str, Any]:
+    """A node's contribution to one `updates`-mode chunk, defensively.
+
+    Found live, mid-run, not in any fixture: once `subgraphs=True` is on,
+    LangGraph auto-detects a nested graph invoked *synchronously inside* a
+    plain node (the worker's `create_agent` call, the deep grader's
+    `create_deep_agent` call) and surfaces its own internal steps in the
+    same stream. Some of those steps contribute `None` rather than `{}` for
+    "nothing to report this tick" — every `.get()` on a raw chunk value
+    must go through this first, or the ones that changed it call directly
+    crash on `'NoneType' object has no attribute 'get'`.
+    """
+    return raw if isinstance(raw, dict) else {}
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:

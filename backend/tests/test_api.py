@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from dyflow.api.main import OLLAMA_CLOUD_MODEL, create_app, resolve_model
+from dyflow.api.main import OLLAMA_CLOUD_MODEL, _coerce_update, create_app, resolve_model
 
 
 class StubGraph:
@@ -261,6 +261,27 @@ class TestRunPostedWorkflow:
             "/api/runs", json={"workflow": self._doc(), "question": "hi", "oops": 1}
         )
         assert response.status_code == 422
+
+
+class TestCoerceUpdate:
+    """Found live, mid-run: once `subgraphs=True` is on, LangGraph surfaces a
+    nested graph invoked *inside* a plain node (`create_agent`/
+    `create_deep_agent` called from within a worker or grader factory) —
+    and some of its internal steps contribute `None`, not `{}`, for
+    "nothing to report this tick". `AttributeError: 'NoneType' object has
+    no attribute 'get'` crashed the whole stream on this, mid-answer, in a
+    real Chinook run.
+    """
+
+    def test_a_dict_update_passes_through_unchanged(self) -> None:
+        assert _coerce_update({"outputs": {"n1": "x"}}) == {"outputs": {"n1": "x"}}
+
+    def test_none_becomes_an_empty_dict_rather_than_raising(self) -> None:
+        assert _coerce_update(None) == {}
+
+    def test_anything_else_unexpected_also_becomes_an_empty_dict(self) -> None:
+        assert _coerce_update("not a dict") == {}
+        assert _coerce_update(42) == {}
 
 
 class TestRunStream:

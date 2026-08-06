@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "name": "Intent-routed (router + orchestrator + per-intent grader)",
+  "savedAt": "2026-08-06T05:58:37.779444+00:00",
+  "document": {
+    "version": 1,
+    "name": "Intent-routed (router + orchestrator + per-intent grader)",
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 320
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "data": {
+          "branches": "dataquery\noff_topic\ngeneral_knowledge\ngreeting",
+          "fallback": "off_topic",
+          "rules": "A question about Chinook's data (revenue, genres, artists) is dataquery. A greeting with no question is greeting. A general factual question unrelated to the store is general_knowledge. Anything else is off_topic."
+        },
+        "position": {
+          "x": 360,
+          "y": 320
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "orch1",
+        "type": "orchestrate.supervisor",
+        "data": {
+          "maxSubtasks": 8
+        },
+        "position": {
+          "x": 700,
+          "y": 40
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "worker1",
+        "type": "orchestrate.worker",
+        "data": {},
+        "position": {
+          "x": 980,
+          "y": 40
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "tool-tables",
+        "type": "tool.chinook-get-all-tables",
+        "data": {},
+        "position": {
+          "x": 980,
+          "y": 260
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "tool-schema",
+        "type": "tool.chinook-get-schema",
+        "data": {
+          "table": "Track"
+        },
+        "position": {
+          "x": 1180,
+          "y": 260
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "tool-sql",
+        "type": "tool.chinook-execute-sql",
+        "data": {
+          "maxRows": 1000
+        },
+        "position": {
+          "x": 1380,
+          "y": 260
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "report1",
+        "type": "function.format_report",
+        "data": {
+          "reportTitle": "Data answer"
+        },
+        "position": {
+          "x": 1260,
+          "y": 40
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "grader-data",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- Must cite a real figure that could only come from querying the database.\n- Must not answer from general knowledge.",
+          "criteriaMode": "replace",
+          "maxAttempts": 2,
+          "tier": "deep"
+        },
+        "position": {
+          "x": 1540,
+          "y": 40
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "agent-offtopic",
+        "type": "agent.llm",
+        "data": {},
+        "position": {
+          "x": 700,
+          "y": 340
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "grader-offtopic",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- A polite decline is enough; no data is required.",
+          "criteriaMode": "replace",
+          "maxAttempts": 1
+        },
+        "position": {
+          "x": 980,
+          "y": 340
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "agent-general",
+        "type": "agent.llm",
+        "data": {},
+        "position": {
+          "x": 700,
+          "y": 500
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "grader-general",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- The answer must be a direct, confident statement.",
+          "criteriaMode": "replace",
+          "maxAttempts": 2
+        },
+        "position": {
+          "x": 980,
+          "y": 500
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "agent-greeting",
+        "type": "agent.llm",
+        "data": {},
+        "position": {
+          "x": 700,
+          "y": 660
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "grader-greeting",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- A short, friendly greeting back is enough.",
+          "criteriaMode": "replace",
+          "maxAttempts": 1
+        },
+        "position": {
+          "x": 980,
+          "y": 660
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 1820,
+          "y": 340
+        },
+        "size": {
+          "width": 320,
+          "height": 300
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:dataquery"
+        },
+        "target": {
+          "nodeId": "orch1",
+          "portId": "instruction"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "orch1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker1",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-tables",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-schema",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-sql",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "report1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "report1",
+          "portId": "report"
+        },
+        "target": {
+          "nodeId": "grader-data",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-data",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-data",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "orch1",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:off_topic"
+        },
+        "target": {
+          "nodeId": "agent-offtopic",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-offtopic",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader-offtopic",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-offtopic",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-offtopic",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "agent-offtopic",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:general_knowledge"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-general",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader-general",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-general",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-general",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:greeting"
+        },
+        "target": {
+          "nodeId": "agent-greeting",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-greeting",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader-greeting",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-greeting",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-greeting",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "agent-greeting",
+          "portId": "feedback"
+        }
+      }
+    ]
+  }
+}
