@@ -839,6 +839,44 @@ it just lands in `outputs["grader_data"]` instead of
 
 221 pytest passing.
 
+## Closed the two remaining "acceptable as-is" items for real (2026-08-06)
+
+Two items had been recorded as deliberate, rationale-backed non-fixes
+rather than gaps: the 11 "part of a loop" `error` diagnostics (accurate,
+but indistinguishable from a real bug), and Chinook's `maxRows` field
+(inert by design, since the model supplies its own args). Converted both
+into actual code changes rather than leaving them as accepted tradeoffs.
+
+**Loop diagnostics**: `acyclicGraphRule` now tells an *escapable* cycle (a
+grader's `revise` port looping back, with a `pass` port that exits the
+same cycle — valid for the backend per CLAUDE.md's "a cycle must contain a
+conditional edge") apart from a genuinely *unescapable* one (every member
+only ever feeds back in, never out — a real bug on any engine). The
+escapable case is now a `warning`, not a blocking `error`. Fixing this
+required first fixing a latent inaccuracy in `topologicalOrder()`'s own
+cycle result: it is Kahn's algorithm's leftover set — every node whose
+in-degree never resolved — which over-includes nodes merely *downstream*
+of a cycle, not only the cycle's own members. Added `canReachSelf` to
+compute true cycle membership before checking for an escape; without it, a
+downstream node with no back-edge at all falsely suppressed detection of a
+real escape elsewhere in the graph. Verified live: the real intent-routed
+demo's diagnostics count dropped from 12 to **1** (only the genuinely
+blocking empty-prompt error remains), with the 11 loop diagnostics now
+rendering as warnings.
+
+**Chinook `maxRows`**: was inert not because the design was wrong (the
+model supplying its own `table`/`max_rows` per call is genuinely more
+correct than a fixed default for a dynamically-invoked tool) but because
+the *ceiling* half of that idea was never wired: a developer's configured
+row cap should still bound whatever the model asks for. Added
+`ExecuteSqlTool(row_cap=...)` and `NodeRuntime._bound_tool()` (shared by
+`_agent`/`_worker`), which builds a fresh tool instance per bound node
+carrying its own configured ceiling — never mutating the shared
+type-keyed registry instance, since two SQL-tool nodes with two different
+ceilings in the same document would otherwise clobber each other.
+
+222 pytest + 262 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
