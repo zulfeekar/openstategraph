@@ -973,6 +973,36 @@ both unspecified, not unbuilt).
 
 301 Vitest + 229 pytest passing, `tsc` clean.
 
+## Closed one concrete slice of "streaming/observability enhancements" (2026-08-06)
+
+Re-examined the "unspecified" streaming/observability gap rather than
+leaving it entirely as a design question, and found a genuine, already-
+specified piece hiding inside it: the Inspector's "LAST RUN" section
+already renders a per-node duration badge (`node.runtime.durationMs`) —
+built for the local canvas preview (`ExecutionEngine`, a real start/end
+pair) — but a Chat-driven (backend-streamed) run never populated it at
+all. Every node's timing stayed permanently blank for the execution path
+most people actually use, silently, with no error.
+
+Fixed in `AskPanel.tsx`: since LangGraph's `updates` stream mode reports
+a node only after it finishes (no start event exists to pair with), used
+the wall-clock gap since the previous `update` frame as the duration —
+documented honestly as an approximation (accurate for a sequential
+chain, an overstatement for any one member of a fan-out, since several
+workers are genuinely concurrent behind one gap) rather than presented as
+profiler-grade precision.
+
+Verified live: a real chat message through the greeting branch showed
+`router1` (820ms), `agent-greeting` (11ms) and `grader-greeting`
+(2244ms) as distinct, real durations in the Inspector; untouched nodes
+correctly stayed `null`.
+
+This does not resolve the "streaming/observability" item as a whole — a
+LangSmith-style trace view is still unspecified — but it closes the one
+piece of it that was concretely scoped and already had a UI built for it.
+
+301 Vitest passing, `tsc` clean.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
