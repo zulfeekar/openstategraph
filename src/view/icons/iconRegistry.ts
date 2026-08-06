@@ -42,6 +42,7 @@ const ICONS: Record<string, LucideIcon> = {
   'node-orchestrator': Split,
   'node-worker': Users,
   'node-format-report': FileOutput,
+  'node-discovered-tool': Wrench,
   'port-feedback': ShieldCheck,
 
   // Port types

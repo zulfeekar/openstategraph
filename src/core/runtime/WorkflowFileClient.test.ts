@@ -100,3 +100,55 @@ describe('WorkflowFileClient.remove', () => {
     expect(stub.calls[0]!.init?.method).toBe('DELETE');
   });
 });
+
+describe('WorkflowFileClient.capabilities', () => {
+  it('maps the snake_case tool fields to camelCase', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        tools: [
+          {
+            id: 'chinook-nl-to-sql/tools.ListTablesTool',
+            name: 'chinook_list_tables',
+            description: 'Lists tables.',
+            args_schema: { type: 'object', properties: {} },
+          },
+        ],
+        functions: [],
+      }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.capabilities('chinook-nl-to-sql');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.tools).toEqual([
+      {
+        id: 'chinook-nl-to-sql/tools.ListTablesTool',
+        name: 'chinook_list_tables',
+        description: 'Lists tables.',
+        argsSchema: { type: 'object', properties: {} },
+      },
+    ]);
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/chinook-nl-to-sql/capabilities');
+  });
+
+  it('is an empty list, not a crash, for a workflow with no tools folder', async () => {
+    const stub = stubFetch(jsonResponse({ tools: [], functions: [] }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.capabilities('empty-workflow');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.tools).toEqual([]);
+  });
+
+  it('is a failure, not a crash, for an unsaved workflow with no folder at all', async () => {
+    const stub = stubFetch(jsonResponse({ detail: "No workflow named 'x'" }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.capabilities('x');
+
+    expect(result.ok).toBe(false);
+  });
+});

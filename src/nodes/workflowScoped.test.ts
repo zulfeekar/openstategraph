@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
+import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
-import { registerNodeTypesForRawDocument } from './workflowScoped';
+import { registerDiscoveredCapabilities, registerNodeTypesForRawDocument } from './workflowScoped';
 
 /**
  * The gap this closes (recorded in `.scratch/fullstack-langgraph/map.md`):
@@ -151,5 +152,79 @@ describe('registerNodeTypesForRawDocument — the load-order bug', () => {
     expect(() =>
       registerNodeTypesForRawDocument({}, workbench.registry, workbench.engine.executors),
     ).not.toThrow();
+  });
+});
+
+/**
+ * Ticket 18's node-type-discovery half: a workflow's discovered `tools/`
+ * capabilities become real, connectable node types the moment that
+ * workflow is opened — see `DiscoveredToolNode.ts` for the node-type side.
+ */
+describe('registerDiscoveredCapabilities', () => {
+  const capability = (id: string): ToolCapability => ({
+    id,
+    name: id,
+    description: `discovered tool ${id}`,
+    argsSchema: { type: 'object', properties: {} },
+  });
+
+  it('registers one node type per discovered capability', () => {
+    const workbench = new Workbench();
+    registerDiscoveredCapabilities(
+      [capability('a/tools.One'), capability('a/tools.Two')],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeDefined();
+    expect(workbench.registry.nodeTypes.get('a/tools.Two')).toBeDefined();
+  });
+
+  it('unregisters the previous workflow’s capabilities when a new one is opened', () => {
+    const workbench = new Workbench();
+    registerDiscoveredCapabilities(
+      [capability('a/tools.One')],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    registerDiscoveredCapabilities(
+      [capability('b/tools.Two')],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeUndefined();
+    expect(workbench.registry.nodeTypes.get('b/tools.Two')).toBeDefined();
+  });
+
+  it('an empty list clears whatever was registered, without leaving it stranded', () => {
+    const workbench = new Workbench();
+    registerDiscoveredCapabilities(
+      [capability('a/tools.One')],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    registerDiscoveredCapabilities([], workbench.registry, workbench.engine.executors);
+
+    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeUndefined();
+  });
+
+  it('re-registering the same capability is idempotent, not a duplicate-id crash', () => {
+    const workbench = new Workbench();
+    expect(() => {
+      registerDiscoveredCapabilities(
+        [capability('a/tools.One')],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+      registerDiscoveredCapabilities(
+        [capability('a/tools.One')],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+    }).not.toThrow();
+    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeDefined();
   });
 });

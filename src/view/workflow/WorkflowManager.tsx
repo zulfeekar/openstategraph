@@ -18,7 +18,7 @@ import {
   recordKnownSavedAt,
 } from '@app/workflowFileWatch';
 import { slugify, WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
-import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
+import { registerDiscoveredCapabilities, registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -116,8 +116,17 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       try {
         // Before importing, not after: `fromJSON` skips any node whose type
         // is not registered yet, so a workflow-scoped type (Chinook's
-        // tools) must exist in the registry before its nodes can be
-        // created at all — registering afterwards would be too late.
+        // tools, or a discovered capability already placed in a
+        // previously-saved document) must exist in the registry before its
+        // nodes can be created at all — registering afterwards would be
+        // too late. Ticket 18: a workflow's own discovered `tools/`
+        // capabilities become real, connectable node types the same way.
+        const capabilities = await client.capabilities(slug);
+        registerDiscoveredCapabilities(
+          capabilities.ok ? capabilities.value.tools : [],
+          workbench.registry,
+          workbench.engine.executors,
+        );
         registerNodeTypesForRawDocument(outcome.value, workbench.registry, workbench.engine.executors);
         controller.document.importJSON(JSON.stringify(outcome.value));
         // Continuing to edit and save now updates *this* workflow, not a new one.

@@ -2,7 +2,9 @@ import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
+import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
+import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
 
 /**
  * Registers a node type only while a workflow that actually uses it is open.
@@ -90,6 +92,45 @@ export function registerChinookNodes(
   executors: Registry<INodeExecutor>,
 ): void {
   applyChinookRegistration(true, registry, executors);
+}
+
+/** Ids this tab currently has registered from the last workflow's discovery call. */
+let registeredDiscoveredToolIds: readonly string[] = [];
+
+/**
+ * Ticket 18's node-type-discovery half: registers one workflow-scoped node
+ * type per `ToolCapability` the backend discovered in that workflow's
+ * `tools/` folder (`WorkflowFileClient.capabilities`), so a hand-written
+ * `BaseTool` subclass becomes a real, connectable palette entry with no TS
+ * file to hand-author — see `DiscoveredToolNode.ts`.
+ *
+ * Unlike Chinook's usage-based sync (`syncWorkflowScopedNodes`), this
+ * registers every discovered capability unconditionally the moment a
+ * workflow is opened — the whole point is to make an undiscovered-until-now
+ * capability *available* to place, not to react to something already
+ * placed. Call on every successful load, passing the freshly-fetched list;
+ * an empty list (an unsaved workflow, a fetch failure, or a workflow with
+ * no `tools/` folder) correctly clears whatever the previous workflow had
+ * registered rather than leaving it stranded in the palette.
+ */
+export function registerDiscoveredCapabilities(
+  capabilities: readonly ToolCapability[],
+  registry: ModelRegistry,
+  executors: Registry<INodeExecutor>,
+): void {
+  for (const id of registeredDiscoveredToolIds) {
+    if (registry.nodeTypes.get(id) != null) {
+      registry.nodeTypes.unregister(id);
+      executors.unregister(id);
+    }
+  }
+
+  for (const capability of capabilities) {
+    const { definition, executor } = createDiscoveredToolNode(capability);
+    registry.nodeTypes.upsert(definition);
+    executors.upsert(executor);
+  }
+  registeredDiscoveredToolIds = capabilities.map((c) => c.id);
 }
 
 function applyChinookRegistration(

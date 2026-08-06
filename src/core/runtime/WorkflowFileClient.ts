@@ -38,11 +38,24 @@ export interface WorkflowSummary {
   readonly edgeCount: number;
 }
 
+/** Ticket 18: one `BaseTool` subclass discovered in a workflow's `tools/` folder. */
+export interface ToolCapability {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly argsSchema: Record<string, unknown>;
+}
+
+export interface WorkflowCapabilities {
+  readonly tools: readonly ToolCapability[];
+}
+
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   load(slug: string): Promise<Result<unknown, string>>;
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
+  capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
 }
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -126,6 +139,42 @@ export class WorkflowFileClient implements IWorkflowFileClient {
     }
     if (!response.ok) return Err(await describeFailure(response));
     return Ok(undefined);
+  }
+
+  /**
+   * Ticket 18: what this saved workflow's own `tools/`/`functions/` folders
+   * offer, discovered by the backend importing them — not a static
+   * registration. An unsaved, canvas-only workflow has no folder yet, so
+   * callers should expect this to fail harmlessly for one.
+   */
+  async capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/capabilities`,
+      );
+    } catch {
+      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as { tools?: unknown[] };
+      const tools = Array.isArray(payload.tools) ? payload.tools : [];
+      return Ok({
+        tools: tools.map((entry) => {
+          const record = entry as Record<string, unknown>;
+          return {
+            id: asString(record['id']),
+            name: asString(record['name']),
+            description: asString(record['description']),
+            argsSchema: (record['args_schema'] as Record<string, unknown>) ?? {},
+          };
+        }),
+      });
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
   }
 }
 
