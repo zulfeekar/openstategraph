@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07) — f5f7076
 Blocked by: 30
 
 ## Question
@@ -31,3 +31,7 @@ Build the real mechanism:
   422 lesson), with tests at exactly that seam.
 - Failure is loud: an unresolvable tool stays in `unresolved_tools` warnings;
   discovery ImportErrors surface in the capabilities response, not a log.
+
+## Resolution
+
+`BaseTool.node_type` + `configure(data)`; `discover_tool_registry` keys by node_type; `build_tool_registry` layers workflow tools over defaults on all three endpoints; `workflow_slug` on BOTH request models with the 422 pinned; envelope unwrapped everywhere; unresolved bindings stay loud.

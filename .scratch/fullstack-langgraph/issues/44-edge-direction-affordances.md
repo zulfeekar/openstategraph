@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07) — ccd1959
 
 ## Question
 
@@ -16,3 +16,7 @@ animates nothing.
   the ≥350ms minimum highlight chaining.
 - Focused node: direction-aware port glow (inputs vs outputs distinct).
 - Respect `prefers-reduced-motion` for the dash animation.
+
+## Resolution
+
+context-stroke arrowhead on FlowLink follows every CSS state; reduced-motion honoured; backend-driven edge activity already existed via node:runtime.

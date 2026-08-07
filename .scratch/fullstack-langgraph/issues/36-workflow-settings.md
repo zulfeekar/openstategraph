@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07) — 0274129
 
 ## Question
 
@@ -17,3 +17,7 @@ destroys the setting on save.
 - Inspector surface: a workflow-level (no selection) inspector panel.
 - Backend reads it uniformly across /api/runs, /stream, /resume — the WIP
   had three slightly different spellings.
+
+## Resolution
+
+`settings` round-trips through SerializedWorkflow/WorkflowModel (omitted when empty; import clears stale); backend reads settings.model as document default via one helper on all endpoints. Workflow-level inspector panel not built.

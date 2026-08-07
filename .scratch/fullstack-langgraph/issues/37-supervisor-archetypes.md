@@ -1,6 +1,6 @@
 Type: grilling
-Status: open
-Blocked by: 30
+Status: open — claimed 2026-08-07 (wayfinder session)
+Blocked by: 30 (resolved)
 
 ## Question
 

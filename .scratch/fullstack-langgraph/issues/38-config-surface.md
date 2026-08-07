@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved v1 (2026-08-07) — 8ce5a22
 Blocked by: 30, 31, 32
 
 ## Question
@@ -20,3 +20,7 @@ has no grouping.
   editor.
 - Read-only prompt sections: rendering (ticket 31) belongs to the same
   Inspector pass.
+
+## Resolution
+
+FieldSchema gained group/advanced; groupFieldsForInspector drives the panel; execution overrides file under advanced Execution; agent card stays model+budget. Subagent repeatable-group and middleware-slot editors remain open design.

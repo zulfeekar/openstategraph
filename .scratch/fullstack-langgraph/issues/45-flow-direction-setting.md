@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07) — ccd1959
 
 ## Question
 
@@ -22,3 +22,7 @@ footer row. No preferences store exists (only `theme` persists).
 - TopBar toggle beside Arrange; arrange passes the matching rankDir;
   keyboard binding in the one binding table; persisted; live re-layout on
   switch is a single undoable transaction.
+
+## Resolution
+
+One rotation rule (`resolvePortSide`); PreferencesStore persists; TopBar toggles + re-arranges with matching rankDir; NodeCard spreads shared-edge ports. Live-verified both directions incl. cold-load.

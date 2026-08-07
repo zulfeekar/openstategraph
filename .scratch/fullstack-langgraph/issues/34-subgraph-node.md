@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved v1 (2026-08-07) — 0274129
 Blocked by: 30, 36
 
 ## Question
@@ -23,3 +23,7 @@ Design `workflow.subgraph`:
   verify a real nested subgraph's namespace arrives as documented.
 - Frontend: a card showing the child workflow's name with drill-in; palette
   lists open-able workflows from `WorkflowStore.list()`.
+
+## Resolution
+
+`workflow.subgraph` compiles the child at build time (self-inclusion refused with the chain named) and invokes with explicit mapping: upstream text in as question, answer out. Shared RunState is a deliberate v1; namespace-verified streaming and drill-in UI remain fog.

@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07) — ccd1959
 
 ## Question
 
@@ -12,3 +12,7 @@ blocks/tables, theme-aware) used by: chat answers, thinking stream, approval
 candidate, node runtime output bodies, tool descriptions in the palette.
 Streaming-safe (partial markdown mustn't flicker badly). Keep `<pre>` for
 genuinely preformatted content (logs).
+
+## Resolution
+
+RichText (GFM, no raw HTML, noopener links) renders chat answers + HITL candidates; thinking stays preformatted deliberately.

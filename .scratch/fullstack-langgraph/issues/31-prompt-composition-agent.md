@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: mostly resolved (2026-08-07) — one piece open
 Blocked by: 30
 
 ## Question
@@ -24,3 +24,7 @@ contract, already proven on Router/Grader) to the agent family:
 Also restore/record: the reverted WIP router rewrite bypassed
 `resolve_system_prompt()` entirely and interpolated the question into the
 system message — the anti-pattern this ticket exists to prevent.
+
+## Resolution
+
+`resolve_prompt()` on the family composes SystemPrompt (context above rules); `systemPrompt` field on agent.llm reaches `create_agent(system_prompt=)`. The reverted router rewrite is gone — `BaseRouter` classifies through `resolve_system_prompt()` again. Still open: rendering the *locked* sections read-only in the Inspector.

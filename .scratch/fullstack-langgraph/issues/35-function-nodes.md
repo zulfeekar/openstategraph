@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved v1 (2026-08-07) — 0274129
 Blocked by: 33
 
 ## Question
@@ -22,3 +22,7 @@ Design executable function nodes:
   `format_report` migrates from hardcoded to the first discovered example.
 - Ports: how are a function's inputs/outputs declared? From its signature
   via inspection, or a manifest like tools?
+
+## Resolution
+
+`discover_function_callables` → `function.<name>` registry; contract fn(text)->str, no state access; raises become readable output; explicit builders can't be shadowed. Port declaration from signatures remains fog.

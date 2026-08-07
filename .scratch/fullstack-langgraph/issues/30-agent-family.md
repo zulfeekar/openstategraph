@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved (2026-08-07) — built in f5f7076
 Blocked by: 29
 
 ## Question
@@ -33,3 +33,7 @@ Decisions:
   subclass — the deepagents stack is data (a slot preset), not inheritance.
 - TS `agent.llm` gains `tier` mirroring Router/Grader; how does the palette
   present the tiers without three near-identical cards?
+
+## Resolution
+
+Built as designed: `backend/dyflow/abc/agent.py`, base holds the three resolvers + template method; Deep is a sibling of React; `agent_node_for_tier` is the one tier lookup; `_agent`/`_worker` delegate. TS `agent.llm` gained the tier select (8ce5a22).

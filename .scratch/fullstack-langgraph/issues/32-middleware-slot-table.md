@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: mostly resolved (2026-08-07) — no UI yet
 Blocked by: 30
 
 ## Question
@@ -28,3 +28,7 @@ Design the real thing, per CLAUDE.md's slot-table rule:
   RetryMiddleware duplicated an existing, correct mechanism. Do not port it.
 - UI: how does a developer enable/replace a slot per node? (Blocked on the
   Inspector grouping work, ticket 38.)
+
+## Resolution
+
+`MiddlewareSlotTable` (name-keyed, canonical order, no priority integers) flattens into `create_agent(middleware=[...])` — the library's real seam; presets per tier via `middleware_preset()`. Still open: which prebuilt middlewares ship in default slots, and the per-node UI.
