@@ -258,3 +258,17 @@ The consequence worth protecting: those four tools are closed systems, where a w
 TDD. Tests before implementation. `core/` is pure TypeScript and directly unit-testable — there is no excuse for untested logic there.
 
 Never refactor a god class without tests in place first.
+
+## Worktree economy
+
+A git worktree of this repo must NOT install its own dependencies — each
+copy costs ~420M (`node_modules` 183M + a venv 235M) for nothing. Instead:
+
+```bash
+ln -s /Users/zulfeekar.cheriyampu/dyflow/node_modules node_modules
+```
+
+and use the system `python3` (the backend's deps are installed user-level;
+`python3 -m pytest` works with no venv). Never run `npm install` or create
+a `.venv` inside a worktree unless a dependency actually changed — and if
+one did, do it on the main checkout and re-link.
