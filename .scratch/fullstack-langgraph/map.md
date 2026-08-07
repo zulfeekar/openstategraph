@@ -1060,6 +1060,46 @@ no `system_prompt=` to `create_agent` (authored `systemPrompt` fields are
 silently inert — ticket 31), and `workflow.settings` is destroyed by any
 editor save because `SerializedWorkflow` has no such key (ticket 36).
 
+## Foundation built and live-verified; tabular workflow runs end to end (2026-08-07)
+
+Same session as the findings sweep, execution phase. Commits `7cd4bc1` →
+`ccd1959` plus this one. What is now true, all verified against the running
+app and Ollama cloud, not only in tests:
+
+- **The agent ladder exists in Python** (`abc/agent.py`): `IAgent →
+  AbstractAgentNode → BaseAgentNode → React/Deep/CustomGraph`, base holds
+  only the three resolvers + template method; `_agent`/`_worker` delegate to
+  it, so `agent.llm` finally honours `systemPrompt` and `tier`.
+  Middleware is a name-keyed slot table flattened into
+  `create_agent(middleware=[...])` — the library's own seam.
+- **Tools resolve by canvas node type** (`BaseTool.node_type` +
+  `configure(data)`); per-workflow discovery layers over the defaults via
+  `workflow_slug`, on all three run endpoints, envelope-unwrapped, with the
+  resume-422 pinned by a test.
+- **`workflow.subgraph` and `function.*` nodes execute**; a self-including
+  workflow is refused at build time with the chain named. `workflow.settings`
+  round-trips (the editor no longer deletes it) and its `model` is the
+  document default.
+- **UX**: arrowheads (`context-stroke` marker), a persisted
+  horizontal/vertical flow toggle built on one rotation rule
+  (`resolvePortSide`), progressive-disclosure Inspector groups, and
+  markdown-rendered chat answers.
+- **The video-game workflow ran as a user would** — see
+  [tabular repair](issues/40-tabular-analytics-repair.md) for the full
+  transcript: correct routing per branch, fan-out with real DuckDB tool
+  calls, a real grader rejection + replan, HITL approve *and* reject with
+  feedback, answers independently verified against the CSV.
+
+Open, honestly: [open-api-explorer](issues/42-open-api-explorer.md) and
+[code-workshop](issues/43-code-workshop.md) are charted, not built;
+[chinook canvas document](issues/39-chinook-canvas-document.md),
+[supervisor archetypes](issues/37-supervisor-archetypes.md),
+[persistence & durability](issues/47-persistence-memory-durability.md),
+[coverage](issues/48-coverage-at-leaked-seams.md),
+[workflow package contract](issues/49-workflow-package-contract.md),
+[OSS release](issues/50-oss-release.md) (the last nail) and
+[browser E2E](issues/51-browser-e2e.md) remain the frontier.
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
