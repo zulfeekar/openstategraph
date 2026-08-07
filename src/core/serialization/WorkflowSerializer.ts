@@ -102,6 +102,9 @@ export class WorkflowSerializer {
     return Ok({
       version: WORKFLOW_SCHEMA_VERSION,
       name: typeof doc['name'] === 'string' ? doc['name'] : 'Imported workflow',
+      ...(typeof doc['settings'] === 'object' && doc['settings'] !== null
+        ? { settings: doc['settings'] as Record<string, unknown> }
+        : {}),
       nodes: doc['nodes'] as readonly SerializedNode[],
       edges: doc['edges'] as readonly SerializedEdge[],
       ...(typeof doc['meta'] === 'object' && doc['meta'] !== null
@@ -123,6 +126,8 @@ export class WorkflowSerializer {
     model.transact(() => {
       model.clear();
       model.setName(document.name);
+      // Always applied — a document with no settings must clear stale ones.
+      model.setSettings(document.settings ?? {});
 
       // Ids come from the file, so the local counters must be re-seeded or
       // the next new node could collide with an imported one.

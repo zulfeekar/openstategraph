@@ -206,4 +206,46 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
     return found
 
 
-__all__ = ["FunctionCapability", "ToolCapability", "discover_functions", "discover_tools"]
+def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]:
+    """The runtime's function registry: `function.<name>` → the callable.
+
+    The node-type convention mirrors tools' `node_type` declaration without
+    demanding one: a function's *name* is already its identity (that is what
+    `discover_functions` lists), so `function.format_report` in a document
+    binds `def format_report(...)` in the workflow's `functions/`. The
+    signature contract is deliberately narrow — `fn(text: str) -> str`, a
+    deterministic transform of the node's upstream text — because a function
+    with access to raw graph state would be a second, unserialisable place
+    for control flow to hide (expressions are a JSON AST; code is referenced
+    by name, never embedded).
+    """
+    functions_dir = workflow_dir / "functions"
+    if not functions_dir.is_dir():
+        return {}
+
+    registry: dict[str, Any] = {}
+    for path in sorted(functions_dir.glob("*.py")):
+        if path.stem.startswith("_"):
+            continue
+        qualified_module = f"{slug}.functions.{path.stem}"
+        try:
+            module = _import_module(path, qualified_module)
+        except Exception:
+            logger.warning("Skipping unimportable function module %s", path, exc_info=True)
+            continue
+        for name, obj in inspect.getmembers(module, inspect.isfunction):
+            if name.startswith("_") or obj.__module__ != qualified_module:
+                continue
+            registry[f"function.{name}"] = obj
+    return registry
+
+
+__all__ = [
+    "FunctionCapability",
+    "ToolCapability",
+    "discover_function_callables",
+    "discover_functions",
+    "discover_tool_instances",
+    "discover_tool_registry",
+    "discover_tools",
+]

@@ -210,10 +210,24 @@ class NodeRuntime:
         *,
         model: Any = None,
         tools: ToolRegistry | None = None,
+        functions: dict[str, Any] | None = None,
+        document_loader: Callable[[str], dict[str, Any]] | None = None,
         max_attempts: int = 3,
+        _ancestry: tuple[str, ...] = (),
     ) -> None:
         self.model = model
         self.tools = tools or {}
+        #: `function.<name>` -> callable — deterministic graph steps
+        #: discovered from the workflow's `functions/` (ticket 35).
+        self.functions = functions or {}
+        #: Loads another workflow's document by slug, for `workflow.subgraph`
+        #: nodes (ticket 34). None means subgraphs cannot resolve — recorded
+        #: loudly in `unresolved_subgraphs`, never silently.
+        self.document_loader = document_loader
+        #: The chain of subgraph slugs above this runtime — how a workflow
+        #: that (transitively) includes itself is refused at build time
+        #: instead of recursing forever at run time.
+        self._ancestry = _ancestry
         self.max_attempts = max_attempts
         #: Per-node model overrides, keyed by the resolved LangChain model
         #: string — cached so ten agents on the same non-default model share
@@ -235,6 +249,12 @@ class NodeRuntime:
         #: produced an authoritative-sounding answer about global music revenue
         #: instead of querying anything. A visible warning beats a plausible lie.
         self.unresolved_tools: list[str] = []
+        #: Function node types wired on the canvas with no discovered callable,
+        #: and subgraph nodes whose workflow could not be loaded. Same loudness
+        #: rule as tools: a silently-degraded step reads as "covered" when it
+        #: was not.
+        self.unresolved_functions: list[str] = []
+        self.unresolved_subgraphs: list[str] = []
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             "input.markdown": self._input,
@@ -263,10 +283,18 @@ class NodeRuntime:
         self._nodes = {n["id"]: n for n in document.get("nodes", [])}
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-            builder = self._builders.get(str(node.get("type", "")))
-            if builder is None:
-                return self._passthrough(node_id, node, plan)
-            return builder(node_id, node, plan)
+            node_type = str(node.get("type", ""))
+            builder = self._builders.get(node_type)
+            if builder is not None:
+                return builder(node_id, node, plan)
+            # Discovered capabilities resolve by convention, after the
+            # explicitly-registered builders so a built-in like
+            # `function.format_report` can never be shadowed by accident.
+            if node_type == "workflow.subgraph":
+                return self._subgraph(node_id, node, plan)
+            if node_type.startswith("function."):
+                return self._discovered_function(node_id, node, plan)
+            return self._passthrough(node_id, node, plan)
 
         return build
 
@@ -747,6 +775,102 @@ class NodeRuntime:
             )
             report = f"# {title}\n\n{body}" if body else f"# {title}\n\n_No results._"
             return {"outputs": {node_id: report}, "answer": report}
+
+        return run
+
+    def _discovered_function(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """A workflow-discovered function as a deterministic graph step.
+
+        The signature contract is `fn(text: str) -> str` — a transform of the
+        node's upstream text, no model, no state access (ticket 35: code is
+        referenced by name, never given the raw state to hide control flow
+        in). A raised exception becomes readable output — the same
+        errors-are-data rule `BaseTool.run` applies: retrying a deterministic
+        function reproduces the same failure, so the useful move is to carry
+        the message downstream where a grader or a person can read it.
+        """
+        node_type = str(node.get("type", ""))
+        fn = self.functions.get(node_type)
+        if fn is None:
+            if node_type not in self.unresolved_functions:
+                self.unresolved_functions.append(node_type)
+            return self._passthrough(node_id, node, plan)
+
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+
+        def run(state: RunState) -> dict[str, Any]:
+            text = _upstream_text(state, upstream) or state.get("question", "")
+            try:
+                result = fn(text)
+            except Exception as exc:
+                return {"outputs": {node_id: f"[{node_id} failed: {type(exc).__name__}: {exc}]"}}
+            output = result if isinstance(result, str) else str(result)
+            return {"outputs": {node_id: output}, "answer": output}
+
+        return run
+
+    def _subgraph(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """Another workflow, compiled and invoked as one node of this graph.
+
+        This is what makes "workflow composition = subgraphs" real (ticket
+        34). The child is compiled **at build time** — so a workflow that
+        (transitively) includes itself is refused with a readable error
+        instead of recursing at run time — and invoked with an explicit
+        state mapping: the parent's upstream text becomes the child's
+        question, and only the child's final answer flows back. The child
+        never sees the parent's other state keys, mirroring the
+        subagent-isolation rule: a subgraph receives a task and reports a
+        result.
+        """
+        from dyflow.compile.workflow_compiler import WorkflowCompiler
+
+        data = node.get("data") or {}
+        slug = _text(data, "workflow").strip()
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+
+        if slug and slug in self._ancestry:
+            chain = " -> ".join((*self._ancestry, slug))
+            raise ValueError(
+                f"Workflow {slug!r} includes itself through its subgraphs ({chain}); "
+                "a subgraph cycle can never terminate"
+            )
+
+        child_graph = None
+        if slug and self.document_loader is not None:
+            try:
+                child_document = self.document_loader(slug)
+            except Exception:
+                child_document = None
+            if child_document is not None:
+                child_runtime = NodeRuntime(
+                    model=self.model,
+                    tools=self.tools,
+                    functions=self.functions,
+                    document_loader=self.document_loader,
+                    max_attempts=self.max_attempts,
+                    _ancestry=(*self._ancestry, slug),
+                )
+                child_graph = WorkflowCompiler().build(
+                    child_document, RunState, child_runtime.factory(child_document)
+                )
+
+        if child_graph is None:
+            label = slug or "(no workflow selected)"
+            if label not in self.unresolved_subgraphs:
+                self.unresolved_subgraphs.append(label)
+            captured = None
+        else:
+            captured = child_graph
+
+        def run(state: RunState) -> dict[str, Any]:
+            if captured is None:
+                return {"outputs": {node_id: ""}}
+            question = _upstream_text(state, upstream) or state.get("question", "")
+            final = captured.invoke(
+                {"question": question, "attempts": 0, "decisions": {}, "outputs": {}}
+            )
+            answer = final.get("answer", "")
+            return {"outputs": {node_id: answer}, "answer": answer}
 
         return run
 

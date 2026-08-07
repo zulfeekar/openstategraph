@@ -52,6 +52,7 @@ export class WorkflowModel implements IWorkflowModel {
   private readonly queries = new GraphQueries(this.nodeMap, this.edgeMap, this.adjacency);
 
   private _name: string;
+  private _settings: Record<string, unknown> = {};
 
   constructor(name = 'Untitled workflow') {
     this._name = name;
@@ -63,6 +64,11 @@ export class WorkflowModel implements IWorkflowModel {
 
   get name(): string {
     return this._name;
+  }
+
+  /** Workflow-level runtime configuration. Empty means "all defaults". */
+  get settings(): Readonly<Record<string, unknown>> {
+    return this._settings;
   }
 
   nodes(): readonly INodeModel[] {
@@ -278,6 +284,18 @@ export class WorkflowModel implements IWorkflowModel {
     this.bus.emit('workflow:name', { name: trimmed });
   }
 
+  /**
+   * Replaces (never merges) the workflow-level settings.
+   *
+   * Replacement semantics match import: loading a document that has no
+   * settings must clear any stale ones, or a workflow would silently keep
+   * another workflow's model choice. Copied defensively both ways.
+   */
+  setSettings(settings: Readonly<Record<string, unknown>>): void {
+    this._settings = { ...settings };
+    this.bus.emit('workflow:settings', { settings: this._settings });
+  }
+
   /** Empties the document and tells listeners to resync from scratch. */
   clear(): void {
     this.transact(() => {
@@ -326,6 +344,9 @@ export class WorkflowModel implements IWorkflowModel {
     return {
       version: WORKFLOW_SCHEMA_VERSION,
       name: this._name,
+      // Omitted when empty: an always-present `settings: {}` would be a
+      // whole-corpus diff the day the field shipped.
+      ...(Object.keys(this._settings).length > 0 ? { settings: { ...this._settings } } : {}),
       nodes: sortByIdNatural(this.nodes(), (node) => node.id).map((node) => node.toJSON()),
       // Edges sort by endpoints, not by id — the id is a creation counter and
       // is not written to the file at all.

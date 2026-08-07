@@ -15,6 +15,7 @@ import {
   Users,
   FileOutput,
   UserCheck,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -45,6 +46,7 @@ const ICONS: Record<string, LucideIcon> = {
   'node-worker': Users,
   'node-format-report': FileOutput,
   'node-discovered-tool': Wrench,
+  'node-subgraph': Workflow,
   'port-feedback': ShieldCheck,
 
   // Port types

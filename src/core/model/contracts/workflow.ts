@@ -40,6 +40,13 @@ export interface SerializedWorkflow {
   /** Bumped when the shape changes; migrations key off it. */
   readonly version: number;
   readonly name: string;
+  /**
+   * Workflow-level configuration the runtime reads — the default model,
+   * a recursion limit, later a checkpointer choice (ticket 36). Optional
+   * and omitted when empty, so pre-existing documents keep their bytes.
+   * Absent keys mean "inherit the runtime's default".
+   */
+  readonly settings?: Readonly<Record<string, unknown>>;
   readonly nodes: readonly SerializedNode[];
   readonly edges: readonly SerializedEdge[];
   readonly meta?: Readonly<Record<string, unknown>>;
@@ -65,6 +72,7 @@ export interface WorkflowEvents extends Record<string, unknown> {
   'edge:removed': { edgeId: EdgeId; edge: IEdgeModel };
   'edge:label': { edgeId: EdgeId; label: string | null };
   'workflow:name': { name: string };
+  'workflow:settings': { settings: Readonly<Record<string, unknown>> };
   /** Wholesale replacement (import, new document) — listeners resync fully. */
   'workflow:reset': { workflow: IWorkflowModel };
 }

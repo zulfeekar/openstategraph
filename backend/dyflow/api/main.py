@@ -266,6 +266,52 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     return registry
 
 
+def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
+    """`function.<name>` -> callable, from the workflow's own `functions/`.
+
+    Mirrors `build_tool_registry`: slug-scoped, degrade-loud (the runtime
+    records an unresolved function; discovery failures log and return {}).
+    """
+    from dyflow.api.capability_discovery import discover_function_callables
+
+    if not slug:
+        return {}
+    try:
+        return discover_function_callables(workflow_store.directory_for(slug), slug)
+    except Exception:
+        logger.warning("Function discovery failed for %r", slug, exc_info=True)
+        return {}
+
+
+def workflow_default_model(document: dict[str, Any]) -> str | None:
+    """The document's own default model, from `settings.model` (ticket 36)."""
+    settings = document.get("settings")
+    if isinstance(settings, dict):
+        value = settings.get("model")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def runtime_warnings(runtime: Any) -> list[str]:
+    """Every "this step silently lost a capability" condition, spelled out."""
+    warnings: list[str] = []
+    for tool_type in runtime.unresolved_tools:
+        warnings.append(
+            f'No implementation for tool "{tool_type}" — the agent ran without it, '
+            "so its answer may not be grounded in that data source."
+        )
+    for fn_type in runtime.unresolved_functions:
+        warnings.append(
+            f'No function found for "{fn_type}" — the step passed its input through unchanged.'
+        )
+    for slug_name in runtime.unresolved_subgraphs:
+        warnings.append(
+            f'Subgraph workflow "{slug_name}" could not be loaded — the node produced nothing.'
+        )
+    return warnings
+
+
 def create_app(
     graph_factory: GraphFactory | None = None,
     workflows_root: Any = None,
@@ -284,6 +330,18 @@ def create_app(
 
     def tool_registry_for(slug: str | None) -> dict[str, Any]:
         return build_tool_registry(workflow_store, slug)
+
+    def runtime_for(slug: str | None, document: dict[str, Any], model: Any) -> Any:
+        """One NodeRuntime construction shared by run/stream/resume, so the
+        three endpoints can never disagree about capabilities again."""
+        from dyflow.compile.node_runtime import NodeRuntime
+
+        return NodeRuntime(
+            model=model,
+            tools=tool_registry_for(slug),
+            functions=build_function_registry(workflow_store, slug),
+            document_loader=lambda child_slug: _document_of(workflow_store.load(child_slug)),
+        )
     app = FastAPI(title="Dyflow runtime", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -412,12 +470,15 @@ def create_app(
         from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        model = init_chat_model(resolve_model(request.model))
         document = _document_of(request.workflow)
+        # Model precedence: explicit request > the document's own
+        # settings.model > environment default. A workflow that names its
+        # model runs the same everywhere it is opened.
+        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
+        runtime = runtime_for(request.workflow_slug, document, model)
 
         try:
             graph = compiler.build(document, RunState, runtime.factory(document))
@@ -428,14 +489,7 @@ def create_app(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
-        warnings = list(plan.warnings)
-        for tool_type in runtime.unresolved_tools:
-            # The agent ran without this tool. Saying so is the difference
-            # between a wrong answer and an explained one.
-            warnings.append(
-                f'No implementation for tool "{tool_type}" — the agent ran without it, '
-                "so its answer may not be grounded in that data source."
-            )
+        warnings = list(plan.warnings) + runtime_warnings(runtime)
 
         return RunResponse(
             answer=str(final.get("answer") or ""),
@@ -491,12 +545,12 @@ def create_app(
         from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        model = init_chat_model(resolve_model(request.model))
+        document = _document_of(request.workflow)
+        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
 
         compiler = WorkflowCompiler()
-        document = _document_of(request.workflow)
         plan = compiler.plan(document)
-        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
+        runtime = runtime_for(request.workflow_slug, document, model)
 
         try:
             graph = compiler.build(
@@ -550,12 +604,12 @@ def create_app(
         from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        model = init_chat_model(resolve_model(request.model))
+        document = _document_of(request.workflow)
+        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
 
         compiler = WorkflowCompiler()
-        document = _document_of(request.workflow)
         plan = compiler.plan(document)
-        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
+        runtime = runtime_for(request.workflow_slug, document, model)
 
         try:
             graph = compiler.build(
@@ -741,12 +795,7 @@ def _stream_run(
         )
         return
 
-    warnings = list(plan.warnings)
-    for tool_type in runtime.unresolved_tools:
-        warnings.append(
-            f'No implementation for tool "{tool_type}" — the agent ran without it, '
-            "so its answer may not be grounded in that data source."
-        )
+    warnings = list(plan.warnings) + runtime_warnings(runtime)
 
     yield _sse(
         "done",
