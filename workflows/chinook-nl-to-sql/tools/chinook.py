@@ -65,6 +65,7 @@ class ListTablesTool(BaseTool):
     """Every table, with row counts — the orientation an agent needs first."""
 
     name = "chinook_list_tables"
+    node_type = "tool.chinook-get-all-tables"
     description = (
         "List all tables in the Chinook music-store database with their row counts. "
         "Call this first to discover what data is available."
@@ -105,6 +106,7 @@ class GetTableSchemaTool(BaseTool):
     """
 
     name = "chinook_get_table_schema"
+    node_type = "tool.chinook-get-schema"
     description = (
         "Get the columns, types, primary key and foreign keys of one Chinook table. "
         "Use the foreign keys to work out how to join tables."
@@ -165,6 +167,7 @@ class ExecuteSqlTool(BaseTool):
     """Runs one read-only SELECT and returns a Markdown table."""
 
     name = "chinook_execute_sql"
+    node_type = "tool.chinook-execute-sql"
     description = (
         "Execute a single read-only SQL SELECT against the Chinook database and "
         "return the rows. Use chinook_get_table_schema first to get column names "
@@ -184,6 +187,19 @@ class ExecuteSqlTool(BaseTool):
         # more should still be capped, not silently granted a bigger window
         # than the developer configured.
         self.row_cap = row_cap
+
+    def configure(self, data):
+        """The bound node's "Max rows" field becomes this instance's ceiling.
+
+        A fresh instance, never a mutation — two nodes of this type with two
+        different caps in one document must not clobber each other.
+        """
+        configured = data.get("maxRows")
+        if isinstance(configured, (int, float)) and configured > 0:
+            return type(self)(row_cap=int(configured))
+        if isinstance(configured, str) and configured.strip().isdigit():
+            return type(self)(row_cap=int(configured.strip()))
+        return self
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, ExecuteSqlArgs)

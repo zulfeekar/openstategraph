@@ -645,6 +645,7 @@ class TestCapabilities:
                 "name": "greet",
                 "description": "Greets someone.",
                 "args_schema": body["tools"][0]["args_schema"],
+                "node_type": "",
             }
         ]
         assert "name" in body["tools"][0]["args_schema"]["properties"]

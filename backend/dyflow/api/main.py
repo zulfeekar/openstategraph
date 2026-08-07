@@ -93,6 +93,11 @@ class RunRequest(BaseModel):
     #: Set by the client on a fresh send; echoed back so a paused run's
     #: eventual resume call can target the same checkpointed thread.
     thread_id: str | None = None
+    #: The open workflow's slug, when the client knows it. Tools discovered
+    #: in that workflow's own `tools/` folder are layered over the defaults,
+    #: so a document can bind the tools that live beside it. Optional and
+    #: additive — omitting it runs with the default registry, never a crash.
+    workflow_slug: str | None = None
 
 
 class ResumeRequest(BaseModel):
@@ -113,6 +118,12 @@ class ResumeRequest(BaseModel):
     feedback: str | None = None
     model: str | None = None
     recursion_limit: int = Field(default=50, ge=10, le=1000)
+    #: Same as `RunRequest.workflow_slug` — and it must exist on BOTH models:
+    #: this class forbids extras, so a client that echoes the slug on resume
+    #: (as ours does) would otherwise be rejected 422 and every approval
+    #: would die at validation. A resumed run must also bind the *same*
+    #: tool set as the run it resumes.
+    workflow_slug: str | None = None
 
 
 class RunResponse(BaseModel):
@@ -155,6 +166,9 @@ class ToolCapabilityResponse(BaseModel):
     name: str
     description: str
     args_schema: dict[str, Any]
+    #: The canvas node type the tool declares (`BaseTool.node_type`); empty
+    #: when the tool is listable but not placeable.
+    node_type: str = ""
 
 
 class FunctionCapabilityResponse(BaseModel):
@@ -217,6 +231,41 @@ def _default_factory(model: str) -> Any:
     return build_live_graph(model)
 
 
+def _document_of(workflow: dict[str, Any]) -> dict[str, Any]:
+    """Accepts a bare document or the store's `{…, document}` envelope.
+
+    The store saves `{version, name, savedAt, document}`; the editor's export
+    posts the bare document. Both arrive at the run endpoints, and compiling
+    the *envelope* silently produces a zero-node graph — so every endpoint
+    unwraps through this one helper, resume included.
+    """
+    inner = workflow.get("document")
+    return inner if isinstance(inner, dict) else workflow
+
+
+def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
+    """Default tools, with the open workflow's own tools layered over.
+
+    The defaults (Chinook) stay so documents that bind them — the
+    intent-routed demo — keep working from any workflow context. A slug adds
+    that workflow's `tools/`, keyed by each tool's own `node_type`
+    declaration (ticket 33); same-type collisions resolve workflow-wins,
+    mirroring the frontend's local-shadows-global registry rule. A failed
+    discovery degrades to the defaults with a log line, never a crash —
+    `NodeRuntime.unresolved_tools` keeps missing bindings loud.
+    """
+    from dyflow.api.capability_discovery import discover_tool_registry
+    from dyflow.compile.node_runtime import chinook_tool_registry
+
+    registry: dict[str, Any] = chinook_tool_registry()
+    if slug:
+        try:
+            registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
+        except Exception:
+            logger.warning("Tool discovery failed for %r", slug, exc_info=True)
+    return registry
+
+
 def create_app(
     graph_factory: GraphFactory | None = None,
     workflows_root: Any = None,
@@ -232,6 +281,9 @@ def create_app(
 
     factory = graph_factory or _default_factory
     workflow_store = WorkflowStore(root=workflows_root)
+
+    def tool_registry_for(slug: str | None) -> dict[str, Any]:
+        return build_tool_registry(workflow_store, slug)
     app = FastAPI(title="Dyflow runtime", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -323,7 +375,7 @@ def create_app(
         functions = discover_functions(workflow_dir, slug=slug)
         return CapabilitiesResponse(
             tools=[
-                ToolCapabilityResponse(id=t.id, name=t.name, description=t.description, args_schema=t.args_schema)
+                ToolCapabilityResponse(id=t.id, name=t.name, description=t.description, args_schema=t.args_schema, node_type=t.node_type)
                 for t in tools
             ],
             functions=[
@@ -350,7 +402,7 @@ def create_app(
     @app.post("/api/runs", response_model=RunResponse)
     def run_workflow(request: RunRequest) -> RunResponse:
         """Compiles and runs a canvas-authored workflow."""
-        from dyflow.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
         from dyflow.compile.workflow_compiler import WorkflowCompiler
 
         # Ollama cloud is the default (see `resolve_model`), so a model is
@@ -361,13 +413,14 @@ def create_app(
         from langchain.chat_models import init_chat_model
 
         model = init_chat_model(resolve_model(request.model))
+        document = _document_of(request.workflow)
 
         compiler = WorkflowCompiler()
-        plan = compiler.plan(request.workflow)
-        runtime = NodeRuntime(model=model, tools=chinook_tool_registry())
+        plan = compiler.plan(document)
+        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
 
         try:
-            graph = compiler.build(request.workflow, RunState, runtime.factory(request.workflow))
+            graph = compiler.build(document, RunState, runtime.factory(document))
             final = graph.invoke(
                 {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
                 {"recursion_limit": request.recursion_limit},
@@ -428,7 +481,6 @@ def create_app(
         from dyflow.compile.node_runtime import (
             NodeRuntime,
             RunState,
-            chinook_tool_registry,
             keep_latest_nonempty,
             merge_decisions,
         )
@@ -442,14 +494,15 @@ def create_app(
         model = init_chat_model(resolve_model(request.model))
 
         compiler = WorkflowCompiler()
-        plan = compiler.plan(request.workflow)
-        runtime = NodeRuntime(model=model, tools=chinook_tool_registry())
+        document = _document_of(request.workflow)
+        plan = compiler.plan(document)
+        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
 
         try:
             graph = compiler.build(
-                request.workflow,
+                document,
                 RunState,
-                runtime.factory(request.workflow),
+                runtime.factory(document),
                 checkpointer=_HUMAN_IN_THE_LOOP_CHECKPOINTER,
             )
         except Exception as exc:
@@ -490,7 +543,7 @@ def create_app(
         carried — this is what tells the shared checkpointer
         (`_HUMAN_IN_THE_LOOP_CHECKPOINTER`) which paused run to continue.
         """
-        from dyflow.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
         from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
         from langgraph.types import Command
 
@@ -500,14 +553,15 @@ def create_app(
         model = init_chat_model(resolve_model(request.model))
 
         compiler = WorkflowCompiler()
-        plan = compiler.plan(request.workflow)
-        runtime = NodeRuntime(model=model, tools=chinook_tool_registry())
+        document = _document_of(request.workflow)
+        plan = compiler.plan(document)
+        runtime = NodeRuntime(model=model, tools=tool_registry_for(request.workflow_slug))
 
         try:
             graph = compiler.build(
-                request.workflow,
+                document,
                 RunState,
-                runtime.factory(request.workflow),
+                runtime.factory(document),
                 checkpointer=_HUMAN_IN_THE_LOOP_CHECKPOINTER,
             )
         except Exception as exc:

@@ -69,6 +69,13 @@ class BaseTool(ABC):
 
     name: ClassVar[str]
     description: ClassVar[str]
+    #: The canvas node type this tool answers to (`tool.tabular-query`).
+    #: The tool declares its own wiring identity — ticket 33 — so the
+    #: runtime registry, the discovery endpoint and the (eventually
+    #: generated) TypeScript node definition all key off one declaration.
+    #: Empty means "not placeable on a canvas", which is legitimate for a
+    #: tool only ever handed to an agent programmatically.
+    node_type: ClassVar[str] = ""
     #: Pydantic model describing the arguments. The source of truth for the
     #: generated TypeScript, and for the schema the LLM is shown.
     Args: ClassVar[type[BaseModel]]
@@ -76,6 +83,18 @@ class BaseTool(ABC):
     @abstractmethod
     def _execute(self, args: BaseModel) -> ToolResult:
         """Do the work. Arguments are already validated."""
+
+    def configure(self, data: dict[str, Any]) -> "BaseTool":
+        """One bound node's own field values, delivered to its tool.
+
+        Returns the instance to use — **a fresh one when config matters**,
+        never a mutation of the shared registry instance: two nodes of the
+        same tool type with different config in one document would otherwise
+        clobber each other. The default ignores config entirely, which is
+        correct for a stateless tool; a tool with a configurable field
+        overrides this and reads exactly the keys it declared.
+        """
+        return self
 
     def run(self, **kwargs: Any) -> ToolResult:
         """Validate, execute, and convert failure into data.
@@ -122,6 +141,7 @@ class BaseTool(ABC):
         return {
             "name": self.name,
             "description": self.description,
+            "node_type": self.node_type,
             "args_schema": self.Args.model_json_schema(),
         }
 

@@ -353,16 +353,32 @@ class NodeRuntime:
                 self.unresolved_tools.append(tool_type)
             return None
 
-        if tool_type == "tool.chinook-execute-sql":
-            data = self._nodes.get(tool_node_id, {}).get("data") or {}
-            configured = data.get("maxRows")
-            if isinstance(configured, (int, float)) and configured > 0:
-                return type(tool)(row_cap=int(configured))
-        return tool
+        data = self._nodes.get(tool_node_id, {}).get("data") or {}
+        configure = getattr(tool, "configure", None)
+        if configure is None or not data:
+            return tool
+        # `configure` returns a fresh instance when config matters (the
+        # BaseTool contract), so the shared registry instance is never
+        # mutated — the row-cap special case that used to live here is now
+        # each tool's own business.
+        return configure(data)
 
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """A `create_agent` loop with the tools the canvas bound to it."""
-        from langchain.agents import create_agent
+        """An agent-family loop with the tools the canvas bound to it.
+
+        Construction is delegated to the ladder in `dyflow.abc.agent` — the
+        node's `tier` picks the class, `resolve_prompt()` is the single place
+        the authored `systemPrompt` and the wired skill text become a prompt,
+        and `resolve_middleware()` flattens into the library's own
+        `create_agent(middleware=...)` seam. This factory keeps only the
+        state plumbing: what flows in, what update flows out.
+
+        The agent is built **per skill value**, not once at compile time,
+        because the skill port's text arrives through state — the same reason
+        `_worker` rebuilds per invocation. A memo keeps the common case (no
+        skill wired, context never changes) at one construction total.
+        """
+        from dyflow.abc import agent as agent_family
         from langchain_core.messages import HumanMessage
 
         # Resolved by the *type* of each bound node, so wiring a tool on the
@@ -373,16 +389,27 @@ class NodeRuntime:
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
 
-        model = self._resolve_model(node.get("data") or {})
-        agent = None
-        if model is not None:
-            agent = create_agent(model=model, tools=lc_tools, name=f"agent_{node_id}")
+        data = node.get("data") or {}
+        model = self._resolve_model(data)
         #: Exposed so a test can assert the wiring produced the tools, without
         #: needing a model to prove it.
         self.last_bound_tools = [t.name for t in lc_tools]
 
         skills = plan.skill_bindings.get(node_id, [])
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        built: dict[str, Any] = {}
+
+        def agent_for(skill: str) -> Any:
+            if skill not in built:
+                tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
+                built[skill] = tier_cls(
+                    name=f"agent_{node_id}",
+                    model=model,
+                    tools=lc_tools,
+                    rules=_text(data, "systemPrompt"),
+                    context=skill,
+                ).build()
+            return built[skill]
 
         def run(state: RunState) -> dict[str, Any]:
             prompt = _upstream_text(state, upstream) or state.get("question", "")
@@ -393,13 +420,14 @@ class NodeRuntime:
                 # loop is pure cost.
                 prompt = f"{prompt}\n\nYour previous answer was rejected: {feedback}"
 
+            agent = agent_for(skill) if model is not None else None
             if agent is None:
                 return {
                     "outputs": {node_id: ""},
                     "attempts": state.get("attempts", 0) + 1,
                 }
 
-            payload = [HumanMessage(content=f"{skill}\n\n{prompt}".strip())]
+            payload = [HumanMessage(content=prompt)]
             result = agent.invoke({"messages": payload})
             messages = result.get("messages") or []
             text = messages[-1].content if messages else ""
@@ -622,7 +650,6 @@ class NodeRuntime:
         approximating it with a hand-assembled message list removes a
         variable between the working case and this one.
         """
-        from langchain.agents import create_agent
         from langchain_core.messages import HumanMessage
 
         lc_tools = []
@@ -662,12 +689,17 @@ class NodeRuntime:
                 return {"worker_results": {task_id: ""}}
 
             system_prompt = _upstream_text(state, skills) or default_prompt
-            agent = create_agent(
+            # Same ladder as `_agent`: the family owns construction, this
+            # factory owns state plumbing. The worker's directive is its
+            # *rules* — the editable half of the prompt — with no context.
+            from dyflow.abc import agent as agent_family
+
+            agent = agent_family.ReactAgentNode(
+                name=f"worker_{node_id}",
                 model=self.model,
                 tools=lc_tools,
-                system_prompt=system_prompt,
-                name=f"worker_{node_id}",
-            )
+                rules=system_prompt,
+            ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
             text = out[-1].content if out else ""

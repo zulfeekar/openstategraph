@@ -21,6 +21,12 @@ export interface RunRequest {
   readonly model?: string;
   /** Superstep budget — **not** an iteration count. */
   readonly recursionLimit?: number;
+  /**
+   * The open workflow's slug, when known. The backend layers that
+   * workflow's own `tools/` over its defaults, so a document can bind the
+   * tools that live beside it. Optional — a run without it still works.
+   */
+  readonly workflowSlug?: string;
 }
 
 export interface RunResult {
@@ -59,6 +65,10 @@ export interface ResumeRequest {
   readonly feedback?: string;
   readonly model?: string;
   readonly recursionLimit?: number;
+  /** Same as `RunRequest.workflowSlug`: a resume must bind the same tool
+   * set as the run it resumes. The backend's `ResumeRequest` declares this
+   * field explicitly (it forbids unknown keys). */
+  readonly workflowSlug?: string;
 }
 
 /**
@@ -127,6 +137,7 @@ export class RuntimeClient implements IRuntimeClient {
       question: request.question,
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
     };
 
     let response: Response;
@@ -168,6 +179,7 @@ export class RuntimeClient implements IRuntimeClient {
       question: request.question,
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent);
   }
@@ -183,6 +195,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.feedback ? { feedback: request.feedback } : {}),
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent);
   }

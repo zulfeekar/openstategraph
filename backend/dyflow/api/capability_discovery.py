@@ -50,6 +50,9 @@ class ToolCapability:
     name: str
     description: str
     args_schema: dict[str, Any]
+    #: The canvas node type the tool itself declares (`BaseTool.node_type`).
+    #: Empty when the tool is not placeable on a canvas.
+    node_type: str = ""
 
 
 @dataclass(frozen=True)
@@ -78,19 +81,20 @@ def _import_module(path: Path, qualified_name: str) -> Any:
     return module
 
 
-def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
-    """Every `BaseTool` subclass defined in `<workflow_dir>/tools/*.py`.
+def discover_tool_instances(workflow_dir: Path, slug: str) -> list[tuple[str, BaseTool]]:
+    """`(qualified_id, instance)` for every tool the workflow defines.
 
-    Only classes *defined* in the scanned module count — an import re-exported
-    through the module (e.g. `from .other import SomeTool`) is skipped by
-    checking `__module__`, so an `__init__.py` re-export never registers the
-    same tool twice under two different qualified ids.
+    The instances are the same objects `discover_tools` describes — returned
+    so the runtime can *bind* them, not merely list them. (An earlier attempt
+    re-imported each class from its qualified id by string surgery:
+    `__import__("tabular-analytics.tools")` — a hyphenated slug is never a
+    legal module name, so every slug-based run silently lost all its tools.)
     """
     tools_dir = workflow_dir / "tools"
     if not tools_dir.is_dir():
         return []
 
-    found: list[ToolCapability] = []
+    found: list[tuple[str, BaseTool]] = []
     seen_classes: set[type] = set()
 
     for path in sorted(tools_dir.glob("*.py")):
@@ -100,9 +104,6 @@ def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
         try:
             module = _import_module(path, qualified_module)
         except Exception:
-            # A syntax error or a bad import in one file must not blank the
-            # whole capability list — the same reasoning `WorkflowStore.list`
-            # already applies to one unreadable `workflow.json`.
             logger.warning("Skipping unimportable tool module %s", path, exc_info=True)
             continue
 
@@ -117,18 +118,50 @@ def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
             try:
                 instance = obj()
             except Exception:
-                logger.warning("Skipping tool %s.%s: constructor failed", qualified_module, obj.__name__, exc_info=True)
-                continue
-            found.append(
-                ToolCapability(
-                    id=f"{slug}/tools.{obj.__name__}",
-                    name=instance.name,
-                    description=instance.description,
-                    args_schema=instance.Args.model_json_schema(),
+                logger.warning(
+                    "Skipping tool %s.%s: constructor failed",
+                    qualified_module,
+                    obj.__name__,
+                    exc_info=True,
                 )
-            )
+                continue
+            found.append((f"{slug}/tools.{obj.__name__}", instance))
 
     return found
+
+
+def discover_tool_registry(workflow_dir: Path, slug: str) -> dict[str, BaseTool]:
+    """The runtime's tool registry: canvas node type → tool instance.
+
+    Keyed by each tool's **own** `node_type` declaration — the single source
+    of truth for wiring identity (ticket 33). A tool that declares none is
+    listable but not placeable, so it is simply absent here.
+    """
+    registry: dict[str, BaseTool] = {}
+    for _, instance in discover_tool_instances(workflow_dir, slug):
+        if instance.node_type:
+            registry[instance.node_type] = instance
+    return registry
+
+
+def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
+    """Every `BaseTool` subclass defined in `<workflow_dir>/tools/*.py`.
+
+    Only classes *defined* in the scanned module count — an import re-exported
+    through the module (e.g. `from .other import SomeTool`) is skipped by
+    checking `__module__`, so an `__init__.py` re-export never registers the
+    same tool twice under two different qualified ids.
+    """
+    return [
+        ToolCapability(
+            id=qualified_id,
+            name=instance.name,
+            description=instance.description,
+            args_schema=instance.Args.model_json_schema(),
+            node_type=instance.node_type,
+        )
+        for qualified_id, instance in discover_tool_instances(workflow_dir, slug)
+    ]
 
 
 def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability]:

@@ -113,6 +113,7 @@ class ListDataFilesTool(BaseTool):
     """List all CSV/Parquet files available for analysis."""
 
     name = "tabular_list_data_files"
+    node_type = "tool.tabular-list-files"
     description = (
         "List all CSV and Parquet files available in the workflow's data directory. "
         "Call this first to discover what datasets are available for analysis."
@@ -162,6 +163,7 @@ class GetTableSchemaTool(BaseTool):
     """Infer and return the schema of a tabular data file."""
 
     name = "tabular_get_schema"
+    node_type = "tool.tabular-get-schema"
     description = (
         "Get the column names, data types, and sample values for a CSV or Parquet file. "
         "Use this to understand the structure of a dataset before querying it."
@@ -226,6 +228,7 @@ class QueryDataTool(BaseTool):
     """Execute SQL queries against tabular data files using DuckDB."""
 
     name = "tabular_query_data"
+    node_type = "tool.tabular-query"
     description = (
         "Execute a SQL query against CSV/Parquet files using DuckDB. "
         "Use the file name (without extension) as the table name. "
@@ -235,6 +238,19 @@ class QueryDataTool(BaseTool):
 
     def __init__(self, *, row_cap: int = DEFAULT_MAX_ROWS) -> None:
         self.row_cap = row_cap
+
+    def configure(self, data):
+        """The bound node's "Max rows" field becomes this instance's ceiling.
+
+        A fresh instance, never a mutation — two nodes of this type with two
+        different caps in one document must not clobber each other.
+        """
+        configured = data.get("maxRows")
+        if isinstance(configured, (int, float)) and configured > 0:
+            return type(self)(row_cap=int(configured))
+        if isinstance(configured, str) and configured.strip().isdigit():
+            return type(self)(row_cap=int(configured.strip()))
+        return self
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, QueryDataArgs)
@@ -311,6 +327,7 @@ class SampleDataTool(BaseTool):
     """Return a sample of rows from a data file for exploration."""
 
     name = "tabular_sample_data"
+    node_type = "tool.tabular-sample"
     description = (
         "Get a preview sample of rows from a CSV or Parquet file. "
         "Use this to quickly see what the data looks like before writing queries."

@@ -8,8 +8,23 @@ import {
   type RunStreamEvent,
 } from '@core/runtime/RuntimeClient';
 import { useController } from '@app/WorkbenchContext';
+import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import './AskPanel.css';
+
+/**
+ * The slug of the workflow currently open, if the file-watch layer knows it.
+ * Read fresh per call: the open workflow can change between sends, and the
+ * backend uses it to bind the tools living beside that workflow.
+ */
+function currentWorkflowSlug(): string | undefined {
+  try {
+    return sessionStorage.getItem(CURRENT_SLUG_KEY) ?? undefined;
+  } catch {
+    return undefined; // sessionStorage can throw in restricted contexts
+  }
+}
+
 
 /** One row in a turn's live "Activity" feed — a node that has started running. */
 interface ActivityRow {
@@ -262,7 +277,10 @@ export function AskPanel() {
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
       await streamAndSettle(turnId, (onEvent) =>
-        client.resume({ threadId, workflow: document, decision }, onEvent),
+        client.resume(
+          { threadId, workflow: document, decision, workflowSlug: currentWorkflowSlug() },
+          onEvent,
+        ),
       );
     },
     [client, controller, streamAndSettle, turns, updateTurn],
@@ -299,7 +317,12 @@ export function AskPanel() {
     // exactly the bytes that would be saved — no second representation.
     const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
-    await streamAndSettle(id, (onEvent) => client.runStream({ workflow: document, question: trimmed }, onEvent));
+    await streamAndSettle(id, (onEvent) =>
+      client.runStream(
+        { workflow: document, question: trimmed, workflowSlug: currentWorkflowSlug() },
+        onEvent,
+      ),
+    );
   }, [client, controller, question, running, scrollToEnd, streamAndSettle]);
 
   return (

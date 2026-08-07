@@ -81,6 +81,27 @@ describe('RuntimeClient.run', () => {
     expect(sent['recursion_limit']).toBe(42);
   });
 
+  it('sends the workflow slug under the key the server expects', async () => {
+    const stub = stubFetch(jsonResponse(GOOD));
+    await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+      workflowSlug: 'tabular-analytics',
+    });
+
+    // The backend layers that workflow's own tools over its defaults; a
+    // camelCase key would be silently dropped by FastAPI and the run would
+    // bind no workflow tools — the agent then answers from memory.
+    const sent = JSON.parse(stub.bodies[0]!) as Record<string, unknown>;
+    expect(sent['workflow_slug']).toBe('tabular-analytics');
+  });
+
+  it('omits the slug when none is known — the field is optional server-side', async () => {
+    const stub = stubFetch(jsonResponse(GOOD));
+    await new RuntimeClient('http://rt', stub.fetch).run({ workflow: {}, question: 'q' });
+    expect(JSON.parse(stub.bodies[0]!)).not.toHaveProperty('workflow_slug');
+  });
+
   it('omits the model when none is chosen, so the server decides', async () => {
     const stub = stubFetch(jsonResponse(GOOD));
     await new RuntimeClient('http://rt', stub.fetch).run({ workflow: {}, question: 'q' });
