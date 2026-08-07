@@ -25,6 +25,14 @@ interface FieldSchemaBase<TValue extends FieldValue> {
   readonly onCard?: boolean;
   /** Render in the inspector panel. Default `true`. */
   readonly inInspector?: boolean;
+  /**
+   * Inspector section this field renders under. Default "Configuration".
+   * Groups appear in the order their first field was declared — the schema
+   * stays the single place presentation is decided (ticket 38).
+   */
+  readonly group?: string;
+  /** Collapsed by default in the inspector, inside its group. */
+  readonly advanced?: boolean;
   /** Return an error string to block the value, or `null` to accept it. */
   readonly validate?: (value: TValue) => string | null;
 }
@@ -183,4 +191,34 @@ export function validateFields(
     if (error) errors[schema.key] = error;
   }
   return errors;
+}
+
+/** One inspector section: its visible fields, plus the collapsed advanced set. */
+export interface InspectorFieldGroup {
+  readonly heading: string;
+  readonly fields: FieldSchema[];
+  readonly advanced: FieldSchema[];
+}
+
+/**
+ * Sections for the inspector, derived from the schema alone — the node's
+ * declaration decides its own presentation, so a new field lands in the
+ * right place without touching the panel (ticket 38's progressive
+ * disclosure: the card stays small, everything else groups and collapses).
+ */
+export function groupFieldsForInspector(
+  fields: readonly FieldSchema[],
+): InspectorFieldGroup[] {
+  const groups = new Map<string, { fields: FieldSchema[]; advanced: FieldSchema[] }>();
+  for (const schema of fields) {
+    if (!isInInspector(schema)) continue;
+    const heading = schema.group ?? 'Configuration';
+    let bucket = groups.get(heading);
+    if (!bucket) {
+      bucket = { fields: [], advanced: [] };
+      groups.set(heading, bucket);
+    }
+    (schema.advanced ? bucket.advanced : bucket.fields).push(schema);
+  }
+  return [...groups.entries()].map(([heading, bucket]) => ({ heading, ...bucket }));
 }

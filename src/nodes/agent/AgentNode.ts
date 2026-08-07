@@ -14,6 +14,8 @@ import { CATEGORY, PORT } from '../vocabulary';
 
 const FIELD_MODEL = 'model';
 const FIELD_BUDGET = 'tokenBudget';
+const FIELD_TIER = 'tier';
+const FIELD_SYSTEM_PROMPT = 'systemPrompt';
 
 /**
  * Turns before the loop is cut off.
@@ -27,6 +29,16 @@ const MAX_TURNS = 6;
 export class AgentNodeModel extends AbstractNodeModel {
   get modelSelection(): string {
     return this.getText(FIELD_MODEL);
+  }
+
+  /** react | deep | custom — which agent-family tier the backend builds. */
+  get tier(): string {
+    return this.getText(FIELD_TIER) || 'react';
+  }
+
+  /** The developer's system-prompt rules. Composed, never the whole prompt. */
+  get systemPrompt(): string {
+    return this.getText(FIELD_SYSTEM_PROMPT);
   }
 
   get tokenBudget(): number {
@@ -72,6 +84,35 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           step: 100,
           defaultValue: 500,
           format: (value) => `· ${value.toLocaleString()}`,
+        },
+        {
+          // Mirrors Router/Grader's tier select — the backend's
+          // agent_node_for_tier reads this exact key, so an agent can be a
+          // plain ReAct loop or a deep-agent harness by configuration.
+          kind: 'select',
+          key: FIELD_TIER,
+          label: 'Runtime',
+          defaultValue: 'react',
+          onCard: false,
+          group: 'Runtime',
+          options: [
+            { value: 'react', label: 'Agent · create_agent' },
+            { value: 'deep', label: 'Deep agent · create_deep_agent' },
+            { value: 'custom', label: 'Custom · hand-written node' },
+          ],
+        },
+        {
+          // The *rules* half of the composed prompt. The machinery (context
+          // from the skill port, ordering) is owned by the backend's
+          // resolve_prompt() — this field can shape the agent's behaviour
+          // but never break its plumbing.
+          kind: 'textarea',
+          key: FIELD_SYSTEM_PROMPT,
+          label: 'System prompt',
+          placeholder: 'e.g. You are a data analyst. Cite figures from the tools.',
+          defaultValue: '',
+          onCard: false,
+          group: 'Prompt',
         },
       ],
       ports: [

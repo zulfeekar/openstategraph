@@ -142,6 +142,8 @@ const EXECUTION_OVERRIDE_FIELDS: readonly FieldSchema[] = [
     placeholder: '3',
     defaultValue: '',
     onCard: false,
+    group: 'Execution',
+    advanced: true,
     validate: positiveIntegerOrEmpty,
   },
   {
@@ -152,6 +154,8 @@ const EXECUTION_OVERRIDE_FIELDS: readonly FieldSchema[] = [
     placeholder: 'e.g. 30',
     defaultValue: '',
     onCard: false,
+    group: 'Execution',
+    advanced: true,
     validate: positiveNumberOrEmpty,
   },
 ];

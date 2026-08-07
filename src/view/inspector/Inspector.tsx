@@ -20,7 +20,7 @@ import {
   TextInput,
   type StatusTone,
 } from '@design/primitives';
-import { isInInspector, validateFields } from '@core/model/contracts/fields';
+import { groupFieldsForInspector, validateFields } from '@core/model/contracts/fields';
 import { useDraftValue } from '@view/hooks/useDraftValue';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
 import {
@@ -64,7 +64,9 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
   if (!node) return <PanelEmpty title="Node not found" />;
 
   const definition = node.definition;
-  const fields = definition.fields.filter(isInInspector);
+  // Sections derive from the schema itself (group/advanced, ticket 38) so a
+  // node's declaration decides its own presentation — nothing per-panel.
+  const fieldGroups = groupFieldsForInspector(definition.fields);
   const errors = validateFields(definition.fields, node.data);
   const status = node.runtime.status;
   const tone: StatusTone = status === 'idle' ? 'ready' : status;
@@ -84,9 +86,9 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
           <p className="inspector__description">{definition.description}</p>
         </PanelSection>
 
-        {fields.length > 0 ? (
-          <PanelSection heading="Configuration">
-            {fields.map((schema) => (
+        {fieldGroups.map((group) => (
+          <PanelSection key={group.heading} heading={group.heading}>
+            {group.fields.map((schema) => (
               <FieldRenderer
                 key={schema.key}
                 nodeId={node.id}
@@ -95,8 +97,24 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
                 {...(errors[schema.key] ? { error: errors[schema.key] } : {})}
               />
             ))}
+            {group.advanced.length > 0 ? (
+              // Native disclosure: collapsed by default, keyboard-accessible
+              // for free, and open state is fine to lose on re-render.
+              <details className="inspector__advanced">
+                <summary className="inspector__advanced-summary">Advanced</summary>
+                {group.advanced.map((schema) => (
+                  <FieldRenderer
+                    key={schema.key}
+                    nodeId={node.id}
+                    schema={schema}
+                    data={node.data}
+                    {...(errors[schema.key] ? { error: errors[schema.key] } : {})}
+                  />
+                ))}
+              </details>
+            ) : null}
           </PanelSection>
-        ) : null}
+        ))}
 
         {node.ports.length > 0 ? (
           <PanelSection heading="Ports">
