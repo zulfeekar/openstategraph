@@ -17,6 +17,13 @@ dependencies = [
     "langchain-ollama>=1.0",
     "langchain-anthropic>=1.0",
     "langchain-openai>=1.0",
+    # Tabular workflow tools (workflows/tabular-analytics): SQL-on-files via
+    # DuckDB, schema inference via pandas. Declared here because workflow
+    # tools import inside the backend process; a clean `pip install -e .`
+    # must be able to discover them (discover_tools swallows ImportError,
+    # so an undeclared dependency silently empties the palette).
+    "duckdb>=1.0",
+    "pandas>=2.2",
 ]
 
 [project.optional-dependencies]

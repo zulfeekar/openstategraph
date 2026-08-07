@@ -40,6 +40,42 @@ class Classification(BaseModel):
     reason: str = ""
 
 
+class Branch(BaseModel):
+    """One branch: a stable ``id`` for wiring and a human ``name`` for the model.
+
+    The editor's edges point at ``branch:<id>`` ports (ticket 20 — ids survive
+    renames), so the conditional edge dispatches on the **id**. The model can
+    only classify by **name** — ``b1-data`` is opaque where ``data_query`` is
+    not. The two must never be conflated: the id belongs to the graph, the name
+    belongs to the prompt, and this pair is the only place both live together.
+    """
+
+    id: str
+    name: str
+
+    @classmethod
+    def of(cls, value: "str | dict[str, Any] | Branch") -> "Branch":
+        """Accepts every historical spelling of a branch.
+
+        - v1 documents stored a bare name (``"greeting"``) — id and name are
+          the same string, which is exactly why v1 files kept routing.
+        - v2 documents store ``{"id": ..., "name": ...}``; a missing half
+          borrows the other, so a hand-written mapping stays convenient.
+        """
+        if isinstance(value, Branch):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                raise ValueError("A branch needs a name")
+            return cls(id=text, name=text)
+        raw_id = str(value.get("id") or "").strip()
+        raw_name = str(value.get("name") or "").strip()
+        if not raw_id and not raw_name:
+            raise ValueError("A branch needs an id or a name")
+        return cls(id=raw_id or raw_name, name=raw_name or raw_id)
+
+
 @runtime_checkable
 class IRouter(Protocol):
     """The contract consumers depend on.
@@ -79,7 +115,7 @@ class BaseRouter(ABC):
 
     def __init__(
         self,
-        branches: list[str],
+        branches: "list[str | dict[str, Any] | Branch]",
         *,
         fallback: str | None = None,
         rules: str = "",
@@ -87,12 +123,30 @@ class BaseRouter(ABC):
     ) -> None:
         if not branches:
             raise ValueError("A router needs at least one branch")
-        self.branches = list(branches)
-        # Default to the last branch rather than raising: a router with an
-        # unusable fallback is worse than one with an arbitrary but valid one.
-        self.fallback = fallback if fallback in self.branches else self.branches[-1]
+        #: The full id/name table. `self.branches` below stays `list[str]`
+        #: (names) so `IRouter` and every prompt-side consumer are untouched.
+        self.branch_table = [Branch.of(entry) for entry in branches]
+        self.branches = [branch.name for branch in self.branch_table]
+        self._ids_by_name = {branch.name: branch.id for branch in self.branch_table}
+        names_by_id = {branch.id: branch.name for branch in self.branch_table}
+        # A fallback may arrive as a name or (from the canvas `fallback` field)
+        # as an id; normalise to the name. Default to the last branch rather
+        # than raising: a router with an unusable fallback is worse than one
+        # with an arbitrary but valid one.
+        resolved = names_by_id.get(fallback or "", fallback)
+        self.fallback = resolved if resolved in self.branches else self.branches[-1]
         self.rules = rules
         self.model = model
+
+    def route_key(self, name: str) -> str:
+        """The graph-side key for a classified branch name.
+
+        This is what the compiler's conditional edge dispatches on — the
+        ``branch:<id>`` port id with its prefix stripped. An unknown name is
+        passed through untouched rather than raised on: the caller's own
+        fallback handling stays in charge of what a misroute means.
+        """
+        return self._ids_by_name.get(name, name)
 
     # -- the parts a subclass may shape ----------------------------------- #
 

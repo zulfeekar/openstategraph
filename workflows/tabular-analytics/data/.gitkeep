@@ -1,0 +1,11 @@
+# Place your dataset files here (CSV or Parquet)
+#
+# Supported formats:
+# - .csv (comma-separated values)
+# - .parquet (columnar storage format)
+#
+# The tabular tools will auto-discover files in this directory.
+# Example datasets:
+# - vgsales.csv (Video Game Sales)
+# - titanic.csv (Titanic passenger data)
+# - imdb_movies.csv (IMDB movie data)

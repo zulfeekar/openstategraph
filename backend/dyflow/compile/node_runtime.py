@@ -175,6 +175,24 @@ def _text(data: dict[str, Any], key: str, default: str = "") -> str:
     return value if isinstance(value, str) else default
 
 
+def _branch_entries(raw: Any) -> list[Any]:
+    """The router's branch table, in either of its two saved forms.
+
+    v1 documents store a newline-separated string of names; v2 (ticket 20)
+    stores ``[{id, name}]`` so edges survive renames. Anything unusable
+    collapses to a single ``"default"`` branch rather than raising — a router
+    is the entry point, and refusing to compile is a total outage where a
+    misroute is recoverable. `Branch.of` handles per-entry normalisation.
+    """
+    if isinstance(raw, str):
+        names = [line.strip() for line in raw.split("\n") if line.strip()]
+        return names or ["default"]
+    if isinstance(raw, list):
+        entries = [entry for entry in raw if isinstance(entry, (str, dict))]
+        return entries or ["default"]
+    return ["default"]
+
+
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
@@ -406,9 +424,7 @@ class NodeRuntime:
         rather than teaching `BaseRouter` about one.
         """
         data = node.get("data") or {}
-        branches = [
-            line.strip() for line in _text(data, "branches").split("\n") if line.strip()
-        ] or ["default"]
+        branches = _branch_entries(data.get("branches"))
         base_model = self._resolve_model(data)
         classifying_model = base_model
         if _text(data, "tier") == "deep" and base_model is not None:
@@ -425,7 +441,11 @@ class NodeRuntime:
             question = _upstream_text(state, upstream) or state.get("question", "")
             decision = router.classify(question)
             return {
-                "decisions": {node_id: decision.branch},
+                # The conditional edge dispatches on the *stable id* — the
+                # `branch:<id>` port the canvas edge actually leaves from —
+                # while the model classified by human-readable *name*.
+                # `route_key` is the one place that mapping lives.
+                "decisions": {node_id: router.route_key(decision.branch)},
                 "outputs": {node_id: question},
             }
 

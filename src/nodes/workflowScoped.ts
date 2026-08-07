@@ -4,6 +4,7 @@ import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
+import { TABULAR_NODES } from './tools/TabularDataNode';
 import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
 
 /**
@@ -38,6 +39,10 @@ export function syncWorkflowScopedNodes(
   const chinookTypeIds = new Set(CHINOOK_NODES.map((n) => n.definition.id));
   const documentUsesChinook = model.nodes().some((node) => chinookTypeIds.has(node.type));
   applyChinookRegistration(documentUsesChinook, registry, executors);
+
+  const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
+  const documentUsesTabular = model.nodes().some((node) => tabularTypeIds.has(node.type));
+  applyTabularRegistration(documentUsesTabular, registry, executors);
 }
 
 /**
@@ -73,6 +78,12 @@ export function registerNodeTypesForRawDocument(
     (node) => typeof node === 'object' && node != null && chinookTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyChinookRegistration(documentUsesChinook, registry, executors);
+
+  const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
+  const documentUsesTabular = nodes.some(
+    (node) => typeof node === 'object' && node != null && tabularTypeIds.has((node as { type?: unknown }).type as string),
+  );
+  applyTabularRegistration(documentUsesTabular, registry, executors);
 }
 
 /**
@@ -139,6 +150,23 @@ function applyChinookRegistration(
   executors: Registry<INodeExecutor>,
 ): void {
   for (const { definition, executor } of CHINOOK_NODES) {
+    const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
+    if (shouldBeRegistered && !alreadyRegistered) {
+      registry.nodeTypes.upsert(definition);
+      executors.upsert(executor);
+    } else if (!shouldBeRegistered && alreadyRegistered) {
+      registry.nodeTypes.unregister(definition.id);
+      executors.unregister(executor.id);
+    }
+  }
+}
+
+function applyTabularRegistration(
+  shouldBeRegistered: boolean,
+  registry: ModelRegistry,
+  executors: Registry<INodeExecutor>,
+): void {
+  for (const { definition, executor } of TABULAR_NODES) {
     const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
     if (shouldBeRegistered && !alreadyRegistered) {
       registry.nodeTypes.upsert(definition);
