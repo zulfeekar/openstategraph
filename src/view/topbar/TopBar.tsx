@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   Moon,
+  MoveVertical,
   Network,
   PanelLeft,
   PanelRight,
@@ -31,6 +32,7 @@ import {
 import type { Theme } from '@design/tokens';
 import {
   useController,
+  useFlowDirection,
   useHistoryState,
   usePaperController,
   useWorkbench,
@@ -73,6 +75,7 @@ export function TopBar({
   onNotify,
 }: TopBarProps) {
   const workbench = useWorkbench();
+  const flowDirection = useFlowDirection();
   const controller = useController();
   const paper = usePaperController();
   const { canUndo, canRedo } = useHistoryState();
@@ -216,8 +219,34 @@ export function TopBar({
             label="Arrange automatically"
             icon={<Icon glyph={Network} size="md" />}
             onClick={() => {
-              paper?.autoLayout.run();
+              paper?.autoLayout.run({
+                rankDir: flowDirection === 'vertical' ? 'TB' : 'LR',
+              });
               requestAnimationFrame(() => paper?.fitToContent());
+            }}
+          />
+        </Tooltip>
+        <Tooltip
+          content={
+            flowDirection === 'vertical'
+              ? 'Flow direction: vertical — switch to horizontal'
+              : 'Flow direction: horizontal — switch to vertical'
+          }
+          multiline
+        >
+          <IconButton
+            label="Toggle flow direction"
+            active={flowDirection === 'vertical'}
+            icon={<Icon glyph={MoveVertical} size="md" />}
+            onClick={() => {
+              const next = flowDirection === 'vertical' ? 'horizontal' : 'vertical';
+              workbench.preferences.setFlowDirection(next);
+              // Re-arrange in the new direction so the toggle is visibly a
+              // layout decision, not a hidden mode; one undoable transaction.
+              requestAnimationFrame(() => {
+                paper?.autoLayout.run({ rankDir: next === 'vertical' ? 'TB' : 'LR' });
+                requestAnimationFrame(() => paper?.fitToContent());
+              });
             }}
           />
         </Tooltip>

@@ -123,6 +123,16 @@ export const FlowLink = dia.Link.define(
         strokeWidth: 1.5,
         strokeLinecap: 'round',
         fill: 'none',
+        // Direction must be legible at rest (ticket 44): a filled chevron on
+        // the target end. `context-stroke` makes the head follow the line's
+        // *rendered* stroke — including the CSS hover/selected/active
+        // colours — with no per-state marker plumbing.
+        targetMarker: {
+          type: 'path',
+          d: 'M 9 -4.5 0 0 9 4.5 z',
+          fill: 'context-stroke',
+          stroke: 'none',
+        },
       },
       outline: {
         connection: true,

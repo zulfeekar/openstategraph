@@ -10,6 +10,7 @@ import {
 import { useController } from '@app/WorkbenchContext';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
+import { RichText } from '@view/common/RichText';
 import './AskPanel.css';
 
 /**
@@ -423,7 +424,7 @@ function ApprovalPrompt({
   return (
     <div className="ask__approval">
       <p className="ask__approval-message">{approval.message}</p>
-      {approval.candidate ? <pre className="ask__answer">{approval.candidate}</pre> : null}
+      {approval.candidate ? <RichText className="ask__answer" text={approval.candidate} /> : null}
       <div className="ask__approval-actions">
         <Button variant="primary" onClick={onApprove}>
           Approve
@@ -473,7 +474,7 @@ function Answer({ result }: { result: RunResult }) {
         </p>
       ))}
 
-      <pre className="ask__answer">{result.answer || '_No answer was produced._'}</pre>
+      <RichText className="ask__answer" text={result.answer || '_No answer was produced._'} />
 
       {result.attempts > 1 ? (
         // Surfaced because a silent retry hides real cost and real quality

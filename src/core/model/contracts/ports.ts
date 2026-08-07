@@ -96,3 +96,28 @@ export function maxConnectionsOf(port: IPortDescriptor): number | null {
 export function sideOf(port: IPortDescriptor): PortSide {
   return port.side ?? (port.direction === 'in' ? 'left' : 'right');
 }
+
+/** Which way the canvas reads: left→right, or top→bottom. Ticket 45. */
+export type FlowDirection = 'horizontal' | 'vertical';
+
+const CLOCKWISE: Record<PortSide, PortSide> = {
+  left: 'top',
+  top: 'right',
+  right: 'bottom',
+  bottom: 'left',
+};
+
+/**
+ * The side a port lands on under a given flow direction.
+ *
+ * One rule, no per-port annotations: a port's effective *horizontal* side
+ * (explicit `side`, or the in→left / out→right default) rotates 90°
+ * clockwise for vertical flow. That single rotation moves flow ports from
+ * the left/right edges to top/bottom AND swings the tool/worker buses from
+ * top/bottom onto the card's flanks — every existing `side` declaration
+ * keeps meaning what it meant, just relative to the reading direction.
+ */
+export function resolvePortSide(port: IPortDescriptor, flow: FlowDirection): PortSide {
+  const horizontal = sideOf(port);
+  return flow === 'horizontal' ? horizontal : CLOCKWISE[horizontal];
+}

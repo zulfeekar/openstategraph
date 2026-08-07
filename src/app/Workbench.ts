@@ -1,3 +1,4 @@
+import { PreferencesStore } from '@app/preferences';
 import { ModelRegistry } from '@core/model/ModelRegistry';
 import { WorkflowModel } from '@core/model/WorkflowModel';
 import { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
@@ -34,6 +35,8 @@ import { applyLayoutTokens } from '@design/tokens';
  */
 export class Workbench {
   readonly registry = new ModelRegistry();
+  /** Chrome-level user preferences (flow direction). Ticket 45. */
+  readonly preferences = new PreferencesStore();
   readonly model = new WorkflowModel('AI Workflow');
   readonly credentials = new CredentialStore();
   readonly providers: ProviderRegistry;

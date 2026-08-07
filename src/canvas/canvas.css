@@ -249,3 +249,11 @@
   font: var(--type-caption);
   color: var(--color-text-tertiary);
 }
+
+/* A run's flowing-dash animation is a motion effect; honour the user's
+   reduced-motion preference — the colour change still marks the edge. */
+@media (prefers-reduced-motion: reduce) {
+  .joint-link.is-active [joint-selector='line'] {
+    animation: none;
+  }
+}

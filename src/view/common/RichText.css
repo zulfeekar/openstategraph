@@ -1,0 +1,100 @@
+/* Model-authored Markdown (ticket 46). Scoped under .rich-text so these
+   rules can never leak into app chrome. Sized for panel widths. */
+
+.rich-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
+  overflow-wrap: break-word;
+}
+
+.rich-text > :first-child {
+  margin-top: 0;
+}
+
+.rich-text > :last-child {
+  margin-bottom: 0;
+}
+
+.rich-text p,
+.rich-text ul,
+.rich-text ol,
+.rich-text table,
+.rich-text pre,
+.rich-text blockquote {
+  margin: 0 0 8px;
+}
+
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rich-text h1 {
+  font-size: 15px;
+}
+
+.rich-text h2 {
+  font-size: 14px;
+}
+
+.rich-text ul,
+.rich-text ol {
+  padding-left: 18px;
+}
+
+.rich-text code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.12));
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.rich-text pre {
+  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.12));
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+.rich-text pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Tables scroll inside their own box; the panel never scrolls sideways. */
+.rich-text table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rich-text th,
+.rich-text td {
+  border: 1px solid var(--color-border);
+  padding: 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rich-text th {
+  font-weight: 600;
+  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.08));
+}
+
+.rich-text blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 10px;
+  color: var(--color-text-muted);
+}
+
+.rich-text a {
+  color: var(--color-accent, inherit);
+}

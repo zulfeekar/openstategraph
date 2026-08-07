@@ -12,12 +12,13 @@ import {
   type StatusTone,
 } from '@design/primitives';
 import { isOnCard, validateFields } from '@core/model/contracts/fields';
-import { sideOf, type IPortDescriptor } from '@core/model/contracts/ports';
+import { resolvePortSide, type IPortDescriptor } from '@core/model/contracts/ports';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeGeometry } from '@canvas/shapes/HtmlNode';
 import type { NodeId } from '@core/model/contracts/node';
 import {
   useController,
+  useFlowDirection,
   useNode,
   usePaperController,
   useWorkbench,
@@ -87,6 +88,7 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
    * Without both, the second pass writes a value a hair different from the
    * first and React exceeds its update depth. */
 
+  const flow = useFlowDirection();
   const lastReported = useRef<string>('');
 
   const report = useCallback(() => {
@@ -103,26 +105,48 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
 
     const ports: Record<string, { x: number; y: number }> = {};
 
-    for (const port of node.ports) {
-      const side = sideOf(port);
+    // Direction-aware: each port's side comes from the one rotation rule in
+    // `resolvePortSide` (ticket 45). Several ports can now share the top or
+    // bottom edge (all flow inputs, in vertical mode), so those spread
+    // evenly along the width instead of stacking on one point.
+    const resolved = node.ports.map((port) => ({ port, side: resolvePortSide(port, flow) }));
+    const topPorts = resolved.filter((entry) => entry.side === 'top');
+    const bottomPorts = resolved.filter((entry) => entry.side === 'bottom');
+    const spread = (index: number, count: number) =>
+      Math.round((width * (index + 1)) / (count + 1));
+
+    for (const { port, side } of resolved) {
       if (side === 'top') {
-        ports[port.id] = { x: width / 2, y: 0 };
+        const index = topPorts.findIndex((entry) => entry.port.id === port.id);
+        ports[port.id] = { x: spread(index, topPorts.length), y: 0 };
         continue;
       }
       if (side === 'bottom') {
         // The tool-bus pill straddles the card's bottom edge, so the port
         // goes on the pill's *lower* rim — dead centre would put the dot on
         // top of the pill's own label.
-        const pill = card.querySelector<HTMLElement>(`[data-port-row="${port.id}"]`);
+        const pill =
+          port.appearance === 'pill'
+            ? card.querySelector<HTMLElement>(`[data-port-row="${port.id}"]`)
+            : null;
         const overhang = pill ? pill.getBoundingClientRect().height / zoom / 2 : 0;
-        ports[port.id] = { x: width / 2, y: height + Math.round(overhang) };
+        const index = bottomPorts.findIndex((entry) => entry.port.id === port.id);
+        ports[port.id] = {
+          x: spread(index, bottomPorts.length),
+          y: height + Math.round(overhang),
+        };
         continue;
       }
       const row = card.querySelector<HTMLElement>(`[data-port-row="${port.id}"]`);
-      if (!row) continue;
-      const rowRect = row.getBoundingClientRect();
-      const y = Math.round((rowRect.top + rowRect.height / 2 - cardRect.top) / zoom);
-      ports[port.id] = { x: side === 'left' ? 0 : width, y };
+      if (row) {
+        const rowRect = row.getBoundingClientRect();
+        const y = Math.round((rowRect.top + rowRect.height / 2 - cardRect.top) / zoom);
+        ports[port.id] = { x: side === 'left' ? 0 : width, y };
+        continue;
+      }
+      // A bus port rotated onto a flank has no matching footer row; centre
+      // it vertically on the edge instead.
+      ports[port.id] = { x: side === 'left' ? 0 : width, y: Math.round(height / 2) };
     }
 
     const geometry: NodeGeometry = { height, ports };
@@ -136,7 +160,7 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
     if (Math.abs(node.size.height - height) >= 1) {
       controller.nodes.applyMeasuredSize(node.id, { width: node.size.width, height });
     }
-  }, [controller, node, paper]);
+  }, [controller, flow, node, paper]);
 
   // Measure before the browser paints, so ports never lag a frame behind the
   // content that positions them.

@@ -4,6 +4,7 @@ import type { WorkflowController } from '@controller/WorkflowController';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeId } from '@core/model/contracts/node';
 import type { WorkflowEvents } from '@core/model/contracts/workflow';
+import type { FlowDirection } from '@core/model/contracts/ports';
 import type { PaperController } from '@canvas/PaperController';
 import {
   loadWorkflow,
@@ -179,6 +180,20 @@ export function useNode(nodeId: NodeId): AbstractNodeModel | undefined {
 }
 
 /** Undo/redo availability, for toolbar enablement. */
+/** The canvas flow direction, live — re-renders on toggle. Ticket 45. */
+export function useFlowDirection(): FlowDirection {
+  const { workbench } = useWorkbenchValue();
+  const { preferences } = workbench;
+  const [direction, setDirection] = useState<FlowDirection>(preferences.flowDirection);
+
+  useEffect(
+    () => preferences.onChange(() => setDirection(preferences.flowDirection)),
+    [preferences],
+  );
+
+  return direction;
+}
+
 export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
   const { workbench } = useWorkbenchValue();
   const { history } = workbench.controller;
