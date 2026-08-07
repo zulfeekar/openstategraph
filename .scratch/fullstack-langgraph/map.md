@@ -1003,14 +1003,71 @@ piece of it that was concretely scoped and already had a UI built for it.
 
 301 Vitest passing, `tsc` clean.
 
+## Findings sweep + program charted: dynamic StateGraph builder (2026-08-07)
+
+A `/goal` session judged the repo as an outside collaborator would — "a
+workflow is a StateGraph where everything is configurable" — and found the
+working tree mid-feature and off-architecture (a homegrown middleware runtime
+monkey-patching `model.invoke`, a `BaseRouter` rewrite hardcoding one
+dataset's vocabulary and bypassing `SystemPrompt`, an `/api/runs` tool
+discovery that imported a hyphenated slug as a module name). That tree is
+preserved verbatim on `wip/middleware-tabular-experiment` and reverted on
+main; each intent re-enters as a ticket below.
+
+**Fixed and committed (`7cd4bc1`), 316 pytest + 306 Vitest green:**
+
+- **Ticket 20's missing half** — the editor's v2 `[{id,name}]` branch
+  contract never reached Python; `_router` parsed a newline string, got `[]`,
+  and routed *every* question to the first destination. `Branch.of` +
+  `BaseRouter.route_key(name)` now map the classified *name* back to the
+  stable *id* the conditional edge dispatches on (43 new tests). Recorded as
+  [Router branch contract](issues/29-router-branch-contract.md): a serialized
+  contract change is always a two-sided change.
+- The tabular workflow's tools called `ToolResult.content(...)` — a field,
+  not a constructor — so every *success* handed the model a failure string,
+  while its tests asserted `hasattr(result, "content") or hasattr(result,
+  "failure")`, true of every ToolResult. Tools fixed, tests now read real
+  content from the real CSV, module loaded via
+  `spec_from_file_location` under a synthetic name (the approach
+  `pytest.ini`'s own comment prescribes); `duckdb`/`pandas` declared.
+
+**The charted program (tickets 29–51),** phased and blocking-wired:
+foundation ([agent family](issues/30-agent-family.md),
+[prompt composition](issues/31-prompt-composition-agent.md),
+[middleware slot table](issues/32-middleware-slot-table.md),
+[tool resolution by node type](issues/33-tool-resolution-by-node-type.md),
+[subgraph node](issues/34-subgraph-node.md),
+[function nodes](issues/35-function-nodes.md),
+[workflow settings](issues/36-workflow-settings.md),
+[supervisor archetypes](issues/37-supervisor-archetypes.md),
+[config surface](issues/38-config-surface.md)) → four proving workflows
+([chinook canvas document](issues/39-chinook-canvas-document.md),
+[tabular repair](issues/40-tabular-analytics-repair.md) +
+[honest data](issues/41-honest-vgsales-data.md),
+[open-api-explorer](issues/42-open-api-explorer.md),
+[code-workshop](issues/43-code-workshop.md)) → UX
+([edge direction](issues/44-edge-direction-affordances.md),
+[flow direction setting](issues/45-flow-direction-setting.md),
+[markdown rendering](issues/46-markdown-rendering.md)) → robustness
+([persistence & durability](issues/47-persistence-memory-durability.md),
+[coverage at leaked seams](issues/48-coverage-at-leaked-seams.md)) →
+contributor surface ([workflow package contract](issues/49-workflow-package-contract.md))
+→ [OSS release](issues/50-oss-release.md) last, plus a
+[browser E2E prototype](issues/51-browser-e2e.md).
+
+Two facts worth pinning for every future session: `agent.llm` still passes
+no `system_prompt=` to `create_agent` (authored `systemPrompt` fields are
+silently inert — ticket 31), and `workflow.settings` is destroyed by any
+editor save because `SerializedWorkflow` has no such key (ticket 36).
+
 ## Not yet specified
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
 - Sandboxing capability discovery. Importing user modules executes their code; acceptable for a local dev tool, unresolved for hosted use — becomes specifiable only if hosting comes into scope.
 - Whether `tests/` are *run* by the app (a "run tests" affordance on a workflow) or merely colocated for the developer and their coding agent.
-- Streaming and observability into the editor — token streams and per-node traces from a running LangGraph back onto the canvas.
+- ~~Streaming and observability into the editor~~ **Graduated 2026-08-07** into [edge direction affordances](issues/44-edge-direction-affordances.md) (backend-driven edge animation) — a LangSmith-style trace view remains fog.
 - Human-in-the-loop: how `interrupt` / `HumanInTheLoopMiddleware` surfaces as a canvas affordance.
-- Per-node error, retry and timeout semantics once the entity hierarchy is fixed.
+- ~~Per-node error, retry and timeout semantics~~ **Resolved earlier** (per-node overrides built); durability/cache graduated into [persistence, memory & durability](issues/47-persistence-memory-durability.md).
 - Migrating existing v1 workflow JSON to the generated schema (a serializer migration chain already exists).
 - Provider credentials once the backend exists — browser-side `localStorage` keys go away; unclear what replaces them.
 - Multi-user / auth — only becomes specifiable after the persistence shape is decided.
