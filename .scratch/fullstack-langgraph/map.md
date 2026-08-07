@@ -34,6 +34,8 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- [Supervisor archetypes](issues/37-supervisor-archetypes.md) — hybrid: model labels subtasks against wired archetype names, untrusted labels fall back to a designated default worker
+- [Middleware slot table](issues/32-middleware-slot-table.md) — user decision recorded: prebuilt default stacks per node family, extended by `workflows/<slug>/middlewares/` files, same discovery pattern as tools/functions
 - [Agent family](issues/30-agent-family.md) — built: ladder in abc/agent.py, base minimal, Deep a sibling of React
 - [Prompt composition for the agent](issues/31-prompt-composition-agent.md) — built; read-only locked-section rendering still open
 - [Middleware slot table](issues/32-middleware-slot-table.md) — built over create_agent(middleware=); default prebuilts + UI still open
@@ -1112,6 +1114,8 @@ Open, honestly: [open-api-explorer](issues/42-open-api-explorer.md) and
 [browser E2E](issues/51-browser-e2e.md) remain the frontier.
 
 ## Not yet specified
+
+- **Per-family prebuilt file conventions.** The user's mental model (2026-08-07): every node family — grader, router, orchestrator, supervisor, deep agent — has its own prebuilt files a workflow can shadow, the way `middlewares/` will work; deep agents additionally surface deepagents' own sandbox/read/write/grep built-ins. What the directory layout and shadowing rules are per family is not yet sharp enough to ticket beyond middlewares (ticket 32) — it likely folds into the workflow package contract (ticket 49).
 
 - ~~**Shared capabilities across workflows.**~~ **Settled 2026-08-05 by the user:** the shared tier *is* the generic tier — `AgentNode`, `TextInput`, `MarkdownFile`, `Output`, `Group`, `Note` are the editor's **grammar** and ship in `src/nodes/`; anything bound to one domain (the Chinook tools) lives in `workflows/<slug>/{nodes,tools,functions}/` and is only in the palette while that workflow is open. Mechanism is a **workflow-scoped registry overlay** on the global `Registry<T>` (`upsert()` already exists), with **workflow-local shadowing global**, so a workflow can override a generic node without forking and `core/` is never edited. Rationale: put one workflow's tools in the shared catalogue and every future palette carries every past workflow's tools — unbounded growth, useless exactly when the product starts working. **Immediate consequence: Qwen registered the Chinook tools globally in `src/nodes/index.ts` (verified in the running palette) — that is on the wrong side of this line and must move.**
 - Sandboxing capability discovery. Importing user modules executes their code; acceptable for a local dev tool, unresolved for hosted use — becomes specifiable only if hosting comes into scope.

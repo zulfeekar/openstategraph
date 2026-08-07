@@ -1,5 +1,5 @@
 Type: grilling
-Status: mostly resolved (2026-08-07) — no UI yet
+Status: mostly resolved (2026-08-07) — extension model now decided; prebuilt selection + discovery still to build
 Blocked by: 30
 
 ## Question
@@ -32,3 +32,20 @@ Design the real thing, per CLAUDE.md's slot-table rule:
 ## Resolution
 
 `MiddlewareSlotTable` (name-keyed, canonical order, no priority integers) flattens into `create_agent(middleware=[...])` — the library's real seam; presets per tier via `middleware_preset()`. Still open: which prebuilt middlewares ship in default slots, and the per-node UI.
+
+## User decision (2026-08-07, during ticket 37)
+
+**Prebuilt-by-default, file-extended.** Every agent-tier node ships a
+working default middleware stack drawn from LangChain's own prebuilts —
+prompt-injection guard, PII redaction, and whatever else earns a default
+slot — overridable or extendable the same way tools and functions already
+are: a developer adds `workflows/<slug>/middlewares/<name>.py` and discovery
+registers it into the slot table by name (local fills-or-replaces a slot;
+the base keeps the canonical order). Middlewares are expected to *rarely*
+need custom code — the prebuilts cover most needs — which is exactly why
+the default stack must be good.
+
+Left to build: pick the concrete default slots per tier (deep agents also
+carry their own built-ins: sandbox/filesystem read/write/grep via
+deepagents), `discover_middlewares` mirroring `discover_function_callables`,
+and the per-node UI for enabling/replacing slots.

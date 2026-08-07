@@ -1,5 +1,5 @@
 Type: grilling
-Status: open — claimed 2026-08-07 (wayfinder session)
+Status: resolved (2026-08-07) — hybrid routing, decided by the user
 Blocked by: 30 (resolved)
 
 ## Question
@@ -20,3 +20,30 @@ own tools/prompt, chosen per subtask.
   gets a named reducer (standing rule).
 - Compiler: `fan_out` becomes `dict[str, list[str]]`; `_fan_out_router`
   returns `Send(archetype_node, payload)` per subtask.
+
+## Resolution (user decision, 2026-08-07)
+
+**Hybrid routing.** The supervisor's planning prompt lists the wired worker
+archetypes (name + description) and the model labels every subtask with one.
+A label that names no wired archetype is **not trusted**: it falls back to
+the default worker, so a misroute degrades to today's single-archetype
+behaviour instead of a silent wrong answer from a tool-less worker.
+
+Implementation decisions that follow (routine calls, recorded here):
+- The label matches the worker node's **archetype name** — its node title,
+  slugified — not its id; the supervisor prompt and the path map use the
+  same string, one source.
+- **Default worker**: a `default` toggle on the worker card; when none is
+  set, the first wired archetype (canonical edge order). Exactly one
+  default — the validator warns on two.
+- Compiler: `fan_out` becomes `dict[str, list[str]]` (orchestrator → its
+  archetype nodes); `_fan_out_router` emits `Send(archetype_node, payload)`
+  per labelled subtask; `Subtask` gains an `archetype` field; state keys it
+  touches keep their existing reducers (`worker_results` is task-id-keyed
+  and already merge-safe).
+
+The wider principle the user stated with this decision — **every prebuilt
+node ships minimum viable code with basic behaviour, extended by dropping
+files into the workflow's own directory** — is recorded on
+[middleware slot table](32-middleware-slot-table.md) and in the map's fog,
+because it reaches beyond this ticket.
