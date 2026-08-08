@@ -89,6 +89,40 @@ $("newconv").onclick = () => {
 // Deliberately no raw HTML passthrough — everything is escaped first.
 function md(text) {
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+// The Architect's ephemeral-first contract (ticket 69): composing returns a
+// document; SAVING is a human act. When an answer carries a workflow JSON
+// fence, this renders that act — one click, one PUT to the existing store
+// endpoint, and the new workflow joins the picker.
+function offerSave(el, answerText) {
+  const m = answerText.match(/```json\s*([\s\S]*?)```/);
+  if (!m) return;
+  let doc;
+  try { doc = JSON.parse(m[1]); } catch { return; }
+  doc = doc.document || doc;
+  if (!Array.isArray(doc.nodes) || !Array.isArray(doc.edges)) return;
+  const box = document.createElement("div");
+  box.className = "hitl";
+  box.innerHTML = `<b>This answer contains a workflow.</b>
+    <input id="save-slug" placeholder="slug e.g. my-research-team" style="width:220px">
+    <button>Save as workflow</button> <span class="saved"></span>`;
+  el.appendChild(box);
+  box.querySelector("button").onclick = async () => {
+    const slug = box.querySelector("#save-slug").value.trim();
+    const note = box.querySelector(".saved");
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) { note.textContent = "slug: lowercase letters, digits, hyphens"; return; }
+    const resp = await fetch(`/api/workflows/${slug}`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: doc.name || slug, document: doc }),
+    });
+    if (resp.ok) {
+      note.textContent = "saved ✔ — now in the workflow picker";
+      loadWorkflows();
+    } else {
+      note.textContent = "save failed: " + esc(await resp.text()).slice(0, 120);
+    }
+  };
+}
   const lines = esc(text).split("\\n");
   let out = [], inCode = false, inTable = false, inList = false;
   const closeAll = () => { if (inTable) { out.push("</table>"); inTable = false; } if (inList) { out.push("</ul>"); inList = false; } };
@@ -188,6 +222,7 @@ async function stream(path, body, el) {
             answer.hidden = false;
             answer.innerHTML = md(d.answer || "_no answer_");
             if (d.warnings && d.warnings.length) answer.innerHTML += `<p class="error">${esc2(d.warnings.join("; "))}</p>`;
+            offerSave(el, d.answer || "");
           }
         }
       }
@@ -196,6 +231,40 @@ async function stream(path, body, el) {
   el.scrollIntoView({ block: "end" });
 }
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+// The Architect's ephemeral-first contract (ticket 69): composing returns a
+// document; SAVING is a human act. When an answer carries a workflow JSON
+// fence, this renders that act — one click, one PUT to the existing store
+// endpoint, and the new workflow joins the picker.
+function offerSave(el, answerText) {
+  const m = answerText.match(/```json\s*([\s\S]*?)```/);
+  if (!m) return;
+  let doc;
+  try { doc = JSON.parse(m[1]); } catch { return; }
+  doc = doc.document || doc;
+  if (!Array.isArray(doc.nodes) || !Array.isArray(doc.edges)) return;
+  const box = document.createElement("div");
+  box.className = "hitl";
+  box.innerHTML = `<b>This answer contains a workflow.</b>
+    <input id="save-slug" placeholder="slug e.g. my-research-team" style="width:220px">
+    <button>Save as workflow</button> <span class="saved"></span>`;
+  el.appendChild(box);
+  box.querySelector("button").onclick = async () => {
+    const slug = box.querySelector("#save-slug").value.trim();
+    const note = box.querySelector(".saved");
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) { note.textContent = "slug: lowercase letters, digits, hyphens"; return; }
+    const resp = await fetch(`/api/workflows/${slug}`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: doc.name || slug, document: doc }),
+    });
+    if (resp.ok) {
+      note.textContent = "saved ✔ — now in the workflow picker";
+      loadWorkflows();
+    } else {
+      note.textContent = "save failed: " + esc(await resp.text()).slice(0, 120);
+    }
+  };
+}
 
 function renderInterrupt(el, d) {
   const box = document.createElement("div");
