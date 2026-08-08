@@ -77,3 +77,18 @@
     display: none;
   }
 }
+
+/* Runtime health dot (ticket 58): green = up, red = down, grey = probing. */
+.topbar__health {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-text-muted);
+}
+.topbar__health[data-state='up'] {
+  background: var(--color-status-success, #22c55e);
+}
+.topbar__health[data-state='down'] {
+  background: var(--color-status-danger, #ef4444);
+}

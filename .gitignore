@@ -39,3 +39,4 @@ workflows/code-workshop/scratch/
 workflows/code-workshop/output/
 harness-loop-graph.pdf
 .claude/settings.local.json
+.dev/

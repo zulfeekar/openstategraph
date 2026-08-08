@@ -25,8 +25,11 @@ common to unify, and a Makefile wrapping "run these two things" would be one
 more thing to keep in sync with the two `npm`/`pip` scripts below):
 
 ```bash
-# Terminal 1 — the editor
 npm install
+scripts/dev.sh     # supervised backend + editor; scripts/dev.sh stop; scripts/status.sh
+
+# — or by hand —
+# Terminal 1 — the editor
 npm run dev        # http://localhost:5273
 
 # Terminal 2 — the runtime (optional: the editor works read-only without it,

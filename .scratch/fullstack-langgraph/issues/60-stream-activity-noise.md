@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08)
 Blocked by:
 
 ## Question
@@ -13,3 +13,7 @@ propagate to the parent. Fix: filter/namespace non-canvas frames server-side
 node names in the feed), and surface a child workflow's attempt count in the
 parent's outputs. Also fold in the recorded warning-collapse item (7
 "can loop back" diagnostics for one loop -> one per-loop notice).
+
+## Resolution
+
+Stream emits only canvas-node frames (internal model/tools/middleware frames folded but not emitted — verified live: in1/team1/out1 only); subgraph propagates child attempts (Team run now reports 2, was 0). Warning-collapse sub-item stays deferred on ticket 56's follow-ups.

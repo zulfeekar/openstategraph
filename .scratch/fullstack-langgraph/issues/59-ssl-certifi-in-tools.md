@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08)
 Blocked by:
 
 ## Question
@@ -11,3 +11,7 @@ uvicorn launch now does this, fragile). Fix in code: the HTTP helper in
 builds its ssl context from `certifi.where()` when available; certifi is
 declared as a backend dependency. One test: the context resolves without
 env vars.
+
+## Resolution
+
+default_fetch builds its ssl context from certifi.where() (import-safe fallback); certifi declared; live API suite passes with no env var.

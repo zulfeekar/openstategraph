@@ -61,11 +61,31 @@ class FetchError(Exception):
     """A transport-level failure with a message a model can act on."""
 
 
+def _ssl_context():
+    """certifi's CA bundle when available (ticket 59).
+
+    python.org macOS installs ship no system CA path, so a bare `urlopen`
+    fails every HTTPS call with CERTIFICATE_VERIFY_FAILED unless the user
+    hand-exports SSL_CERT_FILE. certifi rides in with the backend deps;
+    falling back to the default context keeps this import-safe without it.
+    """
+    import ssl
+
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def default_fetch(url: str) -> str:
     """Stdlib fetch: one GET, bounded timeout, readable failures."""
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(
+            request, timeout=FETCH_TIMEOUT_SECONDS, context=_ssl_context()
+        ) as response:
             return response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         raise FetchError(f"HTTP {exc.code} from {url}") from exc

@@ -752,6 +752,14 @@ def _stream_run(
                     if "attempts" in update:
                         attempts = int(update["attempts"])
                     task_ids = list((update.get("worker_results") or {}).keys())
+                    # Internal frames — `model`, `tools`, a middleware's own
+                    # node — are real LangGraph nodes inside an agent's
+                    # compiled loop, but they are not canvas nodes, and the
+                    # activity feed treating them as such reads as noise
+                    # (ticket 60). Their state contributions are already
+                    # folded above; only frames naming a canvas node emit.
+                    if node_id not in node_ids_by_name.values():
+                        continue
                     yield _sse(
                         "update",
                         {

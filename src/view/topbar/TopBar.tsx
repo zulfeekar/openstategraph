@@ -38,6 +38,7 @@ import {
   useWorkbench,
 } from '@app/WorkbenchContext';
 import { download, exportJSON, exportPNG, exportSVG, importJSON, slugify } from '@view/export/exportWorkflow';
+import { RuntimeHealthDot } from './RuntimeHealthDot';
 import './TopBar.css';
 
 interface TopBarProps {
@@ -170,6 +171,7 @@ export function TopBar({
         </span>
         <span className="topbar__product">Dyflow</span>
         <span className="topbar__divider" role="presentation" />
+        <RuntimeHealthDot />
         <span className="topbar__doc" title={workbench.model.name}>
           {workbench.model.name}
         </span>

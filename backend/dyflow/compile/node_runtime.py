@@ -907,7 +907,13 @@ class NodeRuntime:
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}}
             )
             answer = final.get("answer", "")
-            return {"outputs": {node_id: answer}, "answer": answer}
+            # The child's loop cost is part of the parent's story: without
+            # this, a Team that revised twice reports attempts=0 (ticket 60).
+            update: dict[str, Any] = {"outputs": {node_id: answer}, "answer": answer}
+            child_attempts = final.get("attempts")
+            if isinstance(child_attempts, int) and child_attempts > 0:
+                update["attempts"] = child_attempts
+            return update
 
         return run
 

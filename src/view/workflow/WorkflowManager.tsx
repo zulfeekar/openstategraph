@@ -55,16 +55,20 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   useModelEvents(['workflow:name']);
   const client = useMemo(() => new WorkflowFileClient(), []);
   const [workflows, setWorkflows] = useState<readonly WorkflowSummary[]>([]);
+  const [listError, setListError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
     if (outcome.ok) {
+      setListError(null);
       setWorkflows(outcome.value);
       return outcome.value;
     }
-    onNotify(`Could not list workflows: ${outcome.error}`);
+    // State, not just a toast: a toast evaporates, and the stale panel then
+    // reads "no workflows" — indistinguishable from a dead runtime (ticket 58).
+    setListError(outcome.error);
     return [];
   }, [client, onNotify]);
 
@@ -202,7 +206,14 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         </PanelSection>
 
         <PanelSection heading="Saved Workflows">
-          {workflows.length === 0 ? (
+          {listError ? (
+            <div className="workflow-manager__empty" role="alert">
+              <p>Runtime unreachable: {listError}</p>
+              <Button size="sm" onClick={() => void refreshList()}>
+                Retry
+              </Button>
+            </div>
+          ) : workflows.length === 0 ? (
             <p className="workflow-manager__empty">
               No saved workflows yet. Create one above!
             </p>
