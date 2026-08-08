@@ -32,3 +32,7 @@ Decisions to grill:
 - `graph.py` generator second, per ticket 15's standing design: consumes `CompiledPlan`, property-tested by Mermaid equality with the interpreter, exported read-only ("regenerated — hand-written code lives in tools/functions/").
 - Reusability = package contract (ticket 49) + a "duplicate as template" store operation; no separate template registry invented.
 - Implementation: queued behind the in-flight sessions (compiler/API files are contended); folded into ticket 49's implementation pass.
+
+## Implementation (2026-08-08)
+
+Mermaid surface built: generic `GET /api/workflows/{slug}/graph` compiles the real document (xray=True — subgraphs expanded; retired the chinook-hardcoded endpoint), `WorkflowFileClient.compiledGraph`, TopBar 'View compiled graph' overlay rendering locally via lazy-loaded mermaid (strict security, Copy-Mermaid button — the text is the portable artifact). Live-verified on the concierge: 11 nodes, labelled branches, revise loop visible. This is also ticket 68's cheap half. `graph.py` generator remains the recorded follow-up.

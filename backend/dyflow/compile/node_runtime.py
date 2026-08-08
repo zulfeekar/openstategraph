@@ -885,6 +885,11 @@ class NodeRuntime:
                 for task in plan_list
             }
             scoped = {k: v for k, v in results.items() if k in current_ids}
+            # A task that died (retries exhausted → error handler wrote to
+            # outputs, which carries no task identity) must appear as a
+            # named gap, not vanish from the join (ticket 61 residual #2).
+            for missing in sorted(current_ids - scoped.keys()):
+                scoped[missing] = "_(this task failed before reporting a result)_" 
             body = "\n\n".join(
                 # An empty member result renders as an explicit gap — a blank
                 # section reads like formatting, and the grader (and the

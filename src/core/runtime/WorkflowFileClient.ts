@@ -56,6 +56,7 @@ export interface IWorkflowFileClient {
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
   capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
+  compiledGraph(slug: string): Promise<Result<string, string>>;
 }
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -147,6 +148,28 @@ export class WorkflowFileClient implements IWorkflowFileClient {
    * registration. An unsaved, canvas-only workflow has no folder yet, so
    * callers should expect this to fail harmlessly for one.
    */
+  /**
+   * The COMPILED topology as Mermaid text (ticket 54): what the backend
+   * compiler actually produced, subgraphs expanded — never a hand-drawn
+   * approximation, and never a PNG (that would post the graph to a third
+   * party).
+   */
+  async compiledGraph(slug: string): Promise<Result<string, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/graph`,
+      );
+    } catch {
+      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+    const payload = (await response.json()) as { mermaid?: string };
+    return typeof payload.mermaid === 'string'
+      ? Ok(payload.mermaid)
+      : Err('The runtime returned no diagram.');
+  }
+
   async capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>> {
     let response: Response;
     try {

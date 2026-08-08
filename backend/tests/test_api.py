@@ -168,7 +168,10 @@ class TestGraphPreview:
         response = client.get("/api/workflows/chinook-nl-to-sql/graph")
         assert response.status_code == 200
         diagram = response.json()["mermaid"]
-        for node in ("orient", "write_sql", "grade", "synthesise"):
+        # The generic {slug} endpoint compiles the CANVAS document (ticket
+        # 54) — the hand-written graph.py preview retired with the
+        # chinook-specific route it powered.
+        for node in ("agent_sql", "grader_sql", "out1"):
             assert node in diagram
 
     def test_the_preview_never_calls_a_third_party(self, client: TestClient) -> None:

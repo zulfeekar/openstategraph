@@ -24,6 +24,7 @@
     "dagre": "^0.8.5",
     "graphlib": "^2.1.8",
     "lucide-react": "^1.28.0",
+    "mermaid": "^11.16.1",
     "openai": "^7.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -16,6 +16,7 @@ import {
   Sun,
   Undo2,
   Upload,
+  GitBranch,
 } from 'lucide-react';
 import {
   Badge,
@@ -38,6 +39,7 @@ import {
   useWorkbench,
 } from '@app/WorkbenchContext';
 import { download, exportJSON, exportPNG, exportSVG, importJSON, slugify } from '@view/export/exportWorkflow';
+import { GraphPreview } from '@view/overlays/GraphPreview';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import './TopBar.css';
 
@@ -75,6 +77,7 @@ export function TopBar({
   onOpenCredentials,
   onNotify,
 }: TopBarProps) {
+  const [graphOpen, setGraphOpen] = useState(false);
   const workbench = useWorkbench();
   const flowDirection = useFlowDirection();
   const controller = useController();
@@ -164,6 +167,7 @@ export function TopBar({
   ];
 
   return (
+    <>
     <header className="topbar">
       <div className="topbar__brand">
         <span className="topbar__mark" aria-hidden="true">
@@ -215,6 +219,14 @@ export function TopBar({
         </Tooltip>
 
         <span className="topbar__divider" role="presentation" />
+
+        <Tooltip content="View compiled graph" multiline>
+          <IconButton
+            label="View compiled graph"
+            icon={<Icon glyph={GitBranch} size="md" />}
+            onClick={() => setGraphOpen(true)}
+          />
+        </Tooltip>
 
         <Tooltip content="Arrange automatically" multiline>
           <IconButton
@@ -315,6 +327,8 @@ export function TopBar({
         </Tooltip>
       </div>
     </header>
+      <GraphPreview open={graphOpen} onClose={() => setGraphOpen(false)} />
+    </>
   );
 }
 

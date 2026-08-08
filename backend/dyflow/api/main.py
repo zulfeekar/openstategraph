@@ -479,20 +479,37 @@ def create_app(
             ],
         )
 
-    @app.get("/api/workflows/chinook-nl-to-sql/graph")
-    def graph_preview() -> dict[str, str]:
-        """Mermaid **text**, never a PNG.
+    @app.get("/api/workflows/{slug}/graph")
+    def compiled_graph(slug: str) -> dict[str, str]:
+        """The COMPILED topology as Mermaid text (ticket 54) — what the
+        compiler actually produced, not a hand-drawn approximation.
 
-        `draw_mermaid_png()` posts the graph to the Mermaid.Ink API; this endpoint
-        exists partly so the frontend is never tempted to.
+        `xray=True` expands subgraph internals (a concierge shows its routed
+        children; a Team shows its members), which is also the cheap half of
+        the editor's dual-view ask (ticket 68). Text, never a PNG —
+        `draw_mermaid_png()` posts the graph to a third-party API.
         """
-        from graph import build_graph, mermaid
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.workflow_compiler import WorkflowCompiler
 
-        # A structural preview needs no model, so none is required to see it.
-        def _noop(state: dict[str, Any]) -> dict[str, Any]:
-            return {}
+        try:
+            document = workflow_store.load(slug)
+        except WorkflowNotFoundError:
+            raise HTTPException(status_code=404, detail=f"No workflow '{slug}'")
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
-        return {"mermaid": mermaid(build_graph(_noop, _noop))}
+        runtime = runtime_for(slug, document, None)
+        compiler = WorkflowCompiler()
+        try:
+            graph = compiler.build(
+                document, RunState, runtime.factory(document), store=memory_store
+            )
+            mermaid_text = graph.get_graph(xray=True).draw_mermaid()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}")
+        return {"mermaid": mermaid_text}
 
     @app.post("/api/runs", response_model=RunResponse)
     def run_workflow(request: RunRequest) -> RunResponse:
