@@ -22,15 +22,17 @@ CHAT_PAGE = """<!doctype html>
   :root { color-scheme: light dark; --line: #8884; --muted: #888; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 15px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  #split { flex: 1; display: flex; min-height: 0; }
+  #flowpane { flex: 1; overflow: auto; padding: 16px; min-width: 0; }
+  #flowpane h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  #chatcol { width: 420px; max-width: 420px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); min-height: 0; }
+  @media (max-width: 900px) { #split { flex-direction: column; } #chatcol { width: 100%; max-width: none; border-left: none; border-top: 1px solid var(--line); } #flowpane { max-height: 45vh; } }
   header { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   header strong { margin-right: auto; }
   select, input, button, textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; }
   button { cursor: pointer; }
-  main { flex: 1; overflow-y: auto; padding: 16px; max-width: 780px; width: 100%; margin: 0 auto; }
-  #flowbox { border-bottom: 1px solid var(--line); padding: 6px 14px; max-width: 780px; width: 100%; margin: 0 auto; }
-  #flowbox summary { cursor: pointer; font-size: 13px; color: var(--muted); }
-  #flow { overflow-x: auto; padding: 8px 0; }
-  #flow svg { max-width: 100%; height: auto; }
+  main { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+  #flow svg { width: 100%; height: auto; }
   #flow .flow-active > * { stroke: #22c55e !important; stroke-width: 2.5px !important; }
   #flow .flow-active rect, #flow .flow-active polygon { fill: #22c55e33 !important; }
   .turn { margin-bottom: 20px; }
@@ -43,7 +45,7 @@ CHAT_PAGE = """<!doctype html>
   .answer code, .answer pre { background: #8881; border-radius: 4px; padding: 1px 4px; }
   .error { color: #e5484d; }
   .hitl { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 8px; }
-  footer { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); max-width: 780px; width: 100%; margin: 0 auto; }
+  footer { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
   footer textarea { flex: 1; resize: none; height: 44px; }
 </style>
 </head>
@@ -55,12 +57,19 @@ CHAT_PAGE = """<!doctype html>
   <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
   <span id="who" style="font-size:12px;color:var(--muted)"></span>
 </header>
-<details id="flowbox"><summary>Live flow</summary><div id="flow">select a workflow…</div></details>
-<main id="log"></main>
-<footer>
-  <textarea id="msg" placeholder="Ask the selected workflow…"></textarea>
-  <button id="send">Send</button>
-</footer>
+<div id="split">
+  <section id="flowpane">
+    <h2>Live flow</h2>
+    <div id="flow">select a workflow…</div>
+  </section>
+  <div id="chatcol">
+    <main id="log"></main>
+    <footer>
+      <textarea id="msg" placeholder="Ask the selected workflow…"></textarea>
+      <button id="send">Send</button>
+    </footer>
+  </div>
+</div>
 <script src="/chat/mermaid.js"></script>
 <script>
 "use strict";
