@@ -1,5 +1,5 @@
 Type: task
-Status: open — v1 skill shipped; conversation-state change pending
+Status: resolved (2026-08-08) — generalised and live-verified
 
 ## Question
 
@@ -20,3 +20,21 @@ v1 shipped meanwhile: `workflows/workflow-architect/skills/interview.md`
 instructs the Architect to detect underspecified requests and answer with
 exactly one clarifying question instead of composing blind — single-turn
 honest behavior; full multi-turn lands with the state change.
+
+## Resolution
+
+Generalised far beyond the interview after the user caught the real gap live
+("what is the weather?" → "oslo" → a Wikipedia article): conversation memory
+is now **structural, for every workflow** — the input node records each user
+turn and the output node each answer (history exists on supervisor paths, no
+agent required); `_thread_question` renders the exchange for every
+intent-interpreting node; agents speak into the shared record with feedback
+as its own turn. Live-verified on the exact reported scenario: turn 2 "oslo"
+returned real Oslo weather (18.6°C + forecast), no drift. The Architect's
+interview skill rides on the same mechanism (turn 1 clarifying-question
+behaviour verified; its turn-2 composition remained provider-gated by
+Ollama 500s all evening — mechanics pinned by 9 unit tests instead).
+
+Plus the user's memory-scope model: save_memory(scope=user|workflow|app),
+search across all three with provenance labels — user follows the person,
+workflow holds slug-scoped findings, app is the root's shared pool.

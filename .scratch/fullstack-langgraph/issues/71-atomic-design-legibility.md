@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08)
 
 ## Question
 
@@ -16,3 +16,7 @@ examples; (2) palette sections named by the model (Atoms: tools/middleware
 · Molecules: agent tiers, router, grader · Organisms: Team, supervisor
 pattern); (3) ticket 32's Inspector effective-stack panel labels each slot's
 kind. Cheap, purely legibility — the architecture already conforms.
+
+## Resolution
+
+Wiki page `openwiki/architecture/atomic-design.md` (the five levels with real examples + the two holding rules), palette sections labelled with their level (Agents · molecules / Tools · atoms). Inspector slot labelling remains with ticket 32's panel.

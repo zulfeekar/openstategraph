@@ -34,6 +34,7 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- [Conversation + scoped memory](issues/73-interview-workflow-creation.md) — thread record written centrally (every path), interpret-nodes see the conversation, three-scope long-term memory (user/workflow/app); oslo scenario fixed live. [Atomic legibility](issues/71-atomic-design-legibility.md) + chat-page extraction (72) landed
 - [Live flow view](issues/68-editor-dual-view.md) — /chat shows the running workflow's graph with active nodes lit (user's real dual-view ask, built + live-verified); [glossary](issues/66-ssot-explorer-prebuilts.md) closed as covered-by-skills; save-as-workflow, Playwright 5/5, Prettier/ESLint/CHANGELOG/v0.1.0 all landed
 - [Dynamic Workflow Architect](issues/69-dynamic-workflow-architect.md) — built: compiler-as-tool validation loop, grammar skill, hidden package, concierge build branch; ephemeral-first (saving is a human click)
 - Board-clearing sweep (2026-08-08): [subtask hygiene](issues/61-openapi-5q-test.md) + failed-task visibility · [compiled-graph view](issues/54-workflow-transparency-and-codegen.md) (generic endpoint + TopBar mermaid overlay) · [middleware file-drop discovery](issues/32-middleware-slot-table.md) · [package validator + scaffold](issues/49-workflow-package-contract.md) · [locked prompt sections](issues/31-prompt-composition-agent.md) · one-warning-per-loop · [data-analyst-team](issues/66-ssot-explorer-prebuilts.md) live · ruff in CI
