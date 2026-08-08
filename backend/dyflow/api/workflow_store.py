@@ -196,3 +196,30 @@ __all__ = [
     "WorkflowSummary",
     "slugify",
 ]
+
+
+def validate_package(workflow_dir: Path) -> list[str]:
+    """Findings for one workflow package against the contract (ticket 49).
+
+    The contract: `workflow.json` (envelope) required; `AGENTS.md` expected;
+    `tools/ functions/ middlewares/ skills/ tests/ data/` optional and
+    discovered by convention. Findings are strings a human acts on —
+    "error: ..." blocks running, "warning: ..." is advice. Never raises:
+    a broken package must be reportable, not un-listable.
+    """
+    findings: list[str] = []
+    manifest = workflow_dir / "workflow.json"
+    if not manifest.is_file():
+        return [f"error: no workflow.json in {workflow_dir.name}/"]
+    try:
+        payload = json.loads(manifest.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        return [f"error: workflow.json unreadable ({exc})"]
+    document = payload.get("document", payload)
+    if not isinstance(document.get("nodes"), list):
+        findings.append("error: document has no nodes list")
+    if not (workflow_dir / "AGENTS.md").is_file():
+        findings.append("warning: no AGENTS.md — collaborators (and agents) have no orientation")
+    if (workflow_dir / "tools").is_dir() and not (workflow_dir / "tests").is_dir():
+        findings.append("warning: tools/ without tests/ — hand-written code with no guard")
+    return findings

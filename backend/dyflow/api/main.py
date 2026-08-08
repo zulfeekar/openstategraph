@@ -162,6 +162,8 @@ class WorkflowSummaryResponse(BaseModel):
     saved_at: str
     node_count: int
     edge_count: int
+    #: Package-contract findings (ticket 49) — "error: ..." / "warning: ...".
+    findings: list[str] = []
 
 
 class WorkflowDocumentResponse(BaseModel):
@@ -401,19 +403,20 @@ def create_app(
 
     @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
     def list_workflows() -> list[WorkflowSummaryResponse]:
-        from dyflow.api.workflow_store import WorkflowSummary
+        from dyflow.api.workflow_store import WorkflowSummary, validate_package
 
         def to_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
             return WorkflowSummaryResponse(
                 slug=s.slug, name=s.name, saved_at=s.saved_at,
                 node_count=s.node_count, edge_count=s.edge_count,
+                findings=validate_package(workflow_store.directory_for(s.slug)),
             )
 
         return [to_response(s) for s in workflow_store.list()]
 
     @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
     def get_workflow(slug: str) -> WorkflowDocumentResponse:
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError, validate_package
 
         try:
             document = workflow_store.load(slug)

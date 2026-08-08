@@ -142,3 +142,29 @@ class TestSlugSafety:
         store = WorkflowStore(root=nested_root)
         with pytest.raises(InvalidSlugError):
             store.directory_for("..")
+
+
+class TestPackageValidator:
+    """Ticket 49: findings, never exceptions."""
+
+    def test_a_conforming_package_has_no_findings(self, tmp_path) -> None:
+        from dyflow.api.workflow_store import validate_package
+        import json
+        (tmp_path / "workflow.json").write_text(json.dumps(
+            {"document": {"nodes": [], "edges": []}}))
+        (tmp_path / "AGENTS.md").write_text("# hi")
+        assert [f for f in validate_package(tmp_path) if f.startswith("error")] == []
+
+    def test_a_missing_manifest_is_one_clear_error(self, tmp_path) -> None:
+        from dyflow.api.workflow_store import validate_package
+        findings = validate_package(tmp_path)
+        assert len(findings) == 1 and findings[0].startswith("error: no workflow.json")
+
+    def test_tools_without_tests_warns(self, tmp_path) -> None:
+        from dyflow.api.workflow_store import validate_package
+        import json
+        (tmp_path / "workflow.json").write_text(json.dumps({"document": {"nodes": []}}))
+        (tmp_path / "AGENTS.md").write_text("# hi")
+        tools = tmp_path / "tools"; tools.mkdir()
+        (tools / "t.py").write_text("x=1")
+        assert any("tools/ without tests/" in f for f in validate_package(tmp_path))
