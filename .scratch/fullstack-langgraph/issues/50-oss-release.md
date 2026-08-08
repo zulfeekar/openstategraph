@@ -28,3 +28,7 @@ Remains for a human (destructive / policy):
 1. **History purge of the PDF** — it stays fetchable until rewritten out: `git filter-repo --invert-paths --path harness-loop-graph.pdf` (rewrites all SHAs; coordinate before running).
 2. **Fate of `.scratch/` + `HANDOVER.md`** — ship, scrub, or untrack (`.scratch/decisions/loop-graph-harness.md` quotes the same third-party deck).
 Deferred as nice-to-have: linters (eslint/prettier/ruff/mypy), issue templates, CHANGELOG + v0.1.0 tag, VITE_DYFLOW_API_URL.
+
+## Linting landed (2026-08-08)
+
+ruff (errors-only select: E9,F — real defects, zero style churn) config in pyproject, 15 hits fixed, wired into CI before pytest. ESLint/Prettier and the wider ruff select remain the recorded follow-ups; Playwright stays ticket 51.

@@ -55,3 +55,7 @@ two visible judge iterations in the trace, compliant result. Distinction
 kept: RubricMiddleware = agent-internal atom; Grader node (with its own
 structured rubric rows) = graph-level organism. Both exist for different
 altitudes of the Lego model.
+
+## Follow-up built (2026-08-08)
+
+`data-analyst-team` shipped: Team package whose SQL Analyst member carries the three generic SQL explorer tools against Chinook + a `skills/sql-conventions.md` procedural skill; live-verified through a Team node (correct $523.06 USA revenue figure, table named, grader loop fired). Glossary node remains the one open piece — blocked on the user's source choice (table vs docs corpus).

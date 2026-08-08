@@ -310,14 +310,10 @@ class TestArchetypeDescriptionsAreNeverBlind:
                 captured["archetypes"] = archetypes or []
                 return []
 
-        import dyflow.compile.node_runtime as nr
-        run = runtime._orchestrator("sup1", doc["nodes"][1], plan)
         # The roster is built at factory time inside _orchestrator's closure —
         # invoke and inspect through the real Orchestrator's own prompt path
         # is model-bound, so instead assert on the Archetype list the closure
         # captured by rebuilding it the same way the factory does.
-        from dyflow.abc.orchestrator import Archetype, archetype_key
-        worker_node = doc["nodes"][2]
         role_desc = None
         for worker_id in plan.fan_out.get("sup1", []):
             tool_ids = plan.tool_bindings.get(worker_id, [])

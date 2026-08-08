@@ -451,7 +451,7 @@ def create_app(
 
     @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
     def get_workflow(slug: str) -> WorkflowDocumentResponse:
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError, validate_package
+        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
             document = workflow_store.load(slug)
@@ -531,7 +531,7 @@ def create_app(
         `draw_mermaid_png()` posts the graph to a third-party API.
         """
         from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.node_runtime import RunState
         from dyflow.compile.workflow_compiler import WorkflowCompiler
 
         try:
@@ -555,7 +555,7 @@ def create_app(
     @app.post("/api/runs", response_model=RunResponse)
     def run_workflow(request: RunRequest) -> RunResponse:
         """Compiles and runs a canvas-authored workflow."""
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.node_runtime import RunState
         from dyflow.compile.workflow_compiler import WorkflowCompiler
 
         # Ollama cloud is the default (see `resolve_model`), so a model is
@@ -628,10 +628,7 @@ def create_app(
         silently disagree about what "the final answer" means.
         """
         from dyflow.compile.node_runtime import (
-            NodeRuntime,
             RunState,
-            keep_latest_nonempty,
-            merge_decisions,
         )
         from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
 
@@ -699,7 +696,7 @@ def create_app(
         carried — this is what tells the shared checkpointer
         (`_HUMAN_IN_THE_LOOP_CHECKPOINTER`) which paused run to continue.
         """
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.node_runtime import RunState
         from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
         from langgraph.types import Command
 

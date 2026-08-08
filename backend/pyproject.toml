@@ -30,9 +30,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "ruff>=0.6",
 ]
 
 # Test configuration lives in the repo-root pytest.ini, not here — it already
 # covers both roots (backend/ and the workflow's own tools/), and pytest.ini
 # takes precedence over this file's [tool.pytest.ini_options] table when both
 # exist, so duplicating it here would be dead weight, not a real override.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Errors-only to start: syntax errors and real defects (undefined names,
+# unused imports), zero style churn. Widening the select set is a deliberate
+# future step, not a default (ticket 50).
+select = ["E9", "F"]

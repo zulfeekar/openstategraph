@@ -13,7 +13,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 from dyflow.compile.node_runtime import NodeRuntime, RunState
 from dyflow.compile.workflow_compiler import WorkflowCompiler

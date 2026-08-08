@@ -34,6 +34,7 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- Board-clearing sweep (2026-08-08): [subtask hygiene](issues/61-openapi-5q-test.md) + failed-task visibility · [compiled-graph view](issues/54-workflow-transparency-and-codegen.md) (generic endpoint + TopBar mermaid overlay) · [middleware file-drop discovery](issues/32-middleware-slot-table.md) · [package validator + scaffold](issues/49-workflow-package-contract.md) · [locked prompt sections](issues/31-prompt-composition-agent.md) · one-warning-per-loop · [data-analyst-team](issues/66-ssot-explorer-prebuilts.md) live · ruff in CI
 - [SSOT explorer prebuilts](issues/66-ssot-explorer-prebuilts.md) — v1 built: generic SQL explorer (FK=JOIN rules), skills-as-procedural-context, rubric grader, summarization toggle; glossary node + analyst team deferred
 - [Memory system](issues/65-memory-system.md) — IMPLEMENTED: Store + prebuilt save/search tools on every agent, sqlite checkpointer opt-in; live cross-thread recall verified
 - [Concierge gateway](issues/67-concierge-gateway.md) — hidden top workflow routes customer chat; child registries now resolve per-package; [editor dual-view](issues/68-editor-dual-view.md) charted
