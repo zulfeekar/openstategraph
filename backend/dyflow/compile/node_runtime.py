@@ -181,6 +181,12 @@ def _final_text(messages: list[Any]) -> str:
     non-empty string keeps whatever the agent actually said.
     """
     for message in reversed(messages):
+        # A message that *requests* tool calls is never the final answer —
+        # its content is preamble or echoed arguments. Observed live: a
+        # degraded loop ended on a dangling call and the "answer" rendered
+        # as {"path": ...} in the customer chat.
+        if getattr(message, "tool_calls", None):
+            continue
         content = getattr(message, "content", "")
         if isinstance(content, str) and content.strip():
             return content

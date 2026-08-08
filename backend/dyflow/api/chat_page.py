@@ -160,10 +160,23 @@ async function stream(path, body, el) {
         else if (line.startsWith("data: ")) {
           const d = JSON.parse(line.slice(6));
           if (event === "update") {
-            const row = document.createElement("div");
-            if (d.internal) row.className = "child";
-            row.textContent = (d.internal ? "· " : "▸ ") + d.node + (d.taskId ? " (" + d.taskId + ")" : "");
-            steps.appendChild(row); el.scrollIntoView({ block: "end" });
+            if (d.internal) {
+              // Internal machinery collapses to a live counter on its owning
+              // step — a 20-call tool loop is one line, not twenty.
+              const last = steps.lastElementChild;
+              if (last) {
+                const n = (Number(last.dataset.internal) || 0) + 1;
+                last.dataset.internal = String(n);
+                last.textContent = last.dataset.base + "  ·  " + n + " steps";
+              }
+            } else {
+              const row = document.createElement("div");
+              const base = "▸ " + d.node + (d.taskId ? " (" + d.taskId + ")" : "");
+              row.dataset.base = base;
+              row.textContent = base;
+              steps.appendChild(row);
+            }
+            el.scrollIntoView({ block: "end" });
           } else if (event === "token") {
             tokens += d.content; thinking.textContent = tokens.slice(-600);
           } else if (event === "error") {

@@ -56,9 +56,22 @@ class ListWorkflowsTool(BaseTool):
                 continue
             document = payload.get("document", payload)
             name = str(payload.get("name") or document.get("name") or package.name)
+            # One-liner from the package's own docs, so "list the workflows
+            # and what they do" is ONE call — observed live: without this the
+            # model looped describe_workflow per entry, 20+ steps of theater.
+            summary = ""
+            agents_md = package / "AGENTS.md"
+            if agents_md.is_file():
+                try:
+                    for line in agents_md.read_text().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            summary = line[:160]
+                            break
+                except OSError:
+                    pass
             rows.append(
-                f"- **{package.name}** — {name} "
-                f"({len(document.get('nodes') or [])} nodes)"
+                f"- **{package.name}** ({name}): {summary or 'no description yet'}"
             )
         if not rows:
             return ToolResult(content="No workflows exist yet.")
