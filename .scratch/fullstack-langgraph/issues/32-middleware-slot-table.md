@@ -49,3 +49,17 @@ Left to build: pick the concrete default slots per tier (deep agents also
 carry their own built-ins: sandbox/filesystem read/write/grep via
 deepagents), `discover_middlewares` mirroring `discover_function_callables`,
 and the per-node UI for enabling/replacing slots.
+
+## User decision refined (2026-08-08) — the atomic-design rule
+
+Not all Lang* middlewares default-on. Three kinds, three defaults:
+**correctness guards** (patch-tool-calls etc.) locked on; **cost trades**
+(summarization, context editing, call limits) opt-in toggles with the price
+named in the label; **semantics changers** (HITL middleware, PII redaction)
+default off, one-line consequence shown. Every agent inherits the *catalogue*
+via the slot table; each tier ships a curated preset — capability inherited,
+composition never. Official vocabulary adopted: atoms = middlewares/tools,
+molecules = tier presets, organisms = canvas patterns (Team, supervisor+
+grader), templates = workflow packages, pages = /chat + concierge.
+UI: the Inspector shows the effective stack in canonical slot order, preset
+slots marked "from tier", per-slot on/off/replace-from-`middlewares/`.
