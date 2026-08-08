@@ -30,7 +30,7 @@ table above is an index, not a replacement.
 
 `workflow.subgraph` and `team.workflow` are the same slug-as-data mechanism
 compiled by the same backend path
-([`NodeRuntime._subgraph`](../../backend/dyflow/compile/node_runtime.py)). What
+([`NodeRuntime._subgraph`](../../backend/openstategraph/compile/node_runtime.py)). What
 distinguishes a **Team** is the contract its card states — its expected
 outcome, whose enforcing copy is the child's grader criteria
 ([`src/nodes/compose/TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)).

@@ -180,7 +180,7 @@ export function TopBar({
           <span className="topbar__mark" aria-hidden="true">
             <Icon glyph={Network} size="md" />
           </span>
-          <span className="topbar__product">Dyflow</span>
+          <span className="topbar__product">OpenStateGraph</span>
           <span className="topbar__divider" role="presentation" />
           <RuntimeHealthDot />
           <span className="topbar__doc" title={workbench.model.name}>

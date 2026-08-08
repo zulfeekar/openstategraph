@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from dyflow.api.main import OLLAMA_CLOUD_MODEL, _coerce_update, create_app, resolve_model
+from openstategraph.api.main import OLLAMA_CLOUD_MODEL, _coerce_update, create_app, resolve_model
 
 
 class StubGraph:
@@ -115,9 +115,9 @@ class TestModelResolution:
         zero configuration, since `ollama` authenticates from its own local
         credentials rather than an env var this process needs to see.
         """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
-        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
+        monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
 
         assert resolve_model(None) == OLLAMA_CLOUD_MODEL
 
@@ -129,15 +129,15 @@ class TestModelResolution:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
+        monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
         assert not resolve_model(None).startswith("ollama:")
 
     def test_ollama_resolves_to_a_cloud_model_never_a_local_one(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
-        monkeypatch.delenv("DYFLOW_OLLAMA_MODEL", raising=False)
+        monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
 
         resolved = resolve_model(None)
 
@@ -149,12 +149,12 @@ class TestModelResolution:
         assert resolved.endswith("-cloud")
         assert "8b" not in resolved
 
-    def test_dyflow_ollama_model_overrides_the_cloud_default(
+    def test_openstategraph_ollama_model_overrides_the_cloud_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
             monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("DYFLOW_OLLAMA_MODEL", "ollama:gpt-oss:20b-cloud")
+        monkeypatch.setenv("OPENSTATEGRAPH_OLLAMA_MODEL", "ollama:gpt-oss:20b-cloud")
         assert resolve_model(None) == "ollama:gpt-oss:20b-cloud"
 
     def test_a_local_model_must_be_named_explicitly(self) -> None:
@@ -224,7 +224,7 @@ class TestRunPostedWorkflow:
         without an Anthropic/OpenAI key — resolving *a* model no longer
         depends on any of them being set.
         """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "DYFLOW_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
             monkeypatch.delenv(var, raising=False)
         client = TestClient(create_app())
 
@@ -625,7 +625,7 @@ class TestCapabilities:
         tools_dir = tmp_path / "my-flow" / "tools"
         tools_dir.mkdir()
         (tools_dir / "greet.py").write_text(
-            "from dyflow.abc.tool import BaseTool, ToolResult\n"
+            "from openstategraph.abc.tool import BaseTool, ToolResult\n"
             "from pydantic import BaseModel\n\n"
             "class GreetArgs(BaseModel):\n    name: str\n\n"
             "class GreetTool(BaseTool):\n"

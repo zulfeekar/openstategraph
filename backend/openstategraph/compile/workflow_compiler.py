@@ -29,7 +29,7 @@ from typing import Any, Callable
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
-from dyflow.abc.orchestrator import archetype_key
+from openstategraph.abc.orchestrator import archetype_key
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
 try:

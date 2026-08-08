@@ -30,7 +30,7 @@ export class FormatReportNodeModel extends AbstractNodeModel {
  * `execute_sql` is a tool, and they must not be conflatable in the palette.
  *
  * Joins an orchestrator's worker results into one Markdown report, scoped to
- * the *current* plan's subtask ids only — a real bug (`backend/dyflow`'s
+ * the *current* plan's subtask ids only — a real bug (`backend/openstategraph`'s
  * `_format_report_function`) found that without this scoping, a revise loop's
  * replan silently blended a rejected attempt's stale results back in under
  * `worker_results`, since ids from every generation share one dict.

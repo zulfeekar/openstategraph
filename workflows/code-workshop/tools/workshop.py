@@ -11,7 +11,7 @@ to the model's good behaviour:
   under ``data/fixture-repo``, given its own fresh git repository. Every git
   invocation runs with global/system config disabled, so nothing about the
   developer's real identity, hooks or aliases leaks in — and nothing this
-  workflow does can touch the enclosing Dyflow repository's git state.
+  workflow does can touch the enclosing OpenStateGraph repository's git state.
 - **No arbitrary shell.** There is no "run command" tool. The only process
   the model can start is a fixed pytest invocation with a fixed argument list;
   the only git commands that exist are the fixed ones written below.
@@ -32,7 +32,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 #: This workflow's own directory — everything below is anchored to it.
 WORKFLOW_DIR = Path(__file__).resolve().parent.parent
@@ -61,9 +61,9 @@ def _isolated_git_env() -> dict[str, str]:
         GIT_CONFIG_GLOBAL=os.devnull,
         GIT_CONFIG_SYSTEM=os.devnull,
         GIT_AUTHOR_NAME="Code Workshop",
-        GIT_AUTHOR_EMAIL="workshop@dyflow.local",
+        GIT_AUTHOR_EMAIL="workshop@openstategraph.local",
         GIT_COMMITTER_NAME="Code Workshop",
-        GIT_COMMITTER_EMAIL="workshop@dyflow.local",
+        GIT_COMMITTER_EMAIL="workshop@openstategraph.local",
     )
     return env
 

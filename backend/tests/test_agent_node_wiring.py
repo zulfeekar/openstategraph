@@ -9,10 +9,10 @@ did anything), and ``tier: "deep"`` selects ``create_deep_agent`` for the
 
 from __future__ import annotations
 
-import dyflow.abc.agent as agent_module
-from dyflow.abc.agent import DeepAgentNode, ReactAgentNode
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import CompiledPlan
+import openstategraph.abc.agent as agent_module
+from openstategraph.abc.agent import DeepAgentNode, ReactAgentNode
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import CompiledPlan
 
 
 class RecordingNode(ReactAgentNode):

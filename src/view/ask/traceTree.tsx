@@ -63,7 +63,7 @@ export function exportTrace(turn: {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'dyflow-trace.json';
+  a.download = 'openstategraph-trace.json';
   a.click();
   URL.revokeObjectURL(url);
 }

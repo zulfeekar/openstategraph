@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dyflow.prebuilt_web import WebFetchTool, WebSearchTool, _blocked_host
+from openstategraph.prebuilt_web import WebFetchTool, WebSearchTool, _blocked_host
 
 FAKE_RESULTS = '''
 <a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Fpage">Example <b>Title</b></a>
@@ -44,14 +44,14 @@ class TestSsrfGuard:
         assert _blocked_host(host) is True
 
     def test_the_real_fetcher_refuses_non_http_schemes(self) -> None:
-        from dyflow.prebuilt_web import _get
+        from openstategraph.prebuilt_web import _get
         with pytest.raises(ValueError):
             _get("file:///etc/passwd")
 
 
 class TestRedirectGuard:
     def test_a_redirect_to_an_internal_host_is_refused(self) -> None:
-        from dyflow.prebuilt_web import _GuardedRedirects
+        from openstategraph.prebuilt_web import _GuardedRedirects
         with pytest.raises(ValueError):
             _GuardedRedirects().redirect_request(
                 None, None, 302, "Found", {}, "http://127.0.0.1/latest/meta-data")

@@ -1,4 +1,4 @@
-# Contributing to Dyflow
+# Contributing to OpenStateGraph
 
 Two stacks, one repo: a TypeScript editor (`src/`) and a Python LangGraph
 runtime (`backend/`). Architecture rules live in `CLAUDE.md` — read the
@@ -10,7 +10,7 @@ runtime (`backend/`). Architecture rules live in `CLAUDE.md` — read the
 npm install && npm run dev                 # editor → http://localhost:5273
 pip install -e backend[dev]                # runtime deps
 PYTHONPATH=backend:workflows/chinook-nl-to-sql \
-  uvicorn dyflow.api.main:app --port 8000 --app-dir backend
+  uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 ```
 
 No API keys required: the editor runs on a deterministic Mock provider, the

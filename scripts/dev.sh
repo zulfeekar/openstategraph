@@ -28,9 +28,9 @@ stop_all() {
   # period: uvicorn's graceful shutdown waits for in-flight requests, and a
   # long-running SSE stream keeps it draining forever with the listener
   # already closed (observed live: port dead, process alive for minutes).
-  pkill -f "uvicorn dyflow.api.main:app" 2>/dev/null
+  pkill -f "uvicorn openstategraph.api.main:app" 2>/dev/null
   sleep 3
-  pkill -9 -f "uvicorn dyflow.api.main:app" 2>/dev/null
+  pkill -9 -f "uvicorn openstategraph.api.main:app" 2>/dev/null
   exit 0
 }
 [ "${1:-}" = "stop" ] && stop_all
@@ -54,7 +54,7 @@ supervise() { # name, command...
 
 cd "$ROOT"
 PYTHONPATH="backend:workflows/chinook-nl-to-sql" SSL_CERT_FILE="${CERT_FILE}" \
-  supervise backend python3 -m uvicorn dyflow.api.main:app --port 8000 --app-dir backend
+  supervise backend python3 -m uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 supervise vite npm run dev
 
 echo

@@ -1,6 +1,6 @@
 # Wiki brief
 
-Audience: coding agents (and the Dyflow runtime's own read-only concierge
+Audience: coding agents (and the OpenStateGraph runtime's own read-only concierge
 tools) plus OSS contributors. Document:
 
 - The architecture: the compile seam (workflow.json → LangGraph StateGraph),

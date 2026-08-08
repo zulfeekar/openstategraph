@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 #: Ships with the workflow, beside the tools that read it.
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "Chinook_Sqlite.sqlite"

@@ -31,7 +31,7 @@ from fastapi.responses import StreamingResponse
 # `basicConfig` is a no-op if the root logger already has handlers (e.g. under
 # pytest, or when `uvicorn --log-config` sets its own), so this is safe to call
 # unconditionally rather than guessing whether we're the entrypoint.
-logging.basicConfig(level=os.getenv("DYFLOW_LOG_LEVEL", "INFO"))
+logging.basicConfig(level=os.getenv("OPENSTATEGRAPH_LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
@@ -52,19 +52,19 @@ from langgraph.checkpoint.memory import InMemorySaver
 _HUMAN_IN_THE_LOOP_CHECKPOINTER = InMemorySaver()
 
 
-from dyflow.api.model_resolution import (  # noqa: E402
+from openstategraph.api.model_resolution import (  # noqa: E402
     OLLAMA_CLOUD_MODEL,
     GraphFactory,
     resolve_model,
     workflow_default_model,
 )
-from dyflow.api.registries import (  # noqa: E402
+from openstategraph.api.registries import (  # noqa: E402
     _document_of,
     build_function_registry,
     build_tool_registry,
     runtime_warnings,
 )
-from dyflow.api.schemas import (  # noqa: E402
+from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
     AskResponse,
     CapabilitiesResponse,
@@ -77,7 +77,7 @@ from dyflow.api.schemas import (  # noqa: E402
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
-from dyflow.api.streaming import _coerce_update, _sse, _stream_run  # noqa: E402, F401  (underscored names re-exported for tests)
+from openstategraph.api.streaming import _coerce_update, _sse, _stream_run  # noqa: E402, F401  (underscored names re-exported for tests)
 
 def _default_factory(model: str) -> Any:
     from graph import build_live_graph
@@ -97,7 +97,7 @@ def create_app(
     isolated `workflows_root` so a test never touches the real `workflows/`
     tree at the repo root.
     """
-    from dyflow.api.workflow_store import WorkflowStore
+    from openstategraph.api.workflow_store import WorkflowStore
 
     factory = graph_factory or _default_factory
     workflow_store = WorkflowStore(root=workflows_root)
@@ -108,7 +108,7 @@ def create_app(
     def runtime_for(slug: str | None, document: dict[str, Any], model: Any) -> Any:
         """One NodeRuntime construction shared by run/stream/resume, so the
         three endpoints can never disagree about capabilities again."""
-        from dyflow.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
+        from openstategraph.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
 
         return NodeRuntime(services=RuntimeServices(
             model=model,
@@ -131,14 +131,14 @@ def create_app(
                 discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
             ),
         ))
-    from dyflow.api.capability_discovery import discover_middlewares, discover_skills
-    from dyflow.memory import build_store, checkpointer_for
+    from openstategraph.api.capability_discovery import discover_middlewares, discover_skills
+    from openstategraph.memory import build_store, checkpointer_for
 
     #: Long-term memory, process-wide (ticket 65): one Store shared by every
     #: run, namespaced per user inside the tools themselves.
     memory_store = build_store()
 
-    app = FastAPI(title="Dyflow runtime", version="0.1.0")
+    app = FastAPI(title="OpenStateGraph runtime", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -151,7 +151,7 @@ def create_app(
         """The customer chat surface (ticket 64) — one self-contained page."""
         from fastapi.responses import HTMLResponse
 
-        from dyflow.api.chat_page import CHAT_PAGE
+        from openstategraph.api.chat_page import CHAT_PAGE
 
         return HTMLResponse(CHAT_PAGE)
 
@@ -166,10 +166,10 @@ def create_app(
         prevents: an editable field pre-filled with the output contract,
         cleared by the first person who wrote their own rules.
         """
-        from dyflow.abc.agent import BaseAgentNode
-        from dyflow.abc.grader import BaseGrader
-        from dyflow.abc.orchestrator import BaseOrchestrator
-        from dyflow.abc.router import BaseRouter
+        from openstategraph.abc.agent import BaseAgentNode
+        from openstategraph.abc.grader import BaseGrader
+        from openstategraph.abc.orchestrator import BaseOrchestrator
+        from openstategraph.abc.router import BaseRouter
 
         return {
             "agent.llm": {
@@ -215,7 +215,7 @@ def create_app(
 
     @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
     def list_workflows() -> list[WorkflowSummaryResponse]:
-        from dyflow.api.workflow_store import WorkflowSummary, validate_package
+        from openstategraph.api.workflow_store import WorkflowSummary, validate_package
 
         def to_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
             return WorkflowSummaryResponse(
@@ -228,7 +228,7 @@ def create_app(
 
     @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
     def get_workflow(slug: str) -> WorkflowDocumentResponse:
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
             document = workflow_store.load(slug)
@@ -242,7 +242,7 @@ def create_app(
     def save_workflow(slug: str, request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
         from datetime import datetime, timezone
 
-        from dyflow.api.workflow_store import InvalidSlugError
+        from openstategraph.api.workflow_store import InvalidSlugError
 
         try:
             workflow_store.save(
@@ -257,7 +257,7 @@ def create_app(
 
     @app.delete("/api/workflows/{slug}", status_code=204)
     def delete_workflow(slug: str) -> None:
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
             workflow_store.delete(slug)
@@ -274,8 +274,8 @@ def create_app(
         Requires the workflow to already be saved (so its directory exists);
         an unsaved, canvas-only workflow has no folder to scan yet.
         """
-        from dyflow.api.capability_discovery import discover_functions, discover_tools
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from openstategraph.api.capability_discovery import discover_functions, discover_tools
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
             workflow_dir = workflow_store.directory_for(slug)
@@ -307,9 +307,9 @@ def create_app(
         the editor's dual-view ask (ticket 68). Text, never a PNG —
         `draw_mermaid_png()` posts the graph to a third-party API.
         """
-        from dyflow.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
-        from dyflow.compile.node_runtime import RunState
-        from dyflow.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from openstategraph.compile.node_runtime import RunState
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         try:
             document = workflow_store.load(slug)
@@ -332,14 +332,14 @@ def create_app(
     @app.post("/api/runs", response_model=RunResponse)
     def run_workflow(request: RunRequest) -> RunResponse:
         """Compiles and runs a canvas-authored workflow."""
-        from dyflow.compile.node_runtime import RunState
-        from dyflow.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.compile.node_runtime import RunState
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         # Ollama cloud is the default (see `resolve_model`), so a model is
         # always resolved here — never `None`. A document with no
         # model-calling node still runs fine; `init_chat_model` builds a
         # client lazily and nothing calls it until an agent/worker node does.
-        from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+        from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)
@@ -404,14 +404,14 @@ def create_app(
         reducer, not reimplementing new logic, so the two endpoints cannot
         silently disagree about what "the final answer" means.
         """
-        from dyflow.compile.node_runtime import (
+        from openstategraph.compile.node_runtime import (
             RunState,
         )
-        from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
 
         # Ollama cloud is the default (see `resolve_model`) — a model is
         # always resolved, never `None`.
-        from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+        from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)
@@ -474,11 +474,11 @@ def create_app(
         carried — this is what tells the shared checkpointer
         (`_HUMAN_IN_THE_LOOP_CHECKPOINTER`) which paused run to continue.
         """
-        from dyflow.compile.node_runtime import RunState
-        from dyflow.compile.workflow_compiler import WorkflowCompiler, safe_name
+        from openstategraph.compile.node_runtime import RunState
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
         from langgraph.types import Command
 
-        from dyflow.abc.router import BaseRouter  # noqa: F401  (import cost only)
+        from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)

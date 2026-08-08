@@ -85,7 +85,7 @@ export abstract class PaperFeature implements IPaperFeature {
       try {
         this.teardown[i]?.();
       } catch (error) {
-        console.error(`[dyflow] feature "${this.id}" teardown failed`, error);
+        console.error(`[openstategraph] feature "${this.id}" teardown failed`, error);
       }
     }
     this.teardown.length = 0;

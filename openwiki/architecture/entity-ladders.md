@@ -11,15 +11,15 @@ The house shape is **Interface → Abstract → Base → Concrete**
 the abstract holds shared capability, the base holds shared composition, and
 concretes are leaves.
 
-## Python ladders — [`backend/dyflow/abc/`](../../backend/dyflow/abc)
+## Python ladders — [`backend/openstategraph/abc/`](../../backend/openstategraph/abc)
 
 | File | Interface | Abstract / Base | Concrete |
 | --- | --- | --- | --- |
-| [`agent.py`](../../backend/dyflow/abc/agent.py) | `IAgent` | `AbstractAgentNode`, `BaseAgentNode` | `ReactAgentNode`, `DeepAgentNode`, `CustomGraphNode` |
-| [`router.py`](../../backend/dyflow/abc/router.py) | `IRouter` | `BaseRouter` | `Router` |
-| [`grader.py`](../../backend/dyflow/abc/grader.py) | `IGrader` | `BaseGrader` | `Grader` |
-| [`orchestrator.py`](../../backend/dyflow/abc/orchestrator.py) | `IOrchestrator` | `BaseOrchestrator` | `Orchestrator` |
-| [`tool.py`](../../backend/dyflow/abc/tool.py) | `ITool` | `BaseTool` | per-workflow tools |
+| [`agent.py`](../../backend/openstategraph/abc/agent.py) | `IAgent` | `AbstractAgentNode`, `BaseAgentNode` | `ReactAgentNode`, `DeepAgentNode`, `CustomGraphNode` |
+| [`router.py`](../../backend/openstategraph/abc/router.py) | `IRouter` | `BaseRouter` | `Router` |
+| [`grader.py`](../../backend/openstategraph/abc/grader.py) | `IGrader` | `BaseGrader` | `Grader` |
+| [`orchestrator.py`](../../backend/openstategraph/abc/orchestrator.py) | `IOrchestrator` | `BaseOrchestrator` | `Orchestrator` |
+| [`tool.py`](../../backend/openstategraph/abc/tool.py) | `ITool` | `BaseTool` | per-workflow tools |
 
 Interfaces are `Protocol`s, so a plain callable or a third-party object can
 satisfy them without inheriting.
@@ -45,7 +45,7 @@ the graph node dying.
 
 ### Locked prompt sections
 
-`SystemPrompt` ([`prompt.py`](../../backend/dyflow/abc/prompt.py)) composes a
+`SystemPrompt` ([`prompt.py`](../../backend/openstategraph/abc/prompt.py)) composes a
 prompt from a locked machinery part and an editable rules part. The locked
 `PREAMBLE`/`OUTPUT_CONTRACT` of each base is served read-only to the editor by
 `GET /api/node-contracts`, rendered by
@@ -64,7 +64,7 @@ preview engine.
 
 ## The middleware slot table
 
-[`backend/dyflow/abc/middleware.py`](../../backend/dyflow/abc/middleware.py).
+[`backend/openstategraph/abc/middleware.py`](../../backend/openstategraph/abc/middleware.py).
 
 LangChain middleware is a list whose order means **three things at once**:
 `before_*` runs first-to-last, `after_*` runs last-to-first, `wrap_*` nests

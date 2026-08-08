@@ -1,7 +1,7 @@
 [project]
-name = "dyflow-backend"
+name = "openstategraph-backend"
 version = "0.1.0"
-description = "The Python LangGraph/LangChain runtime behind the Dyflow editor."
+description = "The Python LangGraph/LangChain runtime behind the OpenStateGraph editor."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [

@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dyflow.api.capability_discovery import discover_tool_registry, discover_tools
-from dyflow.compile.node_runtime import NodeRuntime
-from dyflow.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.api.capability_discovery import discover_tool_registry, discover_tools
+from openstategraph.compile.node_runtime import NodeRuntime
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 REPO = Path(__file__).resolve().parent.parent.parent
 TABULAR = REPO / "workflows" / "tabular-analytics"
@@ -74,7 +74,7 @@ class TestBoundToolConfiguration:
     def test_chinook_row_cap_still_configures_through_the_generic_hook(self) -> None:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "dyflow_test_chinook_tools",
+            "openstategraph_test_chinook_tools",
             REPO / "workflows" / "chinook-nl-to-sql" / "tools" / "chinook.py",
         )
         module = importlib.util.module_from_spec(spec)

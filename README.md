@@ -1,4 +1,4 @@
-# Dyflow — AI Workflow Builder
+# OpenStateGraph — AI Workflow Builder
 
 A visual AI-agent workflow editor built on the **open-source** JointJS core
 (`@joint/core`, MPL-2.0), reproducing the JointJS+ *AI Workflow Builder* demo
@@ -36,7 +36,7 @@ npm run dev        # http://localhost:5273
 # but Chat and saving workflows both need it)
 cd backend
 pip install -e .
-PYTHONPATH=backend:workflows/chinook-nl-to-sql uvicorn dyflow.api.main:app --port 8000 --app-dir backend
+PYTHONPATH=backend:workflows/chinook-nl-to-sql uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 
 npm run build      # tsc -b && vite build
 npm run typecheck
@@ -46,7 +46,7 @@ Opens on a seeded demo that **runs with no credentials** on the canvas
 preview — the default model there is `Mock · Offline`, a deterministic
 simulator. The real backend, once running, defaults to **Ollama cloud** with
 zero configuration (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` override it if set —
-see `resolve_model` in `backend/dyflow/api/main.py`).
+see `resolve_model` in `backend/openstategraph/api/main.py`).
 
 ### Environment variables
 
@@ -57,7 +57,7 @@ of these for the backend process:
 | --- | --- |
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
-| `DYFLOW_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
+| `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
 
 The canvas-preview providers (Anthropic/OpenAI/Ollama keys entered in the
 credentials dialog) are separate — see **Providers** below.

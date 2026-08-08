@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import AIMessage
 
-from dyflow.abc.grader import BaseGrader, Grader, IGrader, Verdict
-from dyflow.abc.prompt import SystemPrompt
+from openstategraph.abc.grader import BaseGrader, Grader, IGrader, Verdict
+from openstategraph.abc.prompt import SystemPrompt
 
 
 class FakeModel:
@@ -190,7 +190,7 @@ class TestRubric:
     """Ticket 66 addition: structured rubric rows, composing with criteria."""
 
     def test_rubric_rows_render_as_a_numbered_required_checklist(self) -> None:
-        from dyflow.abc.grader import Grader
+        from openstategraph.abc.grader import Grader
         grader = Grader(rubric=[
             {"criterion": "Cites a figure from the data", "required": True},
             {"criterion": "Under 200 words", "required": False},
@@ -202,7 +202,7 @@ class TestRubric:
     def test_rubric_survives_replace_defaults(self) -> None:
         """The rubric is machinery-rendered structure, not developer rules —
         replacing the default criteria must not silently delete it."""
-        from dyflow.abc.grader import Grader
+        from openstategraph.abc.grader import Grader
         grader = Grader(criteria="- Be concise.", replace_defaults=True,
                         rubric=[{"criterion": "Names the source"}])
         prompt = grader.resolve_system_prompt()
@@ -210,11 +210,11 @@ class TestRubric:
         assert "- Be concise." in prompt
 
     def test_blank_rubric_rows_are_dropped(self) -> None:
-        from dyflow.abc.grader import Grader
+        from openstategraph.abc.grader import Grader
         assert Grader(rubric=[{"criterion": "  "}]).rubric == []
 
     def test_the_output_contract_still_renders_last(self) -> None:
-        from dyflow.abc.grader import Grader
+        from openstategraph.abc.grader import Grader
         grader = Grader(rubric=[{"criterion": "x"}])
         prompt = grader.resolve_system_prompt()
         assert prompt.rstrip().endswith(grader.OUTPUT_CONTRACT.rstrip())

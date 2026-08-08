@@ -1,6 +1,6 @@
 ---
 title: Architecture overview
-description: The two halves of Dyflow, the artefact they meet at, and the module map.
+description: The two halves of OpenStateGraph, the artefact they meet at, and the module map.
 type: page
 ---
 
@@ -11,7 +11,7 @@ Two halves that meet at exactly one artefact: `workflow.json`.
 ```
 src/           TypeScript editor  ──writes──▶  workflows/<slug>/workflow.json
                                                         │
-backend/dyflow  Python runtime    ◀──reads────────────── ┘
+backend/openstategraph  Python runtime    ◀──reads────────────── ┘
                                    compiles → LangGraph StateGraph
 ```
 
@@ -35,31 +35,31 @@ Every extension point is a `Registry<T>`
 file that knows the whole node catalogue is
 [`src/nodes/index.ts`](../../src/nodes/index.ts).
 
-## Backend (`backend/dyflow/`)
+## Backend (`backend/openstategraph/`)
 
 | Module | Responsibility |
 | --- | --- |
-| [`abc/`](../../backend/dyflow/abc) | the entity ladders — agent, router, grader, orchestrator, tool, prompt, middleware slot table |
-| [`compile/workflow_compiler.py`](../../backend/dyflow/compile/workflow_compiler.py) | document → `CompiledPlan` → `StateGraph` |
-| [`compile/node_runtime.py`](../../backend/dyflow/compile/node_runtime.py) | `RunState` + a builder per node type |
-| [`api/main.py`](../../backend/dyflow/api/main.py) | FastAPI app: runs, streaming, resume, capabilities, `/chat` |
-| [`api/workflow_store.py`](../../backend/dyflow/api/workflow_store.py) | file-backed CRUD + `validate_package` |
-| [`api/capability_discovery.py`](../../backend/dyflow/api/capability_discovery.py) | tools / functions / skills / middlewares discovered per package |
-| [`memory.py`](../../backend/dyflow/memory.py) | Store, checkpointers, memory tools |
+| [`abc/`](../../backend/openstategraph/abc) | the entity ladders — agent, router, grader, orchestrator, tool, prompt, middleware slot table |
+| [`compile/workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py) | document → `CompiledPlan` → `StateGraph` |
+| [`compile/node_runtime.py`](../../backend/openstategraph/compile/node_runtime.py) | `RunState` + a builder per node type |
+| [`api/main.py`](../../backend/openstategraph/api/main.py) | FastAPI app: runs, streaming, resume, capabilities, `/chat` |
+| [`api/workflow_store.py`](../../backend/openstategraph/api/workflow_store.py) | file-backed CRUD + `validate_package` |
+| [`api/capability_discovery.py`](../../backend/openstategraph/api/capability_discovery.py) | tools / functions / skills / middlewares discovered per package |
+| [`memory.py`](../../backend/openstategraph/memory.py) | Store, checkpointers, memory tools |
 | `prebuilt_*.py` | shipped tool families (see below) |
 
 ### Prebuilt tool families
 
 | Module | Node types | Purpose |
 | --- | --- | --- |
-| [`prebuilt_sql.py`](../../backend/dyflow/prebuilt_sql.py) | `tool.sql-list-tables`, `tool.sql-get-schema`, `tool.sql-query` | read-only SQLite (`mode=ro`, path jailed to `workflows/`) |
-| [`prebuilt_web.py`](../../backend/dyflow/prebuilt_web.py) | `tool.web-search`, `tool.web-fetch` | keyless search + SSRF-guarded fetch |
-| [`prebuilt_platform.py`](../../backend/dyflow/prebuilt_platform.py) | `tool.platform-list-workflows`, `-describe-workflow`, `-ls`, `-read-file`, `-grep` | read-only platform introspection for the concierge |
-| [`prebuilt_architect.py`](../../backend/dyflow/prebuilt_architect.py) | `tool.validate-workflow` | the compiler exposed as a tool, so an agent can compose-validate-revise |
+| [`prebuilt_sql.py`](../../backend/openstategraph/prebuilt_sql.py) | `tool.sql-list-tables`, `tool.sql-get-schema`, `tool.sql-query` | read-only SQLite (`mode=ro`, path jailed to `workflows/`) |
+| [`prebuilt_web.py`](../../backend/openstategraph/prebuilt_web.py) | `tool.web-search`, `tool.web-fetch` | keyless search + SSRF-guarded fetch |
+| [`prebuilt_platform.py`](../../backend/openstategraph/prebuilt_platform.py) | `tool.platform-list-workflows`, `-describe-workflow`, `-ls`, `-read-file`, `-grep` | read-only platform introspection for the concierge |
+| [`prebuilt_architect.py`](../../backend/openstategraph/prebuilt_architect.py) | `tool.validate-workflow` | the compiler exposed as a tool, so an agent can compose-validate-revise |
 
 ## HTTP surface
 
-Defined in [`api/main.py`](../../backend/dyflow/api/main.py):
+Defined in [`api/main.py`](../../backend/openstategraph/api/main.py):
 
 `GET /api/health` · `GET /api/node-contracts` · `GET /api/workflows` ·
 `GET|PUT|DELETE /api/workflows/{slug}`

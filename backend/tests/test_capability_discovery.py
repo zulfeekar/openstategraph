@@ -10,11 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dyflow.api.capability_discovery import discover_functions, discover_tools
+from openstategraph.api.capability_discovery import discover_functions, discover_tools
 
 
 TOOL_SOURCE = '''\
-from dyflow.abc.tool import BaseTool, ToolResult
+from openstategraph.abc.tool import BaseTool, ToolResult
 from pydantic import BaseModel
 
 
@@ -97,7 +97,7 @@ class TestDiscoverTools:
     def test_the_abstract_base_itself_is_never_discovered(self, tmp_path: Path) -> None:
         write(
             tmp_path / "tools" / "abstract_only.py",
-            "from dyflow.abc.tool import BaseTool\n",
+            "from openstategraph.abc.tool import BaseTool\n",
         )
         assert discover_tools(tmp_path, slug="x") == []
 

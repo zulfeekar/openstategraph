@@ -1,15 +1,15 @@
 ---
 title: The atomic design model
-description: Atoms, molecules, organisms, templates and pages — the official vocabulary for how Dyflow composes, with the real examples.
+description: Atoms, molecules, organisms, templates and pages — the official vocabulary for how OpenStateGraph composes, with the real examples.
 type: page
 ---
 
 # The atomic design model
 
-Dyflow's composition philosophy, named (adopted 2026-08-08; the structure
+OpenStateGraph's composition philosophy, named (adopted 2026-08-08; the structure
 predates the vocabulary):
 
-| Level | In Dyflow | Real examples |
+| Level | In OpenStateGraph | Real examples |
 | --- | --- | --- |
 | **Atoms** | One middleware, one tool, one reducer, one skill file | `SummarizationMiddleware`, `save_memory`, `tool.sql-get-schema`, `skills/join-rules.md` |
 | **Molecules** | A tier's curated preset — atoms in a fixed, meaningful order | the ReAct agent stack, the deep-agent 12-slot preset, the Grader (+rubric), the Router |

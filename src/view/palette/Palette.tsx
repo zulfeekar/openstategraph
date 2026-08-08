@@ -19,7 +19,7 @@ import { resolveIcon } from '@view/icons/iconRegistry';
 import './Palette.css';
 
 /** Custom drag type, so canvas drops can tell a palette drag from a file. */
-export const PALETTE_DRAG_TYPE = 'application/x-dyflow-node-type';
+export const PALETTE_DRAG_TYPE = 'application/x-openstategraph-node-type';
 
 interface PaletteProps {
   onNotify: (message: string) => void;

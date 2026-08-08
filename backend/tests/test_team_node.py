@@ -14,8 +14,8 @@ import sys
 from pathlib import Path
 
 
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 REPO = Path(__file__).resolve().parent.parent.parent
 
@@ -86,7 +86,7 @@ class TestConciergeGateway:
     """Ticket 67: the hidden gateway is well-formed and stays hidden."""
 
     def test_the_concierge_is_not_listed_but_is_loadable(self) -> None:
-        from dyflow.api.workflow_store import WorkflowStore
+        from openstategraph.api.workflow_store import WorkflowStore
         store = WorkflowStore(REPO / "workflows")
         assert "concierge" not in [s.slug for s in store.list()]
         assert store.load("concierge")["name"] == "Concierge (gateway)"  # load() unwraps the envelope
@@ -123,7 +123,7 @@ class TestChildPackageAssets:
     Architect without its interview skill."""
 
     def test_the_child_runtime_gets_the_childs_skills_and_middleware(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime, PackageAssets, RunState
+        from openstategraph.compile.node_runtime import NodeRuntime, PackageAssets, RunState
 
         sentinel_mw = object()
         captured: dict = {}
@@ -147,7 +147,7 @@ class TestChildPackageAssets:
         doc = {"version": 2, "name": "p", "nodes": [
             {"id": "sub1", "type": "workflow.subgraph", "data": {"workflow": "child-flow"}}],
             "edges": []}
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.workflow_compiler import CompiledPlan
         run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
         run(RunState(question="q"))  # type: ignore[typeddict-item]
         assert captured["slug"] == "child-flow"
@@ -156,8 +156,8 @@ class TestChildPackageAssets:
         """Found live: the Architect via the concierge re-asked its interview
         question every turn — child subgraphs were invoked with fresh state."""
         from langchain_core.messages import AIMessage, HumanMessage
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
-        from dyflow.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
 
         captured: dict = {}
 
@@ -166,7 +166,6 @@ class TestChildPackageAssets:
                 captured.update(payload)
                 return {"answer": "ok"}
 
-        import dyflow.compile.node_runtime as nr
         original = WorkflowCompiler.build
         WorkflowCompiler.build = lambda self, *a, **k: SpyGraph()  # type: ignore[method-assign]
         try:
@@ -184,8 +183,8 @@ class TestChildPackageAssets:
 
     def test_the_input_node_does_not_double_record_the_current_turn(self) -> None:
         from langchain_core.messages import HumanMessage
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.workflow_compiler import CompiledPlan
         runtime = NodeRuntime(model=None)
         node = {"id": "in1", "type": "input.text", "data": {}}
         run = runtime.factory({"nodes": [node], "edges": []})("in1", node, CompiledPlan())

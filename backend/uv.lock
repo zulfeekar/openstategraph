@@ -403,7 +403,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dyflow-backend"
+name = "openstategraph-backend"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

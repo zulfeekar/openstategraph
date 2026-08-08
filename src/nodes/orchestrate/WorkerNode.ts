@@ -55,7 +55,7 @@ export const workerNode: INodeDefinition = defineNode(
         // Shown to the supervisor's labelling model alongside the node's
         // title — the description half of the archetype roster. The title
         // itself (slugified) is the dispatch key; see
-        // `backend/dyflow/abc/orchestrator.py`'s `archetype_key`.
+        // `backend/openstategraph/abc/orchestrator.py`'s `archetype_key`.
       },
       {
         kind: 'toggle',

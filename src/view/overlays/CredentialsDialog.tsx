@@ -27,7 +27,7 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog
       title="Models and credentials"
-      subtitle="Dyflow runs offline against mock data by default. Add a key to use a real model."
+      subtitle="OpenStateGraph runs offline against mock data by default. Add a key to use a real model."
       icon={KeyRound}
       onClose={onClose}
       footer={

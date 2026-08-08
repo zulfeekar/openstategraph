@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from dyflow.api.main import create_app
+from openstategraph.api.main import create_app
 
 REPO = Path(__file__).resolve().parent.parent.parent
 
@@ -91,12 +91,12 @@ class TestSlugToolBinding:
 
     @staticmethod
     def _store():
-        from dyflow.api.workflow_store import WorkflowStore
+        from openstategraph.api.workflow_store import WorkflowStore
 
         return WorkflowStore(root=REPO / "workflows")
 
     def test_the_tabular_slug_layers_its_tools_over_the_defaults(self) -> None:
-        from dyflow.api.main import build_tool_registry
+        from openstategraph.api.main import build_tool_registry
 
         registry = build_tool_registry(self._store(), "tabular-analytics")
         # Workflow tools present…
@@ -107,14 +107,14 @@ class TestSlugToolBinding:
         assert "tool.chinook-execute-sql" in registry
 
     def test_no_slug_means_the_default_registry(self) -> None:
-        from dyflow.api.main import build_tool_registry
+        from openstategraph.api.main import build_tool_registry
 
         registry = build_tool_registry(self._store(), None)
         assert "tool.chinook-execute-sql" in registry
         assert "tool.tabular-query" not in registry
 
     def test_an_unknown_slug_degrades_to_defaults_not_an_error(self) -> None:
-        from dyflow.api.main import build_tool_registry
+        from openstategraph.api.main import build_tool_registry
 
         registry = build_tool_registry(self._store(), "definitely-not-a-workflow")
         assert "tool.chinook-execute-sql" in registry
@@ -123,8 +123,8 @@ class TestSlugToolBinding:
         """The end of the chain: a runtime holding the slug registry binds
         `tool.tabular-query` silently — no `unresolved_tools` entry, which is
         the exact signal whose absence meant 'agent answers from memory'."""
-        from dyflow.api.main import build_tool_registry
-        from dyflow.compile.node_runtime import NodeRuntime
+        from openstategraph.api.main import build_tool_registry
+        from openstategraph.compile.node_runtime import NodeRuntime
 
         runtime = NodeRuntime(tools=build_tool_registry(self._store(), "tabular-analytics"))
         runtime._types["t1"] = "tool.tabular-query"

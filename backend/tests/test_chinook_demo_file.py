@@ -26,8 +26,8 @@ from typing import Any, Callable
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from dyflow.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 WORKFLOW_PATH = (
     Path(__file__).resolve().parent.parent.parent / "workflows" / "chinook-nl-to-sql" / "workflow.json"

@@ -40,7 +40,7 @@ def resolve_model(requested: str | None) -> str:
         return "anthropic:claude-haiku-4-5"
     if os.getenv("OPENAI_API_KEY"):
         return "openai:gpt-4.1-mini"
-    return os.getenv("DYFLOW_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
+    return os.getenv("OPENSTATEGRAPH_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
 
 
 #: Injectable so tests can exercise the HTTP layer without a provider.

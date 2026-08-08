@@ -29,7 +29,7 @@ describe('PreferencesStore', () => {
 
   it('treats a corrupt stored value as the default, not an error', () => {
     const storage = memoryStorage();
-    storage.setItem('dyflow.flow-direction', 'diagonal');
+    storage.setItem('openstategraph.flow-direction', 'diagonal');
     expect(new PreferencesStore(storage).flowDirection).toBe('horizontal');
   });
 

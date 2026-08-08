@@ -9,7 +9,7 @@ export const ORCHESTRATOR_TYPE = 'orchestrate.supervisor';
 
 const FIELD_MAX_SUBTASKS = 'maxSubtasks';
 
-/** Mirrors `MAX_SUBTASKS` in `backend/dyflow/abc/orchestrator.py`. */
+/** Mirrors `MAX_SUBTASKS` in `backend/openstategraph/abc/orchestrator.py`. */
 export const DEFAULT_MAX_SUBTASKS = 8;
 
 export class OrchestratorNodeModel extends AbstractNodeModel {
@@ -22,7 +22,7 @@ export class OrchestratorNodeModel extends AbstractNodeModel {
  * Splits one instruction into a bounded list of subtasks and fans them out.
  *
  * Mirrors `IOrchestrator -> BaseOrchestrator -> Orchestrator`
- * (`backend/dyflow/abc/orchestrator.py`) — decomposition is deterministic by
+ * (`backend/openstategraph/abc/orchestrator.py`) — decomposition is deterministic by
  * default (numbered lists, semicolons, "and"), so this node works with no
  * model configuration at all. It never runs the subtasks itself: the
  * `workers` port is a **fan-out declaration**, not control flow, matching

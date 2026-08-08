@@ -25,9 +25,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from dyflow.abc.orchestrator import Archetype, Orchestrator, Subtask, archetype_key
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.abc.orchestrator import Archetype, Orchestrator, Subtask, archetype_key
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 from test_orchestrator_graph import RespondingModel, edge, node
 
@@ -277,8 +277,8 @@ class TestArchetypeDescriptionsAreNeverBlind:
     """Ticket 61: a labelling model can only route what it can see."""
 
     def test_a_worker_with_no_role_is_described_by_its_bound_tools(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime
-        from dyflow.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         doc = {
             "version": 2, "name": "t",

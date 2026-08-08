@@ -20,7 +20,7 @@ const emptyData = (definition: { fields: readonly { key: string; defaultValue?: 
 
 /**
  * The graph-engineering half of the orchestrator ladder
- * (`backend/dyflow/abc/orchestrator.py`): these three node types are what a
+ * (`backend/openstategraph/abc/orchestrator.py`): these three node types are what a
  * developer actually drags onto the canvas to build the fan-out/join
  * documented in `.scratch/fullstack-langgraph/decisions/loop-graph-harness.md`.
  */

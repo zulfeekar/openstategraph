@@ -20,8 +20,8 @@ from typing import Any
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 
 def node(node_id: str, type_: str, **data: Any) -> dict[str, Any]:

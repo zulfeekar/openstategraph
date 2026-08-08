@@ -97,7 +97,7 @@ export class EventBus<M extends EventMap> implements IEventBus<M>, IDisposable {
         try {
           handler(payload);
         } catch (error) {
-          console.error(`[dyflow] handler for "${type}" threw`, error);
+          console.error(`[openstategraph] handler for "${type}" threw`, error);
         }
       }
     }
@@ -105,7 +105,7 @@ export class EventBus<M extends EventMap> implements IEventBus<M>, IDisposable {
       try {
         handler(type, payload);
       } catch (error) {
-        console.error('[dyflow] wildcard handler threw', error);
+        console.error('[openstategraph] wildcard handler threw', error);
       }
     }
   }

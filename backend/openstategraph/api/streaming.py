@@ -8,7 +8,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from dyflow.api.registries import runtime_warnings  # noqa: E402
+from openstategraph.api.registries import runtime_warnings  # noqa: E402
 
 
 def _coerce_update(raw: Any) -> dict[str, Any]:
@@ -61,7 +61,7 @@ def _stream_run(
     never completed; the loop above just stops, indistinguishable from a
     normal finish without this check).
     """
-    from dyflow.compile.node_runtime import keep_latest_nonempty, merge_decisions
+    from openstategraph.compile.node_runtime import keep_latest_nonempty, merge_decisions
 
     answer = ""
     decisions: dict[str, str] = {}

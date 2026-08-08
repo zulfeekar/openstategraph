@@ -13,7 +13,7 @@ A workflow is a **directory**, not a database row:
 
 | Path | Required | Bound by |
 | --- | --- | --- |
-| `workflow.json` | **yes** | [`WorkflowStore`](../../backend/dyflow/api/workflow_store.py) |
+| `workflow.json` | **yes** | [`WorkflowStore`](../../backend/openstategraph/api/workflow_store.py) |
 | `AGENTS.md` | expected (warning if absent) | humans and coding agents |
 | `tools/*.py` | optional | `discover_tool_registry` — keyed by each tool's own `node_type` |
 | `functions/*.py` | optional | `discover_function_callables` — `function.<name>` |
@@ -23,9 +23,9 @@ A workflow is a **directory**, not a database row:
 | `data/` | optional | the workflow's own fixtures/databases |
 
 Discovery lives in
-[`backend/dyflow/api/capability_discovery.py`](../../backend/dyflow/api/capability_discovery.py);
+[`backend/openstategraph/api/capability_discovery.py`](../../backend/openstategraph/api/capability_discovery.py);
 the contract is checked by `validate_package()` in
-[`workflow_store.py`](../../backend/dyflow/api/workflow_store.py) and surfaced
+[`workflow_store.py`](../../backend/openstategraph/api/workflow_store.py) and surfaced
 on the workflow list endpoint as `error: …` / `warning: …` findings.
 
 ## `workflow.json`

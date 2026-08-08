@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 
 class ScriptedModel(GenericFakeChatModel):
@@ -307,7 +307,7 @@ class TestToolBinding:
                 edge("node:agent.llm-1", "result", "node:output.formatted-1", "result"),
             ],
         }
-        from dyflow.compile.node_runtime import chinook_tool_registry
+        from openstategraph.compile.node_runtime import chinook_tool_registry
 
         runtime = NodeRuntime(model=ScriptedModel("ok"), tools=chinook_tool_registry())
         WorkflowCompiler().build(document, RunState, runtime.factory(document))
@@ -359,7 +359,7 @@ class TestToolBinding:
                 edge("node:agent.llm-1", "result", "node:output.formatted-1", "result"),
             ],
         }
-        from dyflow.compile.node_runtime import chinook_tool_registry
+        from openstategraph.compile.node_runtime import chinook_tool_registry
 
         runtime = NodeRuntime(model=ScriptedModel("ok"), tools=chinook_tool_registry())
         runtime.factory(document)
@@ -528,8 +528,8 @@ class TestConversationMemory:
 
     def _run_agent(self, monkeypatch, state_messages):
         from langchain_core.messages import AIMessage
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.workflow_compiler import CompiledPlan
 
         captured: dict = {}
 
@@ -575,24 +575,24 @@ class TestCentralThreadRecord:
     answer — history exists on every path, supervisor branches included."""
 
     def _node(self, runtime, node):
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.workflow_compiler import CompiledPlan
         return runtime.factory({"nodes": [node], "edges": []})(node["id"], node, CompiledPlan())
 
     def test_the_input_node_records_the_user_turn(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
         run = self._node(NodeRuntime(model=None), {"id": "in1", "type": "input.text", "data": {}})
         update = run(RunState(question="what is the weather?"))  # type: ignore[typeddict-item]
         assert [m.content for m in update["messages"]] == ["what is the weather?"]
 
     def test_the_output_node_records_the_answer(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
         run = self._node(NodeRuntime(model=None), {"id": "out1", "type": "output.formatted", "data": {}})
         update = run(RunState(question="q", answer="the forecast", outputs={}))  # type: ignore[typeddict-item]
         assert [m.content for m in update["messages"]] == ["the forecast"]
 
     def test_interpreting_nodes_see_the_conversation_not_the_fragment(self) -> None:
         from langchain_core.messages import AIMessage, HumanMessage
-        from dyflow.compile.node_runtime import RunState, _thread_question
+        from openstategraph.compile.node_runtime import RunState, _thread_question
         state = RunState(  # type: ignore[typeddict-item]
             question="oslo",
             messages=[

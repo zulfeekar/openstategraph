@@ -33,8 +33,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
-from dyflow.abc.middleware import MiddlewareSlotTable
-from dyflow.abc.prompt import SystemPrompt
+from openstategraph.abc.middleware import MiddlewareSlotTable
+from openstategraph.abc.prompt import SystemPrompt
 
 
 @runtime_checkable

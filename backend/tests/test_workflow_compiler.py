@@ -22,7 +22,7 @@ _SKIP_IF_OLD = pytest.mark.skipif(
     reason="`set_node_defaults`/`error_handler` require `langgraph>=1.2`",
 )
 
-from dyflow.compile.workflow_compiler import (
+from openstategraph.compile.workflow_compiler import (
     CompiledPlan,
     WorkflowCompiler,
     default_port_resolver,
@@ -282,7 +282,7 @@ class TestPortResolution:
         # The duplication with the TypeScript catalogue is deliberate and
         # temporary (ticket 02). It must be replaceable without touching the
         # compiler, or it becomes permanent.
-        from dyflow.compile.workflow_compiler import PortSpec
+        from openstategraph.compile.workflow_compiler import PortSpec
 
         calls: list[tuple[str, str]] = []
 

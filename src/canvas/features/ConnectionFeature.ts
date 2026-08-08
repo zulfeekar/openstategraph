@@ -34,7 +34,7 @@ export class ConnectionFeature extends PaperFeature {
 
       // The temporary link is discarded either way; a real edge only exists
       // if the controller accepts the connection.
-      view.model.remove({ dyflowTemp: true });
+      view.model.remove({ openstategraphTemp: true });
 
       if (!source || !target) return;
 

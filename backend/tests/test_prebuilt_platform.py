@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dyflow.prebuilt_platform import (
+from openstategraph.prebuilt_platform import (
     DescribeWorkflowTool,
     ListWorkflowsTool,
     PlatformGrepTool,
@@ -32,7 +32,7 @@ class TestReadOnlyJail:
         listing = PlatformLsTool().run(path=".")
         assert listing.error is None and "workflows/" in listing.content
         readme = PlatformReadTool().run(path="README.md")
-        assert readme.error is None and "Dyflow" in readme.content
+        assert readme.error is None and "OpenStateGraph" in readme.content
 
     def test_escapes_are_refused(self) -> None:
         assert PlatformLsTool().run(path="../..").error is not None
@@ -40,7 +40,7 @@ class TestReadOnlyJail:
         assert PlatformReadTool().run(path=".git/config").error is not None
 
     def test_grep_finds_and_caps(self) -> None:
-        result = PlatformGrepTool().run(pattern="StateGraph", path="backend/dyflow")
+        result = PlatformGrepTool().run(pattern="StateGraph", path="backend/openstategraph")
         assert result.error is None
         assert "workflow_compiler" in result.content
 

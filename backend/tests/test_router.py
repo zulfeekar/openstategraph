@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import AIMessage
 
-from dyflow.abc.router import BaseRouter, Classification, IRouter, Router
+from openstategraph.abc.router import BaseRouter, Classification, IRouter, Router
 
 BRANCHES = ["dataquery", "info", "help", "greeting", "off_topic"]
 

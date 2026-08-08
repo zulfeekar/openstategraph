@@ -21,7 +21,7 @@ import duckdb
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 #: Default data directory — ships with the workflow
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"

@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, ToolResult
+from openstategraph.abc.tool import BaseTool, ToolResult
 
 #: Node types the runtime genuinely implements. Kept as data so the check
 #: below cannot drift from `NodeRuntime._builders` silently — the test pins
@@ -57,7 +57,7 @@ class ValidateWorkflowTool(BaseTool):
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, ValidateArgs)
-        from dyflow.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         try:
             document = json.loads(args.document)

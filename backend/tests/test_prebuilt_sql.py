@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dyflow.prebuilt_sql import SqlGetSchemaTool, SqlListTablesTool, SqlQueryTool
+from openstategraph.prebuilt_sql import SqlGetSchemaTool, SqlListTablesTool, SqlQueryTool
 
 CHINOOK = "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
 

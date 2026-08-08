@@ -42,11 +42,11 @@ export class SnaplinesFeature extends PaperFeature {
     this.onGraph('change:position', ((
       element: dia.Element,
       _position: unknown,
-      opt: { ui?: boolean; dyflowFollow?: boolean },
+      opt: { ui?: boolean; openstategraphFollow?: boolean },
     ) => {
       // Only the element under the pointer drives guides; followers and
       // programmatic moves must not.
-      if (!opt?.ui || opt.dyflowFollow) return;
+      if (!opt?.ui || opt.openstategraphFollow) return;
       if (this.dragging?.id !== element.id) return;
       this.update(element);
     }) as never);
@@ -115,7 +115,7 @@ export class SnaplinesFeature extends PaperFeature {
     if (snapDx !== 0 || snapDy !== 0) {
       // `ui: false` keeps this out of the follower logic in DragCommit —
       // it is a correction to the leader, not a new gesture.
-      element.translate(snapDx, snapDy, { dyflowSnap: true });
+      element.translate(snapDx, snapDy, { openstategraphSnap: true });
     }
 
     this.renderGuides(guides);

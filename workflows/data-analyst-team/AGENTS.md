@@ -1,6 +1,6 @@
 # Data Analyst Team (a Team)
 
-A Dyflow **team package** — supervisor + default worker + a grader whose
+A OpenStateGraph **team package** — supervisor + default worker + a grader whose
 criteria are the team's outcome contract. Scaffolded by `scripts/new_team.py`.
 
 - **Mount it**: add a **Team** node in any workflow with slug `data-analyst-team`.

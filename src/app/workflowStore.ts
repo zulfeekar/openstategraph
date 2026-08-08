@@ -12,7 +12,7 @@ import type { WorkflowSerializer } from '@core/serialization/WorkflowSerializer'
  * a node environment, and consequently untested.
  */
 
-export const STORAGE_PREFIX = 'dyflow-workflow-';
+export const STORAGE_PREFIX = 'openstategraph-workflow-';
 
 /** Just the slice of `Storage` used here, so a test can supply a Map. */
 export interface KeyValueStore {

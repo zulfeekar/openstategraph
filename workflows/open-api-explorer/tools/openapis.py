@@ -42,7 +42,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, ToolResult
+from openstategraph.abc.tool import BaseTool, ToolResult
 
 #: One request per tool call, and it should give up before the graph's own
 #: per-node timeout would.
@@ -50,7 +50,7 @@ FETCH_TIMEOUT_SECONDS = 20
 
 #: Wikipedia's API etiquette asks every client for a descriptive User-Agent
 #: with a contact; the other APIs simply ignore it.
-USER_AGENT = "dyflow-open-api-explorer/0.1 (local dev tool; https://github.com/dyflow)"
+USER_AGENT = "openstategraph-open-api-explorer/0.1 (local dev tool; https://github.com/openstategraph)"
 
 #: url -> decoded response body. Raises `FetchError` on any transport or
 #: HTTP-status failure; tools convert that to `ToolResult.failure`.

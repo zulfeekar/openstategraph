@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from dyflow.api.capability_discovery import discover_function_callables
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.api.capability_discovery import discover_function_callables
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 REPO = Path(__file__).resolve().parent.parent.parent
 

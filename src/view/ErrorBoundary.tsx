@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   override componentDidCatch(error: Error, info: { componentStack?: string }): void {
     // The console is still the right place for the full stack — this UI's
     // job is to make sure *something* is visible without opening dev tools.
-    console.error('Dyflow crashed:', error, info.componentStack);
+    console.error('OpenStateGraph crashed:', error, info.componentStack);
   }
 
   override render(): ReactNode {
@@ -42,7 +42,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
           background: '#fff',
         }}
       >
-        <h1 style={{ fontSize: '1.1rem' }}>Dyflow hit an unrecoverable error</h1>
+        <h1 style={{ fontSize: '1.1rem' }}>OpenStateGraph hit an unrecoverable error</h1>
         <p>
           Reloading the page usually clears a bad autosave. If it keeps happening, this is the
           detail to report:

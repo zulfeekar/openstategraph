@@ -32,7 +32,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def _load_module():
-    name = "dyflow_workflow_open_api_explorer_tools_openapis"
+    name = "openstategraph_workflow_open_api_explorer_tools_openapis"
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, WORKFLOW_DIR / "tools" / "openapis.py")

@@ -20,7 +20,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.prompt import SystemPrompt
+from openstategraph.abc.prompt import SystemPrompt
 
 #: A runaway split (a numbered list with 500 items, say) must not fan out to 500
 #: subagents. Bounding here is cheaper and more reliable than trusting the

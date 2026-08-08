@@ -4,7 +4,7 @@ import type { Unsubscribe } from '@core/kernel/Disposable';
 import type { FieldOption } from '@core/model/contracts/fields';
 import { AbstractLLMProvider, type ILLMProvider, type ModelDescriptor } from './ILLMProvider';
 
-const STORAGE_PREFIX = 'dyflow.credentials.';
+const STORAGE_PREFIX = 'openstategraph.credentials.';
 
 interface ProviderEvents extends Record<string, unknown> {
   changed: { providerId: string };

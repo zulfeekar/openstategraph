@@ -32,26 +32,26 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     discovery degrades to the defaults with a log line, never a crash —
     `NodeRuntime.unresolved_tools` keeps missing bindings loud.
     """
-    from dyflow.api.capability_discovery import discover_tool_registry
-    from dyflow.compile.node_runtime import chinook_tool_registry
+    from openstategraph.api.capability_discovery import discover_tool_registry
+    from openstategraph.compile.node_runtime import chinook_tool_registry
 
-    from dyflow.prebuilt_sql import SQL_EXPLORER_TOOLS
+    from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
 
     registry: dict[str, Any] = chinook_tool_registry()
     # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
     # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
     registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
-    from dyflow.prebuilt_platform import PLATFORM_TOOLS
+    from openstategraph.prebuilt_platform import PLATFORM_TOOLS
 
     # Read-only platform introspection (ticket 67, user spec: "no write,
     # everything else") — list/describe workflows, jailed ls/read/grep.
     registry.update({tool.node_type: tool for tool in PLATFORM_TOOLS})
-    from dyflow.prebuilt_web import WEB_TOOLS
+    from openstategraph.prebuilt_web import WEB_TOOLS
 
     # The open web, read-only (search + SSRF-guarded fetch) — the root
     # assistant's generic-chat requirement (ticket 67 refinement).
     registry.update({tool.node_type: tool for tool in WEB_TOOLS})
-    from dyflow.prebuilt_architect import ARCHITECT_TOOLS
+    from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
 
     # The compiler as a tool (ticket 69): read-only compile-checking, the
     # Architect's revise-loop evidence.
@@ -71,7 +71,7 @@ def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, 
     Mirrors `build_tool_registry`: slug-scoped, degrade-loud (the runtime
     records an unresolved function; discovery failures log and return {}).
     """
-    from dyflow.api.capability_discovery import discover_function_callables
+    from openstategraph.api.capability_discovery import discover_function_callables
 
     if not slug:
         return {}

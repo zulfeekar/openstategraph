@@ -1,6 +1,6 @@
 # Security
 
-Dyflow is a local-first development tool; the backend binds to localhost and
+OpenStateGraph is a local-first development tool; the backend binds to localhost and
 has no authentication. Do not expose it to a network as-is.
 
 Known, documented trade-offs:

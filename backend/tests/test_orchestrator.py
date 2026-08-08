@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from dyflow.abc.orchestrator import BaseOrchestrator, MAX_SUBTASKS, Orchestrator, Subtask
+from openstategraph.abc.orchestrator import BaseOrchestrator, MAX_SUBTASKS, Orchestrator, Subtask
 
 
 class TestDeterministicSplit:
@@ -128,19 +128,19 @@ class TestSubtaskHygiene:
     """Ticket 61 residual: fragments carry context, duplicates collapse."""
 
     def test_a_conjunction_fragment_carries_the_parent_instruction(self) -> None:
-        from dyflow.abc.orchestrator import Orchestrator
+        from openstategraph.abc.orchestrator import Orchestrator
         plan = Orchestrator().plan("Compare the current weather in Oslo and Madrid.")
         assert len(plan) == 2
         assert "part of the request" in plan[1].instruction
         assert "Madrid" in plan[1].instruction and "Oslo" in plan[1].instruction
 
     def test_duplicate_pieces_collapse_to_one_dispatch(self) -> None:
-        from dyflow.abc.orchestrator import Orchestrator
+        from openstategraph.abc.orchestrator import Orchestrator
         plan = Orchestrator().plan("check the weather; check the weather; count the tables")
         assert [t.instruction for t in plan][0].startswith("check the weather")
         assert len(plan) == 2
 
     def test_a_single_piece_instruction_is_never_decorated(self) -> None:
-        from dyflow.abc.orchestrator import Orchestrator
+        from openstategraph.abc.orchestrator import Orchestrator
         plan = Orchestrator().plan("Top sellers")
         assert plan[0].instruction == "Top sellers"

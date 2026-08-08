@@ -28,7 +28,7 @@ try {
     el.style.padding = '2rem';
     el.style.color = '#c00';
     const detail = error instanceof Error ? `${error.message}\n${error.stack}` : String(error);
-    el.textContent = `Dyflow failed to start.\n\n${detail}`;
+    el.textContent = `OpenStateGraph failed to start.\n\n${detail}`;
   }
   throw error;
 }
@@ -38,7 +38,7 @@ try {
 // `model.nodeCount` against `graph.getElements().length` is how a model/graph
 // divergence gets found in seconds instead of by bisecting handlers.
 if (import.meta.env.DEV) {
-  (window as unknown as { __dyflow: unknown }).__dyflow = workbench;
+  (window as unknown as { __openstategraph: unknown }).__openstategraph = workbench;
 }
 
 const container = document.getElementById('root');

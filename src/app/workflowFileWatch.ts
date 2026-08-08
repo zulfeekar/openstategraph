@@ -14,7 +14,7 @@ import { registerDiscoveredCapabilities } from '@nodes/workflowScoped';
  * `sessionStorage`, not the model, so a rename changes the display name
  * only, never the directory (ticket 14's identity decision).
  */
-export const CURRENT_SLUG_KEY = 'dyflow-current-workflow-slug';
+export const CURRENT_SLUG_KEY = 'openstategraph-current-workflow-slug';
 
 /**
  * The `savedAt` this tab itself last wrote or read for a slug — a plain

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dyflow.abc.agent import (
+from openstategraph.abc.agent import (
     AbstractAgentNode,
     BaseAgentNode,
     CustomGraphNode,
@@ -23,7 +23,7 @@ from dyflow.abc.agent import (
     ReactAgentNode,
     agent_node_for_tier,
 )
-from dyflow.abc.middleware import MiddlewareSlotTable
+from openstategraph.abc.middleware import MiddlewareSlotTable
 
 
 class FakeMiddleware:

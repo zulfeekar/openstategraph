@@ -14,16 +14,17 @@ the other works.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Annotated, Any, Callable, TypedDict
 
 from langgraph.graph.message import add_messages
 
-from dyflow.abc.grader import Grader
-from dyflow.abc.orchestrator import Orchestrator
-from dyflow.abc.router import Router
-from dyflow.compile.workflow_compiler import CompiledPlan
+from openstategraph.abc.grader import Grader
+from openstategraph.abc.orchestrator import Orchestrator
+from openstategraph.abc.router import Router
+from openstategraph.compile.workflow_compiler import CompiledPlan
 
 
 def merge_decisions(left: dict, right: dict) -> dict:
@@ -117,6 +118,8 @@ class RunState(TypedDict, total=False):
 #: shared catalogue must not accumulate every workflow's tools. Passing an empty
 #: registry is valid: the agent simply gets no tools, which is a degraded run
 #: rather than a crash.
+logger = logging.getLogger(__name__)
+
 ToolRegistry = dict[str, Any]
 
 
@@ -135,7 +138,7 @@ class _DeepAgentAsChatModel:
     """Makes a compiled deep agent look like the chat model `BaseGrader.grade()`
     expects — a bare `.invoke(messages) -> object with .content`.
 
-    `BaseGrader` (`dyflow/abc/grader.py`) is deliberately model-agnostic: it
+    `BaseGrader` (`openstategraph/abc/grader.py`) is deliberately model-agnostic: it
     knows nothing about `create_deep_agent`, tiers, or LangChain harness
     tiers, and should not have to. So the adaptation lives here, at the
     compiler/runtime boundary, rather than teaching the grader ladder about a
@@ -568,7 +571,7 @@ class NodeRuntime:
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """An agent-family loop with the tools the canvas bound to it.
 
-        Construction is delegated to the ladder in `dyflow.abc.agent` — the
+        Construction is delegated to the ladder in `openstategraph.abc.agent` — the
         node's `tier` picks the class, `resolve_prompt()` is the single place
         the authored `systemPrompt` and the wired skill text become a prompt,
         and `resolve_middleware()` flattens into the library's own
@@ -580,7 +583,7 @@ class NodeRuntime:
         `_worker` rebuilds per invocation. A memo keeps the common case (no
         skill wired, context never changes) at one construction total.
         """
-        from dyflow.abc import agent as agent_family
+        from openstategraph.abc import agent as agent_family
         from langchain_core.messages import HumanMessage
 
         # Resolved by the *type* of each bound node, so wiring a tool on the
@@ -595,7 +598,7 @@ class NodeRuntime:
         # agent (ticket 65) — capability by configuration, no per-workflow
         # wiring, matching the minimum-viable-prebuilt rule.
         if self.store is not None:
-            from dyflow.memory import memory_tools
+            from openstategraph.memory import memory_tools
 
             lc_tools.extend(memory_tools())
 
@@ -817,7 +820,7 @@ class NodeRuntime:
         reading exactly what this writes — the same node-decides /
         edge-dispatches split as the router and the grader.
         """
-        from dyflow.abc.orchestrator import Archetype, archetype_key
+        from openstategraph.abc.orchestrator import Archetype, archetype_key
 
         data = node.get("data") or {}
         cap = int(data.get("maxSubtasks") or 8)
@@ -987,7 +990,7 @@ class NodeRuntime:
             # Same ladder as `_agent`: the family owns construction, this
             # factory owns state plumbing. The worker's directive is its
             # *rules* — the editable half of the prompt — with no context.
-            from dyflow.abc import agent as agent_family
+            from openstategraph.abc import agent as agent_family
 
             agent = agent_family.ReactAgentNode(
                 name=f"worker_{node_id}",
@@ -1098,7 +1101,7 @@ class NodeRuntime:
         subagent-isolation rule: a subgraph receives a task and reports a
         result.
         """
-        from dyflow.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         data = node.get("data") or {}
         slug = _text(data, "workflow").strip()
@@ -1170,11 +1173,27 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             if captured is None:
                 return {"outputs": {node_id: ""}}
-            question = (
-                _upstream_text(state, upstream + conditional_upstream)
-                or state.get("answer", "")
-                or state.get("question", "")
-            )
+            plain = _upstream_text(state, upstream)
+            # Conditional feeds split by WHO decided (found across two live
+            # bugs): a ROUTER's output is its own rendered conversation block
+            # — redundant now that real history crosses this boundary, and
+            # forwarding it made the Architect face its dialogue twice and
+            # re-ask its interview question verbatim. A GRADER's or an
+            # approval's conditional edge carries real content (the
+            # candidate under review — the code-workshop's review subgraph
+            # broke the other way when this rule lumped them together).
+            router_sources = [
+                src for src in conditional_upstream
+                if self._types.get(src) == "route.classifier"
+            ]
+            content_sources = [src for src in conditional_upstream if src not in router_sources]
+            routed_content = _upstream_text(state, content_sources)
+            if plain or routed_content:
+                question = plain or routed_content
+            elif router_sources:
+                question = state.get("question", "") or _upstream_text(state, router_sources)
+            else:
+                question = state.get("answer", "") or state.get("question", "")
             final = captured.invoke(
                 {
                     "question": question,

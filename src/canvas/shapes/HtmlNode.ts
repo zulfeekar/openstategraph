@@ -2,8 +2,8 @@ import { dia } from '@joint/core';
 import { NODE } from '@design/tokens';
 import type { Point } from '@core/kernel/geometry';
 
-export const HTML_NODE_TYPE = 'dyflow.HtmlNode';
-export const LINK_TYPE = 'dyflow.Link';
+export const HTML_NODE_TYPE = 'openstategraph.HtmlNode';
+export const LINK_TYPE = 'openstategraph.Link';
 export const PORT_GROUP = 'io';
 
 /**
@@ -156,7 +156,7 @@ export const FlowLink = dia.Link.define(
 
 /** Cell namespace handed to the graph so serialized types resolve. */
 export const CELL_NAMESPACE = {
-  dyflow: { HtmlNode, Link: FlowLink },
+  openstategraph: { HtmlNode, Link: FlowLink },
 };
 
 /* ------------------------------------------------------------------ *

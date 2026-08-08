@@ -1,10 +1,10 @@
 ---
-title: How to extend Dyflow
+title: How to extend OpenStateGraph
 description: Recipes for adding a node type, a tool, a middleware slot, a workflow, and a Team.
 type: page
 ---
 
-# How to extend Dyflow
+# How to extend OpenStateGraph
 
 Every recipe below is a *registration* or a *file drop*. If a change requires
 editing the engine, it is probably the wrong shape.
@@ -24,15 +24,15 @@ builder the compiler can run.
    file that knows the full catalogue. Workflow-scoped types register through
    [`workflowScoped.ts`](../../src/nodes/workflowScoped.ts) instead.
 3. **Backend** — add a `_builder` entry keyed by the type in
-   [`NodeRuntime._builders`](../../backend/dyflow/compile/node_runtime.py).
+   [`NodeRuntime._builders`](../../backend/openstategraph/compile/node_runtime.py).
 4. Declare its ports in `DEFAULT_PORT_SPECS`
-   ([`workflow_compiler.py`](../../backend/dyflow/compile/workflow_compiler.py))
+   ([`workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py))
    — this is what decides whether an incoming edge is control flow or a
    binding. Omitting it does not crash; the node compiles as opaque with
    control-flow edges only.
 5. If the type should be composable by the Workflow Architect, add it to
    `KNOWN_NODE_TYPES` in
-   [`prebuilt_architect.py`](../../backend/dyflow/prebuilt_architect.py) — a
+   [`prebuilt_architect.py`](../../backend/openstategraph/prebuilt_architect.py) — a
    test pins that set against `_builders`.
 
 ## Add a tool
@@ -40,7 +40,7 @@ builder the compiler can run.
 For a tool that belongs to one workflow, no registration is needed at all:
 
 1. Drop a `BaseTool` subclass in `workflows/<slug>/tools/my_tool.py`
-   ([`abc/tool.py`](../../backend/dyflow/abc/tool.py)). Define `Args` as a
+   ([`abc/tool.py`](../../backend/openstategraph/abc/tool.py)). Define `Args` as a
    Pydantic model, return `ToolResult`, and return failures as **data**.
 2. Declare `node_type = "tool.my-thing"` to make it placeable on the canvas —
    that declaration is the wiring identity discovery keys on.
@@ -50,7 +50,7 @@ For a tool that belongs to one workflow, no registration is needed at all:
    no `importlib.reload`).
 
 A tool useful to *every* workflow becomes a `prebuilt_*.py` family beside
-[`prebuilt_sql.py`](../../backend/dyflow/prebuilt_sql.py), plus canvas node
+[`prebuilt_sql.py`](../../backend/openstategraph/prebuilt_sql.py), plus canvas node
 definitions like
 [`PlatformToolsNode.ts`](../../src/nodes/tools/PlatformToolsNode.ts).
 
@@ -68,7 +68,7 @@ slot name**: `summarization.py` replaces the tier's summarization slot; a novel
 name adds a new slot that flattens after the canonical ones. No registration.
 
 To change the canonical order itself, edit `AbstractAgentNode.SLOT_ORDER`
-([`abc/agent.py`](../../backend/dyflow/abc/agent.py)) — and read
+([`abc/agent.py`](../../backend/openstategraph/abc/agent.py)) — and read
 [why order is a slot table](../architecture/entity-ladders.md) first. Never
 expose an ordering number to a user.
 

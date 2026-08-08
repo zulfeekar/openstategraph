@@ -24,7 +24,7 @@ WORKFLOW_DIR = Path(__file__).resolve().parent.parent
 
 
 def _load_workshop_module():
-    name = "dyflow_workflow_code_workshop_tools_workshop"
+    name = "openstategraph_workflow_code_workshop_tools_workshop"
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, WORKFLOW_DIR / "tools" / "workshop.py")

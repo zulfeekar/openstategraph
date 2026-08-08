@@ -20,7 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
 DEFAULT_MAX_ROWS = 200

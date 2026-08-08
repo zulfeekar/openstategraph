@@ -296,5 +296,5 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
   return state;
 }
 
-const SESSION_KEY = 'dyflow-current-workflow-id';
+const SESSION_KEY = 'openstategraph-current-workflow-id';
 const SAVE_DELAY_MS = 1000;

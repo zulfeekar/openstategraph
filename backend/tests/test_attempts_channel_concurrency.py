@@ -18,7 +18,7 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from dyflow.compile.node_runtime import keep_max
+from openstategraph.compile.node_runtime import keep_max
 
 
 class BareState(TypedDict, total=False):
@@ -85,7 +85,7 @@ class TestTheFix:
 
 class TestRunStateDeclaresTheReducer:
     def test_attempts_is_not_a_bare_scalar_field(self) -> None:
-        from dyflow.compile.node_runtime import RunState
+        from openstategraph.compile.node_runtime import RunState
 
         # Guards against a future refactor quietly reverting this to `int`
         # and reintroducing the exact bug this file documents.

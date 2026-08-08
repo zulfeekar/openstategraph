@@ -15,7 +15,7 @@ export interface ClipboardFragment {
   readonly origin: Point;
 }
 
-const CLIPBOARD_MIME = 'application/x-dyflow-fragment';
+const CLIPBOARD_MIME = 'application/x-openstategraph-fragment';
 
 /**
  * Copy / cut / paste of graph fragments.

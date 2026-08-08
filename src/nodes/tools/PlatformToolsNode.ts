@@ -7,7 +7,7 @@ import { AbstractToolNodeModel, defineToolNode } from './AbstractToolNode';
  * The platform + web tool families — generic-tier vocabulary (ticket 67).
  *
  * These implement nothing in the browser: their Python halves
- * (`backend/dyflow/prebuilt_platform.py`, `prebuilt_web.py`) are read-only by
+ * (`backend/openstategraph/prebuilt_platform.py`, `prebuilt_web.py`) are read-only by
  * construction and run behind the runtime. The TS definitions exist so the
  * documents that bind them — the concierge above all — survive the editor:
  * `WorkflowSerializer.fromJSON` silently drops nodes whose type isn't

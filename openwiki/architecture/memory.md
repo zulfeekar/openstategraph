@@ -7,7 +7,7 @@ type: page
 # The memory system
 
 Three kinds, each mapped to the LangGraph construct that owns it. Source:
-[`backend/dyflow/memory.py`](../../backend/dyflow/memory.py).
+[`backend/openstategraph/memory.py`](../../backend/openstategraph/memory.py).
 
 ## Long-term — the `Store`
 
@@ -39,7 +39,7 @@ Three kinds, each mapped to the LangGraph construct that owns it. Source:
 ## Procedural — skills
 
 `workflows/<slug>/skills/*.md` are read by `discover_skills()`
-([`capability_discovery.py`](../../backend/dyflow/api/capability_discovery.py)),
+([`capability_discovery.py`](../../backend/openstategraph/api/capability_discovery.py)),
 concatenated as `## Skill: <stem>` sections, and handed to `NodeRuntime` as
 `skills_context`. Every agent and worker in that workflow receives it as prompt
 *context* — above the developer's rules, below the locked preamble, with

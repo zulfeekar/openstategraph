@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dyflow.prebuilt_architect import KNOWN_NODE_TYPES, ValidateWorkflowTool
+from openstategraph.prebuilt_architect import KNOWN_NODE_TYPES, ValidateWorkflowTool
 
 REPO = Path(__file__).resolve().parent.parent.parent
 
@@ -30,7 +30,7 @@ class TestValidateWorkflowTool:
         assert result.error is not None and "wat.nope" in result.error
 
     def test_known_types_stay_in_lockstep_with_the_runtime(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.node_runtime import NodeRuntime
         runtime_types = set(NodeRuntime(model=None)._builders) | {"workflow.subgraph", "team.workflow"}
         assert runtime_types <= KNOWN_NODE_TYPES | {"input.markdown"}
         assert KNOWN_NODE_TYPES <= runtime_types

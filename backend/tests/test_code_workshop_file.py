@@ -28,9 +28,9 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from dyflow.api.capability_discovery import discover_tool_registry
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.api.capability_discovery import discover_tool_registry
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
 WORKSHOP_DIR = WORKFLOWS_ROOT / "code-workshop"

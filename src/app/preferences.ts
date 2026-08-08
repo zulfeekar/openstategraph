@@ -1,6 +1,6 @@
 import type { FlowDirection } from '@core/model/contracts/ports';
 
-const FLOW_DIRECTION_KEY = 'dyflow.flow-direction';
+const FLOW_DIRECTION_KEY = 'openstategraph.flow-direction';
 
 /**
  * User preferences — chrome-level choices that belong to the person, not the

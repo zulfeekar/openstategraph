@@ -21,9 +21,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from dyflow.abc.router import Branch, Classification, Router
-from dyflow.compile.node_runtime import NodeRuntime, RunState
-from dyflow.compile.workflow_compiler import CompiledPlan
+from openstategraph.abc.router import Branch, Classification, Router
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.workflow_compiler import CompiledPlan
 
 
 class ScriptedModel:

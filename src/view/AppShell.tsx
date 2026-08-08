@@ -23,7 +23,7 @@ import { FileText, MessageSquareText } from 'lucide-react';
 import { IconButton, Icon, Tooltip } from '@design/primitives';
 import './AppShell.css';
 
-const THEME_STORAGE_KEY = 'dyflow.theme';
+const THEME_STORAGE_KEY = 'openstategraph.theme';
 
 /**
  * The application layout.

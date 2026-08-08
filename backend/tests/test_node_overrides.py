@@ -31,7 +31,7 @@ _SKIP_IF_OLD = pytest.mark.skipif(
 )
 from typing_extensions import TypedDict
 
-from dyflow.compile.workflow_compiler import WorkflowCompiler, _node_overrides
+from openstategraph.compile.workflow_compiler import WorkflowCompiler, _node_overrides
 
 
 def node(node_id: str, type_: str, **data: Any) -> dict[str, Any]:
@@ -147,7 +147,7 @@ def test_every_node_gets_the_default_retry_policy_without_graph_defaults() -> No
     """Ticket 61: on langgraph<1.2 (no `set_node_defaults`) the default retry
     policy must still reach every `add_node`, or a transient provider 500
     silently empties a worker's result."""
-    from dyflow.compile.workflow_compiler import WorkflowCompiler
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
     seen: dict[str, object] = {}
 
@@ -160,7 +160,7 @@ def test_every_node_gets_the_default_retry_policy_without_graph_defaults() -> No
         def add_conditional_edges(self, *_a, **_k): ...
         def compile(self, **_k): return self
 
-    import dyflow.compile.workflow_compiler as wc
+    import openstategraph.compile.workflow_compiler as wc
     doc = {
         "version": 2, "name": "t",
         "nodes": [

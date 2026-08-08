@@ -76,7 +76,7 @@ export class DisposableStore implements IDisposable {
         this.items[i]?.dispose();
       } catch (error) {
         // One broken teardown must not orphan the rest.
-        console.error('[dyflow] dispose failed', error);
+        console.error('[openstategraph] dispose failed', error);
       }
     }
     this.items.length = 0;

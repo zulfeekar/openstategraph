@@ -11,7 +11,7 @@ import sqlite3
 
 import pytest
 
-from dyflow.abc.tool import ITool, ToolResult
+from openstategraph.abc.tool import ITool, ToolResult
 from tools.chinook import (
     ExecuteSqlTool,
     GetTableSchemaTool,

@@ -173,7 +173,7 @@ class WorkflowStore:
 def _agents_md(name: str, slug: str) -> str:
     return (
         f"# {name}\n\n"
-        f"A Dyflow workflow. `workflow.json` in this directory is the "
+        f"A OpenStateGraph workflow. `workflow.json` in this directory is the "
         "source of truth for its nodes and edges — edit it through the "
         "editor, not by hand, unless you know the canonical serialization "
         "rules (ticket 19: sorted nodes, content-addressed edges, no "

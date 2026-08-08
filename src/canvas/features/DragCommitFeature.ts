@@ -73,7 +73,7 @@ export class DragCommitFeature extends PaperFeature {
         // Skip embedded children: JointJS already moved them with their
         // parent, and translating again would double the delta.
         if (!other || other.getParentCell()) continue;
-        other.translate(dx, dy, { ui: true, dyflowFollow: true });
+        other.translate(dx, dy, { ui: true, openstategraphFollow: true });
       }
     }) as never);
 

@@ -25,7 +25,7 @@ WORKFLOW_DIR = Path(__file__).resolve().parent.parent
 
 def _load_tabular_module():
     """Import `tools/tabular.py` under a synthetic, collision-free name."""
-    name = "dyflow_workflow_tabular_analytics_tools_tabular"
+    name = "openstategraph_workflow_tabular_analytics_tools_tabular"
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, WORKFLOW_DIR / "tools" / "tabular.py")

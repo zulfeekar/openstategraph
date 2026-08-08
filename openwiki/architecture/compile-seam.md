@@ -6,10 +6,10 @@ type: page
 
 # The compile seam
 
-Source: [`backend/dyflow/compile/workflow_compiler.py`](../../backend/dyflow/compile/workflow_compiler.py)
-and [`backend/dyflow/compile/node_runtime.py`](../../backend/dyflow/compile/node_runtime.py).
+Source: [`backend/openstategraph/compile/workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py)
+and [`backend/openstategraph/compile/node_runtime.py`](../../backend/openstategraph/compile/node_runtime.py).
 
-**Dyflow is a single-target compiler, not a runtime.** The output is a plain
+**OpenStateGraph is a single-target compiler, not a runtime.** The output is a plain
 LangGraph `StateGraph`, so checkpointing, `interrupt()`, `Send` fan-out,
 reducers and streaming are inherited, never reimplemented.
 
@@ -77,7 +77,7 @@ Resolved after the registry, by convention: `workflow.subgraph` and
 package, and finally a passthrough.
 
 `NodeRuntime` is constructed once per request in `runtime_for()`
-([`api/main.py`](../../backend/dyflow/api/main.py)) so run, stream and resume
+([`api/main.py`](../../backend/openstategraph/api/main.py)) so run, stream and resume
 can never disagree about capabilities. It carries the tool/function
 registries, a `document_loader` and `registry_loader` (a child workflow
 resolves tools from *its own* package), the memory `store`, the joined

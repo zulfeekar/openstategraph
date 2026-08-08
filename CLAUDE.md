@@ -1,4 +1,4 @@
-# Dyflow — architecture principles
+# OpenStateGraph — architecture principles
 
 Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph runtime.
 
@@ -265,7 +265,7 @@ A git worktree of this repo must NOT install its own dependencies — each
 copy costs ~420M (`node_modules` 183M + a venv 235M) for nothing. Instead:
 
 ```bash
-ln -s /Users/zulfeekar.cheriyampu/dyflow/node_modules node_modules
+ln -s /Users/zulfeekar.cheriyampu/openstategraph/node_modules node_modules
 ```
 
 and use the system `python3` (the backend's deps are installed user-level;

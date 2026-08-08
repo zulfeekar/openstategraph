@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dyflow.abc.tool import BaseTool
+from openstategraph.abc.tool import BaseTool
 
 logger = logging.getLogger(__name__)
 

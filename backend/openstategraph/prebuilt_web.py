@@ -24,9 +24,9 @@ import urllib.request
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.tool import BaseTool, ToolResult
+from openstategraph.abc.tool import BaseTool, ToolResult
 
-USER_AGENT = "dyflow/0.1 (+local dev tool)"
+USER_AGENT = "openstategraph/0.1 (+local dev tool)"
 FETCH_TIMEOUT = 15
 MAX_FETCH_CHARS = 8_000
 MAX_RESULTS = 6

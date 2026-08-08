@@ -7,7 +7,7 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.store.memory import InMemoryStore
 
-from dyflow.memory import USER_MEMORY_NAMESPACE, checkpointer_for, memory_tools
+from openstategraph.memory import USER_MEMORY_NAMESPACE, checkpointer_for, memory_tools
 
 
 class S(TypedDict, total=False):
@@ -59,8 +59,8 @@ class TestMemoryTools:
 
 class TestAgentsAreMemoryCapable:
     def test_agents_bind_the_memory_tools_when_a_store_exists(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.workflow_compiler import CompiledPlan
 
         runtime = NodeRuntime(model=None, store=InMemoryStore())
         node = {"id": "a1", "type": "agent.llm", "data": {}}
@@ -68,8 +68,8 @@ class TestAgentsAreMemoryCapable:
         assert {"save_memory", "search_memory"} <= set(runtime.last_bound_tools)
 
     def test_no_store_means_no_memory_tools(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime
-        from dyflow.compile.workflow_compiler import CompiledPlan
+        from openstategraph.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.workflow_compiler import CompiledPlan
 
         runtime = NodeRuntime(model=None)
         node = {"id": "a1", "type": "agent.llm", "data": {}}
@@ -94,7 +94,7 @@ class TestWorkflowMiddlewareDiscovery:
     """Ticket 32: middlewares/<slot>.py fills-or-replaces a named slot."""
 
     def test_a_dropped_file_becomes_a_named_slot(self, tmp_path) -> None:
-        from dyflow.api.capability_discovery import discover_middlewares
+        from openstategraph.api.capability_discovery import discover_middlewares
         mw_dir = tmp_path / "middlewares"
         mw_dir.mkdir()
         (mw_dir / "audit.py").write_text("MIDDLEWARE = object()\n")
@@ -102,14 +102,14 @@ class TestWorkflowMiddlewareDiscovery:
         assert set(found) == {"audit"}
 
     def test_a_file_without_MIDDLEWARE_is_skipped_loudly_not_fatally(self, tmp_path) -> None:
-        from dyflow.api.capability_discovery import discover_middlewares
+        from openstategraph.api.capability_discovery import discover_middlewares
         mw_dir = tmp_path / "middlewares"
         mw_dir.mkdir()
         (mw_dir / "broken.py").write_text("x = 1\n")
         assert discover_middlewares(tmp_path, "test-flow") == {}
 
     def test_workflow_slots_reach_every_agents_contributions(self) -> None:
-        from dyflow.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.node_runtime import NodeRuntime
         sentinel = object()
         runtime = NodeRuntime(model=None, workflow_middleware={"audit": sentinel})
         assert runtime.workflow_middleware["audit"] is sentinel

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dyflow Chat</title>
+<title>OpenStateGraph Chat</title>
 <style>
   :root { color-scheme: light dark; --line: #8884; --muted: #888; }
   * { box-sizing: border-box; }
@@ -37,7 +37,7 @@
 </head>
 <body>
 <header>
-  <strong>Dyflow</strong>
+  <strong>OpenStateGraph</strong>
   <select id="wf" title="Workflow"></select>
   <button id="newconv" title="Start a fresh thread">New conversation</button>
   <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
@@ -61,16 +61,16 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const state = {
-  email: localStorage.getItem("dyflow.email") || "",
-  sessionId: sessionStorage.getItem("dyflow.session") || crypto.randomUUID(),
-  threads: JSON.parse(localStorage.getItem("dyflow.threads") || "{}"),
+  email: localStorage.getItem("openstategraph.email") || "",
+  sessionId: sessionStorage.getItem("openstategraph.session") || crypto.randomUUID(),
+  threads: JSON.parse(localStorage.getItem("openstategraph.threads") || "{}"),
   workflow: null, doc: null, pending: null,
 };
-sessionStorage.setItem("dyflow.session", state.sessionId);
+sessionStorage.setItem("openstategraph.session", state.sessionId);
 $("email").value = state.email;
 $("email").onchange = () => {
   state.email = $("email").value.trim() || "anonymous";
-  localStorage.setItem("dyflow.email", state.email);
+  localStorage.setItem("openstategraph.email", state.email);
   $("who").textContent = state.sessionId.slice(0, 8);
 };
 $("who").textContent = state.sessionId.slice(0, 8);
@@ -78,13 +78,13 @@ $("who").textContent = state.sessionId.slice(0, 8);
 function threadFor(slug) {
   if (!state.threads[slug]) {
     state.threads[slug] = crypto.randomUUID();
-    localStorage.setItem("dyflow.threads", JSON.stringify(state.threads));
+    localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
   }
   return state.threads[slug];
 }
 $("newconv").onclick = () => {
   delete state.threads[state.workflow];
-  localStorage.setItem("dyflow.threads", JSON.stringify(state.threads));
+  localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
   $("log").innerHTML = "";
 };
 
@@ -188,7 +188,7 @@ async function loadWorkflows() {
   const list = await (await fetch("/api/workflows")).json();
   // "Auto" is the hidden concierge gateway (ticket 67): a predefined
   // router-of-workflows the customer never has to know about.
-  $("wf").innerHTML = '<option value="concierge">Auto — let Dyflow route</option>'
+  $("wf").innerHTML = '<option value="concierge">Auto — let OpenStateGraph route</option>'
     + list.map((w) => `<option value="${w.slug}">${w.name}</option>`).join("");
   state.workflow = "concierge";
   $("wf").onchange = async () => {

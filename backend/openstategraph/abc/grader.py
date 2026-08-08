@@ -31,7 +31,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from dyflow.abc.prompt import SystemPrompt
+from openstategraph.abc.prompt import SystemPrompt
 
 
 class Verdict(BaseModel):
