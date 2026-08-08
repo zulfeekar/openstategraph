@@ -13,7 +13,7 @@ files, and streams a run back to the chat panel.
 ### Prerequisites
 
 - Node 20+ (developed against Node 22)
-- Python 3.13+
+- Python 3.11+ (developed against 3.12/3.13)
 - No local model runtime needed — the backend defaults to **Ollama cloud**
   (an Ollama account, not a local `ollama serve`; see the "Ollama means
   Ollama cloud" rule in `CLAUDE.md`). A local Ollama daemon only matters if
@@ -90,7 +90,7 @@ in this repo.
 | `ui.Keyboard` | [`canvas/features/KeyboardFeature.ts`](src/canvas/features/KeyboardFeature.ts) — one binding table, shared with the help drawer |
 | `dia.CommandManager` | [`core/commands/CommandStack.ts`](src/core/commands/CommandStack.ts) — undo/redo with coalescing + transactions |
 | `format.*` (PNG/SVG/JSON) | [`view/export/exportWorkflow.ts`](src/view/export/exportWorkflow.ts) |
-| `layout.DirectedGraph` | [`canvas/AutoLayout.ts`](src/canvas/AutoLayout.ts) — dagre via the MIT `@joint/layout-directed-graph` |
+| `layout.DirectedGraph` | [`canvas/AutoLayout.ts`](src/canvas/AutoLayout.ts) — dagre via the MPL-2.0 `@joint/layout-directed-graph` |
 | HTML-in-shape | [`canvas/shapes/HtmlNode.ts`](src/canvas/shapes/HtmlNode.ts) — `foreignObject` + React portals |
 
 ---

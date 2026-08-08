@@ -37,3 +37,5 @@ coverage/
 # Code Workshop workflow — runtime jail and PR dry-run output, never sources
 workflows/code-workshop/scratch/
 workflows/code-workshop/output/
+harness-loop-graph.pdf
+.claude/settings.local.json

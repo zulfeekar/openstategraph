@@ -3,6 +3,7 @@ name = "dyflow-backend"
 version = "0.1.0"
 description = "The Python LangGraph/LangChain runtime behind the Dyflow editor."
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
