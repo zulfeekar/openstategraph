@@ -34,6 +34,7 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- [Chat fidelity](issues/62-chat-markdown-fidelity.md), [trace tree + export](issues/63-execution-trace-tree.md), [customer chat client](issues/64-customer-chat-client.md) — built + live-verified; [memory system research](issues/65-memory-system.md) — Store/checkpointer/skills mapping recorded, feeds ticket 66
 - [Team node implementation](issues/56-team-node-implementation.md) — built + live-verified: `team.workflow` over the subgraph path, `new_team.py` scaffold, `research-team` example
 - [Persistence & durability](issues/47-persistence-memory-durability.md), [coverage](issues/48-coverage-at-leaked-seams.md), [package contract](issues/49-workflow-package-contract.md), [Team node design](issues/52-team-node.md) — decisions recorded 2026-08-08
 - [OSS release](issues/50-oss-release.md) — mechanics shipped (LICENSE, CI, CONTRIBUTING, SECURITY); PDF history purge + .scratch fate are the two human steps

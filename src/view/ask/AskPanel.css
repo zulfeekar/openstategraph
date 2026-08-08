@@ -200,3 +200,44 @@
     transform: translateY(0);
   }
 }
+
+/* Trace tree (ticket 63) */
+.ask__trace-step summary { cursor: pointer; list-style: none; }
+.ask__trace-step summary::-webkit-details-marker { display: none; }
+.ask__activity-row--child {
+  margin-left: 18px;
+  opacity: 0.75;
+  border-left: 1px solid var(--color-border);
+  padding-left: 8px;
+}
+.ask__activity-ms {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ask__activity-count {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.ask__trace-output {
+  margin: 4px 0 8px 18px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-left: 2px solid var(--color-border);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.ask__export {
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.ask__export:hover { color: var(--color-text); }
+.ask__thinking--settled { white-space: normal; }

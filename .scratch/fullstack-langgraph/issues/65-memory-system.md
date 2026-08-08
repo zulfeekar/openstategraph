@@ -1,5 +1,5 @@
 Type: research
-Status: open
+Status: resolved (2026-08-08)
 Blocked by:
 
 ## Question
@@ -13,3 +13,7 @@ skills/instructions the agent retrieves, cf. deepagents skills +
 concrete LangGraph construct, where namespaces come from
 (`user_email`/`session_id`/`thread_id`, ticket 64), what is prebuilt vs
 workflow-supplied, and which nodes/middleware slots expose it.
+
+## Resolution
+
+Research complete: [research/65-memory-system.md](../research/65-memory-system.md). One-liners: long-term = Store at compile(store=) namespaced ('memories', user_email); episodic = checkpointer threads + Store-held few-shots; procedural = skills + Store-backed instructions with a reflection node; thread/session never in Store namespaces; memory middleware after prompt caching (validates the slot table); build prebuilt save/search-memory tools next.

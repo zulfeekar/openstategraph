@@ -93,6 +93,12 @@ class RunRequest(BaseModel):
     #: Set by the client on a fresh send; echoed back so a paused run's
     #: eventual resume call can target the same checkpointed thread.
     thread_id: str | None = None
+    #: Customer-client identity (ticket 64): a browser session and the person.
+    #: Neither ever enters a Store namespace by itself — per the memory
+    #: research (ticket 65), `user_email` namespaces long-term memory and
+    #: `thread_id`/`session_id` scope only the checkpointer/config.
+    session_id: str | None = None
+    user_email: str | None = None
     #: The open workflow's slug, when the client knows it. Tools discovered
     #: in that workflow's own `tools/` folder are layered over the defaults,
     #: so a document can bind the tools that live beside it. Optional and
@@ -113,6 +119,8 @@ class ResumeRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     thread_id: str = Field(min_length=1)
+    session_id: str | None = None
+    user_email: str | None = None
     workflow: dict[str, Any]
     decision: Literal["approve", "reject"]
     feedback: str | None = None
@@ -350,6 +358,15 @@ def create_app(
         allow_headers=["content-type"],
     )
 
+    @app.get("/chat", include_in_schema=False)
+    def chat_page() -> Any:
+        """The customer chat surface (ticket 64) — one self-contained page."""
+        from fastapi.responses import HTMLResponse
+
+        from dyflow.api.chat_page import CHAT_PAGE
+
+        return HTMLResponse(CHAT_PAGE)
+
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         # Always true now: Ollama cloud is the default, not an opt-in, so
@@ -569,7 +586,11 @@ def create_app(
         thread_id = request.thread_id or f"run-{id(graph)}-{os.urandom(4).hex()}"
         config = {
             "recursion_limit": request.recursion_limit,
-            "configurable": {"thread_id": thread_id},
+            "configurable": {
+                "thread_id": thread_id,
+                "session_id": request.session_id or "",
+                "user_email": request.user_email or "",
+            },
         }
         graph_input = {
             "question": request.question,
@@ -624,7 +645,11 @@ def create_app(
         node_ids_by_name = {safe_name(n): n for n in plan.nodes}
         config = {
             "recursion_limit": request.recursion_limit,
-            "configurable": {"thread_id": request.thread_id},
+            "configurable": {
+                "thread_id": request.thread_id,
+                "session_id": request.session_id or "",
+                "user_email": request.user_email or "",
+            },
         }
         resume_value: dict[str, Any] = {"decision": request.decision}
         if request.feedback:
@@ -753,19 +778,21 @@ def _stream_run(
                         attempts = int(update["attempts"])
                     task_ids = list((update.get("worker_results") or {}).keys())
                     # Internal frames — `model`, `tools`, a middleware's own
-                    # node — are real LangGraph nodes inside an agent's
-                    # compiled loop, but they are not canvas nodes, and the
-                    # activity feed treating them as such reads as noise
-                    # (ticket 60). Their state contributions are already
-                    # folded above; only frames naming a canvas node emit.
-                    if node_id not in node_ids_by_name.values():
-                        continue
+                    # node — are real LangGraph steps inside an agent's
+                    # compiled loop, but not canvas nodes. They are emitted
+                    # *tagged* (`internal: true`) rather than dropped: the
+                    # flat activity feed ignores them, and the trace tree
+                    # (ticket 63) nests them under their owning canvas node —
+                    # which is exactly where a LangSmith-style view wants
+                    # them.
+                    is_internal = node_id not in node_ids_by_name.values()
                     yield _sse(
                         "update",
                         {
                             "node": node_id,
                             "namespace": list(namespace),
                             "taskId": task_ids[0] if task_ids else None,
+                            "internal": is_internal,
                             "output": (update.get("outputs") or {}).get(node_id)
                             or (update.get("worker_results") or {}).get(
                                 task_ids[0] if task_ids else "", None

@@ -1,5 +1,5 @@
 Type: task
-Status: open — claimed 2026-08-08
+Status: resolved (2026-08-08)
 
 ## Question
 
@@ -9,3 +9,7 @@ renders raw: streamed `thinking` tokens (deliberately preformatted — is that
 the complaint?), activity lines, error blocks, tables mid-stream. Fix so
 every model-authored surface renders markdown, with code blocks and tables
 styled, while the raw-token stream stays legible during streaming.
+
+## Resolution
+
+Streaming keeps the raw `<pre>` token feed (legible mid-arrival); a settled turn re-renders thinking through RichText — every model-authored surface is now GFM.

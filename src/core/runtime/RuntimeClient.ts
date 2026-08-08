@@ -88,6 +88,10 @@ export type RunStreamEvent =
       readonly node: string;
       readonly namespace: readonly string[];
       readonly taskId: string | null;
+      /** True for steps inside a node's own compiled loop (model calls,
+       * tool executions, middleware hooks) — trace-tree children, never
+       * flat-feed rows. */
+      readonly internal: boolean;
       readonly output: string | null;
     }
   | {
@@ -250,6 +254,7 @@ export class RuntimeClient implements IRuntimeClient {
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
           taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
+          internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
         });
       } else if (eventName === 'token') {
