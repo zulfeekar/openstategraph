@@ -129,7 +129,6 @@ class TestMemoryScopes:
         assert store.search(("workflow-memory", "tabular-analytics"))
 
     def test_search_reads_all_scopes_and_labels_provenance(self) -> None:
-        from dyflow.memory import APP_NAMESPACE
         store = InMemoryStore()
         save, search = memory_tools()
         config = {"configurable": {"thread_id": "t", "user_email": "a@x.com",

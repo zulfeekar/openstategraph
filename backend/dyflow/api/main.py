@@ -19,16 +19,14 @@ model.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 # `basicConfig` is a no-op if the root logger already has handlers (e.g. under
 # pytest, or when `uvicorn --log-config` sets its own), so this is safe to call
@@ -53,294 +51,39 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 _HUMAN_IN_THE_LOOP_CHECKPOINTER = InMemorySaver()
 
-#: The Ollama model to use — a **cloud** model, never a local one.
-#:
-#: Standing project instruction: local models are not performant enough for this
-#: workload, and the evidence is direct. `llama3.1:8b` locally could not hold
-#: structured output at all, took minutes per run, and produced a confidently
-#: wrong answer about global music revenue when asked a database question. The
-#: same workflow on `gpt-oss:120b-cloud` wrote a correct two-join `GROUP BY` and
-#: answered in 23s.
-#:
-#: So a bare `ollama:` fallback must resolve to cloud. Anyone wanting a local
-#: model has to name it explicitly in the request, which is the right amount of
-#: friction for a choice that changes the result this much.
-OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
 
-class AskRequest(BaseModel):
-    model_config = {"extra": "forbid"}
-
-    question: str = Field(min_length=1, description="A natural-language question.")
-    #: Provider-prefixed, e.g. `anthropic:claude-haiku-4-5` or `ollama:llama3.1:8b`.
-    model: str | None = None
-    #: Superstep budget, **not** an iteration count. See graph.py.
-    recursion_limit: int = Field(default=50, ge=10, le=1000)
-
-
-class RunRequest(BaseModel):
-    """Run **the posted document**, not a server-side graph.
-
-    This is what makes the editor's Run button honest: the workflow the developer
-    can see on the canvas is the workflow that executes. The document is
-    vendor-neutral `workflow.json`, so the compile seam stays one-directional.
-    """
-
-    model_config = {"extra": "forbid"}
-
-    workflow: dict[str, Any] = Field(description="A workflow.json document.")
-    question: str = Field(min_length=1)
-    model: str | None = None
-    recursion_limit: int = Field(default=50, ge=10, le=1000)
-    #: Set by the client on a fresh send; echoed back so a paused run's
-    #: eventual resume call can target the same checkpointed thread.
-    thread_id: str | None = None
-    #: Customer-client identity (ticket 64): a browser session and the person.
-    #: Neither ever enters a Store namespace by itself — per the memory
-    #: research (ticket 65), `user_email` namespaces long-term memory and
-    #: `thread_id`/`session_id` scope only the checkpointer/config.
-    session_id: str | None = None
-    user_email: str | None = None
-    #: The open workflow's slug, when the client knows it. Tools discovered
-    #: in that workflow's own `tools/` folder are layered over the defaults,
-    #: so a document can bind the tools that live beside it. Optional and
-    #: additive — omitting it runs with the default registry, never a crash.
-    workflow_slug: str | None = None
-
-
-class ResumeRequest(BaseModel):
-    """Continues a run a `human.approval` node paused.
-
-    Carries the whole workflow again (not just the thread id) for the same
-    reason `RunRequest` does — the compile seam is one-directional and
-    stateless per call; nothing server-side remembers *which* document a
-    thread belongs to between requests, only the checkpointed graph state
-    LangGraph itself owns.
-    """
-
-    model_config = {"extra": "forbid"}
-
-    thread_id: str = Field(min_length=1)
-    session_id: str | None = None
-    user_email: str | None = None
-    workflow: dict[str, Any]
-    decision: Literal["approve", "reject"]
-    feedback: str | None = None
-    model: str | None = None
-    recursion_limit: int = Field(default=50, ge=10, le=1000)
-    #: Same as `RunRequest.workflow_slug` — and it must exist on BOTH models:
-    #: this class forbids extras, so a client that echoes the slug on resume
-    #: (as ours does) would otherwise be rejected 422 and every approval
-    #: would die at validation. A resumed run must also bind the *same*
-    #: tool set as the run it resumes.
-    workflow_slug: str | None = None
-
-
-class RunResponse(BaseModel):
-    answer: str
-    #: node id -> branch taken, so the editor can highlight the path that ran.
-    decisions: dict[str, str] = {}
-    #: node id -> that node's output, for per-node inspection in the sidebar.
-    outputs: dict[str, str] = {}
-    attempts: int = 0
-    mermaid: str = ""
-    warnings: list[str] = []
-
-
-class SaveWorkflowRequest(BaseModel):
-    """The whole document plus the display name — never the slug: the slug
-    is the URL path parameter, frozen at creation (see `workflow_store.py`).
-    """
-
-    model_config = {"extra": "forbid"}
-
-    name: str = Field(min_length=1)
-    document: dict[str, Any]
-
-
-class WorkflowSummaryResponse(BaseModel):
-    slug: str
-    name: str
-    saved_at: str
-    node_count: int
-    edge_count: int
-    #: Package-contract findings (ticket 49) — "error: ..." / "warning: ...".
-    findings: list[str] = []
-
-
-class WorkflowDocumentResponse(BaseModel):
-    slug: str
-    document: dict[str, Any]
-
-
-class ToolCapabilityResponse(BaseModel):
-    id: str
-    name: str
-    description: str
-    args_schema: dict[str, Any]
-    #: The canvas node type the tool declares (`BaseTool.node_type`); empty
-    #: when the tool is listable but not placeable.
-    node_type: str = ""
-
-
-class FunctionCapabilityResponse(BaseModel):
-    id: str
-    name: str
-    docstring: str
-    signature: str
-
-
-class CapabilitiesResponse(BaseModel):
-    tools: list[ToolCapabilityResponse]
-    functions: list[FunctionCapabilityResponse]
-
-
-class AskResponse(BaseModel):
-    """What the editor renders.
-
-    The SQL and rows are returned alongside the prose deliberately: an answer a
-    developer cannot audit is not much use, and seeing the query is how they tell
-    a right answer from a plausible one.
-    """
-
-    answer: str
-    sql: str
-    rows: str
-    attempts: int
-    passed: bool
-    reason: str
-
-
-def resolve_model(requested: str | None) -> str:
-    """Picks a model, preferring an explicit request.
-
-    **Ollama cloud is the default**, not an opt-in — a developer with neither
-    an Anthropic nor an OpenAI key still gets a working model with zero
-    configuration, because `ollama` authenticates from its own local
-    credentials (verified live: `init_chat_model("ollama:gpt-oss:120b-cloud")`
-    works with no `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`OLLAMA_HOST` env vars
-    set at all). This never falls back to a *local* model — see
-    `OLLAMA_CLOUD_MODEL`'s own comment for why that standing rule exists —
-    and an explicit `model` argument still always wins, so a surprise
-    provider is only possible by asking for one.
-    """
-    if requested:
-        return requested
-    if os.getenv("ANTHROPIC_API_KEY"):
-        return "anthropic:claude-haiku-4-5"
-    if os.getenv("OPENAI_API_KEY"):
-        return "openai:gpt-4.1-mini"
-    return os.getenv("DYFLOW_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
-
-
-#: Injectable so tests can exercise the HTTP layer without a provider.
-GraphFactory = Callable[[str], Any]
-
+from dyflow.api.model_resolution import (  # noqa: E402
+    OLLAMA_CLOUD_MODEL,
+    GraphFactory,
+    resolve_model,
+    workflow_default_model,
+)
+from dyflow.api.registries import (  # noqa: E402
+    _document_of,
+    build_function_registry,
+    build_tool_registry,
+    runtime_warnings,
+)
+from dyflow.api.schemas import (  # noqa: E402
+    AskRequest,
+    AskResponse,
+    CapabilitiesResponse,
+    FunctionCapabilityResponse,
+    ResumeRequest,
+    RunRequest,
+    RunResponse,
+    SaveWorkflowRequest,
+    ToolCapabilityResponse,
+    WorkflowDocumentResponse,
+    WorkflowSummaryResponse,
+)
+from dyflow.api.streaming import _stream_run  # noqa: E402
 
 def _default_factory(model: str) -> Any:
     from graph import build_live_graph
 
     return build_live_graph(model)
 
-
-def _document_of(workflow: dict[str, Any]) -> dict[str, Any]:
-    """Accepts a bare document or the store's `{…, document}` envelope.
-
-    The store saves `{version, name, savedAt, document}`; the editor's export
-    posts the bare document. Both arrive at the run endpoints, and compiling
-    the *envelope* silently produces a zero-node graph — so every endpoint
-    unwraps through this one helper, resume included.
-    """
-    inner = workflow.get("document")
-    return inner if isinstance(inner, dict) else workflow
-
-
-def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
-    """Default tools, with the open workflow's own tools layered over.
-
-    The defaults (Chinook) stay so documents that bind them — the
-    intent-routed demo — keep working from any workflow context. A slug adds
-    that workflow's `tools/`, keyed by each tool's own `node_type`
-    declaration (ticket 33); same-type collisions resolve workflow-wins,
-    mirroring the frontend's local-shadows-global registry rule. A failed
-    discovery degrades to the defaults with a log line, never a crash —
-    `NodeRuntime.unresolved_tools` keeps missing bindings loud.
-    """
-    from dyflow.api.capability_discovery import discover_tool_registry
-    from dyflow.compile.node_runtime import chinook_tool_registry
-
-    from dyflow.prebuilt_sql import SQL_EXPLORER_TOOLS
-
-    registry: dict[str, Any] = chinook_tool_registry()
-    # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
-    # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
-    registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
-    from dyflow.prebuilt_platform import PLATFORM_TOOLS
-
-    # Read-only platform introspection (ticket 67, user spec: "no write,
-    # everything else") — list/describe workflows, jailed ls/read/grep.
-    registry.update({tool.node_type: tool for tool in PLATFORM_TOOLS})
-    from dyflow.prebuilt_web import WEB_TOOLS
-
-    # The open web, read-only (search + SSRF-guarded fetch) — the root
-    # assistant's generic-chat requirement (ticket 67 refinement).
-    registry.update({tool.node_type: tool for tool in WEB_TOOLS})
-    from dyflow.prebuilt_architect import ARCHITECT_TOOLS
-
-    # The compiler as a tool (ticket 69): read-only compile-checking, the
-    # Architect's revise-loop evidence.
-    registry.update({tool.node_type: tool for tool in ARCHITECT_TOOLS})
-    if slug:
-        try:
-            registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
-        except Exception:
-            logger.warning("Tool discovery failed for %r", slug, exc_info=True)
-    return registry
-
-
-def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
-    """`function.<name>` -> callable, from the workflow's own `functions/`.
-
-    Mirrors `build_tool_registry`: slug-scoped, degrade-loud (the runtime
-    records an unresolved function; discovery failures log and return {}).
-    """
-    from dyflow.api.capability_discovery import discover_function_callables
-
-    if not slug:
-        return {}
-    try:
-        return discover_function_callables(workflow_store.directory_for(slug), slug)
-    except Exception:
-        logger.warning("Function discovery failed for %r", slug, exc_info=True)
-        return {}
-
-
-def workflow_default_model(document: dict[str, Any]) -> str | None:
-    """The document's own default model, from `settings.model` (ticket 36)."""
-    settings = document.get("settings")
-    if isinstance(settings, dict):
-        value = settings.get("model")
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def runtime_warnings(runtime: Any) -> list[str]:
-    """Every "this step silently lost a capability" condition, spelled out."""
-    warnings: list[str] = []
-    for tool_type in runtime.unresolved_tools:
-        warnings.append(
-            f'No implementation for tool "{tool_type}" — the agent ran without it, '
-            "so its answer may not be grounded in that data source."
-        )
-    for fn_type in runtime.unresolved_functions:
-        warnings.append(
-            f'No function found for "{fn_type}" — the step passed its input through unchanged.'
-        )
-    for slug_name in runtime.unresolved_subgraphs:
-        warnings.append(
-            f'Subgraph workflow "{slug_name}" could not be loaded — the node produced nothing.'
-        )
-    return warnings
 
 
 def create_app(
@@ -811,154 +554,7 @@ def create_app(
     return app
 
 
-def _coerce_update(raw: Any) -> dict[str, Any]:
-    """A node's contribution to one `updates`-mode chunk, defensively.
 
-    Found live, mid-run, not in any fixture: once `subgraphs=True` is on,
-    LangGraph auto-detects a nested graph invoked *synchronously inside* a
-    plain node (the worker's `create_agent` call, the deep grader's
-    `create_deep_agent` call) and surfaces its own internal steps in the
-    same stream. Some of those steps contribute `None` rather than `{}` for
-    "nothing to report this tick" — every `.get()` on a raw chunk value
-    must go through this first, or the ones that changed it call directly
-    crash on `'NoneType' object has no attribute 'get'`.
-    """
-    return raw if isinstance(raw, dict) else {}
-
-
-def _sse(event: str, data: dict[str, Any]) -> str:
-    """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
-
-    `json.dumps` rather than string interpolation, because a node's output can
-    contain newlines and quotes, and SSE's `data:` line is newline-delimited —
-    an unescaped newline would silently split one event into two.
-    """
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
-
-
-def _stream_run(
-    graph: Any,
-    graph_input: Any,
-    config: dict[str, Any],
-    plan: Any,
-    node_ids_by_name: dict[str, str],
-    runtime: Any,
-    thread_id: str,
-) -> Any:
-    """Drives one `graph.stream()` call and yields SSE frames.
-
-    Shared by `/api/runs/stream` (a fresh run) and `/api/runs/resume` (a
-    run a `human.approval` node paused) — from the frontend's point of
-    view a resume is not a different kind of thing, it is the same stream
-    picking back up with a `Command(resume=...)` for `graph_input` instead
-    of the initial state dict, so both endpoints reuse this one generator
-    and the client's SSE parsing never needs to know which one it got.
-
-    After the stream ends, `graph.get_state(config).next` tells apart "the
-    run actually finished" (empty — nothing left scheduled) from "a
-    `human.approval` node paused it" (non-empty — LangGraph does not raise
-    or emit an `updates` chunk for the interrupted node itself, since it
-    never completed; the loop above just stops, indistinguishable from a
-    normal finish without this check).
-    """
-    from dyflow.compile.node_runtime import keep_latest_nonempty, merge_decisions
-
-    answer = ""
-    decisions: dict[str, str] = {}
-    outputs: dict[str, str] = {}
-    attempts = 0
-
-    try:
-        stream = graph.stream(
-            graph_input,
-            config,
-            stream_mode=["updates", "messages"],
-            subgraphs=True,
-        )
-        for namespace, mode, payload in stream:
-            if mode == "updates":
-                for raw_name, raw_update in payload.items():
-                    update = _coerce_update(raw_update)
-                    node_id = node_ids_by_name.get(raw_name, raw_name)
-                    answer = keep_latest_nonempty(answer, str(update.get("answer") or ""))
-                    decisions = merge_decisions(
-                        decisions, {k: str(v) for k, v in (update.get("decisions") or {}).items()}
-                    )
-                    outputs = merge_decisions(
-                        outputs, {k: str(v) for k, v in (update.get("outputs") or {}).items()}
-                    )
-                    if "attempts" in update:
-                        attempts = int(update["attempts"])
-                    task_ids = list((update.get("worker_results") or {}).keys())
-                    # Internal frames — `model`, `tools`, a middleware's own
-                    # node — are real LangGraph steps inside an agent's
-                    # compiled loop, but not canvas nodes. They are emitted
-                    # *tagged* (`internal: true`) rather than dropped: the
-                    # flat activity feed ignores them, and the trace tree
-                    # (ticket 63) nests them under their owning canvas node —
-                    # which is exactly where a LangSmith-style view wants
-                    # them.
-                    is_internal = node_id not in node_ids_by_name.values()
-                    yield _sse(
-                        "update",
-                        {
-                            "node": node_id,
-                            "namespace": list(namespace),
-                            "taskId": task_ids[0] if task_ids else None,
-                            "internal": is_internal,
-                            "output": (update.get("outputs") or {}).get(node_id)
-                            or (update.get("worker_results") or {}).get(
-                                task_ids[0] if task_ids else "", None
-                            ),
-                        },
-                    )
-            elif mode == "messages":
-                message, metadata = payload
-                content = getattr(message, "content", "")
-                if isinstance(content, str) and content:
-                    raw_name = metadata.get("langgraph_node", "")
-                    yield _sse(
-                        "token",
-                        {
-                            "node": node_ids_by_name.get(raw_name, raw_name),
-                            "namespace": list(namespace),
-                            "content": content,
-                        },
-                    )
-    except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
-        yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
-        return
-
-    snapshot = graph.get_state(config)
-    if snapshot.next:
-        interrupts = snapshot.tasks[0].interrupts if snapshot.tasks else ()
-        payload_value = interrupts[0].value if interrupts else {}
-        yield _sse(
-            "interrupt",
-            {
-                "threadId": thread_id,
-                "message": (payload_value or {}).get("message", "Approval needed"),
-                "candidate": (payload_value or {}).get("candidate", ""),
-            },
-        )
-        return
-
-    warnings = list(plan.warnings) + runtime_warnings(runtime)
-
-    yield _sse(
-        "done",
-        {
-            "answer": answer,
-            "decisions": decisions,
-            "outputs": outputs,
-            "attempts": attempts,
-            "mermaid": graph.get_graph().draw_mermaid(),
-            "warnings": warnings,
-        },
-    )
-
-
-#: For `uvicorn dyflow.api.main:app --reload`.
 app = create_app()
 
 __all__ = [
