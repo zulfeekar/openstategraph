@@ -42,3 +42,7 @@ harness-loop-graph.pdf
 .dev/
 test-results/
 playwright-report/
+
+# Internal planning substrate — local only, never published
+.scratch/
+HANDOVER.md
