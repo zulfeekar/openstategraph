@@ -1,10 +1,10 @@
 # Loop, Graph and Harness engineering — how it maps onto Dyflow
 
-**Source material:** a DevCompass deck (`harness-loop-graph.pdf`, shared by the
-user) plus their two-part "Loop Engineering vs Graph Engineering" articles, and
-an independent findings table the user supplied (symptom → likely fix, a
-production-readiness checklist, and a list of "expensive mistakes"). Read in
-full before writing this.
+**Source material:** third-party reading the user shared for context (a deck
+and two articles on loop-vs-graph engineering, plus a findings checklist).
+The material itself is not in this repository and its passages are not
+reproduced here — this document records only the decisions we took and the
+rules as understood in our own words (scrubbed 2026-08-08 for OSS).
 
 ## The three-layer framework, as given
 
@@ -14,27 +14,24 @@ LOOP    = FEEDBACK      (produce → check against evidence → retry with a rea
 GRAPH   = FLOW          (nodes, edges, branches, joins, cycles, exits — explicit control flow)
 ```
 
-Load-bearing quotes worth keeping verbatim, because they are decision rules, not
-just framing:
+The decision rules we adopted from it, restated in our own words:
 
-- *"A model decides. A harness lets it act. A loop makes it prove the result. A
-  graph controls what is allowed to happen next."*
-- *"Do not loop on confidence. Loop on evidence. 'The agent says it is
-  finished' is not proof."*
-- *"An unbounded retry is not reliability. It is a cost leak. Every loop needs
-  a measurable objective, fresh evidence, maximum attempts, and a named
-  escalation path."*
-- *"Trace first. Formalize second."* — do not convert an imagined process into
-  forty nodes before watching a capable agent do the work.
-- *"State schema — what each node may read or update and how parallel results
-  are merged"* is named explicitly as a **graph-engineering decision**, not an
-  implementation detail.
+- The model makes decisions; the harness gives it the means to act; a loop
+  forces it to prove results; the graph bounds what may happen next.
+- Loops terminate on **evidence**, never on the agent's own confidence.
+- A retry without a measurable objective, fresh evidence, an attempt cap and
+  a named escalation path is a cost leak, not reliability.
+- Trace a capable agent doing the work before formalizing the process into
+  nodes.
+- The state schema — who may write each key, and how parallel writes merge —
+  is a graph-engineering decision in its own right, not an implementation
+  detail.
 
 The nesting matters: **the graph runs inside the harness. The loops run inside
 parts of the graph.** They are not competing designs — a system that gets one
 layer right and starves another still fails, in a specific and diagnosable way
-(their own symptom table: "cannot access the right tool" → harness; "close but
-unreliable" → loop; "specialists must run in order" → graph).
+(symptom triage: missing-tool failures point at the harness; close-but-
+unreliable output points at the loop; ordering problems point at the graph).
 
 ## Where this session had already independently arrived at the same design
 
@@ -42,16 +39,16 @@ This is worth stating plainly: nothing in the shared material contradicted
 architecture already built over prior sessions. It **confirms and names** three
 things that existed under different labels:
 
-| DevCompass term | Already built as |
+| Framework term | Already built as |
 | --- | --- |
 | Harness | `WorkflowCompiler` + `NodeRuntime` + FastAPI seam + real Chinook tools (read-only driver, not string-matched) |
 | Loop | `BaseRouter` / `BaseGrader` — evidence-checked, bounded (`maxAttempts`), feedback-carrying, terminate-with-honesty on exhaustion |
 | Graph | `add_conditional_edges` for router/grader; **`Send` fan-out + reducer join** for the orchestrator (this session's addition) |
 
-The one thing the material sharpened rather than merely confirmed:
-**"the state schema and how parallel results are merged" is graph engineering,
-not an afterthought** — and this session found a real, live bug that is exactly
-that class of oversight (below).
+The one thing the material sharpened rather than merely confirmed: how
+parallel results merge into the state schema is graph engineering, not an
+afterthought — and this session found a real, live bug of exactly that class
+(below).
 
 ## What this session added: the orchestrator, and the fan-out/join primitive
 
@@ -60,9 +57,9 @@ that class of oversight (below).
 instruction into subtasks is mechanical (bound the count, mint an id, never
 produce zero), and only the *decomposition rule* is a legitimate extension
 point. The default is **deterministic** — split on numbered lists, semicolons,
-"and" — rather than model-driven, which is the checklist's own instruction:
-*"keep control model-driven only where a rule cannot express the decision"*,
-and decomposing a punctuated instruction is exactly a rule's job.
+"and" — rather than model-driven, applying the adopted rule that control stays
+rule-based wherever a rule can express the decision; decomposing a punctuated
+instruction is exactly a rule's job.
 
 The graph-engineering half: `WorkflowCompiler` now recognises a `worker`-typed
 port as a **fan-out declaration**, distinct from control flow and from a

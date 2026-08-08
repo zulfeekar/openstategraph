@@ -293,7 +293,7 @@ through the injection point so the seam cannot rot shut (ticket 02 owns generati
 
 ## Orchestrator + `Send` fan-out/join — backend built (ticket 27, 2026-08-05)
 
-Grounded against a shared external framework (a DevCompass "loop/graph/harness"
+Grounded against a shared external framework (a third-party "loop/graph/harness"
 deck the user supplied) before building anything — see
 [the decision doc](decisions/loop-graph-harness.md). It confirmed, rather than
 changed, the architecture already in place: Router/Grader are the loop layer,
