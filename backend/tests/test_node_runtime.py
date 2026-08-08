@@ -521,3 +521,43 @@ class TestPerNodeModelResolution:
         # An unconfigured provider (no API key) must not take the whole run
         # down — the run still produces an answer from the shared default.
         assert runtime._resolve_model({"model": "openai/gpt-4.1-mini"}) is default
+
+
+class TestConversationMemory:
+    """Ticket 73: agents on a continuing thread see prior turns."""
+
+    def _run_agent(self, monkeypatch, state_messages):
+        from langchain_core.messages import AIMessage
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.workflow_compiler import CompiledPlan
+
+        captured: dict = {}
+
+        class FakeAgent:
+            def invoke(self, invocation):
+                captured.update(invocation)
+                return {"messages": [AIMessage(content="answer")]}
+
+        import langchain.agents as agents_module
+        monkeypatch.setattr(agents_module, "create_agent", lambda **kw: FakeAgent())
+
+        runtime = NodeRuntime(model=object())
+        node = {"id": "a1", "type": "agent.llm", "data": {}}
+        run = runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
+        update = run(RunState(question="second question", messages=state_messages))  # type: ignore[typeddict-item]
+        return captured, update
+
+    def test_prior_turns_are_fed_back_to_the_agent(self, monkeypatch) -> None:
+        from langchain_core.messages import AIMessage, HumanMessage
+        history = [HumanMessage(content="first question"), AIMessage(content="first answer")]
+        captured, _ = self._run_agent(monkeypatch, history)
+        contents = [m.content for m in captured["messages"]]
+        assert contents == ["first question", "first answer", "second question"]
+
+    def test_a_fresh_thread_is_single_shot_exactly_as_before(self, monkeypatch) -> None:
+        captured, _ = self._run_agent(monkeypatch, [])
+        assert [m.content for m in captured["messages"]] == ["second question"]
+
+    def test_both_sides_of_the_exchange_persist_for_the_next_send(self, monkeypatch) -> None:
+        _, update = self._run_agent(monkeypatch, [])
+        assert [m.content for m in update["messages"]] == ["second question", "answer"]

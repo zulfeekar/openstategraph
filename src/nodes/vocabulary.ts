@@ -20,8 +20,8 @@ export const CATEGORY = {
 
 export const CATEGORIES: readonly INodeCategory[] = [
   { id: CATEGORY.inputs, label: 'Inputs', order: 10 },
-  { id: CATEGORY.agent, label: 'Agent', order: 20 },
-  { id: CATEGORY.tools, label: 'Tools', order: 30 },
+  { id: CATEGORY.agent, label: 'Agents · molecules', order: 20 },
+  { id: CATEGORY.tools, label: 'Tools · atoms', order: 30 },
   { id: CATEGORY.output, label: 'Output', order: 40 },
   { id: CATEGORY.annotate, label: 'Annotate', order: 50 },
 ];

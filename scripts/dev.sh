@@ -24,8 +24,13 @@ stop_all() {
       echo "stopped $name"
     fi
   done
-  # Belt-and-braces for orphans from older invocations.
+  # Belt-and-braces for orphans — escalate to SIGKILL after a grace
+  # period: uvicorn's graceful shutdown waits for in-flight requests, and a
+  # long-running SSE stream keeps it draining forever with the listener
+  # already closed (observed live: port dead, process alive for minutes).
   pkill -f "uvicorn dyflow.api.main:app" 2>/dev/null
+  sleep 3
+  pkill -9 -f "uvicorn dyflow.api.main:app" 2>/dev/null
   exit 0
 }
 [ "${1:-}" = "stop" ] && stop_all

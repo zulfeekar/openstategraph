@@ -531,7 +531,15 @@ class NodeRuntime:
                     "attempts": state.get("attempts", 0) + 1,
                 }
 
-            payload = [HumanMessage(content=prompt)]
+            # Conversation memory (ticket 73): a continuing thread's prior
+            # turns ride in `state["messages"]` (checkpointer-backed on the
+            # stream endpoints), and feeding them back is what lets an agent
+            # hold an interview instead of meeting every send amnesiac. A
+            # fresh run has no history, so single-shot behaviour is
+            # unchanged; long threads are bounded by the summarize toggle.
+            history = list(state.get("messages") or [])
+            turn = HumanMessage(content=prompt)
+            payload = [*history, turn]
             invocation: dict[str, Any] = {"messages": payload}
             rubric_text = _text(data, "rubric").strip()
             if rubric_text:
@@ -544,7 +552,9 @@ class NodeRuntime:
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
-                "messages": messages[-1:],
+                # Both sides of the exchange persist, so the next send's
+                # history contains the question AND this answer.
+                "messages": [turn, *messages[-1:]],
             }
 
         return run
