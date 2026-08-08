@@ -44,10 +44,83 @@
 }
 
 .palette-item__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
   font: var(--type-body-md);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-tight);
   color: var(--color-text-primary);
+}
+
+/* ---------- Workflow-scoped provenance ---------- *
+ * A node registered by the open workflow's own package looks structurally
+ * identical to an app-wide prebuilt, so the difference has to be carried
+ * entirely by chrome: a left rail on the card and a small package mark
+ * beside the title.
+ */
+.palette-item__scope {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.palette-item--scoped {
+  border-left: 2px solid var(--color-border-emphasis);
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.palette-section--scoped {
+  background: var(--color-bg-subtle);
+}
+
+/* A one-line explanation, and the empty state for a workflow with no tools
+   of its own — a full `PanelEmpty` block would out-weigh the section. */
+.palette-note {
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-0-5);
+}
+
+.palette-note code {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* The counterweight to "This workflow": without it, the generic sections
+   read as a continuation of the scoped one rather than a different kind
+   of thing. */
+.palette-group-label {
+  /* Block, not a flex row: the panel is ~280px wide and "in every workflow"
+     beside an uppercase label wraps into an unreadable two-column stack. */
+  display: block;
+  padding: var(--space-3) var(--space-3) 0;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.palette-group-label__hint {
+  display: block;
+  margin-top: 2px;
+  font: var(--type-caption);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--color-text-quaternary);
+}
+
+.palette-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-4);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
 }
 
 .palette-item__description {

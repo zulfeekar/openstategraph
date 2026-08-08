@@ -89,7 +89,7 @@ def main() -> None:
     (target / "AGENTS.md").write_text(
         f"""# {name} (a Team)
 
-A OpenStateGraph **team package** — supervisor + default worker + a grader whose
+An OpenStateGraph **team package** — supervisor + default worker + a grader whose
 criteria are the team's outcome contract. Scaffolded by `scripts/new_team.py`.
 
 - **Mount it**: add a **Team** node in any workflow with slug `{slug}`.

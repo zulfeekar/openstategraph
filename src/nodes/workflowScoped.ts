@@ -159,10 +159,31 @@ export function registerDiscoveredCapabilities(
 
   for (const capability of capabilities) {
     const { definition, executor } = createDiscoveredToolNode(capability);
-    registry.nodeTypes.upsert(definition);
+    registry.nodeTypes.upsert(asWorkflowScoped(definition));
     executors.upsert(executor);
   }
   registeredDiscoveredToolIds = capabilities.map((c) => c.id);
+}
+
+/**
+ * Stamps `scope: 'workflow'` onto a definition on its way into the registry.
+ *
+ * **Display metadata, and deliberately applied here rather than in each
+ * node module.** This function *is* the definition of "workflow-scoped":
+ * every family that travels with a workflow reaches the registry through
+ * this file, so marking them at the registration seam means a new scoped
+ * family cannot be added without being labelled, and a node module stays
+ * ignorant of whether someone chose to scope it. The palette reads the
+ * flag to keep these out of the always-available sections
+ * (`src/view/palette/Palette.tsx`).
+ *
+ * The copy keeps the original `create`, so an *instance* still carries the
+ * unstamped definition. That is intentional and sufficient: `scope` is a
+ * catalogue-presentation fact ("can I always reach for this?"), which is
+ * only ever asked of the palette, never of a placed node.
+ */
+function asWorkflowScoped(definition: INodeDefinition): INodeDefinition {
+  return { ...definition, scope: 'workflow' };
 }
 
 function applyChinookRegistration(
@@ -170,16 +191,7 @@ function applyChinookRegistration(
   registry: ModelRegistry,
   executors: Registry<INodeExecutor>,
 ): void {
-  for (const { definition, executor } of CHINOOK_NODES) {
-    const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
-    if (shouldBeRegistered && !alreadyRegistered) {
-      registry.nodeTypes.upsert(definition);
-      executors.upsert(executor);
-    } else if (!shouldBeRegistered && alreadyRegistered) {
-      registry.nodeTypes.unregister(definition.id);
-      executors.unregister(executor.id);
-    }
-  }
+  applyFamilyRegistration(CHINOOK_NODES, shouldBeRegistered, registry, executors);
 }
 
 /**
@@ -195,9 +207,16 @@ function applyFamilyRegistration(
   executors: Registry<INodeExecutor>,
 ): void {
   for (const { definition, executor } of family) {
-    const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
-    if (shouldBeRegistered && !alreadyRegistered) {
-      registry.nodeTypes.upsert(definition);
+    const existing = registry.nodeTypes.get(definition.id);
+    const alreadyRegistered = existing != null;
+    // Re-upsert an entry that is registered but unstamped: a scoped type can
+    // reach the registry by another route (a direct `upsert` in a test or a
+    // seeding path), and one that stays unstamped would quietly reappear
+    // among the always-available palette sections.
+    if (shouldBeRegistered && alreadyRegistered && existing.scope !== 'workflow') {
+      registry.nodeTypes.upsert(asWorkflowScoped(definition));
+    } else if (shouldBeRegistered && !alreadyRegistered) {
+      registry.nodeTypes.upsert(asWorkflowScoped(definition));
       executors.upsert(executor);
     } else if (!shouldBeRegistered && alreadyRegistered) {
       registry.nodeTypes.unregister(definition.id);
@@ -211,14 +230,5 @@ function applyTabularRegistration(
   registry: ModelRegistry,
   executors: Registry<INodeExecutor>,
 ): void {
-  for (const { definition, executor } of TABULAR_NODES) {
-    const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
-    if (shouldBeRegistered && !alreadyRegistered) {
-      registry.nodeTypes.upsert(definition);
-      executors.upsert(executor);
-    } else if (!shouldBeRegistered && alreadyRegistered) {
-      registry.nodeTypes.unregister(definition.id);
-      executors.unregister(executor.id);
-    }
-  }
+  applyFamilyRegistration(TABULAR_NODES, shouldBeRegistered, registry, executors);
 }

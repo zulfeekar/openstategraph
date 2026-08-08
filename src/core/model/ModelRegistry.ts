@@ -95,6 +95,8 @@ export interface NodeSpec {
   readonly hiddenInPalette?: boolean;
   readonly bodyId?: string;
   readonly keywords?: readonly string[];
+  /** See `INodeDefinition.scope`. Omitted means app-wide. */
+  readonly scope?: INodeDefinition['scope'];
 }
 
 type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => AbstractNodeModel;
@@ -190,6 +192,7 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
     ...(spec.hiddenInPalette ? { hiddenInPalette: true } : {}),
     ...(spec.bodyId ? { bodyId: spec.bodyId } : {}),
     ...(spec.keywords ? { keywords: spec.keywords } : {}),
+    ...(spec.scope ? { scope: spec.scope } : {}),
     create: (init) => new Model(definition, init),
   };
   return definition;

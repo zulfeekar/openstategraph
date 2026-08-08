@@ -610,6 +610,34 @@ class NodeRuntime:
 
         skills = plan.skill_bindings.get(node_id, [])
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # An agent fed by a grader's `pass` or an approval's `approved` port
+        # arrives over a *conditional* edge, which `plan.edges` does not
+        # carry — the same gap `_subgraph` and `_output` already close. Found
+        # live by the page-analytics dispatcher: an agent placed after
+        # human.approval received the original question instead of the
+        # approved report, and either fabricated figures or refused. Router
+        # sources are excluded exactly as in `_subgraph`: a routed agent
+        # keeps answering the user's question, not the router's rendering.
+        conditional_upstream = [
+            src
+            for src, dests in plan.conditional.items()
+            if node_id in dests.values() and self._types.get(src) != "route.classifier"
+        ]
+        # `feedback` is `keep_latest_nonempty`, so a grader's rejection text
+        # survives in state even after the same grader later passes — the ""
+        # written on pass can never clear it (that reducer exists to survive
+        # two graders in one superstep). An agent must therefore not trust
+        # the *presence* of feedback, only feedback whose deciding node still
+        # stands by it: the ones whose revise/rejected edge targets this
+        # agent AND whose latest decision is still that label. Found live:
+        # the page-analytics dispatcher ran after one grader-revise lap and
+        # received "Your previous answer was rejected" instead of the
+        # human-approved report.
+        feedback_sources = [
+            src
+            for src, dests in plan.conditional.items()
+            if node_id in (dests.get("revise"), dests.get("rejected"))
+        ]
         built: dict[str, Any] = {}
 
         def agent_for(skill: str) -> Any:
@@ -646,9 +674,14 @@ class NodeRuntime:
             return built[skill]
 
         def run(state: RunState) -> dict[str, Any]:
-            prompt = _upstream_text(state, upstream) or state.get("question", "")
+            prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
             skill = _upstream_text(state, skills)
+            decisions = state.get("decisions") or {}
             feedback = state.get("feedback", "")
+            if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
+                feedback = ""
 
             agent = agent_for(skill) if model is not None else None
             if agent is None:

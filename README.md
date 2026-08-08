@@ -1,8 +1,33 @@
 # OpenStateGraph — AI Workflow Builder
 
+[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-informational.svg)](CHANGELOG.md)
+
 A visual AI-agent workflow editor built on the **open-source** JointJS core
 (`@joint/core`, MPL-2.0), reproducing the JointJS+ *AI Workflow Builder* demo
 without any commercial packages.
+
+### We compile; we do not interpret
+
+The closest-looking tools — Langflow, Flowise, n8n, Dify — own their execution
+engine: a flow runs inside their platform, through their runtime, or it does not
+run at all. OpenStateGraph is a **compiler with a single target**. A canvas is
+`workflow.json`, and `workflow.json` compiles to a plain LangGraph `StateGraph`.
+
+Two consequences follow, and they are the whole point:
+
+- **A flow is a file in git.** `workflow.json`, plus the package's own `tools/`,
+  `functions/` and `tests/` — reviewable in a pull request, diffable, not a blob
+  in someone's database.
+- **The output runs without the editor.** The compiled graph is an ordinary
+  Python object: import it from a script, exercise it with `pytest`, deploy it
+  wherever Python runs. Delete this repository and your workflow still runs.
+
+We also inherit rather than reimplement: checkpointing, time travel,
+`interrupt()` for human-in-the-loop, `Send` fan-out, reducer merging and token
+streaming are LangGraph's, not ours. **The compiler is not portable; the output
+is.**
 
 Phase 1 (this repo) is the editor: canvas, design system, MVC engine, and a
 pluggable provider layer that already runs workflows end to end. Phase 2 —
@@ -58,6 +83,7 @@ of these for the backend process:
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
+| `OPENSTATEGRAPH_LOG_LEVEL` | backend log verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
 
 The canvas-preview providers (Anthropic/OpenAI/Ollama keys entered in the
 credentials dialog) are separate — see **Providers** below.
@@ -72,6 +98,37 @@ cd backend && pip install -e . && pytest  # backend unit tests
 
 Architecture is documented in depth in [`CLAUDE.md`](CLAUDE.md); this README
 covers running the app, not the design rules.
+
+---
+
+## Docker
+
+One command, either way:
+
+```bash
+./start        # production stack in Docker — build + run, then http://localhost:8000/
+./start dev    # local dev with hot reload — Vite :5273 + uvicorn --reload :8000
+./start stop   # stop whichever is running
+./start logs   # follow the container logs
+```
+
+`./start` builds a multi-stage image (Node compiles the editor, a throwaway
+stage builds the Python wheels) whose final layer is Python slim plus runtime
+deps, the built `dist/`, `backend/` and `workflows/`. The backend serves the
+editor, `/chat` and the API from a single origin on port 8000 — the frontend
+calls `http://localhost:8000` absolutely, so map that port as-is.
+`./workflows` is bind-mounted, so workflows saved in the container land in the
+repo.
+
+**One worker, deliberately.** The human-in-the-loop checkpointer in
+`api/main.py` is an in-process `InMemorySaver`, so a second worker gets a
+second, empty copy and a `/api/runs/resume` routed to it cannot find its run.
+Scaling out needs a persisted checkpointer (SQLite for one host, Postgres
+beyond) wired into `main.py` first. `uvicorn --reload` is single-process for
+its own reasons too — it and `--workers N` are mutually exclusive.
+
+Rationale for each choice is commented inline in `Dockerfile`,
+`docker-compose.yml`, `start` and `scripts/dev.sh`.
 
 ---
 
@@ -226,19 +283,55 @@ the dispatcher and the shortcuts drawer, so the documentation cannot drift.
 
 ---
 
-## Phase 2 — LangGraph backend
+## The compile seam
 
-The seam is already in place: `ILLMProvider` and `INodeExecutor`. A
-`LangGraphProvider` (or a `HttpWorkflowExecutor` that posts the serialized
-workflow to a Python service) registers alongside the existing adapters and
-nothing else changes — the canvas, palette, inspector and command stack are
-already vendor-agnostic.
+The seam that keeps the two halves independent is `ILLMProvider` +
+`INodeExecutor` on the editor side, and one directional compile step on the
+runtime side. The serialized document
+([`core/serialization`](src/core/serialization/WorkflowSerializer.ts)) is
+versioned with a migration chain and is the wire format the Python side turns
+into a LangGraph `StateGraph`.
 
-The serialized document ([`core/serialization`](src/core/serialization/WorkflowSerializer.ts))
-is versioned with a migration chain and is the natural wire format for
-compiling a graph into a LangGraph `StateGraph`.
+It stays one-directional on purpose: `workflow.json` → runtime, never back.
+Nothing reads runtime objects into the model, expressions are a serialisable
+JSON AST rather than host-language lambdas, reducers are a named enum, and
+LangGraph type names never leak into `workflow.json` or `core/`. That keeps
+`workflow.json` the vendor-neutral layer without paying for an orchestration
+abstraction nothing else could implement.
 
-**MCP note:** `docs-langchain` (https://docs.langchain.com/mcp) is connected in
-this workspace. `reference-langchain` (https://reference.langchain.com/mcp) is
-**not** yet — add it before phase 2 so API signatures come from the reference
-rather than from memory.
+**Docs note:** LangGraph and LangChain facts in this repo come from the
+`docs-langchain` MCP server (<https://docs.langchain.com/mcp>), never from
+memory.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. The house style is TDD, and `core/` is
+pure TypeScript with no excuse for untested logic.
+
+- [**CONTRIBUTING.md**](CONTRIBUTING.md) — setup, the test gate, and how to add
+  a node type, tool, provider or workflow package
+- [**CLAUDE.md**](CLAUDE.md) — the architecture contract. Read
+  "Non-negotiables" before designing anything; most rejected proposals are
+  rejected by a rule already written there
+- [**CODE_OF_CONDUCT.md**](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1
+- [**SECURITY.md**](SECURITY.md) — a local-first tool with no authentication;
+  read the documented trade-offs before exposing it to anything
+- [**CHANGELOG.md**](CHANGELOG.md) — what changed, per release
+- [**THIRD_PARTY_NOTICES.md**](THIRD_PARTY_NOTICES.md) — MPL-2.0, OFL-1.1 and
+  redistributed-data attributions
+
+Every pull request runs the same two commands CI does:
+
+```bash
+npm run verify      # tsc + eslint + prettier + vitest
+python -m pytest    # backend + workflow tests (live-API tests are opt-in: -m live)
+```
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Third-party components keep their own licences;
+the ones with live obligations (JointJS under MPL-2.0, the Inter typeface under
+OFL-1.1, and the redistributed Chinook sample database under MIT) are recorded
+in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

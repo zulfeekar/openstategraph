@@ -51,7 +51,7 @@ def main() -> None:
         "savedAt": datetime.now(timezone.utc).isoformat(), "document": document,
     }, indent=2) + "\n")
     (target / "AGENTS.md").write_text(
-        f"# {name}\n\nA OpenStateGraph workflow package. `workflow.json` is the source of truth —\n"
+        f"# {name}\n\nAn OpenStateGraph workflow package. `workflow.json` is the source of truth —\n"
         "edit through the editor. `tools/`, `functions/`, `middlewares/` (one slot\n"
         "per file exposing `MIDDLEWARE`), `skills/*.md` (prompt context for every\n"
         "agent here) and `tests/` are discovered by convention.\n"

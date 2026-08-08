@@ -1,0 +1,64 @@
+name: Feature request
+description: Propose a new capability, node type, or workflow.
+title: '[feat]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing, skim the "Non-negotiables" section of `CLAUDE.md`.
+        Two rules reject a lot of otherwise reasonable proposals early:
+        we **compile to LangGraph and never write an execution engine**, and
+        extensions arrive by **registering**, never by editing `core/`.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can't you do today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should exist, and where would it live?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What shape is this?
+      description: Most good proposals are a registration, not an engine change.
+      options:
+        - A new node type (INodeDefinition + INodeExecutor)
+        - A new tool (IToolExecutor)
+        - A new LLM provider (ILLMProvider)
+        - A new connection or validation rule
+        - A new canvas feature (IPaperFeature)
+        - A new workflow package under workflows/
+        - Editor / UX change
+        - Compiler or runtime change
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do nothing" — why is that not good enough?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: >
+            This does not require a second orchestration runtime or a hand-written
+            execution engine.
+          required: true

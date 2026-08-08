@@ -571,3 +571,20 @@ __all__ = [
     "create_app",
     "resolve_model",
 ]
+
+
+# --- Container-only: serve the built editor SPA from this same process. ------
+# Off unless OPENSTATEGRAPH_SERVE_STATIC=1, so a host-run backend (scripts/dev.sh,
+# pytest) behaves exactly as before — Vite serves the editor there. Mounted last
+# and only at "/", so every route declared above (/api/*, /chat, /chat/mermaid.js)
+# still wins; StaticFiles only sees what nothing else claimed. html=True serves
+# index.html at "/" (it does not invent a catch-all for arbitrary deep links —
+# the editor has no client-side router, so it does not need one).
+if os.getenv("OPENSTATEGRAPH_SERVE_STATIC") == "1":
+    _static_dir = Path(os.getenv("OPENSTATEGRAPH_STATIC_DIR", "dist"))
+    if _static_dir.is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=_static_dir, html=True), name="editor")
+    else:
+        logger.warning("OPENSTATEGRAPH_SERVE_STATIC=1 but %s is not a directory", _static_dir)

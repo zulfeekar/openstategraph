@@ -1,6 +1,6 @@
 # Code Workshop (deep coder + grader loop + review subgraph + approval + dry-run PR)
 
-A OpenStateGraph workflow — ticket 43's coder use case, end to end on the canvas.
+An OpenStateGraph workflow — ticket 43's coder use case, end to end on the canvas.
 `workflow.json` in this directory is the source of truth for its nodes and
 edges — edit it through the editor, not by hand, unless you know the
 canonical serialization rules (ticket 19).

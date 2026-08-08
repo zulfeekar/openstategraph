@@ -82,6 +82,48 @@ describe('workflow-scoped node registration', () => {
   });
 });
 
+/**
+ * The palette's provenance split (`src/view/palette/Palette.tsx`) is only as
+ * good as this flag: a scoped node type that reaches the registry unstamped
+ * silently rejoins the always-available sections, which is precisely the
+ * confusion the split exists to remove.
+ */
+describe('workflow-scoped node types announce their scope', () => {
+  it('stamps scope: workflow on a family registered for the open document', () => {
+    const workbench = new Workbench();
+    const definition = CHINOOK_NODES[0]!.definition;
+    workbench.registry.nodeTypes.upsert(definition);
+    workbench.model.addNode(definition.create({ position: { x: 0, y: 0 } }));
+
+    for (const id of CHINOOK_NODES.map((n) => n.definition.id)) {
+      expect(workbench.registry.nodeTypes.get(id)?.scope).toBe('workflow');
+    }
+  });
+
+  it('stamps scope: workflow on a discovered capability', () => {
+    const workbench = new Workbench();
+    registerDiscoveredCapabilities(
+      [
+        {
+          id: 'a/tools.One',
+          name: 'One',
+          description: 'discovered',
+          argsSchema: { type: 'object', properties: {} },
+        },
+      ],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    expect(workbench.registry.nodeTypes.get('a/tools.One')?.scope).toBe('workflow');
+  });
+
+  it('leaves app-wide prebuilts unscoped', () => {
+    const workbench = new Workbench();
+    expect(workbench.registry.nodeTypes.get('input.text')?.scope).toBeUndefined();
+  });
+});
+
 describe('registerNodeTypesForRawDocument — the load-order bug', () => {
   it('a document referencing an unregistered Chinook tool imports that node, not skips it', () => {
     // Reproduces the exact bug found while building this: `fromJSON` skips

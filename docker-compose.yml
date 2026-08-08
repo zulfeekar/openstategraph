@@ -1,0 +1,52 @@
+# The production stack: one service. `./start` brings it up.
+#
+# There is deliberately no second container for the frontend. The editor is a
+# static SPA that the Dockerfile builds and the backend serves (via the
+# env-guarded StaticFiles mount at the end of api/main.py), so a separate nginx
+# would add a container, a config file and a CORS boundary to serve files that
+# are already inside this one. It would also *break* the editor: the frontend
+# talks to a hardcoded http://localhost:8000 (src/core/runtime/RuntimeClient.ts),
+# so serving the UI from the same origin and port as the API is what makes it
+# work without touching src/.
+#
+# No `version:` key — obsolete since Compose v2 and warned about by the CLI.
+
+services:
+  openstategraph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: openstategraph:local
+    # Must be 8000 on the *host* side too, not just in the container: the
+    # editor bundle calls http://localhost:8000 absolutely. Changing the left
+    # number breaks the UI's API calls even though the server comes up fine.
+    ports:
+      - "8000:8000"
+    env_file:
+      # Optional — provider keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) and
+      # OPENSTATEGRAPH_OLLAMA_MODEL / OPENSTATEGRAPH_LOG_LEVEL. Copy
+      # .env.example to .env to use it; the stack starts without one.
+      #
+      # Note on Ollama cloud (the default provider): it authenticates from the
+      # local `ollama` CLI's own credentials, which do not exist inside this
+      # container. To use it from the container either supply an equivalent
+      # credential through .env, or run against Anthropic/OpenAI keys instead.
+      - path: .env
+        required: false
+    volumes:
+      # Authored workflows are user content with their own lifecycle, and the
+      # editor writes to this directory at runtime (WorkflowStore.save/delete).
+      # A bind mount rather than a named volume so edits made in the container
+      # show up in the repo — that is the point of the directory.
+      #
+      # Relative path on purpose: `./workflows` resolves against this file's
+      # directory on macOS, Windows and Linux alike. Never an absolute host path.
+      - ./workflows:/app/workflows
+    restart: unless-stopped
+    # Single replica, single worker — see the CMD comment in the Dockerfile.
+    # The in-process InMemorySaver checkpointer means a second instance would
+    # silently lose human-in-the-loop resumes, so this is a correctness
+    # constraint, not a capacity choice.
+    deploy:
+      replicas: 1

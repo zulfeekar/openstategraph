@@ -1,6 +1,6 @@
 # Open API Explorer (supervisor + per-source worker archetypes)
 
-A OpenStateGraph workflow. `workflow.json` is the source of truth — edit through the editor.
+An OpenStateGraph workflow. `workflow.json` is the source of truth — edit through the editor.
 
 - **Pattern**: supervisor labels each subtask with a worker archetype (hybrid
   routing, ticket 37) — Weather (Open-Meteo, default), Countries (World Bank),

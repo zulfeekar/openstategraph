@@ -1,5 +1,6 @@
 import { Err, type Result } from '@core/kernel/Result';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import type { FieldSchema } from '@core/model/contracts/fields';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { AbstractToolNodeModel, defineToolNode } from './AbstractToolNode';
 
@@ -31,6 +32,7 @@ function backendTool(spec: {
   label: string;
   description: string;
   keywords: readonly string[];
+  fields?: readonly FieldSchema[];
 }): { definition: INodeDefinition; executor: INodeExecutor } {
   return {
     definition: defineToolNode(
@@ -42,7 +44,7 @@ function backendTool(spec: {
         accent: 'neutral',
         keywords: [...spec.keywords, 'read-only', 'prebuilt'],
         defaultSize: { width: 252, height: 120 },
-        fields: [],
+        fields: spec.fields ?? [],
       },
       PlatformToolNodeModel,
     ),
@@ -92,5 +94,22 @@ export const PLATFORM_TOOL_NODES = [
     label: 'Web Fetch',
     description: 'Reads one public web page as text (SSRF-guarded).',
     keywords: ['web', 'fetch', 'url', 'online'],
+  }),
+  backendTool({
+    id: 'tool.email-send',
+    label: 'Email Send',
+    description:
+      'Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured.',
+    keywords: ['email', 'send', 'report', 'delivery', 'smtp'],
+    fields: [
+      {
+        key: 'to',
+        label: 'Recipient',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'reports@example.com',
+        hint: 'The fixed destination. Agents cannot re-address the mail.',
+      },
+    ],
   }),
 ];

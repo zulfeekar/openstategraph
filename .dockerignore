@@ -1,0 +1,59 @@
+# Keep the build context small and the image reproducible. Anything the
+# Dockerfile needs must NOT be listed here; everything else should be, because
+# a fat context is copied to the daemon on every build.
+
+# Never ship host-built artefacts — the image builds its own.
+node_modules/
+dist/
+*.tsbuildinfo
+.venv/
+venv/
+
+# Python bytecode / tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage/
+
+# VCS, CI and editor
+.git/
+.github/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Secrets — .env is passed at *runtime* via compose's env_file, never baked in.
+.env
+.env.*
+!.env.example
+*.local
+
+# Tests, e2e output and local dev state: not runtime inputs.
+e2e/
+test-results/
+playwright-report/
+playwright.config.ts
+.gstack/
+.dev/
+pytest.ini
+
+# Docs and internal planning substrate
+*.md
+!README.md
+.scratch/
+openwiki/
+graphify-out/
+
+# Workflow runtime jails — sources are copied, generated output is not.
+workflows/code-workshop/scratch/
+workflows/code-workshop/output/
+
+# Docker's own files do not belong inside the context.
+Dockerfile
+.dockerignore
+docker-compose.yml

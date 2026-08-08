@@ -56,6 +56,11 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # The compiler as a tool (ticket 69): read-only compile-checking, the
     # Architect's revise-loop evidence.
     registry.update({tool.node_type: tool for tool in ARCHITECT_TOOLS})
+    from openstategraph.prebuilt_email import EMAIL_TOOLS
+
+    # Report delivery (full-sweep capability test): SMTP when configured,
+    # loud .eml dry-run otherwise. Recipient is node config, never a model arg.
+    registry.update({tool.node_type: tool for tool in EMAIL_TOOLS})
     if slug:
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))

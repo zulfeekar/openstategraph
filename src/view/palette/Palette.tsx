@@ -1,7 +1,9 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
-import { Search, X } from 'lucide-react';
+import { Package, Search, X } from 'lucide-react';
 import {
+  Badge,
+  Button,
   Icon,
   IconButton,
   IconTile,
@@ -13,7 +15,7 @@ import {
   TextInput,
 } from '@design/primitives';
 import { matchesQuery } from '@core/model/ModelRegistry';
-import type { INodeDefinition } from '@core/model/contracts/node';
+import type { INodeCategory, INodeDefinition } from '@core/model/contracts/node';
 import { useController, usePaperController, useWorkbench } from '@app/WorkbenchContext';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import './Palette.css';
@@ -50,20 +52,46 @@ export function Palette({ onNotify }: PaletteProps) {
     () => workbench.registry.nodeTypes.size,
   );
 
-  const sections = useMemo(() => {
+  // Two provenances, presented as two different things — the problem this
+  // split exists to fix is that a Chinook tool and the Agent node looked
+  // identical in the palette, so nothing told a developer that one of them
+  // vanishes the moment they open a different workflow. Workflow-scoped
+  // types are lifted out of their categories into a single leading section
+  // (they are few, and *where they came from* matters more than which
+  // category they'd land in); everything else keeps its normal sectioning.
+  const { scoped, appSections, matchCount } = useMemo(() => {
     const all = workbench.registry.paletteSections();
-    if (!query.trim()) return all;
-    return all
-      .map((section) => ({
-        ...section,
-        nodes: section.nodes.filter((definition) => matchesQuery(definition, query)),
-      }))
-      .filter((section) => section.nodes.length > 0);
+    const searching = query.trim().length > 0;
+    const visible = searching
+      ? all
+          .map((section) => ({
+            ...section,
+            nodes: section.nodes.filter((definition) => matchesQuery(definition, query)),
+          }))
+          .filter((section) => section.nodes.length > 0)
+      : all;
+
+    const scopedNodes: INodeDefinition[] = [];
+    const rest: { category: INodeCategory; nodes: readonly INodeDefinition[] }[] = [];
+    for (const section of visible) {
+      const app = section.nodes.filter((definition) => definition.scope !== 'workflow');
+      for (const definition of section.nodes) {
+        if (definition.scope === 'workflow') scopedNodes.push(definition);
+      }
+      if (app.length > 0) rest.push({ ...section, nodes: app });
+    }
+    return {
+      scoped: scopedNodes,
+      appSections: rest,
+      matchCount: scopedNodes.length + rest.reduce((n, s) => n + s.nodes.length, 0),
+    };
     // Recomputed on every render this component takes, including the ones
     // `useSyncExternalStore` above forces — `workbench.registry` itself
     // never changes identity, so it cannot be a dependency that triggers this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workbench, query, workbench.registry.nodeTypes.size]);
+
+  const searching = query.trim().length > 0;
 
   const add = (definition: INodeDefinition) => {
     const at = paper?.viewportCenter() ?? { x: 120, y: 120 };
@@ -94,26 +122,85 @@ export function Palette({ onNotify }: PaletteProps) {
       </PanelHeader>
 
       <PanelBody>
-        {sections.length === 0 ? (
+        {matchCount === 0 ? (
           <PanelEmpty
             glyph={Search}
             title="No matches"
             body={`Nothing in the palette matches “${query}”.`}
           />
-        ) : (
-          sections.map((section) => (
-            <PanelSection key={section.category.id} heading={section.category.label}>
-              {section.nodes.map((definition) => (
-                <PaletteItem
-                  key={definition.id}
-                  definition={definition}
-                  disabled={isAtLimit(workbench, definition)}
-                  onActivate={() => add(definition)}
-                />
-              ))}
-            </PanelSection>
-          ))
-        )}
+        ) : null}
+
+        {matchCount > 0 && (searching ? scoped.length > 0 : true) ? (
+          <PanelSection
+            className="palette-section--scoped"
+            heading="This workflow"
+            aside={
+              scoped.length > 0 ? (
+                <Badge tone="accent" numeric>
+                  {scoped.length}
+                </Badge>
+              ) : undefined
+            }
+          >
+            {scoped.length > 0 ? (
+              <>
+                <p className="palette-note">
+                  From this workflow&rsquo;s own package — they leave the palette when you open
+                  another one.
+                </p>
+                {scoped.map((definition) => (
+                  <PaletteItem
+                    key={definition.id}
+                    definition={definition}
+                    disabled={isAtLimit(workbench, definition)}
+                    onActivate={() => add(definition)}
+                  />
+                ))}
+              </>
+            ) : (
+              <p className="palette-note">
+                This workflow has no tools of its own yet. Python tools in its <code>tools/</code>{' '}
+                folder show up here as nodes you can wire in.
+              </p>
+            )}
+          </PanelSection>
+        ) : null}
+
+        {appSections.length > 0 ? (
+          <>
+            <div className="palette-group-label">
+              Always available
+              <span className="palette-group-label__hint">in every workflow</span>
+            </div>
+            {appSections.map((section) => (
+              <PanelSection
+                key={section.category.id}
+                heading={section.category.label}
+                aside={searching ? <Badge numeric>{section.nodes.length}</Badge> : undefined}
+              >
+                {section.nodes.map((definition) => (
+                  <PaletteItem
+                    key={definition.id}
+                    definition={definition}
+                    disabled={isAtLimit(workbench, definition)}
+                    onActivate={() => add(definition)}
+                  />
+                ))}
+              </PanelSection>
+            ))}
+          </>
+        ) : null}
+
+        {searching && matchCount > 0 ? (
+          <div className="palette-footnote">
+            <span>
+              {matchCount} {matchCount === 1 ? 'node' : 'nodes'} match &ldquo;{query}&rdquo;
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setQuery('')}>
+              Show all
+            </Button>
+          </div>
+        ) : null}
       </PanelBody>
     </Panel>
   );
@@ -128,16 +215,27 @@ function PaletteItem({
   disabled: boolean;
   onActivate: () => void;
 }) {
+  const scoped = definition.scope === 'workflow';
   return (
     <button
       type="button"
-      className={clsx('palette-item', disabled && 'palette-item--disabled')}
+      className={clsx(
+        'palette-item',
+        disabled && 'palette-item--disabled',
+        scoped && 'palette-item--scoped',
+      )}
       data-accent={definition.accent}
       // Native HTML5 drag rather than pointer events: it gives the OS drag
       // image, the copy cursor and drop-target semantics for free.
       draggable={!disabled}
       aria-disabled={disabled}
-      title={disabled ? `Only one ${definition.label} is allowed` : definition.description}
+      title={
+        disabled
+          ? `Only one ${definition.label} is allowed`
+          : scoped
+            ? `${definition.description}\n\nBelongs to this workflow — not available in others.`
+            : definition.description
+      }
       onDragStart={(event) => {
         if (disabled) {
           event.preventDefault();
@@ -152,7 +250,17 @@ function PaletteItem({
     >
       <IconTile glyph={resolveIcon(definition.iconId)} size="md" iconSize="sm" />
       <span className="palette-item__text">
-        <span className="palette-item__title">{definition.label}</span>
+        <span className="palette-item__title">
+          {definition.label}
+          {scoped ? (
+            // A per-card mark as well as the section header: search results
+            // and a full palette both scroll, and a header three rows up is
+            // not an answer to "does this one travel with my workflow?".
+            <span className="palette-item__scope" role="img" aria-label="Scoped to this workflow">
+              <Icon glyph={Package} size="xs" />
+            </span>
+          ) : null}
+        </span>
         <span className="palette-item__description">{definition.description}</span>
       </span>
     </button>

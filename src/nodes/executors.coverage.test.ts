@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { addNode, makeWorkbench, TYPE } from '@core/testing/fixtures';
-import { isToolExecutor, type ExecutionContext, type INodeExecutor } from '@core/execution/INodeExecutor';
+import {
+  isToolExecutor,
+  type ExecutionContext,
+  type INodeExecutor,
+} from '@core/execution/INodeExecutor';
 import type { Workbench } from '@app/Workbench';
 import { textInputExecutor } from './inputs/TextInputNode';
 import { markdownFileExecutor } from './inputs/MarkdownFileNode';
@@ -42,9 +46,13 @@ function ctxFor(
     workflow: workbench.model,
     providers: workbench.providers,
     signal: new AbortController().signal,
-    input: <T,>(port: string) => inputs[port] as T | undefined,
-    inputs: <T,>(port: string) =>
-      (Array.isArray(inputs[port]) ? inputs[port] : inputs[port] === undefined ? [] : [inputs[port]]) as T[],
+    input: <T>(port: string) => inputs[port] as T | undefined,
+    inputs: <T>(port: string) =>
+      (Array.isArray(inputs[port])
+        ? inputs[port]
+        : inputs[port] === undefined
+          ? []
+          : [inputs[port]]) as T[],
     toolsOn: () => [],
     invokeTool: async () => ({ ok: true, value: 'stub' }) as const,
     log: () => undefined,

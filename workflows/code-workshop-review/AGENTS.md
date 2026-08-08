@@ -1,6 +1,6 @@
 # Code Workshop Review (reviewer + review-quality grader)
 
-A OpenStateGraph workflow. `workflow.json` in this directory is the source of truth —
+An OpenStateGraph workflow. `workflow.json` in this directory is the source of truth —
 edit it through the editor, not by hand, unless you know the canonical
 serialization rules (ticket 19).
 

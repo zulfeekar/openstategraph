@@ -29,6 +29,12 @@ export type NodeKind = 'standard' | 'container' | 'annotation';
 /** Per-node execution state, surfaced as the status dot on the card. */
 export type NodeStatus = 'idle' | 'ready' | 'running' | 'success' | 'warning' | 'error';
 
+/**
+ * Whether a node type is always available or belongs to the open workflow.
+ * See `INodeDefinition.scope`.
+ */
+export type NodeScope = 'workflow' | 'app';
+
 /** Live execution result attached to a node between runs. */
 export interface NodeRuntimeState {
   readonly status: NodeStatus;
@@ -110,6 +116,22 @@ export interface INodeDefinition extends IIdentifiable {
   readonly bodyId?: string;
   /** Keywords that should match this node in palette search. */
   readonly keywords?: readonly string[];
+  /**
+   * Where this node type comes from, for the palette to say so.
+   *
+   * `'app'` (the default when omitted) — an app-wide prebuilt: agents,
+   * router, grader, platform tools. Always available, in every workflow.
+   *
+   * `'workflow'` — registered only while a particular workflow is open,
+   * because it belongs to that workflow's own package (`syncWorkflowScopedNodes`,
+   * `registerDiscoveredCapabilities`). It travels with the workflow and
+   * disappears when another one is opened, so the palette must not present
+   * it as if it were always there.
+   *
+   * Optional and additive: nothing outside the palette branches on it, and
+   * a node type that never says anything is treated as `'app'`.
+   */
+  readonly scope?: NodeScope;
   /**
    * Constructs the instance. Concrete node classes are reached only
    * through here, which is what keeps the model open for extension and

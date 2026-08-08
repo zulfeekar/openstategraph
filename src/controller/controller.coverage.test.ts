@@ -60,9 +60,7 @@ describe('grouping', () => {
     controller.selectionActions.selectNodes([input.id, agent.id]);
     const grouped = controller.grouping.group('annotate.group');
     expect(grouped.ok).toBe(true);
-    const container = workbench.model
-      .nodes()
-      .find((node) => node.kind === 'container');
+    const container = workbench.model.nodes().find((node) => node.kind === 'container');
     expect(container).toBeDefined();
     expect(workbench.model.childrenOf(container!.id).length).toBe(2);
     expect(controller.grouping.ungroup(container!.id).ok).toBe(true);
