@@ -115,7 +115,7 @@ class TestModelResolution:
         zero configuration, since `ollama` authenticates from its own local
         credentials rather than an env var this process needs to see.
         """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
         monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
 
@@ -135,7 +135,7 @@ class TestModelResolution:
     def test_ollama_resolves_to_a_cloud_model_never_a_local_one(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
         monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
 
@@ -224,7 +224,7 @@ class TestRunPostedWorkflow:
         without an Anthropic/OpenAI key — resolving *a* model no longer
         depends on any of them being set.
         """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST", "OPENSTATEGRAPH_USE_OLLAMA"):
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
         client = TestClient(create_app())
 
