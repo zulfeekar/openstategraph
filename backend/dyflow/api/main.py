@@ -283,6 +283,11 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # The open web, read-only (search + SSRF-guarded fetch) — the root
     # assistant's generic-chat requirement (ticket 67 refinement).
     registry.update({tool.node_type: tool for tool in WEB_TOOLS})
+    from dyflow.prebuilt_architect import ARCHITECT_TOOLS
+
+    # The compiler as a tool (ticket 69): read-only compile-checking, the
+    # Architect's revise-loop evidence.
+    registry.update({tool.node_type: tool for tool in ARCHITECT_TOOLS})
     if slug:
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))

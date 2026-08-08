@@ -91,12 +91,13 @@ class TestConciergeGateway:
         assert "concierge" not in [s.slug for s in store.list()]
         assert store.load("concierge")["name"] == "Concierge (gateway)"  # load() unwraps the envelope
 
-    def test_the_concierge_compiles_with_all_four_routes(self) -> None:
+    def test_the_concierge_compiles_with_all_five_routes(self) -> None:
         doc = json.loads((REPO / "workflows/concierge/workflow.json").read_text())["document"]
         plan = WorkflowCompiler().plan(doc)
         assert plan.conditional["router1"] == {
             "b-videogames": "wf-videogames", "b-music": "wf-music",
-            "b-livedata": "wf-livedata", "b-general": "agent-general",
+            "b-livedata": "wf-livedata", "b-build": "wf-architect",
+            "b-general": "agent-general",
         }
         assert plan.warnings == []
 

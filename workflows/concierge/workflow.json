@@ -38,12 +38,16 @@
               "name": "live_data"
             },
             {
+              "id": "b-build",
+              "name": "build_workflow"
+            },
+            {
               "id": "b-general",
               "name": "general"
             }
           ],
           "fallback": "general",
-          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: ONLY weather/forecasts, country statistics (population, GDP), or recent earthquakes \u2014 the four wired data APIs.\ngeneral: everything else \u2014 greetings, general knowledge, questions about this platform itself, and anything needing a web search (news, versions, current events)."
+          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: ONLY weather/forecasts, country statistics (population, GDP), or recent earthquakes \u2014 the four wired data APIs.\nbuild_workflow: requests to build, create, design or compose a new workflow, team, or pipeline on this platform.\ngeneral: everything else \u2014 greetings, general knowledge, questions about this platform itself, and anything needing a web search (news, versions, current events)."
         },
         "position": {
           "x": 360,
@@ -181,6 +185,18 @@
         "position": {
           "x": 460,
           "y": 1540
+        }
+      },
+      {
+        "id": "wf-architect",
+        "type": "workflow.subgraph",
+        "title": "Workflow Architect",
+        "data": {
+          "workflow": "workflow-architect"
+        },
+        "position": {
+          "x": 720,
+          "y": 520
         }
       }
     ],
@@ -363,6 +379,26 @@
         "target": {
           "nodeId": "agent-general",
           "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-build"
+        },
+        "target": {
+          "nodeId": "wf-architect",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "wf-architect",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
         }
       }
     ]
