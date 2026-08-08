@@ -473,6 +473,18 @@ class NodeRuntime:
         def agent_for(skill: str) -> Any:
             if skill not in built:
                 contributions: dict[str, Any] = {}
+                if _text(data, "rubric").strip() and model is not None:
+                    # deepagents' own LLM-as-judge (beta, >=0.6.5): a grader
+                    # sub-agent inside the agent, iterating until the rubric
+                    # is satisfied or max_iterations. The rubric *text* rides
+                    # on invocation state (per the docs), so one middleware
+                    # serves every question. This is the agent-internal atom;
+                    # the Grader *node* stays the graph-level organism.
+                    from deepagents import RubricMiddleware
+
+                    contributions["rubric"] = RubricMiddleware(
+                        model=model, max_iterations=3
+                    )
                 if data.get("summarize") and model is not None:
                     # LangChain's own prebuilt, never hand-rolled (ticket 66):
                     # summarizes older turns when the context bloats, keeping
@@ -508,7 +520,11 @@ class NodeRuntime:
                 }
 
             payload = [HumanMessage(content=prompt)]
-            result = agent.invoke({"messages": payload})
+            invocation: dict[str, Any] = {"messages": payload}
+            rubric_text = _text(data, "rubric").strip()
+            if rubric_text:
+                invocation["rubric"] = rubric_text
+            result = agent.invoke(invocation)
             messages = result.get("messages") or []
             text = messages[-1].content if messages else ""
             answer = text if isinstance(text, str) else str(text)

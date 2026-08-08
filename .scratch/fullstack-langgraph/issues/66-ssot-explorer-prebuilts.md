@@ -41,3 +41,17 @@ Built (one-liners):
 - **Context summarization** (user addition): `summarize` toggle on agent.llm → LangChain's own `SummarizationMiddleware` in the slot table — prebuilt, never hand-rolled.
 
 Deferred, recorded: the Glossary/SSOT wiki node (needs a source decision — table vs docs corpus) and the prebuilt Data Analyst Team package composing all of it (a `new_team.py` variant once the glossary exists).
+
+## Correction + build (2026-08-08, user-prompted, docs-verified)
+
+My earlier claim "no prebuilt rubric middleware exists" was **wrong** — the
+user pointed at `deepagents.RubricMiddleware` (>=0.6.5, beta) and the docs
+MCP confirmed it: an LLM-as-judge grader *sub-agent* inside the agent,
+rubric text passed on invocation state, iterating to `max_iterations`.
+Wired: `rubric` textarea on agent.llm → RubricMiddleware slot (judge = the
+agent's own model, 3 iterations) + rubric on the invoke payload; deepagents
+upgraded 0.3.1 → 0.7.5 (un-skipped 7 tests). Live-verified: haiku rubric,
+two visible judge iterations in the trace, compliant result. Distinction
+kept: RubricMiddleware = agent-internal atom; Grader node (with its own
+structured rubric rows) = graph-level organism. Both exist for different
+altitudes of the Lego model.

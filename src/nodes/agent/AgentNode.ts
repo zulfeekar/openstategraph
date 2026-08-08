@@ -86,6 +86,20 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           format: (value) => `· ${value.toLocaleString()}`,
         },
         {
+          // deepagents' RubricMiddleware (beta): what "done" looks like. A
+          // grader sub-agent judges the transcript against this and the
+          // agent iterates until satisfied (max 3 rounds). Distinct from a
+          // Grader *node*: this loop is inside the agent.
+          kind: 'textarea',
+          key: 'rubric',
+          label: 'Rubric (self-grading)',
+          placeholder: 'e.g. tests pass; cites a figure from the rows; under 200 words',
+          defaultValue: '',
+          onCard: false,
+          group: 'Judgement',
+          advanced: true,
+        },
+        {
           // LangChain's prebuilt SummarizationMiddleware (ticket 66): when
           // the conversation bloats, older turns are summarized by the
           // model and the recent tail kept verbatim.
