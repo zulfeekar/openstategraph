@@ -6,54 +6,97 @@
   "document": {
     "version": 2,
     "name": "Concierge (gateway)",
-    "settings": { "model": "ollama:gpt-oss:120b-cloud" },
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud"
+    },
     "nodes": [
-      { "id": "in1", "type": "input.text", "data": {}, "position": { "x": 40, "y": 300 } },
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 300
+        }
+      },
       {
         "id": "router1",
         "type": "route.classifier",
         "title": "Concierge Router",
         "data": {
           "branches": [
-            { "id": "b-videogames", "name": "videogames" },
-            { "id": "b-music", "name": "music_store" },
-            { "id": "b-livedata", "name": "live_data" },
-            { "id": "b-general", "name": "general" }
+            {
+              "id": "b-videogames",
+              "name": "videogames"
+            },
+            {
+              "id": "b-music",
+              "name": "music_store"
+            },
+            {
+              "id": "b-livedata",
+              "name": "live_data"
+            },
+            {
+              "id": "b-general",
+              "name": "general"
+            }
           ],
           "fallback": "general",
-          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices — the Chinook store database.\nlive_data: questions needing live external data — weather, country facts, GDP, Wikipedia background, earthquakes.\ngeneral: greetings, small talk, and anything else."
+          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: questions needing live external data \u2014 weather, country facts, GDP, Wikipedia background, earthquakes.\ngeneral: greetings, small talk, and anything else."
         },
-        "position": { "x": 360, "y": 300 }
+        "position": {
+          "x": 360,
+          "y": 300
+        }
       },
       {
         "id": "wf-videogames",
         "type": "workflow.subgraph",
         "title": "Video Game Analytics",
-        "data": { "workflow": "tabular-analytics" },
-        "position": { "x": 720, "y": 80 }
+        "data": {
+          "workflow": "tabular-analytics"
+        },
+        "position": {
+          "x": 720,
+          "y": 80
+        }
       },
       {
         "id": "wf-music",
         "type": "workflow.subgraph",
         "title": "Chinook SQL",
-        "data": { "workflow": "chinook-nl-to-sql" },
-        "position": { "x": 720, "y": 260 }
+        "data": {
+          "workflow": "chinook-nl-to-sql"
+        },
+        "position": {
+          "x": 720,
+          "y": 260
+        }
       },
       {
         "id": "wf-livedata",
         "type": "workflow.subgraph",
         "title": "Open API Explorer",
-        "data": { "workflow": "open-api-explorer" },
-        "position": { "x": 720, "y": 440 }
+        "data": {
+          "workflow": "open-api-explorer"
+        },
+        "position": {
+          "x": 720,
+          "y": 440
+        }
       },
       {
         "id": "agent-general",
         "type": "agent.llm",
         "title": "General Assistant",
         "data": {
-          "systemPrompt": "You are the Dyflow assistant. Answer general questions helpfully and briefly. You have no tools — never invent data, figures or database contents; for anything needing real data, say which specialised capability the user should ask about (video game sales, the Chinook music store, or live weather/country/earthquake data)."
+          "systemPrompt": "You are the Dyflow assistant. Answer general questions helpfully and briefly. You have READ-ONLY tools over this platform: platform_list_workflows and platform_describe_workflow for questions about what this system offers, and platform_ls / platform_read_file / platform_grep to explore the repository when asked how something works. Use them rather than guessing \u2014 a question like 'how many workflows are there' is answered by calling platform_list_workflows, never from memory. You cannot write, and you never invent data; for live data questions name the specialised workflow instead."
         },
-        "position": { "x": 720, "y": 620 }
+        "position": {
+          "x": 720,
+          "y": 620
+        }
       },
       {
         "id": "grader-general",
@@ -63,22 +106,227 @@
           "criteriaMode": "extend",
           "maxAttempts": 1
         },
-        "position": { "x": 1060, "y": 620 }
+        "position": {
+          "x": 1060,
+          "y": 620
+        }
       },
-      { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1400, "y": 300 } }
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 1400,
+          "y": 300
+        }
+      },
+      {
+        "id": "t-listwf",
+        "type": "tool.platform-list-workflows",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 700
+        }
+      },
+      {
+        "id": "t-descwf",
+        "type": "tool.platform-describe-workflow",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 840
+        }
+      },
+      {
+        "id": "t-ls",
+        "type": "tool.platform-ls",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 980
+        }
+      },
+      {
+        "id": "t-read",
+        "type": "tool.platform-read-file",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 1120
+        }
+      },
+      {
+        "id": "t-grep",
+        "type": "tool.platform-grep",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 1260
+        }
+      }
     ],
     "edges": [
-      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "router1", "portId": "question" } },
-      { "source": { "nodeId": "router1", "portId": "branch:b-videogames" }, "target": { "nodeId": "wf-videogames", "portId": "input" } },
-      { "source": { "nodeId": "router1", "portId": "branch:b-music" }, "target": { "nodeId": "wf-music", "portId": "input" } },
-      { "source": { "nodeId": "router1", "portId": "branch:b-livedata" }, "target": { "nodeId": "wf-livedata", "portId": "input" } },
-      { "source": { "nodeId": "router1", "portId": "branch:b-general" }, "target": { "nodeId": "agent-general", "portId": "prompt" } },
-      { "source": { "nodeId": "wf-videogames", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } },
-      { "source": { "nodeId": "wf-music", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } },
-      { "source": { "nodeId": "wf-livedata", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } },
-      { "source": { "nodeId": "agent-general", "portId": "result" }, "target": { "nodeId": "grader-general", "portId": "candidate" } },
-      { "source": { "nodeId": "grader-general", "portId": "pass" }, "target": { "nodeId": "out1", "portId": "result" } },
-      { "source": { "nodeId": "grader-general", "portId": "revise" }, "target": { "nodeId": "agent-general", "portId": "feedback" } }
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-videogames"
+        },
+        "target": {
+          "nodeId": "wf-videogames",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-music"
+        },
+        "target": {
+          "nodeId": "wf-music",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-livedata"
+        },
+        "target": {
+          "nodeId": "wf-livedata",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-general"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "wf-videogames",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "wf-music",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "wf-livedata",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-general",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader-general",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-general",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-general",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-listwf",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-descwf",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-ls",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-read",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-grep",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      }
     ]
   }
 }

@@ -100,6 +100,16 @@ class TestConciergeGateway:
         }
         assert plan.warnings == []
 
-    def test_the_concierge_binds_no_tools_anywhere(self) -> None:
+    def test_the_concierge_binds_only_read_only_platform_tools(self) -> None:
+        """User spec refined: 'no write — everything else'. The gateway's
+        general agent carries the platform introspection family (all
+        read-only by construction); nothing else binds anything."""
         doc = json.loads((REPO / "workflows/concierge/workflow.json").read_text())["document"]
-        assert WorkflowCompiler().plan(doc).tool_bindings == {}
+        plan = WorkflowCompiler().plan(doc)
+        assert set(plan.tool_bindings) == {"agent-general"}
+        types = {next(n["type"] for n in doc["nodes"] if n["id"] == t)
+                 for t in plan.tool_bindings["agent-general"]}
+        assert types == {
+            "tool.platform-list-workflows", "tool.platform-describe-workflow",
+            "tool.platform-ls", "tool.platform-read-file", "tool.platform-grep",
+        }

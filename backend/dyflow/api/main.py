@@ -273,6 +273,11 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
     # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
     registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
+    from dyflow.prebuilt_platform import PLATFORM_TOOLS
+
+    # Read-only platform introspection (ticket 67, user spec: "no write,
+    # everything else") — list/describe workflows, jailed ls/read/grep.
+    registry.update({tool.node_type: tool for tool in PLATFORM_TOOLS})
     if slug:
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
