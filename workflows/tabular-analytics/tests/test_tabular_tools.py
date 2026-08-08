@@ -74,15 +74,20 @@ class TestQueryData:
             query="SELECT Name, Global_Sales FROM vgsales ORDER BY Global_Sales DESC LIMIT 3"
         )
         assert result.error is None
-        # The markdown table must contain the top row of the actual file.
-        assert "Wii Sports" in result.content
+        # The markdown table must contain the top-ranked row of the actual
+        # file (synthetic dataset — ticket 41; Rank 1 is the highest seller).
+        import csv
+        top = next(csv.DictReader(open(tabular.DEFAULT_DATA_DIR / "vgsales.csv")))
+        assert top["Name"] in result.content
 
     def test_an_aggregation_is_computed_not_echoed(self) -> None:
         result = tabular.QueryDataTool().run(
             query="SELECT COUNT(*) AS n FROM vgsales"
         )
         assert result.error is None
-        assert "50" in result.content  # the shipped sample has 50 data rows
+        import csv
+        n = sum(1 for _ in csv.DictReader(open(tabular.DEFAULT_DATA_DIR / "vgsales.csv")))
+        assert str(n) in result.content  # computed, not echoed
 
     def test_non_select_statements_are_refused(self) -> None:
         result = tabular.QueryDataTool().run(query="DROP TABLE vgsales")
@@ -109,7 +114,9 @@ class TestSampleData:
     def test_returns_real_first_rows(self) -> None:
         result = tabular.SampleDataTool().run(file_name="vgsales.csv", n_rows=5)
         assert result.error is None
-        assert "Wii Sports" in result.content
+        import csv
+        top = next(csv.DictReader(open(tabular.DEFAULT_DATA_DIR / "vgsales.csv")))
+        assert top["Name"] in result.content
 
     def test_an_oversized_n_rows_is_rejected_as_data(self) -> None:
         """Pydantic's `le=50` refuses it; the refusal must arrive as a
