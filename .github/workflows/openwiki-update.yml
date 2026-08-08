@@ -1,0 +1,47 @@
+name: OpenWiki update
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+# Refreshes openwiki/ and opens a PR only when content changed —
+# openwiki tracks state in openwiki/.last-update.json, so quiet weeks
+# produce no PR at all. Configure repo secrets/vars for a hosted provider
+# (CI cannot reach the local Ollama daemon):
+#   secrets.OPENWIKI_API_KEY   — the provider key
+#   vars.OPENWIKI_PROVIDER     — e.g. anthropic | openai | openrouter
+#   vars.OPENWIKI_MODEL_ID     — e.g. claude-haiku-4-5
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      # Installed GLOBALLY, never from this repo's node_modules: openwiki's
+      # terminal UI (ink) breaks against our React 19 when hoisted together
+      # (hit locally; the isolation is the fix, not a workaround).
+      - run: npm install -g openwiki
+      - name: Update wiki
+        env:
+          OPENWIKI_PROVIDER: ${{ vars.OPENWIKI_PROVIDER }}
+          OPENWIKI_MODEL_ID: ${{ vars.OPENWIKI_MODEL_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.OPENWIKI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENWIKI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENWIKI_API_KEY }}
+          OPENWIKI_TELEMETRY_DISABLED: "1"
+        run: openwiki code --update --print
+      - name: Open PR when the wiki changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: openwiki/update
+          title: "docs: OpenWiki refresh"
+          commit-message: "docs: OpenWiki refresh"
+          body: "Scheduled wiki refresh — review what the codebase's story now says."
+          add-paths: |
+            openwiki/
+            AGENTS.md
+            CLAUDE.md

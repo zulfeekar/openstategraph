@@ -1,0 +1,66 @@
+---
+title: The workflow package contract
+description: What a workflows/<slug>/ directory may contain and how discovery binds each piece.
+type: page
+---
+
+# The workflow package contract
+
+A workflow is a **directory**, not a database row:
+`workflows/<slug>/`. Scaffold one with
+[`scripts/new_workflow.py`](../../scripts/new_workflow.py) (or
+[`scripts/new_team.py`](../../scripts/new_team.py) for a prebuilt Team loop).
+
+| Path | Required | Bound by |
+| --- | --- | --- |
+| `workflow.json` | **yes** | [`WorkflowStore`](../../backend/dyflow/api/workflow_store.py) |
+| `AGENTS.md` | expected (warning if absent) | humans and coding agents |
+| `tools/*.py` | optional | `discover_tool_registry` — keyed by each tool's own `node_type` |
+| `functions/*.py` | optional | `discover_function_callables` — `function.<name>` |
+| `middlewares/<slot>.py` | optional | `discover_middlewares` — file stem **is** the slot name, module must export `MIDDLEWARE` |
+| `skills/*.md` | optional | `discover_skills` — concatenated into every agent's prompt context |
+| `tests/` | expected when `tools/` exists | pytest (see [testing](../testing.md)) |
+| `data/` | optional | the workflow's own fixtures/databases |
+
+Discovery lives in
+[`backend/dyflow/api/capability_discovery.py`](../../backend/dyflow/api/capability_discovery.py);
+the contract is checked by `validate_package()` in
+[`workflow_store.py`](../../backend/dyflow/api/workflow_store.py) and surfaced
+on the workflow list endpoint as `error: …` / `warning: …` findings.
+
+## `workflow.json`
+
+An envelope around the document:
+
+```json
+{ "version": 1, "name": "…", "savedAt": "…", "hidden": false,
+  "document": { "version": 2, "name": "…", "settings": {}, "nodes": [], "edges": [] } }
+```
+
+- **Slug is frozen identity; name is not.** The slug is derived once via
+  `slugify()` at creation; renaming never moves the directory.
+- `hidden: true` keeps a package out of every list while still loadable by slug
+  (used by `concierge` and `workflow-architect`).
+- `settings.model` sets the workflow's default model; explicit request > this >
+  environment default.
+- `settings.checkpointer: "sqlite"` opts into durable threads
+  (see [memory](../architecture/memory.md)).
+- Serialization is canonical (sorted nodes, content-addressed edges, no written
+  edge ids) — edit through the editor rather than by hand.
+
+## Discovery rules worth knowing
+
+- **Folder scopes where to look; subclassing decides what counts.** A `tools/`
+  class only registers if it subclasses our `BaseTool` *and* is defined in the
+  scanned module (a re-export is skipped).
+- **Ids are workflow-qualified**: `<slug>/tools.<ClassName>`,
+  `<slug>/functions.<name>`. Modules are imported under `<slug>.tools.<stem>`
+  via `spec_from_file_location`, so two packages' identically named files never
+  collide.
+- **Import executes code.** Discovery runs module-level code — acceptable for a
+  local dev tool, unsuitable for hosting someone else's package. There is no
+  sandboxing.
+- A function's contract is deliberately narrow: `fn(text: str) -> str`. Code is
+  referenced by name, never embedded in the document.
+- A child workflow (subgraph / Team) resolves tools and functions from **its
+  own** package via `registry_loader`, not from the parent's.

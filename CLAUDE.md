@@ -272,3 +272,13 @@ and use the system `python3` (the backend's deps are installed user-level;
 `python3 -m pytest` works with no venv). Never run `npm install` or create
 a `.venv` inside a worktree unless a dependency actually changed — and if
 one did, do it on the main checkout and re-link.
+
+<!-- OPENWIKI:START -->
+
+## OpenWiki
+
+This repository uses OpenWiki for recurring code documentation. Start with `openwiki/quickstart.md`, then follow its links to architecture, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
+
+The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+<!-- OPENWIKI:END -->

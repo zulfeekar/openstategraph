@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08) — generated, wired, scheduled
 
 ## Question
 
@@ -35,3 +35,7 @@ Build steps:
 - Optional: the docs' CI example for scheduled refresh + PR.
 - Later: `wiki_lookup` prebuilt tool (concept search over openwiki/ with
   front-matter citations) if raw read/grep proves too blunt.
+
+## Resolution
+
+Generated (user-approved Copilot provider): 13 OKF concept pages / 677 lines — compile seam, entity ladders, memory, package contract, ten-workflow catalogue, extending how-to, testing, quickstart. Wired: concierge prompt reads openwiki/index.md first for how-does-it-work questions (platform_read already reaches it); CLAUDE.md points coding agents at it; `.github/workflows/openwiki-update.yml` refreshes weekly and opens a PR only on change (openwiki installed globally in CI — local install collides with our React 19). Finding recorded: the Ollama openai-compat endpoint completes silently with an empty wiki — a hosted provider is required.

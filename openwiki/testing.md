@@ -1,0 +1,42 @@
+---
+title: Testing
+description: The three suites, how to run them, and the conventions that keep them isolated.
+type: page
+---
+
+# Testing
+
+TDD is the standing rule: tests before implementation, and `src/core/` is pure
+TypeScript with no excuse for untested logic.
+
+| Suite | Command | Lives in |
+| --- | --- | --- |
+| Frontend unit | `npm test` (`vitest run`) | beside the source, `*.test.ts(x)` |
+| Full frontend gate | `npm run verify` (tsc + eslint + prettier + vitest) | — |
+| Backend unit | `cd backend && pytest` | [`backend/tests/`](../backend/tests) and `workflows/<slug>/tests/` |
+| Browser E2E | `npx playwright test` | [`e2e/canvas.smoke.spec.ts`](../e2e/canvas.smoke.spec.ts) |
+
+CI runs all three as separate jobs
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), with `ruff` on the
+backend.
+
+## pytest conventions ([`pytest.ini`](../pytest.ini))
+
+- Two roots: `backend` and `workflows/chinook-nl-to-sql` on `pythonpath`;
+  `testpaths = workflows backend`.
+- **Live-network tests are opt-in.** Mark them `@pytest.mark.live`; the default
+  run is `-m "not live"` and must pass offline.
+- Test directories deliberately have **no `__init__.py`** — two roots would
+  otherwise collide on a package named `tests`.
+- `norecursedirs` excludes `data`, `scratch` and `output`, so the code-workshop
+  fixture repo's *deliberately failing* test is never collected.
+
+## Isolation seams
+
+Injectability exists for tests, not decoration: `WorkflowStore(root=...)`,
+`create_app(graph_factory=..., workflows_root=...)`,
+`WorkflowCompiler(port_resolver=...)` and `NodeRuntime(tools=..., functions=...)`
+all let a test operate on throwaway data with a stub model.
+
+`WorkflowCompiler.plan()` returns a plain `CompiledPlan`, so routing, bindings
+and fan-out are assertable without building or running a graph.

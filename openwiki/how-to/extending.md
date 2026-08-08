@@ -1,0 +1,108 @@
+---
+title: How to extend Dyflow
+description: Recipes for adding a node type, a tool, a middleware slot, a workflow, and a Team.
+type: page
+---
+
+# How to extend Dyflow
+
+Every recipe below is a *registration* or a *file drop*. If a change requires
+editing the engine, it is probably the wrong shape.
+
+## Add a node type
+
+A node type exists on both sides: a definition the editor can draw and a
+builder the compiler can run.
+
+1. **Frontend** — one module under [`src/nodes/`](../../src/nodes) containing
+   the model class (extending `AbstractNodeModel`), the field schema, the ports
+   and the `INodeExecutor` for canvas preview. Use `defineNode()` from
+   [`ModelRegistry.ts`](../../src/core/model/ModelRegistry.ts).
+   [`RedditSearchNode.ts`](../../src/nodes/tools/RedditSearchNode.ts) is a
+   complete example in ~90 lines.
+2. Register it in [`src/nodes/index.ts`](../../src/nodes/index.ts) — the only
+   file that knows the full catalogue. Workflow-scoped types register through
+   [`workflowScoped.ts`](../../src/nodes/workflowScoped.ts) instead.
+3. **Backend** — add a `_builder` entry keyed by the type in
+   [`NodeRuntime._builders`](../../backend/dyflow/compile/node_runtime.py).
+4. Declare its ports in `DEFAULT_PORT_SPECS`
+   ([`workflow_compiler.py`](../../backend/dyflow/compile/workflow_compiler.py))
+   — this is what decides whether an incoming edge is control flow or a
+   binding. Omitting it does not crash; the node compiles as opaque with
+   control-flow edges only.
+5. If the type should be composable by the Workflow Architect, add it to
+   `KNOWN_NODE_TYPES` in
+   [`prebuilt_architect.py`](../../backend/dyflow/prebuilt_architect.py) — a
+   test pins that set against `_builders`.
+
+## Add a tool
+
+For a tool that belongs to one workflow, no registration is needed at all:
+
+1. Drop a `BaseTool` subclass in `workflows/<slug>/tools/my_tool.py`
+   ([`abc/tool.py`](../../backend/dyflow/abc/tool.py)). Define `Args` as a
+   Pydantic model, return `ToolResult`, and return failures as **data**.
+2. Declare `node_type = "tool.my-thing"` to make it placeable on the canvas —
+   that declaration is the wiring identity discovery keys on.
+3. Add a test in `workflows/<slug>/tests/`; `validate_package` warns about
+   `tools/` without `tests/`.
+4. Restart the backend (discovery imports modules once; there is deliberately
+   no `importlib.reload`).
+
+A tool useful to *every* workflow becomes a `prebuilt_*.py` family beside
+[`prebuilt_sql.py`](../../backend/dyflow/prebuilt_sql.py), plus canvas node
+definitions like
+[`PlatformToolsNode.ts`](../../src/nodes/tools/PlatformToolsNode.ts).
+
+## Add a function
+
+Drop `def my_step(text: str) -> str` in `workflows/<slug>/functions/`. It binds
+to a node of type `function.my_step`. Keep the signature narrow — a function
+with raw graph state would be a second, unserialisable home for control flow.
+
+## Fill a middleware slot
+
+Create `workflows/<slug>/middlewares/<slot_name>.py` exporting a module-level
+`MIDDLEWARE` object (any LangChain `AgentMiddleware`). The **file stem is the
+slot name**: `summarization.py` replaces the tier's summarization slot; a novel
+name adds a new slot that flattens after the canonical ones. No registration.
+
+To change the canonical order itself, edit `AbstractAgentNode.SLOT_ORDER`
+([`abc/agent.py`](../../backend/dyflow/abc/agent.py)) — and read
+[why order is a slot table](../architecture/entity-ladders.md) first. Never
+expose an ordering number to a user.
+
+## Add a workflow
+
+```bash
+python3 scripts/new_workflow.py my-flow "My Flow"
+```
+
+Creates the contract's required files plus the conventional directories. Then
+open the slug in the editor and author it, or hand-write the document if you
+know the canonical serialization rules. See
+[the package contract](../workflows/package-contract.md).
+
+## Add a Team
+
+```bash
+python3 scripts/new_team.py research-team "Deliver a sourced summary"
+```
+
+Scaffolds the prebuilt minimum-viable Team: supervisor + one default worker +
+a grader closing the revise loop. **Edit the grader's criteria first** — they
+*are* the team's outcome contract. Mount it anywhere with a **Team** node
+pointing at the slug
+([`TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)). Add members by adding
+workers (each new title is a new archetype) and binding tools from the
+package's `tools/`.
+
+## Other registries
+
+| To add… | Register a… | Engine changes |
+| --- | --- | --- |
+| An LLM vendor (canvas preview) | `ILLMProvider` | none |
+| A connection rule | `IConnectionRule` | none |
+| A validation check | `IWorkflowRule` | none |
+| A canvas behaviour | `IPaperFeature` | none |
+| A bespoke card body | `NodeBody` in [`nodeBodyRegistry.tsx`](../../src/view/nodes/nodeBodyRegistry.tsx) | none |

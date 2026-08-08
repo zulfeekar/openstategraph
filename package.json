@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Visual AI workflow builder \u2014 JointJS core canvas, MVC engine, pluggable LLM providers.",
+  "description": "Visual AI workflow builder — JointJS core canvas, MVC engine, pluggable LLM providers.",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
