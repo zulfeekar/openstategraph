@@ -413,7 +413,7 @@ class TestReviseReEntersTheFanOut:
         plan = WorkflowCompiler().plan(document)
 
         assert plan.fan_out == {
-            "node:orchestrate.supervisor-1": "node:orchestrate.worker-1",
+            "node:orchestrate.supervisor-1": ["node:orchestrate.worker-1"],
         }
         assert plan.conditional["node:route.grader-1"] == {
             "pass": "node:output.formatted-1",

@@ -1105,13 +1105,36 @@ app and Ollama cloud, not only in tests:
 
 Open, honestly: [open-api-explorer](issues/42-open-api-explorer.md) and
 [code-workshop](issues/43-code-workshop.md) are charted, not built;
-[chinook canvas document](issues/39-chinook-canvas-document.md),
 [supervisor archetypes](issues/37-supervisor-archetypes.md),
 [persistence & durability](issues/47-persistence-memory-durability.md),
 [coverage](issues/48-coverage-at-leaked-seams.md),
 [workflow package contract](issues/49-workflow-package-contract.md),
 [OSS release](issues/50-oss-release.md) (the last nail) and
 [browser E2E](issues/51-browser-e2e.md) remain the frontier.
+
+## The flagship gets its canvas document (2026-08-07)
+
+Ticket [39](issues/39-chinook-canvas-document.md) resolved.
+`workflows/chinook-nl-to-sql/workflow.json` now exists (envelope form,
+matching `tabular-analytics`), so the flagship is listed by
+`WorkflowStore.list()` and loads on the canvas. Shape: `input.text` →
+`agent.llm` (tier react, the SQL directive as `systemPrompt`, all three
+Chinook tools on the tool bus) → `route.grader` (criteria mirroring
+`graph.py`'s deterministic `grade()` checks, maxAttempts 3) with
+`revise → feedback` closing the typed cycle → `output.formatted`.
+
+Compared against `graph.py`: same evaluator-optimizer topology out of the
+compiler (`orient` subsumed by the bound list-tables tool, deep-agent
+`synthesise` by the agent's final message + formatted output). **`graph.py`
+stays** as the "compiler output is just Python" three-tier demonstration.
+`backend/tests/test_chinook_demo_file.py` is the real-file E2E
+(`test_intent_routed_demo_file.py` mould): no plan warnings, three tool
+bindings survive serialization, both grader routes, pass path, and a revise
+lap proving the rejection reason reaches the agent's retry prompt. Verified
+live in the running editor: loaded via Manage workflows, asked through Chat
+— real tool calls, correct SQL, grader pass, **Iron Maiden, 21 albums**.
+The two hardcoded `/api/workflows/chinook-nl-to-sql/*` endpoints move with
+[ticket 49](issues/49-workflow-package-contract.md), as charted.
 
 ## Not yet specified
 

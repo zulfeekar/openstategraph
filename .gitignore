@@ -33,3 +33,7 @@ venv/
 # Test output
 coverage/
 .gstack/
+
+# Code Workshop workflow — runtime jail and PR dry-run output, never sources
+workflows/code-workshop/scratch/
+workflows/code-workshop/output/

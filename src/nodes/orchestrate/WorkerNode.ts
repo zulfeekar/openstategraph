@@ -43,11 +43,35 @@ export const workerNode: INodeDefinition = defineNode(
     accent: 'blue',
     keywords: ['worker', 'subagent', 'dispatch', 'task', 'send', 'fan-out'],
     defaultSize: { width: 252, height: 200 },
-    // Exactly one Worker node exists per fan-out; the runtime multiplies it
-    // into N task instances, but that multiplication is never a second node
-    // on the canvas.
+    // One Worker node per *archetype* (ticket 37): an orchestrator may wire
+    // several, each a different kind of specialist. The runtime still
+    // multiplies each into N task instances, and that multiplication is
+    // never a second node on the canvas.
     maxInstances: undefined,
-    fields: [],
+    fields: [
+      {
+        kind: 'textarea',
+        key: 'role',
+        label: 'Role',
+        placeholder: 'What this worker archetype handles, e.g. "weather and forecast questions"',
+        defaultValue: '',
+        onCard: false,
+        // Shown to the supervisor's labelling model alongside the node's
+        // title — the description half of the archetype roster. The title
+        // itself (slugified) is the dispatch key; see
+        // `backend/dyflow/abc/orchestrator.py`'s `archetype_key`.
+      },
+      {
+        kind: 'toggle',
+        key: 'default',
+        label: 'Default worker',
+        defaultValue: false,
+        onCard: false,
+        // Where unlabelled or unrecognised subtasks land. With no card
+        // claiming it, the first wired archetype is the default; two claims
+        // is a validator warning (`singleDefaultWorkerRule`).
+      },
+    ],
     ports: [
       {
         id: 'dispatch',

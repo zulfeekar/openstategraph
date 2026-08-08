@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "name": "Code Workshop Review",
+  "document": {
+    "version": 2,
+    "name": "Code Workshop Review",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud"
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 120
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "reviewer1",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": "You are a rigorous code reviewer. Your input is a proposed change: a unified diff plus a pytest report. Review it hunk by hunk. Cover: (1) correctness — does the change actually fix the failing behaviour, and could it break anything else; (2) minimality — is anything changed that did not need to be; (3) tests — does the report show the suite passing, and is the fix covered by an existing test; (4) risks or style concerns worth naming. Quote the specific diff lines you are commenting on. End with exactly one line: 'Verdict: APPROVE' or 'Verdict: REQUEST_CHANGES' followed by a one-sentence reason."
+        },
+        "position": {
+          "x": 360,
+          "y": 100
+        },
+        "size": {
+          "width": 300,
+          "height": 240
+        }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- The review must quote or reference specific lines from the diff, not talk about it generically.\n- The review must state whether the test report shows the suite passing.\n- The review must end with a single 'Verdict: APPROVE' or 'Verdict: REQUEST_CHANGES' line with a reason.",
+          "criteriaMode": "replace",
+          "maxAttempts": 2
+        },
+        "position": {
+          "x": 720,
+          "y": 100
+        },
+        "size": {
+          "width": 280,
+          "height": 220
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 1060,
+          "y": 120
+        },
+        "size": {
+          "width": 320,
+          "height": 300
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "reviewer1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "reviewer1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "reviewer1",
+          "portId": "feedback"
+        }
+      }
+    ]
+  }
+}

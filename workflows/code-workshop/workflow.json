@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "name": "Code Workshop",
+  "document": {
+    "version": 2,
+    "name": "Code Workshop",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud"
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        },
+        "size": {
+          "width": 252,
+          "height": 200
+        }
+      },
+      {
+        "id": "coder1",
+        "type": "agent.llm",
+        "data": {
+          "tier": "deep",
+          "systemPrompt": "You are a careful software engineer working in a sandboxed workspace. Follow this loop strictly: (1) call workshop_reset_workspace to get a clean copy of the project; (2) call workshop_run_tests to see what fails; (3) read the failing test and the code under test with workshop_read_file; (4) make the SMALLEST change that fixes the failure using workshop_write_file — always write the complete file; (5) call workshop_run_tests again and repeat until every test passes; (6) call workshop_diff to capture your change. Never touch files unrelated to the failure, and never edit the tests to make them pass. Your final answer MUST contain three sections: a one-paragraph summary of the root cause and the fix, the full unified diff exactly as workshop_diff returned it, and the final pytest report exactly as workshop_run_tests returned it."
+        },
+        "position": {
+          "x": 360,
+          "y": 180
+        },
+        "size": {
+          "width": 300,
+          "height": 260
+        }
+      },
+      {
+        "id": "tool-reset",
+        "type": "tool.workshop-reset",
+        "data": {},
+        "position": {
+          "x": 200,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 160
+        }
+      },
+      {
+        "id": "tool-list",
+        "type": "tool.workshop-list-files",
+        "data": {},
+        "position": {
+          "x": 400,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 160
+        }
+      },
+      {
+        "id": "tool-read",
+        "type": "tool.workshop-read-file",
+        "data": {},
+        "position": {
+          "x": 600,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 160
+        }
+      },
+      {
+        "id": "tool-write",
+        "type": "tool.workshop-write-file",
+        "data": {},
+        "position": {
+          "x": 800,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 160
+        }
+      },
+      {
+        "id": "tool-tests",
+        "type": "tool.workshop-run-tests",
+        "data": {
+          "timeoutSeconds": 120
+        },
+        "position": {
+          "x": 1000,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 180
+        }
+      },
+      {
+        "id": "tool-diff",
+        "type": "tool.workshop-diff",
+        "data": {},
+        "position": {
+          "x": 1200,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 160
+        }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- The answer must contain a unified diff (lines starting with '--- a/' and '+++ b/').\n- The answer must contain a pytest report that says ALL TESTS PASSED.\n- The diff must not modify any file under tests/.\n- The change must be small and targeted at the described failure, not a rewrite.",
+          "criteriaMode": "replace",
+          "maxAttempts": 2
+        },
+        "position": {
+          "x": 740,
+          "y": 180
+        },
+        "size": {
+          "width": 280,
+          "height": 220
+        }
+      },
+      {
+        "id": "review1",
+        "type": "workflow.subgraph",
+        "data": {
+          "workflow": "code-workshop-review"
+        },
+        "position": {
+          "x": 1080,
+          "y": 180
+        },
+        "size": {
+          "width": 252,
+          "height": 150
+        }
+      },
+      {
+        "id": "human1",
+        "type": "human.approval",
+        "data": {
+          "message": "The coder fixed the failing test and the review panel signed off. Approve to package the change as a PR (dry-run: writes .patch + PR body to the workflow's output directory)."
+        },
+        "position": {
+          "x": 1400,
+          "y": 180
+        },
+        "size": {
+          "width": 280,
+          "height": 180
+        }
+      },
+      {
+        "id": "release1",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": "You are the release manager. Your input contains an approved code review of a change that was already made in the sandboxed workspace. Work strictly from evidence: first call workshop_diff to see the actual change, and workshop_run_tests for the actual test report. Then call workshop_create_pr exactly once, with a concise one-line title and a Markdown body containing: the problem, the fix, and how it was verified — quoting only file names, symbols and test results that appear in the tool outputs or your input. Never invent a file, function or test name. Finally report what workshop_create_pr returned — including that it was a dry run, if it was."
+        },
+        "position": {
+          "x": 1720,
+          "y": 180
+        },
+        "size": {
+          "width": 300,
+          "height": 240
+        }
+      },
+      {
+        "id": "tool-pr",
+        "type": "tool.workshop-create-pr",
+        "data": {
+          "useGh": false
+        },
+        "position": {
+          "x": 1760,
+          "y": 520
+        },
+        "size": {
+          "width": 252,
+          "height": 180
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 2080,
+          "y": 200
+        },
+        "size": {
+          "width": 320,
+          "height": 300
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-reset",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-list",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-read",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-write",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-tests",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-diff",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "coder1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "review1",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "review1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "human1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "human1",
+          "portId": "approved"
+        },
+        "target": {
+          "nodeId": "release1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "human1",
+          "portId": "rejected"
+        },
+        "target": {
+          "nodeId": "coder1",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-pr",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "release1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-diff",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "release1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "tool-tests",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "release1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "release1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

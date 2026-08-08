@@ -89,14 +89,17 @@ export const orchestratorNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.worker,
         label: 'workers',
-        // A fan-out declaration, not control flow — the compiler records at
-        // most one dispatch target per orchestrator (`CompiledPlan.fan_out`
-        // is keyed by orchestrator id), so this is a single wire, not a bus.
-        maxConnections: 1,
+        // A fan-out declaration, not control flow — and since ticket 37 a
+        // *bus*: each wire declares one worker archetype
+        // (`CompiledPlan.fan_out` records them in edge order), and the
+        // supervisor labels every subtask with the archetype it should
+        // dispatch to. One wire is still the common case and behaves
+        // exactly as before.
+        maxConnections: null,
         required: true,
         side: 'bottom',
         appearance: 'pill',
-        description: 'The worker node subtasks are dispatched to.',
+        description: 'The worker archetype nodes subtasks are dispatched to.',
       },
     ],
   },

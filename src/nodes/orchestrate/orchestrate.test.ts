@@ -31,7 +31,7 @@ describe('orchestrator + worker — the fan-out declaration', () => {
     expect(field?.defaultValue).toBe(DEFAULT_MAX_SUBTASKS);
   });
 
-  it('declares instruction, feedback and a single-slot workers fan-out port', () => {
+  it('declares instruction, feedback and a workers fan-out bus', () => {
     const ports = orchestratorNode.ports(emptyData(orchestratorNode));
     const instruction = ports.find((p) => p.id === 'instruction');
     const feedback = ports.find((p) => p.id === 'feedback');
@@ -39,9 +39,10 @@ describe('orchestrator + worker — the fan-out declaration', () => {
 
     expect(instruction).toMatchObject({ direction: 'in', type: 'text' });
     expect(feedback).toMatchObject({ direction: 'in', type: 'feedback' });
-    // A single wire, not a bus: the compiler records at most one dispatch
-    // target per orchestrator (`CompiledPlan.fan_out` is one-to-one).
-    expect(workers).toMatchObject({ direction: 'out', type: 'worker', maxConnections: 1 });
+    // A bus since ticket 37: each wire declares one worker archetype the
+    // supervisor can label subtasks for (`CompiledPlan.fan_out` keeps them
+    // in edge order).
+    expect(workers).toMatchObject({ direction: 'out', type: 'worker', maxConnections: null });
   });
 
   it('lets an orchestrator wire its workers port to a Worker node', () => {
@@ -54,6 +55,23 @@ describe('orchestrator + worker — the fan-out declaration', () => {
     );
 
     expect(verdict.ok).toBe(true);
+  });
+
+  it('lets an orchestrator wire a second worker archetype (ticket 37)', () => {
+    const orchestrator = addNode(workbench, TYPE.orchestrator);
+    const weather = addNode(workbench, TYPE.worker);
+    const countries = addNode(workbench, TYPE.worker, { at: { x: 200, y: 0 } });
+
+    workbench.controller.edges.connect(
+      { nodeId: orchestrator.id, portId: 'workers' },
+      { nodeId: weather.id, portId: 'dispatch' },
+    );
+    const second = workbench.controller.edges.connect(
+      { nodeId: orchestrator.id, portId: 'workers' },
+      { nodeId: countries.id, portId: 'dispatch' },
+    );
+
+    expect(second.ok).toBe(true);
   });
 
   it('refuses a workers edge into anything but a worker-typed port', () => {

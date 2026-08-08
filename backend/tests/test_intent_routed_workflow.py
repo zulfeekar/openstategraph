@@ -177,7 +177,7 @@ class TestCompilesCleanly:
     def test_no_warnings_and_the_fan_out_and_bindings_are_where_expected(self) -> None:
         plan = WorkflowCompiler().plan(intent_routed_document())
         assert plan.warnings == []
-        assert plan.fan_out == {"orch1": "worker1"}
+        assert plan.fan_out == {"orch1": ["worker1"]}
         assert set(plan.conditional.keys()) == {
             "router1",
             "grader-data",

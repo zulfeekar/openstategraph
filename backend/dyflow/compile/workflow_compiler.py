@@ -29,6 +29,8 @@ from typing import Any, Callable
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
+from dyflow.abc.orchestrator import archetype_key
+
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
 try:
     from langgraph.types import TimeoutPolicy
@@ -62,8 +64,16 @@ HUMAN_APPROVAL_TYPE = "human.approval"
 WORKER_PORT_TYPE = "worker"
 
 
-def _default_error_handler(state: dict[str, Any], error: Any) -> dict[str, Any]:
+def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str, Any]:
     """Runs once a node's retries are exhausted. Recovers, never crashes.
+
+    The `error: NodeError` annotation is **load-bearing**, not documentation:
+    current langgraph injects the failure context only into a parameter that
+    is both *named* `error` and *annotated* `NodeError` (class or the literal
+    string — this module's `from __future__ import annotations` makes it the
+    string, which the matcher accepts). An untyped `error` parameter is not
+    injected at all, and the handler then dies on arity — found when a
+    langgraph upgrade silently broke every fault-tolerance test.
 
     Deliberately returns a plain state update rather than a `Command`: with
     no `goto`, LangGraph continues along the node's own already-declared
@@ -250,13 +260,16 @@ class CompiledPlan:
     skill_bindings: dict[str, list[str]] = field(default_factory=dict)
     #: Nodes that compile into a binding rather than a step, so are not graph nodes.
     bound_only: list[str] = field(default_factory=list)
-    #: orchestrator node id -> the single worker node it dispatches `Send` to.
+    #: orchestrator node id -> the worker archetype nodes it dispatches
+    #: `Send` to, in canvas edge order (ticket 37).
     #:
-    #: A dict rather than a list, because the whole point is that exactly one
-    #: static worker node absorbs however many dynamic task instances an
-    #: orchestrator plans at runtime — LangGraph has no concept of a node that
-    #: exists N times, only tasks dispatched N times against one node.
-    fan_out: dict[str, str] = field(default_factory=dict)
+    #: A list per orchestrator, one entry per wired archetype — but still a
+    #: *static* declaration: each entry is one node that absorbs however many
+    #: dynamic task instances get labelled for it at runtime. LangGraph has no
+    #: concept of a node that exists N times, only tasks dispatched N times
+    #: against one node. Edge order matters: the first wired archetype is the
+    #: default dispatch target when no card claims `default`.
+    fan_out: dict[str, list[str]] = field(default_factory=dict)
     entry: list[str] = field(default_factory=list)
     exits: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -319,7 +332,9 @@ class WorkflowCompiler:
             # them would make the worker bind to the orchestrator as if it were
             # a tool, which is a different (and wrong) relationship.
             if dst_port.type == WORKER_PORT_TYPE:
-                plan.fan_out[src_id] = dst_id
+                targets = plan.fan_out.setdefault(src_id, [])
+                if dst_id not in targets:
+                    targets.append(dst_id)
                 has_outgoing.add(src_id)
                 # The worker has no *static* incoming edge — LangGraph dispatches
                 # it dynamically via Send — but it is reached, so it must not be
@@ -408,6 +423,21 @@ class WorkflowCompiler:
 
         if not plan.entry and plan.nodes:
             plan.warnings.append("No entry node: every node has an incoming edge")
+
+        # Two archetypes with one dispatch key cannot both be reachable — the
+        # later one silently shadows the earlier in the dispatch map. Warn at
+        # plan time, where the collision is a document fact, not a run fact.
+        for orchestrator_id, worker_ids in plan.fan_out.items():
+            if len(worker_ids) < 2:
+                continue
+            keys = [archetype_key(nodes[w]) for w in worker_ids if w in nodes]
+            duplicates = {k for k in keys if keys.count(k) > 1}
+            if duplicates:
+                plan.warnings.append(
+                    f"Orchestrator {orchestrator_id!r} has workers sharing an "
+                    f"archetype key ({', '.join(sorted(duplicates))}); retitle "
+                    "the workers so every archetype is dispatchable"
+                )
         return plan
 
     # ------------------------------------------------------------------ #
@@ -480,13 +510,31 @@ class WorkflowCompiler:
                 {label: safe_name(dst) for label, dst in destinations.items()},
             )
 
-        for orchestrator_id, worker_id in plan.fan_out.items():
+        for orchestrator_id, worker_ids in plan.fan_out.items():
+            # key -> graph node name. First writer wins on a collision, which
+            # matches the plan-time warning above: the shadowed worker is
+            # unreachable and the developer was told.
+            archetype_map: dict[str, str] = {}
+            for worker_id in worker_ids:
+                worker_node = nodes.get(worker_id) or {}
+                archetype_map.setdefault(archetype_key(worker_node), safe_name(worker_id))
+            # Exactly one default is the validated shape; the first card
+            # claiming it wins here so a mis-authored document still runs,
+            # and with none claimed the first wired archetype is the default.
+            default_worker = next(
+                (
+                    w
+                    for w in worker_ids
+                    if ((nodes.get(w) or {}).get("data") or {}).get("default")
+                ),
+                worker_ids[0],
+            )
             builder.add_conditional_edges(
                 safe_name(orchestrator_id),
-                self._fan_out_router(orchestrator_id, safe_name(worker_id)),
-                # The declared destination set is one entry, always — that is
-                # the point: N dynamic tasks, one static worker (ticket 27).
-                [safe_name(worker_id)],
+                self._fan_out_router(orchestrator_id, archetype_map, safe_name(default_worker)),
+                # The complete declared destination set: every wired archetype.
+                # Still static — N dynamic tasks per archetype node (ticket 27).
+                [safe_name(w) for w in worker_ids],
             )
 
         for node_id in plan.entry:
@@ -499,8 +547,19 @@ class WorkflowCompiler:
         return builder.compile(checkpointer=checkpointer) if checkpointer else builder.compile()
 
     @staticmethod
-    def _fan_out_router(orchestrator_id: str, worker_name: str) -> Callable[[Any], list[Any]]:
+    def _fan_out_router(
+        orchestrator_id: str,
+        archetype_map: dict[str, str],
+        default_worker: str,
+    ) -> Callable[[Any], list[Any]]:
         """Reads the orchestrator's plan and dispatches one `Send` per subtask.
+
+        Hybrid routing (ticket 37): each subtask carries the archetype key the
+        orchestrator labelled it with, and the key resolves to that archetype's
+        node through `archetype_map`. A key that resolves to nothing — the
+        model invented a label, or labelling failed and left `""` — dispatches
+        to `default_worker` rather than raising: a misroute degrades to the
+        single-archetype behaviour this graph had before archetypes existed.
 
         This is the one place `Send` is constructed, deliberately outside the
         orchestrator node itself. The node writes *what to do*
@@ -524,7 +583,7 @@ class WorkflowCompiler:
             subtasks = (state.get("subtasks") or {}).get(orchestrator_id) or []
             return [
                 Send(
-                    worker_name,
+                    archetype_map.get(task.get("archetype") or "", default_worker),
                     {"task_id": task["id"], "task_instruction": task["instruction"]},
                 )
                 for task in subtasks

@@ -7,7 +7,7 @@ import {
   registerLoopableType,
   TYPE,
 } from '@core/testing/fixtures';
-import { acyclicGraphRule, hasOutputRule } from './WorkflowValidator';
+import { acyclicGraphRule, hasOutputRule, singleDefaultWorkerRule } from './WorkflowValidator';
 
 /**
  * Found live, not hypothetically: a real chat run answered a question and
@@ -106,6 +106,50 @@ describe('acyclicGraphRule', () => {
     for (const d of diagnostics) {
       expect(d.severity).toBe('error');
       expect(d.code).toBe('cycle');
+    }
+  });
+});
+
+/**
+ * Ticket 37: unlabelled/unrecognised subtasks dispatch to the default worker
+ * archetype. The compiler takes the first wired claimant, so a second card's
+ * "Default worker" toggle is silently inert — worth a warning, not an error.
+ */
+describe('singleDefaultWorkerRule', () => {
+  it('says nothing for zero or one default claim', () => {
+    const workbench = makeWorkbench();
+    const orchestrator = addNode(workbench, TYPE.orchestrator);
+    const weather = addNode(workbench, TYPE.worker, { data: { default: true } });
+    const countries = addNode(workbench, TYPE.worker, { at: { x: 200, y: 0 } });
+    connect(workbench, orchestrator, 'workers', weather, 'dispatch');
+    connect(workbench, orchestrator, 'workers', countries, 'dispatch');
+
+    const diagnostics = singleDefaultWorkerRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('warns on every card when two workers both claim the default', () => {
+    const workbench = makeWorkbench();
+    const orchestrator = addNode(workbench, TYPE.orchestrator);
+    const weather = addNode(workbench, TYPE.worker, { data: { default: true } });
+    const countries = addNode(workbench, TYPE.worker, {
+      at: { x: 200, y: 0 },
+      data: { default: true },
+    });
+    connect(workbench, orchestrator, 'workers', weather, 'dispatch');
+    connect(workbench, orchestrator, 'workers', countries, 'dispatch');
+
+    const diagnostics = singleDefaultWorkerRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(diagnostics).toHaveLength(2);
+    for (const d of diagnostics) {
+      expect(d.severity).toBe('warning');
+      expect(d.code).toBe('multiple-default-workers');
     }
   });
 });

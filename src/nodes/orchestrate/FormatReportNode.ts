@@ -71,6 +71,9 @@ export const formatReportNode: INodeDefinition = defineNode(
         type: PORT.result,
         label: 'candidate',
         required: true,
+        // A bus since ticket 37: every worker archetype's `result` wires in,
+        // and the join runs once after the fan-out's superstep completes.
+        maxConnections: null,
         description: 'Worker results to join into the report.',
       },
       {

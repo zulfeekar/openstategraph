@@ -270,10 +270,44 @@ export const orphanNodeRule: IWorkflowRule = {
   },
 };
 
+/**
+ * At most one worker per orchestrator may claim "Default worker".
+ *
+ * Ticket 37's hybrid routing sends unlabelled/unrecognised subtasks to the
+ * default archetype. Two claims is not a broken document — the compiler
+ * deterministically takes the first wired claimant — but the second card's
+ * toggle is silently inert, which is exactly the kind of thing a developer
+ * should be told rather than left to discover from dispatch behaviour.
+ */
+export const singleDefaultWorkerRule: IWorkflowRule = {
+  id: 'single-default-worker',
+  check({ model }) {
+    const diagnostics: Diagnostic[] = [];
+    for (const node of model.nodes()) {
+      if (node.type !== 'orchestrate.supervisor') continue;
+      const claimants = model
+        .edgesFrom({ nodeId: node.id, portId: 'workers' })
+        .map((edge) => model.node(edge.target.nodeId))
+        .filter((worker) => worker != null && worker.data['default'] === true);
+      if (claimants.length < 2) continue;
+      for (const worker of claimants) {
+        diagnostics.push({
+          code: 'multiple-default-workers',
+          severity: 'warning',
+          nodeId: worker!.id,
+          message: `${worker!.title}: more than one worker claims "Default worker" — only the first wired one takes effect`,
+        });
+      }
+    }
+    return diagnostics;
+  },
+};
+
 export const DEFAULT_WORKFLOW_RULES: readonly IWorkflowRule[] = [
   requiredInputsRule,
   fieldValidationRule,
   acyclicGraphRule,
   hasOutputRule,
   orphanNodeRule,
+  singleDefaultWorkerRule,
 ];

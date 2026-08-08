@@ -1,10 +1,12 @@
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
+import type { INodeDefinition } from '@core/model/contracts/node';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 import { TABULAR_NODES } from './tools/TabularDataNode';
+import { WORKSHOP_NODES } from './tools/CodeWorkshopNode';
 import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
 
 /**
@@ -43,6 +45,10 @@ export function syncWorkflowScopedNodes(
   const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
   const documentUsesTabular = model.nodes().some((node) => tabularTypeIds.has(node.type));
   applyTabularRegistration(documentUsesTabular, registry, executors);
+
+  const workshopTypeIds = new Set(WORKSHOP_NODES.map((n) => n.definition.id));
+  const documentUsesWorkshop = model.nodes().some((node) => workshopTypeIds.has(node.type));
+  applyFamilyRegistration(WORKSHOP_NODES, documentUsesWorkshop, registry, executors);
 }
 
 /**
@@ -84,6 +90,12 @@ export function registerNodeTypesForRawDocument(
     (node) => typeof node === 'object' && node != null && tabularTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyTabularRegistration(documentUsesTabular, registry, executors);
+
+  const workshopTypeIds = new Set(WORKSHOP_NODES.map((n) => n.definition.id));
+  const documentUsesWorkshop = nodes.some(
+    (node) => typeof node === 'object' && node != null && workshopTypeIds.has((node as { type?: unknown }).type as string),
+  );
+  applyFamilyRegistration(WORKSHOP_NODES, documentUsesWorkshop, registry, executors);
 }
 
 /**
@@ -150,6 +162,30 @@ function applyChinookRegistration(
   executors: Registry<INodeExecutor>,
 ): void {
   for (const { definition, executor } of CHINOOK_NODES) {
+    const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
+    if (shouldBeRegistered && !alreadyRegistered) {
+      registry.nodeTypes.upsert(definition);
+      executors.upsert(executor);
+    } else if (!shouldBeRegistered && alreadyRegistered) {
+      registry.nodeTypes.unregister(definition.id);
+      executors.unregister(executor.id);
+    }
+  }
+}
+
+/**
+ * The generic form of the per-family apply helpers above: registers or
+ * unregisters one workflow-scoped node family wholesale. New families
+ * (Code Workshop is the first) use this directly instead of adding another
+ * copy of the same loop.
+ */
+function applyFamilyRegistration(
+  family: ReadonlyArray<{ definition: INodeDefinition; executor: INodeExecutor }>,
+  shouldBeRegistered: boolean,
+  registry: ModelRegistry,
+  executors: Registry<INodeExecutor>,
+): void {
+  for (const { definition, executor } of family) {
     const alreadyRegistered = registry.nodeTypes.get(definition.id) != null;
     if (shouldBeRegistered && !alreadyRegistered) {
       registry.nodeTypes.upsert(definition);

@@ -20,7 +20,7 @@ from typing import Annotated, Any, Callable, TypedDict
 from langgraph.graph.message import add_messages
 
 from dyflow.abc.grader import Grader
-from dyflow.abc.orchestrator import Orchestrator, Subtask
+from dyflow.abc.orchestrator import Orchestrator
 from dyflow.abc.router import Router
 from dyflow.compile.workflow_compiler import CompiledPlan
 
@@ -592,16 +592,39 @@ class NodeRuntime:
         reading exactly what this writes — the same node-decides /
         edge-dispatches split as the router and the grader.
         """
+        from dyflow.abc.orchestrator import Archetype, archetype_key
+
         data = node.get("data") or {}
         cap = int(data.get("maxSubtasks") or 8)
-        orchestrator = Orchestrator(max_subtasks=cap)
+        # The model is for archetype labelling (ticket 37's hybrid routing);
+        # decomposition itself stays deterministic. With one wired archetype
+        # no labelling call is ever made, so the pre-archetype shape costs
+        # nothing extra.
+        orchestrator = Orchestrator(max_subtasks=cap, model=self._resolve_model(data))
+        # The wired worker archetypes, in edge order — the same roster the
+        # compiler's dispatch map is built from, keyed by the same
+        # `archetype_key`, so a label the planning prompt offered is exactly
+        # a key the fan-out router can resolve.
+        archetypes = []
+        for worker_id in plan.fan_out.get(node_id, []):
+            worker_node = self._nodes.get(worker_id) or {}
+            worker_data = worker_node.get("data") or {}
+            archetypes.append(
+                Archetype(
+                    key=archetype_key(worker_node),
+                    name=str(worker_node.get("title") or "").strip() or worker_id,
+                    description=_text(worker_data, "role"),
+                )
+            )
         upstream = [src for src, dst in plan.edges if dst == node_id]
 
         def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
             feedback = state.get("feedback", "")
             generation = state.get("attempts", 0)
-            subtasks = orchestrator.plan(instruction, generation=generation)
+            subtasks = orchestrator.plan(
+                instruction, generation=generation, archetypes=archetypes
+            )
             if feedback:
                 # Refines every subtask the *original* instruction split
                 # into — it does not add one of its own.
@@ -626,9 +649,10 @@ class NodeRuntime:
                 # context carried into the retry rather than dispatched as
                 # a task of its own.
                 subtasks = [
-                    Subtask(
-                        id=t.id,
-                        instruction=f"{t.instruction}\n\nYour previous attempt was rejected: {feedback}",
+                    t.model_copy(
+                        update={
+                            "instruction": f"{t.instruction}\n\nYour previous attempt was rejected: {feedback}"
+                        }
                     )
                     for t in subtasks
                 ]
@@ -827,6 +851,15 @@ class NodeRuntime:
         data = node.get("data") or {}
         slug = _text(data, "workflow").strip()
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A subgraph fed by a grader's `pass` (or an approval's `approved`)
+        # arrives over a *conditional* edge, which `plan.edges` does not
+        # carry — same situation `_output` already handles. Without this, a
+        # review subgraph placed after a grader would receive the original
+        # question instead of the candidate it is supposed to review
+        # (found while wiring ticket 43's code-workshop, not hypothetically).
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
 
         if slug and slug in self._ancestry:
             chain = " -> ".join((*self._ancestry, slug))
@@ -865,7 +898,11 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             if captured is None:
                 return {"outputs": {node_id: ""}}
-            question = _upstream_text(state, upstream) or state.get("question", "")
+            question = (
+                _upstream_text(state, upstream + conditional_upstream)
+                or state.get("answer", "")
+                or state.get("question", "")
+            )
             final = captured.invoke(
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}}
             )
