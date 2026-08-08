@@ -195,21 +195,32 @@ export const acyclicGraphRule: IWorkflowRule = {
         .some((edge) => edge.source.nodeId === nodeId && !inCycle.has(edge.target.nodeId)),
     );
 
+    if (hasEscape) {
+      // ONE notice per loop, not one per member (found during ticket 42's
+      // UI check: a 7-node revise loop produced 7 identical warnings, which
+      // reads as 7 problems). Anchored to the first member so clicking it
+      // still lands somewhere real; the message names the loop's size.
+      const first = cycle[0];
+      if (first === undefined) return [];
+      const titles = cycle.map((nodeId) => model.node(nodeId)?.title ?? nodeId);
+      const shown = titles.slice(0, 3).join(', ') + (titles.length > 3 ? ', …' : '');
+      return [
+        {
+          code: 'escapable-loop',
+          severity: 'warning' as const,
+          nodeId: first,
+          message: `This workflow contains a revise loop (${titles.length} nodes: ${shown}) — valid for the backend; use Chat to run it, not the canvas preview`,
+        },
+      ];
+    }
     return cycle.map((nodeId) => {
       const title = model.node(nodeId)?.title ?? nodeId;
-      return hasEscape
-        ? {
-            code: 'escapable-loop',
-            severity: 'warning' as const,
-            nodeId,
-            message: `${title} can loop back before continuing — valid for the backend, but the canvas preview can't run it`,
-          }
-        : {
-            code: 'cycle',
-            severity: 'error' as const,
-            nodeId,
-            message: `${title} is part of a loop with no way out — this can never finish`,
-          };
+      return {
+        code: 'cycle',
+        severity: 'error' as const,
+        nodeId,
+        message: `${title} is part of a loop with no way out — this can never finish`,
+      };
     });
   },
 };

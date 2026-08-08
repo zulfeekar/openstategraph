@@ -86,11 +86,12 @@ describe('acyclicGraphRule', () => {
     connect(workbench, a, 'out', c, 'in');
 
     const diagnostics = acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
-    expect(diagnostics).toHaveLength(2);
-    for (const d of diagnostics) {
-      expect(d.severity).toBe('warning');
-      expect(d.code).toBe('escapable-loop');
-    }
+    // Collapsed: ONE notice per loop, naming its size, anchored to a member
+    // (a 7-node revise loop used to produce 7 identical warnings).
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.severity).toBe('warning');
+    expect(diagnostics[0]?.code).toBe('escapable-loop');
+    expect(diagnostics[0]?.message).toContain('2 nodes');
   });
 
   it('keeps an unescapable loop (no way out at all) as a blocking error', () => {
