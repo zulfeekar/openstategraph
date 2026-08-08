@@ -8,7 +8,10 @@ const edge = (id: string, sourceId: string, targetId: string): IEdgeModel =>
     source: { nodeId: sourceId, portId: 'out' },
     target: { nodeId: targetId, portId: 'in' },
     label: null,
-    toJSON: () => ({ source: { nodeId: sourceId, portId: 'out' }, target: { nodeId: targetId, portId: 'in' } }),
+    toJSON: () => ({
+      source: { nodeId: sourceId, portId: 'out' },
+      target: { nodeId: targetId, portId: 'in' },
+    }),
   }) as unknown as IEdgeModel;
 
 describe('AdjacencyIndex', () => {

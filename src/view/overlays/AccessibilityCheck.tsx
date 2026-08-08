@@ -45,9 +45,7 @@ function audit(): Finding[] {
     const hasExplicitLabel = Boolean(id && document.querySelector(`label[for="${id}"]`));
     const hasImplicitLabel = element.closest('label') != null;
     const hasPlaceholder = element.hasAttribute('placeholder');
-    return (
-      !hasText && !hasLabel && !hasExplicitLabel && !hasImplicitLabel && !hasPlaceholder
-    );
+    return !hasText && !hasLabel && !hasExplicitLabel && !hasImplicitLabel && !hasPlaceholder;
   });
 
   findings.push(
@@ -62,7 +60,10 @@ function audit(): Finding[] {
           title: `${unnamed.length} control${unnamed.length === 1 ? '' : 's'} without an accessible name`,
           detail: unnamed
             .slice(0, 5)
-            .map((element) => `<${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).split(' ')[0]}` : ''}>`)
+            .map(
+              (element) =>
+                `<${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).split(' ')[0]}` : ''}>`,
+            )
             .join(', '),
         },
   );

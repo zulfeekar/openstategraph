@@ -151,11 +151,7 @@ export class Viewport {
     if (width === 0 || height === 0) return;
 
     const padded = inflate(rect, padding);
-    const scale = clamp(
-      Math.min(width / padded.width, height / padded.height),
-      CANVAS.zoom.min,
-      1,
-    );
+    const scale = clamp(Math.min(width / padded.width, height / padded.height), CANVAS.zoom.min, 1);
 
     this.apply(scale, {
       x: width / 2 - (padded.x + padded.width / 2) * scale,

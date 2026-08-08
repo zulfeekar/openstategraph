@@ -119,10 +119,7 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     case 'slider': {
       const value = asNumber(data[schema.key], schema.defaultValue);
       return (
-        <Field
-          {...common}
-          labelValue={schema.format ? schema.format(value) : `· ${value}`}
-        >
+        <Field {...common} labelValue={schema.format ? schema.format(value) : `· ${value}`}>
           <div data-no-drag>
             <Slider
               id={id}
@@ -168,14 +165,7 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     case 'repeatable-group': {
       const value = data[schema.key];
       const rows = Array.isArray(value) ? (value as Array<Record<string, FieldValue>>) : [];
-      return (
-        <RepeatableGroupField
-          nodeId={nodeId}
-          schema={schema}
-          rows={rows}
-          {...common}
-        />
-      );
+      return <RepeatableGroupField nodeId={nodeId} schema={schema} rows={rows} {...common} />;
     }
   }
 }
@@ -294,9 +284,7 @@ function RepeatableGroupField({
   };
 
   const updateRow = (index: number, key: string, value: FieldValue) => {
-    const nextRows = rows.map((row, i) =>
-      i === index ? { ...row, [key]: value } : row,
-    );
+    const nextRows = rows.map((row, i) => (i === index ? { ...row, [key]: value } : row));
     controller.nodes.setField(nodeId, schema.key, nextRows);
   };
 
@@ -352,11 +340,7 @@ function RepeatableGroupField({
             </div>
           ))}
           {canAdd && (
-            <button
-              type="button"
-              onClick={addRow}
-              className="repeatable-group__add"
-            >
+            <button type="button" onClick={addRow} className="repeatable-group__add">
               + {schema.addLabel}
             </button>
           )}

@@ -11,10 +11,7 @@ describe('platform tool nodes', () => {
     const document = (
       conciergeEnvelope as unknown as { document: { nodes: unknown[]; edges: unknown[] } }
     ).document;
-    const outcome = workbench.serializer.loadFromText(
-      workbench.model,
-      JSON.stringify(document),
-    );
+    const outcome = workbench.serializer.loadFromText(workbench.model, JSON.stringify(document));
     expect(outcome.ok).toBe(true);
     if (outcome.ok) expect(outcome.value.warnings).toEqual([]);
     expect(workbench.model.nodes()).toHaveLength(document.nodes.length);

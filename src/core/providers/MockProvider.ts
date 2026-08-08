@@ -87,7 +87,9 @@ export class MockProvider extends AbstractLLMProvider {
    * Builds arguments from the tool's own schema rather than a hardcoded
    * map, so a newly registered tool works with the mock immediately.
    */
-  private inventArguments(schema: { properties: Record<string, unknown> }): Record<string, unknown> {
+  private inventArguments(schema: {
+    properties: Record<string, unknown>;
+  }): Record<string, unknown> {
     const args: Record<string, unknown> = {};
     for (const [key, raw] of Object.entries(schema.properties)) {
       const spec = raw as { type?: string; default?: unknown; enum?: unknown[] };
@@ -177,7 +179,9 @@ export class MockProvider extends AbstractLLMProvider {
         ? parsed
         : ((parsed as { items?: unknown[] }).items ?? []);
       return items
-        .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+        .filter(
+          (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
+        )
         .map((item) => ({
           title: String(item['title'] ?? item['name'] ?? item['topic'] ?? 'Untitled'),
           signal: String(item['signal'] ?? item['score'] ?? item['count'] ?? '—'),

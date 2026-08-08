@@ -10,7 +10,9 @@ const FIELD_LIMIT = 'topicLimit';
 
 export class RedditSearchNodeModel extends AbstractToolNodeModel {
   get subreddit(): string {
-    return this.getText(FIELD_SUBREDDIT).replace(/^\/?r\//, '').trim();
+    return this.getText(FIELD_SUBREDDIT)
+      .replace(/^\/?r\//, '')
+      .trim();
   }
 
   get limit(): number {
@@ -35,8 +37,7 @@ export const redditSearchNode: INodeDefinition = defineToolNode(
         prefix: 'r/',
         placeholder: 'reactjs',
         defaultValue: 'reactjs',
-        validate: (value) =>
-          value.trim().length === 0 ? 'Name the subreddit to search' : null,
+        validate: (value) => (value.trim().length === 0 ? 'Name the subreddit to search' : null),
       },
       {
         kind: 'slider',

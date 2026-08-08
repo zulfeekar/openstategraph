@@ -29,25 +29,30 @@ export class PanZoomFeature extends PaperFeature {
   protected onInstall(ctx: PaperFeatureContext): void {
     const { container, viewport } = ctx;
 
-    this.onDom(container, 'wheel', ((event: WheelEvent) => {
-      // Always prevent default: the browser would otherwise scroll the page
-      // or trigger its own zoom on a pinch.
-      event.preventDefault();
+    this.onDom(
+      container,
+      'wheel',
+      ((event: WheelEvent) => {
+        // Always prevent default: the browser would otherwise scroll the page
+        // or trigger its own zoom on a pinch.
+        event.preventDefault();
 
-      if (event.ctrlKey || event.metaKey) {
-        // Trackpad pinch arrives as ctrl+wheel with small deltas; the
-        // divisor keeps a pinch from jumping several zoom steps at once.
-        viewport.zoomBy(-event.deltaY / 240, { x: event.clientX, y: event.clientY });
-        return;
-      }
+        if (event.ctrlKey || event.metaKey) {
+          // Trackpad pinch arrives as ctrl+wheel with small deltas; the
+          // divisor keeps a pinch from jumping several zoom steps at once.
+          viewport.zoomBy(-event.deltaY / 240, { x: event.clientX, y: event.clientY });
+          return;
+        }
 
-      // Shift converts a vertical wheel into horizontal panning, which is
-      // the only way to pan sideways with a plain mouse.
-      const [dx, dy] = event.shiftKey
-        ? [-event.deltaY, -event.deltaX]
-        : [-event.deltaX, -event.deltaY];
-      viewport.panBy(dx, dy);
-    }) as never, { passive: false });
+        // Shift converts a vertical wheel into horizontal panning, which is
+        // the only way to pan sideways with a plain mouse.
+        const [dx, dy] = event.shiftKey
+          ? [-event.deltaY, -event.deltaX]
+          : [-event.deltaX, -event.deltaY];
+        viewport.panBy(dx, dy);
+      }) as never,
+      { passive: false },
+    );
 
     this.onDom(window, 'keydown', ((event: KeyboardEvent) => {
       if (event.code !== 'Space' || this.spaceHeld) return;
@@ -74,16 +79,21 @@ export class PanZoomFeature extends PaperFeature {
       delete container.dataset['panning'];
     }) as never);
 
-    this.onDom(container, 'pointerdown', ((event: PointerEvent) => {
-      const wantsPan = event.button === MIDDLE_BUTTON || (this.spaceHeld && event.button === 0);
-      if (!wantsPan) return;
-      event.preventDefault();
-      event.stopPropagation();
-      this.panning = true;
-      this.lastPointer = { x: event.clientX, y: event.clientY };
-      container.dataset['panning'] = 'true';
-      container.setPointerCapture(event.pointerId);
-    }) as never, { capture: true });
+    this.onDom(
+      container,
+      'pointerdown',
+      ((event: PointerEvent) => {
+        const wantsPan = event.button === MIDDLE_BUTTON || (this.spaceHeld && event.button === 0);
+        if (!wantsPan) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.panning = true;
+        this.lastPointer = { x: event.clientX, y: event.clientY };
+        container.dataset['panning'] = 'true';
+        container.setPointerCapture(event.pointerId);
+      }) as never,
+      { capture: true },
+    );
 
     this.onDom(container, 'pointermove', ((event: PointerEvent) => {
       if (!this.panning) return;
@@ -113,10 +123,5 @@ export class PanZoomFeature extends PaperFeature {
 export function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    target.isContentEditable
-  );
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }

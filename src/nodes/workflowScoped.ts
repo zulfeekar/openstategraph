@@ -81,19 +81,28 @@ export function registerNodeTypesForRawDocument(
 
   const chinookTypeIds = new Set(CHINOOK_NODES.map((n) => n.definition.id));
   const documentUsesChinook = nodes.some(
-    (node) => typeof node === 'object' && node != null && chinookTypeIds.has((node as { type?: unknown }).type as string),
+    (node) =>
+      typeof node === 'object' &&
+      node != null &&
+      chinookTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyChinookRegistration(documentUsesChinook, registry, executors);
 
   const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
   const documentUsesTabular = nodes.some(
-    (node) => typeof node === 'object' && node != null && tabularTypeIds.has((node as { type?: unknown }).type as string),
+    (node) =>
+      typeof node === 'object' &&
+      node != null &&
+      tabularTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyTabularRegistration(documentUsesTabular, registry, executors);
 
   const workshopTypeIds = new Set(WORKSHOP_NODES.map((n) => n.definition.id));
   const documentUsesWorkshop = nodes.some(
-    (node) => typeof node === 'object' && node != null && workshopTypeIds.has((node as { type?: unknown }).type as string),
+    (node) =>
+      typeof node === 'object' &&
+      node != null &&
+      workshopTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyFamilyRegistration(WORKSHOP_NODES, documentUsesWorkshop, registry, executors);
 }

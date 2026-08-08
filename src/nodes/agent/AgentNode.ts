@@ -222,9 +222,7 @@ export const agentExecutor: INodeExecutor = {
     const skill = (ctx.input<string>('skill') ?? '').trim();
     const handles = ctx.toolsOn('tools');
     const specs = handles.map((handle) => handle.spec);
-    const byName = new Map<string, ToolHandle>(
-      handles.map((handle) => [handle.spec.name, handle]),
-    );
+    const byName = new Map<string, ToolHandle>(handles.map((handle) => [handle.spec.name, handle]));
 
     ctx.log(`${provider.label} · ${modelId}`);
     if (specs.length > 0) {
@@ -259,9 +257,7 @@ export const agentExecutor: INodeExecutor = {
       if (result.toolCalls.length === 0) {
         answer = result.text.trim();
         if (result.stopReason === 'max_tokens') {
-          ctx.log(
-            `Answer was cut off at the ${node.tokenBudget.toLocaleString()} token budget`,
-          );
+          ctx.log(`Answer was cut off at the ${node.tokenBudget.toLocaleString()} token budget`);
         }
         break;
       }

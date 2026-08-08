@@ -14,11 +14,7 @@
 import { Ok, Err, type Result } from '@core/kernel/Result';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  IToolExecutor,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, IToolExecutor } from '@core/execution/INodeExecutor';
 import type { ToolSpec } from '@core/providers/ILLMProvider';
 import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
@@ -216,7 +212,9 @@ const getTableSchemaTool: IToolExecutor = {
 
     const schema = CHINOOK_SCHEMA[tableName];
     if (!schema) {
-      return Err(`Unknown table: ${tableName}. Available tables: ${Object.keys(CHINOOK_SCHEMA).join(', ')}`);
+      return Err(
+        `Unknown table: ${tableName}. Available tables: ${Object.keys(CHINOOK_SCHEMA).join(', ')}`,
+      );
     }
 
     ctx.log(`Retrieved schema for table: ${tableName}`);
@@ -375,7 +373,13 @@ const SAMPLE_DATA: Record<string, Record<string, unknown>[]> = {
     { AlbumId: 5, Title: 'Big Ones', ArtistId: 3 },
   ],
   Track: [
-    { TrackId: 1, Name: 'For Those About To Rock (We Salute You)', AlbumId: 1, Milliseconds: 343719, UnitPrice: 0.99 },
+    {
+      TrackId: 1,
+      Name: 'For Those About To Rock (We Salute You)',
+      AlbumId: 1,
+      Milliseconds: 343719,
+      UnitPrice: 0.99,
+    },
     { TrackId: 2, Name: 'Balls to the Wall', AlbumId: 2, Milliseconds: 342562, UnitPrice: 0.99 },
     { TrackId: 3, Name: 'Fast As a Shark', AlbumId: 3, Milliseconds: 230619, UnitPrice: 0.99 },
   ],
@@ -387,19 +391,73 @@ const SAMPLE_DATA: Record<string, Record<string, unknown>[]> = {
     { GenreId: 5, Name: 'Rock And Roll' },
   ],
   Customer: [
-    { CustomerId: 1, FirstName: 'Luís', LastName: 'Gonçalves', Email: 'luisg@embraer.com.br', Country: 'Brazil' },
-    { CustomerId: 2, FirstName: 'Leonie', LastName: 'Köhler', Email: 'leonekohler@surfeu.de', Country: 'Germany' },
-    { CustomerId: 3, FirstName: 'François', LastName: 'Tremblay', Email: 'ftremblay@gmail.com', Country: 'Canada' },
+    {
+      CustomerId: 1,
+      FirstName: 'Luís',
+      LastName: 'Gonçalves',
+      Email: 'luisg@embraer.com.br',
+      Country: 'Brazil',
+    },
+    {
+      CustomerId: 2,
+      FirstName: 'Leonie',
+      LastName: 'Köhler',
+      Email: 'leonekohler@surfeu.de',
+      Country: 'Germany',
+    },
+    {
+      CustomerId: 3,
+      FirstName: 'François',
+      LastName: 'Tremblay',
+      Email: 'ftremblay@gmail.com',
+      Country: 'Canada',
+    },
   ],
   Employee: [
-    { EmployeeId: 1, FirstName: 'Andrew', LastName: 'Adams', Title: 'General Manager', Email: 'andrew@chinookcorp.com' },
-    { EmployeeId: 2, FirstName: 'Nancy', LastName: 'Edwards', Title: 'Sales Manager', Email: 'nancy@chinookcorp.com' },
-    { EmployeeId: 3, FirstName: 'Jane', LastName: 'Peacock', Title: 'Sales Support Agent', Email: 'jane@chinookcorp.com' },
+    {
+      EmployeeId: 1,
+      FirstName: 'Andrew',
+      LastName: 'Adams',
+      Title: 'General Manager',
+      Email: 'andrew@chinookcorp.com',
+    },
+    {
+      EmployeeId: 2,
+      FirstName: 'Nancy',
+      LastName: 'Edwards',
+      Title: 'Sales Manager',
+      Email: 'nancy@chinookcorp.com',
+    },
+    {
+      EmployeeId: 3,
+      FirstName: 'Jane',
+      LastName: 'Peacock',
+      Title: 'Sales Support Agent',
+      Email: 'jane@chinookcorp.com',
+    },
   ],
   Invoice: [
-    { InvoiceId: 1, CustomerId: 1, InvoiceDate: '2021-01-01', Total: 5.94, BillingCountry: 'Brazil' },
-    { InvoiceId: 2, CustomerId: 2, InvoiceDate: '2021-01-02', Total: 12.93, BillingCountry: 'Germany' },
-    { InvoiceId: 3, CustomerId: 3, InvoiceDate: '2021-01-03', Total: 8.91, BillingCountry: 'Canada' },
+    {
+      InvoiceId: 1,
+      CustomerId: 1,
+      InvoiceDate: '2021-01-01',
+      Total: 5.94,
+      BillingCountry: 'Brazil',
+    },
+    {
+      InvoiceId: 2,
+      CustomerId: 2,
+      InvoiceDate: '2021-01-02',
+      Total: 12.93,
+      BillingCountry: 'Germany',
+    },
+    {
+      InvoiceId: 3,
+      CustomerId: 3,
+      InvoiceDate: '2021-01-03',
+      Total: 8.91,
+      BillingCountry: 'Canada',
+    },
   ],
 };
 
@@ -443,7 +501,12 @@ const executeSqlTool: IToolExecutor = {
     }
 
     // Check for dangerous operations
-    if (normalizedQuery.includes('DELETE') || normalizedQuery.includes('DROP') || normalizedQuery.includes('INSERT') || normalizedQuery.includes('UPDATE')) {
+    if (
+      normalizedQuery.includes('DELETE') ||
+      normalizedQuery.includes('DROP') ||
+      normalizedQuery.includes('INSERT') ||
+      normalizedQuery.includes('UPDATE')
+    ) {
       return Err('Dangerous operations (DELETE, DROP, INSERT, UPDATE) are not allowed');
     }
 

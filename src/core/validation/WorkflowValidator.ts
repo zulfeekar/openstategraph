@@ -5,7 +5,11 @@ import { validateFields } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
 
 /** True if a path exists from `start` back to itself, staying within `candidates`. */
-function canReachSelf(model: WorkflowModel, candidates: ReadonlySet<NodeId>, start: NodeId): boolean {
+function canReachSelf(
+  model: WorkflowModel,
+  candidates: ReadonlySet<NodeId>,
+  start: NodeId,
+): boolean {
   const stack: NodeId[] = [start];
   const visited = new Set<NodeId>();
   while (stack.length > 0) {

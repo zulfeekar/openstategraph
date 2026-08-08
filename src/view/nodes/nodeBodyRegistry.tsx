@@ -49,14 +49,11 @@ export function resolveNodeBody(definition: INodeDefinition): NodeBody {
 function FormattedOutputBody({ node }: NodeBodyProps) {
   const [expanded, setExpanded] = useState(false);
   const value = node.runtime.output;
-  const text = typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value, null, 2);
+  const text =
+    typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value, null, 2);
 
   if (!text) {
-    return (
-      <div className="node__result-empty">
-        Run the workflow to see the result here.
-      </div>
-    );
+    return <div className="node__result-empty">Run the workflow to see the result here.</div>;
   }
 
   return (

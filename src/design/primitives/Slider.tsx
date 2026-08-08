@@ -2,8 +2,10 @@ import { forwardRef, type InputHTMLAttributes } from 'react';
 import clsx from 'clsx';
 import './Slider.css';
 
-interface SliderProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
+interface SliderProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange' | 'type'
+> {
   value: number;
   min?: number;
   max?: number;
@@ -14,7 +16,17 @@ interface SliderProps
 }
 
 export const Slider = forwardRef<HTMLInputElement, SliderProps>(function Slider(
-  { value, min = 0, max = 100, step = 1, onValueChange, onValueCommit, className, disabled, ...rest },
+  {
+    value,
+    min = 0,
+    max = 100,
+    step = 1,
+    onValueChange,
+    onValueCommit,
+    className,
+    disabled,
+    ...rest
+  },
   ref,
 ) {
   const span = max - min;

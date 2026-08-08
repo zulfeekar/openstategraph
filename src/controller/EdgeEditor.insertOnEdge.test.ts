@@ -31,9 +31,7 @@ describe('EdgeEditor.insertOnEdge', () => {
     expect(outcome.ok).toBe(true);
     expect(workbench.model.edge(edge.id)).toBeUndefined();
     expect(workbench.model.nodeCount).toBe(3);
-    const inserted = workbench.model
-      .nodes()
-      .find((n) => n.id !== a.id && n.id !== b.id);
+    const inserted = workbench.model.nodes().find((n) => n.id !== a.id && n.id !== b.id);
     expect(inserted).toBeDefined();
     expect(workbench.model.edgesInto({ nodeId: inserted!.id, portId: 'in' })[0]?.source).toEqual({
       nodeId: a.id,

@@ -1,11 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import {
-  CircleAlert,
-  Info,
-  MousePointer2,
-  TriangleAlert,
-  Trash2,
-} from 'lucide-react';
+import { CircleAlert, Info, MousePointer2, TriangleAlert, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -52,7 +46,11 @@ export function Inspector() {
 
   return (
     <Panel side="right" className="inspector" style={{ width: 'var(--layout-inspector-width)' }}>
-      {single ? <NodeInspector nodeId={single} /> : <WorkflowInspector count={nodes.length + edges.length} />}
+      {single ? (
+        <NodeInspector nodeId={single} />
+      ) : (
+        <WorkflowInspector count={nodes.length + edges.length} />
+      )}
     </Panel>
   );
 }
@@ -78,11 +76,7 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
       <PanelBody>
         <PanelSection heading="Identity">
           <Field label="Name">
-            <NodeTitleInput
-              nodeId={node.id}
-              title={node.title}
-              placeholder={definition.label}
-            />
+            <NodeTitleInput nodeId={node.id} title={node.title} placeholder={definition.label} />
           </Field>
           <p className="inspector__description">{definition.description}</p>
         </PanelSection>
@@ -122,11 +116,13 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
         {node.ports.length > 0 ? (
           <PanelSection heading="Ports">
             {node.ports.map((port) => {
-              const connections = workbench.model.edgesOf(node.id).filter((edge) =>
-                port.direction === 'in'
-                  ? edge.target.portId === port.id
-                  : edge.source.portId === port.id,
-              ).length;
+              const connections = workbench.model
+                .edgesOf(node.id)
+                .filter((edge) =>
+                  port.direction === 'in'
+                    ? edge.target.portId === port.id
+                    : edge.source.portId === port.id,
+                ).length;
               return (
                 <div key={port.id} className="inspector__port">
                   <span className="inspector__port-name">{port.label}</span>
@@ -150,9 +146,7 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
               <Badge numeric>{node.runtime.durationMs} ms</Badge>
             ) : null}
           </div>
-          {node.runtime.error ? (
-            <p className="inspector__error">{node.runtime.error}</p>
-          ) : null}
+          {node.runtime.error ? <p className="inspector__error">{node.runtime.error}</p> : null}
           {node.runtime.log.length > 0 ? (
             <ol className="inspector__log">
               {node.runtime.log.map((line, index) => (
@@ -266,13 +260,7 @@ function WorkflowInspector({ count }: { count: number }) {
   );
 }
 
-function DiagnosticRow({
-  diagnostic,
-  onSelect,
-}: {
-  diagnostic: Diagnostic;
-  onSelect: () => void;
-}) {
+function DiagnosticRow({ diagnostic, onSelect }: { diagnostic: Diagnostic; onSelect: () => void }) {
   const glyph =
     diagnostic.severity === 'error'
       ? CircleAlert

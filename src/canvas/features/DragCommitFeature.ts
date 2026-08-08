@@ -54,7 +54,11 @@ export class DragCommitFeature extends PaperFeature {
     }) as never);
 
     // Translate the rest of the selection in step with the grabbed node.
-    this.onGraph('change:position', ((element: dia.Element, position: Point, opt: { ui?: boolean }) => {
+    this.onGraph('change:position', ((
+      element: dia.Element,
+      position: Point,
+      opt: { ui?: boolean },
+    ) => {
       if (!opt?.ui || adapter.isApplying) return;
       if (this.leader !== String(element.id) || !this.leaderStart) return;
 

@@ -17,12 +17,7 @@ export class EdgeModel implements IEdgeModel {
 
   private _label: string | null;
 
-  constructor(init: {
-    id?: EdgeId;
-    source: PortRef;
-    target: PortRef;
-    label?: string | null;
-  }) {
+  constructor(init: { id?: EdgeId; source: PortRef; target: PortRef; label?: string | null }) {
     this.id = init.id ?? nextId('edge');
     this.source = { ...init.source };
     this.target = { ...init.target };

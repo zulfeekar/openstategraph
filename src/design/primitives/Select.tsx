@@ -12,8 +12,10 @@ export interface SelectOption<T extends string = string> {
   disabled?: boolean;
 }
 
-interface SelectProps<T extends string>
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children' | 'value' | 'onChange'> {
+interface SelectProps<T extends string> extends Omit<
+  SelectHTMLAttributes<HTMLSelectElement>,
+  'children' | 'value' | 'onChange'
+> {
   options: readonly SelectOption<T>[];
   value: T;
   onValueChange: (value: T) => void;
@@ -59,7 +61,11 @@ export const Select = forwardRef(function Select<T extends string>(
             </optgroup>
           ) : (
             group.options.map((option) => (
-              <option key={`${index}-${option.value}`} value={option.value} disabled={option.disabled}>
+              <option
+                key={`${index}-${option.value}`}
+                value={option.value}
+                disabled={option.disabled}
+              >
                 {option.label}
               </option>
             ))
@@ -71,4 +77,6 @@ export const Select = forwardRef(function Select<T extends string>(
       </span>
     </div>
   );
-}) as <T extends string>(props: SelectProps<T> & { ref?: React.Ref<HTMLSelectElement> }) => ReactNode;
+}) as <T extends string>(
+  props: SelectProps<T> & { ref?: React.Ref<HTMLSelectElement> },
+) => ReactNode;

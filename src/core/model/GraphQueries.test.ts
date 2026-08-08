@@ -61,7 +61,12 @@ describe('GraphQueries', () => {
           ['e2', 'c', 'a'],
         ],
       );
-      expect(queries.edgesOf('a').map((e) => e.id).sort()).toEqual(['e1', 'e2']);
+      expect(
+        queries
+          .edgesOf('a')
+          .map((e) => e.id)
+          .sort(),
+      ).toEqual(['e1', 'e2']);
     });
 
     it('filters to only edges landing on a specific port', () => {
@@ -82,20 +87,26 @@ describe('GraphQueries', () => {
         [{ id: 'group' }, { id: 'a', parentId: 'group' }, { id: 'b', parentId: 'group' }],
         [],
       );
-      expect(queries.childrenOf('group').map((n) => n.id).sort()).toEqual(['a', 'b']);
+      expect(
+        queries
+          .childrenOf('group')
+          .map((n) => n.id)
+          .sort(),
+      ).toEqual(['a', 'b']);
     });
 
     it('walks grandchildren too, unlike childrenOf', () => {
       const queries = build(
-        [
-          { id: 'root' },
-          { id: 'mid', parentId: 'root' },
-          { id: 'leaf', parentId: 'mid' },
-        ],
+        [{ id: 'root' }, { id: 'mid', parentId: 'root' }, { id: 'leaf', parentId: 'mid' }],
         [],
       );
       expect(queries.childrenOf('root').map((n) => n.id)).toEqual(['mid']);
-      expect(queries.descendantsOf('root').map((n) => n.id).sort()).toEqual(['leaf', 'mid']);
+      expect(
+        queries
+          .descendantsOf('root')
+          .map((n) => n.id)
+          .sort(),
+      ).toEqual(['leaf', 'mid']);
     });
   });
 
@@ -116,7 +127,11 @@ describe('GraphQueries', () => {
   describe('countOfType', () => {
     it('counts only nodes of the given type', () => {
       const queries = build(
-        [{ id: 'a', type: 'x' }, { id: 'b', type: 'x' }, { id: 'c', type: 'y' }],
+        [
+          { id: 'a', type: 'x' },
+          { id: 'b', type: 'x' },
+          { id: 'c', type: 'y' },
+        ],
         [],
       );
       expect(queries.countOfType('x')).toBe(2);

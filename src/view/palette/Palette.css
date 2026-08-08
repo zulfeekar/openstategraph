@@ -21,7 +21,9 @@
 
 .palette-item:hover:not(.palette-item--disabled) {
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border-emphasis), var(--shadow-sm);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-emphasis),
+    var(--shadow-sm);
 }
 
 .palette-item:active:not(.palette-item--disabled) {

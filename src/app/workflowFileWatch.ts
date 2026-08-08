@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { WorkflowFileClient, type ToolCapability, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
+import {
+  WorkflowFileClient,
+  type ToolCapability,
+  type WorkflowSummary,
+} from '@core/runtime/WorkflowFileClient';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
@@ -44,7 +48,11 @@ const knownCapabilityIds = new Map<string, readonly string[]>();
 export type CapabilityRefreshAction =
   | { readonly kind: 'baseline'; readonly ids: readonly string[] }
   | { readonly kind: 'unchanged' }
-  | { readonly kind: 'changed'; readonly ids: readonly string[]; readonly added: readonly string[] };
+  | {
+      readonly kind: 'changed';
+      readonly ids: readonly string[];
+      readonly added: readonly string[];
+    };
 
 /**
  * Ticket 18's hot-reload gap, closed with the polling infrastructure this
@@ -151,10 +159,14 @@ export function useWorkflowFileWatch(
             knownSavedAt.set(slug, action.savedAt);
             break;
           case 'notify-deleted':
-            onNotify('This workflow was deleted on disk — your open copy is no longer backed by a saved file.');
+            onNotify(
+              'This workflow was deleted on disk — your open copy is no longer backed by a saved file.',
+            );
             break;
           case 'notify-changed':
-            onNotify('This workflow changed on disk — open Manage Workflows and Load it to see the latest version.');
+            onNotify(
+              'This workflow changed on disk — open Manage Workflows and Load it to see the latest version.',
+            );
             break;
           case 'none':
             break;

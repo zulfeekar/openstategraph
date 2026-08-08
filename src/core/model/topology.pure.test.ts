@@ -11,7 +11,12 @@ import { bounds, topologicalOrder } from './topology';
  */
 
 const fakeNode = (id: string, isExecutable = true, x = 0, y = 0, w = 10, h = 10) =>
-  ({ id, isExecutable, position: { x, y }, size: { width: w, height: h } }) as unknown as AbstractNodeModel;
+  ({
+    id,
+    isExecutable,
+    position: { x, y },
+    size: { width: w, height: h },
+  }) as unknown as AbstractNodeModel;
 
 const fakeEdge = (sourceId: string, targetId: string) =>
   ({ source: { nodeId: sourceId }, target: { nodeId: targetId } }) as unknown as EdgeModel;
@@ -47,7 +52,9 @@ describe('topology.bounds', () => {
   });
 
   it('unions every rectangle', () => {
-    expect(bounds([fakeNode('a', true, 0, 0, 10, 10), fakeNode('b', true, 100, 100, 10, 10)])).toEqual({
+    expect(
+      bounds([fakeNode('a', true, 0, 0, 10, 10), fakeNode('b', true, 100, 100, 10, 10)]),
+    ).toEqual({
       x: 0,
       y: 0,
       width: 110,

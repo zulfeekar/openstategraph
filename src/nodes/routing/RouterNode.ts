@@ -4,11 +4,7 @@ import { defineNode } from '@core/model/ModelRegistry';
 import type { FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { IPortDescriptor } from '@core/model/contracts/ports';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  PortOutputs,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
 export const ROUTER_TYPE = 'route.classifier';
@@ -145,7 +141,11 @@ export class RouterNodeModel extends AbstractNodeModel {
    */
   get systemPrompt(): string {
     const listed = this.branches
-      .map((entry) => (entry.name === this.fallback ? `- ${entry.name}  (used when nothing else matches)` : `- ${entry.name}`))
+      .map((entry) =>
+        entry.name === this.fallback
+          ? `- ${entry.name}  (used when nothing else matches)`
+          : `- ${entry.name}`,
+      )
       .join('\n');
     const rules = this.rules.trim();
     return [
@@ -285,7 +285,6 @@ export const routerNode: INodeDefinition = defineNode(
   },
   RouterNodeModel,
 );
-
 
 /**
  * Browser-preview executor — deliberately refuses to run.

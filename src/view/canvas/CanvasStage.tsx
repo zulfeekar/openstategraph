@@ -186,9 +186,7 @@ function EmptyState() {
         <Icon glyph={Workflow} size="xl" />
       </span>
       <span className="canvas-empty__title">Start with a node</span>
-      <span className="canvas-empty__hint">
-        Drag one in from the palette, or press ⌘V to paste
-      </span>
+      <span className="canvas-empty__hint">Drag one in from the palette, or press ⌘V to paste</span>
     </div>
   );
 }

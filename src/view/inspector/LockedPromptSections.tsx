@@ -19,7 +19,7 @@ async function fetchContracts(): Promise<ContractMap> {
   if (cache) return cache;
   pending ??= fetch('http://localhost:8000/api/node-contracts')
     .then(async (response) => (response.ok ? ((await response.json()) as ContractMap) : {}))
-    .catch(() => ({} as ContractMap))
+    .catch(() => ({}) as ContractMap)
     .then((map) => (cache = map));
   return pending;
 }

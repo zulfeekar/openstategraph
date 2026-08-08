@@ -105,7 +105,10 @@ export class ConnectionValidator {
   }
 
   private orderedRules(): readonly IConnectionRule[] {
-    return this.rules.list().slice().sort((a, b) => a.order - b.order);
+    return this.rules
+      .list()
+      .slice()
+      .sort((a, b) => a.order - b.order);
   }
 }
 
@@ -222,8 +225,7 @@ export const acyclicRule: IConnectionRule = {
       if (current == null) continue;
       if (current === source.nodeId) {
         return {
-          reason:
-            'That would create a loop. Route it through a Grader’s “revise” output instead.',
+          reason: 'That would create a loop. Route it through a Grader’s “revise” output instead.',
         };
       }
       for (const next of model.successorsOf(current)) {

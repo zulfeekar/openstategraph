@@ -1,4 +1,10 @@
-import { distanceToSegment, rectCenter, rectOf, unionRects, type Rect } from '@core/kernel/geometry';
+import {
+  distanceToSegment,
+  rectCenter,
+  rectOf,
+  unionRects,
+  type Rect,
+} from '@core/kernel/geometry';
 import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
 import type { EdgeId, IEdgeModel } from './contracts/workflow';

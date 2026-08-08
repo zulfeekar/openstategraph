@@ -1,4 +1,14 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { Workbench } from './Workbench';
 import type { WorkflowController } from '@controller/WorkflowController';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
@@ -6,12 +16,7 @@ import type { NodeId } from '@core/model/contracts/node';
 import type { WorkflowEvents } from '@core/model/contracts/workflow';
 import type { FlowDirection } from '@core/model/contracts/ports';
 import type { PaperController } from '@canvas/PaperController';
-import {
-  loadWorkflow,
-  mostRecentWorkflowId,
-  resolveSession,
-  saveWorkflow,
-} from './workflowStore';
+import { loadWorkflow, mostRecentWorkflowId, resolveSession, saveWorkflow } from './workflowStore';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 
 interface WorkbenchValue {
@@ -31,10 +36,7 @@ export function WorkbenchProvider({
   children: ReactNode;
 }) {
   const [paper, setPaper] = useState<PaperController | null>(null);
-  const value = useMemo<WorkbenchValue>(
-    () => ({ workbench, paper, setPaper }),
-    [workbench, paper],
-  );
+  const value = useMemo<WorkbenchValue>(() => ({ workbench, paper, setPaper }), [workbench, paper]);
   return <WorkbenchContext.Provider value={value}>{children}</WorkbenchContext.Provider>;
 }
 
@@ -99,10 +101,7 @@ export function useModelEvents(events: readonly (keyof WorkflowEvents & string)[
 export function useWorkflowVersion(): number {
   const { workbench } = useWorkbenchValue();
   const [version, setVersion] = useState(0);
-  useEffect(
-    () => workbench.model.onAny(() => setVersion((value) => value + 1)),
-    [workbench],
-  );
+  useEffect(() => workbench.model.onAny(() => setVersion((value) => value + 1)), [workbench]);
   return version;
 }
 
@@ -124,10 +123,10 @@ let cachedSelection: { nodes: readonly NodeId[]; edges: readonly string[] } = {
   edges: [],
 };
 
-function selectionSnapshot(selection: {
+function selectionSnapshot(selection: { nodes: readonly NodeId[]; edges: readonly string[] }): {
   nodes: readonly NodeId[];
   edges: readonly string[];
-}): { nodes: readonly NodeId[]; edges: readonly string[] } {
+} {
   const nodes = selection.nodes;
   const edges = selection.edges;
   if (
@@ -252,7 +251,11 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
           // Same ordering requirement as the named-file Load path: a
           // workflow-scoped node type must be registered *before* import, or
           // `fromJSON` silently skips every node of that type.
-          registerNodeTypesForRawDocument(JSON.parse(json), workbench.registry, workbench.engine.executors);
+          registerNodeTypesForRawDocument(
+            JSON.parse(json),
+            workbench.registry,
+            workbench.engine.executors,
+          );
           controller.document.importJSON(json);
         } catch (error) {
           // A corrupt autosave entry must not take the whole app down —

@@ -26,7 +26,6 @@ function currentWorkflowSlug(): string | undefined {
   }
 }
 
-
 /** One row in a turn's live "Activity" feed — a node that has started running. */
 interface ActivityRow {
   readonly node: string;
@@ -292,7 +291,9 @@ export function AskPanel() {
           scrollToEnd();
         } else if (event.type === 'token') {
           setTurns((all) =>
-            all.map((turn) => (turn.id === id ? { ...turn, thinking: turn.thinking + event.content } : turn)),
+            all.map((turn) =>
+              turn.id === id ? { ...turn, thinking: turn.thinking + event.content } : turn,
+            ),
           );
           scrollToEnd();
         }
@@ -328,9 +329,17 @@ export function AskPanel() {
         // Once finished, show the whole path that ran rather than just the
         // last node the stream happened to touch.
         controller.selectionActions.selectNodes([...seen]);
-        updateTurn(id, { running: false, result: outcome.value as RunResult, pendingApproval: null });
+        updateTurn(id, {
+          running: false,
+          result: outcome.value as RunResult,
+          pendingApproval: null,
+        });
       } else {
-        updateTurn(id, { running: false, error: outcome.error ?? 'The run failed.', pendingApproval: null });
+        updateTurn(id, {
+          running: false,
+          error: outcome.error ?? 'The run failed.',
+          pendingApproval: null,
+        });
       }
       scrollToEnd();
     },

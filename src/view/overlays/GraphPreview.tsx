@@ -87,7 +87,12 @@ export function GraphPreview({ open, onClose }: { open: boolean; onClose: () => 
               Copy Mermaid
             </button>
           ) : null}
-          <button type="button" className="graph-preview__close" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="graph-preview__close"
+            onClick={onClose}
+            aria-label="Close"
+          >
             ×
           </button>
         </header>

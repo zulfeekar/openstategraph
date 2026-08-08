@@ -118,10 +118,7 @@ export function exportSVG(paper: PaperController): Result<string, string> {
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   clone.setAttribute('width', String(Math.round(bounds.width)));
   clone.setAttribute('height', String(Math.round(bounds.height)));
-  clone.setAttribute(
-    'viewBox',
-    `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`,
-  );
+  clone.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`);
 
   // The live paper carries the viewport's pan/zoom on its layers; the export
   // is framed by the viewBox instead, so that transform has to go.
@@ -161,10 +158,7 @@ export function exportSVG(paper: PaperController): Result<string, string> {
  * producing a silently blank image. SVG export always works and is offered as
  * the fallback.
  */
-export async function exportPNG(
-  paper: PaperController,
-  scale = 2,
-): Promise<Result<Blob, string>> {
+export async function exportPNG(paper: PaperController, scale = 2): Promise<Result<Blob, string>> {
   const svg = exportSVG(paper);
   if (!svg.ok) return svg;
 
@@ -182,9 +176,7 @@ export async function exportPNG(
     context.scale(scale, scale);
     context.drawImage(image, 0, 0);
 
-    const png = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/png'),
-    );
+    const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     return png ? Ok(png) : Err('The image could not be encoded');
   } catch {
     return Err(

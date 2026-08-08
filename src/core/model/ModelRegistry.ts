@@ -89,8 +89,7 @@ export interface NodeSpec {
   readonly fields?: readonly FieldSchema[];
   /** Static port list, or a function of the node's data for dynamic ports. */
   readonly ports?:
-    | readonly IPortDescriptor[]
-    | ((data: Readonly<NodeData>) => readonly IPortDescriptor[]);
+    readonly IPortDescriptor[] | ((data: Readonly<NodeData>) => readonly IPortDescriptor[]);
   readonly defaultSize: INodeDefinition['defaultSize'];
   readonly maxInstances?: number;
   readonly hiddenInPalette?: boolean;
@@ -173,7 +172,9 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
   // Only nodes the compiler actually schedules (`add_node`) can have a
   // per-node retry/timeout override — a container or annotation never runs.
   const fields =
-    kind === 'standard' ? [...(spec.fields ?? []), ...EXECUTION_OVERRIDE_FIELDS] : (spec.fields ?? []);
+    kind === 'standard'
+      ? [...(spec.fields ?? []), ...EXECUTION_OVERRIDE_FIELDS]
+      : (spec.fields ?? []);
   const definition: INodeDefinition = {
     id: spec.id,
     kind,
@@ -201,11 +202,7 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
 export function matchesQuery(definition: INodeDefinition, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const haystack = [
-    definition.label,
-    definition.description,
-    ...(definition.keywords ?? []),
-  ]
+  const haystack = [definition.label, definition.description, ...(definition.keywords ?? [])]
     .join(' ')
     .toLowerCase();
   // Every whitespace-separated term must appear, so "reddit tool" narrows

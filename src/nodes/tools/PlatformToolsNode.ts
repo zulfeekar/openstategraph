@@ -21,9 +21,7 @@ function backendOnlyExecutor(id: string, label: string): INodeExecutor {
   return {
     id,
     execute(_ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
-      return Promise.resolve(
-        Err(`${label} runs on the backend — use Chat to exercise it.`),
-      );
+      return Promise.resolve(Err(`${label} runs on the backend — use Chat to exercise it.`));
     },
   };
 }

@@ -69,7 +69,8 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
   const menu = useMenu<HTMLButtonElement>();
 
   const fieldErrors = useMemo(
-    () => (node ? validateFields(node.definition.fields, node.data) : ({} as Record<string, string>)),
+    () =>
+      node ? validateFields(node.definition.fields, node.data) : ({} as Record<string, string>),
     [node],
   );
 
@@ -263,9 +264,7 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
 
   const inputs = node.ports.filter((port) => port.direction === 'in');
   const outputs = node.ports.filter((port) => port.direction === 'out');
-  const rowPorts = [...inputs, ...outputs].filter(
-    (port) => (port.appearance ?? 'row') === 'row',
-  );
+  const rowPorts = [...inputs, ...outputs].filter((port) => (port.appearance ?? 'row') === 'row');
   const pill = node.ports.find((port) => port.appearance === 'pill');
 
   return (
@@ -295,7 +294,12 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
             icon={<Icon glyph={EllipsisVertical} size="sm" />}
             {...menu.triggerProps}
           />
-          <Menu anchorRef={menu.anchorRef} entries={entries} open={menu.open} onClose={menu.close} />
+          <Menu
+            anchorRef={menu.anchorRef}
+            entries={entries}
+            open={menu.open}
+            onClose={menu.close}
+          />
         </span>
       </header>
 
@@ -320,7 +324,9 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
 
       {node.runtime.tokens > 0 || node.runtime.durationMs != null ? (
         <div className="node__meta">
-          {node.runtime.tokens > 0 ? <span>{node.runtime.tokens.toLocaleString()} tokens</span> : null}
+          {node.runtime.tokens > 0 ? (
+            <span>{node.runtime.tokens.toLocaleString()} tokens</span>
+          ) : null}
           {node.runtime.durationMs != null ? <span>{node.runtime.durationMs} ms</span> : null}
         </div>
       ) : null}
@@ -358,7 +364,9 @@ function PortRow({ port }: { port: IPortDescriptor }) {
       )}
       data-port-row={port.id}
       data-accent={portType.accent}
-      title={port.description ?? `${portType.label} ${port.direction === 'in' ? 'input' : 'output'}`}
+      title={
+        port.description ?? `${portType.label} ${port.direction === 'in' ? 'input' : 'output'}`
+      }
     >
       {port.direction === 'in' ? (
         <>

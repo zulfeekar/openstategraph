@@ -2,13 +2,7 @@ import type { Unsubscribe } from '@core/kernel/Disposable';
 import type { Point, Rect, Size } from '@core/kernel/geometry';
 import type { FieldValue, NodeData } from './fields';
 import type { PortRef } from './ports';
-import type {
-  INodeModel,
-  NodeId,
-  NodeRuntimeState,
-  NodeTypeId,
-  SerializedNode,
-} from './node';
+import type { INodeModel, NodeId, NodeRuntimeState, NodeTypeId, SerializedNode } from './node';
 
 export type EdgeId = string;
 

@@ -17,9 +17,7 @@ const jsonResponse = (body: unknown, status = 200): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-const stubFetch = (
-  response: Response,
-): { fetch: FetchLike; calls: string[]; bodies: string[] } => {
+const stubFetch = (response: Response): { fetch: FetchLike; calls: string[]; bodies: string[] } => {
   const calls: string[] = [];
   const bodies: string[] = [];
   const fetchImpl: FetchLike = (url, init) => {
@@ -126,10 +124,7 @@ describe('RuntimeClient.run', () => {
 
     it('passes through the server’s explanation when no model is configured', async () => {
       const detail = 'No model configured. Set ANTHROPIC_API_KEY or…';
-      const client = new RuntimeClient(
-        'http://rt',
-        stubFetch(jsonResponse({ detail }, 503)).fetch,
-      );
+      const client = new RuntimeClient('http://rt', stubFetch(jsonResponse({ detail }, 503)).fetch);
       const result = await client.run({ workflow: {}, question: 'q' });
 
       expect(result.ok).toBe(false);
@@ -185,7 +180,10 @@ describe('RuntimeClient.run', () => {
     });
 
     it('falls back to the status when the body carries no detail', async () => {
-      const client = new RuntimeClient('http://rt', stubFetch(new Response('', { status: 500 })).fetch);
+      const client = new RuntimeClient(
+        'http://rt',
+        stubFetch(new Response('', { status: 500 })).fetch,
+      );
       const result = await client.run({ workflow: {}, question: 'q' });
       expect(result.ok).toBe(false);
       if (result.ok) return;

@@ -147,7 +147,10 @@ export class MoveNodesCommand implements ICommand {
     this.label = entries.length === 1 ? 'Move node' : `Move ${entries.length} nodes`;
     // Keyed on the participating nodes, so dragging A then B does not
     // merge into a single confusing entry.
-    this.coalesceKey = `move:${entries.map((e) => e.nodeId).sort().join(',')}`;
+    this.coalesceKey = `move:${entries
+      .map((e) => e.nodeId)
+      .sort()
+      .join(',')}`;
   }
 
   static from(

@@ -58,7 +58,8 @@ export class DisconnectCommand implements ICommand {
     private readonly edgeIds: readonly EdgeId[],
     label?: string,
   ) {
-    this.label = label ?? (edgeIds.length === 1 ? 'Disconnect' : `Disconnect ${edgeIds.length} links`);
+    this.label =
+      label ?? (edgeIds.length === 1 ? 'Disconnect' : `Disconnect ${edgeIds.length} links`);
   }
 
   execute(ctx: CommandContext): void {

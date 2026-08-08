@@ -12,13 +12,16 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
+import { CURRENT_SLUG_KEY, forgetKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
 import {
-  CURRENT_SLUG_KEY,
-  forgetKnownSavedAt,
-  recordKnownSavedAt,
-} from '@app/workflowFileWatch';
-import { slugify, WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
-import { registerDiscoveredCapabilities, registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
+  slugify,
+  WorkflowFileClient,
+  type WorkflowSummary,
+} from '@core/runtime/WorkflowFileClient';
+import {
+  registerDiscoveredCapabilities,
+  registerNodeTypesForRawDocument,
+} from '@nodes/workflowScoped';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -131,7 +134,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
           workbench.registry,
           workbench.engine.executors,
         );
-        registerNodeTypesForRawDocument(outcome.value, workbench.registry, workbench.engine.executors);
+        registerNodeTypesForRawDocument(
+          outcome.value,
+          workbench.registry,
+          workbench.engine.executors,
+        );
         controller.document.importJSON(JSON.stringify(outcome.value));
         // Continuing to edit and save now updates *this* workflow, not a new one.
         sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
@@ -173,9 +180,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     <Panel side="left" className="workflow-manager" style={{ width: 320 }}>
       <PanelHeader
         title="Workflows"
-        actions={
-          <IconButton label="Close" icon={<Icon glyph={X} size="sm" />} onClick={onClose} />
-        }
+        actions={<IconButton label="Close" icon={<Icon glyph={X} size="sm" />} onClick={onClose} />}
       />
       <PanelBody>
         <PanelSection heading="New Workflow">
@@ -189,7 +194,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
               }}
             />
           </Field>
-          <Button variant="primary" onClick={handleNewWorkflow} icon={<Icon glyph={Plus} size="sm" />}>
+          <Button
+            variant="primary"
+            onClick={handleNewWorkflow}
+            icon={<Icon glyph={Plus} size="sm" />}
+          >
             Create New
           </Button>
         </PanelSection>
@@ -214,9 +223,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
               </Button>
             </div>
           ) : workflows.length === 0 ? (
-            <p className="workflow-manager__empty">
-              No saved workflows yet. Create one above!
-            </p>
+            <p className="workflow-manager__empty">No saved workflows yet. Create one above!</p>
           ) : (
             <ul className="workflow-manager__list">
               {workflows.map((wf) => (

@@ -78,9 +78,9 @@ export function registerNodeCatalogue(
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
-  subgraphExecutor,
-  teamExecutor,
-  ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
+    subgraphExecutor,
+    teamExecutor,
+    ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
     formattedOutputExecutor,
   ]);
 }

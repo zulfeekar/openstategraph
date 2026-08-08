@@ -171,9 +171,7 @@ export class OpenAIProvider extends AbstractLLMProvider {
   }
 }
 
-function toOpenAIMessage(
-  message: LLMMessage,
-): OpenAI.Chat.Completions.ChatCompletionMessageParam {
+function toOpenAIMessage(message: LLMMessage): OpenAI.Chat.Completions.ChatCompletionMessageParam {
   switch (message.role) {
     case 'tool':
       return {
@@ -222,9 +220,7 @@ function mapFinishReason(reason: string | null): StopReason {
 function safeParse(json: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(json) as unknown;
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }

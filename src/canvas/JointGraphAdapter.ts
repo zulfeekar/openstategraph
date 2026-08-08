@@ -93,8 +93,7 @@ export class JointGraphAdapter implements IDisposable {
 
     for (const [portId, point] of Object.entries(geometry.ports)) {
       const existing = element.portProp(portId, 'position/args') as
-        | { x?: number; y?: number }
-        | undefined;
+        { x?: number; y?: number } | undefined;
       if (
         existing &&
         Math.abs((existing.x ?? 0) - point.x) < 0.5 &&
@@ -156,10 +155,7 @@ export class JointGraphAdapter implements IDisposable {
       );
     }) as never);
 
-    on('node:resized', ((payload: {
-      nodeId: NodeId;
-      size: { width: number; height: number };
-    }) => {
+    on('node:resized', ((payload: { nodeId: NodeId; size: { width: number; height: number } }) => {
       const element = this.element(payload.nodeId);
       if (!element) return;
       const current = element.size();

@@ -81,7 +81,7 @@ export class ExecutionEngine {
       // case instead.
       const first = blocking.some((d) => d.code === 'cycle')
         ? 'This graph has a loop with no way out — it can never finish, on this engine or the backend.'
-        : blocking[0]?.message ?? 'Workflow is not runnable';
+        : (blocking[0]?.message ?? 'Workflow is not runnable');
       return this.rejectBeforeStart(first);
     }
 
@@ -171,8 +171,7 @@ export class ExecutionEngine {
           status: 'success',
           error: null,
           durationMs,
-          output:
-            outcome.value[DISPLAY_KEY] ?? (primary ? outcome.value[primary.id] : null),
+          output: outcome.value[DISPLAY_KEY] ?? (primary ? outcome.value[primary.id] : null),
         });
         this.bus.emit('run:node', { nodeId, status: 'success' });
       }
@@ -265,8 +264,8 @@ export class ExecutionEngine {
       providers: this.providers,
       signal,
 
-      input: <T,>(portId: string) => readPort(portId)[0] as T | undefined,
-      inputs: <T,>(portId: string) => readPort(portId) as readonly T[],
+      input: <T>(portId: string) => readPort(portId)[0] as T | undefined,
+      inputs: <T>(portId: string) => readPort(portId) as readonly T[],
       toolsOn: (portId: string) => readPort(portId).filter(isToolHandle),
 
       invokeTool: async (handle: ToolHandle, args: Record<string, unknown>) => {

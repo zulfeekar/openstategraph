@@ -20,9 +20,7 @@ import type { ToolSpec } from '@core/providers/ILLMProvider';
 import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
 const backendOnly = (name: string) => (): Promise<Result<string, string>> =>
-  Promise.resolve(
-    Err(`"${name}" only runs on the backend — use Chat, not the canvas Run button.`),
-  );
+  Promise.resolve(Err(`"${name}" only runs on the backend — use Chat, not the canvas Run button.`));
 
 function workshopTool(spec: ToolSpec): IToolExecutor {
   return {

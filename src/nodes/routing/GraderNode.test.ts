@@ -194,14 +194,12 @@ describe('the revise loop', () => {
 
   it('only the grader and the human approval gate can start a feedback edge', () => {
     const workbench2 = makeWorkbench();
-    const feedbackSources = workbench2.registry.nodeTypes
-      .list()
-      .flatMap((definition) =>
-        definition
-          .ports(Object.fromEntries(definition.fields.map((f) => [f.key, f.defaultValue])) as never)
-          .filter((port) => port.direction === 'out' && port.type === 'feedback')
-          .map(() => definition.id),
-      );
+    const feedbackSources = workbench2.registry.nodeTypes.list().flatMap((definition) =>
+      definition
+        .ports(Object.fromEntries(definition.fields.map((f) => [f.key, f.defaultValue])) as never)
+        .filter((port) => port.direction === 'out' && port.type === 'feedback')
+        .map(() => definition.id),
+    );
 
     // If anything else could emit feedback, an accidental cycle would become
     // drawable and the type gate would stop being a gate. `human.approval`'s

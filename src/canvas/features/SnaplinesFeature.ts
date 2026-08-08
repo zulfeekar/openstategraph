@@ -39,7 +39,11 @@ export class SnaplinesFeature extends PaperFeature {
       this.dragging = view.model;
     }) as never);
 
-    this.onGraph('change:position', ((element: dia.Element, _position: unknown, opt: { ui?: boolean; dyflowFollow?: boolean }) => {
+    this.onGraph('change:position', ((
+      element: dia.Element,
+      _position: unknown,
+      opt: { ui?: boolean; dyflowFollow?: boolean },
+    ) => {
       // Only the element under the pointer drives guides; followers and
       // programmatic moves must not.
       if (!opt?.ui || opt.dyflowFollow) return;

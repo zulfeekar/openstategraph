@@ -2,11 +2,7 @@ import { Ok, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  PortOutputs,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
 const FIELD_FILENAME = 'filename';

@@ -2,11 +2,7 @@ import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  PortOutputs,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
 export const ORCHESTRATOR_TYPE = 'orchestrate.supervisor';
@@ -82,7 +78,8 @@ export const orchestratorNode: INodeDefinition = defineNode(
         direction: 'in',
         type: PORT.feedback,
         label: 'feedback',
-        description: 'A grader’s rejection. Replans under a fresh generation, rather than retrying.',
+        description:
+          'A grader’s rejection. Replans under a fresh generation, rather than retrying.',
       },
       {
         id: 'workers',

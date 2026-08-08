@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, RotateCcw, TriangleAlert } from 'lucide-react';
-import {
-  Badge,
-  Button,
-  Field,
-  Icon,
-  IconTile,
-  TextInput,
-} from '@design/primitives';
+import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import { AbstractLLMProvider } from '@core/providers/ILLMProvider';
 import { OllamaProvider } from '@core/providers/OllamaProvider';
 import { useWorkbench } from '@app/WorkbenchContext';

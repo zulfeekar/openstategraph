@@ -13,7 +13,9 @@
   max-width: 340px;
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-lg);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-default),
+    var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -90,7 +92,9 @@
   max-height: min(640px, 100%);
   border-radius: var(--radius-2xl);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-xl);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-default),
+    var(--shadow-xl);
   animation: dialog-in var(--duration-normal) var(--ease-out);
 }
 

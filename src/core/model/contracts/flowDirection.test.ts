@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  resolvePortSide,
-  sideOf,
-  type IPortDescriptor,
-} from '@core/model/contracts/ports';
+import { resolvePortSide, sideOf, type IPortDescriptor } from '@core/model/contracts/ports';
 
 /**
  * Flow direction — ticket 45.

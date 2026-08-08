@@ -55,9 +55,7 @@ export class ClipboardService {
 
     const edges = this.model
       .edges()
-      .filter(
-        (edge) => included.has(edge.source.nodeId) && included.has(edge.target.nodeId),
-      )
+      .filter((edge) => included.has(edge.source.nodeId) && included.has(edge.target.nodeId))
       .map((edge) => edge.toJSON());
 
     const origin = {
@@ -82,7 +80,10 @@ export class ClipboardService {
    * it lands in history — paste is one undo step, and a paste that is part
    * of a larger gesture can be composed into it.
    */
-  pasteCommand(at: Point, fragment = this.fragment): { command: ICommand | null; nodeIds: NodeId[] } {
+  pasteCommand(
+    at: Point,
+    fragment = this.fragment,
+  ): { command: ICommand | null; nodeIds: NodeId[] } {
     if (!fragment || fragment.nodes.length === 0) return { command: null, nodeIds: [] };
 
     const dx = at.x - fragment.origin.x;

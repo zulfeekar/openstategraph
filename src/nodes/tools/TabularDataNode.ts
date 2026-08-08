@@ -15,11 +15,7 @@
 import { Ok, Err, type Result } from '@core/kernel/Result';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  IToolExecutor,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, IToolExecutor } from '@core/execution/INodeExecutor';
 import type { ToolSpec } from '@core/providers/ILLMProvider';
 import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
@@ -114,7 +110,10 @@ export const getTableSchemaNode: INodeDefinition = defineToolNode(
         label: 'File name',
         placeholder: 'e.g., vgsales.csv',
         defaultValue: '',
-        validate: (value) => (value.trim().endsWith('.csv') || value.trim().endsWith('.parquet') ? null : 'Must end with .csv or .parquet'),
+        validate: (value) =>
+          value.trim().endsWith('.csv') || value.trim().endsWith('.parquet')
+            ? null
+            : 'Must end with .csv or .parquet',
       },
     ],
   },
@@ -212,7 +211,7 @@ const queryDataTool: IToolExecutor = {
     return {
       name: 'query_data',
       description:
-        'Executes a SQL SELECT query against CSV/Parquet files using DuckDB. Use the file name (without extension) as the table name. Example: SELECT * FROM vgsales WHERE Genre = \'Action\' LIMIT 10',
+        "Executes a SQL SELECT query against CSV/Parquet files using DuckDB. Use the file name (without extension) as the table name. Example: SELECT * FROM vgsales WHERE Genre = 'Action' LIMIT 10",
       parameters: {
         type: 'object',
         properties: {
@@ -258,10 +257,7 @@ const queryDataTool: IToolExecutor = {
   },
 };
 
-export const queryDataExecutor: INodeExecutor = createToolExecutor(
-  queryDataNode.id,
-  queryDataTool,
-);
+export const queryDataExecutor: INodeExecutor = createToolExecutor(queryDataNode.id, queryDataTool);
 
 /* ================================================================== *
  * Sample Data
@@ -287,7 +283,8 @@ export const sampleDataNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.tabular-sample',
     label: 'Sample Data',
-    description: 'Returns a preview sample of rows from a CSV or Parquet file for quick exploration.',
+    description:
+      'Returns a preview sample of rows from a CSV or Parquet file for quick exploration.',
     iconId: 'node-database',
     accent: 'orange',
     keywords: ['sample', 'preview', 'rows', 'csv', 'parquet', 'explore'],

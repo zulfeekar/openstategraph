@@ -30,7 +30,10 @@ describe('hasOutputRule', () => {
     // is the graph's terminal output, same as `_agent` writing `answer`
     // directly in the backend compiler.
 
-    const diagnostics = hasOutputRule.check({ model: workbench.model, registry: workbench.registry });
+    const diagnostics = hasOutputRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
     expect(diagnostics).toEqual([]);
   });
 
@@ -40,7 +43,10 @@ describe('hasOutputRule', () => {
     // (correctly) always its own sink — nothing to flag.
     addNode(workbench, TYPE.output);
 
-    const diagnostics = hasOutputRule.check({ model: workbench.model, registry: workbench.registry });
+    const diagnostics = hasOutputRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
     expect(diagnostics).toEqual([]);
   });
 
@@ -58,7 +64,10 @@ describe('hasOutputRule', () => {
     connect(workbench, a, 'out', b, 'in');
     connect(workbench, b, 'out', a, 'in');
 
-    const diagnostics = hasOutputRule.check({ model: workbench.model, registry: workbench.registry });
+    const diagnostics = hasOutputRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.code).toBe('no-output');
   });
@@ -85,7 +94,10 @@ describe('acyclicGraphRule', () => {
     // `a`'s escape hatch — the same shape as a grader's `pass` port.
     connect(workbench, a, 'out', c, 'in');
 
-    const diagnostics = acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
+    const diagnostics = acyclicGraphRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
     // Collapsed: ONE notice per loop, naming its size, anchored to a member
     // (a 7-node revise loop used to produce 7 identical warnings).
     expect(diagnostics).toHaveLength(1);
@@ -102,7 +114,10 @@ describe('acyclicGraphRule', () => {
     connect(workbench, a, 'out', b, 'in');
     connect(workbench, b, 'out', a, 'in');
 
-    const diagnostics = acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
+    const diagnostics = acyclicGraphRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
     expect(diagnostics).toHaveLength(2);
     for (const d of diagnostics) {
       expect(d.severity).toBe('error');

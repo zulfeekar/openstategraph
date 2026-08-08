@@ -206,9 +206,7 @@ export interface InspectorFieldGroup {
  * right place without touching the panel (ticket 38's progressive
  * disclosure: the card stays small, everything else groups and collapses).
  */
-export function groupFieldsForInspector(
-  fields: readonly FieldSchema[],
-): InspectorFieldGroup[] {
+export function groupFieldsForInspector(fields: readonly FieldSchema[]): InspectorFieldGroup[] {
   const groups = new Map<string, { fields: FieldSchema[]; advanced: FieldSchema[] }>();
   for (const schema of fields) {
     if (!isInInspector(schema)) continue;

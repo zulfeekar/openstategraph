@@ -84,14 +84,10 @@
    * a wide ambient one for lift. Kept low-opacity so cards read crisp
    * against the light canvas rather than smudged. */
   --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm:
-    0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
-  --shadow-md:
-    0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 10px -2px rgba(16, 24, 40, 0.06);
-  --shadow-lg:
-    0 2px 4px rgba(16, 24, 40, 0.05), 0 10px 24px -4px rgba(16, 24, 40, 0.1);
-  --shadow-xl:
-    0 4px 8px rgba(16, 24, 40, 0.05), 0 20px 40px -8px rgba(16, 24, 40, 0.14);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 10px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 2px 4px rgba(16, 24, 40, 0.05), 0 10px 24px -4px rgba(16, 24, 40, 0.1);
+  --shadow-xl: 0 4px 8px rgba(16, 24, 40, 0.05), 0 20px 40px -8px rgba(16, 24, 40, 0.14);
   --shadow-node:
     0 0 0 1px var(--color-border-default), 0 1px 2px rgba(16, 24, 40, 0.05),
     0 4px 12px -4px rgba(16, 24, 40, 0.08);

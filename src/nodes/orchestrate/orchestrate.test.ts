@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { addNode, makeWorkbench, TYPE } from '@core/testing/fixtures';
 import type { Workbench } from '@app/Workbench';
-import { DEFAULT_MAX_SUBTASKS, ORCHESTRATOR_TYPE, orchestratorExecutor, orchestratorNode } from './OrchestratorNode';
+import {
+  DEFAULT_MAX_SUBTASKS,
+  ORCHESTRATOR_TYPE,
+  orchestratorExecutor,
+  orchestratorNode,
+} from './OrchestratorNode';
 import { WORKER_TYPE, workerExecutor, workerNode } from './WorkerNode';
 import {
   FORMAT_REPORT_TYPE,
@@ -108,7 +113,10 @@ describe('orchestrator + worker — the fan-out declaration', () => {
 
   it('the worker exposes a result output, not a raw dispatch echo', () => {
     const ports = workerNode.ports(emptyData(workerNode));
-    expect(ports.find((p) => p.id === 'result')).toMatchObject({ direction: 'out', type: 'result' });
+    expect(ports.find((p) => p.id === 'result')).toMatchObject({
+      direction: 'out',
+      type: 'result',
+    });
   });
 
   it('both refuse to execute in the browser preview — Python owns the fan-out', async () => {

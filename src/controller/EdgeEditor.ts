@@ -11,13 +11,7 @@ import type { NodeTypeId } from '@core/model/contracts/node';
 import type { PortRef } from '@core/model/contracts/ports';
 import type { EdgeId } from '@core/model/contracts/workflow';
 import type { ConnectionValidator } from '@core/validation/ConnectionValidator';
-import {
-  failed,
-  OK,
-  type ActionOutcome,
-  type EditingContext,
-  type IEdgeEditor,
-} from './contracts';
+import { failed, OK, type ActionOutcome, type EditingContext, type IEdgeEditor } from './contracts';
 
 /**
  * Connecting and disconnecting ports.

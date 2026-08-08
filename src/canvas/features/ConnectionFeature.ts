@@ -86,9 +86,7 @@ export class ConnectionFeature extends PaperFeature {
  * before features install. Reads the port ids straight off the magnets the
  * adapter tagged, so no lookup table has to be kept in step.
  */
-export function createConnectionValidator(
-  isValid: (source: PortRef, target: PortRef) => boolean,
-) {
+export function createConnectionValidator(isValid: (source: PortRef, target: PortRef) => boolean) {
   return function validateConnection(
     sourceView: dia.CellView,
     sourceMagnet: SVGElement,

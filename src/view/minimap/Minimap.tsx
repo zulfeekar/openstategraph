@@ -122,7 +122,9 @@ export function Minimap() {
         <IconButton
           size="sm"
           label={collapsed ? 'Show minimap' : 'Hide minimap'}
-          icon={<Icon glyph={ChevronDown} size="sm" className={collapsed ? 'is-flipped' : undefined} />}
+          icon={
+            <Icon glyph={ChevronDown} size="sm" className={collapsed ? 'is-flipped' : undefined} />
+          }
           onClick={() => setCollapsed((value) => !value)}
         />
         <span className="minimap__divider" role="presentation" />

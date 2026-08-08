@@ -33,7 +33,7 @@ describe('seedDemoWorkflow', () => {
     expect(types).toContain('tool.chinook-execute-sql');
   });
 
-  it('leaves an empty undo stack, so the first Cmd-Z is the user\'s own edit', () => {
+  it("leaves an empty undo stack, so the first Cmd-Z is the user's own edit", () => {
     const workbench = new Workbench();
     seedDemoWorkflow(workbench);
 

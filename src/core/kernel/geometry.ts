@@ -45,7 +45,8 @@ export function distanceToSegment(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSquared = dx * dx + dy * dy;
-  const t = lengthSquared === 0 ? 0 : clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared, 0, 1);
+  const t =
+    lengthSquared === 0 ? 0 : clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared, 0, 1);
   const closest = { x: a.x + t * dx, y: a.y + t * dy };
   return Math.hypot(p.x - closest.x, p.y - closest.y);
 }
@@ -60,9 +61,7 @@ export function containsRect(outer: Rect, inner: Rect): boolean {
 }
 
 export function intersects(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-  );
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
 export function containsPoint(r: Rect, p: Point): boolean {

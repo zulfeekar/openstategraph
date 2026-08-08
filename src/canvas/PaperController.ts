@@ -8,12 +8,7 @@ import type { ModelRegistry } from '@core/model/ModelRegistry';
 import { JointGraphAdapter } from './JointGraphAdapter';
 import { Viewport } from './Viewport';
 import { AutoLayout } from './AutoLayout';
-import {
-  CELL_NAMESPACE,
-  NodeMountRegistry,
-  defineHtmlNodeView,
-  FlowLink,
-} from './shapes/HtmlNode';
+import { CELL_NAMESPACE, NodeMountRegistry, defineHtmlNodeView, FlowLink } from './shapes/HtmlNode';
 import type { IPaperFeature, PaperFeatureContext } from './features/IPaperFeature';
 import { PanZoomFeature } from './features/PanZoomFeature';
 import { SelectionFeature } from './features/SelectionFeature';

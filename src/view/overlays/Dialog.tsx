@@ -85,11 +85,7 @@ export function Dialog({ title, subtitle, icon, onClose, footer, children }: Dia
             <h2 className="dialog__title">{title}</h2>
             {subtitle ? <p className="dialog__subtitle">{subtitle}</p> : null}
           </div>
-          <IconButton
-            label="Close dialog"
-            icon={<Icon glyph={X} size="md" />}
-            onClick={onClose}
-          />
+          <IconButton label="Close dialog" icon={<Icon glyph={X} size="md" />} onClick={onClose} />
         </header>
 
         <div className="dialog__body">{children}</div>

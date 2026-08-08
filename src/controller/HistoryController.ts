@@ -36,8 +36,6 @@ export class HistoryController implements IHistoryController {
   }
 
   onChange(handler: (state: { canUndo: boolean; canRedo: boolean }) => void): Unsubscribe {
-    return this.commands.on('changed', ({ canUndo, canRedo }) =>
-      handler({ canUndo, canRedo }),
-    );
+    return this.commands.on('changed', ({ canUndo, canRedo }) => handler({ canUndo, canRedo }));
   }
 }

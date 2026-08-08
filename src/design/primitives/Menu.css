@@ -8,7 +8,9 @@
   padding: var(--space-1);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface-raised);
-  box-shadow: inset 0 0 0 1px var(--color-border-default), var(--shadow-xl);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-default),
+    var(--shadow-xl);
   animation: menu-in var(--duration-fast) var(--ease-out);
 }
 

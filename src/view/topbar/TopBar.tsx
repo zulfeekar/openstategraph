@@ -38,7 +38,14 @@ import {
   usePaperController,
   useWorkbench,
 } from '@app/WorkbenchContext';
-import { download, exportJSON, exportPNG, exportSVG, importJSON, slugify } from '@view/export/exportWorkflow';
+import {
+  download,
+  exportJSON,
+  exportPNG,
+  exportSVG,
+  importJSON,
+  slugify,
+} from '@view/export/exportWorkflow';
 import { GraphPreview } from '@view/overlays/GraphPreview';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import './TopBar.css';
@@ -168,165 +175,163 @@ export function TopBar({
 
   return (
     <>
-    <header className="topbar">
-      <div className="topbar__brand">
-        <span className="topbar__mark" aria-hidden="true">
-          <Icon glyph={Network} size="md" />
-        </span>
-        <span className="topbar__product">Dyflow</span>
-        <span className="topbar__divider" role="presentation" />
-        <RuntimeHealthDot />
-        <span className="topbar__doc" title={workbench.model.name}>
-          {workbench.model.name}
-        </span>
-      </div>
+      <header className="topbar">
+        <div className="topbar__brand">
+          <span className="topbar__mark" aria-hidden="true">
+            <Icon glyph={Network} size="md" />
+          </span>
+          <span className="topbar__product">Dyflow</span>
+          <span className="topbar__divider" role="presentation" />
+          <RuntimeHealthDot />
+          <span className="topbar__doc" title={workbench.model.name}>
+            {workbench.model.name}
+          </span>
+        </div>
 
-      <div className="topbar__group">
-        <Tooltip content="Toggle palette" shortcut={shortcutText('Mod+B')}>
-          <IconButton
-            label="Toggle palette"
-            active={paletteOpen}
-            icon={<Icon glyph={PanelLeft} size="md" />}
-            onClick={onPaletteToggle}
-          />
-        </Tooltip>
-        <Tooltip content="Toggle grid">
-          <IconButton
-            label="Toggle grid"
-            active={showGrid}
-            icon={<Icon glyph={Grid2x2} size="md" />}
-            onClick={() => onGridChange(!showGrid)}
-          />
-        </Tooltip>
+        <div className="topbar__group">
+          <Tooltip content="Toggle palette" shortcut={shortcutText('Mod+B')}>
+            <IconButton
+              label="Toggle palette"
+              active={paletteOpen}
+              icon={<Icon glyph={PanelLeft} size="md" />}
+              onClick={onPaletteToggle}
+            />
+          </Tooltip>
+          <Tooltip content="Toggle grid">
+            <IconButton
+              label="Toggle grid"
+              active={showGrid}
+              icon={<Icon glyph={Grid2x2} size="md" />}
+              onClick={() => onGridChange(!showGrid)}
+            />
+          </Tooltip>
 
-        <span className="topbar__divider" role="presentation" />
+          <span className="topbar__divider" role="presentation" />
 
-        <Tooltip content="Undo" shortcut={shortcutText('Mod+Z')}>
-          <IconButton
-            label="Undo"
-            disabled={!canUndo}
-            icon={<Icon glyph={Undo2} size="md" />}
-            onClick={() => controller.history.undo()}
-          />
-        </Tooltip>
-        <Tooltip content="Redo" shortcut={shortcutText('Mod+Shift+Z')}>
-          <IconButton
-            label="Redo"
-            disabled={!canRedo}
-            icon={<Icon glyph={Redo2} size="md" />}
-            onClick={() => controller.history.redo()}
-          />
-        </Tooltip>
+          <Tooltip content="Undo" shortcut={shortcutText('Mod+Z')}>
+            <IconButton
+              label="Undo"
+              disabled={!canUndo}
+              icon={<Icon glyph={Undo2} size="md" />}
+              onClick={() => controller.history.undo()}
+            />
+          </Tooltip>
+          <Tooltip content="Redo" shortcut={shortcutText('Mod+Shift+Z')}>
+            <IconButton
+              label="Redo"
+              disabled={!canRedo}
+              icon={<Icon glyph={Redo2} size="md" />}
+              onClick={() => controller.history.redo()}
+            />
+          </Tooltip>
 
-        <span className="topbar__divider" role="presentation" />
+          <span className="topbar__divider" role="presentation" />
 
-        <Tooltip content="View compiled graph" multiline>
-          <IconButton
-            label="View compiled graph"
-            icon={<Icon glyph={GitBranch} size="md" />}
-            onClick={() => setGraphOpen(true)}
-          />
-        </Tooltip>
+          <Tooltip content="View compiled graph" multiline>
+            <IconButton
+              label="View compiled graph"
+              icon={<Icon glyph={GitBranch} size="md" />}
+              onClick={() => setGraphOpen(true)}
+            />
+          </Tooltip>
 
-        <Tooltip content="Arrange automatically" multiline>
-          <IconButton
-            label="Arrange automatically"
-            icon={<Icon glyph={Network} size="md" />}
-            onClick={() => {
-              paper?.autoLayout.run({
-                rankDir: flowDirection === 'vertical' ? 'TB' : 'LR',
-              });
-              requestAnimationFrame(() => paper?.fitToContent());
-            }}
-          />
-        </Tooltip>
-        <Tooltip
-          content={
-            flowDirection === 'vertical'
-              ? 'Flow direction: vertical — switch to horizontal'
-              : 'Flow direction: horizontal — switch to vertical'
-          }
-          multiline
-        >
-          <IconButton
-            label="Toggle flow direction"
-            active={flowDirection === 'vertical'}
-            icon={<Icon glyph={MoveVertical} size="md" />}
-            onClick={() => {
-              const next = flowDirection === 'vertical' ? 'horizontal' : 'vertical';
-              workbench.preferences.setFlowDirection(next);
-              // Re-arrange in the new direction so the toggle is visibly a
-              // layout decision, not a hidden mode; one undoable transaction.
-              requestAnimationFrame(() => {
-                paper?.autoLayout.run({ rankDir: next === 'vertical' ? 'TB' : 'LR' });
+          <Tooltip content="Arrange automatically" multiline>
+            <IconButton
+              label="Arrange automatically"
+              icon={<Icon glyph={Network} size="md" />}
+              onClick={() => {
+                paper?.autoLayout.run({
+                  rankDir: flowDirection === 'vertical' ? 'TB' : 'LR',
+                });
                 requestAnimationFrame(() => paper?.fitToContent());
-              });
-            }}
+              }}
+            />
+          </Tooltip>
+          <Tooltip
+            content={
+              flowDirection === 'vertical'
+                ? 'Flow direction: vertical — switch to horizontal'
+                : 'Flow direction: horizontal — switch to vertical'
+            }
+            multiline
+          >
+            <IconButton
+              label="Toggle flow direction"
+              active={flowDirection === 'vertical'}
+              icon={<Icon glyph={MoveVertical} size="md" />}
+              onClick={() => {
+                const next = flowDirection === 'vertical' ? 'horizontal' : 'vertical';
+                workbench.preferences.setFlowDirection(next);
+                // Re-arrange in the new direction so the toggle is visibly a
+                // layout decision, not a hidden mode; one undoable transaction.
+                requestAnimationFrame(() => {
+                  paper?.autoLayout.run({ rankDir: next === 'vertical' ? 'TB' : 'LR' });
+                  requestAnimationFrame(() => paper?.fitToContent());
+                });
+              }}
+            />
+          </Tooltip>
+        </div>
+
+        <div className="topbar__spacer" />
+
+        <div className="topbar__group">
+          {tokens > 0 ? (
+            <Badge numeric tone={running ? 'accent' : 'neutral'}>
+              {tokens.toLocaleString()} tokens
+            </Badge>
+          ) : null}
+
+          <Tooltip content="API keys and endpoints" multiline>
+            <IconButton
+              label="API keys and endpoints"
+              icon={<Icon glyph={KeyRound} size="md" />}
+              onClick={onOpenCredentials}
+            />
+          </Tooltip>
+
+          <Button
+            variant={running ? 'secondary' : 'primary'}
+            size="lg"
+            icon={running ? <Spinner /> : <Icon glyph={Play} size="sm" strokeWidth={2.25} />}
+            onClick={run}
+          >
+            {running ? 'Stop' : 'Run'}
+          </Button>
+
+          <Tooltip content="Export or import">
+            <IconButton
+              ref={exportMenu.anchorRef}
+              label="Export or import"
+              icon={<Icon glyph={Download} size="md" />}
+              {...exportMenu.triggerProps}
+            />
+          </Tooltip>
+          <Menu
+            anchorRef={exportMenu.anchorRef}
+            entries={exportEntries}
+            open={exportMenu.open}
+            onClose={exportMenu.close}
           />
-        </Tooltip>
-      </div>
 
-      <div className="topbar__spacer" />
+          <Tooltip content={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+            <IconButton
+              label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              icon={<Icon glyph={theme === 'dark' ? Sun : Moon} size="md" />}
+              onClick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}
+            />
+          </Tooltip>
 
-      <div className="topbar__group">
-        {tokens > 0 ? (
-          <Badge numeric tone={running ? 'accent' : 'neutral'}>
-            {tokens.toLocaleString()} tokens
-          </Badge>
-        ) : null}
-
-        <Tooltip content="API keys and endpoints" multiline>
-          <IconButton
-            label="API keys and endpoints"
-            icon={<Icon glyph={KeyRound} size="md" />}
-            onClick={onOpenCredentials}
-          />
-        </Tooltip>
-
-        <Button
-          variant={running ? 'secondary' : 'primary'}
-          size="lg"
-          icon={
-            running ? <Spinner /> : <Icon glyph={Play} size="sm" strokeWidth={2.25} />
-          }
-          onClick={run}
-        >
-          {running ? 'Stop' : 'Run'}
-        </Button>
-
-        <Tooltip content="Export or import">
-          <IconButton
-            ref={exportMenu.anchorRef}
-            label="Export or import"
-            icon={<Icon glyph={Download} size="md" />}
-            {...exportMenu.triggerProps}
-          />
-        </Tooltip>
-        <Menu
-          anchorRef={exportMenu.anchorRef}
-          entries={exportEntries}
-          open={exportMenu.open}
-          onClose={exportMenu.close}
-        />
-
-        <Tooltip content={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
-          <IconButton
-            label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            icon={<Icon glyph={theme === 'dark' ? Sun : Moon} size="md" />}
-            onClick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}
-          />
-        </Tooltip>
-
-        <Tooltip content="Toggle inspector">
-          <IconButton
-            label="Toggle inspector"
-            active={inspectorOpen}
-            icon={<Icon glyph={PanelRight} size="md" />}
-            onClick={onInspectorToggle}
-          />
-        </Tooltip>
-      </div>
-    </header>
+          <Tooltip content="Toggle inspector">
+            <IconButton
+              label="Toggle inspector"
+              active={inspectorOpen}
+              icon={<Icon glyph={PanelRight} size="md" />}
+              onClick={onInspectorToggle}
+            />
+          </Tooltip>
+        </div>
+      </header>
       <GraphPreview open={graphOpen} onClose={() => setGraphOpen(false)} />
     </>
   );

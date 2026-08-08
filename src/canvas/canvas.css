@@ -64,7 +64,9 @@
 /* JointJS applies this while a cell is being dragged. */
 .joint-element.is-dragging .node,
 .joint-dragging .node {
-  box-shadow: var(--shadow-xl), 0 0 0 1.5px var(--color-border-focus);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 0 1.5px var(--color-border-focus);
   cursor: grabbing;
 }
 

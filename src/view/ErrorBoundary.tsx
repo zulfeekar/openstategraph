@@ -43,9 +43,14 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
         }}
       >
         <h1 style={{ fontSize: '1.1rem' }}>Dyflow hit an unrecoverable error</h1>
-        <p>Reloading the page usually clears a bad autosave. If it keeps happening, this is the detail to report:</p>
-        <pre>{error.message}
-{error.stack}</pre>
+        <p>
+          Reloading the page usually clears a bad autosave. If it keeps happening, this is the
+          detail to report:
+        </p>
+        <pre>
+          {error.message}
+          {error.stack}
+        </pre>
       </div>
     );
   }

@@ -28,11 +28,15 @@ import {
  */
 describe('branchesOf', () => {
   it('parses branches from an array with stable ids', () => {
-    expect(branchesOf({ branches: [
-      { id: 'x', name: 'dataquery' },
-      { id: 'y', name: 'help' },
-      { id: 'z', name: 'greeting' },
-    ] })).toEqual([
+    expect(
+      branchesOf({
+        branches: [
+          { id: 'x', name: 'dataquery' },
+          { id: 'y', name: 'help' },
+          { id: 'z', name: 'greeting' },
+        ],
+      }),
+    ).toEqual([
       { id: 'x', name: 'dataquery' },
       { id: 'y', name: 'help' },
       { id: 'z', name: 'greeting' },
@@ -40,22 +44,30 @@ describe('branchesOf', () => {
   });
 
   it('ignores blank entries', () => {
-    expect(branchesOf({ branches: [
-      { id: 'a', name: 'a' },
-      { id: 'b', name: '' },
-      { id: 'c', name: 'b' },
-    ] })).toEqual([
+    expect(
+      branchesOf({
+        branches: [
+          { id: 'a', name: 'a' },
+          { id: 'b', name: '' },
+          { id: 'c', name: 'b' },
+        ],
+      }),
+    ).toEqual([
       { id: 'a', name: 'a' },
       { id: 'c', name: 'b' },
     ]);
   });
 
   it('deduplicates by id, because two ports cannot share an id', () => {
-    expect(branchesOf({ branches: [
-      { id: 'x', name: 'a' },
-      { id: 'y', name: 'b' },
-      { id: 'x', name: 'a-duplicate' },
-    ] })).toEqual([
+    expect(
+      branchesOf({
+        branches: [
+          { id: 'x', name: 'a' },
+          { id: 'y', name: 'b' },
+          { id: 'x', name: 'a-duplicate' },
+        ],
+      }),
+    ).toEqual([
       { id: 'x', name: 'a' },
       { id: 'y', name: 'b' },
     ]);
@@ -87,25 +99,31 @@ describe('routerNode ports', () => {
     routerNode.ports({ ...defaultsFrom(routerNode.fields), ...data } as never);
 
   it('exposes exactly one output per branch', () => {
-    const ports = portsFor({ branches: [
-      { id: 'x', name: 'dataquery' },
-      { id: 'y', name: 'help' },
-      { id: 'z', name: 'off_topic' },
-    ] });
+    const ports = portsFor({
+      branches: [
+        { id: 'x', name: 'dataquery' },
+        { id: 'y', name: 'help' },
+        { id: 'z', name: 'off_topic' },
+      ],
+    });
     const outs = ports.filter((p) => p.direction === 'out');
     expect(outs.map((p) => p.label)).toEqual(['dataquery', 'help', 'off_topic']);
   });
 
   it('changes its port count when the branch list changes', () => {
-    const before = portsFor({ branches: [
-      { id: 'a', name: 'a' },
-      { id: 'b', name: 'b' },
-    ] }).filter((p) => p.direction === 'out');
-    const after = portsFor({ branches: [
-      { id: 'a', name: 'a' },
-      { id: 'b', name: 'b' },
-      { id: 'c', name: 'c' },
-    ] }).filter((p) => p.direction === 'out');
+    const before = portsFor({
+      branches: [
+        { id: 'a', name: 'a' },
+        { id: 'b', name: 'b' },
+      ],
+    }).filter((p) => p.direction === 'out');
+    const after = portsFor({
+      branches: [
+        { id: 'a', name: 'a' },
+        { id: 'b', name: 'b' },
+        { id: 'c', name: 'c' },
+      ],
+    }).filter((p) => p.direction === 'out');
     expect(before).toHaveLength(2);
     expect(after).toHaveLength(3);
   });
@@ -135,10 +153,12 @@ describe('routerNode ports', () => {
   });
 
   it('gives every port a unique id even for names that slugify alike', () => {
-    const ports = portsFor({ branches: [
-      { id: 'x', name: 'a b' },
-      { id: 'y', name: 'a-b' },
-    ] });
+    const ports = portsFor({
+      branches: [
+        { id: 'x', name: 'a b' },
+        { id: 'y', name: 'a-b' },
+      ],
+    });
     const ids = ports.filter((p) => p.direction === 'out').map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -151,10 +171,13 @@ describe('routerNode ports', () => {
   });
 
   it('marks the fallback branch, so an unmatched question is visibly handled', () => {
-    const ports = portsFor({ branches: [
-      { id: 'x', name: 'dataquery' },
-      { id: 'y', name: 'help' },
-    ], fallback: 'help' });
+    const ports = portsFor({
+      branches: [
+        { id: 'x', name: 'dataquery' },
+        { id: 'y', name: 'help' },
+      ],
+      fallback: 'help',
+    });
     const fallback = ports.find((p) => p.label === 'help');
     expect(fallback?.description).toMatch(/fallback|unmatched/i);
   });
@@ -227,7 +250,7 @@ describe('router prompt composition', () => {
     workbench = makeWorkbench();
   });
 
-  it('starts with no rules, because rules are the developer\'s to write', () => {
+  it("starts with no rules, because rules are the developer's to write", () => {
     expect(router().rules).toBe('');
   });
 

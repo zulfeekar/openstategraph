@@ -6,10 +6,7 @@ import {
   ConnectionValidator,
   DEFAULT_CONNECTION_RULES,
 } from '@core/validation/ConnectionValidator';
-import {
-  DEFAULT_WORKFLOW_RULES,
-  WorkflowValidator,
-} from '@core/validation/WorkflowValidator';
+import { DEFAULT_WORKFLOW_RULES, WorkflowValidator } from '@core/validation/WorkflowValidator';
 import { ExecutionEngine } from '@core/execution/ExecutionEngine';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { MockProvider } from '@core/providers/MockProvider';
@@ -85,10 +82,16 @@ export class Workbench {
             const branches = data['branches'];
             // Convert newline-separated text to array of {id, name}
             if (typeof branches === 'string' && branches.trim()) {
-              const entries = branches.split('\n').filter((line) => line.trim()).map((name, idx) => ({
-                id: `b${Date.now()}-${idx}-${name.trim().slice(0, 8).replace(/[^a-z0-9_]/gi, '-')}`,
-                name: name.trim(),
-              }));
+              const entries = branches
+                .split('\n')
+                .filter((line) => line.trim())
+                .map((name, idx) => ({
+                  id: `b${Date.now()}-${idx}-${name
+                    .trim()
+                    .slice(0, 8)
+                    .replace(/[^a-z0-9_]/gi, '-')}`,
+                  name: name.trim(),
+                }));
               data['branches'] = entries;
             }
           }

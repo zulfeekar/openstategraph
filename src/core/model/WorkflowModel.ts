@@ -8,12 +8,7 @@ import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
 import type { FieldValue, NodeData } from './contracts/fields';
 import type { PortRef } from './contracts/ports';
-import type {
-  INodeModel,
-  NodeId,
-  NodeRuntimeState,
-  NodeTypeId,
-} from './contracts/node';
+import type { INodeModel, NodeId, NodeRuntimeState, NodeTypeId } from './contracts/node';
 import type {
   EdgeId,
   IEdgeModel,

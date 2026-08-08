@@ -222,7 +222,9 @@ describe('WorkflowSerializer', () => {
     });
 
     it('rejects a document missing nodes or edges', () => {
-      const outcome = workbench.controller.document.importJSON(JSON.stringify({ version: 1, name: 'x' }));
+      const outcome = workbench.controller.document.importJSON(
+        JSON.stringify({ version: 1, name: 'x' }),
+      );
       expect(outcome.ok).toBe(false);
     });
 

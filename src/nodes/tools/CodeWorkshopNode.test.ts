@@ -4,11 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  WORKSHOP_NODES,
-  createPrNode,
-  runWorkspaceTestsNode,
-} from './CodeWorkshopNode';
+import { WORKSHOP_NODES, createPrNode, runWorkspaceTestsNode } from './CodeWorkshopNode';
 
 describe('code workshop nodes definition', () => {
   it('exports all seven workshop tool nodes', () => {

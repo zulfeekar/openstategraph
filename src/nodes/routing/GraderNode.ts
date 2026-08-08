@@ -2,11 +2,7 @@ import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
-import type {
-  ExecutionContext,
-  INodeExecutor,
-  PortOutputs,
-} from '@core/execution/INodeExecutor';
+import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
 export const GRADER_TYPE = 'route.grader';
@@ -71,11 +67,9 @@ export class GraderNodeModel extends AbstractNodeModel {
    * already says, or they duplicate and contradict it.
    */
   get systemPrompt(): string {
-    return [
-      GRADER_PREAMBLE,
-      `Criteria:\n${this.effectiveCriteria}`,
-      GRADER_OUTPUT_CONTRACT,
-    ].join('\n\n');
+    return [GRADER_PREAMBLE, `Criteria:\n${this.effectiveCriteria}`, GRADER_OUTPUT_CONTRACT].join(
+      '\n\n',
+    );
   }
 }
 

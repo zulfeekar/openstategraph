@@ -27,12 +27,5 @@ export {
   IS_APPLE,
   type StatusTone,
 } from './Indicators';
-export {
-  Panel,
-  PanelHeader,
-  PanelBody,
-  PanelFooter,
-  PanelSection,
-  PanelEmpty,
-} from './Panel';
+export { Panel, PanelHeader, PanelBody, PanelFooter, PanelSection, PanelEmpty } from './Panel';
 export { useFloating, type Placement, type Alignment, type FloatingPosition } from './useFloating';
