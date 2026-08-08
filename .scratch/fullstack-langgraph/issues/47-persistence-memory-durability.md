@@ -21,3 +21,7 @@ thread_id.
 ## Resolution
 
 One-liners: checkpointer stays `InMemorySaver` per process until a real multi-user need (map keeps that fog) — but `/api/runs` gets the same checkpointer as the stream endpoints so a HITL node no longer 502s there; `workflow.settings` grows optional `checkpointer: memory|sqlite` with SqliteSaver as the first durable option (file beside workflow.json, matching the files-first persistence decision of ticket 10); `Store`/memory namespaces deferred until a node type consumes them (no speculative plumbing); `durability=` left at LangGraph defaults, revisited when sqlite lands.
+
+## Implementation (2026-08-08)
+
+`checkpointer_for(settings, slug, fallback)` — sqlite opt-in per document, file under .dev/, graceful in-memory fallback; wired on both stream endpoints.

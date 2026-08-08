@@ -17,3 +17,7 @@ workflow-supplied, and which nodes/middleware slots expose it.
 ## Resolution
 
 Research complete: [research/65-memory-system.md](../research/65-memory-system.md). One-liners: long-term = Store at compile(store=) namespaced ('memories', user_email); episodic = checkpointer threads + Store-held few-shots; procedural = skills + Store-backed instructions with a reflection node; thread/session never in Store namespaces; memory middleware after prompt caching (validates the slot table); build prebuilt save/search-memory tools next.
+
+## Implementation (2026-08-08)
+
+Built: `backend/dyflow/memory.py` — process-wide Store at compile(store=) on all endpoints (children included), prebuilt `save_memory`/`search_memory` auto-bound to every agent when a store exists (tools resolve store+namespace via get_store/get_config at run time; emails sanitised for namespace rules), `settings.checkpointer: sqlite` opt-in durability. 7 tests. Live: fact saved in one thread, recalled in a brand-new thread, namespaced to user_email.

@@ -229,6 +229,7 @@ class NodeRuntime:
         functions: dict[str, Any] | None = None,
         document_loader: Callable[[str], dict[str, Any]] | None = None,
         registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None,
+        store: Any = None,
         max_attempts: int = 3,
         _ancestry: tuple[str, ...] = (),
     ) -> None:
@@ -247,6 +248,11 @@ class NodeRuntime:
         #: concierge (ticket 67) silently loses its tools — the
         #: parametric-answer failure this codebase treats as the worst kind.
         self.registry_loader = registry_loader
+        #: The long-term memory store (ticket 65). Its presence is what turns
+        #: the prebuilt save/search-memory tools on for every agent — the
+        #: tools reach it through `langgraph.config.get_store()` at run time,
+        #: so this reference is a capability flag, not a data path.
+        self.store = store
         #: The chain of subgraph slugs above this runtime — how a workflow
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
@@ -439,6 +445,14 @@ class NodeRuntime:
             tool = self._bound_tool(tool_node_id)
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
+
+        # A store's presence turns on the prebuilt memory tools for every
+        # agent (ticket 65) — capability by configuration, no per-workflow
+        # wiring, matching the minimum-viable-prebuilt rule.
+        if self.store is not None:
+            from dyflow.memory import memory_tools
+
+            lc_tools.extend(memory_tools())
 
         data = node.get("data") or {}
         model = self._resolve_model(data)
@@ -928,11 +942,15 @@ class NodeRuntime:
                     functions={**self.functions, **child_functions},
                     document_loader=self.document_loader,
                     registry_loader=self.registry_loader,
+                    store=self.store,
                     max_attempts=self.max_attempts,
                     _ancestry=(*self._ancestry, slug),
                 )
                 child_graph = WorkflowCompiler().build(
-                    child_document, RunState, child_runtime.factory(child_document)
+                    child_document,
+                    RunState,
+                    child_runtime.factory(child_document),
+                    store=self.store,
                 )
 
         if child_graph is None:

@@ -452,6 +452,7 @@ class WorkflowCompiler:
         *,
         compile_graph: bool = True,
         checkpointer: Any = None,
+        store: Any = None,
     ) -> Any:
         """Assembles the graph.
 
@@ -551,7 +552,7 @@ class WorkflowCompiler:
 
         if not compile_graph:
             return builder
-        return builder.compile(checkpointer=checkpointer) if checkpointer else builder.compile()
+        return builder.compile(checkpointer=checkpointer, store=store)
 
     @staticmethod
     def _fan_out_router(

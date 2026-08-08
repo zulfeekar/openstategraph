@@ -34,6 +34,7 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- [Memory system](issues/65-memory-system.md) — IMPLEMENTED: Store + prebuilt save/search tools on every agent, sqlite checkpointer opt-in; live cross-thread recall verified
 - [Concierge gateway](issues/67-concierge-gateway.md) — hidden top workflow routes customer chat; child registries now resolve per-package; [editor dual-view](issues/68-editor-dual-view.md) charted
 - [Chat fidelity](issues/62-chat-markdown-fidelity.md), [trace tree + export](issues/63-execution-trace-tree.md), [customer chat client](issues/64-customer-chat-client.md) — built + live-verified; [memory system research](issues/65-memory-system.md) — Store/checkpointer/skills mapping recorded, feeds ticket 66
 - [Team node implementation](issues/56-team-node-implementation.md) — built + live-verified: `team.workflow` over the subgraph path, `new_team.py` scaffold, `research-team` example

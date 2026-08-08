@@ -353,7 +353,14 @@ def create_app(
                 tool_registry_for(child_slug),
                 build_function_registry(workflow_store, child_slug),
             ),
+            store=memory_store,
         )
+    from dyflow.memory import build_store, checkpointer_for
+
+    #: Long-term memory, process-wide (ticket 65): one Store shared by every
+    #: run, namespaced per user inside the tools themselves.
+    memory_store = build_store()
+
     app = FastAPI(title="Dyflow runtime", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -502,7 +509,7 @@ def create_app(
         runtime = runtime_for(request.workflow_slug, document, model)
 
         try:
-            graph = compiler.build(document, RunState, runtime.factory(document))
+            graph = compiler.build(document, RunState, runtime.factory(document), store=memory_store)
             final = graph.invoke(
                 {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
                 {"recursion_limit": request.recursion_limit},
@@ -578,7 +585,10 @@ def create_app(
                 document,
                 RunState,
                 runtime.factory(document),
-                checkpointer=_HUMAN_IN_THE_LOOP_CHECKPOINTER,
+                checkpointer=checkpointer_for(
+                    document.get("settings"), request.workflow_slug, _HUMAN_IN_THE_LOOP_CHECKPOINTER
+                ),
+                store=memory_store,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
@@ -641,7 +651,10 @@ def create_app(
                 document,
                 RunState,
                 runtime.factory(document),
-                checkpointer=_HUMAN_IN_THE_LOOP_CHECKPOINTER,
+                checkpointer=checkpointer_for(
+                    document.get("settings"), request.workflow_slug, _HUMAN_IN_THE_LOOP_CHECKPOINTER
+                ),
+                store=memory_store,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
