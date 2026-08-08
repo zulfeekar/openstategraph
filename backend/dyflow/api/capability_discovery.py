@@ -249,3 +249,26 @@ __all__ = [
     "discover_tool_registry",
     "discover_tools",
 ]
+
+
+def discover_skills(workflow_dir: Path) -> str:
+    """Procedural memory, file-first (tickets 65+66): `skills/*.md` under a
+    workflow package, concatenated as prompt context for its agents.
+
+    Deliberately the simplest honest tier of the skills ladder — full
+    progressive disclosure (deepagents' 3-level SKILL.md loading) belongs to
+    the deep tier and is recorded on ticket 66. A missing directory is the
+    common case and costs nothing.
+    """
+    skills_dir = workflow_dir / "skills"
+    if not skills_dir.is_dir():
+        return ""
+    parts: list[str] = []
+    for path in sorted(skills_dir.glob("*.md")):
+        try:
+            text = path.read_text().strip()
+        except OSError:
+            continue
+        if text:
+            parts.append(f"## Skill: {path.stem}\n{text}")
+    return "\n\n".join(parts)

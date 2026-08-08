@@ -230,6 +230,7 @@ class NodeRuntime:
         document_loader: Callable[[str], dict[str, Any]] | None = None,
         registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None,
         store: Any = None,
+        skills_context: str = "",
         max_attempts: int = 3,
         _ancestry: tuple[str, ...] = (),
     ) -> None:
@@ -253,6 +254,11 @@ class NodeRuntime:
         #: tools reach it through `langgraph.config.get_store()` at run time,
         #: so this reference is a capability flag, not a data path.
         self.store = store
+        #: Procedural skills (`workflows/<slug>/skills/*.md`) — business
+        #: rules, JOIN conventions, house style — joined once and given to
+        #: every agent in this workflow as prompt *context* (above rules,
+        #: below the locked preamble; SystemPrompt owns the ordering).
+        self.skills_context = skills_context
         #: The chain of subgraph slugs above this runtime — how a workflow
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
@@ -466,13 +472,22 @@ class NodeRuntime:
 
         def agent_for(skill: str) -> Any:
             if skill not in built:
+                contributions: dict[str, Any] = {}
+                if data.get("summarize") and model is not None:
+                    # LangChain's own prebuilt, never hand-rolled (ticket 66):
+                    # summarizes older turns when the context bloats, keeping
+                    # the recent tail verbatim.
+                    from langchain.agents.middleware import SummarizationMiddleware
+
+                    contributions["summarization"] = SummarizationMiddleware(model=model)
                 tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
                 built[skill] = tier_cls(
                     name=f"agent_{node_id}",
                     model=model,
                     tools=lc_tools,
                     rules=_text(data, "systemPrompt"),
-                    context=skill,
+                    context="\n\n".join(part for part in (self.skills_context, skill) if part),
+                    middleware=contributions,
                 ).build()
             return built[skill]
 
@@ -559,8 +574,15 @@ class NodeRuntime:
         grading_model = base_model
         if _text(data, "tier") == "deep" and base_model is not None:
             grading_model = _DeepAgentAsChatModel(base_model, name=f"grader_{node_id}")
+        raw_rubric = data.get("rubric")
+        rubric_rows = [
+            {"criterion": str(row.get("criterion") or row.get("name") or ""),
+             "required": bool(row.get("required", True))}
+            for row in raw_rubric
+        ] if isinstance(raw_rubric, list) else []
         grader = Grader(
             criteria=_text(data, "criteria"),
+            rubric=rubric_rows,
             replace_defaults=_text(data, "criteriaMode") == "replace",
             model=grading_model,
         )
@@ -792,6 +814,8 @@ class NodeRuntime:
                 return {"worker_results": {task_id: ""}}
 
             system_prompt = _upstream_text(state, skills) or default_prompt
+            if self.skills_context:
+                system_prompt = f"{self.skills_context}\n\n{system_prompt}".strip()
             # Same ladder as `_agent`: the family owns construction, this
             # factory owns state plumbing. The worker's directive is its
             # *rules* — the editable half of the prompt — with no context.

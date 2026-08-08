@@ -86,6 +86,18 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           format: (value) => `· ${value.toLocaleString()}`,
         },
         {
+          // LangChain's prebuilt SummarizationMiddleware (ticket 66): when
+          // the conversation bloats, older turns are summarized by the
+          // model and the recent tail kept verbatim.
+          kind: 'toggle',
+          key: 'summarize',
+          label: 'Summarize long context',
+          defaultValue: false,
+          onCard: false,
+          group: 'Context',
+          advanced: true,
+        },
+        {
           // Mirrors Router/Grader's tier select — the backend's
           // agent_node_for_tier reads this exact key, so an agent can be a
           // plain ReAct loop or a deep-agent harness by configuration.

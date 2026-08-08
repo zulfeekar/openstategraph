@@ -102,6 +102,29 @@ export const graderNode: INodeDefinition = defineNode(
     defaultSize: { width: 268, height: 210 },
     fields: [
       {
+        // Structured rubric rows (ticket 66): each is judged explicitly, a
+        // failed REQUIRED row is a revise. Composes with the criteria —
+        // the backend renders it as machinery context, so `replace` on the
+        // criteria never deletes it.
+        kind: 'repeatable-group',
+        key: 'rubric',
+        label: 'Rubric',
+        addLabel: 'Add rubric row',
+        maxRows: 10,
+        onCard: false,
+        group: 'Judgement',
+        fields: [
+          {
+            kind: 'text',
+            key: 'criterion',
+            label: 'Criterion',
+            placeholder: 'e.g. Cites a figure from the executed rows',
+            defaultValue: '',
+          },
+          { kind: 'toggle', key: 'required', label: 'Required', defaultValue: true },
+        ],
+      },
+      {
         kind: 'textarea',
         key: FIELD_CRITERIA,
         label: 'Your criteria',

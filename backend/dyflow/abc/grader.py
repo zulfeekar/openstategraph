@@ -94,14 +94,34 @@ class BaseGrader(ABC):
         self,
         *,
         criteria: str = "",
+        rubric: list[dict] | None = None,
         replace_defaults: bool = False,
         model: Any = None,
     ) -> None:
         self.criteria = criteria
+        #: Structured rubric rows: {"criterion": str, "required": bool}.
+        #: Rendered as a numbered checklist the model must judge row by row —
+        #: a failed required row is a revise, with that row as the feedback.
+        #: Freeform `criteria` and a rubric compose; neither replaces the other.
+        self.rubric = [r for r in (rubric or []) if str(r.get("criterion") or "").strip()]
         self.replace_defaults = replace_defaults
         self.model = model
 
     # -- the parts a subclass may shape ----------------------------------- #
+
+    def describe_rubric(self) -> str:
+        """The rubric as a numbered checklist, or "" when none is set."""
+        if not self.rubric:
+            return ""
+        lines = ["Rubric — judge each row explicitly:"]
+        for i, row in enumerate(self.rubric, 1):
+            marker = "REQUIRED" if row.get("required", True) else "advisory"
+            lines.append(f"R{i} [{marker}]: {str(row['criterion']).strip()}")
+        lines.append(
+            "A failed REQUIRED row means the candidate is rejected; name the "
+            "failing row numbers in your reason."
+        )
+        return "\n".join(lines)
 
     def describe_criteria(self) -> str:
         """The developer's criteria. Override for something richer than a string."""
@@ -129,6 +149,11 @@ class BaseGrader(ABC):
             .with_defaults(self.DEFAULT_CRITERIA)
             .with_rules(self.describe_criteria(), replace_defaults=self.replace_defaults)
         )
+        rubric = self.describe_rubric()
+        if rubric:
+            # Context, not rules: the rubric is structure the machinery
+            # renders, and it must survive `replace_defaults` untouched.
+            prompt = prompt.with_context(rubric)
         return prompt.with_context(f"The question was:\n{question}") if question else prompt
 
     def resolve_system_prompt(self, question: str = "") -> str:

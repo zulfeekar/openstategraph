@@ -265,7 +265,12 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     from dyflow.api.capability_discovery import discover_tool_registry
     from dyflow.compile.node_runtime import chinook_tool_registry
 
+    from dyflow.prebuilt_sql import SQL_EXPLORER_TOOLS
+
     registry: dict[str, Any] = chinook_tool_registry()
+    # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
+    # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
+    registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
     if slug:
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
@@ -354,7 +359,11 @@ def create_app(
                 build_function_registry(workflow_store, child_slug),
             ),
             store=memory_store,
+            skills_context=(
+                discover_skills(workflow_store.directory_for(slug)) if slug else ""
+            ),
         )
+    from dyflow.api.capability_discovery import discover_skills
     from dyflow.memory import build_store, checkpointer_for
 
     #: Long-term memory, process-wide (ticket 65): one Store shared by every

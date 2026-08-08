@@ -184,3 +184,37 @@ class TestSystemPromptCarryForward:
         assert prompt.effective_rules() == "MINE"
         assert prompt.replace_defaults is True
         assert "some context" in prompt.render()
+
+
+class TestRubric:
+    """Ticket 66 addition: structured rubric rows, composing with criteria."""
+
+    def test_rubric_rows_render_as_a_numbered_required_checklist(self) -> None:
+        from dyflow.abc.grader import Grader
+        grader = Grader(rubric=[
+            {"criterion": "Cites a figure from the data", "required": True},
+            {"criterion": "Under 200 words", "required": False},
+        ])
+        prompt = grader.resolve_system_prompt()
+        assert "R1 [REQUIRED]: Cites a figure from the data" in prompt
+        assert "R2 [advisory]: Under 200 words" in prompt
+
+    def test_rubric_survives_replace_defaults(self) -> None:
+        """The rubric is machinery-rendered structure, not developer rules —
+        replacing the default criteria must not silently delete it."""
+        from dyflow.abc.grader import Grader
+        grader = Grader(criteria="- Be concise.", replace_defaults=True,
+                        rubric=[{"criterion": "Names the source"}])
+        prompt = grader.resolve_system_prompt()
+        assert "R1 [REQUIRED]: Names the source" in prompt
+        assert "- Be concise." in prompt
+
+    def test_blank_rubric_rows_are_dropped(self) -> None:
+        from dyflow.abc.grader import Grader
+        assert Grader(rubric=[{"criterion": "  "}]).rubric == []
+
+    def test_the_output_contract_still_renders_last(self) -> None:
+        from dyflow.abc.grader import Grader
+        grader = Grader(rubric=[{"criterion": "x"}])
+        prompt = grader.resolve_system_prompt()
+        assert prompt.rstrip().endswith(grader.OUTPUT_CONTRACT.rstrip())
