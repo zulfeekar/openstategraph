@@ -151,3 +151,44 @@ class TestChildPackageAssets:
         run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
         run(RunState(question="q"))  # type: ignore[typeddict-item]
         assert captured["slug"] == "child-flow"
+
+    def test_the_parent_conversation_crosses_into_the_child(self) -> None:
+        """Found live: the Architect via the concierge re-asked its interview
+        question every turn — child subgraphs were invoked with fresh state."""
+        from langchain_core.messages import AIMessage, HumanMessage
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
+
+        captured: dict = {}
+
+        class SpyGraph:
+            def invoke(self, payload):
+                captured.update(payload)
+                return {"answer": "ok"}
+
+        import dyflow.compile.node_runtime as nr
+        original = WorkflowCompiler.build
+        WorkflowCompiler.build = lambda self, *a, **k: SpyGraph()  # type: ignore[method-assign]
+        try:
+            parent = NodeRuntime(model=None, document_loader=lambda slug: {"nodes": [], "edges": []})
+            doc = {"nodes": [{"id": "sub1", "type": "workflow.subgraph",
+                              "data": {"workflow": "child"}}], "edges": []}
+            run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
+            history = [HumanMessage(content="create a workflow"),
+                       AIMessage(content="Before I build: what should it produce?")]
+            run(RunState(question="a movie review flow", messages=history))  # type: ignore[typeddict-item]
+        finally:
+            WorkflowCompiler.build = original  # type: ignore[method-assign]
+        assert [m.content for m in captured["messages"]][:2] == [
+            "create a workflow", "Before I build: what should it produce?"]
+
+    def test_the_input_node_does_not_double_record_the_current_turn(self) -> None:
+        from langchain_core.messages import HumanMessage
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        from dyflow.compile.workflow_compiler import CompiledPlan
+        runtime = NodeRuntime(model=None)
+        node = {"id": "in1", "type": "input.text", "data": {}}
+        run = runtime.factory({"nodes": [node], "edges": []})("in1", node, CompiledPlan())
+        update = run(RunState(question="q1",  # type: ignore[typeddict-item]
+                              messages=[HumanMessage(content="q1")]))
+        assert "messages" not in update

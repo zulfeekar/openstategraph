@@ -516,7 +516,13 @@ class NodeRuntime:
 
             text = state.get("question") or configured
             update: dict[str, Any] = {"outputs": {node_id: text}}
-            if text:
+            prior = state.get("messages") or []
+            already_recorded = bool(
+                prior
+                and getattr(prior[-1], "type", "") == "human"
+                and getattr(prior[-1], "content", None) == text
+            )
+            if text and not already_recorded:
                 # The thread's record of THIS user turn — written at the one
                 # node every path shares, so conversation history exists
                 # whether the branch runs an agent, a supervisor, or neither
@@ -1170,7 +1176,19 @@ class NodeRuntime:
                 or state.get("question", "")
             )
             final = captured.invoke(
-                {"question": question, "attempts": 0, "decisions": {}, "outputs": {}}
+                {
+                    "question": question,
+                    # The conversation crosses the boundary (found live: the
+                    # Architect routed through the concierge re-asked its
+                    # interview question every turn — the child was invoked
+                    # with fresh state, so the parent thread's history never
+                    # reached it). Graph state stays isolated; the DIALOGUE
+                    # is precisely what a routed conversational child needs.
+                    "messages": list(state.get("messages") or []),
+                    "attempts": 0,
+                    "decisions": {},
+                    "outputs": {},
+                }
             )
             answer = final.get("answer", "")
             # The child's loop cost is part of the parent's story: without
