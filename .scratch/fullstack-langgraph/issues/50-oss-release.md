@@ -32,3 +32,7 @@ Deferred as nice-to-have: linters (eslint/prettier/ruff/mypy), issue templates, 
 ## Linting landed (2026-08-08)
 
 ruff (errors-only select: E9,F — real defects, zero style churn) config in pyproject, 15 hits fixed, wired into CI before pytest. ESLint/Prettier and the wider ruff select remain the recorded follow-ups; Playwright stays ticket 51.
+
+## PDF purge executed (2026-08-08, user-authorized)
+
+The deck was reading material only — user confirmed it does not belong in the codebase. `git filter-repo --invert-paths` run after a backup bundle; zero history references remain, .git 13M → 1.9M, all branches rewritten, fsck clean. One residue for the .scratch decision: `decisions/loop-graph-harness.md` still quotes the same deck — it goes whenever .scratch's fate is decided.
