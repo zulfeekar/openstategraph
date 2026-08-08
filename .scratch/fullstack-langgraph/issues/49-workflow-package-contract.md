@@ -1,5 +1,5 @@
 Type: grilling
-Status: resolved (2026-08-08) — contract decided; validator+scaffold queued
+Status: resolved (2026-08-08) — contract decided AND built
 Blocked by: 33, 35
 
 ## Question
@@ -17,3 +17,7 @@ de-hardcode the chinook endpoints behind `{slug}` routes.
 ## Resolution
 
 One-liners: a workflow package = `workflow.json` (envelope) + `AGENTS.md` required; `tools/ functions/ middlewares/ tests/ data/` optional, discovered by convention (per the user's prebuilt+file-extension model, ticket 37 note); validator = a `WorkflowStore.validate(slug)` returning findings (missing AGENTS.md = warning, unparseable workflow.json = error) surfaced through `GET /api/workflows`; scaffold = `scripts/new_workflow.py <slug>` copying a template package; chinook-hardcoded endpoints (`/graph`, `/ask`) generalize to `{slug}` — folded together with ticket 54's Mermaid tab implementation.
+
+## Implementation (2026-08-08)
+
+`validate_package` (errors block, warnings advise; never raises) surfaced as `findings` on `GET /api/workflows`; `scripts/new_workflow.py` scaffolds the full conforming package (incl. middlewares/ + skills/); the chinook-hardcoded `/graph` endpoint retired by ticket 54's generic one — `/ask` remains the last slug-specific route, kept deliberately as the historical demo API.
