@@ -558,6 +558,51 @@ class TestConversationMemory:
         captured, _ = self._run_agent(monkeypatch, [])
         assert [m.content for m in captured["messages"]] == ["second question"]
 
-    def test_both_sides_of_the_exchange_persist_for_the_next_send(self, monkeypatch) -> None:
+    def test_the_current_turn_is_not_duplicated_when_already_recorded(self, monkeypatch) -> None:
+        """The input node logs the turn before the agent runs — the agent
+        must speak into that record, not append a copy."""
+        from langchain_core.messages import HumanMessage
+        captured, _ = self._run_agent(monkeypatch, [HumanMessage(content="second question")])
+        assert [m.content for m in captured["messages"]] == ["second question"]
+
+    def test_the_record_is_written_centrally_not_by_the_agent(self, monkeypatch) -> None:
         _, update = self._run_agent(monkeypatch, [])
-        assert [m.content for m in update["messages"]] == ["second question", "answer"]
+        assert "messages" not in update
+
+
+class TestCentralThreadRecord:
+    """Ticket 73 generalised: input logs the user turn, output logs the
+    answer — history exists on every path, supervisor branches included."""
+
+    def _node(self, runtime, node):
+        from dyflow.compile.workflow_compiler import CompiledPlan
+        return runtime.factory({"nodes": [node], "edges": []})(node["id"], node, CompiledPlan())
+
+    def test_the_input_node_records_the_user_turn(self) -> None:
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        run = self._node(NodeRuntime(model=None), {"id": "in1", "type": "input.text", "data": {}})
+        update = run(RunState(question="what is the weather?"))  # type: ignore[typeddict-item]
+        assert [m.content for m in update["messages"]] == ["what is the weather?"]
+
+    def test_the_output_node_records_the_answer(self) -> None:
+        from dyflow.compile.node_runtime import NodeRuntime, RunState
+        run = self._node(NodeRuntime(model=None), {"id": "out1", "type": "output.formatted", "data": {}})
+        update = run(RunState(question="q", answer="the forecast", outputs={}))  # type: ignore[typeddict-item]
+        assert [m.content for m in update["messages"]] == ["the forecast"]
+
+    def test_interpreting_nodes_see_the_conversation_not_the_fragment(self) -> None:
+        from langchain_core.messages import AIMessage, HumanMessage
+        from dyflow.compile.node_runtime import RunState, _thread_question
+        state = RunState(  # type: ignore[typeddict-item]
+            question="oslo",
+            messages=[
+                HumanMessage(content="what is the weather?"),
+                AIMessage(content="Which city would you like the forecast for?"),
+                HumanMessage(content="oslo"),
+            ],
+        )
+        rendered = _thread_question(state)
+        assert "what is the weather?" in rendered
+        assert rendered.rstrip().endswith("oslo")
+        # The current turn appears as the new message, not duplicated in history.
+        assert rendered.count("oslo") == 1

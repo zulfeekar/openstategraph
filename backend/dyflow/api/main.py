@@ -698,6 +698,7 @@ def create_app(
                 "thread_id": thread_id,
                 "session_id": request.session_id or "",
                 "user_email": request.user_email or "",
+                "workflow_slug": request.workflow_slug or "",
             },
         }
         graph_input = {
@@ -760,6 +761,7 @@ def create_app(
                 "thread_id": request.thread_id,
                 "session_id": request.session_id or "",
                 "user_email": request.user_email or "",
+                "workflow_slug": request.workflow_slug or "",
             },
         }
         resume_value: dict[str, Any] = {"decision": request.decision}

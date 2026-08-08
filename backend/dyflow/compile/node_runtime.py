@@ -215,6 +215,65 @@ def _branch_entries(raw: Any) -> list[Any]:
     return ["default"]
 
 
+def _thread_question(state: RunState, limit: int = 6) -> str:
+    """The user's message *in conversation* — the classify/decompose input.
+
+    Found live (ticket 73's general case): "what is the weather?" →
+    assistant asks which city → "oslo" arrives as a bare fragment, and a
+    router or supervisor classifying it context-free sent it to the
+    knowledge worker for a Wikipedia article. Any node that interprets
+    intent must see the recent exchange, not the fragment. Bounded to the
+    last few turns; a fresh thread reduces to the plain question.
+    """
+    question = state.get("question", "")
+    history = [
+        m for m in (state.get("messages") or [])
+        if isinstance(getattr(m, "content", None), str) and m.content.strip()
+    ][-limit:]
+    if not history:
+        return question
+    lines = [
+        f"{'User' if m.type == 'human' else 'Assistant'}: {m.content.strip()}"
+        for m in history
+    ]
+    return (
+        "Conversation so far:\n" + "\n".join(lines) +
+        f"\n\nThe user's new message (interpret it in the context above): {question}"
+    )
+
+
+def _thread_question(state: RunState, limit: int = 6) -> str:
+    """The user's message *in conversation* — what intent-interpreting nodes
+    (router, supervisor) must classify against.
+
+    Found live (ticket 73's general case): "what is the weather?" →
+    assistant asks which city → "oslo" arrives as a bare fragment; a
+    context-free supervisor labelled it knowledge and returned a Wikipedia
+    article. History is bounded to the last few turns; the current turn
+    (recorded by the input node this same run) is excluded from the history
+    block since it IS the new message; a fresh thread reduces to the plain
+    question.
+    """
+    question = state.get("question", "")
+    history = [
+        m for m in (state.get("messages") or [])
+        if isinstance(getattr(m, "content", None), str) and m.content.strip()
+    ]
+    if history and history[-1].type == "human" and history[-1].content == question:
+        history = history[:-1]
+    history = history[-limit:]
+    if not history:
+        return question
+    lines = [
+        f"{'User' if m.type == 'human' else 'Assistant'}: {m.content.strip()}"
+        for m in history
+    ]
+    return (
+        "Conversation so far:\n" + "\n".join(lines)
+        + f"\n\nThe user's new message (interpret it in the context above): {question}"
+    )
+
+
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
@@ -401,8 +460,18 @@ class NodeRuntime:
         )
 
         def run(state: RunState) -> dict[str, Any]:
+            from langchain_core.messages import HumanMessage
+
             text = state.get("question") or configured
-            return {"outputs": {node_id: text}}
+            update: dict[str, Any] = {"outputs": {node_id: text}}
+            if text:
+                # The thread's record of THIS user turn — written at the one
+                # node every path shares, so conversation history exists
+                # whether the branch runs an agent, a supervisor, or neither
+                # (ticket 73's general case, found live: "oslo" after
+                # "which city?" arrived context-free at a supervisor).
+                update["messages"] = [HumanMessage(content=text)]
+            return update
 
         return run
 
@@ -519,10 +588,6 @@ class NodeRuntime:
             prompt = _upstream_text(state, upstream) or state.get("question", "")
             skill = _upstream_text(state, skills)
             feedback = state.get("feedback", "")
-            if feedback:
-                # The retry carries *why*, or the agent repeats itself and the
-                # loop is pure cost.
-                prompt = f"{prompt}\n\nYour previous answer was rejected: {feedback}"
 
             agent = agent_for(skill) if model is not None else None
             if agent is None:
@@ -531,15 +596,21 @@ class NodeRuntime:
                     "attempts": state.get("attempts", 0) + 1,
                 }
 
-            # Conversation memory (ticket 73): a continuing thread's prior
-            # turns ride in `state["messages"]` (checkpointer-backed on the
-            # stream endpoints), and feeding them back is what lets an agent
-            # hold an interview instead of meeting every send amnesiac. A
-            # fresh run has no history, so single-shot behaviour is
-            # unchanged; long threads are bounded by the summarize toggle.
-            history = list(state.get("messages") or [])
-            turn = HumanMessage(content=prompt)
-            payload = [*history, turn]
+            # Conversation memory (ticket 73, generalised): the thread record
+            # is written centrally — the input node logs each user turn, the
+            # output node logs each answer — so EVERY path accumulates
+            # history, and this agent simply speaks into it. A rejection
+            # becomes its own turn (the retry carries *why*); a prompt that
+            # differs from the recorded turn (an upstream transform) is
+            # appended; a fresh thread reduces to single-shot exactly as
+            # before. Long threads are bounded by the summarize toggle.
+            payload = list(state.get("messages") or [])
+            if feedback:
+                payload.append(
+                    HumanMessage(content=f"Your previous answer was rejected: {feedback}")
+                )
+            elif not payload or payload[-1].type != "human" or payload[-1].content != prompt:
+                payload.append(HumanMessage(content=prompt))
             invocation: dict[str, Any] = {"messages": payload}
             rubric_text = _text(data, "rubric").strip()
             if rubric_text:
@@ -552,9 +623,6 @@ class NodeRuntime:
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
-                # Both sides of the exchange persist, so the next send's
-                # history contains the question AND this answer.
-                "messages": [turn, *messages[-1:]],
             }
 
         return run
@@ -585,6 +653,8 @@ class NodeRuntime:
 
         def run(state: RunState) -> dict[str, Any]:
             question = _upstream_text(state, upstream) or state.get("question", "")
+            if question == state.get("question", ""):
+                question = _thread_question(state)
             decision = router.classify(question)
             return {
                 # The conditional edge dispatches on the *stable id* — the
@@ -731,6 +801,8 @@ class NodeRuntime:
 
         def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
+            if instruction == state.get("question", ""):
+                instruction = _thread_question(state)
             feedback = state.get("feedback", "")
             generation = state.get("attempts", 0)
             subtasks = orchestrator.plan(
@@ -1058,8 +1130,16 @@ class NodeRuntime:
         ]
 
         def run(state: RunState) -> dict[str, Any]:
+            from langchain_core.messages import AIMessage
+
             text = _upstream_text(state, upstream + conditional_upstream)
-            return {"answer": text or state.get("answer", ""), "outputs": {node_id: text}}
+            answer = text or state.get("answer", "")
+            update: dict[str, Any] = {"answer": answer, "outputs": {node_id: text}}
+            if answer:
+                # The thread record's other half (ticket 73): the answer is
+                # logged where every path converges, agent or not.
+                update["messages"] = [AIMessage(content=answer)]
+            return update
 
         return run
 

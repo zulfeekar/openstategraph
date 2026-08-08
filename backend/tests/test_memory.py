@@ -113,3 +113,45 @@ class TestWorkflowMiddlewareDiscovery:
         sentinel = object()
         runtime = NodeRuntime(model=None, workflow_middleware={"audit": sentinel})
         assert runtime.workflow_middleware["audit"] is sentinel
+
+
+class TestMemoryScopes:
+    """User model (2026-08-08): user / workflow / app scopes, one search."""
+
+    def test_workflow_scope_lands_in_the_slug_namespace(self) -> None:
+        store = InMemoryStore()
+        save, _ = memory_tools()
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "vgsales ranks tie-break by name", "scope": "workflow"})},
+            store=store,
+            config={"configurable": {"thread_id": "t", "workflow_slug": "tabular-analytics"}},
+        )
+        assert store.search(("workflow-memory", "tabular-analytics"))
+
+    def test_search_reads_all_scopes_and_labels_provenance(self) -> None:
+        from dyflow.memory import APP_NAMESPACE
+        store = InMemoryStore()
+        save, search = memory_tools()
+        config = {"configurable": {"thread_id": "t", "user_email": "a@x.com",
+                                   "workflow_slug": "tabular-analytics"}}
+        _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes concise answers"})},
+                      store=store, config=config)
+        _run_in_graph(lambda s: {"out": save.invoke({"fact": "Global_Sales is authoritative", "scope": "workflow"})},
+                      store=store, config=config)
+        _run_in_graph(lambda s: {"out": save.invoke({"fact": "the platform has 8 workflows", "scope": "app"})},
+                      store=store, config=config)
+        result = _run_in_graph(lambda s: {"out": search.invoke({"query": "a"})},
+                               store=store, config=config)
+        out = result["out"]
+        assert "[user]" in out and "[workflow]" in out and "[app]" in out
+
+    def test_app_scope_is_shared_across_workflows(self) -> None:
+        store = InMemoryStore()
+        save, search = memory_tools()
+        _run_in_graph(lambda s: {"out": save.invoke({"fact": "shared finding", "scope": "app"})},
+                      store=store,
+                      config={"configurable": {"thread_id": "t1", "workflow_slug": "concierge"}})
+        result = _run_in_graph(lambda s: {"out": search.invoke({"query": "shared"})},
+                               store=store,
+                               config={"configurable": {"thread_id": "t2", "workflow_slug": "chinook-nl-to-sql"}})
+        assert "shared finding" in result["out"]
