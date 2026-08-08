@@ -165,7 +165,10 @@ class BaseOrchestrator(ABC):
         if self.model is None:
             labels = []
             for task in subtasks:
-                text = task.instruction.lower()
+                # Match on the fragment itself, never the appended parent
+                # context — the context names the whole request and would
+                # make every fragment "mention" every archetype in it.
+                text = task.instruction.split("(part of the request:")[0].lower()
                 match = next(
                     (
                         a.key
@@ -235,6 +238,29 @@ class BaseOrchestrator(ABC):
             pieces = [instruction.strip()] if instruction.strip() else []
         if not pieces:
             return []
+
+        # Two hygiene rules, both found live (ticket 61's residual). First:
+        # a conjunction split loses the shared predicate — "compare the
+        # weather in Oslo and Madrid" leaves the fragment "Madrid.", and a
+        # worker handed only that drifts back to whatever it saw last. A
+        # fragment (short, and not the whole instruction) carries its parent
+        # as explicit context. Second: near-duplicate pieces collapse to one
+        # — dispatching the same work twice doubles cost and lets two answers
+        # disagree.
+        if len(pieces) > 1:
+            pieces = [
+                piece if len(piece.split()) >= 3
+                else f"{piece} (part of the request: {instruction.strip()})"
+                for piece in pieces
+            ]
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for piece in pieces:
+            key = " ".join(piece.lower().split()).rstrip(".!?")
+            if key not in seen:
+                seen.add(key)
+                deduped.append(piece)
+        pieces = deduped
 
         truncated = pieces[: self.max_subtasks]
         prefix = f"task-{generation}-" if generation else "task-"

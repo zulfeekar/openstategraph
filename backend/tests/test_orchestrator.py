@@ -72,7 +72,9 @@ class TestIdentity:
     def test_ids_are_usable_as_dict_keys_for_joining_results(self) -> None:
         subtasks = Orchestrator().plan("a; b")
         joined = {t.id: f"result for {t.instruction}" for t in subtasks}
-        assert joined["task-1"] == "result for a"
+        # Fragments carry parent context (ticket 61) — the property under
+        # test is that ids key the join, not the instruction spelling.
+        assert joined["task-1"].startswith("result for a")
 
     def test_a_later_generation_never_reuses_an_earlier_ones_ids(self) -> None:
         """Found live, not hypothetically.
@@ -120,3 +122,25 @@ class TestLadder:
         subtask = Subtask(id="task-1", instruction="x")
         assert subtask.id == "task-1"
         assert subtask.instruction == "x"
+
+
+class TestSubtaskHygiene:
+    """Ticket 61 residual: fragments carry context, duplicates collapse."""
+
+    def test_a_conjunction_fragment_carries_the_parent_instruction(self) -> None:
+        from dyflow.abc.orchestrator import Orchestrator
+        plan = Orchestrator().plan("Compare the current weather in Oslo and Madrid.")
+        assert len(plan) == 2
+        assert "part of the request" in plan[1].instruction
+        assert "Madrid" in plan[1].instruction and "Oslo" in plan[1].instruction
+
+    def test_duplicate_pieces_collapse_to_one_dispatch(self) -> None:
+        from dyflow.abc.orchestrator import Orchestrator
+        plan = Orchestrator().plan("check the weather; check the weather; count the tables")
+        assert [t.instruction for t in plan][0].startswith("check the weather")
+        assert len(plan) == 2
+
+    def test_a_single_piece_instruction_is_never_decorated(self) -> None:
+        from dyflow.abc.orchestrator import Orchestrator
+        plan = Orchestrator().plan("Top sellers")
+        assert plan[0].instruction == "Top sellers"
