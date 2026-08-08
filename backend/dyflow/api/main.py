@@ -362,8 +362,11 @@ def create_app(
             skills_context=(
                 discover_skills(workflow_store.directory_for(slug)) if slug else ""
             ),
+            workflow_middleware=(
+                discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
+            ),
         )
-    from dyflow.api.capability_discovery import discover_skills
+    from dyflow.api.capability_discovery import discover_middlewares, discover_skills
     from dyflow.memory import build_store, checkpointer_for
 
     #: Long-term memory, process-wide (ticket 65): one Store shared by every

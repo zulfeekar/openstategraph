@@ -63,3 +63,7 @@ molecules = tier presets, organisms = canvas patterns (Team, supervisor+
 grader), templates = workflow packages, pages = /chat + concierge.
 UI: the Inspector shows the effective stack in canonical slot order, preset
 slots marked "from tier", per-slot on/off/replace-from-`middlewares/`.
+
+## Implementation (2026-08-08)
+
+`discover_middlewares`: `workflows/<slug>/middlewares/<slot>.py` exposing `MIDDLEWARE` — file stem IS the slot name (replaces a preset slot or adds one); merged into every agent's contributions after the tier preset, before per-node config. Prebuilt slots now live: rubric (deepagents), summarization (LangChain), + the tier presets. Remaining follow-up: the Inspector effective-stack panel (needs a tier-describe endpoint).

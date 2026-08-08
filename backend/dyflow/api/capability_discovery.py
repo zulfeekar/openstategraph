@@ -272,3 +272,35 @@ def discover_skills(workflow_dir: Path) -> str:
         if text:
             parts.append(f"## Skill: {path.stem}\n{text}")
     return "\n\n".join(parts)
+
+
+def discover_middlewares(workflow_dir: Path, slug: str) -> dict[str, Any]:
+    """Workflow-supplied middleware, one slot per file (tickets 32+37).
+
+    `middlewares/<slot_name>.py` must expose a module-level `MIDDLEWARE`
+    object (any LangChain `AgentMiddleware` — including the library's own
+    prebuilts, pre-configured). The file's stem IS the slot name, so a file
+    called `summarization.py` *replaces* the tier's summarization slot and a
+    novel name adds a new slot — local fills-or-replaces, the base keeps the
+    canonical order. Rarely needed (the prebuilts cover most cases — the
+    user's own words on ticket 37); when it is, it is one file, no
+    registration.
+    """
+    middlewares_dir = workflow_dir / "middlewares"
+    if not middlewares_dir.is_dir():
+        return {}
+    found: dict[str, Any] = {}
+    for path in sorted(middlewares_dir.glob("*.py")):
+        if path.stem.startswith("_"):
+            continue
+        try:
+            module = _import_module(path, f"{slug}.middlewares.{path.stem}")
+        except Exception:
+            logger.warning("Skipping unimportable middleware module %s", path, exc_info=True)
+            continue
+        middleware = getattr(module, "MIDDLEWARE", None)
+        if middleware is None:
+            logger.warning("%s defines no MIDDLEWARE object; skipped", path)
+            continue
+        found[path.stem] = middleware
+    return found

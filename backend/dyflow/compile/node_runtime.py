@@ -231,6 +231,7 @@ class NodeRuntime:
         registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None,
         store: Any = None,
         skills_context: str = "",
+        workflow_middleware: dict[str, Any] | None = None,
         max_attempts: int = 3,
         _ancestry: tuple[str, ...] = (),
     ) -> None:
@@ -259,6 +260,11 @@ class NodeRuntime:
         #: every agent in this workflow as prompt *context* (above rules,
         #: below the locked preamble; SystemPrompt owns the ordering).
         self.skills_context = skills_context
+        #: Slot-name -> middleware instance from `workflows/<slug>/middlewares/`
+        #: (ticket 32): merged into every agent's slot table AFTER the tier
+        #: preset and BEFORE per-node config, so a workflow file replaces a
+        #: preset slot and a node's own setting still wins.
+        self.workflow_middleware = dict(workflow_middleware or {})
         #: The chain of subgraph slugs above this runtime — how a workflow
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
@@ -472,7 +478,7 @@ class NodeRuntime:
 
         def agent_for(skill: str) -> Any:
             if skill not in built:
-                contributions: dict[str, Any] = {}
+                contributions: dict[str, Any] = dict(self.workflow_middleware)
                 if _text(data, "rubric").strip() and model is not None:
                     # deepagents' own LLM-as-judge (beta, >=0.6.5): a grader
                     # sub-agent inside the agent, iterating until the rubric

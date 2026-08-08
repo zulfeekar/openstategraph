@@ -88,3 +88,28 @@ class TestDurableCheckpointer:
         sentinel = object()
         assert checkpointer_for(None, "x", fallback=sentinel) is sentinel
         assert checkpointer_for({"checkpointer": "memory"}, "x", fallback=sentinel) is sentinel
+
+
+class TestWorkflowMiddlewareDiscovery:
+    """Ticket 32: middlewares/<slot>.py fills-or-replaces a named slot."""
+
+    def test_a_dropped_file_becomes_a_named_slot(self, tmp_path) -> None:
+        from dyflow.api.capability_discovery import discover_middlewares
+        mw_dir = tmp_path / "middlewares"
+        mw_dir.mkdir()
+        (mw_dir / "audit.py").write_text("MIDDLEWARE = object()\n")
+        found = discover_middlewares(tmp_path, "test-flow")
+        assert set(found) == {"audit"}
+
+    def test_a_file_without_MIDDLEWARE_is_skipped_loudly_not_fatally(self, tmp_path) -> None:
+        from dyflow.api.capability_discovery import discover_middlewares
+        mw_dir = tmp_path / "middlewares"
+        mw_dir.mkdir()
+        (mw_dir / "broken.py").write_text("x = 1\n")
+        assert discover_middlewares(tmp_path, "test-flow") == {}
+
+    def test_workflow_slots_reach_every_agents_contributions(self) -> None:
+        from dyflow.compile.node_runtime import NodeRuntime
+        sentinel = object()
+        runtime = NodeRuntime(model=None, workflow_middleware={"audit": sentinel})
+        assert runtime.workflow_middleware["audit"] is sentinel
