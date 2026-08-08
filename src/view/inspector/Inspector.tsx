@@ -21,6 +21,7 @@ import {
   type StatusTone,
 } from '@design/primitives';
 import { groupFieldsForInspector, validateFields } from '@core/model/contracts/fields';
+import { LockedPromptSections } from './LockedPromptSections';
 import { useDraftValue } from '@view/hooks/useDraftValue';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
 import {
@@ -85,6 +86,8 @@ function NodeInspector({ nodeId }: { nodeId: string }) {
           </Field>
           <p className="inspector__description">{definition.description}</p>
         </PanelSection>
+
+        <LockedPromptSections nodeType={definition.id} />
 
         {fieldGroups.map((group) => (
           <PanelSection key={group.heading} heading={group.heading}>

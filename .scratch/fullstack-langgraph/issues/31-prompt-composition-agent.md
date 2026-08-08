@@ -1,5 +1,5 @@
 Type: grilling
-Status: mostly resolved (2026-08-07) — one piece open
+Status: resolved (2026-08-08)
 Blocked by: 30
 
 ## Question
@@ -28,3 +28,7 @@ system message — the anti-pattern this ticket exists to prevent.
 ## Resolution
 
 `resolve_prompt()` on the family composes SystemPrompt (context above rules); `systemPrompt` field on agent.llm reaches `create_agent(system_prompt=)`. The reverted router rewrite is gone — `BaseRouter` classifies through `resolve_system_prompt()` again. Still open: rendering the *locked* sections read-only in the Inspector.
+
+## Locked sections shipped (2026-08-08)
+
+`GET /api/node-contracts` serves each ladder's PREAMBLE/OUTPUT_CONTRACT from the Python classes (single source of truth); `LockedPromptSections` renders them read-only in the Inspector under Identity ('locked · runs first' / 'locked · always last'), absent honestly when the runtime is down. Endpoint + fetch live-verified; the click-to-select visual check is deferred to ticket 51's Playwright suite (synthetic DOM clicks don't traverse JointJS's pointer pipeline).

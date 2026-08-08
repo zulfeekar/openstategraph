@@ -392,6 +392,41 @@ def create_app(
 
         return HTMLResponse(CHAT_PAGE)
 
+    @app.get("/api/node-contracts")
+    def node_contracts() -> dict[str, dict[str, str]]:
+        """The LOCKED prompt sections per model-driven node type (ticket 31).
+
+        Served from the Python ladder classes — the single source of truth —
+        so the editor can show a developer what the machinery already says
+        (read-only, beside their editable rules) instead of letting them
+        duplicate or contradict it. The original RouterNode bug this
+        prevents: an editable field pre-filled with the output contract,
+        cleared by the first person who wrote their own rules.
+        """
+        from dyflow.abc.agent import BaseAgentNode
+        from dyflow.abc.grader import BaseGrader
+        from dyflow.abc.orchestrator import BaseOrchestrator
+        from dyflow.abc.router import BaseRouter
+
+        return {
+            "agent.llm": {
+                "preamble": BaseAgentNode.PREAMBLE,
+                "contract": BaseAgentNode.OUTPUT_CONTRACT,
+            },
+            "route.classifier": {
+                "preamble": BaseRouter.PREAMBLE,
+                "contract": BaseRouter.OUTPUT_CONTRACT,
+            },
+            "route.grader": {
+                "preamble": BaseGrader.PREAMBLE,
+                "contract": BaseGrader.OUTPUT_CONTRACT,
+            },
+            "orchestrate.supervisor": {
+                "preamble": BaseOrchestrator.PREAMBLE,
+                "contract": BaseOrchestrator.OUTPUT_CONTRACT,
+            },
+        }
+
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         # Always true now: Ollama cloud is the default, not an opt-in, so
