@@ -27,6 +27,12 @@ CHAT_PAGE = """<!doctype html>
   select, input, button, textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; }
   button { cursor: pointer; }
   main { flex: 1; overflow-y: auto; padding: 16px; max-width: 780px; width: 100%; margin: 0 auto; }
+  #flowbox { border-bottom: 1px solid var(--line); padding: 6px 14px; max-width: 780px; width: 100%; margin: 0 auto; }
+  #flowbox summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  #flow { overflow-x: auto; padding: 8px 0; }
+  #flow svg { max-width: 100%; height: auto; }
+  #flow .flow-active > * { stroke: #22c55e !important; stroke-width: 2.5px !important; }
+  #flow .flow-active rect, #flow .flow-active polygon { fill: #22c55e33 !important; }
   .turn { margin-bottom: 20px; }
   .q { font-weight: 600; margin-bottom: 6px; }
   .steps { font-size: 12px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; margin: 6px 0; }
@@ -49,11 +55,13 @@ CHAT_PAGE = """<!doctype html>
   <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
   <span id="who" style="font-size:12px;color:var(--muted)"></span>
 </header>
+<details id="flowbox"><summary>Live flow</summary><div id="flow">select a workflow…</div></details>
 <main id="log"></main>
 <footer>
   <textarea id="msg" placeholder="Ask the selected workflow…"></textarea>
   <button id="send">Send</button>
 </footer>
+<script src="/chat/mermaid.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -147,6 +155,40 @@ function offerSave(el, answerText) {
   return out.join("\\n");
 }
 
+// --- Live flow view (ticket 68, as the user actually meant it): the
+// active workflow's compiled graph, with the node currently processing lit
+// up as stream frames arrive. Same safe_name rule as the compiler.
+const flow = { slug: null, ready: false };
+const safeName = (id) => id.replace(/[^a-zA-Z0-9_]/g, "_");
+
+async function renderFlow(slug) {
+  const host = $("flow");
+  if (flow.slug === slug && flow.ready) return;
+  flow.slug = slug; flow.ready = false;
+  host.textContent = "compiling…";
+  try {
+    const resp = await fetch(`/api/workflows/${slug}/graph`);
+    if (!resp.ok) { host.textContent = "no compiled view: " + resp.status; return; }
+    const { mermaid: text } = await resp.json();
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral" });
+    const { svg } = await mermaid.render("flow-" + Date.now(), text);
+    host.innerHTML = svg;
+    flow.ready = true;
+  } catch (err) {
+    host.textContent = "flow view unavailable: " + err;
+  }
+}
+
+let activeFlowNode = null;
+function highlightFlow(nodeId) {
+  if (!flow.ready || !nodeId) return;
+  const name = safeName(nodeId);
+  if (activeFlowNode) activeFlowNode.classList.remove("flow-active");
+  // Mermaid stamps flowchart node ids as `flowchart-<name>-N`.
+  const el = $("flow").querySelector(`[id*="-${CSS.escape(name)}-"]`);
+  if (el) { el.classList.add("flow-active"); activeFlowNode = el; }
+}
+
 async function loadWorkflows() {
   const list = await (await fetch("/api/workflows")).json();
   // "Auto" is the hidden concierge gateway (ticket 67): a predefined
@@ -154,7 +196,11 @@ async function loadWorkflows() {
   $("wf").innerHTML = '<option value="concierge">Auto — let Dyflow route</option>'
     + list.map((w) => `<option value="${w.slug}">${w.name}</option>`).join("");
   state.workflow = "concierge";
-  $("wf").onchange = async () => { state.workflow = $("wf").value; state.doc = null; };
+  $("wf").onchange = async () => {
+    state.workflow = $("wf").value; state.doc = null;
+    void renderFlow(state.workflow);
+  };
+  void renderFlow(state.workflow);
 }
 
 async function docFor(slug) {
@@ -194,6 +240,7 @@ async function stream(path, body, el) {
         else if (line.startsWith("data: ")) {
           const d = JSON.parse(line.slice(6));
           if (event === "update") {
+            if (!d.internal) highlightFlow(d.node);
             if (d.internal) {
               // Internal machinery collapses to a live counter on its owning
               // step — a 20-call tool loop is one line, not twenty.

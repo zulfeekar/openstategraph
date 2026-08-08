@@ -59,3 +59,7 @@ altitudes of the Lego model.
 ## Follow-up built (2026-08-08)
 
 `data-analyst-team` shipped: Team package whose SQL Analyst member carries the three generic SQL explorer tools against Chinook + a `skills/sql-conventions.md` procedural skill; live-verified through a Team node (correct $523.06 USA revenue figure, table named, grader loop fired). Glossary node remains the one open piece — blocked on the user's source choice (table vs docs corpus).
+
+## Glossary closed (2026-08-08)
+
+User clarified they had no standing glossary source — the idea was this session's extrapolation of their 6-tables scenario. Closed as **covered by skills**: per-table business rules and definitions live in `workflows/<slug>/skills/*.md` (procedural memory every agent already receives). A dedicated Glossary node returns only if a real structured SSOT source appears.

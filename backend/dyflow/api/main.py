@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Callable, Literal
 
 from fastapi import FastAPI, HTTPException
@@ -441,6 +442,20 @@ def create_app(
                 "contract": BaseOrchestrator.OUTPUT_CONTRACT,
             },
         }
+
+    @app.get("/chat/mermaid.js", include_in_schema=False)
+    def chat_mermaid_asset() -> Any:
+        """Mermaid for the /chat live-flow view (ticket 68) — served from the
+        repo's own node_modules so the chat page stays CDN-free and cannot
+        version-skew against the editor's copy."""
+        from fastapi.responses import FileResponse
+
+        asset = Path(__file__).resolve().parent.parent.parent.parent / (
+            "node_modules/mermaid/dist/mermaid.min.js"
+        )
+        if not asset.is_file():
+            raise HTTPException(status_code=404, detail="mermaid asset not installed")
+        return FileResponse(asset, media_type="text/javascript")
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
