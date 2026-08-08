@@ -43,3 +43,10 @@ class TestReadOnlyJail:
         result = PlatformGrepTool().run(pattern="StateGraph", path="backend/dyflow")
         assert result.error is None
         assert "workflow_compiler" in result.content
+
+
+class TestDotfilesAreSecrets:
+    def test_env_and_any_dotfile_are_unreadable(self) -> None:
+        assert PlatformReadTool().run(path=".env").error is not None
+        assert PlatformReadTool().run(path=".env.example").error is not None
+        assert PlatformLsTool().run(path=".github").error is not None

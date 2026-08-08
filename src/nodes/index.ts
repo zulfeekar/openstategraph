@@ -19,6 +19,7 @@ import { workerExecutor, workerNode } from './orchestrate/WorkerNode';
 import { formatReportExecutor, formatReportNode } from './orchestrate/FormatReportNode';
 import { subgraphExecutor, subgraphNode } from './compose/SubgraphNode';
 import { teamExecutor, teamNode } from './compose/TeamNode';
+import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 
 /**
  * The catalogue's single registration point.
@@ -60,6 +61,7 @@ export function registerNodeCatalogue(
     formatReportNode,
     subgraphNode,
     teamNode,
+    ...PLATFORM_TOOL_NODES.map((entry) => entry.definition),
     formattedOutputNode,
     groupNode,
     noteNode,
@@ -78,6 +80,7 @@ export function registerNodeCatalogue(
     formatReportExecutor,
   subgraphExecutor,
   teamExecutor,
+  ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
     formattedOutputExecutor,
   ]);
 }

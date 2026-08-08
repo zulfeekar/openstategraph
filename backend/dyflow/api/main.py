@@ -278,6 +278,11 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # Read-only platform introspection (ticket 67, user spec: "no write,
     # everything else") — list/describe workflows, jailed ls/read/grep.
     registry.update({tool.node_type: tool for tool in PLATFORM_TOOLS})
+    from dyflow.prebuilt_web import WEB_TOOLS
+
+    # The open web, read-only (search + SSRF-guarded fetch) — the root
+    # assistant's generic-chat requirement (ticket 67 refinement).
+    registry.update({tool.node_type: tool for tool in WEB_TOOLS})
     if slug:
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))

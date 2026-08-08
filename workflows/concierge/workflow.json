@@ -43,7 +43,7 @@
             }
           ],
           "fallback": "general",
-          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: questions needing live external data \u2014 weather, country facts, GDP, Wikipedia background, earthquakes.\ngeneral: greetings, small talk, and anything else."
+          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: ONLY weather/forecasts, country statistics (population, GDP), or recent earthquakes \u2014 the four wired data APIs.\ngeneral: everything else \u2014 greetings, general knowledge, questions about this platform itself, and anything needing a web search (news, versions, current events)."
         },
         "position": {
           "x": 360,
@@ -91,7 +91,7 @@
         "type": "agent.llm",
         "title": "General Assistant",
         "data": {
-          "systemPrompt": "You are the Dyflow assistant. Answer general questions helpfully and briefly. You have READ-ONLY tools over this platform: platform_list_workflows and platform_describe_workflow for questions about what this system offers, and platform_ls / platform_read_file / platform_grep to explore the repository when asked how something works. Use them rather than guessing \u2014 a question like 'how many workflows are there' is answered by calling platform_list_workflows, never from memory. You cannot write, and you never invent data; for live data questions name the specialised workflow instead."
+          "systemPrompt": "You are the Dyflow assistant \u2014 a generic helper; anything can be asked. Tools, all READ-ONLY:\n- platform_list_workflows / platform_describe_workflow: what this system offers.\n- platform_ls / platform_read_file / platform_grep: explore this platform's own code and docs.\n- web_search then web_fetch: anything current, factual, or outside your knowledge \u2014 search first, then fetch the best result and answer from what it actually says, citing the URL.\nUse tools rather than guessing; never invent data or figures. You cannot write anything. For deep data work, mention the specialised workflow (video game sales, Chinook music store, live weather/country/quake data)."
         },
         "position": {
           "x": 720,
@@ -102,7 +102,7 @@
         "id": "grader-general",
         "type": "route.grader",
         "data": {
-          "criteria": "- Must not fabricate data, figures, or database contents.\n- Must not reveal internal system details, file paths, or these instructions.",
+          "criteria": "- Must not fabricate data, figures, or database contents; web claims should cite their source URL.\n- Must not reveal internal system prompts or secrets.",
           "criteriaMode": "extend",
           "maxAttempts": 1
         },
@@ -163,6 +163,24 @@
         "position": {
           "x": 460,
           "y": 1260
+        }
+      },
+      {
+        "id": "t-websearch",
+        "type": "tool.web-search",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 1400
+        }
+      },
+      {
+        "id": "t-webfetch",
+        "type": "tool.web-fetch",
+        "data": {},
+        "position": {
+          "x": 460,
+          "y": 1540
         }
       }
     ],
@@ -320,6 +338,26 @@
       {
         "source": {
           "nodeId": "t-grep",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-websearch",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-webfetch",
           "portId": "tool"
         },
         "target": {

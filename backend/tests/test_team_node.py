@@ -112,4 +112,5 @@ class TestConciergeGateway:
         assert types == {
             "tool.platform-list-workflows", "tool.platform-describe-workflow",
             "tool.platform-ls", "tool.platform-read-file", "tool.platform-grep",
+            "tool.web-search", "tool.web-fetch",
         }

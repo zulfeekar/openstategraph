@@ -136,7 +136,10 @@ def _inside_repo(path: Path) -> bool:
 
 
 def _excluded(path: Path) -> bool:
-    return any(part in EXCLUDED_DIRS for part in path.parts)
+    # Hidden files and directories are out too — `.env` holds credentials,
+    # `.git` holds history; a read-only jail that reads secrets isn't one
+    # (found in self-review after shipping).
+    return any(part in EXCLUDED_DIRS or part.startswith(".") for part in path.parts)
 
 
 class LsArgs(BaseModel):
