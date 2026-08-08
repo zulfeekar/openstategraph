@@ -228,6 +228,7 @@ class NodeRuntime:
         tools: ToolRegistry | None = None,
         functions: dict[str, Any] | None = None,
         document_loader: Callable[[str], dict[str, Any]] | None = None,
+        registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None,
         max_attempts: int = 3,
         _ancestry: tuple[str, ...] = (),
     ) -> None:
@@ -240,6 +241,12 @@ class NodeRuntime:
         #: nodes (ticket 34). None means subgraphs cannot resolve — recorded
         #: loudly in `unresolved_subgraphs`, never silently.
         self.document_loader = document_loader
+        #: Resolves a CHILD workflow's (tools, functions) from its own
+        #: package, for subgraph/team nodes. Without this, a child inherits
+        #: the parent's registries and a routed tabular question under the
+        #: concierge (ticket 67) silently loses its tools — the
+        #: parametric-answer failure this codebase treats as the worst kind.
+        self.registry_loader = registry_loader
         #: The chain of subgraph slugs above this runtime — how a workflow
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
@@ -909,11 +916,18 @@ class NodeRuntime:
             except Exception:
                 child_document = None
             if child_document is not None:
+                child_tools, child_functions = self.tools, self.functions
+                if self.registry_loader is not None:
+                    try:
+                        child_tools, child_functions = self.registry_loader(slug)
+                    except Exception:
+                        pass  # the parent registries remain the honest fallback
                 child_runtime = NodeRuntime(
                     model=self.model,
-                    tools=self.tools,
-                    functions=self.functions,
+                    tools={**self.tools, **child_tools},
+                    functions={**self.functions, **child_functions},
                     document_loader=self.document_loader,
+                    registry_loader=self.registry_loader,
                     max_attempts=self.max_attempts,
                     _ancestry=(*self._ancestry, slug),
                 )

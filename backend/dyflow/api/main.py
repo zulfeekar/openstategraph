@@ -349,6 +349,10 @@ def create_app(
             tools=tool_registry_for(slug),
             functions=build_function_registry(workflow_store, slug),
             document_loader=lambda child_slug: _document_of(workflow_store.load(child_slug)),
+            registry_loader=lambda child_slug: (
+                tool_registry_for(child_slug),
+                build_function_registry(workflow_store, child_slug),
+            ),
         )
     app = FastAPI(title="Dyflow runtime", version="0.1.0")
     app.add_middleware(

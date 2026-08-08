@@ -117,6 +117,10 @@ class WorkflowStore:
                 # localStorage store.
                 continue
             document = payload.get("document", payload)
+            # A hidden workflow (the concierge gateway, ticket 67) is loadable
+            # by slug but never advertised — the list is the customer surface.
+            if payload.get("hidden") is True:
+                continue
             summaries.append(
                 WorkflowSummary(
                     slug=entry.name,

@@ -81,3 +81,26 @@ class TestScaffoldedTeamPackage:
             capture_output=True, text=True,
         )
         assert proc.returncode != 0
+
+
+class TestConciergeGateway:
+    """Ticket 67: the hidden gateway is well-formed and stays hidden."""
+
+    def test_the_concierge_is_not_listed_but_is_loadable(self) -> None:
+        from dyflow.api.workflow_store import WorkflowStore
+        store = WorkflowStore(REPO / "workflows")
+        assert "concierge" not in [s.slug for s in store.list()]
+        assert store.load("concierge")["name"] == "Concierge (gateway)"  # load() unwraps the envelope
+
+    def test_the_concierge_compiles_with_all_four_routes(self) -> None:
+        doc = json.loads((REPO / "workflows/concierge/workflow.json").read_text())["document"]
+        plan = WorkflowCompiler().plan(doc)
+        assert plan.conditional["router1"] == {
+            "b-videogames": "wf-videogames", "b-music": "wf-music",
+            "b-livedata": "wf-livedata", "b-general": "agent-general",
+        }
+        assert plan.warnings == []
+
+    def test_the_concierge_binds_no_tools_anywhere(self) -> None:
+        doc = json.loads((REPO / "workflows/concierge/workflow.json").read_text())["document"]
+        assert WorkflowCompiler().plan(doc).tool_bindings == {}

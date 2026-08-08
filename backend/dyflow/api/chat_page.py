@@ -115,8 +115,11 @@ function md(text) {
 
 async function loadWorkflows() {
   const list = await (await fetch("/api/workflows")).json();
-  $("wf").innerHTML = list.map((w) => `<option value="${w.slug}">${w.name}</option>`).join("");
-  state.workflow = list[0] && list[0].slug;
+  // "Auto" is the hidden concierge gateway (ticket 67): a predefined
+  // router-of-workflows the customer never has to know about.
+  $("wf").innerHTML = '<option value="concierge">Auto — let Dyflow route</option>'
+    + list.map((w) => `<option value="${w.slug}">${w.name}</option>`).join("");
+  state.workflow = "concierge";
   $("wf").onchange = async () => { state.workflow = $("wf").value; state.doc = null; };
 }
 
