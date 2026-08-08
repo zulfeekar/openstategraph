@@ -28,6 +28,15 @@ export default defineConfig({
       // rather than untested — they are verified in the browser. Counting
       // them would produce a number that rewards the wrong tests.
       exclude: ['src/**/*.test.ts', 'src/**/index.ts'],
+      // A ratchet, not a target: raised as waves of tests land (58% -> 73%
+      // statements in the 2026-08-09 push). CI fails if coverage regresses
+      // below the highest level already achieved.
+      thresholds: {
+        statements: 72,
+        lines: 75,
+        functions: 65,
+        branches: 50,
+      },
     },
   },
 });

@@ -19,7 +19,9 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install -e backend[dev] ruff
       - run: python -m ruff check backend
-      - run: python -m pytest -q   # live-API tests are opt-in (-m live) and stay out of CI
+      # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
+      # guards regressions, raised as it climbs. Live-API tests stay opt-in.
+      - run: python -m pytest -q --cov=backend/openstategraph --cov-fail-under=85
   e2e:
     runs-on: ubuntu-latest
     steps:
