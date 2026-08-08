@@ -480,18 +480,25 @@ class WorkflowCompiler:
         # library default) already excludes programming errors
         # (`ValueError`, `TypeError`, ...), so this does not mask a bug by
         # retrying it into a timeout.
-        if hasattr(builder, "set_node_defaults"):
+        default_retry = RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0)
+        has_graph_defaults = hasattr(builder, "set_node_defaults")
+        if has_graph_defaults:
             builder.set_node_defaults(
-                retry_policy=RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0),
+                retry_policy=default_retry,
                 error_handler=_default_error_handler,
             )
-        else:
-            # `langgraph<1.2`: no graph-wide defaults; retry_policy is applied
-            # per-node in the loop below via `_node_overrides`.
-            pass
 
         for node_id in plan.nodes:
             overrides = _node_overrides(nodes[node_id].get("data") or {})
+            if not has_graph_defaults and "retry_policy" not in overrides:
+                # `langgraph<1.2` has no graph-wide defaults, and the earlier
+                # fallback comment here claimed `_node_overrides` covered it —
+                # it does not: overrides only exist when a card sets
+                # `maxRetries`. That left every node retry-less, so one
+                # transient Ollama 500 emptied a fan-out worker's result or
+                # 502'd the whole run (found live, ticket 61). The default is
+                # applied per node instead; an explicit override still wins.
+                overrides = {**overrides, "retry_policy": default_retry}
             builder.add_node(
                 safe_name(node_id), node_factory(node_id, nodes[node_id], plan), **overrides
             )

@@ -166,9 +166,25 @@ class _DeepAgentAsChatModel:
         )
         result = agent.invoke({"messages": [candidate_message]})
         out = result.get("messages") or []
-        text = out[-1].content if out else ""
+        text = _final_text(out)
         return SimpleNamespace(content=text if isinstance(text, str) else str(text))
 
+
+
+def _final_text(messages: list[Any]) -> str:
+    """The last message with real text, not merely the last message.
+
+    An agent loop can legitimately end on a message with empty content — a
+    dangling tool call the loop cut off, or a provider blip mid-stream — and
+    `out[-1].content` then records "" as the worker's entire answer (observed
+    live under concurrent fan-out, ticket 61). Walking back to the last
+    non-empty string keeps whatever the agent actually said.
+    """
+    for message in reversed(messages):
+        content = getattr(message, "content", "")
+        if isinstance(content, str) and content.strip():
+            return content
+    return ""
 
 def _text(data: dict[str, Any], key: str, default: str = "") -> str:
     value = data.get(key)
@@ -609,11 +625,25 @@ class NodeRuntime:
         for worker_id in plan.fan_out.get(node_id, []):
             worker_node = self._nodes.get(worker_id) or {}
             worker_data = worker_node.get("data") or {}
+            # A labelling model can only route what it can see: with no
+            # `role` set, describe the worker by the tools actually bound to
+            # it — observed live (ticket 61): four undescribed archetypes had
+            # GDP routed to Wikipedia and weather to a tool-less worker.
+            role = _text(worker_data, "role")
+            if not role:
+                described = []
+                for tool_node_id in plan.tool_bindings.get(worker_id, []):
+                    tool_type = str((self._nodes.get(tool_node_id) or {}).get("type", ""))
+                    tool = self.tools.get(tool_type)
+                    described.append(
+                        getattr(tool, "description", None) or tool_type or tool_node_id
+                    )
+                role = "handles: " + "; ".join(described) if described else ""
             archetypes.append(
                 Archetype(
                     key=archetype_key(worker_node),
                     name=str(worker_node.get("title") or "").strip() or worker_id,
-                    description=_text(worker_data, "role"),
+                    description=role,
                 )
             )
         upstream = [src for src, dst in plan.edges if dst == node_id]
@@ -754,7 +784,7 @@ class NodeRuntime:
             ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
-            text = out[-1].content if out else ""
+            text = _final_text(out)
             return {"worker_results": {task_id: text if isinstance(text, str) else str(text)}}
 
         return run
@@ -795,7 +825,11 @@ class NodeRuntime:
             }
             scoped = {k: v for k, v in results.items() if k in current_ids}
             body = "\n\n".join(
-                f"### {task_id}\n{text}" for task_id, text in sorted(scoped.items())
+                # An empty member result renders as an explicit gap — a blank
+                # section reads like formatting, and the grader (and the
+                # human) must see the miss to act on it (ticket 61).
+                f"### {task_id}\n{text or '_(this member produced no result)_'}"
+                for task_id, text in sorted(scoped.items())
             )
             report = f"# {title}\n\n{body}" if body else f"# {title}\n\n_No results._"
             return {"outputs": {node_id: report}, "answer": report}

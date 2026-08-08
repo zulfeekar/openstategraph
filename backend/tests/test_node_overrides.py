@@ -141,3 +141,44 @@ class TestCompilerAppliesTheOverride:
         graph.invoke({}, {"recursion_limit": 10})
 
         assert calls["count"] == 3
+
+
+def test_every_node_gets_the_default_retry_policy_without_graph_defaults() -> None:
+    """Ticket 61: on langgraph<1.2 (no `set_node_defaults`) the default retry
+    policy must still reach every `add_node`, or a transient provider 500
+    silently empties a worker's result."""
+    from dyflow.compile.workflow_compiler import WorkflowCompiler
+
+    seen: dict[str, object] = {}
+
+    class SpyBuilder:
+        # Deliberately no set_node_defaults attribute.
+        def __init__(self, *_a, **_k): ...
+        def add_node(self, name, fn, **kwargs):
+            seen[name] = kwargs.get("retry_policy")
+        def add_edge(self, *_a, **_k): ...
+        def add_conditional_edges(self, *_a, **_k): ...
+        def compile(self, **_k): return self
+
+    import dyflow.compile.workflow_compiler as wc
+    doc = {
+        "version": 2, "name": "t",
+        "nodes": [
+            {"id": "in1", "type": "input.text", "data": {}},
+            {"id": "out1", "type": "output.formatted", "data": {"maxRetries": "5"}},
+        ],
+        "edges": [
+            {"source": {"nodeId": "in1", "portId": "text"},
+             "target": {"nodeId": "out1", "portId": "result"}},
+        ],
+    }
+    original = wc.StateGraph
+    wc.StateGraph = SpyBuilder  # type: ignore[misc]
+    try:
+        WorkflowCompiler().build(doc, dict, lambda *_: (lambda s: {}))
+    finally:
+        wc.StateGraph = original  # type: ignore[misc]
+
+    assert seen["in1"] is not None, "default retry must apply when no override"
+    assert getattr(seen["in1"], "max_attempts", None) == 3
+    assert getattr(seen["out1"], "max_attempts", None) == 5, "explicit override wins"
