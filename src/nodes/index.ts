@@ -18,6 +18,7 @@ import { orchestratorExecutor, orchestratorNode } from './orchestrate/Orchestrat
 import { workerExecutor, workerNode } from './orchestrate/WorkerNode';
 import { formatReportExecutor, formatReportNode } from './orchestrate/FormatReportNode';
 import { subgraphExecutor, subgraphNode } from './compose/SubgraphNode';
+import { teamExecutor, teamNode } from './compose/TeamNode';
 
 /**
  * The catalogue's single registration point.
@@ -58,6 +59,7 @@ export function registerNodeCatalogue(
     workerNode,
     formatReportNode,
     subgraphNode,
+    teamNode,
     formattedOutputNode,
     groupNode,
     noteNode,
@@ -75,6 +77,7 @@ export function registerNodeCatalogue(
     workerExecutor,
     formatReportExecutor,
   subgraphExecutor,
+  teamExecutor,
     formattedOutputExecutor,
   ]);
 }
@@ -92,6 +95,7 @@ export const NODE_TYPE = {
   worker: workerNode.id,
   formatReport: formatReportNode.id,
   subgraph: subgraphNode.id,
+  team: teamNode.id,
   formattedOutput: formattedOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,

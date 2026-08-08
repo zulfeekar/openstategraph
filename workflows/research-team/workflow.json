@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "name": "Research Team",
+  "savedAt": "2026-08-08T03:33:52.240478+00:00",
+  "document": {
+    "version": 2,
+    "name": "Research Team",
+    "settings": {},
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        }
+      },
+      {
+        "id": "lead1",
+        "type": "orchestrate.supervisor",
+        "title": "Research Team Lead",
+        "data": {
+          "maxSubtasks": 3,
+          "instruction": "Split the task into the smallest set of independent subtasks."
+        },
+        "position": {
+          "x": 360,
+          "y": 200
+        }
+      },
+      {
+        "id": "member1",
+        "type": "orchestrate.worker",
+        "title": "Generalist",
+        "data": {
+          "default": true
+        },
+        "position": {
+          "x": 700,
+          "y": 200
+        }
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "data": {
+          "reportTitle": "Research Team findings"
+        },
+        "position": {
+          "x": 1040,
+          "y": 200
+        }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- The answer must cite at least one concrete source or figure from a member's work.",
+          "criteriaMode": "extend",
+          "maxAttempts": 2
+        },
+        "position": {
+          "x": 1380,
+          "y": 200
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 1720,
+          "y": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "lead1",
+          "portId": "instruction"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "member1",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "member1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "join1",
+          "portId": "report"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "lead1",
+          "portId": "feedback"
+        }
+      }
+    ]
+  }
+}

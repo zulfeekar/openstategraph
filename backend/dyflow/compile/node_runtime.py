@@ -290,7 +290,7 @@ class NodeRuntime:
             # Discovered capabilities resolve by convention, after the
             # explicitly-registered builders so a built-in like
             # `function.format_report` can never be shadowed by accident.
-            if node_type == "workflow.subgraph":
+            if node_type in ("workflow.subgraph", "team.workflow"):
                 return self._subgraph(node_id, node, plan)
             if node_type.startswith("function."):
                 return self._discovered_function(node_id, node, plan)
