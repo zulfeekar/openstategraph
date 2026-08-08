@@ -108,16 +108,20 @@ def create_app(
     def runtime_for(slug: str | None, document: dict[str, Any], model: Any) -> Any:
         """One NodeRuntime construction shared by run/stream/resume, so the
         three endpoints can never disagree about capabilities again."""
-        from dyflow.compile.node_runtime import NodeRuntime, RuntimeServices
+        from dyflow.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
 
         return NodeRuntime(services=RuntimeServices(
             model=model,
             tools=tool_registry_for(slug),
             functions=build_function_registry(workflow_store, slug),
             document_loader=lambda child_slug: _document_of(workflow_store.load(child_slug)),
-            registry_loader=lambda child_slug: (
-                tool_registry_for(child_slug),
-                build_function_registry(workflow_store, child_slug),
+            package_loader=lambda child_slug: PackageAssets(
+                tools=tool_registry_for(child_slug),
+                functions=build_function_registry(workflow_store, child_slug),
+                skills_context=discover_skills(workflow_store.directory_for(child_slug)),
+                workflow_middleware=discover_middlewares(
+                    workflow_store.directory_for(child_slug), child_slug
+                ),
             ),
             store=memory_store,
             skills_context=(

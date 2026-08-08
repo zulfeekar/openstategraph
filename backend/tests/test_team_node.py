@@ -115,3 +115,39 @@ class TestConciergeGateway:
             "tool.platform-ls", "tool.platform-read-file", "tool.platform-grep",
             "tool.web-search", "tool.web-fetch",
         }
+
+
+class TestChildPackageAssets:
+    """A routed child runs with its OWN skills, not the parent's — the gap
+    the user found live: 'create a workflow' through Auto reached the
+    Architect without its interview skill."""
+
+    def test_the_child_runtime_gets_the_childs_skills_and_middleware(self) -> None:
+        from dyflow.compile.node_runtime import NodeRuntime, PackageAssets, RunState
+
+        sentinel_mw = object()
+        captured: dict = {}
+
+        def loader(slug: str) -> PackageAssets:
+            captured["slug"] = slug
+            return PackageAssets(tools={}, functions={},
+                                 skills_context="CHILD SKILL TEXT",
+                                 workflow_middleware={"audit": sentinel_mw})
+
+        parent = NodeRuntime(
+            model=None,
+            skills_context="PARENT SKILLS",
+            document_loader=lambda slug: {"version": 2, "name": slug, "nodes": [
+                {"id": "in1", "type": "input.text", "data": {}},
+                {"id": "out1", "type": "output.formatted", "data": {}}],
+                "edges": [{"source": {"nodeId": "in1", "portId": "text"},
+                           "target": {"nodeId": "out1", "portId": "result"}}]},
+            package_loader=loader,
+        )
+        doc = {"version": 2, "name": "p", "nodes": [
+            {"id": "sub1", "type": "workflow.subgraph", "data": {"workflow": "child-flow"}}],
+            "edges": []}
+        from dyflow.compile.workflow_compiler import CompiledPlan
+        run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
+        run(RunState(question="q"))  # type: ignore[typeddict-item]
+        assert captured["slug"] == "child-flow"

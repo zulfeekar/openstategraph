@@ -281,6 +281,24 @@ def _upstream_text(state: RunState, node_ids: list[str]) -> str:
 
 
 @dataclass(frozen=True)
+class PackageAssets:
+    """Everything one workflow package contributes to a runtime.
+
+    The child-subgraph contract (ticket 67, completed properly after the
+    user found the gap live): a routed child must run with its OWN package's
+    assets — tools, functions, skills AND middleware. The first version
+    loaded only tools+functions; skills stayed inherited from the parent, so
+    the Architect routed through the concierge ran without its interview
+    skill or document grammar and composed blind.
+    """
+
+    tools: ToolRegistry
+    functions: dict[str, Any]
+    skills_context: str = ""
+    workflow_middleware: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeServices:
     """Everything a `NodeRuntime` collaborates with, as one named object.
 
@@ -295,7 +313,7 @@ class RuntimeServices:
     tools: ToolRegistry | None = None
     functions: dict[str, Any] | None = None
     document_loader: Callable[[str], dict[str, Any]] | None = None
-    registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None
+    package_loader: Callable[[str], 'PackageAssets'] | None = None
     store: Any = None
     skills_context: str = ""
     workflow_middleware: dict[str, Any] | None = None
@@ -317,7 +335,7 @@ class NodeRuntime:
         tools: ToolRegistry | None = None,
         functions: dict[str, Any] | None = None,
         document_loader: Callable[[str], dict[str, Any]] | None = None,
-        registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None,
+        package_loader: Callable[[str], 'PackageAssets'] | None = None,
         store: Any = None,
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
@@ -329,7 +347,7 @@ class NodeRuntime:
             tools = services.tools
             functions = services.functions
             document_loader = services.document_loader
-            registry_loader = services.registry_loader
+            package_loader = services.package_loader
             store = services.store
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
@@ -348,7 +366,7 @@ class NodeRuntime:
         #: the parent's registries and a routed tabular question under the
         #: concierge (ticket 67) silently loses its tools — the
         #: parametric-answer failure this codebase treats as the worst kind.
-        self.registry_loader = registry_loader
+        self.package_loader = package_loader
         #: The long-term memory store (ticket 65). Its presence is what turns
         #: the prebuilt save/search-memory tools on for every agent — the
         #: tools reach it through `langgraph.config.get_store()` at run time,
@@ -1103,22 +1121,27 @@ class NodeRuntime:
             except Exception:
                 child_document = None
             if child_document is not None:
-                child_tools, child_functions = self.tools, self.functions
-                if self.registry_loader is not None:
+                child_assets = PackageAssets(
+                    tools=self.tools,
+                    functions=self.functions,
+                    skills_context=self.skills_context,
+                    workflow_middleware=self.workflow_middleware,
+                )
+                if self.package_loader is not None:
                     try:
-                        child_tools, child_functions = self.registry_loader(slug)
+                        child_assets = self.package_loader(slug)
                     except Exception:
-                        pass  # the parent registries remain the honest fallback
+                        pass  # the parent assets remain the honest fallback
                 child_runtime = NodeRuntime(
                     services=RuntimeServices(
                         model=self.model,
-                        tools={**self.tools, **child_tools},
-                        functions={**self.functions, **child_functions},
+                        tools={**self.tools, **child_assets.tools},
+                        functions={**self.functions, **child_assets.functions},
                         document_loader=self.document_loader,
-                        registry_loader=self.registry_loader,
+                        package_loader=self.package_loader,
                         store=self.store,
-                        skills_context=self.skills_context,
-                        workflow_middleware=self.workflow_middleware,
+                        skills_context=child_assets.skills_context,
+                        workflow_middleware=child_assets.workflow_middleware or {},
                         max_attempts=self.max_attempts,
                     ),
                     _ancestry=(*self._ancestry, slug),
@@ -1196,4 +1219,4 @@ class NodeRuntime:
         return run
 
 
-__all__ = ["NodeRuntime", "RunState", "RuntimeServices", "ToolRegistry", "chinook_tool_registry", "merge_decisions"]
+__all__ = ["NodeRuntime", "PackageAssets", "RunState", "RuntimeServices", "ToolRegistry", "chinook_tool_registry", "merge_decisions"]
