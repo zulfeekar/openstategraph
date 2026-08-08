@@ -40,3 +40,5 @@ workflows/code-workshop/output/
 harness-loop-graph.pdf
 .claude/settings.local.json
 .dev/
+test-results/
+playwright-report/

@@ -1,5 +1,5 @@
 Type: task
-Status: mostly resolved (2026-08-08) — two human steps remain
+Status: resolved (2026-08-08) — one human step remains (.scratch decision)
 
 ## Question
 
@@ -36,3 +36,7 @@ ruff (errors-only select: E9,F — real defects, zero style churn) config in pyp
 ## PDF purge executed (2026-08-08, user-authorized)
 
 The deck was reading material only — user confirmed it does not belong in the codebase. `git filter-repo --invert-paths` run after a backup bundle; zero history references remain, .git 13M → 1.9M, all branches rewritten, fsck clean. One residue for the .scratch decision: `decisions/loop-graph-harness.md` still quotes the same deck — it goes whenever .scratch's fate is decided.
+
+## Built (2026-08-08)
+
+Tail closed: Prettier (one-time format of src, check wired into verify), lean ESLint flat config (rules-of-hooks = error, v6 advisory rules = warn; tsc owns unused/types), CHANGELOG.md for 0.1.0, annotated tag v0.1.0, CI runs tsc+lint+format+vitest+pytest+ruff+playwright. Remaining on this ticket: only the user's .scratch/HANDOVER publish decision.
