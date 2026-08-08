@@ -2,10 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dyflow",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5273
+      "name": "editor",
+      "url": "http://localhost:5273",
+      "autoPort": false
+    },
+    {
+      "name": "chat",
+      "url": "http://localhost:8000",
+      "autoPort": false
     }
   ]
 }
