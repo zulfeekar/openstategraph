@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08) — all four violations addressed
 
 ## Question
 
@@ -22,3 +22,7 @@ everywhere; core/ clean). The violations, named:
 4. **`AskPanel.tsx` — 610 lines**: chat thread + streaming fold + canvas
    highlighting + approvals + trace tree in one component; extract the
    stream-fold hook (already the plan from ticket 55) and the trace tree.
+
+## Resolution
+
+1. `main.py` 973 → ~575: schemas / model_resolution / registries / streaming split out, test-facing names re-exported (ruff's unused-import fix ate one re-export — pinned with noqa). 2. `chat_page` is a real `static/chat.html` asset. 3. `RuntimeServices` frozen dataclass — new capabilities land once; kwargs remain the test-facing surface; both production sites + the child clone use services. 4. `AskPanel` 610 → 524 with `traceTree.tsx` (101) owning the trace record/model/export; the stream-fold hook extraction remains the recorded follow-up for the /chat-shared client (ticket 55's note).

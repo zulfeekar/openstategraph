@@ -14,6 +14,7 @@ the other works.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Annotated, Any, Callable, TypedDict
 
@@ -279,6 +280,28 @@ def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
 
 
+@dataclass(frozen=True)
+class RuntimeServices:
+    """Everything a `NodeRuntime` collaborates with, as one named object.
+
+    Ticket 72's parameter-object fix: the keyword constructor had grown to
+    nine parameters and every new capability (store, skills, workflow
+    middleware...) widened it again at two production call sites and the
+    child-runtime clone. New capabilities now land HERE once; `NodeRuntime`'s
+    keyword form remains as the test-facing compatibility surface.
+    """
+
+    model: Any = None
+    tools: ToolRegistry | None = None
+    functions: dict[str, Any] | None = None
+    document_loader: Callable[[str], dict[str, Any]] | None = None
+    registry_loader: Callable[[str], tuple[ToolRegistry, dict[str, Any]]] | None = None
+    store: Any = None
+    skills_context: str = ""
+    workflow_middleware: dict[str, Any] | None = None
+    max_attempts: int = 3
+
+
 class NodeRuntime:
     """Builds the callable for each node type.
 
@@ -289,6 +312,7 @@ class NodeRuntime:
     def __init__(
         self,
         *,
+        services: RuntimeServices | None = None,
         model: Any = None,
         tools: ToolRegistry | None = None,
         functions: dict[str, Any] | None = None,
@@ -300,6 +324,16 @@ class NodeRuntime:
         max_attempts: int = 3,
         _ancestry: tuple[str, ...] = (),
     ) -> None:
+        if services is not None:
+            model = services.model
+            tools = services.tools
+            functions = services.functions
+            document_loader = services.document_loader
+            registry_loader = services.registry_loader
+            store = services.store
+            skills_context = services.skills_context
+            workflow_middleware = services.workflow_middleware
+            max_attempts = services.max_attempts
         self.model = model
         self.tools = tools or {}
         #: `function.<name>` -> callable — deterministic graph steps
@@ -1076,13 +1110,17 @@ class NodeRuntime:
                     except Exception:
                         pass  # the parent registries remain the honest fallback
                 child_runtime = NodeRuntime(
-                    model=self.model,
-                    tools={**self.tools, **child_tools},
-                    functions={**self.functions, **child_functions},
-                    document_loader=self.document_loader,
-                    registry_loader=self.registry_loader,
-                    store=self.store,
-                    max_attempts=self.max_attempts,
+                    services=RuntimeServices(
+                        model=self.model,
+                        tools={**self.tools, **child_tools},
+                        functions={**self.functions, **child_functions},
+                        document_loader=self.document_loader,
+                        registry_loader=self.registry_loader,
+                        store=self.store,
+                        skills_context=self.skills_context,
+                        workflow_middleware=self.workflow_middleware,
+                        max_attempts=self.max_attempts,
+                    ),
                     _ancestry=(*self._ancestry, slug),
                 )
                 child_graph = WorkflowCompiler().build(
@@ -1158,4 +1196,4 @@ class NodeRuntime:
         return run
 
 
-__all__ = ["NodeRuntime", "RunState", "ToolRegistry", "chinook_tool_registry", "merge_decisions"]
+__all__ = ["NodeRuntime", "RunState", "RuntimeServices", "ToolRegistry", "chinook_tool_registry", "merge_decisions"]

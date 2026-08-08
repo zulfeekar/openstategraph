@@ -77,7 +77,7 @@ from dyflow.api.schemas import (  # noqa: E402
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
-from dyflow.api.streaming import _stream_run  # noqa: E402
+from dyflow.api.streaming import _coerce_update, _sse, _stream_run  # noqa: E402, F401  (underscored names re-exported for tests)
 
 def _default_factory(model: str) -> Any:
     from graph import build_live_graph
@@ -108,9 +108,9 @@ def create_app(
     def runtime_for(slug: str | None, document: dict[str, Any], model: Any) -> Any:
         """One NodeRuntime construction shared by run/stream/resume, so the
         three endpoints can never disagree about capabilities again."""
-        from dyflow.compile.node_runtime import NodeRuntime
+        from dyflow.compile.node_runtime import NodeRuntime, RuntimeServices
 
-        return NodeRuntime(
+        return NodeRuntime(services=RuntimeServices(
             model=model,
             tools=tool_registry_for(slug),
             functions=build_function_registry(workflow_store, slug),
@@ -126,7 +126,7 @@ def create_app(
             workflow_middleware=(
                 discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
             ),
-        )
+        ))
     from dyflow.api.capability_discovery import discover_middlewares, discover_skills
     from dyflow.memory import build_store, checkpointer_for
 
