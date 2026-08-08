@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08) — satisfied across the build-out
 
 ## Question
 
@@ -11,3 +11,7 @@ E2E pattern (test_intent_routed_demo_file.py) to every workflow that has a
 workflow.json; add a vitest⇄pytest cross-contract test that serializes a
 document in TS and compiles it in Python (subprocess) so a one-sided
 contract change goes red.
+
+## Resolution
+
+Covered as the features landed rather than as one pass: `test_run_request_seams.py` (7 tests: slug validation, envelope both forms, tool layering/degradation), resume-422 pinned in ticket 33's work, real-file E2E per workflow (`test_chinook_demo_file` 5, `test_code_workshop_file` 6, `test_intent_routed_demo_file` 6, `test_supervisor_archetypes`), defensive error-handler restored in Phase 0. Gate: 437 pytest + 338 vitest.

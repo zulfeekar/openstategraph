@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved (2026-08-08) — design decided from ticket 53 research; implementation is the next build ticket
 Blocked by: 34, 37
 
 ## Question
@@ -38,3 +38,7 @@ Decisions to grill:
 - **Drag-and-drop vocabulary.** See ticket 53's research for what else in
   LangGraph/LangChain can become a draggable construct; whatever it finds
   feeds the Team's member palette.
+
+## Resolution
+
+One-liners: a Team is a **reference** to its own workflow package (reusable, shadowable files — inline rejected: it would fork the package contract), realized two ways per the research: as a `workflow.subgraph` node in the parent graph (control-flow member) or bound to an agent's `subagents` bus compiling to `CompiledSubAgent(name, description, graph)` (delegation member) — same package, two mount points; the prebuilt Team template = supervisor + default worker + grader closing the loop (outcome contract = the grader's criteria; step budget = the existing `maxAttempts`/recursion budget, nothing new); collapsed card shows entry point, outcome criteria gist, member count, last-run status; drill-in opens the child workflow in the editor (existing load path) with a breadcrumb back — no nested-canvas rendering in v1. Implementation ticket to be cut when picked up.
