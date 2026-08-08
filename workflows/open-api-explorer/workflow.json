@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "name": "Open API Explorer",
+  "savedAt": "2026-08-08T03:00:00.000000+00:00",
+  "document": {
+    "version": 2,
+    "name": "Open API Explorer",
+    "settings": { "model": "ollama:gpt-oss:120b-cloud" },
+    "nodes": [
+      { "id": "in1", "type": "input.text", "data": {}, "position": { "x": 40, "y": 300 } },
+      {
+        "id": "super1",
+        "type": "orchestrate.supervisor",
+        "title": "Explorer Supervisor",
+        "data": {
+          "maxSubtasks": 4,
+          "instruction": "Split the question into independent lookups, one per data source it needs: weather/geocoding, country facts and indicators, encyclopedia background, or recent earthquakes."
+        },
+        "position": { "x": 360, "y": 300 }
+      },
+      {
+        "id": "worker-weather",
+        "type": "orchestrate.worker",
+        "title": "Weather Worker",
+        "data": { "default": true },
+        "position": { "x": 700, "y": 60 }
+      },
+      {
+        "id": "worker-countries",
+        "type": "orchestrate.worker",
+        "title": "Countries Worker",
+        "data": {},
+        "position": { "x": 700, "y": 300 }
+      },
+      {
+        "id": "worker-knowledge",
+        "type": "orchestrate.worker",
+        "title": "Knowledge Worker",
+        "data": {},
+        "position": { "x": 700, "y": 540 }
+      },
+      {
+        "id": "worker-quakes",
+        "type": "orchestrate.worker",
+        "title": "Quakes Worker",
+        "data": {},
+        "position": { "x": 700, "y": 780 }
+      },
+      { "id": "tool-geocode", "type": "tool.openmeteo-geocode", "data": {}, "position": { "x": 560, "y": 180 } },
+      { "id": "tool-forecast", "type": "tool.openmeteo-forecast", "data": {}, "position": { "x": 840, "y": 180 } },
+      { "id": "tool-country", "type": "tool.worldbank-country", "data": {}, "position": { "x": 560, "y": 420 } },
+      { "id": "tool-indicator", "type": "tool.worldbank-indicator", "data": {}, "position": { "x": 840, "y": 420 } },
+      { "id": "tool-wiki", "type": "tool.wikipedia-summary", "data": {}, "position": { "x": 700, "y": 660 } },
+      { "id": "tool-quakes", "type": "tool.usgs-earthquakes", "data": {}, "position": { "x": 700, "y": 900 } },
+      {
+        "id": "report1",
+        "type": "function.format_report",
+        "data": { "reportTitle": "Open API Explorer findings" },
+        "position": { "x": 1060, "y": 300 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- Every claim must come from a tool result in the report, with its figure or fact cited.\n- If a source failed, the answer must say so rather than invent the data.",
+          "criteriaMode": "extend",
+          "maxAttempts": 2
+        },
+        "position": { "x": 1380, "y": 300 }
+      },
+      { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1700, "y": 300 } }
+    ],
+    "edges": [
+      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "super1", "portId": "instruction" } },
+      { "source": { "nodeId": "super1", "portId": "workers" }, "target": { "nodeId": "worker-weather", "portId": "dispatch" } },
+      { "source": { "nodeId": "super1", "portId": "workers" }, "target": { "nodeId": "worker-countries", "portId": "dispatch" } },
+      { "source": { "nodeId": "super1", "portId": "workers" }, "target": { "nodeId": "worker-knowledge", "portId": "dispatch" } },
+      { "source": { "nodeId": "super1", "portId": "workers" }, "target": { "nodeId": "worker-quakes", "portId": "dispatch" } },
+      { "source": { "nodeId": "tool-geocode", "portId": "tool" }, "target": { "nodeId": "worker-weather", "portId": "tools" } },
+      { "source": { "nodeId": "tool-forecast", "portId": "tool" }, "target": { "nodeId": "worker-weather", "portId": "tools" } },
+      { "source": { "nodeId": "tool-country", "portId": "tool" }, "target": { "nodeId": "worker-countries", "portId": "tools" } },
+      { "source": { "nodeId": "tool-indicator", "portId": "tool" }, "target": { "nodeId": "worker-countries", "portId": "tools" } },
+      { "source": { "nodeId": "tool-wiki", "portId": "tool" }, "target": { "nodeId": "worker-knowledge", "portId": "tools" } },
+      { "source": { "nodeId": "tool-quakes", "portId": "tool" }, "target": { "nodeId": "worker-quakes", "portId": "tools" } },
+      { "source": { "nodeId": "worker-weather", "portId": "result" }, "target": { "nodeId": "report1", "portId": "candidate" } },
+      { "source": { "nodeId": "worker-countries", "portId": "result" }, "target": { "nodeId": "report1", "portId": "candidate" } },
+      { "source": { "nodeId": "worker-knowledge", "portId": "result" }, "target": { "nodeId": "report1", "portId": "candidate" } },
+      { "source": { "nodeId": "worker-quakes", "portId": "result" }, "target": { "nodeId": "report1", "portId": "candidate" } },
+      { "source": { "nodeId": "report1", "portId": "report" }, "target": { "nodeId": "grader1", "portId": "candidate" } },
+      { "source": { "nodeId": "grader1", "portId": "pass" }, "target": { "nodeId": "out1", "portId": "result" } },
+      { "source": { "nodeId": "grader1", "portId": "revise" }, "target": { "nodeId": "super1", "portId": "feedback" } }
+    ]
+  }
+}
