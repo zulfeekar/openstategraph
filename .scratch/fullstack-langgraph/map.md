@@ -34,6 +34,12 @@ They cannot collide because they own different things: the canvas never writes `
 
 ## Decisions so far
 
+- [Chinook canvas document](issues/39-chinook-canvas-document.md) — flagship now has workflow.json; real-file E2E test guards it
+- [Open API Explorer](issues/42-open-api-explorer.md) — supervisor archetypes live: hybrid labelling dispatched 2 kinds, grader revise re-planned, grounded answer
+- [Code Workshop](issues/43-code-workshop.md) — coder use case live: jailed tools, review subgraph, HITL approve, dry-run PR artifacts
+- [Draggable constructs research](issues/53-draggable-constructs-inventory.md) — 17 constructs inventoried; subagent cards strongest (feeds Team node)
+- [Transparency/codegen](issues/54-workflow-transparency-and-codegen.md) + [embedded chat](issues/55-embedded-chat-surface.md) — decisions recorded, implementation queued
+- [Honest vgsales data](issues/41-honest-vgsales-data.md) — synthetic generator (seed 41), labelled, tools smoke-tested
 - [Supervisor archetypes](issues/37-supervisor-archetypes.md) — hybrid: model labels subtasks against wired archetype names, untrusted labels fall back to a designated default worker
 - [Middleware slot table](issues/32-middleware-slot-table.md) — user decision recorded: prebuilt default stacks per node family, extended by `workflows/<slug>/middlewares/` files, same discovery pattern as tools/functions
 - [Agent family](issues/30-agent-family.md) — built: ladder in abc/agent.py, base minimal, Deep a sibling of React

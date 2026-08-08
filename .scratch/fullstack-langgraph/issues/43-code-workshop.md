@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-08) — live-verified incl. HITL
 Blocked by: 30, 34, 33
 
 ## Question
@@ -16,3 +16,7 @@ directory; `git` state isolated (worktree or temp clone); PR creation is
 **dry-run by default** (writes .patch + PR body to the workflow's output);
 invoking `gh pr create` is an explicit opt-in field AND still passes through
 human.approval. Tests use a fixture repo with a seeded failing test.
+
+## Resolution
+
+Built (session + integration): jailed file/pytest/git tools (`tools/workshop.py`, path-escape refused, fixed pytest runner only), fixture repo with seeded failing median test, deep-tier coder agent, review via `workflow.subgraph` (`code-workshop-review`), grader, `human.approval` before `release1` which writes dry-run `output/PR.md` + `change.patch` (gh strictly opt-in, still behind approval). Live E2E: agent fixed the bug, 5/5 tests passed, interrupt → approve → PR artifacts written fresh.
