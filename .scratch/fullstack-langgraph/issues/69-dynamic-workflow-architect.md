@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: built (2026-08-08) — live composition pending a stable provider window
 
 ## Question
 
@@ -34,3 +34,23 @@ Design to grill:
   `new_team.py`'s document, parameterized by the conversation.
 - **Trace/UX**: the composed graph should render via the existing Mermaid
   endpoint before the user runs it — see before you execute.
+
+## Resolution
+
+Built on the recommended path: `validate_workflow` (the compiler as a
+read-only tool — topology report, unknown types named, warnings surfaced;
+5 tests incl. validating the Architect's own document and a lockstep test
+pinning KNOWN_NODE_TYPES to NodeRuntime._builders), the hidden
+`workflow-architect` package (agent + document-grammar skill + validate tool
++ grader refusing unvalidated answers), and the concierge's `build_workflow`
+branch routing "build me a..." requests to it. Ephemeral-first: composing
+returns the document; saving stays a human act.
+
+Live verification status, honestly: Ollama cloud spent the evening
+intermittently 500-ing on large generations. The outage itself *proved* the
+resilience path (per-node retries visibly firing, failure recorded readably
+in outputs, clean 200s) but a full composition — several multi-KB JSON
+drafts — did not complete inside a client window. It works through /chat
+(streaming, no client timeout): pick Auto, ask "Build me a team that ...".
+One follow-up worth its own pass: a "Save as workflow" affordance in /chat
+when an answer carries a ```json workflow fence (the human-click write).
