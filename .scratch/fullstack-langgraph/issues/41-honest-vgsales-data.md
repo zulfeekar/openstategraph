@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-08-07)
 
 ## Question
 
@@ -13,3 +13,7 @@ scrape, redistribution unclear — check before committing the real file) vs a
 clearly-labelled synthetic dataset of realistic size (~1–5k rows, plausible
 distributions, README note). Either way the file's provenance is stated in
 the workflow's AGENTS.md and the grader criteria match reality.
+
+## Resolution
+
+Synthetic over unlicensed mirror: `scripts/generate_vgsales.py` (seed 41) writes 300 internally-consistent rows (Global = sum of regions), data dir labelled SYNTHETIC, tools smoke-tested against it.
