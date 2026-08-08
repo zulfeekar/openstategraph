@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved (2026-08-07) — decisions recorded, implementation queued
 Blocked by:
 
 ## Question
@@ -25,3 +25,10 @@ Decisions to grill:
 - What makes a workflow *reusable* by another developer: the package
   contract (ticket 49), the generated code, or a template/instantiate flow
   ("new workflow from this one")?
+
+## Resolution (auto-mode decisions, one-liners)
+
+- Both surfaces, Mermaid first: per-workflow "Graph" tab rendering `compiled.get_graph(xray=True).draw_mermaid()` from a generalized `GET /api/workflows/{slug}/graph` (de-hardcodes the chinook-only endpoint) — cheapest honest view of what actually compiles.
+- `graph.py` generator second, per ticket 15's standing design: consumes `CompiledPlan`, property-tested by Mermaid equality with the interpreter, exported read-only ("regenerated — hand-written code lives in tools/functions/").
+- Reusability = package contract (ticket 49) + a "duplicate as template" store operation; no separate template registry invented.
+- Implementation: queued behind the in-flight sessions (compiler/API files are contended); folded into ticket 49's implementation pass.

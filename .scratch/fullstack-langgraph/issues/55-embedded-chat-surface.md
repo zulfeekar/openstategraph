@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved (2026-08-07) — decisions recorded, implementation queued
 Blocked by:
 
 ## Question
@@ -25,3 +25,11 @@ Decisions to grill:
   in a customer surface?
 - Does this reuse `AskPanel` extracted into a shared component, or a
   separate lightweight build with no JointJS/React-editor payload?
+
+## Resolution (auto-mode decisions, one-liners)
+
+- Artefact: a standalone minimal chat page served per slug (`/chat/{slug}`, no JointJS/editor payload) + the SSE API contract documented — an iframe embed falls out for free; no widget SDK invented yet.
+- Auth: per-workflow bearer token in workflow.settings (checked only when set), CORS stays allowlist; multi-user stays out of scope per the map.
+- Surface shows the answer + coarse progress (step count, not node ids — internals stay behind the curtain); HITL approvals render as plain approve/reject prompts.
+- Reuse: extract AskPanel's stream-fold into a shared headless hook; the editor panel and the chat page both consume it.
+- Implementation: new task ticket once the in-flight sessions land (API + frontend files contended).
