@@ -45,6 +45,12 @@ class RunRequest(BaseModel):
     #: so a document can bind the tools that live beside it. Optional and
     #: additive — omitting it runs with the default registry, never a crash.
     workflow_slug: str | None = None
+    #: Editor-only (never `/chat`): give every agent one extra context block
+    #: telling it to name a missing capability and emit a ```suggestion fence
+    #: the editor can turn into a real node. Off by default, so the customer
+    #: chat surface — which simply never sets it — can never be told to
+    #: propose edits to a workflow its user cannot edit.
+    advisor: bool = False
     #: Per-request provider credentials, e.g. `{"ANTHROPIC_API_KEY": "..."}`.
     #: The editor's "Models and credentials" dialog stores keys in the
     #: browser; without this field they would only ever reach the in-browser
@@ -81,6 +87,12 @@ class ResumeRequest(BaseModel):
     #: would die at validation. A resumed run must also bind the *same*
     #: tool set as the run it resumes.
     workflow_slug: str | None = None
+    #: Same as `RunRequest.advisor`, and it must exist on BOTH models for the
+    #: same reason `workflow_slug` does: this model forbids extras, so the
+    #: editor — which sets the flag on every send — would 422 on every
+    #: approval resume if only `RunRequest` carried it. A resumed run must
+    #: also compose the *same* agent context as the run it resumes.
+    advisor: bool = False
     #: Same as `RunRequest.credentials`, and for the same "must exist on
     #: BOTH models" reason as `workflow_slug` above: this model forbids
     #: extras, so a client that sends credentials on the run must be able to

@@ -70,6 +70,37 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
 
 
 
+#: Tool families an advisor may propose adding to a running workflow.
+#:
+#: A prefix allow-list rather than "everything in the registry": a suggestion
+#: is only useful if the editor can place the node with **no configuration** —
+#: `tool.chinook-*` is bound to one bundled database and a discovered
+#: `tool.<workflow>-*` needs the file that defines it, so proposing either
+#: would produce a node that looks wired and answers nothing. The families
+#: below are self-contained (web, platform introspection) or carry their own
+#: config field the developer fills in afterwards (email's recipient).
+SUGGESTIBLE_TOOL_PREFIXES = ("tool.web-", "tool.platform-", "tool.sql-", "tool.email-")
+
+
+def suggestible_tool_catalog(registry: dict[str, Any]) -> str:
+    """The advisor's menu: one `- <node_type> — <description>` line per tool.
+
+    Built from the registry the run itself was given, never a hand-kept list,
+    so a tool added to `build_tool_registry` becomes suggestible by existing
+    and cannot drift out of sync with what the runtime can actually bind.
+    Descriptions come from each tool's own `description`, which is the same
+    text the model already sees when the tool *is* bound — so "what this tool
+    would give me" reads identically before and after the wiring.
+    """
+    lines: list[str] = []
+    for node_type in sorted(registry):
+        if not node_type.startswith(SUGGESTIBLE_TOOL_PREFIXES):
+            continue
+        description = " ".join(str(getattr(registry[node_type], "description", "")).split())
+        lines.append(f"- {node_type} — {description}" if description else f"- {node_type}")
+    return "\n".join(lines)
+
+
 def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
     """`function.<name>` -> callable, from the workflow's own `functions/`.
 

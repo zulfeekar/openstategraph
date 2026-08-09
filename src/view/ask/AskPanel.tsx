@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Info, Send, TriangleAlert } from 'lucide-react';
+import { Info, Lightbulb, Send, TriangleAlert } from 'lucide-react';
 import { Button, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
 import {
   RuntimeClient,
@@ -14,6 +14,7 @@ import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
 import { Activity, exportTrace, type ActivityRow } from './traceTree';
 import { RunTimeline } from './RunTimeline';
+import { parseSuggestion, type CapabilitySuggestion } from './suggestion';
 import './AskPanel.css';
 
 /**
@@ -65,6 +66,24 @@ interface ChatTurn {
   readonly error: string | null;
   /** Set while this turn's run is paused waiting for a human decision. */
   readonly pendingApproval: PendingApproval | null;
+  /**
+   * A capability gap the agent named, already validated against this editor
+   * (`parseSuggestion`) — so its presence means the offer can actually be
+   * honoured, never that a model merely asked for something.
+   */
+  readonly suggestion: CapabilitySuggestion | null;
+  /** How the developer answered the offer. `null` while it still stands. */
+  readonly suggestionDecision: 'accepted' | 'declined' | null;
+  /**
+   * What the editor did to the canvas on their behalf, in plain words.
+   *
+   * The product rule is explicit that the editor must *tell the user what it
+   * did* — a graph that changes silently underneath a conversation is the
+   * failure mode this whole feature is trying to avoid.
+   */
+  readonly notice: string | null;
+  /** The answer with the suggestion fence stripped, when one was honoured. */
+  readonly answerText: string | null;
 }
 
 let nextTurnId = 0;
@@ -317,10 +336,20 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
         // Once finished, show the whole path that ran rather than just the
         // last node the stream happened to touch.
         controller.selectionActions.selectNodes([...seen]);
+        const result = outcome.value as RunResult;
+        // Validated against the *live* editor here, not in the renderer: a
+        // suggestion naming an unregistered type or a node that is not on
+        // this canvas comes back as `null`, and its fence stays in the prose.
+        const parsed = parseSuggestion(result.answer, {
+          nodeTypes: new Set(workbench.registry.nodeTypes.list().map((type) => type.id)),
+          nodeIds: new Set(controller.model.nodes().map((node) => node.id)),
+        });
         updateTurn(id, {
           running: false,
-          result: outcome.value as RunResult,
+          result,
           pendingApproval: null,
+          suggestion: parsed.suggestion,
+          answerText: parsed.suggestion ? parsed.text : null,
         });
       } else {
         updateTurn(id, {
@@ -331,7 +360,7 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
       }
       scrollToEnd();
     },
-    [controller, scrollToEnd, updateTurn],
+    [controller, scrollToEnd, updateTurn, workbench],
   );
 
   const respondToApproval = useCallback(
@@ -359,49 +388,149 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
     [client, controller, streamAndSettle, turns, updateTurn, workbench],
   );
 
+  /**
+   * Runs one question as a new turn in the thread.
+   *
+   * Split out of `send` because the advisor loop needs to ask the *same*
+   * question again after wiring a tool in — and a re-run has to be a genuine
+   * turn (its own activity feed, its own answer, its own chance to suggest
+   * again), not a quietly patched-up copy of the first one.
+   */
+  const ask = useCallback(
+    async (trimmed: string) => {
+      // The entry Text Input is the workflow's own "first contact" — writing
+      // the message there means the chat and the canvas agree about what was
+      // asked, rather than the question living only inside this panel.
+      const entry = controller.model.nodes().find((node) => node.type === TEXT_INPUT_TYPE);
+      if (entry) controller.nodes.setField(entry.id, 'prompt', trimmed);
+
+      const id = `turn-${nextTurnId++}`;
+      setTurns((all) => [
+        ...all,
+        {
+          id,
+          question: trimmed,
+          running: true,
+          activity: [],
+          thinking: '',
+          result: null,
+          error: null,
+          pendingApproval: null,
+          suggestion: null,
+          suggestionDecision: null,
+          notice: null,
+          answerText: null,
+        },
+      ]);
+      scrollToEnd();
+
+      // Serialised through the same path as “export”, so the runtime receives
+      // exactly the bytes that would be saved — no second representation.
+      // Read *here*, per run: a re-run after a suggestion was applied must
+      // post the canvas as it now is, with the new tool wired in.
+      const document = JSON.parse(controller.document.exportJSON()) as unknown;
+
+      await streamAndSettle(id, (onEvent) =>
+        client.runStream(
+          {
+            workflow: document,
+            question: trimmed,
+            workflowSlug: currentWorkflowSlug(),
+            // Editor only — this is what lets an agent name a capability gap
+            // and offer the fix. The customer `/chat` page never sets it.
+            advisor: true,
+            ...credentialsPatch(workbench.providers),
+          },
+          onEvent,
+        ),
+      );
+    },
+    [client, controller, scrollToEnd, streamAndSettle, workbench],
+  );
+
   const send = useCallback(async () => {
     const trimmed = question.trim();
     if (trimmed === '' || running) return;
-
-    // The entry Text Input is the workflow's own "first contact" — writing
-    // the message there means the chat and the canvas agree about what was
-    // asked, rather than the question living only inside this panel.
-    const entry = controller.model.nodes().find((node) => node.type === TEXT_INPUT_TYPE);
-    if (entry) controller.nodes.setField(entry.id, 'prompt', trimmed);
-
-    const id = `turn-${nextTurnId++}`;
-    setTurns((all) => [
-      ...all,
-      {
-        id,
-        question: trimmed,
-        running: true,
-        activity: [],
-        thinking: '',
-        result: null,
-        error: null,
-        pendingApproval: null,
-      },
-    ]);
     setQuestion('');
-    scrollToEnd();
+    await ask(trimmed);
+  }, [ask, question, running]);
 
-    // Serialised through the same path as “export”, so the runtime receives
-    // exactly the bytes that would be saved — no second representation.
-    const document = JSON.parse(controller.document.exportJSON()) as unknown;
+  /**
+   * Honours a suggestion: add the node, wire it, say so, ask again.
+   *
+   * Every mutation goes through the controller's command layer, so the canvas
+   * projects the change the same way it would for a hand-drawn one and the
+   * whole thing is a single undo away — which matters more here than
+   * anywhere else in the editor, since this is the one edit the *developer*
+   * did not draw.
+   */
+  const applySuggestion = useCallback(
+    async (turnId: string, suggestion: CapabilitySuggestion) => {
+      const target = controller.model.node(suggestion.attachTo);
+      const definition = workbench.registry.nodeTypes.get(suggestion.nodeType);
+      if (!target || !definition) {
+        // Re-checked at click time, not only at parse time: the developer may
+        // have deleted the agent while the offer sat in the thread.
+        updateTurn(turnId, {
+          suggestionDecision: 'declined',
+          notice: 'That suggestion no longer fits this canvas — nothing was changed.',
+        });
+        return;
+      }
 
-    await streamAndSettle(id, (onEvent) =>
-      client.runStream(
-        {
-          workflow: document,
-          question: trimmed,
-          workflowSlug: currentWorkflowSlug(),
-          ...credentialsPatch(workbench.providers),
-        },
-        onEvent,
-      ),
-    );
-  }, [client, controller, question, running, scrollToEnd, streamAndSettle, workbench]);
+      // Below the agent, not above it: a tool node's own port sits on its top
+      // edge and links *upward* into the agent's bottom tool bus (see
+      // `TOOL_PORT`), so anywhere else would draw a link back across the card.
+      // Shifted right by whatever is already on that bus, so the second
+      // suggested tool does not land on top of the first.
+      const busy = controller.model.edgesInto({
+        nodeId: suggestion.attachTo,
+        portId: suggestion.port,
+      }).length;
+      const at = {
+        x: target.position.x + busy * (definition.defaultSize.width + 32),
+        y: target.position.y + target.size.height + 120,
+      };
+
+      const before = new Set(controller.model.nodes().map((node) => node.id));
+      let created: string | null = null;
+      // One transaction, so undo takes the node *and* its link back together.
+      controller.history.transact(`Add ${definition.label}`, () => {
+        if (!controller.nodes.add(suggestion.nodeType, at, { centre: false, select: false }).ok) {
+          return;
+        }
+        created =
+          controller.model.nodes().find((node) => !before.has(node.id))?.id ?? null;
+        if (created) {
+          controller.edges.connect(
+            { nodeId: created, portId: 'tool' },
+            { nodeId: suggestion.attachTo, portId: suggestion.port },
+          );
+        }
+      });
+
+      if (!created) {
+        updateTurn(turnId, {
+          suggestionDecision: 'declined',
+          notice: `${definition.label} could not be added to this workflow.`,
+        });
+        return;
+      }
+
+      updateTurn(turnId, {
+        suggestionDecision: 'accepted',
+        notice: `Added ${definition.label} and wired it to ${target.title || suggestion.attachTo}. Re-running…`,
+      });
+      scrollToEnd();
+      await ask(turns.find((turn) => turn.id === turnId)?.question ?? '');
+    },
+    [ask, controller, scrollToEnd, turns, updateTurn, workbench],
+  );
+
+  const declineSuggestion = useCallback(
+    (turnId: string) => updateTurn(turnId, { suggestionDecision: 'declined' }),
+    [updateTurn],
+  );
 
   return (
     <Panel side="right" className="ask" style={{ width: 'var(--layout-inspector-width)' }}>
@@ -424,7 +553,13 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
             </div>
           ) : null}
           {turns.map((turn) => (
-            <Turn key={turn.id} turn={turn} onRespond={respondToApproval} />
+            <Turn
+              key={turn.id}
+              turn={turn}
+              onRespond={respondToApproval}
+              onApplySuggestion={applySuggestion}
+              onDeclineSuggestion={declineSuggestion}
+            />
           ))}
         </div>
 
@@ -466,9 +601,13 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
 function Turn({
   turn,
   onRespond,
+  onApplySuggestion,
+  onDeclineSuggestion,
 }: {
   turn: ChatTurn;
   onRespond: (turnId: string, decision: 'approve' | 'reject') => void;
+  onApplySuggestion: (turnId: string, suggestion: CapabilitySuggestion) => void;
+  onDeclineSuggestion: (turnId: string) => void;
 }) {
   // Per turn, and ephemeral: a run's timeline is a fact about that run, and
   // nothing about it deserves to be persisted.
@@ -541,7 +680,71 @@ function Turn({
         </p>
       ) : null}
 
-      {turn.result ? <Answer result={turn.result} /> : null}
+      {turn.result ? <Answer result={turn.result} text={turn.answerText} /> : null}
+
+      {turn.suggestion ? (
+        <SuggestionCard
+          suggestion={turn.suggestion}
+          decision={turn.suggestionDecision}
+          onAccept={() => onApplySuggestion(turn.id, turn.suggestion as CapabilitySuggestion)}
+          onDecline={() => onDeclineSuggestion(turn.id)}
+        />
+      ) : null}
+
+      {/* What the editor did on the developer's behalf, in the thread where
+          they are already looking — never only on the canvas. */}
+      {turn.notice ? <p className="ask__did">{turn.notice}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The capability-gap offer: "this workflow has no web access. Add it?"
+ *
+ * Deliberately a card in the thread rather than a modal or a canvas
+ * affordance. The gap was discovered *in a conversation*, the developer is
+ * reading that conversation, and the answer is one word — interrupting the
+ * whole editor to ask it would be out of all proportion.
+ *
+ * Declining collapses it to a muted line rather than removing it: the offer
+ * is part of what happened in this turn, and a thread that edits its own
+ * history is a thread you cannot trust.
+ */
+function SuggestionCard({
+  suggestion,
+  decision,
+  onAccept,
+  onDecline,
+}: {
+  suggestion: CapabilitySuggestion;
+  decision: 'accepted' | 'declined' | null;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  if (decision !== null) {
+    return (
+      <p className="ask__suggestion-settled">
+        {decision === 'accepted' ? 'Added' : 'Declined'} — {suggestion.label}
+      </p>
+    );
+  }
+
+  return (
+    <div className="ask__suggestion">
+      <p className="ask__suggestion-headline">
+        <Icon glyph={Lightbulb} size="sm" />
+        <span>
+          <strong>{suggestion.label}</strong> — {suggestion.reason}
+        </span>
+      </p>
+      <div className="ask__suggestion-actions">
+        <Button variant="primary" onClick={onAccept}>
+          Add &amp; re-run
+        </Button>
+        <Button variant="secondary" onClick={onDecline}>
+          No thanks
+        </Button>
+      </div>
     </div>
   );
 }
@@ -588,7 +791,7 @@ function ApprovalPrompt({
  * than a single spinner that gives no sense a fan-out happened at all.
  */
 
-function Answer({ result }: { result: RunResult }) {
+function Answer({ result, text }: { result: RunResult; text?: string | null }) {
   const decisions = Object.entries(result.decisions);
 
   return (
@@ -604,7 +807,12 @@ function Answer({ result }: { result: RunResult }) {
         </p>
       ))}
 
-      <RichText className="ask__answer" text={result.answer || '_No answer was produced._'} />
+      {/* `text` is the answer with an honoured suggestion's fence removed —
+          the card below says the same thing, and better. */}
+      <RichText
+        className="ask__answer"
+        text={(text ?? result.answer) || '_No answer was produced._'}
+      />
 
       {result.attempts > 1 ? (
         // Surfaced because a silent retry hides real cost and real quality

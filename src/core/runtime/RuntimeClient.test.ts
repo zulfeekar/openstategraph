@@ -100,6 +100,19 @@ describe('RuntimeClient.run', () => {
     expect(JSON.parse(stub.bodies[0]!)).not.toHaveProperty('workflow_slug');
   });
 
+  it('sends the advisor flag only when the caller asks for it', async () => {
+    const stub = stubFetch(jsonResponse(GOOD));
+    const client = new RuntimeClient('http://rt', stub.fetch);
+    await client.run({ workflow: {}, question: 'q', advisor: true });
+    await client.run({ workflow: {}, question: 'q' });
+
+    // Editor-only capability. Omitted rather than sent as `false` so the
+    // customer `/chat` surface's requests stay byte-identical to what they
+    // were before this existed — nothing there can ever opt in by accident.
+    expect(JSON.parse(stub.bodies[0]!)).toHaveProperty('advisor', true);
+    expect(JSON.parse(stub.bodies[1]!)).not.toHaveProperty('advisor');
+  });
+
   it('omits the model when none is chosen, so the server decides', async () => {
     const stub = stubFetch(jsonResponse(GOOD));
     await new RuntimeClient('http://rt', stub.fetch).run({ workflow: {}, question: 'q' });

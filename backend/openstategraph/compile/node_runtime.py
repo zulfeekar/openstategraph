@@ -371,6 +371,44 @@ class RuntimeServices:
     skills_context: str = ""
     workflow_middleware: dict[str, Any] | None = None
     max_attempts: int = 3
+    #: The editor-advisor tool catalogue, or "" for a normal run. See
+    #: `advisor_context` — one field rather than a `bool` + the text it needs,
+    #: because a flag and its data can disagree and this pair never should:
+    #: an advisor with nothing to suggest is not an advisor.
+    advisor_catalog: str = ""
+
+
+def advisor_context(node_id: str, catalog: str) -> str:
+    """The editor-only "you may propose a fix" context block.
+
+    *Context*, not rules and not a contract change: it is generated
+    situational detail (this agent's own id, the tools this runtime could
+    bind), so `SystemPrompt` places it above the developer's rules and the
+    locked OUTPUT CONTRACT still renders last. That ordering is what lets the
+    fence coexist with the contract instead of competing with it.
+
+    `attachTo` is pre-filled with the agent's own node id rather than left to
+    the model, because a hallucinated id is the one failure the editor cannot
+    recover from: it would either wire the tool to the wrong agent or reject a
+    genuinely correct suggestion.
+    """
+    if not catalog:
+        return ""
+    return (
+        "You are running inside the workflow editor. If you cannot properly "
+        "answer because this workflow lacks a capability, say so briefly, then "
+        "emit exactly one fenced block:\n"
+        "```suggestion\n"
+        '{"nodeType": "<one from the catalogue below>", '
+        f'"attachTo": "{node_id}", '
+        '"port": "tools", "label": "<short human label>", '
+        '"reason": "<one sentence>"}\n'
+        "```\n"
+        "Only suggest when genuinely blocked — never when you can already "
+        "answer, and never more than one block.\n"
+        "Tools that could be added to you:\n"
+        f"{catalog}"
+    )
 
 
 class NodeRuntime:
@@ -393,6 +431,7 @@ class NodeRuntime:
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
         max_attempts: int = 3,
+        advisor_catalog: str = "",
         _ancestry: tuple[str, ...] = (),
     ) -> None:
         if services is not None:
@@ -405,6 +444,10 @@ class NodeRuntime:
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
             max_attempts = services.max_attempts
+            advisor_catalog = services.advisor_catalog
+        #: Non-empty only for an editor run that asked for it (`advisor: true`
+        #: on the request). See `advisor_context`.
+        self.advisor_catalog = advisor_catalog
         self.model = model
         self.tools = tools or {}
         #: `function.<name>` -> callable — deterministic graph steps
@@ -733,7 +776,15 @@ class NodeRuntime:
                     model=model,
                     tools=lc_tools,
                     rules=_text(data, "systemPrompt"),
-                    context="\n\n".join(part for part in (self.skills_context, skill) if part),
+                    context="\n\n".join(
+                        part
+                        for part in (
+                            self.skills_context,
+                            skill,
+                            advisor_context(node_id, self.advisor_catalog),
+                        )
+                        if part
+                    ),
                     middleware=contributions,
                 ).build()
             return built[skill]
@@ -1258,6 +1309,12 @@ class NodeRuntime:
                         skills_context=child_assets.skills_context,
                         workflow_middleware=child_assets.workflow_middleware or {},
                         max_attempts=self.max_attempts,
+                        # Deliberately NOT inherited. A child subgraph's node
+                        # ids do not exist in the document open on the canvas,
+                        # so any `attachTo` it produced would name a node the
+                        # editor cannot find — an unappliable suggestion is
+                        # worse than none, since it reads as an offer.
+                        advisor_catalog="",
                     ),
                     _ancestry=(*self._ancestry, slug),
                 )

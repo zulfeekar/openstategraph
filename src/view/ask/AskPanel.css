@@ -314,6 +314,55 @@
   gap: var(--space-2);
 }
 
+/* ---------- Capability-gap suggestion ---------- */
+
+/* Indigo, not amber: an approval BLOCKS a run and must read as "you are
+   holding this up"; a suggestion is an offer the developer may ignore, and
+   colouring the two alike would train people to dismiss both. */
+.ask__suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--indigo-50);
+  border: 1px solid var(--indigo-100);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme='dark'] .ask__suggestion {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.ask__suggestion-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font: var(--type-body-md);
+  color: var(--color-text-primary);
+}
+
+.ask__suggestion-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Collapsed, never removed: the offer is part of what happened in this turn. */
+.ask__suggestion-settled {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* What the editor changed on the developer's behalf. */
+.ask__did {
+  margin: 0;
+  font: var(--type-body-sm);
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
 /* ---------- Trace tree (ticket 63) ---------- */
 
 .ask__activity-row {

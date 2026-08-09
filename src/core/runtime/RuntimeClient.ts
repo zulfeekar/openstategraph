@@ -37,6 +37,15 @@ export interface RunRequest {
    * for keys across *both* runtimes. The backend applies them only where it
    * has no value of its own, so this is a fallback and never an override.
    */
+  /**
+   * Editor-only. Asks the backend to give every agent one extra context
+   * block: name the missing capability and emit a `suggestion` fence the
+   * editor can turn into a real, wired node.
+   *
+   * Never set by the customer `/chat` surface — a person who cannot edit the
+   * workflow must not be offered edits to it.
+   */
+  readonly advisor?: boolean;
   readonly credentials?: Readonly<Record<string, string>>;
 }
 
@@ -83,6 +92,9 @@ export interface ResumeRequest {
   /** Same as `RunRequest.credentials` — a resume re-initialises the model,
    * so it needs the same keys the run it continues had. */
   readonly credentials?: Readonly<Record<string, string>>;
+  /** Same as `RunRequest.advisor`. The backend's `ResumeRequest` declares it
+   * explicitly (it forbids unknown keys), so a resume can carry it too. */
+  readonly advisor?: boolean;
 }
 
 /**
@@ -157,6 +169,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
       ...(request.credentials ? { credentials: request.credentials } : {}),
+      ...(request.advisor ? { advisor: true } : {}),
     };
 
     let response: Response;
@@ -200,6 +213,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
       ...(request.credentials ? { credentials: request.credentials } : {}),
+      ...(request.advisor ? { advisor: true } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent);
   }
@@ -217,6 +231,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
       ...(request.credentials ? { credentials: request.credentials } : {}),
+      ...(request.advisor ? { advisor: true } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent);
   }

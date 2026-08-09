@@ -64,6 +64,7 @@ from openstategraph.api.registries import (  # noqa: E402
     build_function_registry,
     build_tool_registry,
     runtime_warnings,
+    suggestible_tool_catalog,
 )
 from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
@@ -106,9 +107,17 @@ def create_app(
     def tool_registry_for(slug: str | None) -> dict[str, Any]:
         return build_tool_registry(workflow_store, slug)
 
-    def runtime_for(slug: str | None, document: dict[str, Any], model: Any) -> Any:
+    def runtime_for(
+        slug: str | None, document: dict[str, Any], model: Any, *, advisor: bool = False
+    ) -> Any:
         """One NodeRuntime construction shared by run/stream/resume, so the
-        three endpoints can never disagree about capabilities again."""
+        three endpoints can never disagree about capabilities again.
+
+        `advisor` is the editor-only capability-gap flag: it turns the tool
+        catalogue into an extra agent context block (see `advisor_context`).
+        Passed per call rather than baked into the app, because the same
+        process serves both the editor and `/chat` and only one of them may
+        ever propose edits to the canvas."""
         from openstategraph.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
 
         return NodeRuntime(services=RuntimeServices(
@@ -130,6 +139,9 @@ def create_app(
             ),
             workflow_middleware=(
                 discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
+            ),
+            advisor_catalog=(
+                suggestible_tool_catalog(tool_registry_for(slug)) if advisor else ""
             ),
         ))
     from openstategraph.api.capability_discovery import discover_middlewares, discover_skills
@@ -357,7 +369,7 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model)
+        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
 
         try:
             graph = compiler.build(document, RunState, runtime.factory(document), store=memory_store)
@@ -428,7 +440,7 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model)
+        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
 
         try:
             graph = compiler.build(
@@ -497,7 +509,7 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model)
+        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
 
         try:
             graph = compiler.build(
