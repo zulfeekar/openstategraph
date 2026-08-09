@@ -260,6 +260,9 @@ export const routerNode: INodeDefinition = defineNode(
           direction: 'in',
           type: PORT.text,
           label: 'question',
+          // Classifying an agent's answer is the same move as chaining it
+          // into another prompt — see `AgentNode`'s `prompt` port.
+          accepts: [PORT.text, PORT.result],
           description: 'The text to classify.',
         },
       ];

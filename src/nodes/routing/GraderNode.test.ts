@@ -138,23 +138,21 @@ describe('the revise loop', () => {
     expect(verdict.ok).toBe(false);
   });
 
-  it('is refused by the type system before the cycle rule is even consulted', () => {
+  it('is refused by the cycle rule, naming the feedback port as the way round', () => {
     const { agent, grader } = loop();
     const verdict = workbench.controller.edges.connect(
       { nodeId: grader.id, portId: 'pass' },
       { nodeId: agent.id, portId: 'prompt' },
     );
 
-    // Worth pinning precisely, because it corrects an assumption. Adding the
-    // `feedback` port did **not** make accidental cycles expressible: `pass` is
-    // a `result` and `prompt` is a `text`, so `typeCompatibilityRule` rejects
-    // this first and `acyclicRule` never runs.
-    //
-    // So the ticket-11 finding still holds — `acyclicRule`'s *rejection* branch
-    // remains unreachable through the real catalogue, and the only drawable
-    // cycle is the deliberate feedback one. The type graph is doing the work.
-    expect(verdict.message).toMatch(/can.t feed/i);
-    expect(verdict.message).not.toMatch(/loop/i);
+    // Superseding the ticket-11 note that used to sit here. Until ticket 08,
+    // `prompt` refused a `result` outright, so `typeCompatibilityRule` caught
+    // this and `acyclicRule`'s rejection branch was unreachable through the
+    // real catalogue. Prompt chaining opened `prompt` to `result` — so the
+    // cycle rule is now the load-bearing guard, and this pins that it holds:
+    // `feedback` is still the only port type a loop may close on.
+    expect(verdict.message).toMatch(/loop/i);
+    expect(verdict.message).toMatch(/revise/i);
   });
 
   it('reports the cycle rather than throwing when the graph is scheduled', () => {

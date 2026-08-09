@@ -4,6 +4,7 @@ import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import {
   maxConnectionsOf,
+  portAcceptsType,
   portRefEquals,
   type IPortDescriptor,
   type PortRef,
@@ -151,11 +152,18 @@ export const duplicateRule: IConnectionRule = {
   },
 };
 
-/** The consumer's declared `accepts` list governs compatibility. */
+/**
+ * The consumer's declared `accepts` list governs compatibility — at two
+ * granularities. A *port type* may accept another type catalogue-wide, and an
+ * individual *port* may opt into one more source type without widening its
+ * type for everyone (ticket 08: prompt chaining wants `result → prompt`, not
+ * `result → every text input ever added`).
+ */
 export const typeCompatibilityRule: IConnectionRule = {
   id: 'type-compatibility',
   order: 40,
   check({ registry, sourcePort, targetPort }) {
+    if (portAcceptsType(targetPort, sourcePort.type)) return null;
     if (registry.canConnectTypes(sourcePort.type, targetPort.type)) return null;
     const from = registry.portType(sourcePort.type).label;
     const to = registry.portType(targetPort.type).label;

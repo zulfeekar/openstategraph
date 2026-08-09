@@ -71,6 +71,9 @@ export const orchestratorNode: INodeDefinition = defineNode(
         type: PORT.text,
         label: 'instruction',
         required: true,
+        // An agent that plans, then an orchestrator that decomposes the plan,
+        // is the same chaining case — see `AgentNode`'s `prompt` port.
+        accepts: [PORT.text, PORT.result],
         description: 'The instruction to decompose into subtasks.',
       },
       {

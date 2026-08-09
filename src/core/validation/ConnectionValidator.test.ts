@@ -152,10 +152,9 @@ describe('ConnectionValidator', () => {
   });
 
   describe('acyclic rule', () => {
-    // Uses a synthetic symmetric-port type. No cycle is expressible with the
-    // shipped catalogue — the only `result`-accepting input is on the output
-    // node, which has no output port — so the rule is unreachable through the
-    // real node types and has to be exercised in isolation.
+    // Uses a synthetic symmetric-port type so the rule is tested independently
+    // of which real ports happen to accept which types. The catalogue-level
+    // pins live in "prompt chaining (ticket 08)" below.
     beforeEach(() => registerLoopableType(workbench));
 
     it('rejects a link that would close a two-node cycle', () => {
@@ -200,6 +199,65 @@ describe('ConnectionValidator', () => {
       connect(workbench, left, 'result', output, 'result');
 
       expect(validate(right, 'result', output, 'result').ok).toBe(true);
+    });
+  });
+
+  describe('prompt chaining (ticket 08)', () => {
+    // `result` is no longer terminal: the three text-side *inputs* that can
+    // legitimately consume a previous step's answer declare `accepts` on the
+    // port descriptor. Everything else keeps the default "only itself".
+    it('lets one agent’s result feed another agent’s prompt', () => {
+      const second = addNode(workbench, TYPE.agent);
+      expect(validate(agent, 'result', second, 'prompt').ok).toBe(true);
+    });
+
+    it('actually draws the chain through the controller, not just the validator', () => {
+      // The gesture path: `edges.connect` is what the canvas calls when a link
+      // is dropped, so this is the claim "prompt chaining is drawable".
+      const second = addNode(workbench, TYPE.agent);
+      const verdict = workbench.controller.edges.connect(
+        { nodeId: agent.id, portId: 'result' },
+        { nodeId: second.id, portId: 'prompt' },
+      );
+
+      expect(verdict.ok).toBe(true);
+      expect(workbench.model.edgesInto({ nodeId: second.id, portId: 'prompt' })).toHaveLength(1);
+    });
+
+    it('lets an agent’s result be classified by a router', () => {
+      const router = addNode(workbench, TYPE.router);
+      expect(validate(agent, 'result', router, 'question').ok).toBe(true);
+    });
+
+    it('lets an agent’s result instruct an orchestrator', () => {
+      const orchestrator = addNode(workbench, TYPE.orchestrator);
+      expect(validate(agent, 'result', orchestrator, 'instruction').ok).toBe(true);
+    });
+
+    it('still refuses a result into an input that has not opted in', () => {
+      // A text input is only widened where chaining is meaningful; the
+      // widening is per-port, not a blanket text ← result type rule.
+      const grader = addNode(workbench, TYPE.grader);
+      expect(validate(agent, 'result', grader, 'candidate').ok).toBe(true);
+      expect(validate(textInput, 'text', agent, 'skill').ok).toBe(false);
+    });
+
+    it('refuses a chain that loops back on itself through result', () => {
+      // The regression pin: widening `accepts` must not make an ordinary
+      // cycle drawable. `feedback` stays the only cycle-closing port type.
+      const second = addNode(workbench, TYPE.agent);
+      connect(workbench, agent, 'result', second, 'prompt');
+
+      const verdict = validate(second, 'result', agent, 'prompt');
+      expect(verdict).toMatchObject({ ok: false });
+      if (!verdict.ok) expect(verdict.reason).toMatch(/loop/i);
+    });
+
+    it('still allows the grader’s revise loop to close', () => {
+      const grader = addNode(workbench, TYPE.grader);
+      connect(workbench, agent, 'result', grader, 'candidate');
+
+      expect(validate(grader, 'revise', agent, 'feedback').ok).toBe(true);
     });
   });
 

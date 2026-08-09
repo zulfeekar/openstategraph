@@ -63,6 +63,17 @@ export interface IPortDescriptor {
   readonly appearance?: 'row' | 'pill';
   /** Tooltip / inspector help text. */
   readonly description?: string;
+  /**
+   * Extra source port types *this port* accepts, on top of whatever its port
+   * type already declares. Narrower than widening the type itself: an
+   * agent's `prompt` may consume a previous agent's `result` (prompt
+   * chaining) without every `text` input in the catalogue silently gaining
+   * the same affordance.
+   *
+   * Consumer-declared, like `IPortTypeDefinition.accepts`, and additive only
+   * — a port may open itself up, never close down what its type allows.
+   */
+  readonly accepts?: readonly (PortTypeId | '*')[];
 }
 
 export interface PortInstance extends IPortDescriptor {
@@ -90,6 +101,17 @@ export const portRefKey = (ref: PortRef): string => `${ref.nodeId}/${ref.portId}
 export function maxConnectionsOf(port: IPortDescriptor): number | null {
   if (port.maxConnections !== undefined) return port.maxConnections;
   return port.direction === 'in' ? 1 : null;
+}
+
+/**
+ * Whether this *port* individually opts into a source type its port type does
+ * not already accept. Type-level compatibility is checked separately, so this
+ * only ever widens.
+ */
+export function portAcceptsType(port: IPortDescriptor, sourceType: PortTypeId): boolean {
+  const accepts = port.accepts;
+  if (!accepts) return false;
+  return accepts.includes('*') || accepts.includes(sourceType);
 }
 
 /** Resolves the effective side for a port. */

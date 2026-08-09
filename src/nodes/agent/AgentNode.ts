@@ -148,6 +148,11 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           type: PORT.text,
           label: 'prompt',
           required: true,
+          // Prompt chaining: an earlier agent's answer is a legitimate task
+          // for the next one (generate → improve → polish). Declared on the
+          // port, not on the `text` port type, so the affordance appears
+          // exactly where it makes sense.
+          accepts: [PORT.text, PORT.result],
           description: 'The task for the agent.',
         },
         {
