@@ -682,7 +682,11 @@ function renderInterrupt(el, d) {
       box.remove();
       const doc = await docFor(state.workflow);
       await stream("/api/runs/resume", {
-        thread_id: d.thread_id, workflow: { document: doc }, decision: b.dataset.d,
+        // The interrupt event spells it `threadId` (camelCase) — reading the
+        // snake_case spelling posted `undefined`, JSON.stringify dropped the
+        // key, and every approval died 422 "thread_id: Field required".
+        thread_id: d.threadId || d.thread_id || threadFor(state.workflow),
+        workflow: { document: doc }, decision: b.dataset.d,
         workflow_slug: state.workflow, session_id: state.sessionId, user_email: state.email || "anonymous",
       }, el);
     };
