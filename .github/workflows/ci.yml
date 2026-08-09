@@ -22,6 +22,49 @@ jobs:
       # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
       # guards regressions, raised as it climbs. Live-API tests stay opt-in.
       - run: python -m pytest -q --cov=backend/openstategraph --cov-fail-under=85
+  # Docs freshness: code changes should carry their documentation. Pure
+  # git + bash, no dependencies. Escape hatch: `docs: not-needed` in any
+  # commit message in the PR.
+  docs-freshness:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Code changes must touch docs
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$BASE" "$HEAD")
+          code=$(printf '%s\n' "$changed" | grep -E '^(src|backend)/' || true)
+          if [ -z "$code" ]; then
+            echo "No src/ or backend/ changes — nothing to check."; exit 0
+          fi
+          docs=$(printf '%s\n' "$changed" | grep -E '^(README\.md|docs/|openwiki/)' || true)
+          if [ -n "$docs" ]; then
+            echo "Docs updated alongside code:"; printf '%s\n' "$docs"; exit 0
+          fi
+          if git log --format='%B' "$BASE".."$HEAD" | grep -qF 'docs: not-needed'; then
+            echo "Escape hatch found: a commit message says 'docs: not-needed'."; exit 0
+          fi
+          echo "::error::This PR changes src/ or backend/ but no documentation."
+          cat <<'MSG'
+
+          Code changed, docs did not.
+
+          Please update one of:
+            README.md      user-facing behaviour, setup, providers
+            docs/          decisions and architecture notes
+            openwiki/      generated reference (or let the workflow regenerate)
+
+          If this change genuinely needs no docs, say so in a commit message:
+            git commit --allow-empty -m "docs: not-needed — internal refactor only"
+
+          MSG
+          exit 1
+
   e2e:
     runs-on: ubuntu-latest
     steps:
