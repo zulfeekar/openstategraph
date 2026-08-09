@@ -255,7 +255,7 @@ class TestDispatchByArchetype:
         assert "### task-2\n68 million" in final["answer"]
 
     def test_a_single_worker_document_behaves_exactly_as_before(self) -> None:
-        """The tabular/intent-routed shape must not change behaviour: one wired
+        """The classic routed shape must not change behaviour: one wired
         worker, no labels needed, every subtask lands on it."""
         document = two_archetype_document()
         document["edges"] = [
@@ -322,10 +322,10 @@ class TestArchetypeDescriptionsAreNeverBlind:
         assert role_desc is not None
 
     def test_an_explicit_role_wins_over_the_derived_description(self) -> None:
-        # Pinned via the document contract: open-api-explorer ships roles set.
+        # Pinned via the document contract: page-analytics ships roles set.
         import json
         from pathlib import Path
         doc = json.loads((Path(__file__).resolve().parent.parent.parent /
-                          "workflows/open-api-explorer/workflow.json").read_text())["document"]
+                          "workflows/page-analytics/workflow.json").read_text())["document"]
         workers = [n for n in doc["nodes"] if n["type"] == "orchestrate.worker"]
         assert workers and all((n["data"].get("role") or "").strip() for n in workers)

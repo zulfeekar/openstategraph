@@ -11,8 +11,8 @@ const readWorkflow = (slug: string): unknown =>
   );
 
 describe('summarizeComposition', () => {
-  it('counts the real page-metrics-team into the atomic vocabulary', () => {
-    const summary = summarizeComposition(readWorkflow('page-metrics-team'), 'team');
+  it('counts the real chinook-metrics-team into the atomic vocabulary', () => {
+    const summary = summarizeComposition(readWorkflow('chinook-metrics-team'), 'team');
     expect(summary).not.toBeNull();
     expect(formatComposition(summary!)).toBe(
       '1 supervisor · 1 worker · 1 grader · 1 function · 3 tools — loops until its grader passes',
@@ -20,14 +20,14 @@ describe('summarizeComposition', () => {
   });
 
   it('accepts a bare document as well as a saved envelope', () => {
-    const envelope = readWorkflow('page-metrics-team') as { document: unknown };
+    const envelope = readWorkflow('chinook-metrics-team') as { document: unknown };
     expect(summarizeComposition(envelope.document, 'team')).toEqual(
       summarizeComposition(envelope, 'team'),
     );
   });
 
   it('claims no loop for a subgraph mount, even one containing a grader', () => {
-    const summary = summarizeComposition(readWorkflow('page-metrics-team'), 'subgraph');
+    const summary = summarizeComposition(readWorkflow('chinook-metrics-team'), 'subgraph');
     expect(summary?.note).toBeUndefined();
     expect(formatComposition(summary!)).not.toContain('loops');
   });

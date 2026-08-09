@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scaffolds a new Team workflow package — ticket 56.
 
-    python3 scripts/new_team.py research-team "Deliver a sourced summary"
+    python3 scripts/new_team.py sourcing-team "Deliver a sourced summary"
 
 Creates `workflows/<slug>/` with the prebuilt minimum-viable Team (ticket 52's
 design): supervisor + one default worker + a grader closing the revise loop.
@@ -51,7 +51,8 @@ def document(name: str, outcome: str) -> dict:
         },
         {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 1720, "y": 200}},
     ]
-    edge = lambda s, sp, t, tp: {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": t, "portId": tp}}
+    def edge(s, sp, t, tp):
+        return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": t, "portId": tp}}
     edges = [
         edge("in1", "text", "lead1", "instruction"),
         edge("lead1", "workers", "member1", "dispatch"),

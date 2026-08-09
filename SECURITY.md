@@ -9,8 +9,9 @@ Known, documented trade-offs:
   revocable keys.
 - Capability discovery imports Python from `workflows/<slug>/` — opening a
   workflow executes its code. Only open workflows you trust.
-- The code-workshop tools are jailed to their workflow's scratch directory and
-  never invoke `gh` without explicit opt-in plus human approval.
+- The prebuilt SQL tools open their database read-only (`mode=ro`), and the
+  configured path is jailed to `workflows/` — a canvas field can never reach
+  an arbitrary host file.
 
 Report vulnerabilities via GitHub issues (or privately to the maintainer if
 disclosure-sensitive).

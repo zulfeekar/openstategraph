@@ -50,8 +50,6 @@ openwiki/
 graphify-out/
 
 # Workflow runtime jails — sources are copied, generated output is not.
-workflows/code-workshop/scratch/
-workflows/code-workshop/output/
 
 # Docker's own files do not belong inside the context.
 Dockerfile

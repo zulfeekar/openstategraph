@@ -18,13 +18,14 @@ class TestIntrospection:
     def test_lists_visible_workflows_and_hides_hidden_ones(self) -> None:
         result = ListWorkflowsTool().run()
         assert result.error is None
-        assert "tabular-analytics" in result.content
+        assert "chinook-nl-to-sql" in result.content
+        assert "page-analytics" in result.content
         assert "concierge" not in result.content
 
     def test_describe_reads_the_packages_own_docs(self) -> None:
-        result = DescribeWorkflowTool().run(slug="data-analyst-team")
+        result = DescribeWorkflowTool().run(slug="page-analytics")
         assert result.error is None
-        assert "Team" in result.content and "Nodes:" in result.content
+        assert "Store Analytics" in result.content and "Nodes:" in result.content
 
     def test_describe_refuses_the_hidden_gateway(self) -> None:
         assert DescribeWorkflowTool().run(slug="concierge").error is not None

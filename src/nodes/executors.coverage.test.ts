@@ -119,12 +119,12 @@ describe('honest backend-only refusals', () => {
   it('subgraph and team refuse, naming the slug when set', async () => {
     const workbench = makeWorkbench();
     const bare = addNode(workbench, 'workflow.subgraph');
-    const named = addNode(workbench, 'team.workflow', { data: { workflow: 'research-team' } });
+    const named = addNode(workbench, 'team.workflow', { data: { workflow: 'chinook-metrics-team' } });
     const bareOut = await subgraphExecutor.execute(ctxFor(workbench, bare.id));
     const namedOut = await teamExecutor.execute(ctxFor(workbench, named.id));
     expect(bareOut.ok).toBe(false);
     expect(namedOut.ok).toBe(false);
-    if (!namedOut.ok) expect(namedOut.error).toContain('research-team');
+    if (!namedOut.ok) expect(namedOut.error).toContain('chinook-metrics-team');
   });
 
   it('every platform/web prebuilt refuses toward Chat', async () => {

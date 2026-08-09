@@ -5,7 +5,7 @@ Three parts that previously each failed a different silent way:
 - A tool declares its own `node_type` (the canvas type id) in its manifest,
   so the wiring identity has one source of truth — the tool. A WIP attempt
   keyed a registry by lowercased class name (`tool.querydatatool`), which can
-  never match a canvas type (`tool.tabular-query`).
+  never match a canvas type (`tool.chinook-execute-sql`).
 - `configure(data)` is how one bound node's own field values reach its tool
   instance — replacing a compiler special-case that knew about exactly one
   Chinook field and left every other tool's config inert.
@@ -23,7 +23,7 @@ from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 REPO = Path(__file__).resolve().parent.parent.parent
-TABULAR = REPO / "workflows" / "tabular-analytics"
+CHINOOK = REPO / "workflows" / "chinook-nl-to-sql"
 
 
 class ARecordingTool(BaseTool):
@@ -88,24 +88,23 @@ class TestBoundToolConfiguration:
 
 class TestWorkflowToolDiscovery:
     def test_registry_is_keyed_by_canvas_node_type(self) -> None:
-        registry = discover_tool_registry(TABULAR, slug="tabular-analytics")
+        registry = discover_tool_registry(CHINOOK, slug="chinook-nl-to-sql")
         assert set(registry) == {
-            "tool.tabular-list-files",
-            "tool.tabular-get-schema",
-            "tool.tabular-query",
-            "tool.tabular-sample",
+            "tool.chinook-get-all-tables",
+            "tool.chinook-get-schema",
+            "tool.chinook-execute-sql",
         }
         for node_type, tool in registry.items():
             assert isinstance(tool, BaseTool)
             assert tool.node_type == node_type
 
     def test_capabilities_expose_the_node_type_too(self) -> None:
-        capabilities = discover_tools(TABULAR, slug="tabular-analytics")
+        capabilities = discover_tools(CHINOOK, slug="chinook-nl-to-sql")
         by_name = {c.name: c for c in capabilities}
-        assert by_name["tabular_query_data"].node_type == "tool.tabular-query"
+        assert by_name["chinook_execute_sql"].node_type == "tool.chinook-execute-sql"
 
     def test_a_workflow_without_tools_discovers_an_empty_registry(self) -> None:
         registry = discover_tool_registry(
-            REPO / "workflows" / "intent-routed-demo", slug="intent-routed-demo"
+            REPO / "workflows" / "page-analytics", slug="page-analytics"
         )
         assert registry == {}

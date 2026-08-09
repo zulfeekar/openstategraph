@@ -69,7 +69,7 @@ class BaseTool(ABC):
 
     name: ClassVar[str]
     description: ClassVar[str]
-    #: The canvas node type this tool answers to (`tool.tabular-query`).
+    #: The canvas node type this tool answers to (`tool.chinook-execute-sql`).
     #: The tool declares its own wiring identity — ticket 33 — so the
     #: runtime registry, the discovery endpoint and the (eventually
     #: generated) TypeScript node definition all key off one declaration.

@@ -73,6 +73,28 @@ simulator. The real backend, once running, defaults to **Ollama cloud** with
 zero configuration (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` override it if set —
 see `resolve_model` in `backend/openstategraph/api/main.py`).
 
+### Example workflows
+
+The repository ships exactly **two** visible examples, both evaluated against
+**one** sample database — `workflows/chinook-nl-to-sql/data/Chinook_Sqlite.sqlite`,
+the standard Chinook music store. One database is the single source of truth:
+every figure any example produces can be checked against the same file.
+
+- **`chinook-nl-to-sql`** — the focused example. Natural language in, one
+  SQL answer out: an agent bound to three Chinook-specific tools
+  (list tables → schema → read-only query).
+- **`page-analytics`** ("Store Analytics") — the comprehensive example. It
+  exercises every generic node type at once: intent routing with a
+  conversation fallback, a supervisor with three worker archetypes on the
+  generic SQL Explorer bus (one also holding web search), report formatting,
+  a grader revise loop, human approval, an email dispatcher (dry-run without
+  SMTP), a quick-metric agent, a mounted Team (`chinook-metrics-team`), and
+  the focused example itself mounted as a subgraph for deep SQL questions.
+
+Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
+the chat gateway and the build-me-a-workflow flow; `scripts/new_team.py` and
+`scripts/new_workflow.py` scaffold your own packages.
+
 ### Environment variables
 
 None are required. Copy [`.env.example`](.env.example) to `.env` to set any

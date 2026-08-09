@@ -84,14 +84,14 @@ describe('RuntimeClient.run', () => {
     await new RuntimeClient('http://rt', stub.fetch).run({
       workflow: {},
       question: 'q',
-      workflowSlug: 'tabular-analytics',
+      workflowSlug: 'chinook-nl-to-sql',
     });
 
     // The backend layers that workflow's own tools over its defaults; a
     // camelCase key would be silently dropped by FastAPI and the run would
     // bind no workflow tools — the agent then answers from memory.
     const sent = JSON.parse(stub.bodies[0]!) as Record<string, unknown>;
-    expect(sent['workflow_slug']).toBe('tabular-analytics');
+    expect(sent['workflow_slug']).toBe('chinook-nl-to-sql');
   });
 
   it('omits the slug when none is known — the field is optional server-side', async () => {

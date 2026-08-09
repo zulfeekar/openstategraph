@@ -32,8 +32,8 @@ describe('peekMermaid', () => {
 
 describe('peekDiagramId', () => {
   it('is unique per slug and sequence', () => {
-    expect(peekDiagramId('page-metrics-team', 1)).toBe('peek-page-metrics-team-1');
-    expect(peekDiagramId('page-metrics-team', 2)).not.toBe(peekDiagramId('page-metrics-team', 1));
+    expect(peekDiagramId('chinook-metrics-team', 1)).toBe('peek-chinook-metrics-team-1');
+    expect(peekDiagramId('chinook-metrics-team', 2)).not.toBe(peekDiagramId('chinook-metrics-team', 1));
   });
 
   it('strips characters that are illegal in a DOM id', () => {

@@ -5,7 +5,7 @@
  * contains (a supervisor, its workers, a grader, the tools they hold) live in
  * *another* document, and drilling in is a navigation, not a zoom. That
  * opacity is right for composition and wrong for orientation: a card reading
- * only `page-metrics-team` tells a reader nothing about what the box costs or
+ * only `chinook-metrics-team` tells a reader nothing about what the box costs or
  * does.
  *
  * So this derives a **census** of the referenced document — node types counted

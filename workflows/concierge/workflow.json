@@ -26,16 +26,8 @@
         "data": {
           "branches": [
             {
-              "id": "b-videogames",
-              "name": "videogames"
-            },
-            {
               "id": "b-music",
               "name": "music_store"
-            },
-            {
-              "id": "b-livedata",
-              "name": "live_data"
             },
             {
               "id": "b-build",
@@ -47,23 +39,11 @@
             }
           ],
           "fallback": "general",
-          "rules": "videogames: questions about video game sales, platforms, genres, publishers, the vgsales dataset.\nmusic_store: questions about music, artists, albums, tracks, invoices \u2014 the Chinook store database.\nlive_data: ONLY weather/forecasts, country statistics (population, GDP), or recent earthquakes \u2014 the four wired data APIs.\nbuild_workflow: ONLY explicit requests to create something new on this platform ('build me a workflow/team that ...', 'create a pipeline for ...'). Questions about how the platform or its parts WORK are general, never build_workflow.\ngeneral: everything else \u2014 greetings, general knowledge, questions about this platform itself, and anything needing a web search (news, versions, current events)."
+          "rules": "music_store: questions answerable from the Chinook music-store database - music, artists, albums, tracks, genres, customers, invoices, store revenue.\nbuild_workflow: ONLY explicit requests to create something new on this platform ('build me a workflow/team that ...', 'create a pipeline for ...'). Questions about how the platform or its parts WORK are general, never build_workflow.\ngeneral: everything else - greetings, general knowledge, questions about this platform itself, and anything needing a web search (news, versions, current events)."
         },
         "position": {
           "x": 360,
           "y": 300
-        }
-      },
-      {
-        "id": "wf-videogames",
-        "type": "workflow.subgraph",
-        "title": "Video Game Analytics",
-        "data": {
-          "workflow": "tabular-analytics"
-        },
-        "position": {
-          "x": 720,
-          "y": 80
         }
       },
       {
@@ -79,23 +59,11 @@
         }
       },
       {
-        "id": "wf-livedata",
-        "type": "workflow.subgraph",
-        "title": "Open API Explorer",
-        "data": {
-          "workflow": "open-api-explorer"
-        },
-        "position": {
-          "x": 720,
-          "y": 440
-        }
-      },
-      {
         "id": "agent-general",
         "type": "agent.llm",
         "title": "General Assistant",
         "data": {
-          "systemPrompt": "You are the OpenStateGraph assistant \u2014 a generic helper; anything can be asked. Tools, all READ-ONLY:\n- platform_list_workflows / platform_describe_workflow: what this system offers.\n- platform_ls / platform_read_file / platform_grep: explore this platform's own code and docs. For how-does-this-work questions, read openwiki/index.md FIRST \u2014 it is the curated wiki \u2014 and follow its links before grepping raw source.\n- knowledge_lookup: this gateway's own routing knowledge — one doc per specialised workflow (what it answers, when NOT to use it). Look a workflow up before describing or recommending it.\n- web_search then web_fetch: anything current, factual, or outside your knowledge \u2014 search first, then fetch the best result and answer from what it actually says, citing the URL.\nUse tools rather than guessing; never invent data or figures. You cannot write anything. For deep data work, mention the specialised workflow (video game sales, Chinook music store, live weather/country/quake data)."
+          "systemPrompt": "You are the OpenStateGraph assistant \u2014 a generic helper; anything can be asked. Tools, all READ-ONLY:\n- platform_list_workflows / platform_describe_workflow: what this system offers.\n- platform_ls / platform_read_file / platform_grep: explore this platform's own code and docs. For how-does-this-work questions, read openwiki/index.md FIRST \u2014 it is the curated wiki \u2014 and follow its links before grepping raw source.\n- knowledge_lookup: this gateway's own routing knowledge \u2014 one doc per specialised workflow (what it answers, when NOT to use it). Look a workflow up before describing or recommending it.\n- web_search then web_fetch: anything current, factual, or outside your knowledge \u2014 search first, then fetch the best result and answer from what it actually says, citing the URL.\nUse tools rather than guessing; never invent data or figures. You cannot write anything. For deep data work, mention the specialised examples: the focused Chinook NL-to-SQL workflow, or the comprehensive Store Analytics workflow (reports, teams, approval, email) - both run on the one shared Chinook music-store database."
         },
         "position": {
           "x": 720,
@@ -223,30 +191,10 @@
       {
         "source": {
           "nodeId": "router1",
-          "portId": "branch:b-videogames"
-        },
-        "target": {
-          "nodeId": "wf-videogames",
-          "portId": "input"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "router1",
           "portId": "branch:b-music"
         },
         "target": {
           "nodeId": "wf-music",
-          "portId": "input"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "router1",
-          "portId": "branch:b-livedata"
-        },
-        "target": {
-          "nodeId": "wf-livedata",
           "portId": "input"
         }
       },
@@ -262,27 +210,7 @@
       },
       {
         "source": {
-          "nodeId": "wf-videogames",
-          "portId": "result"
-        },
-        "target": {
-          "nodeId": "out1",
-          "portId": "result"
-        }
-      },
-      {
-        "source": {
           "nodeId": "wf-music",
-          "portId": "result"
-        },
-        "target": {
-          "nodeId": "out1",
-          "portId": "result"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "wf-livedata",
           "portId": "result"
         },
         "target": {

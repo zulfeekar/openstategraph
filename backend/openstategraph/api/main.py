@@ -76,6 +76,7 @@ from openstategraph.api.schemas import (  # noqa: E402
     KnowledgeTopicDocResponse,
     KnowledgeTopicSaveRequest,
     KnowledgeTopicStatusResponse,
+    PluginExportResponse,
     ResumeRequest,
     RunRequest,
     RunResponse,
@@ -330,6 +331,35 @@ def create_app(
                 FunctionCapabilityResponse(id=f.id, name=f.name, docstring=f.docstring, signature=f.signature)
                 for f in functions
             ],
+        )
+
+    @app.get("/api/workflows/{slug}/plugin-export", response_model=PluginExportResponse)
+    def export_workflow_as_plugin(slug: str) -> PluginExportResponse:
+        """Preview this workflow package as an Agent Plugins v1 plugin.
+
+        A GET writes nothing: it returns the manifest, the layout a caller
+        would materialize, and the honest list of what does not survive the
+        crossing. The verdict and the full mapping are in
+        `docs/decisions/agent-plugins.md` — adopt-as-interop, never as our
+        format, with all of their vocabulary confined to `plugin_interop.py`.
+        """
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+        from openstategraph.plugin_interop import InvalidPluginError, export_plugin
+
+        try:
+            workflow_dir = workflow_store.directory_for(slug)
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not workflow_dir.is_dir():
+            raise HTTPException(
+                status_code=404, detail=f"No workflow named {slug!r}"
+            ) from WorkflowNotFoundError(slug)
+        try:
+            export = export_plugin(workflow_dir)
+        except InvalidPluginError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return PluginExportResponse(
+            manifest=export.manifest, paths=sorted(export.files), notes=export.notes
         )
 
     @app.post("/api/workflows/{slug}/knowledge/build", response_model=KnowledgeBuildResponse)

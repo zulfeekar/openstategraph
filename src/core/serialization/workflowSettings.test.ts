@@ -6,7 +6,7 @@ import { makeWorkbench } from '@core/testing/fixtures';
  * Workflow-level settings — ticket 36.
  *
  * The backend reads `document.settings.model` for its node → workflow →
- * default model resolution, and the tabular-analytics workflow ships one.
+ * default model resolution, and the concierge gateway ships one.
  * Until this existed, `toJSON()` emitted exactly `{version, name, nodes,
  * edges}`, so *opening a workflow in the editor and saving deleted its
  * settings* — silent data loss on the round trip.
@@ -39,11 +39,11 @@ describe('workflow settings', () => {
     expect(parsed).not.toHaveProperty('settings');
   });
 
-  it('loads the real tabular-analytics shape', () => {
+  it('loads a real settings-bearing shape', () => {
     const outcome = workbench.controller.document.importJSON(
       JSON.stringify({
         version: 2,
-        name: 'Video Game Sales Analytics',
+        name: 'Concierge (gateway)',
         settings: { model: 'ollama:gpt-oss:120b-cloud' },
         nodes: [],
         edges: [],

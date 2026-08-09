@@ -24,8 +24,9 @@ def _document_of(workflow: dict[str, Any]) -> dict[str, Any]:
 def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
     """Default tools, with the open workflow's own tools layered over.
 
-    The defaults (Chinook) stay so documents that bind them — the
-    intent-routed demo — keep working from any workflow context. A slug adds
+    The defaults (Chinook) stay so documents that bind them — e.g. the
+    chinook-nl-to-sql example mounted as a subgraph elsewhere — keep working
+    from any workflow context. A slug adds
     that workflow's `tools/`, keyed by each tool's own `node_type`
     declaration (ticket 33); same-type collisions resolve workflow-wins,
     mirroring the frontend's local-shadows-global registry rule. A failed

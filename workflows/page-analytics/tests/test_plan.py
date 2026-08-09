@@ -45,6 +45,6 @@ class TestPageAnalyticsPlan:
         assert _plan("page-analytics").warnings == []
 
     def test_the_mounted_team_package_compiles_too(self) -> None:
-        plan = _plan("page-metrics-team")
+        plan = _plan("chinook-metrics-team")
         assert plan.warnings == []
         assert plan.entry and plan.exits

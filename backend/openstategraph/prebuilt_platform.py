@@ -83,7 +83,7 @@ class ListWorkflowsTool(BaseTool):
 
 class DescribeWorkflowArgs(BaseModel):
     model_config = {"extra": "forbid"}
-    slug: str = Field(description="The workflow's slug, e.g. 'tabular-analytics'.")
+    slug: str = Field(description="The workflow's slug, e.g. 'chinook-nl-to-sql'.")
 
 
 class DescribeWorkflowTool(BaseTool):

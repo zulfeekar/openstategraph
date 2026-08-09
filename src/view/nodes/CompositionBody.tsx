@@ -22,7 +22,7 @@ import './CompositionBody.css';
  * document, they are not nodes of this canvas, and nothing here can edit them.
  * That boundary is what the original one-line census protected, and it still
  * holds — but opacity for the model is not the same as opacity for the reader.
- * A card reading `page-metrics-team · 1 supervisor · 2 workers` still leaves
+ * A card reading `chinook-metrics-team · 1 supervisor · 2 workers` still leaves
  * "what actually happens in there" a question answerable only by loading
  * another document and losing your place.
  *

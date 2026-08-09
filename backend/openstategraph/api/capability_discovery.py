@@ -87,7 +87,7 @@ def discover_tool_instances(workflow_dir: Path, slug: str) -> list[tuple[str, Ba
     The instances are the same objects `discover_tools` describes — returned
     so the runtime can *bind* them, not merely list them. (An earlier attempt
     re-imported each class from its qualified id by string surgery:
-    `__import__("tabular-analytics.tools")` — a hyphenated slug is never a
+    `__import__("chinook-nl-to-sql.tools")` — a hyphenated slug is never a
     legal module name, so every slug-based run silently lost all its tools.)
     """
     tools_dir = workflow_dir / "tools"

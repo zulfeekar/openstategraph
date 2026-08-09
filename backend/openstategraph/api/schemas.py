@@ -159,6 +159,20 @@ class CapabilitiesResponse(BaseModel):
     functions: list[FunctionCapabilityResponse]
 
 
+class PluginExportResponse(BaseModel):
+    """A preview of this workflow as an Agent Plugins v1 package.
+
+    A report, not a write: `paths` is the layout a caller would materialize,
+    and `notes` names every lossy edge (see `docs/decisions/agent-plugins.md`).
+    The mapping itself lives entirely in `plugin_interop.py` — this schema
+    carries their manifest as opaque data and adds no vocabulary of its own.
+    """
+
+    manifest: dict[str, Any]
+    paths: list[str]
+    notes: list[str]
+
+
 class AskResponse(BaseModel):
     """What the editor renders.
 

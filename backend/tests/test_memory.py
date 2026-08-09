@@ -122,17 +122,17 @@ class TestMemoryScopes:
         store = InMemoryStore()
         save, _ = memory_tools()
         _run_in_graph(
-            lambda s: {"out": save.invoke({"fact": "vgsales ranks tie-break by name", "scope": "workflow"})},
+            lambda s: {"out": save.invoke({"fact": "chinook revenue sums InvoiceLine amounts", "scope": "workflow"})},
             store=store,
-            config={"configurable": {"thread_id": "t", "workflow_slug": "tabular-analytics"}},
+            config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-nl-to-sql"}},
         )
-        assert store.search(("workflow-memory", "tabular-analytics"))
+        assert store.search(("workflow-memory", "chinook-nl-to-sql"))
 
     def test_search_reads_all_scopes_and_labels_provenance(self) -> None:
         store = InMemoryStore()
         save, search = memory_tools()
         config = {"configurable": {"thread_id": "t", "user_email": "a@x.com",
-                                   "workflow_slug": "tabular-analytics"}}
+                                   "workflow_slug": "chinook-nl-to-sql"}}
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes concise answers"})},
                       store=store, config=config)
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "Global_Sales is authoritative", "scope": "workflow"})},
@@ -144,7 +144,7 @@ class TestMemoryScopes:
         out = result["out"]
         # App hits carry their originating slug — the spine stays auditable.
         assert "[user]" in out and "[workflow]" in out
-        assert "[app via tabular-analytics]" in out
+        assert "[app via chinook-nl-to-sql]" in out
 
     def test_app_scope_writes_are_stamped_with_the_originating_slug(self) -> None:
         """The spine is auditable: any workflow may contribute app-wide

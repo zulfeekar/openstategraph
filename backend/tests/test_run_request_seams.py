@@ -46,7 +46,7 @@ class TestResumeAcceptsTheSlug:
                 "thread_id": "no-such-thread",
                 "workflow": MINIMAL_DOCUMENT,
                 "decision": "approve",
-                "workflow_slug": "tabular-analytics",
+                "workflow_slug": "chinook-nl-to-sql",
             },
         )
         assert response.status_code != 422, response.text
@@ -95,23 +95,22 @@ class TestSlugToolBinding:
 
         return WorkflowStore(root=REPO / "workflows")
 
-    def test_the_tabular_slug_layers_its_tools_over_the_defaults(self) -> None:
+    def test_the_chinook_slug_layers_its_tools_over_the_defaults(self) -> None:
         from openstategraph.api.main import build_tool_registry
 
-        registry = build_tool_registry(self._store(), "tabular-analytics")
+        registry = build_tool_registry(self._store(), "chinook-nl-to-sql")
         # Workflow tools present…
-        assert "tool.tabular-query" in registry
-        assert "tool.tabular-sample" in registry
-        # …and the defaults kept, so the intent-routed demo's Chinook
-        # bindings still resolve from any workflow context.
         assert "tool.chinook-execute-sql" in registry
+        assert "tool.chinook-get-schema" in registry
+        # …and the defaults kept, so generic bindings (the SQL Explorer
+        # family) still resolve from any workflow context.
+        assert "tool.sql-query" in registry
 
     def test_no_slug_means_the_default_registry(self) -> None:
         from openstategraph.api.main import build_tool_registry
 
         registry = build_tool_registry(self._store(), None)
-        assert "tool.chinook-execute-sql" in registry
-        assert "tool.tabular-query" not in registry
+        assert "tool.sql-query" in registry
 
     def test_an_unknown_slug_degrades_to_defaults_not_an_error(self) -> None:
         from openstategraph.api.main import build_tool_registry
@@ -119,16 +118,17 @@ class TestSlugToolBinding:
         registry = build_tool_registry(self._store(), "definitely-not-a-workflow")
         assert "tool.chinook-execute-sql" in registry
 
-    def test_a_bound_tabular_tool_resolves_with_no_warning(self) -> None:
+    def test_a_bound_chinook_tool_resolves_with_no_warning(self) -> None:
         """The end of the chain: a runtime holding the slug registry binds
-        `tool.tabular-query` silently — no `unresolved_tools` entry, which is
-        the exact signal whose absence meant 'agent answers from memory'."""
+        `tool.chinook-execute-sql` silently — no `unresolved_tools` entry,
+        which is the exact signal whose absence meant 'agent answers from
+        memory'."""
         from openstategraph.api.main import build_tool_registry
         from openstategraph.compile.node_runtime import NodeRuntime
 
-        runtime = NodeRuntime(tools=build_tool_registry(self._store(), "tabular-analytics"))
-        runtime._types["t1"] = "tool.tabular-query"
-        runtime._nodes["t1"] = {"id": "t1", "type": "tool.tabular-query", "data": {"maxRows": 5}}
+        runtime = NodeRuntime(tools=build_tool_registry(self._store(), "chinook-nl-to-sql"))
+        runtime._types["t1"] = "tool.chinook-execute-sql"
+        runtime._nodes["t1"] = {"id": "t1", "type": "tool.chinook-execute-sql", "data": {"maxRows": 5}}
         tool = runtime._bound_tool("t1")
         assert tool is not None
         assert tool.row_cap == 5

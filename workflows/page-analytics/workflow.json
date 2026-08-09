@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "name": "Page Analytics",
+  "name": "Store Analytics",
   "savedAt": "2026-08-08T22:35:57.409168+00:00",
   "document": {
     "version": 2,
-    "name": "Page Analytics",
+    "name": "Store Analytics",
     "settings": {},
     "nodes": [
       {
@@ -22,7 +22,7 @@
         "title": "Reporting House Style",
         "data": {
           "filename": "reporting-house-style.md",
-          "instruction": "House style for analytics reporting:\n- Lead with the headline number, then the comparison window.\n- Views, revenue, falloff and trends each get their own section.\n- Falloff = exit rate per funnel step (pages.funnel_step 1..3); always name the worst step.\n- Cite tables for every figure. Round money to whole USD.\n- Close with exactly three recommended actions."
+          "instruction": "House style for music-store analytics reporting:\n- Lead with the headline number, then the comparison window.\n- Revenue by genre, revenue by country, top customers and invoice trends each get their own section.\n- Cite tables for every figure. Round money to whole USD.\n- Close with exactly three recommended actions."
         },
         "position": {
           "x": 40,
@@ -48,7 +48,7 @@
             },
             {
               "id": "b-context",
-              "name": "industry_context"
+              "name": "sql_specialist"
             },
             {
               "id": "b-chat",
@@ -56,7 +56,7 @@
             }
           ],
           "fallback": "conversation",
-          "rules": "full_report: asks for the complete page-analytics report (views, revenue, falloff, trends) or to send/email the report. quick_metric: asks for one specific NEW number or comparison from our data. database_deep_dive: open-ended exploration of the analytics database. industry_context: benchmarks or facts about the wider world/industry, not our data. conversation: greetings, follow-ups about a previous answer (how did you get this, explain, why), questions about what this workflow can do, and anything that fits no other branch."
+          "rules": "full_report: asks for the complete store-analytics report (revenue by genre, revenue by country, top customers, invoice trends) or to send/email the report. quick_metric: asks for one specific NEW number or comparison from the Chinook store data. database_deep_dive: open-ended, multi-step exploration of the store database best split across a team. sql_specialist: one precise, deep SQL question - an exact query, a tricky JOIN, or schema detail - best answered by the focused NL-to-SQL workflow. conversation: greetings, follow-ups about a previous answer (how did you get this, explain, why), questions about what this workflow can do, and anything that fits no other branch."
         },
         "position": {
           "x": 360,
@@ -69,7 +69,7 @@
         "title": "Analytics Lead",
         "data": {
           "maxSubtasks": 4,
-          "instruction": "Produce the weekly page-analytics report. Split into per-specialist subtasks: traffic (views, bounce, falloff by funnel step), revenue (totals, by product and page, refunds), trends (week-over-week movement, experiments, referrer quality). Each subtask names the tables to use."
+          "instruction": "Produce the Chinook music-store analytics report. Split into per-specialist subtasks: sales (revenue totals, revenue by genre, top tracks and albums - tables Invoice, InvoiceLine, Track, Album, Genre), customers (top customers by spend, revenue by billing country - tables Customer, Invoice), trends (invoice totals over time, media-type mix, purchase falloff from tracks browsed to tracks bought - tables Invoice, InvoiceLine, MediaType, Track). Each subtask names the tables to use."
         },
         "position": {
           "x": 700,
@@ -79,9 +79,9 @@
       {
         "id": "w-traffic",
         "type": "orchestrate.worker",
-        "title": "Traffic Analyst",
+        "title": "Sales Analyst",
         "data": {
-          "role": "pageviews, sessions, bounce and funnel falloff \u2014 tables pageviews, sessions, pages"
+          "role": "revenue totals, revenue by genre, top tracks and albums - tables Invoice, InvoiceLine, Track, Album, Genre"
         },
         "position": {
           "x": 1040,
@@ -91,9 +91,9 @@
       {
         "id": "w-revenue",
         "type": "orchestrate.worker",
-        "title": "Revenue Analyst",
+        "title": "Customer Analyst",
         "data": {
-          "role": "revenue totals, product mix, refunds \u2014 tables revenue, pages, sessions"
+          "role": "top customers by spend, revenue by billing country - tables Customer, Invoice"
         },
         "position": {
           "x": 1040,
@@ -106,7 +106,7 @@
         "title": "Trends Analyst",
         "data": {
           "default": true,
-          "role": "movement over time, experiments, referrer quality \u2014 tables sessions, experiments, referrers; may check the web for context"
+          "role": "invoice totals over time, media-type mix - tables Invoice, InvoiceLine, MediaType; may check the web for music-industry context"
         },
         "position": {
           "x": 1040,
@@ -117,7 +117,7 @@
         "id": "report1",
         "type": "function.format_report",
         "data": {
-          "reportTitle": "Weekly Page Analytics"
+          "reportTitle": "Chinook Store Analytics"
         },
         "position": {
           "x": 1380,
@@ -128,7 +128,7 @@
         "id": "grader-report",
         "type": "route.grader",
         "data": {
-          "criteria": "- Views, revenue, falloff and trends must each appear with figures drawn from tool results, tables named.\n- Falloff must identify the worst funnel step.\n- No fabricated numbers; unknowns are stated as unknown.\n- Ends with exactly three recommended actions.",
+          "criteria": "- Revenue by genre, revenue by country, top customers and invoice trends must each appear with figures drawn from tool results, tables named.\n- No fabricated numbers; unknowns are stated as unknown.\n- Ends with exactly three recommended actions.",
           "criteriaMode": "extend",
           "maxAttempts": 2
         },
@@ -141,7 +141,7 @@
         "id": "approve1",
         "type": "human.approval",
         "data": {
-          "message": "Review the analytics report before it is emailed. Check the cited figures."
+          "message": "Review the store-analytics report before it is emailed. Check the cited figures."
         },
         "position": {
           "x": 2060,
@@ -153,7 +153,7 @@
         "type": "agent.llm",
         "title": "Report Dispatcher",
         "data": {
-          "systemPrompt": "You dispatch the human-approved analytics report by email. Call send_email exactly once. The body MUST be the approved report text exactly as it was given to you - copied verbatim, every figure unchanged. Never rewrite, summarize, or invent numbers: if a figure is not in the approved report it must not be in the email. Subject: 'Weekly Page Analytics - <the report's own headline figure>'. Afterwards tell the user whether delivery was real or a dry run, quoting the tool result.",
+          "systemPrompt": "You dispatch the human-approved store-analytics report by email. Call send_email exactly once. The body MUST be the approved report text exactly as it was given to you - copied verbatim, every figure unchanged. Never rewrite, summarize, or invent numbers: if a figure is not in the approved report it must not be in the email. Subject: 'Chinook Store Analytics - <the report's own headline figure>'. Afterwards tell the user whether delivery was real or a dry run, quoting the tool result.",
           "rubric": "The email body is the approved report verbatim - every figure identical, nothing invented - and send_email was called exactly once."
         },
         "position": {
@@ -166,7 +166,7 @@
         "type": "agent.llm",
         "title": "Metric Answerer",
         "data": {
-          "systemPrompt": "Answer one specific page-analytics question with a SQL query. List tables/schema first if unsure. One number, its window, and the table it came from.",
+          "systemPrompt": "Answer one specific Chinook music-store question with a SQL query. List tables/schema first if unsure. One number, its window, and the table it came from.",
           "summarize": true
         },
         "position": {
@@ -178,7 +178,7 @@
         "id": "grader-metric",
         "type": "route.grader",
         "data": {
-          "criteria": "- The number must come from a SQL tool result, table named.\n- The covered date range must be stated.",
+          "criteria": "- The number must come from a SQL tool result, table named.\n- When the question involves dates, the covered invoice date range must be stated.",
           "criteriaMode": "replace",
           "maxAttempts": 2
         },
@@ -190,10 +190,10 @@
       {
         "id": "team1",
         "type": "team.workflow",
-        "title": "Page Metrics Team",
+        "title": "Chinook Metrics Team",
         "data": {
-          "workflow": "page-metrics-team",
-          "outcome": "Grader-approved figures from the page-analytics database, tables named, date range stated."
+          "workflow": "chinook-metrics-team",
+          "outcome": "Grader-approved figures from the Chinook database, tables named, JOINs following the declared foreign keys."
         },
         "position": {
           "x": 700,
@@ -204,18 +204,19 @@
         "id": "wf-research",
         "type": "workflow.subgraph",
         "data": {
-          "workflow": "research-team"
+          "workflow": "chinook-nl-to-sql"
         },
         "position": {
           "x": 700,
           "y": 1060
-        }
+        },
+        "title": "Chinook NL-to-SQL"
       },
       {
         "id": "t-list",
         "type": "tool.sql-list-tables",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite"
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
         },
         "position": {
           "x": 1380,
@@ -226,7 +227,7 @@
         "id": "t-schema",
         "type": "tool.sql-get-schema",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite"
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
         },
         "position": {
           "x": 1600,
@@ -237,7 +238,7 @@
         "id": "t-query",
         "type": "tool.sql-query",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite",
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite",
           "maxRows": 200
         },
         "position": {
@@ -279,7 +280,7 @@
         "type": "agent.llm",
         "title": "Analytics Concierge",
         "data": {
-          "systemPrompt": "You are the Page Analytics assistant's conversational side. Use the conversation history to answer follow-ups and meta questions. When asked how a previous answer was produced: figures come from read-only SQL queries against this workflow's analytics SQLite (tables: pages, referrers, experiments, sessions, pageviews, revenue); industry facts come from the research team's web search. Answer greetings briefly and offer the report, a quick metric, a deep dive, or industry context. Never invent figures - if a new number is wanted, say to ask for it directly so the data branch runs."
+          "systemPrompt": "You are the Store Analytics assistant's conversational side. Use the conversation history to answer follow-ups and meta questions. When asked how a previous answer was produced: figures come from read-only SQL queries against the shared Chinook music-store SQLite (tables: Artist, Album, Track, Genre, MediaType, Customer, Invoice, InvoiceLine, Playlist, Employee); deep SQL questions go through the focused NL-to-SQL workflow; the trends analyst may add web-search context. Answer greetings briefly and offer the report, a quick metric, a team deep dive, or a precise SQL answer. Never invent figures - if a new number is wanted, say to ask for it directly so the data branch runs."
         },
         "position": {
           "x": 700,

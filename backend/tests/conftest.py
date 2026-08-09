@@ -2,10 +2,10 @@
 
 Lives in `conftest.py` so pytest puts it on the path for every test module
 (the suite deliberately has no `__init__.py` — see `pytest.ini`), and so
-`RespondingModel` has one owner. It previously had five, in
-`test_orchestrator_graph`, `test_intent_routed_workflow`,
-`test_intent_routed_demo_file`, `test_chinook_demo_file` and
-`test_code_workshop_file`, each carrying a docstring pointing at one of the
+`RespondingModel` has one owner. It previously had five copies across the
+graph-shape test modules (`test_orchestrator_graph`,
+`test_intent_routed_workflow`, `test_chinook_demo_file` and two since-removed
+workflow-file suites), each carrying a docstring pointing at one of the
 others as the original. They had already drifted: two dropped the `calls`
 list, one dropped `bind_tools`, and only one still recorded *why* the fake
 is predicate-driven. That is the failure mode the rule against duplicated
@@ -78,7 +78,7 @@ class RespondingModel(GenericFakeChatModel):
 
         Every caller needs this for the same reason, stated once here rather
         than five times: `create_agent` calls `bind_tools` for any agent
-        given tools (the Chinook and workshop documents bind real ones), and
+        given tools (the Chinook document binds real ones), and
         `create_deep_agent` calls it *even with* `tools=[]`, because it
         always attaches its own filesystem/subagent tools. The fake still
         answers purely from message content; it never looks at what was

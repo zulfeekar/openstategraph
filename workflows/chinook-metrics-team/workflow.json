@@ -1,10 +1,11 @@
 {
   "version": 1,
-  "name": "Page Metrics Team",
+  "name": "Chinook Metrics Team",
+  "hidden": true,
   "savedAt": "2026-08-08T22:35:17.523136+00:00",
   "document": {
     "version": 2,
-    "name": "Page Metrics Team",
+    "name": "Chinook Metrics Team",
     "settings": {},
     "nodes": [
       {
@@ -19,7 +20,7 @@
       {
         "id": "lead1",
         "type": "orchestrate.supervisor",
-        "title": "Page Metrics Team Lead",
+        "title": "Chinook Metrics Team Lead",
         "data": {
           "maxSubtasks": 3,
           "instruction": "Split the task into the smallest set of independent subtasks."
@@ -35,7 +36,7 @@
         "title": "Generalist",
         "data": {
           "default": true,
-          "role": "explores the page-analytics SQLite: pages, referrers, experiments, sessions, pageviews, revenue; reads schemas and JOIN rules, runs read-only queries"
+          "role": "explores the Chinook music-store SQLite: Artist, Album, Track, Genre, MediaType, Customer, Invoice, InvoiceLine, Playlist, Employee; reads schemas and JOIN rules, runs read-only queries"
         },
         "position": {
           "x": 700,
@@ -46,7 +47,7 @@
         "id": "join1",
         "type": "function.format_report",
         "data": {
-          "reportTitle": "Page Metrics Team findings"
+          "reportTitle": "Chinook Metrics Team findings"
         },
         "position": {
           "x": 1040,
@@ -57,7 +58,7 @@
         "id": "grader1",
         "type": "route.grader",
         "data": {
-          "criteria": "- Every figure must come from a SQL tool result against the page-analytics database, with the table named.\n- JOINs must follow the schema's declared foreign keys.\n- The final answer must state the date range it covers.",
+          "criteria": "- Every figure must come from a SQL tool result against the Chinook database, with the table named.\n- JOINs must follow the schema's declared foreign keys.\n- The final answer must state the invoice date range it covers, when dates are involved.",
           "criteriaMode": "extend",
           "maxAttempts": 2
         },
@@ -79,7 +80,7 @@
         "id": "t-list",
         "type": "tool.sql-list-tables",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite"
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
         },
         "position": {
           "x": 700,
@@ -90,7 +91,7 @@
         "id": "t-schema",
         "type": "tool.sql-get-schema",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite"
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
         },
         "position": {
           "x": 940,
@@ -101,7 +102,7 @@
         "id": "t-query",
         "type": "tool.sql-query",
         "data": {
-          "database": "page-analytics/data/analytics.sqlite",
+          "database": "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite",
           "maxRows": 100
         },
         "position": {

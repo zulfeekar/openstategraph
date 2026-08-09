@@ -1,9 +1,0 @@
-# Page Metrics Team (a Team)
-
-An OpenStateGraph **team package** — supervisor + default worker + a grader whose
-criteria are the team's outcome contract. Scaffolded by `scripts/new_team.py`.
-
-- **Mount it**: add a **Team** node in any workflow with slug `page-metrics-team`.
-- **Outcome**: edit `grader1`'s criteria — that is what "done" means here.
-- **Members**: add workers (each a new archetype by title) and bind tools from
-  `tools/`; `middlewares/` and `functions/` are discovered by convention.
