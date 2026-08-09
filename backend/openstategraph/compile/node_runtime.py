@@ -14,6 +14,7 @@ the other works.
 
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -278,6 +279,45 @@ def _thread_question(state: RunState, limit: int = 6) -> str:
     )
 
 
+def apply_mount_overrides(
+    child_document: dict[str, Any], overrides: Any
+) -> tuple[dict[str, Any], list[str]]:
+    """Per-mount configuration for a shared package (docs/decisions/mount-overrides.md).
+
+    ``overrides`` is the mount node's ``data.overrides``:
+    ``{"<childNodeId>": {"<fieldKey>": value}}`` — plain JSON keyed by the
+    child document's own vocabulary. Applied shallowly, per field, to a COPY;
+    the package on disk is the single source of truth and the compile seam
+    stays one-directional. An unknown child node id warns loudly and runs on
+    the package default — a typo degrading audibly beats a run that cannot
+    start.
+    """
+    if not overrides:
+        return child_document, []
+    if not isinstance(overrides, dict):
+        return child_document, [
+            f"overrides must be a mapping of child node id -> fields, got {type(overrides).__name__}"
+        ]
+
+    warnings: list[str] = []
+    document = copy.deepcopy(child_document)
+    by_id = {n.get("id"): n for n in document.get("nodes") or []}
+    for node_id, fields in overrides.items():
+        target = by_id.get(node_id)
+        if target is None:
+            warnings.append(
+                f'override targets unknown child node "{node_id}" — the package default ran'
+            )
+            continue
+        if not isinstance(fields, dict):
+            warnings.append(
+                f'override for "{node_id}" must be a mapping of field -> value — ignored'
+            )
+            continue
+        target.setdefault("data", {}).update(fields)
+    return document, warnings
+
+
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
@@ -416,6 +456,9 @@ class NodeRuntime:
         #: was not.
         self.unresolved_functions: list[str] = []
         self.unresolved_subgraphs: list[str] = []
+        #: Per-mount override problems (unknown child node id, wrong shape) —
+        #: surfaced through `runtime_warnings` beside unresolved tools.
+        self.override_warnings: list[str] = []
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             "input.markdown": self._input,
@@ -1175,6 +1218,14 @@ class NodeRuntime:
             except Exception:
                 child_document = None
             if child_document is not None:
+                # Per-mount overrides (docs/decisions/mount-overrides.md):
+                # this mount's own configuration, merged onto a copy of the
+                # shared package before the child compiles.
+                child_document, mount_warnings = apply_mount_overrides(
+                    child_document, data.get("overrides")
+                )
+                for warning in mount_warnings:
+                    self.override_warnings.append(f"{slug or node_id}: {warning}")
                 child_assets = PackageAssets(
                     tools=self.tools,
                     functions=self.functions,

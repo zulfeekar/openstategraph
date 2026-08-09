@@ -104,5 +104,7 @@ def runtime_warnings(runtime: Any) -> list[str]:
         warnings.append(
             f'Subgraph workflow "{slug_name}" could not be loaded — the node produced nothing.'
         )
+    for override_warning in getattr(runtime, "override_warnings", []):
+        warnings.append(f"Mount override — {override_warning}")
     return warnings
 
