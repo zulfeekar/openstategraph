@@ -2,6 +2,7 @@ import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react';
 import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
 import { Icon } from './Icon';
+import { useFieldControl, type ControlSize } from './Field';
 import './Select.css';
 
 export interface SelectOption<T extends string = string> {
@@ -14,19 +15,36 @@ export interface SelectOption<T extends string = string> {
 
 interface SelectProps<T extends string> extends Omit<
   SelectHTMLAttributes<HTMLSelectElement>,
-  'children' | 'value' | 'onChange'
+  'children' | 'value' | 'onChange' | 'size'
 > {
   options: readonly SelectOption<T>[];
   value: T;
   onValueChange: (value: T) => void;
   /** Glyph shown inside the control, left of the value. */
   leading?: ReactNode;
+  /** Matches the shared control scale, so this can line up with a button. */
+  size?: ControlSize;
+  invalid?: boolean;
 }
 
 export const Select = forwardRef(function Select<T extends string>(
-  { options, value, onValueChange, leading, className, disabled, ...rest }: SelectProps<T>,
+  {
+    options,
+    value,
+    onValueChange,
+    leading,
+    size = 'md',
+    invalid,
+    className,
+    disabled,
+    ...rest
+  }: SelectProps<T>,
   ref: React.Ref<HTMLSelectElement>,
 ) {
+  const control = useFieldControl({
+    describedBy: rest['aria-describedby'],
+    invalid,
+  });
   // Preserve declaration order while collecting groups, so the rendered
   // popup matches the order the caller registered options in.
   const groups: { name: string | undefined; options: readonly SelectOption<T>[] }[] = [];
@@ -40,7 +58,11 @@ export const Select = forwardRef(function Select<T extends string>(
   }
 
   return (
-    <div className={clsx('select', className)} data-disabled={disabled || undefined}>
+    <div
+      className={clsx('select', size !== 'md' && `select--${size}`, className)}
+      data-disabled={disabled || undefined}
+      data-invalid={control.invalid || undefined}
+    >
       {leading ? <span className="select__leading">{leading}</span> : null}
       <select
         ref={ref}
@@ -49,6 +71,8 @@ export const Select = forwardRef(function Select<T extends string>(
         disabled={disabled}
         onChange={(event) => onValueChange(event.target.value as T)}
         {...rest}
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid || undefined}
       >
         {groups.map((group, index) =>
           group.name ? (

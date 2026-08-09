@@ -97,9 +97,13 @@ table {
   border-width: 0;
 }
 
-/* A single, consistent focus ring for every interactive surface. */
+/* A single, consistent focus ring for every interactive surface.
+ *
+ * The same width, offset and tint the input and select halos use, so a
+ * Tab through a toolbar and a Tab through a form draw the same shape.
+ * See `--focus-ring-*` in tokens.css. */
 :focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-soft);
   outline-offset: var(--focus-ring-offset);
 }
 

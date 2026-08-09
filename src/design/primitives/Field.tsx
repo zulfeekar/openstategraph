@@ -1,9 +1,12 @@
 import {
+  createContext,
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   type InputHTMLAttributes,
   type ReactNode,
@@ -12,9 +15,29 @@ import {
 import clsx from 'clsx';
 import './Field.css';
 
+/** The three sizes every control in this system shares. */
+export type ControlSize = 'sm' | 'md' | 'lg';
+
 /* ------------------------------------------------------------------ *
  * Field — the label / control / hint shell.
  * ------------------------------------------------------------------ */
+
+/**
+ * What a `Field` tells the control inside it.
+ *
+ * The hint and the error are rendered by the shell, so only the shell
+ * knows their ids — and without them the control has nothing to point
+ * `aria-describedby` at, which is how an error message ends up visible
+ * on screen and absent from the accessibility tree. Publishing them here
+ * lets `TextInput`, `TextArea` and `Select` wire themselves up, while an
+ * explicit prop on the call site still wins.
+ */
+interface FieldContextValue {
+  describedBy: string | undefined;
+  invalid: boolean;
+}
+
+const FieldContext = createContext<FieldContextValue | null>(null);
 
 interface FieldProps {
   label?: string;
@@ -37,20 +60,38 @@ export function Field({
   className,
   children,
 }: FieldProps) {
+  const detailId = useId();
+
   const caption = label ? (
     <>
-      <span className="field__label">
+      <span className="field__label" data-error={error ? 'true' : undefined}>
         <span>{label}</span>
         {labelValue != null ? <span className="field__label-value">{labelValue}</span> : null}
       </span>
     </>
   ) : null;
 
+  // Error replaces hint rather than stacking below it: node bodies are
+  // height-constrained and sit on a canvas, so growing a field by a line
+  // would shove every node beneath it down the screen.
   const detail = error ? (
-    <span className="field__error">{error}</span>
+    <span className="field__error" id={detailId}>
+      {error}
+    </span>
   ) : hint ? (
-    <span className="field__hint">{hint}</span>
+    <span className="field__hint" id={detailId}>
+      {hint}
+    </span>
   ) : null;
+
+  const hasDetail = Boolean(error ?? hint);
+  const context = useMemo<FieldContextValue>(
+    () => ({
+      describedBy: hasDetail ? detailId : undefined,
+      invalid: Boolean(error),
+    }),
+    [hasDetail, detailId, error],
+  );
 
   // With an explicit `htmlFor`, the label points at a specific control.
   // Without one, the field renders *as* a label and wraps its control, which
@@ -61,7 +102,7 @@ export function Field({
     return (
       <label className={clsx('field', className)}>
         {caption}
-        {children}
+        <FieldContext.Provider value={context}>{children}</FieldContext.Provider>
         {detail}
       </label>
     );
@@ -70,15 +111,31 @@ export function Field({
   return (
     <div className={clsx('field', className)}>
       {label ? (
-        <label className="field__label" htmlFor={htmlFor}>
+        <label className="field__label" htmlFor={htmlFor} data-error={error ? 'true' : undefined}>
           <span>{label}</span>
           {labelValue != null ? <span className="field__label-value">{labelValue}</span> : null}
         </label>
       ) : null}
-      {children}
+      <FieldContext.Provider value={context}>{children}</FieldContext.Provider>
       {detail}
     </div>
   );
+}
+
+/**
+ * The `aria-describedby` / `aria-invalid` a control should carry, given
+ * what its surrounding `Field` is showing and what the caller asked for.
+ * An explicit prop always wins; the field only fills a gap.
+ */
+export function useFieldControl(explicit: {
+  describedBy?: string | undefined;
+  invalid?: boolean | undefined;
+}): { describedBy: string | undefined; invalid: boolean | undefined } {
+  const field = useContext(FieldContext);
+  return {
+    describedBy: explicit.describedBy ?? field?.describedBy,
+    invalid: explicit.invalid ?? field?.invalid,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -90,20 +147,34 @@ interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'si
   suffix?: ReactNode;
   invalid?: boolean;
   mono?: boolean;
+  /** Matches the shared control scale, so this can line up with a button. */
+  size?: ControlSize;
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { prefix, suffix, invalid, mono, className, disabled, ...rest },
+  { prefix, suffix, invalid, mono, size = 'md', className, disabled, ...rest },
   ref,
 ) {
+  const control = useFieldControl({
+    describedBy: rest['aria-describedby'],
+    invalid,
+  });
+
   return (
     <div
-      className={clsx('input', mono && 'input--mono', className)}
-      data-invalid={invalid || undefined}
+      className={clsx('input', size !== 'md' && `input--${size}`, mono && 'input--mono', className)}
+      data-invalid={control.invalid || undefined}
       data-disabled={disabled || undefined}
     >
       {prefix ? <span className="input__prefix">{prefix}</span> : null}
-      <input ref={ref} className="input__control" disabled={disabled} {...rest} />
+      <input
+        ref={ref}
+        className="input__control"
+        disabled={disabled}
+        {...rest}
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid || undefined}
+      />
       {suffix ? <span className="input__suffix">{suffix}</span> : null}
     </div>
   );
@@ -125,6 +196,10 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   { invalid, mono, minRows = 2, className, disabled, value, onChange, ...rest },
   ref,
 ) {
+  const control = useFieldControl({
+    describedBy: rest['aria-describedby'],
+    invalid,
+  });
   const innerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const resize = useCallback(() => {
@@ -150,7 +225,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   return (
     <div
       className={clsx('input', 'input--textarea', mono && 'input--mono', className)}
-      data-invalid={invalid || undefined}
+      data-invalid={control.invalid || undefined}
       data-disabled={disabled || undefined}
     >
       <textarea
@@ -168,6 +243,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
           resize();
         }}
         {...rest}
+        aria-describedby={control.describedBy}
+        aria-invalid={control.invalid || undefined}
       />
     </div>
   );

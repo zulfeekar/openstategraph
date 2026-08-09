@@ -17,6 +17,12 @@ export type IconSize = keyof typeof ICON_SIZE;
 
 interface IconProps {
   glyph: LucideIcon;
+  /**
+   * Omit it and the icon takes `md`, but *yields* — a control that knows
+   * better (a small button, a badge) may size it down from CSS. Name a
+   * size and it is stamped with `data-icon-size`, which those rules skip.
+   * So a deliberate choice always wins and an absent one adapts.
+   */
   size?: IconSize;
   /** Stroke weight. 1.75 reads crisper than lucide's default 2 at 14–16px. */
   strokeWidth?: number;
@@ -25,9 +31,14 @@ interface IconProps {
   label?: string;
 }
 
-export function Icon({ glyph, size = 'md', strokeWidth = 1.75, className, label }: IconProps) {
+export function Icon({ glyph, size, strokeWidth = 1.75, className, label }: IconProps) {
+  // Spread rather than declared inline: lucide's prop type has no index
+  // signature, so an inline `data-*` key trips the excess-property check.
+  const sizeMarker = size ? { 'data-icon-size': size } : {};
+
   return createElement(glyph, {
-    size: ICON_SIZE[size],
+    ...sizeMarker,
+    size: ICON_SIZE[size ?? 'md'],
     strokeWidth,
     className,
     'aria-hidden': label ? undefined : true,

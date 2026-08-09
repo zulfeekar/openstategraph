@@ -3,7 +3,7 @@
 
 export { Button, IconButton, type ButtonVariant, type ButtonSize } from './Button';
 export { Icon, ICON_SIZE, type IconSize } from './Icon';
-export { Field, TextInput, TextArea, DisplayRow, useFieldId } from './Field';
+export { Field, TextInput, TextArea, DisplayRow, useFieldId, type ControlSize } from './Field';
 export { Select, type SelectOption } from './Select';
 export { Slider } from './Slider';
 export { Tooltip } from './Tooltip';

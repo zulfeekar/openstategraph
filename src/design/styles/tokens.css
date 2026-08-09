@@ -84,6 +84,18 @@
   --space-10: 2.5rem; /* 40px */
   --space-12: 3rem; /* 48px */
 
+  /* ---------- Control geometry ----------
+   * One height per size step, shared by *every* control class — button,
+   * icon button, text input, select. shadcn's rule, at our density: a
+   * button beside an input must agree on its baseline, or every toolbar
+   * and inspector row is 2px out of true.
+   *
+   * A control that varies with its content (textarea) opts out; a control
+   * that sits in a row does not. */
+  --control-height-sm: 24px;
+  --control-height-md: 28px;
+  --control-height-lg: 32px;
+
   /* ---------- Radius ---------- */
   --radius-xs: 3px;
   --radius-sm: 5px;
@@ -181,9 +193,32 @@
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
 
-  /* ---------- Focus ring ---------- */
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
+  /* ---------- Focus ring ----------
+   * One ring for the whole product. Buttons, menu items and links get it
+   * as an `outline`; inputs and selects — whose focus lives on a child —
+   * get the identical geometry as a `box-shadow` halo. Two mechanisms,
+   * deliberately one appearance.
+   *
+   * Offset is 0 on purpose: an offset ring is clipped by the scrolling
+   * panels and node cards these controls live inside.
+   *
+   * `--color-focus-ring` is the theme's colour and is not ours to change;
+   * width, offset and alpha are geometry and are. */
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 0px;
+  --focus-ring-alpha: 45%;
+  --focus-ring-soft: color-mix(in srgb, var(--color-focus-ring) var(--focus-ring-alpha), transparent);
+
+  /* An errored control focuses to a danger-tinted ring rather than the
+   * ordinary blue one, so "focused" never paints over "wrong". Weaker
+   * than the focus ring, matching the invalid convention. */
+  --invalid-ring-alpha: 30%;
+  --invalid-ring-soft: color-mix(in srgb, var(--color-danger) var(--invalid-ring-alpha), transparent);
+
+  /* ---------- Disabled ----------
+   * One value, everywhere. Four different opacities across four controls
+   * is how a disabled toolbar ends up looking like four kinds of broken. */
+  --disabled-opacity: 0.5;
 
   /* ---------- Z-index — one ordered list, no magic numbers ---------- */
   --z-canvas: 0;

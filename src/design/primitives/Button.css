@@ -1,5 +1,5 @@
 .btn {
-  --btn-height: 28px;
+  --btn-height: var(--control-height-md);
   --btn-padding-x: var(--space-3);
   --btn-gap: var(--space-1-5);
   --btn-radius: var(--radius-md);
@@ -21,12 +21,35 @@
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: var(--disabled-opacity);
+}
+
+/* Glyphs inside a control never intercept the click that was aimed at the
+ * control, and never absorb the flex squeeze meant for the label. */
+.btn svg,
+.icon-btn svg {
+  flex: none;
+  pointer-events: none;
+}
+
+/* A default icon size that *yields* to an explicit one. `Icon` stamps
+ * `data-icon-size` only when the caller named a size, so a small control
+ * scales its glyphs down automatically while every deliberate choice
+ * survives untouched. (shadcn spells this `:not([class*='size-'])`.) */
+.btn--sm svg:not([data-icon-size]),
+.icon-btn--sm svg:not([data-icon-size]) {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-btn--xs svg:not([data-icon-size]) {
+  width: 12px;
+  height: 12px;
 }
 
 /* ---------- Sizes ---------- */
 .btn--sm {
-  --btn-height: 24px;
+  --btn-height: var(--control-height-sm);
   --btn-padding-x: var(--space-2);
   --btn-gap: var(--space-1);
   --btn-radius: var(--radius-sm);
@@ -34,7 +57,7 @@
 }
 
 .btn--lg {
-  --btn-height: 32px;
+  --btn-height: var(--control-height-lg);
   --btn-padding-x: var(--space-3-5, 14px);
 }
 
@@ -97,7 +120,7 @@
 
 /* ---------- Icon-only ---------- */
 .icon-btn {
-  --icon-btn-size: 28px;
+  --icon-btn-size: var(--control-height-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -114,11 +137,11 @@
   border-radius: var(--radius-sm);
 }
 .icon-btn--sm {
-  --icon-btn-size: 24px;
+  --icon-btn-size: var(--control-height-sm);
   border-radius: var(--radius-sm);
 }
 .icon-btn--lg {
-  --icon-btn-size: 32px;
+  --icon-btn-size: var(--control-height-lg);
 }
 
 .icon-btn:hover:not(:disabled) {
@@ -129,7 +152,7 @@
   background: var(--color-bg-active);
 }
 .icon-btn:disabled {
-  opacity: 0.35;
+  opacity: var(--disabled-opacity);
 }
 .icon-btn[data-state='on'] {
   background: var(--color-bg-active);

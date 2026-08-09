@@ -1,12 +1,39 @@
+/* Height, radius, focus halo and disabled treatment are the input's — a
+ * select is an input that opens a list, and looking like a different
+ * species of control is the fastest way to make a form look assembled
+ * from parts. */
 .select {
+  --select-height: var(--control-height-md);
+  --select-padding-y: var(--space-1);
+  --select-padding-x: var(--space-2-5);
+  --select-radius: var(--radius-md);
+
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 30px;
-  border-radius: var(--radius-md);
+  min-height: var(--select-height);
+  border-radius: var(--select-radius);
   background: var(--color-bg-surface);
   box-shadow: inset 0 0 0 1px var(--color-border-default);
   transition: var(--transition-colors);
+}
+
+.select--sm {
+  --select-height: var(--control-height-sm);
+  --select-padding-y: var(--space-0-5);
+  --select-padding-x: var(--space-2);
+  --select-radius: var(--radius-sm);
+}
+
+.select--sm .select__control {
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.select--lg {
+  --select-height: var(--control-height-lg);
+  --select-padding-y: var(--space-1-5);
+  --select-padding-x: var(--space-3);
 }
 
 .select:hover {
@@ -16,12 +43,28 @@
 .select:focus-within {
   box-shadow:
     inset 0 0 0 1px var(--color-border-focus),
-    0 0 0 3px color-mix(in srgb, var(--color-border-focus) 18%, transparent);
+    0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
+}
+
+.select[data-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--color-danger);
+}
+
+.select[data-invalid='true']:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-danger),
+    0 0 0 var(--focus-ring-width) var(--invalid-ring-soft);
 }
 
 .select[data-disabled='true'] {
   background: var(--color-bg-subtle);
-  opacity: 0.7;
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity);
+}
+
+.select svg {
+  flex: none;
+  pointer-events: none;
 }
 
 /* The native <select> stays the interactive element — free keyboard
@@ -31,7 +74,8 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: var(--space-1-5) var(--space-7) var(--space-1-5) var(--space-2-5);
+  padding: var(--select-padding-y) var(--space-7) var(--select-padding-y)
+    var(--select-padding-x);
   font: var(--type-body-md);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-tight);
@@ -41,7 +85,7 @@
 }
 
 .select__control:disabled {
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .select__control option {
@@ -62,7 +106,7 @@
 .select__leading {
   display: flex;
   flex: none;
-  padding-left: var(--space-2-5);
+  padding-left: var(--select-padding-x);
   color: var(--accent-on-tint, var(--color-text-tertiary));
 }
 

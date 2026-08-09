@@ -49,6 +49,19 @@
   background: var(--color-bg-muted);
   color: var(--color-text-secondary);
   white-space: nowrap;
+  /* A badge labels the thing beside it; it must not be squeezed by it. */
+  flex: none;
+}
+
+.badge svg,
+.icon-tile svg {
+  flex: none;
+  pointer-events: none;
+}
+
+.badge > svg:not([data-icon-size]) {
+  width: 12px;
+  height: 12px;
 }
 
 .badge--accent {
