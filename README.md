@@ -332,6 +332,10 @@ memory.
 Issues and pull requests are welcome. The house style is TDD, and `core/` is
 pure TypeScript with no excuse for untested logic.
 
+- [**docs/**](docs/README.md) — the documentation set: [getting
+  started](docs/getting-started.md), the seven [patterns](docs/patterns.md),
+  [building an atom](docs/building-an-atom.md) (a node, both halves, end to
+  end) and the [ports and edges](docs/ports-and-edges.md) reference
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — setup, the test gate, and how to add
   a node type, tool, provider or workflow package
 - [**CLAUDE.md**](CLAUDE.md) — the architecture contract. Read
