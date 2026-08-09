@@ -152,3 +152,53 @@ describe('stepLabel', () => {
     expect(stepLabel('wf_music')).toBe('wf_music');
   });
 });
+
+describe('spawn rows', () => {
+  const spawnRow = (patch: Partial<TimelineRow> & { label: string }): TimelineRow => ({
+    node: 'node:orch',
+    taskId: null,
+    internal: false,
+    namespace: [],
+    durationMs: 0,
+    ...patch,
+    spawn: { kind: 'fanout', label: patch.label, instruction: 'do a thing' },
+  });
+
+  it('never gets a bar of its own', () => {
+    const { steps } = buildTimeline([
+      row({ node: 'node:orch', durationMs: 10 }),
+      spawnRow({ label: 'researcher', taskId: 't1' }),
+    ]);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.label).toBe('orch');
+  });
+
+  it('names a dispatched worker lane after the child it announced', () => {
+    const { steps } = buildTimeline([
+      spawnRow({ label: 'researcher', taskId: 't1' }),
+      spawnRow({ label: 'analyst', taskId: 't2' }),
+      row({ node: 'node:worker', taskId: 't1', durationMs: 20 }),
+      row({ node: 'node:worker', taskId: 't2', durationMs: 30 }),
+    ]);
+    expect(steps.map((s) => s.label)).toEqual(['researcher', 'analyst']);
+  });
+
+  it('names a subgraph lane after the mounted child, not the checkpoint id', () => {
+    const { steps } = buildTimeline([
+      spawnRow({ label: 'wf_music', namespace: ['wf_music:abc123'] }),
+      row({ node: 'node:a', namespace: ['wf_music:abc123'], durationMs: 20 }),
+      row({ node: 'node:b', namespace: ['wf_music:abc123'], durationMs: 5 }),
+    ]);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.label).toBe('wf_music');
+    expect(steps[0]!.namespace).toBe('wf_music:abc123');
+    expect(steps[0]!.count).toBe(2);
+  });
+
+  it('leaves a lane with the bare namespace when nothing announced it', () => {
+    const { steps } = buildTimeline([
+      row({ node: 'node:a', namespace: ['wf_music:abc123'], durationMs: 20 }),
+    ]);
+    expect(steps[0]!.label).toBe('wf_music:abc123');
+  });
+});

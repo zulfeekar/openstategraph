@@ -162,6 +162,13 @@
   }
   .steps:empty { display: none; }
   .steps div { font-variant-numeric: tabular-nums; }
+  /* A spawn is an event in the run, not a step of it — indented under the
+     node that spawned, and clipped to one line however long the task is. */
+  .steps div.spawn {
+    padding-inline-start: 12px;
+    border-inline-start: 1px solid var(--line);
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
 
   /* ---------- Read-only run timeline ---------- */
   details.tl { margin: 0 0 var(--space-2); font-size: var(--font-size-12); }
@@ -452,7 +459,8 @@ function finishFlow() {
  * Same folding rules as the editor's `buildTimeline`, and the same honesty
  * about the numbers: a step's duration is the gap until the next frame, since
  * the stream reports a node only after it finishes. */
-function renderTimeline(el, rows) {
+function renderTimeline(el, rows, names) {
+  names = names || {};
   const box = el.querySelector("details.tl");
   const body = box.querySelector(".tl-body");
   const steps = [];
@@ -464,7 +472,8 @@ function renderTimeline(el, rows) {
     if (row.internal) { if (last) { last.ms += d; last.internal++; } clock += d; continue; }
     const ns = (row.namespace && row.namespace[0]) || null;
     if (ns && last && last.ns === ns && last.taskId === row.taskId) { last.ms += d; last.count++; clock += d; continue; }
-    const label = ns || row.node.replace(/^node:/, "");
+    const label = (row.taskId && names["task:" + row.taskId])
+      || (ns && names["ns:" + ns]) || ns || row.node.replace(/^node:/, "");
     visits[label] = (visits[label] || 0) + 1;
     steps.push({ label, ns, taskId: row.taskId, ms: d, start: clock, count: 1, internal: 0, visit: visits[label] });
     clock += d;
@@ -541,6 +550,10 @@ async function stream(path, body, el) {
   // timing of its own. Ephemeral: this list lives with the turn and is never
   // stored anywhere.
   const tlRows = []; let lastFrameAt = performance.now();
+  // Child names harvested from `spawn` events, keyed by whichever handle the
+  // child's own frames carry (`taskId` for a Send-dispatched worker, the
+  // namespace head for a mounted subgraph).
+  const tlNames = {};
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   for (;;) {
     const { done, value } = await reader.read();
@@ -557,7 +570,7 @@ async function stream(path, body, el) {
             const now = performance.now();
             tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], ms: now - lastFrameAt });
             lastFrameAt = now;
-            renderTimeline(el, tlRows);
+            renderTimeline(el, tlRows, tlNames);
             // A frame from inside a subgraph names a node that does not exist
             // in *this* diagram — the diagram shows the mounted workflow as a
             // single box. Highlight that box instead, so a run that spends 45
@@ -568,7 +581,11 @@ async function stream(path, body, el) {
             if (d.internal) {
               // Internal machinery collapses to a live counter on its owning
               // step — a 20-call tool loop is one line, not twenty.
-              const last = steps.lastElementChild;
+              // The *last real step*, not the last row: a spawn row sits in
+              // this strip too, and charging a tool loop's steps to it would
+              // relabel the announcement as work.
+              let last = steps.lastElementChild;
+              while (last && last.classList.contains("spawn")) last = last.previousElementSibling;
               if (last) {
                 const n = (Number(last.dataset.internal) || 0) + 1;
                 last.dataset.internal = String(n);
@@ -581,6 +598,22 @@ async function stream(path, body, el) {
               row.textContent = base;
               steps.appendChild(row);
             }
+            el.scrollIntoView({ block: "end" });
+          } else if (event === "spawn") {
+            // The moment the run created a child worker or subagent. A row of
+            // its own, never a tick on the previous step's internal counter:
+            // "3 more internal steps" is exactly what hides a fan-out.
+            const row = document.createElement("div");
+            const base = "⤷ spawned " + d.label + (d.instruction ? " — " + d.instruction : "");
+            row.className = "spawn";
+            row.dataset.base = base;
+            row.textContent = base;
+            row.title = d.instruction || "";
+            steps.appendChild(row);
+            // Named lanes in the timeline too, so a bar reads `researcher`
+            // rather than a bare task id or a checkpoint namespace.
+            if (d.taskId) tlNames["task:" + d.taskId] = d.label;
+            if (d.namespace && d.namespace[0]) tlNames["ns:" + d.namespace[0]] = d.label;
             el.scrollIntoView({ block: "end" });
           } else if (event === "token") {
             tokens += d.content; thinking.textContent = tokens.slice(-600);

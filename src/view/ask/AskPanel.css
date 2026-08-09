@@ -420,6 +420,29 @@
   padding-left: var(--space-2);
 }
 
+/* A spawn is an event in the run, not a step of it: indented under the node
+ * that spawned, and given the instruction it handed over so the row says
+ * *what* the child was asked to do rather than only that one appeared. */
+.ask__activity-row--spawn {
+  margin-left: var(--space-4);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--color-border-default);
+  justify-content: flex-start;
+}
+
+.ask__activity-row--spawn .ask__activity-node {
+  color: var(--color-text-link);
+  white-space: nowrap;
+}
+
+.ask__activity-spawn-task {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ask__activity-ms {
   margin-left: auto;
   font: var(--type-caption);

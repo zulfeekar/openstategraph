@@ -26,6 +26,149 @@ def _coerce_update(raw: Any) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+#: How much of a spawned child's instruction rides along on the `spawn` event.
+#: Long enough to recognise the task, short enough that a step row stays one line.
+SPAWN_SNIPPET_CHARS = 120
+
+
+def _snippet(text: Any) -> str:
+    """One line of a spawned child's instruction, truncated for a step row."""
+    flat = " ".join(str(text or "").split())
+    if len(flat) <= SPAWN_SNIPPET_CHARS:
+        return flat
+    return flat[: SPAWN_SNIPPET_CHARS - 1].rstrip() + "…"
+
+
+def _tool_calls_of(message: Any) -> list[dict[str, Any]]:
+    """A message's tool calls, whether it arrived as an object or a dict.
+
+    The `updates` stream carries whatever the node returned: a LangChain
+    `AIMessage` from an agent's `model` step, but a plain dict from a node
+    that built its own state update. Both shapes appear in one run.
+    """
+    calls = getattr(message, "tool_calls", None)
+    if calls is None and isinstance(message, dict):
+        calls = message.get("tool_calls")
+    return [c for c in (calls or []) if isinstance(c, dict)]
+
+
+class SpawnWatcher:
+    """Turns raw `updates` frames into *spawn* events — the moment a run
+    creates a child worker or subagent.
+
+    Three signals, because the runtime spawns in three structurally different
+    ways and a user cannot be expected to know which one they are looking at:
+
+    1. **Fan-out plan.** An orchestrator writes `subtasks[node_id] = [...]`
+       and the conditional edge `Send`s one task each. The plan frame is the
+       spawn moment — it names every child *before* any of them runs, with
+       the instruction that was handed to it.
+    2. **Deep-agent `task` tool call.** A deep agent spawns a subagent by
+       calling its `task` tool; the call's arguments carry the subagent type
+       and the task description. Detected on the agent's own model frame,
+       which is where the tool call surfaces.
+    3. **A namespace appearing for the first time.** A mounted workflow or
+       team runs as a true nested subgraph and gets its own checkpoint
+       namespace; the first frame bearing an unseen namespace head is that
+       subgraph starting.
+
+    Stateful only in the "have I seen this id before" sense, so one instance
+    lives exactly as long as one run.
+    """
+
+    def __init__(self, node_ids_by_name: dict[str, str] | None = None) -> None:
+        #: Graph-node name -> canvas node id. A namespace head that is not in
+        #: here belongs to a node's *own* compiled loop (`node_agent_llm_1`
+        #: and friends), not to a mounted workflow — announcing it as a spawn
+        #: showed internal machinery as if it were a new actor.
+        self._known = dict(node_ids_by_name or {})
+        self._namespaces: set[str] = set()
+        self._tasks: set[str] = set()
+        self._tool_calls: set[str] = set()
+        self._last_top_node: str = ""
+
+    def inspect(
+        self,
+        node_id: str,
+        namespace: tuple[str, ...] | list[str],
+        update: dict[str, Any],
+        internal: bool,
+    ) -> list[dict[str, Any]]:
+        """Every spawn this frame reveals, in the order they should be shown."""
+        spawns: list[dict[str, Any]] = []
+        ns = list(namespace)
+
+        head = ns[0] if ns else ""
+        mounted = head.split(":")[0] if head else ""
+        # Keyed by the *mounted node*, not the namespace head. Found live: a
+        # `Send`-dispatched worker that calls `create_agent` gets a fresh
+        # checkpoint id per dispatched instance, so keying on the head
+        # announced the same worker node once per task on top of the `fanout`
+        # rows that already named each child. One announcement per mounted
+        # node per run is the honest count.
+        is_canvas_node = not self._known or mounted in self._known or mounted in self._known.values()
+        if mounted and is_canvas_node and mounted not in self._namespaces:
+            self._namespaces.add(mounted)
+            mounted = self._known.get(mounted, mounted)
+            spawns.append(
+                {
+                    "kind": "subgraph",
+                    "parent": self._last_top_node or mounted,
+                    "label": mounted,
+                    "instruction": "",
+                    "taskId": None,
+                    "namespace": ns,
+                }
+            )
+
+        for owner, plan in (update.get("subtasks") or {}).items():
+            for task in plan if isinstance(plan, list) else []:
+                if not isinstance(task, dict):
+                    continue
+                task_id = str(task.get("id") or "")
+                if not task_id or task_id in self._tasks:
+                    continue
+                self._tasks.add(task_id)
+                spawns.append(
+                    {
+                        "kind": "fanout",
+                        "parent": str(owner),
+                        "label": str(task.get("archetype") or "") or task_id,
+                        "instruction": _snippet(task.get("instruction")),
+                        "taskId": task_id,
+                        "namespace": ns,
+                    }
+                )
+
+        for message in update.get("messages") or []:
+            for call in _tool_calls_of(message):
+                if str(call.get("name") or "") != "task":
+                    continue
+                call_id = str(call.get("id") or "")
+                if call_id and call_id in self._tool_calls:
+                    continue
+                if call_id:
+                    self._tool_calls.add(call_id)
+                args = call.get("args")
+                args = args if isinstance(args, dict) else {}
+                spawns.append(
+                    {
+                        "kind": "subagent",
+                        "parent": node_id,
+                        "label": str(args.get("subagent_type") or "") or "subagent",
+                        "instruction": _snippet(
+                            args.get("description") or args.get("instruction")
+                        ),
+                        "taskId": call_id or None,
+                        "namespace": ns,
+                    }
+                )
+
+        if not internal and not ns:
+            self._last_top_node = node_id
+        return spawns
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
 
@@ -64,6 +207,7 @@ def _stream_run(
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty, merge_decisions
 
     answer = ""
+    spawns = SpawnWatcher(node_ids_by_name)
     decisions: dict[str, str] = {}
     outputs: dict[str, str] = {}
     attempts = 0
@@ -115,6 +259,17 @@ def _stream_run(
                     # which is exactly where a LangSmith-style view wants
                     # them.
                     is_internal = node_id not in node_ids_by_name.values()
+                    # The spawn moment is emitted *before* the frame that
+                    # revealed it, so a child's own steps read as arriving
+                    # after the row that announced it.
+                    #
+                    # TODO(future, deliberately not built): a spawn-confirmation
+                    # gate would hook exactly here — `interrupt({...spawn})`
+                    # before yielding, turning fire-and-run into ask-first.
+                    # Default behaviour stays fire-and-run; nothing below
+                    # blocks.
+                    for spawn in spawns.inspect(node_id, namespace, update, is_internal):
+                        yield _sse("spawn", spawn)
                     yield _sse(
                         "update",
                         {

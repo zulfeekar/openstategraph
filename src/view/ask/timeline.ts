@@ -27,6 +27,13 @@ export interface TimelineRow {
   /** LangGraph's checkpoint namespace — non-empty inside a subgraph/team. */
   readonly namespace?: readonly string[];
   readonly durationMs: number;
+  /** Set on a spawn row: a run announced a child. Never a bar of its own —
+   * a spawn takes no time — but it is what a lane gets its *name* from. */
+  readonly spawn?: {
+    readonly kind: string;
+    readonly label: string;
+    readonly instruction: string;
+  };
 }
 
 /** One bar. */
@@ -75,17 +82,32 @@ export function stepLabel(node: string): string {
  * 3. **A repeated node gets a repeated bar.** This is the whole reason to
  *    build a timeline for an evaluator-optimizer graph: a second bar for the
  *    same agent *is* the revise lap, and merging them would erase it.
+ * 4. **A spawn row names a lane, it does not occupy one.** A spawn is an
+ *    announcement, not work: it takes no time and gets no bar. What it
+ *    contributes is the child's *name*, so a lane reads `researcher` rather
+ *    than `wf_music:5f2ab…` or a bare task id.
  */
 export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
   type Draft = { -readonly [K in keyof TimelineStep]: TimelineStep[K] };
   const steps: Draft[] = [];
   const visits = new Map<string, number>();
+  const spawnNames = new Map<string, string>();
   let clock = 0;
 
   const mutable = (): Draft | undefined => steps[steps.length - 1];
 
   for (const row of rows) {
     const duration = Number.isFinite(row.durationMs) ? Math.max(0, row.durationMs) : 0;
+
+    if (row.spawn) {
+      // Keyed by whichever handle the child's own frames will carry: a
+      // `Send`-dispatched worker is told apart by `taskId`, a mounted
+      // subgraph by its namespace head.
+      if (row.taskId) spawnNames.set(`task:${row.taskId}`, row.spawn.label);
+      const head = row.namespace?.[0];
+      if (head) spawnNames.set(`ns:${head}`, row.spawn.label);
+      continue;
+    }
 
     if (row.internal) {
       const last = mutable();
@@ -114,7 +136,11 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       continue;
     }
 
-    const label = namespace ?? stepLabel(row.node);
+    const spawned =
+      (row.taskId ? spawnNames.get(`task:${row.taskId}`) : undefined) ??
+      (namespace ? spawnNames.get(`ns:${namespace}`) : undefined);
+    const label =
+      spawned ?? (namespace !== null ? namespace : undefined) ?? stepLabel(row.node);
     const visit = (visits.get(label) ?? 0) + 1;
     visits.set(label, visit);
 

@@ -296,6 +296,37 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
             ),
           );
           scrollToEnd();
+        } else if (event.type === 'spawn') {
+          // A spawn takes no time of its own — it is an announcement, not a
+          // step — so it does not move `lastFrameAt` and carries a zero
+          // duration. The next real frame still measures its gap from the
+          // last frame that actually ran.
+          setTurns((all) =>
+            all.map((turn) =>
+              turn.id === id
+                ? {
+                    ...turn,
+                    activity: [
+                      ...turn.activity,
+                      {
+                        node: event.parent,
+                        taskId: event.taskId,
+                        internal: false,
+                        namespace: event.namespace,
+                        durationMs: 0,
+                        output: null,
+                        spawn: {
+                          kind: event.kind,
+                          label: event.label,
+                          instruction: event.instruction,
+                        },
+                      },
+                    ],
+                  }
+                : turn,
+            ),
+          );
+          scrollToEnd();
         } else if (event.type === 'token') {
           setTurns((all) =>
             all.map((turn) =>

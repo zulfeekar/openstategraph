@@ -126,6 +126,23 @@ export type RunStreamEvent =
       readonly namespace: readonly string[];
       readonly content: string;
     }
+  | {
+      /** A run created a child worker or subagent — the spawn *moment*,
+       * emitted before the frame that revealed it. Three shapes of the same
+       * event: an orchestrator's fan-out plan (`fanout`), a deep agent's
+       * `task` tool call (`subagent`), and a mounted workflow starting its
+       * own nested subgraph (`subgraph`). */
+      readonly type: 'spawn';
+      readonly kind: 'fanout' | 'subagent' | 'subgraph';
+      /** The canvas node that did the spawning. */
+      readonly parent: string;
+      /** What to call the child: archetype, subagent type, or mounted node. */
+      readonly label: string;
+      /** First ~120 chars of the child's instruction, if the frame carried one. */
+      readonly instruction: string;
+      readonly taskId: string | null;
+      readonly namespace: readonly string[];
+    }
   | { readonly type: 'error'; readonly detail: string };
 
 export interface IRuntimeClient {
@@ -288,6 +305,17 @@ export class RuntimeClient implements IRuntimeClient {
           taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
           internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
+        });
+      } else if (eventName === 'spawn') {
+        const kind = asString(payload['kind']);
+        onEvent({
+          type: 'spawn',
+          kind: kind === 'fanout' || kind === 'subagent' ? kind : 'subgraph',
+          parent: asString(payload['parent']),
+          label: asString(payload['label']),
+          instruction: asString(payload['instruction']),
+          taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
         });
       } else if (eventName === 'token') {
         onEvent({

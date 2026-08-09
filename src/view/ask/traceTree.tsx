@@ -23,6 +23,16 @@ export interface ActivityRow {
    * approximation the Inspector's duration badge uses. */
   readonly durationMs: number;
   readonly output: string | null;
+  /** Set when this row is a *spawn* rather than a completed step: the run
+   * announced a child worker or subagent. A first-class row, not an
+   * anonymous internal-step tick — seeing the spawn moment is the point. */
+  readonly spawn?: SpawnDetail;
+}
+
+export interface SpawnDetail {
+  readonly kind: 'fanout' | 'subagent' | 'subgraph';
+  readonly label: string;
+  readonly instruction: string;
 }
 
 /** One node's subtree: the node plus the internal steps it ran. */
@@ -31,20 +41,32 @@ export interface TraceNode {
   readonly taskId: string | null;
   readonly durationMs: number;
   readonly output: string | null;
+  readonly spawn?: SpawnDetail;
   readonly children: readonly Omit<ActivityRow, 'internal'>[];
 }
 
 /** Nests internal steps under the most recent canvas node — the stream is
  * ordered, so ownership is positional (LangGraph reports a namespace only
- * for true nested subgraphs, not for loop internals). */
+ * for true nested subgraphs, not for loop internals).
+ *
+ * A spawn row is always top-level, even though it usually arrives while an
+ * agent's internal loop is running: it is the announcement of a *new* actor,
+ * so burying it under the parent's collapsed step count would hide exactly
+ * the moment the user came here to see. */
 export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
   const tree: TraceNode[] = [];
+  // The owner of internal steps is the last *node*, not the last row: a spawn
+  // row sits in the tree too, and charging a tool loop to it would turn the
+  // announcement into the work.
+  let owner: TraceNode | undefined;
   for (const row of rows) {
-    const last = tree[tree.length - 1];
-    if (row.internal && last) {
-      (last.children as ActivityRow[]).push(row);
-    } else if (!row.internal) {
+    if (row.spawn) {
       tree.push({ ...row, children: [] });
+    } else if (row.internal) {
+      if (owner) (owner.children as ActivityRow[]).push(row);
+    } else {
+      owner = { ...row, children: [] };
+      tree.push(owner);
     }
   }
   return tree;
@@ -78,7 +100,20 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
   return (
     <div className="ask__activity">
       {rows.length === 0 ? <p className="ask__meta">Waiting for the first node to run…</p> : null}
-      {trace.map((step, index) => (
+      {trace.map((step, index) =>
+        step.spawn ? (
+          <div
+            key={`spawn-${step.spawn.label}-${step.taskId ?? index}`}
+            className="ask__activity-row ask__activity-row--spawn"
+            title={step.spawn.instruction || undefined}
+          >
+            <span className="ask__activity-node">⤷ spawned {step.spawn.label}</span>
+            {step.spawn.instruction ? (
+              <span className="ask__activity-spawn-task">{step.spawn.instruction}</span>
+            ) : null}
+            {step.taskId ? <span className="ask__activity-task">{step.taskId}</span> : null}
+          </div>
+        ) : (
         <details
           key={`${step.node}-${step.taskId ?? index}`}
           className="ask__trace-step"
@@ -100,7 +135,8 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
           ))}
           {step.output ? <RichText className="ask__trace-output" text={step.output} /> : null}
         </details>
-      ))}
+        ),
+      )}
     </div>
   );
 }
