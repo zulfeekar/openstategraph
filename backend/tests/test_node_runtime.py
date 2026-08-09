@@ -606,3 +606,31 @@ class TestCentralThreadRecord:
         assert rendered.rstrip().endswith("oslo")
         # The current turn appears as the new message, not duplicated in history.
         assert rendered.count("oslo") == 1
+
+    def test_the_rendered_block_marks_the_new_message_as_THE_task(self) -> None:
+        """Found live: a mounted team supervisor echoed the previous
+        assistant turn instead of executing the new message — the history
+        block probabilistically dominated. The wording must state outright
+        that the conversation is context only and the new message is the
+        task to execute."""
+        from langchain_core.messages import AIMessage, HumanMessage
+        from openstategraph.compile.node_runtime import RunState, _thread_question
+        state = RunState(  # type: ignore[typeddict-item]
+            question="now do it for Q2",
+            messages=[HumanMessage(content="report Q1"), AIMessage(content="Q1 report...")],
+        )
+        rendered = _thread_question(state)
+        assert (
+            "The user's new message — this is the task; the conversation "
+            "above is context only, never the task:" in rendered
+        )
+
+    def test_thread_question_history_stays_bounded(self) -> None:
+        from langchain_core.messages import HumanMessage
+        from openstategraph.compile.node_runtime import RunState, _thread_question
+        state = RunState(  # type: ignore[typeddict-item]
+            question="latest",
+            messages=[HumanMessage(content=f"turn {i}") for i in range(50)],
+        )
+        rendered = _thread_question(state, limit=6)
+        assert rendered.count("User:") == 6

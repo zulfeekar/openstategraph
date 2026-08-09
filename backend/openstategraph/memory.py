@@ -100,8 +100,15 @@ def memory_tools() -> list[Any]:
         store = get_store()
         if store is None:
             return "No memory store is configured."
-        store.put(_namespace_for(scope), str(uuid.uuid4()), {"fact": fact.strip()})
-        return f"Remembered ({(scope or 'user').strip().lower()})."
+        value: dict[str, Any] = {"fact": fact.strip()}
+        cleaned = (scope or "user").strip().lower()
+        if cleaned == "app":
+            # The spine is auditable: any workflow may deposit an app-wide
+            # learning (permissive read, deliberate write — owner decision
+            # 2026-08-09), but every deposit records which workflow made it.
+            value["workflow"] = _workflow_namespace()[1]
+        store.put(_namespace_for(scope), str(uuid.uuid4()), value)
+        return f"Remembered ({cleaned})."
 
     @tool
     def search_memory(query: str) -> str:
@@ -120,20 +127,61 @@ def memory_tools() -> list[Any]:
             ("app", APP_NAMESPACE),
         ):
             try:
+                # limit=4 per scope caps the whole block at 12 one-liners —
+                # a hoarding workflow can never flood the calling prompt.
                 hits = store.search(namespace, query=query, limit=4)
             except Exception:
                 continue
-            rows.extend(f"- [{label}] {item.value.get('fact', '')}" for item in hits)
+            for item in hits:
+                source = item.value.get("workflow", "")
+                tag = f"{label} via {source}" if label == "app" and source else label
+                rows.append(f"- [{tag}] {item.value.get('fact', '')}")
         return "\n".join(rows) if rows else "No saved memories match."
 
     return [save_memory, search_memory]
 
 
 def build_store() -> Any:
-    """The process-wide long-term store. In-memory for the dev tool; the seam
-    a PostgresStore drops into when hosting ever comes into scope."""
+    """The process-wide long-term store.
+
+    In-memory by default (the dev tool's honest baseline). Setting
+    ``OPENSTATEGRAPH_MEMORY_PATH=/path/to/memory.sqlite`` opts into a
+    sqlite-backed store so memories survive a restart — the same opt-in
+    shape as ``settings.checkpointer: "sqlite"``, and the same constraint:
+    one uvicorn worker, one connection (``check_same_thread=False`` makes
+    the single shared connection usable across request threads, not across
+    processes). A PostgresStore drops into this same seam when hosting
+    ever comes into scope. An unusable path degrades loudly to in-memory
+    rather than failing startup.
+    """
+    import os
+
     from langgraph.store.memory import InMemoryStore
 
+    raw_path = os.environ.get("OPENSTATEGRAPH_MEMORY_PATH", "").strip()
+    if raw_path:
+        try:
+            import sqlite3
+
+            from langgraph.store.sqlite import SqliteStore
+
+            path = Path(raw_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(
+                path,
+                check_same_thread=False,
+                isolation_level=None,  # autocommit — the store BEGINs itself
+            )
+            store = SqliteStore(conn)
+            store.setup()
+            return store
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "OPENSTATEGRAPH_MEMORY_PATH=%r unusable; falling back to in-memory store",
+                raw_path,
+            )
     return InMemoryStore()
 
 

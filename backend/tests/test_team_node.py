@@ -165,7 +165,7 @@ class TestChildPackageAssets:
         captured: dict = {}
 
         class SpyGraph:
-            def invoke(self, payload):
+            def invoke(self, payload, config=None):
                 captured.update(payload)
                 return {"answer": "ok"}
 

@@ -276,7 +276,12 @@ def _thread_question(state: RunState, limit: int = 6) -> str:
     ]
     return (
         "Conversation so far:\n" + "\n".join(lines)
-        + f"\n\nThe user's new message (interpret it in the context above): {question}"
+        # "this is the task" is deliberate and load-bearing (pinned by test):
+        # a mounted team supervisor once echoed the PREVIOUS assistant turn
+        # instead of executing the new message — with a softer framing, the
+        # history block probabilistically dominates the fragment that follows.
+        + "\n\nThe user's new message — this is the task; the conversation "
+        + f"above is context only, never the task: {question}"
     )
 
 
@@ -670,9 +675,16 @@ class NodeRuntime:
         canvas declaration and the build button's home; an explicitly wired
         atom plus this rule is deduped by tool name to exactly one binding.
         """
-        from openstategraph.prebuilt_knowledge import ambient_knowledge_tool
+        if not hasattr(self, "_ambient_knowledge_memo"):
+            # One directory scan per runtime construction, not one per agent
+            # or worker bound — the package cannot change mid-compile, and a
+            # large canvas would otherwise re-glob knowledge/ for every node.
+            from openstategraph import prebuilt_knowledge
 
-        ambient = ambient_knowledge_tool(self.knowledge_package_dir)
+            self._ambient_knowledge_memo = prebuilt_knowledge.ambient_knowledge_tool(
+                self.knowledge_package_dir
+            )
+        ambient = self._ambient_knowledge_memo
         if ambient is None:
             return
         if any(getattr(t, "name", "") == ambient.name for t in lc_tools):
@@ -1406,6 +1418,34 @@ class NodeRuntime:
                 question = state.get("question", "") or _upstream_text(state, router_sources)
             else:
                 question = state.get("answer", "") or state.get("question", "")
+            # The spine rule: a mounted child owns its OWN memory namespace.
+            # An invoke here inherits the parent's config through the runnable
+            # context, so without an explicit override the child's
+            # save_memory(scope="workflow") would land in the PARENT's slug —
+            # the exact leak skills/knowledge isolation already closes for
+            # their assets (ticket 67's lesson, applied to the Store). The
+            # rest of `configurable` (user_email, thread_id, session_id)
+            # crosses untouched: the person and the thread are the same on
+            # both sides of the mount.
+            child_config = None
+            if slug:
+                try:
+                    from langgraph.config import get_config
+
+                    parent_configurable = {
+                        k: v
+                        for k, v in (get_config().get("configurable") or {}).items()
+                        # LangGraph rides its own runtime plumbing (dunder
+                        # keys, checkpoint coordinates) in `configurable`;
+                        # forwarding those into a fresh compiled child would
+                        # hand it the parent's internals. Only the app-level
+                        # keys cross the mount.
+                        if not k.startswith("__") and not k.startswith("checkpoint")
+                    }
+                except Exception:
+                    parent_configurable = {}
+                parent_configurable["workflow_slug"] = slug
+                child_config = {"configurable": parent_configurable}
             final = captured.invoke(
                 {
                     "question": question,
@@ -1419,7 +1459,8 @@ class NodeRuntime:
                     "attempts": 0,
                     "decisions": {},
                     "outputs": {},
-                }
+                },
+                child_config,
             )
             answer = final.get("answer", "")
             # The child's loop cost is part of the parent's story: without

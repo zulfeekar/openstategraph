@@ -62,3 +62,31 @@ class TestAgentNodeDelegation:
     def test_default_tier_is_react(self, monkeypatch) -> None:
         _run_factory(monkeypatch, {})
         assert len(RecordingNode.built) == 1
+
+
+class TestSummarizeToggle:
+    """The card's `summarize` toggle must actually contribute the
+    SummarizationMiddleware slot — long threads stay bounded (memory sweep,
+    2026-08-09)."""
+
+    def _built_with(self, monkeypatch, data: dict) -> RecordingNode:
+        from langchain_core.language_models import GenericFakeChatModel
+
+        RecordingNode.built.clear()
+        monkeypatch.setattr(
+            agent_module, "agent_node_for_tier", lambda tier: RecordingNode
+        )
+        runtime = NodeRuntime(model=GenericFakeChatModel(messages=iter([])))
+        node = {"id": "a1", "type": "agent.llm", "data": data}
+        run = runtime._agent("a1", node, CompiledPlan())
+        run(RunState(question="q"))  # type: ignore[typeddict-item]
+        (built,) = RecordingNode.built
+        return built
+
+    def test_summarize_true_contributes_the_slot(self, monkeypatch) -> None:
+        built = self._built_with(monkeypatch, {"summarize": True})
+        assert "summarization" in built._middleware_contributions
+
+    def test_summarize_off_contributes_nothing(self, monkeypatch) -> None:
+        built = self._built_with(monkeypatch, {})
+        assert "summarization" not in built._middleware_contributions
