@@ -7,6 +7,9 @@ import {
 } from '@core/runtime/compositionSummary';
 import { peekDiagramId, peekMermaid } from '@core/runtime/mermaidPeek';
 import { useWorkbench } from '@app/WorkbenchContext';
+import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
+import { Pencil } from 'lucide-react';
+import { Icon } from '@design/primitives';
 import { loadWorkflowIntoEditor } from '@view/workflow/loadWorkflowIntoEditor';
 import type { NodeBodyProps } from './nodeBodyRegistry';
 import './CompositionBody.css';
@@ -31,10 +34,11 @@ import './CompositionBody.css';
  * document and the compile seam stays one-directional (we render text the
  * compiler emitted; we never read a runtime object back into the model).
  *
- * **Open** is the honest way in: it runs the ordinary load path, the very same
- * `loadWorkflowIntoEditor` the Workflows panel uses. Drilling in remains a
- * navigation, not a zoom — ticket 56's recorded follow-up, now with an
- * affordance.
+ * **Edit team** / **Edit workflow** is the honest way in: it runs the ordinary
+ * load path, the very same `loadWorkflowIntoEditor` the Workflows panel uses.
+ * Drilling in remains a navigation, not a zoom — ticket 56's recorded
+ * follow-up, now with an affordance that says what it does and leaves a trail
+ * (`drillStack`) so `DrillBanner` can say where you landed and get you back.
  */
 /**
  * How many child nodes this mount overrides (docs/decisions/mount-overrides.md).
@@ -107,7 +111,7 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
             </span>
           ) : null}
         </button>
-        <OpenMount slug={slug} />
+        <OpenMount slug={slug} kind={kind} />
       </div>
       {expanded ? <GraphPeek slug={slug} /> : null}
     </div>
@@ -157,8 +161,16 @@ function GraphPeek({ slug }: { slug: string }) {
 }
 
 /**
- * Open the referenced workflow in the editor.
+ * Edit the referenced package — the honest way in.
  *
+ * The label names the *thing*, not the mechanism. "Open" said nothing about
+ * what opens, or that what opens is shared: a mount is a reference to one
+ * definition, so editing it through this button changes every other mount of
+ * it. "Edit team" / "Edit workflow" plus a tooltip that says *shared
+ * definition* is the smallest wording that makes both facts visible before the
+ * click rather than after it.
+ *
+
  * Reaches the app through `useWorkbench()` — the context every card already
  * sits in — rather than a new prop on the body registry: the registry's
  * contract is deliberately just `{ node }`, and widening it for one body would
@@ -168,14 +180,22 @@ function GraphPeek({ slug }: { slug: string }) {
  * invented plumbing to the shell's `Toaster`. Success needs no message: the
  * canvas becomes the other workflow, which is the loudest feedback available.
  */
-function OpenMount({ slug }: { slug: string }) {
+function OpenMount({ slug, kind }: { slug: string; kind: CompositionKind }) {
   const workbench = useWorkbench();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const label = kind === 'team' ? 'Edit team' : 'Edit workflow';
 
   const open = useCallback(async () => {
     setBusy(true);
-    const outcome = await loadWorkflowIntoEditor(slug, new WorkflowFileClient(), workbench);
+    // Provenance is read *before* the load, since the import replaces both
+    // the current slug and the model's name with the child's.
+    const fromSlug = sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '';
+    const fromName = workbench.model.name;
+    const outcome = await loadWorkflowIntoEditor(slug, new WorkflowFileClient(), workbench, {
+      fromSlug,
+      fromName,
+    });
     setBusy(false);
     setError(outcome.ok ? null : outcome.error);
   }, [slug, workbench]);
@@ -186,10 +206,11 @@ function OpenMount({ slug }: { slug: string }) {
         type="button"
         className="node__composition-open"
         disabled={busy}
-        title={`Load ${slug} in the editor`}
+        title={`Opens ${slug} for editing — this is the shared definition, every mount of it is affected.`}
         onClick={() => void open()}
       >
-        Open
+        <Icon glyph={Pencil} size="xs" />
+        {label}
       </button>
       {error ? (
         <span className="node__composition--missing" role="alert">

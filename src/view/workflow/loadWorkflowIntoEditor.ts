@@ -6,6 +6,13 @@ import {
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
 } from '@nodes/workflowScoped';
+import { pushDrillFrame } from '@app/drillStack';
+
+/** The workflow a drill-in is leaving — recorded only once the load succeeds. */
+export interface DrillProvenance {
+  readonly fromSlug: string;
+  readonly fromName: string;
+}
 
 /**
  * Load a saved workflow into the editor, by slug.
@@ -21,11 +28,17 @@ import {
  *
  * Everything it touches is injected, so this is orchestration, not policy: it
  * neither owns the client nor knows what a card is.
+ *
+ * `provenance` marks the load as a **drill-in**: the caller says which workflow
+ * the user is leaving, and that frame joins the drill stack so the banner can
+ * name the way back. Only a drill-in passes it — a Back click is a *pop*, and
+ * a manual load from the Workflows panel clears the trail at its own call site.
  */
 export async function loadWorkflowIntoEditor(
   slug: string,
   client: IWorkflowFileClient,
   workbench: Workbench,
+  provenance?: DrillProvenance,
 ): Promise<Result<string, string>> {
   const outcome = await client.load(slug);
   if (!outcome.ok) return Err(outcome.error);
@@ -53,6 +66,11 @@ export async function loadWorkflowIntoEditor(
     // mistake the file as already-changed.
     const list = await client.list();
     recordKnownSavedAt(slug, list.ok ? list.value.find((wf) => wf.slug === slug)?.savedAt : undefined);
+    // After the import, never before: a trail entry for a load that failed
+    // would offer a way back from somewhere the user never arrived.
+    if (provenance && provenance.fromSlug && provenance.fromSlug !== slug) {
+      pushDrillFrame({ slug: provenance.fromSlug, name: provenance.fromName });
+    }
     return Ok(workbench.model.name);
   } catch (error) {
     return Err(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);

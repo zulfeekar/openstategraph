@@ -14,7 +14,7 @@
 }
 
 /* The census line and its two affordances share one row: disclosure on the
- * left (it labels what it opens), Open pinned right. */
+ * left (it labels what it opens), Edit pinned right. */
 .node__composition-row {
   display: flex;
   align-items: baseline;
@@ -48,6 +48,12 @@
 
 .node__composition-open {
   flex: none;
+  /* The pencil and its label read as one control, hence inline-flex with a
+   * hair of gap rather than two baseline-aligned siblings. */
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
   font: inherit;
   color: var(--color-text-secondary);
   background: none;

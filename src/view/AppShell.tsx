@@ -18,6 +18,7 @@ import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
+import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
 import { FileText, MessageSquareText } from 'lucide-react';
 import { IconButton, Icon, Tooltip } from '@design/primitives';
@@ -211,6 +212,10 @@ export function AppShell() {
 
         <main className="app-shell__canvas">
           <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
+          {/* Over the canvas, not in the topbar: it is a fact about *this
+              document*, and it appears and disappears with a navigation —
+              the topbar's contents are fixed chrome. */}
+          <DrillBanner />
           {paper ? <Minimap /> : null}
           <ShortcutsDrawer shortcuts={paper?.shortcuts ?? []} />
           <AccessibilityCheck />

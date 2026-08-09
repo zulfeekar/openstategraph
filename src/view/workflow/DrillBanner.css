@@ -1,0 +1,79 @@
+/* The drill-in orientation strip.
+ *
+ * Floats over the top of the canvas rather than pushing the layout down: it
+ * comes and goes with a navigation, and a strip that reflowed the canvas would
+ * move every node on screen each time. Centred and narrow so it reads as
+ * chrome about *where you are*, not as a warning about something broken —
+ * hence surface colours and no status hue. */
+.drill-banner {
+  position: absolute;
+  top: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Wrap rather than ellipsise in a narrow window: a second line costs a few
+   * pixels of canvas, while "Editing Page Metrics…" costs the user the answer
+   * they came for. */
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  /* Wide enough that two ordinary workflow names ("Editing Page Metrics Team
+   * … Back to Page Analytics") both fit unabbreviated — a banner whose whole
+   * job is orientation must not ellipsise the name it is orienting you to. */
+  max-width: min(760px, calc(100% - var(--space-8)));
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-raised);
+  box-shadow: var(--shadow-sm);
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.drill-banner__where {
+  min-width: 0;
+}
+
+.drill-banner__where strong {
+  color: var(--color-text-primary);
+}
+
+/* The fact that makes an edit here consequential — muted, but present, and
+ * carrying the full explanation in its tooltip. */
+.drill-banner__shared {
+  flex: none;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.drill-banner__back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.drill-banner__back:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-emphasis);
+}
+
+.drill-banner__back:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

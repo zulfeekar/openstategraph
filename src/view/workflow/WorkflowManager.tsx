@@ -18,6 +18,7 @@ import {
   WorkflowFileClient,
   type WorkflowSummary,
 } from '@core/runtime/WorkflowFileClient';
+import { clearDrillStack } from '@app/drillStack';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import './WorkflowManager.css';
 
@@ -85,6 +86,9 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // A fresh workflow has no slug yet — the next save mints one from
     // whatever name it has at that moment.
     sessionStorage.removeItem(CURRENT_SLUG_KEY);
+    // Same reasoning as a manual load: a brand-new document is not "inside"
+    // anything, so there is nothing to go back to.
+    clearDrillStack();
     onNotify(`Created new workflow: ${name}`);
     setNewName('');
     onClose();
@@ -120,6 +124,10 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         onNotify(`Could not load: ${outcome.error}`);
         return;
       }
+      // Picking a workflow here is a navigation of its own, not a return, so
+      // the drill trail goes with it — offering "Back to …" afterwards would
+      // point at a parent the user deliberately left.
+      clearDrillStack();
       onNotify(`Loaded: ${outcome.value}`);
       onClose();
     },
