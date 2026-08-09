@@ -291,9 +291,23 @@
     linear-gradient(#000 0 0);
 }
 
-/* The bloom: the same sweep, blurred and pushed behind the card. */
+/* The bloom: the same sweep, blurred and pushed behind the card.
+ *
+ * ALSO ring-masked (glitch found by the owner): the reference pen leaves
+ * its blurred twin as a full box, but its card background is opaque —
+ * ours is translucent, so an unmasked bloom washed the gradient across
+ * the card interior. Masked to the border first and blurred after, the
+ * blur spreads the ring into a halo and the interior stays clean. */
 .joint-element.is-active .node::after {
   z-index: -1;
+  padding: var(--run-glow-width);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
   filter: blur(var(--run-glow-blur));
   opacity: 0.7;
 }
