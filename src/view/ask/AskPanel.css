@@ -250,3 +250,19 @@
 .ask__thinking--settled {
   white-space: normal;
 }
+
+/* Why the panel opened, when something other than the user opened it —
+   today, Run handing a looping graph to the backend runtime. Informational
+   tone, never the amber of `.ask__warning`: nothing went wrong. */
+.ask__notice {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+}

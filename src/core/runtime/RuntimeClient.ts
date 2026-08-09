@@ -8,9 +8,11 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
  * else here.
  *
  * The contract it enforces is ticket 07's: the browser **posts a document and a
- * question**, and receives an answer. It holds no provider credentials, and it
- * never builds or executes a graph — that is the backend's job, and the reason
- * this class is so thin is that keeping it thin is the point.
+ * question**, and receives an answer. It never builds or executes a graph —
+ * that is the backend's job, and the reason this class is so thin is that
+ * keeping it thin is the point. It *stores* no provider credentials either;
+ * it forwards whatever the caller passes in `credentials`, which the
+ * credentials dialog owns.
  */
 
 export interface RunRequest {
@@ -27,6 +29,15 @@ export interface RunRequest {
    * tools that live beside it. Optional — a run without it still works.
    */
   readonly workflowSlug?: string;
+  /**
+   * Provider keys held in this browser, by backend environment-variable name
+   * (`{ ANTHROPIC_API_KEY: '…' }`) — see `collectRuntimeCredentials`.
+   *
+   * Sent so the editor's "Models and credentials" dialog is the single home
+   * for keys across *both* runtimes. The backend applies them only where it
+   * has no value of its own, so this is a fallback and never an override.
+   */
+  readonly credentials?: Readonly<Record<string, string>>;
 }
 
 export interface RunResult {
@@ -69,6 +80,9 @@ export interface ResumeRequest {
    * set as the run it resumes. The backend's `ResumeRequest` declares this
    * field explicitly (it forbids unknown keys). */
   readonly workflowSlug?: string;
+  /** Same as `RunRequest.credentials` — a resume re-initialises the model,
+   * so it needs the same keys the run it continues had. */
+  readonly credentials?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -142,6 +156,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
+      ...(request.credentials ? { credentials: request.credentials } : {}),
     };
 
     let response: Response;
@@ -184,6 +199,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
+      ...(request.credentials ? { credentials: request.credentials } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent);
   }
@@ -200,6 +216,7 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.model ? { model: request.model } : {}),
       ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
       ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
+      ...(request.credentials ? { credentials: request.credentials } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent);
   }

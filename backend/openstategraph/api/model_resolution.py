@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from typing import Any, Callable, MutableMapping
 
 
 #: The Ollama model to use — a **cloud** model, never a local one.
@@ -41,6 +41,53 @@ def resolve_model(requested: str | None) -> str:
     if os.getenv("OPENAI_API_KEY"):
         return "openai:gpt-4.1-mini"
     return os.getenv("OPENSTATEGRAPH_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
+
+
+#: The only credential names a request may set. An allow-list, not a
+#: pass-through: a request must never be able to write an arbitrary
+#: environment variable into the server process.
+ACCEPTED_CREDENTIAL_KEYS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OLLAMA_API_KEY",
+        "OLLAMA_HOST",
+    }
+)
+
+
+def apply_credentials(
+    credentials: dict[str, str] | None,
+    env: MutableMapping[str, str] | None = None,
+) -> list[str]:
+    """Fills in **absent** provider credentials from a request, and no others.
+
+    The editor stores keys in the browser (`CredentialsDialog`), so without
+    this a key pasted there does nothing for a backend run. It is applied as a
+    *fallback*, never an override, and the direction is deliberate:
+
+    - A server-side env var is deployment configuration, chosen by whoever
+      operates the server. A browser value arrives from a client on every
+      request, and `os.environ` is process-global rather than request-scoped —
+      if the client won, one request could silently repoint a shared
+      deployment at another account's key for every later run in that process.
+    - So the rule is: absent → fill; present → leave alone.
+
+    Returns the **names** that were filled, never the values. Nothing here
+    logs, returns or echoes a credential value.
+    """
+    target: MutableMapping[str, str] = os.environ if env is None else env
+    filled: list[str] = []
+    for name, value in (credentials or {}).items():
+        if name not in ACCEPTED_CREDENTIAL_KEYS:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if target.get(name):
+            continue  # already configured server-side — configuration wins
+        target[name] = value.strip()
+        filled.append(name)
+    return filled
 
 
 #: Injectable so tests can exercise the HTTP layer without a provider.

@@ -23,13 +23,34 @@ export interface RunEvents extends Record<string, unknown> {
   'run:node': { nodeId: NodeId; status: 'running' | 'success' | 'error' | 'skipped' };
   'run:usage': { usage: TokenUsage };
   'run:log': { nodeId: NodeId; message: string };
-  'run:finish': { runId: string; ok: boolean; usage: TokenUsage; error?: string };
+  'run:finish': {
+    runId: string;
+    ok: boolean;
+    usage: TokenUsage;
+    error?: string;
+    reason?: RunRejection;
+  };
 }
+
+/**
+ * Why a run was refused, when the refusal has a *next step* rather than
+ * being a dead end.
+ *
+ * `requires-backend-runtime` is the only one so far: the canvas preview is a
+ * sequential topological walk, so it cannot execute a cycle — but the real
+ * LangGraph runtime behind Chat can, and the graph is perfectly valid. The
+ * shell listens for this and hands the user over to the backend run they
+ * actually wanted, instead of showing them an error about an engine
+ * limitation they never asked to be subject to. Carried as a machine-readable
+ * code rather than by matching on the message text.
+ */
+export type RunRejection = 'requires-backend-runtime';
 
 export interface RunOutcome {
   readonly ok: boolean;
   readonly usage: TokenUsage;
   readonly error?: string;
+  readonly reason?: RunRejection;
 }
 
 /**
@@ -91,9 +112,16 @@ export class ExecutionEngine {
       // that exits it) — `acyclicGraphRule` reports that shape as a
       // `warning`, not a blocking `error`, so it never reaches the check
       // above. This engine still cannot preview a real cycle regardless of
-      // severity, so it is caught here instead, with the same message.
+      // severity, so it is caught here instead — but *not* as a dead end.
+      // The graph is valid and the backend runs it happily, so this reports
+      // `requires-backend-runtime` and the shell routes the run to the real
+      // runtime (the same one Chat uses) rather than stopping here. The
+      // engine itself still starts no run and knows nothing about HTTP: we
+      // are a compiler, not a runtime, and this is a *handover*, not a second
+      // execution path.
       return this.rejectBeforeStart(
-        'This graph has a loop (e.g. a grader revise step) that the canvas preview cannot run — try Chat instead.',
+        'This graph has a revise loop, so it runs on the backend runtime.',
+        'requires-backend-runtime',
       );
     }
 
@@ -196,11 +224,17 @@ export class ExecutionEngine {
    * already turns a failure into a toast) never fired, and pressing "Run" on
    * an unrunnable graph produced no observable feedback at all.
    */
-  private rejectBeforeStart(error: string): RunOutcome {
+  private rejectBeforeStart(error: string, reason?: RunRejection): RunOutcome {
     const runId = `run-${++this.runCounter}`;
     this.bus.emit('run:start', { runId });
-    this.bus.emit('run:finish', { runId, ok: false, usage: ZERO_USAGE, error });
-    return { ok: false, usage: ZERO_USAGE, error };
+    this.bus.emit('run:finish', {
+      runId,
+      ok: false,
+      usage: ZERO_USAGE,
+      error,
+      ...(reason ? { reason } : {}),
+    });
+    return { ok: false, usage: ZERO_USAGE, error, ...(reason ? { reason } : {}) };
   }
 
   on<K extends keyof RunEvents & string>(

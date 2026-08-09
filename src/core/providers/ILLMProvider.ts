@@ -129,6 +129,18 @@ export interface ILLMProvider extends IIdentifiable {
   readonly credentialsHint?: string;
 
   /**
+   * The environment variable this provider's key is called on the backend,
+   * e.g. `ANTHROPIC_API_KEY`.
+   *
+   * Declared **by the provider**, so "Models and credentials" becomes the one
+   * home for keys across both runtimes without the editor learning a
+   * per-vendor mapping: a newly registered vendor names its own variable and
+   * a backend run picks it up with no change anywhere else. Absent means "do
+   * not forward" — the mock provider, for one.
+   */
+  readonly runtimeCredentialKey?: string;
+
+  /**
    * Whether the agent node should offer a free-text model id.
    *
    * True for providers whose catalogue moves faster than this code can
@@ -169,6 +181,7 @@ export abstract class AbstractLLMProvider implements ILLMProvider {
   abstract readonly requiresApiKey: boolean;
   readonly credentialsHint?: string;
   readonly allowsCustomModel?: boolean;
+  readonly runtimeCredentialKey?: string;
 
   protected apiKey: string | null = null;
   /** Overridable endpoint — lets Ollama point at a non-default host. */

@@ -59,7 +59,7 @@ describe('ExecutionEngine.run — pre-flight rejection is observable', () => {
     expect(events).toEqual(['start', 'finish:false']);
   });
 
-  it('an escapable cycle (a revise loop with a way out) still says to use Chat', async () => {
+  it('an escapable cycle (a revise loop with a way out) hands over to the backend runtime', async () => {
     // `a` fans out to both `b` (closing the cycle) and `c` (escaping it) —
     // the same shape as a grader's `pass` exiting a `revise` loop.
     // `acyclicGraphRule` reports this as a `warning`, not a blocking
@@ -82,7 +82,10 @@ describe('ExecutionEngine.run — pre-flight rejection is observable', () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toMatch(/loop/i);
-    expect(outcome.error).toMatch(/Chat/i);
+    // The machine-readable half is what the shell acts on: it opens the chat
+    // panel and runs this graph on the real backend rather than dead-ending.
+    // Asserted as a code, not by matching the message text.
+    expect(outcome.reason).toBe('requires-backend-runtime');
     expect(events).toEqual(['start', 'finish:false']);
   });
 });

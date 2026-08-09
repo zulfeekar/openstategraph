@@ -26,6 +26,7 @@ export class OpenAIProvider extends AbstractLLMProvider {
   readonly label = 'OpenAI';
   readonly requiresApiKey = true;
   override readonly credentialsHint = 'platform.openai.com → API keys';
+  override readonly runtimeCredentialKey = 'OPENAI_API_KEY';
   override readonly allowsCustomModel = true;
 
   private discovered: readonly ModelDescriptor[] | null = null;

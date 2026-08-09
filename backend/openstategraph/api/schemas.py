@@ -45,6 +45,14 @@ class RunRequest(BaseModel):
     #: so a document can bind the tools that live beside it. Optional and
     #: additive — omitting it runs with the default registry, never a crash.
     workflow_slug: str | None = None
+    #: Per-request provider credentials, e.g. `{"ANTHROPIC_API_KEY": "..."}`.
+    #: The editor's "Models and credentials" dialog stores keys in the
+    #: browser; without this field they would only ever reach the in-browser
+    #: preview, never a backend run — so a developer who pasted a key would
+    #: still see "no model configured" from Chat. Applied as a **fallback
+    #: only**: an env var already set server-side always wins (see
+    #: `apply_credentials`). Never logged, never echoed back.
+    credentials: dict[str, str] | None = None
 
 
 class ResumeRequest(BaseModel):
@@ -73,6 +81,11 @@ class ResumeRequest(BaseModel):
     #: would die at validation. A resumed run must also bind the *same*
     #: tool set as the run it resumes.
     workflow_slug: str | None = None
+    #: Same as `RunRequest.credentials`, and for the same "must exist on
+    #: BOTH models" reason as `workflow_slug` above: this model forbids
+    #: extras, so a client that sends credentials on the run must be able to
+    #: send them on the resume too, or every approval would 422.
+    credentials: dict[str, str] | None = None
 
 
 class RunResponse(BaseModel):

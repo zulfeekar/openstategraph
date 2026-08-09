@@ -57,6 +57,10 @@ export function AppShell() {
   // A second right-hand panel rather than a mode on the inspector: a developer
   // wants to see a node's config *and* the answer at the same time.
   const [askOpen, setAskOpen] = useState(false);
+  // Set when Run hands a graph over to the backend runtime (see the
+  // `run:finish` effect below); cleared as soon as the panel is closed.
+  const [askNotice, setAskNotice] = useState<string | null>(null);
+  const [askFocusNonce, setAskFocusNonce] = useState(0);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
@@ -137,8 +141,22 @@ export function AppShell() {
   /* ---------------- run feedback ---------------- */
 
   useEffect(() => {
-    const off = workbench.engine.on('run:finish', ({ ok, usage }) => {
-      if (ok) notify(`Run finished · ${usage.totalTokens.toLocaleString()} tokens`);
+    const off = workbench.engine.on('run:finish', ({ ok, usage, error, reason }) => {
+      if (ok) {
+        notify(`Run finished · ${usage.totalTokens.toLocaleString()} tokens`);
+        return;
+      }
+      // Run must not dead-end where Chat would have worked. The canvas
+      // preview cannot walk a cycle, but the backend runtime — the same one
+      // this panel already uses — runs it fine, so Run hands over instead of
+      // refusing: open the chat, say why, focus the box. Deliberately *not* an
+      // automatic run: the backend needs a question, and inventing an empty
+      // one would spend tokens on something nobody asked.
+      if (reason === 'requires-backend-runtime') {
+        setAskNotice(error ?? 'This graph runs on the backend runtime.');
+        setAskOpen(true);
+        setAskFocusNonce((value) => value + 1);
+      }
     });
     return off;
   }, [workbench, notify]);
@@ -168,7 +186,12 @@ export function AppShell() {
             <IconButton
               label="Ask the workflow"
               icon={<Icon glyph={MessageSquareText} size="md" />}
-              onClick={() => setAskOpen((value) => !value)}
+              onClick={() =>
+                setAskOpen((value) => {
+                  if (value) setAskNotice(null);
+                  return !value;
+                })
+              }
               active={askOpen}
             />
           </Tooltip>
@@ -199,7 +222,7 @@ export function AppShell() {
           // `right: 0`, which made whichever mounted second (Inspector)
           // silently intercept every click meant for the other.
           <div className="app-shell__right-panels">
-            {askOpen ? <AskPanel /> : null}
+            {askOpen ? <AskPanel notice={askNotice} focusNonce={askFocusNonce} /> : null}
             {inspectorOpen ? <Inspector /> : null}
           </div>
         ) : null}

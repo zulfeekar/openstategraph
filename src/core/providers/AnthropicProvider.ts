@@ -42,6 +42,7 @@ export class AnthropicProvider extends AbstractLLMProvider {
   readonly label = 'Anthropic';
   readonly requiresApiKey = true;
   override readonly credentialsHint = 'console.anthropic.com → API keys';
+  override readonly runtimeCredentialKey = 'ANTHROPIC_API_KEY';
 
   readonly models: readonly ModelDescriptor[] = [
     {

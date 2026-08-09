@@ -92,3 +92,9 @@
 .topbar__health[data-state='down'] {
   background: var(--color-status-danger, #ef4444);
 }
+
+/* Positioning context for the first-run credentials hint. */
+.topbar__hint-anchor {
+  position: relative;
+  display: flex;
+}

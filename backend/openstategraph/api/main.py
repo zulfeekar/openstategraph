@@ -55,6 +55,7 @@ _HUMAN_IN_THE_LOOP_CHECKPOINTER = InMemorySaver()
 from openstategraph.api.model_resolution import (  # noqa: E402
     OLLAMA_CLOUD_MODEL,
     GraphFactory,
+    apply_credentials,
     resolve_model,
     workflow_default_model,
 )
@@ -346,6 +347,9 @@ def create_app(
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)
+        # Browser-held keys, applied only where the server has none — see
+        # `apply_credentials` for why the server's own env always wins.
+        apply_credentials(request.credentials)
         # Model precedence: explicit request > the document's own
         # settings.model > environment default. A workflow that names its
         # model runs the same everywhere it is opened.
@@ -418,6 +422,8 @@ def create_app(
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)
+        # Browser-held keys, fallback-only (see `apply_credentials`).
+        apply_credentials(request.credentials)
         model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
 
         compiler = WorkflowCompiler()
@@ -485,6 +491,8 @@ def create_app(
         from langchain.chat_models import init_chat_model
 
         document = _document_of(request.workflow)
+        # Browser-held keys, fallback-only (see `apply_credentials`).
+        apply_credentials(request.credentials)
         model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
 
         compiler = WorkflowCompiler()

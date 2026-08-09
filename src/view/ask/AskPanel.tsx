@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Send, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Info, Send, TriangleAlert } from 'lucide-react';
 import { Button, Field, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
 import {
   RuntimeClient,
@@ -7,7 +7,8 @@ import {
   type RunResult,
   type RunStreamEvent,
 } from '@core/runtime/RuntimeClient';
-import { useController } from '@app/WorkbenchContext';
+import { useController, useWorkbench } from '@app/WorkbenchContext';
+import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
@@ -25,6 +26,21 @@ function currentWorkflowSlug(): string | undefined {
   } catch {
     return undefined; // sessionStorage can throw in restricted contexts
   }
+}
+
+/**
+ * The browser-held provider keys, read fresh per send.
+ *
+ * Fresh rather than captured: a developer who hits "no model configured",
+ * opens "Models and credentials" and pastes a key expects the very next send
+ * to work, without reloading the editor. Omitted entirely when nothing is
+ * stored, so a deployment with server-side keys sends no field at all.
+ */
+function credentialsPatch(
+  providers: Parameters<typeof collectRuntimeCredentials>[0],
+): { credentials?: Readonly<Record<string, string>> } {
+  const credentials = collectRuntimeCredentials(providers);
+  return credentials ? { credentials } : {};
 }
 
 /** One row in a turn's live "Activity" feed — a node that has started running. */
@@ -98,11 +114,36 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * know what LangGraph is; it serialises the document, posts it, and renders
  * what streams back (ticket 07).
  */
-export function AskPanel() {
+export interface AskPanelProps {
+  /**
+   * A one-line explanation of *why* the panel just opened, when something
+   * else opened it — today, Run handing a looping graph over to the backend
+   * runtime. Shown above the thread and never as a modal: it explains a
+   * transition the user did not ask for, so it must not also interrupt them.
+   */
+  readonly notice?: string | null;
+  /**
+   * Bumped by the opener each time it wants the composer focused. A counter
+   * rather than a boolean because the *same* notice can be triggered twice in
+   * a row, and focus must follow both times.
+   */
+  readonly focusNonce?: number;
+}
+
+export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) {
   const controller = useController();
+  const workbench = useWorkbench();
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<readonly ChatTurn[]>([]);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus, never auto-send: the graph runs on the backend now, but *what* to
+  // ask is still the developer's to say. Silently executing an empty question
+  // would spend tokens on a question nobody asked.
+  useEffect(() => {
+    if (focusNonce > 0) composerRef.current?.focus();
+  }, [focusNonce]);
 
   // One client for the panel's lifetime; the base URL is a dev default until
   // configuration exists.
@@ -302,12 +343,18 @@ export function AskPanel() {
 
       await streamAndSettle(turnId, (onEvent) =>
         client.resume(
-          { threadId, workflow: document, decision, workflowSlug: currentWorkflowSlug() },
+          {
+            threadId,
+            workflow: document,
+            decision,
+            workflowSlug: currentWorkflowSlug(),
+            ...credentialsPatch(workbench.providers),
+          },
           onEvent,
         ),
       );
     },
-    [client, controller, streamAndSettle, turns, updateTurn],
+    [client, controller, streamAndSettle, turns, updateTurn, workbench],
   );
 
   const send = useCallback(async () => {
@@ -343,16 +390,27 @@ export function AskPanel() {
 
     await streamAndSettle(id, (onEvent) =>
       client.runStream(
-        { workflow: document, question: trimmed, workflowSlug: currentWorkflowSlug() },
+        {
+          workflow: document,
+          question: trimmed,
+          workflowSlug: currentWorkflowSlug(),
+          ...credentialsPatch(workbench.providers),
+        },
         onEvent,
       ),
     );
-  }, [client, controller, question, running, scrollToEnd, streamAndSettle]);
+  }, [client, controller, question, running, scrollToEnd, streamAndSettle, workbench]);
 
   return (
     <Panel side="right" className="ask" style={{ width: 'var(--layout-inspector-width)' }}>
       <PanelHeader bordered title="Chat" />
       <PanelBody>
+        {notice ? (
+          <p className="ask__notice">
+            <Icon glyph={Info} size="sm" />
+            <span>{notice}</span>
+          </p>
+        ) : null}
         <div className="ask__thread" ref={threadRef}>
           {turns.length === 0 ? (
             <p className="ask__meta ask__empty">
@@ -366,6 +424,7 @@ export function AskPanel() {
 
         <Field label="Message" className="ask__composer">
           <TextInput
+            ref={composerRef}
             value={question}
             placeholder="Which genre earned the most revenue?"
             onChange={(event) => setQuestion(event.target.value)}

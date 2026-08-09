@@ -47,6 +47,7 @@ import {
   slugify,
 } from '@view/export/exportWorkflow';
 import { GraphPreview } from '@view/overlays/GraphPreview';
+import { OnboardingHint } from '@view/overlays/OnboardingHint';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import './TopBar.css';
 
@@ -102,8 +103,13 @@ export function TopBar({
       setTokens(0);
     });
     const offUsage = engine.on('run:usage', ({ usage }) => setTokens(usage.totalTokens));
-    const offFinish = engine.on('run:finish', ({ ok, error }) => {
+    const offFinish = engine.on('run:finish', ({ ok, error, reason }) => {
       setRunning(false);
+      // A handover to the backend runtime is not a failure and gets no error
+      // toast — the shell opens the chat panel and explains it there, where
+      // the user's next action already is. Toasting as well would read as
+      // "something went wrong" for a run that is about to work.
+      if (reason === 'requires-backend-runtime') return;
       if (!ok && error) onNotify(error);
     });
     return () => {
@@ -282,13 +288,19 @@ export function TopBar({
             </Badge>
           ) : null}
 
-          <Tooltip content="API keys and endpoints" multiline>
-            <IconButton
-              label="API keys and endpoints"
-              icon={<Icon glyph={KeyRound} size="md" />}
-              onClick={onOpenCredentials}
-            />
-          </Tooltip>
+          {/* Anchor for the first-run hint, which points at this exact
+              button — so the pointer and the thing it points at cannot drift
+              apart when the toolbar is rearranged. */}
+          <div className="topbar__hint-anchor">
+            <Tooltip content="API keys and endpoints" multiline>
+              <IconButton
+                label="API keys and endpoints"
+                icon={<Icon glyph={KeyRound} size="md" />}
+                onClick={onOpenCredentials}
+              />
+            </Tooltip>
+            <OnboardingHint onOpenCredentials={onOpenCredentials} />
+          </div>
 
           <Button
             variant={running ? 'secondary' : 'primary'}

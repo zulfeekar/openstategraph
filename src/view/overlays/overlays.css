@@ -279,3 +279,62 @@
     transform: translateY(10px) scale(0.96);
   }
 }
+
+/* ---------- First-run hint ---------- */
+
+.onboarding-hint {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 260px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-xl);
+  animation: toast-in var(--duration-normal) var(--ease-spring);
+}
+
+/* The pointer at the button above it: a hint that floats free reads as a
+   toast, not as a label for a specific control. */
+.onboarding-hint::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-top: 1px solid var(--color-border-default);
+  border-left: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+}
+
+.onboarding-hint__text {
+  margin: 0;
+  padding-right: var(--space-4);
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+}
+
+.onboarding-hint__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.onboarding-hint__close:hover {
+  color: var(--color-text-primary);
+}

@@ -46,6 +46,10 @@ export class OllamaProvider extends AbstractLLMProvider {
   override readonly credentialsHint =
     'Start Ollama with OLLAMA_ORIGINS="*" so the browser can reach it';
   override readonly allowsCustomModel = true;
+  // Ollama *cloud* is what this project uses (never a local model), and a
+  // cloud model is what a backend run resolves by default — so a key set
+  // here is worth forwarding even though the browser path needs none.
+  override readonly runtimeCredentialKey = 'OLLAMA_API_KEY';
 
   private discovered: readonly ModelDescriptor[] | null = null;
 
