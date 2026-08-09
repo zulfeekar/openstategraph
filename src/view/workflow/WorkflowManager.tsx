@@ -18,10 +18,7 @@ import {
   WorkflowFileClient,
   type WorkflowSummary,
 } from '@core/runtime/WorkflowFileClient';
-import {
-  registerDiscoveredCapabilities,
-  registerNodeTypesForRawDocument,
-} from '@nodes/workflowScoped';
+import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -114,46 +111,19 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const handleLoad = useCallback(
     async (slug: string) => {
       setBusy(true);
-      const outcome = await client.load(slug);
+      // The load itself lives in `loadWorkflowIntoEditor`, shared with the
+      // Open affordance on a mount card. Only the panel's own reactions —
+      // busy state, toast, closing — stay here.
+      const outcome = await loadWorkflowIntoEditor(slug, client, workbench);
       setBusy(false);
       if (!outcome.ok) {
         onNotify(`Could not load: ${outcome.error}`);
         return;
       }
-      try {
-        // Before importing, not after: `fromJSON` skips any node whose type
-        // is not registered yet, so a workflow-scoped type (Chinook's
-        // tools, or a discovered capability already placed in a
-        // previously-saved document) must exist in the registry before its
-        // nodes can be created at all — registering afterwards would be
-        // too late. Ticket 18: a workflow's own discovered `tools/`
-        // capabilities become real, connectable node types the same way.
-        const capabilities = await client.capabilities(slug);
-        registerDiscoveredCapabilities(
-          capabilities.ok ? capabilities.value.tools : [],
-          workbench.registry,
-          workbench.engine.executors,
-        );
-        registerNodeTypesForRawDocument(
-          outcome.value,
-          workbench.registry,
-          workbench.engine.executors,
-        );
-        controller.document.importJSON(JSON.stringify(outcome.value));
-        // Continuing to edit and save now updates *this* workflow, not a new one.
-        sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
-        onNotify(`Loaded: ${workbench.model.name}`);
-        // Establishes the file watch's baseline for this slug — otherwise
-        // its first poll after a load would have nothing to compare
-        // against and could mistake the file as already-changed.
-        const list = await refreshList();
-        recordKnownSavedAt(slug, list.find((wf) => wf.slug === slug)?.savedAt);
-        onClose();
-      } catch (error) {
-        onNotify(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
+      onNotify(`Loaded: ${outcome.value}`);
+      onClose();
     },
-    [client, controller, workbench, onNotify, onClose, refreshList],
+    [client, workbench, onNotify, onClose],
   );
 
   const handleDelete = useCallback(

@@ -12,3 +12,99 @@
   color: var(--color-text-quaternary);
   font-style: italic;
 }
+
+/* The census line and its two affordances share one row: disclosure on the
+ * left (it labels what it opens), Open pinned right. */
+.node__composition-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.node__composition-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node__composition-toggle:hover {
+  color: var(--color-text-secondary);
+}
+
+.node__composition-caret {
+  flex: none;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.node__composition-open {
+  flex: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0 5px;
+  cursor: pointer;
+}
+
+.node__composition-open:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-text-tertiary);
+}
+
+.node__composition-open:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* The peek itself.
+ *
+ * Inert by construction: `pointer-events: none` on the diagram means no click,
+ * hover or drag inside it can reach the child's document, so the card stays a
+ * card and the mount stays a box. It is also why the peek does not swallow the
+ * drag that moves the parent node.
+ *
+ * The card's height is measured and reported to the canvas by `NodeCard`, so
+ * growing downward here is supported — the node grows to fit rather than
+ * clipping. The width is not elastic, hence the capped height and the
+ * card-sized Mermaid layout in `peekMermaid`. */
+.node__peek {
+  margin-top: 6px;
+  padding: 6px;
+  /* No height cap. A cap here silently *truncates a graph*, which is worse
+   * than a tall card: a peek that shows the first four nodes of a loop and
+   * hides the edge that closes it tells the reader the opposite of the truth.
+   * `NodeCard` measures and reports the card's height, so growing is
+   * supported; the width is what is fixed, and `peekMermaid` lays the diagram
+   * out top-down to suit it. */
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-sunken, transparent);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.node__peek svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.node__peek--note {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  font-style: italic;
+  padding: 4px 6px;
+  border-style: dashed;
+}

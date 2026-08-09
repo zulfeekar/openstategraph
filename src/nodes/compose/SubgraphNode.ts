@@ -4,6 +4,7 @@ import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
+import { OVERRIDES_FIELD } from './overridesField';
 
 export const SUBGRAPH_TYPE = 'workflow.subgraph';
 
@@ -55,6 +56,7 @@ export const subgraphNode: INodeDefinition = defineNode(
         placeholder: 'e.g. chinook-nl-to-sql',
         defaultValue: '',
       },
+      OVERRIDES_FIELD,
     ],
     ports: [
       {

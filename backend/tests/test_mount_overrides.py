@@ -97,3 +97,20 @@ class TestWiringThroughTheMount:
         ]
         # and the shared child dict itself was never mutated
         assert child["nodes"][0]["data"] == {}
+
+
+class TestTheInspectorStringForm:
+    """The editor's textarea stores overrides as a JSON string."""
+
+    def test_a_json_string_is_one_and_the_same_contract(self) -> None:
+        doc, warnings = apply_mount_overrides(CHILD, '{"grader1": {"maxAttempts": 7}}')
+        assert warnings == []
+        assert next(n for n in doc["nodes"] if n["id"] == "grader1")["data"]["maxAttempts"] == 7
+
+    def test_malformed_json_warns_and_runs_on_defaults(self) -> None:
+        doc, warnings = apply_mount_overrides(CHILD, "{not json")
+        assert doc is CHILD
+        assert "not valid JSON" in warnings[0]
+
+    def test_an_empty_string_is_a_no_op(self) -> None:
+        assert apply_mount_overrides(CHILD, "  ") == (CHILD, []) or apply_mount_overrides(CHILD, "")[1] == []

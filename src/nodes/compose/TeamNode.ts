@@ -4,6 +4,7 @@ import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
+import { OVERRIDES_FIELD } from './overridesField';
 
 export const TEAM_TYPE = 'team.workflow';
 
@@ -76,6 +77,7 @@ export const teamNode: INodeDefinition = defineNode(
         defaultValue: '',
         onCard: true,
       },
+      OVERRIDES_FIELD,
     ],
     ports: [
       {

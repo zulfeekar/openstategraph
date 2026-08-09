@@ -15,6 +15,7 @@ the other works.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -294,6 +295,15 @@ def apply_mount_overrides(
     """
     if not overrides:
         return child_document, []
+    if isinstance(overrides, str):
+        # The inspector edits this field as a JSON textarea, so a saved
+        # document carries the string form; both spellings are one contract.
+        try:
+            overrides = json.loads(overrides)
+        except ValueError:
+            return child_document, ["overrides is not valid JSON — the package defaults ran"]
+        if not overrides:
+            return child_document, []
     if not isinstance(overrides, dict):
         return child_document, [
             f"overrides must be a mapping of child node id -> fields, got {type(overrides).__name__}"
