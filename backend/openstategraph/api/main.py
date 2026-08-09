@@ -71,6 +71,8 @@ from openstategraph.api.schemas import (  # noqa: E402
     AskResponse,
     CapabilitiesResponse,
     FunctionCapabilityResponse,
+    KnowledgeBuildRequest,
+    KnowledgeBuildResponse,
     ResumeRequest,
     RunRequest,
     RunResponse,
@@ -312,6 +314,50 @@ def create_app(
                 for f in functions
             ],
         )
+
+    @app.post("/api/workflows/{slug}/knowledge/build", response_model=KnowledgeBuildResponse)
+    def build_knowledge(slug: str, request: KnowledgeBuildRequest) -> KnowledgeBuildResponse:
+        """'Build second brain' (knowledge layer): one doc per topic, written
+        to `workflows/<slug>/knowledge/` by every registered builder whose
+        source material exists in this workflow — SQL tables today, codebase
+        and OpenAPI sources by registration (`knowledge_builders.BUILDERS`).
+
+        Synchronous on purpose: topics are few (tables of a workflow's own
+        databases), and the report is the button's feedback. Regeneration is
+        safe — a doc without the generated marker is hand-authored and is
+        skipped, never overwritten (see `knowledge_builders`' policy).
+        """
+        from openstategraph.api import knowledge_build
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            document = workflow_store.load(slug)
+            workflow_dir = workflow_store.directory_for(slug)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        # Model precedence mirrors the run endpoints: explicit request >
+        # document settings.model > environment default.
+        model = knowledge_build.resolve_build_model(
+            request.model or workflow_default_model(document), request.credentials
+        )
+        try:
+            report = knowledge_build.run_build(
+                workflow_dir, document, model, workflow_store.root, source=request.source
+            )
+        except knowledge_build.UnknownSourceError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not report["written"] and not report["skipped"]:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No knowledge source found in this workflow — no SQL tool "
+                    "node names a database file under workflows/."
+                ),
+            )
+        return KnowledgeBuildResponse(**report)
 
     @app.get("/api/workflows/{slug}/graph")
     def compiled_graph(slug: str) -> dict[str, str]:

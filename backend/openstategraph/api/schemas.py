@@ -174,3 +174,25 @@ class AskResponse(BaseModel):
     passed: bool
     reason: str
 
+
+
+class KnowledgeBuildRequest(BaseModel):
+    """POST /api/workflows/{slug}/knowledge/build — everything optional.
+
+    `model`/`credentials` follow the run endpoints' resolution chain; `source`
+    names one registered builder (default: every builder that finds topics).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    model: str | None = None
+    credentials: dict[str, str] | None = None
+    source: str | None = None
+
+
+class KnowledgeBuildResponse(BaseModel):
+    """The build report: topic names written/skipped, grouped per source."""
+
+    written: list[str]
+    skipped: list[str]
+    sources: dict[str, dict[str, list[str]]]

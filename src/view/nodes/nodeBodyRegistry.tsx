@@ -7,6 +7,7 @@ import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import { FieldRenderer } from './FieldRenderer';
 import { SubgraphCompositionBody, TeamCompositionBody } from './CompositionBody';
+import { KnowledgeBody } from './KnowledgeBody';
 
 export interface NodeBodyProps {
   node: AbstractNodeModel;
@@ -152,3 +153,4 @@ registerNodeBody('team.workflow', TeamCompositionBody);
 registerNodeBody('workflow.subgraph', SubgraphCompositionBody);
 registerNodeBody('annotate.group', GroupBody);
 registerNodeBody('annotate.note', NoteBody);
+registerNodeBody('tool.knowledge-lookup', KnowledgeBody);

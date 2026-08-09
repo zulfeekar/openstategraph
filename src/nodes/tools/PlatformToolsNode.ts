@@ -96,6 +96,13 @@ export const PLATFORM_TOOL_NODES = [
     keywords: ['web', 'fetch', 'url', 'online'],
   }),
   backendTool({
+    id: 'tool.knowledge-lookup',
+    label: 'Knowledge',
+    description:
+      'The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. Build it from the card’s “Build second brain” button.',
+    keywords: ['knowledge', 'brain', 'wiki', 'procedural', 'second brain', 'lookup', 'memory'],
+  }),
+  backendTool({
     id: 'tool.email-send',
     label: 'Email Send',
     description:

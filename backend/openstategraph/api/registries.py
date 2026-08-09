@@ -61,7 +61,17 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # Report delivery (full-sweep capability test): SMTP when configured,
     # loud .eml dry-run otherwise. Recipient is node config, never a model arg.
     registry.update({tool.node_type: tool for tool in EMAIL_TOOLS})
+    from openstategraph.prebuilt_knowledge import knowledge_lookup_for
+
+    # The second brain (knowledge layer): registered unbound so the node type
+    # always resolves, then re-bound below to the open workflow's own
+    # knowledge/ directory — the same validated jail every slug path uses.
+    registry.update(knowledge_lookup_for(None))
     if slug:
+        try:
+            registry.update(knowledge_lookup_for(workflow_store.directory_for(slug)))
+        except Exception:
+            logger.warning("Knowledge binding failed for %r", slug, exc_info=True)
         try:
             registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
         except Exception:
@@ -79,7 +89,13 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
 #: would produce a node that looks wired and answers nothing. The families
 #: below are self-contained (web, platform introspection) or carry their own
 #: config field the developer fills in afterwards (email's recipient).
-SUGGESTIBLE_TOOL_PREFIXES = ("tool.web-", "tool.platform-", "tool.sql-", "tool.email-")
+SUGGESTIBLE_TOOL_PREFIXES = (
+    "tool.web-",
+    "tool.platform-",
+    "tool.sql-",
+    "tool.email-",
+    "tool.knowledge-",
+)
 
 
 def suggestible_tool_catalog(registry: dict[str, Any]) -> str:

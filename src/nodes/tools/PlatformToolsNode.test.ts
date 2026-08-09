@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeWorkbench } from '@core/testing/fixtures';
 import conciergeEnvelope from '../../../workflows/concierge/workflow.json';
+import { PLATFORM_TOOL_NODES } from './PlatformToolsNode';
 
 describe('platform tool nodes', () => {
   it('the concierge document survives an editor round-trip intact', () => {
@@ -16,5 +17,18 @@ describe('platform tool nodes', () => {
     if (outcome.ok) expect(outcome.value.warnings).toEqual([]);
     expect(workbench.model.nodes()).toHaveLength(document.nodes.length);
     expect(workbench.model.edges()).toHaveLength(document.edges.length);
+  });
+
+  it('ships the Knowledge atom, findable by its second-brain vocabulary', () => {
+    // The knowledge layer's canvas face (its Python half is
+    // `prebuilt_knowledge.py`): a lookup tool any agent's tools port can
+    // bind, fetched on demand rather than concatenated into prompts.
+    const knowledge = PLATFORM_TOOL_NODES.find(
+      (entry) => entry.definition.id === 'tool.knowledge-lookup',
+    );
+    expect(knowledge).toBeDefined();
+    for (const keyword of ['knowledge', 'brain', 'wiki', 'procedural']) {
+      expect(knowledge?.definition.keywords).toContain(keyword);
+    }
   });
 });
