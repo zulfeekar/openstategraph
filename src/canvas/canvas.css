@@ -250,6 +250,14 @@
   inherits: false;
 }
 
+/* While a node is actively running, the glow owns the border: the selection
+ * ring (--shadow-node-selected) is a solid accent stroke that visually
+ * dominates the gradient sweep (owner screenshot). Selection state itself is
+ * untouched — the ring returns the moment the run moves on. */
+.joint-element.is-active.is-selected .node {
+  box-shadow: none;
+}
+
 .joint-element.is-active .node {
   --run-glow-width: var(--space-0-5);
   --run-glow-blur: var(--space-2);
