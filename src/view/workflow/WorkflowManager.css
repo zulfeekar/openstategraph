@@ -4,7 +4,7 @@
 
 .workflow-manager__empty {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-13);
   font-style: italic;
 }
 
@@ -34,13 +34,13 @@
 }
 
 .workflow-manager__name {
-  font-weight: 500;
-  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-13);
   flex: 1;
 }
 
 .workflow-manager__date {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-11);
   color: var(--color-text-secondary);
 }
 

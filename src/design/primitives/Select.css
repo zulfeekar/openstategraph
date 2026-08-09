@@ -31,7 +31,7 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: var(--space-1-5) var(--space-7, 28px) var(--space-1-5) var(--space-2-5);
+  padding: var(--space-1-5) var(--space-7) var(--space-1-5) var(--space-2-5);
   font: var(--type-body-md);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-tight);

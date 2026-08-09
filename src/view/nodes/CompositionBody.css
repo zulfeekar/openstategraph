@@ -5,7 +5,7 @@
 .node__composition {
   font: var(--type-caption);
   color: var(--color-text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-snug);
 }
 
 .node__composition--missing {
@@ -18,7 +18,7 @@
 .node__composition-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .node__composition-toggle {
@@ -26,7 +26,7 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 0;
   border: 0;
   background: none;
@@ -60,7 +60,7 @@
    * hair of gap rather than two baseline-aligned siblings. */
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   white-space: nowrap;
   font: var(--type-caption);
   font-weight: var(--font-weight-semibold);
@@ -69,7 +69,7 @@
   background: var(--color-bg-subtle);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  padding: 2px 6px;
+  padding: var(--space-0-5) var(--space-1-5);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),
@@ -112,8 +112,8 @@
  * clipping. The width is not elastic, hence the capped height and the
  * card-sized Mermaid layout in `peekMermaid`. */
 .node__peek {
-  margin-top: 6px;
-  padding: 6px;
+  margin-top: var(--space-1-5);
+  padding: var(--space-1-5);
   /* No height cap. A cap here silently *truncates a graph*, which is worse
    * than a tall card: a peek that shows the first four nodes of a loop and
    * hides the edge that closes it tells the reader the opposite of the truth.
@@ -121,7 +121,7 @@
    * supported; the width is what is fixed, and `peekMermaid` lays the diagram
    * out top-down to suit it. */
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-surface-sunken, transparent);
   pointer-events: none;
   opacity: 0.85;
@@ -138,6 +138,6 @@
   font: var(--type-caption);
   color: var(--color-text-quaternary);
   font-style: italic;
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-1-5);
   border-style: dashed;
 }

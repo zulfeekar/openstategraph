@@ -56,6 +56,11 @@
   --color-status-warning: var(--amber-500);
   --color-status-error: var(--red-500);
 
+  /* The active-node border glow is a two-hue gradient stroke, so it needs a
+   * pair: it starts on the running-status accent and blends into violet. */
+  --color-run-glow-from: var(--blue-500);
+  --color-run-glow-to: var(--violet-500);
+
   --color-danger: var(--red-600);
   --color-danger-subtle: var(--red-50);
 
@@ -141,6 +146,11 @@
   --color-status-success: #34d399;
   --color-status-warning: #fbbf24;
   --color-status-error: #f87171;
+
+  /* Lifted on dark, where a mid-ramp accent reads as muddy against the
+   * canvas rather than as a light source. */
+  --color-run-glow-from: #60a5fa;
+  --color-run-glow-to: #a78bfa;
 
   --color-danger: #f87171;
   --color-danger-subtle: rgba(248, 113, 113, 0.14);

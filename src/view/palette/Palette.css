@@ -39,7 +39,7 @@
 .palette-item__text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-px);
   min-width: 0;
 }
 
@@ -106,7 +106,7 @@
 
 .palette-group-label__hint {
   display: block;
-  margin-top: 2px;
+  margin-top: var(--space-0-5);
   font: var(--type-caption);
   letter-spacing: normal;
   text-transform: none;

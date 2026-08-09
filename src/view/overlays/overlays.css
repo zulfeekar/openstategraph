@@ -286,7 +286,7 @@
 
 .a11y-item__detail {
   display: block;
-  margin-top: 2px;
+  margin-top: var(--space-0-5);
   color: inherit;
   opacity: 0.8;
 }
@@ -375,7 +375,7 @@
   top: var(--space-2);
   right: var(--space-2);
   display: flex;
-  padding: 2px;
+  padding: var(--space-0-5);
   border: none;
   border-radius: var(--radius-sm);
   background: none;

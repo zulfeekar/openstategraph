@@ -24,8 +24,47 @@
     --live: #2563eb;
     --done: #16a34a;
     --danger: #dc2626;
-    --radius: 12px;
-    --radius-sm: 8px;
+    /* The editor's design tokens, restated in-file — this page is served
+       standalone by the backend and cannot import `src/design`. Same 4px
+       spacing ladder, same radius steps, same type ramp, so the two
+       surfaces stay on one scale even though they share no stylesheet. */
+    --space-px: 1px;
+    --space-0-5: 0.125rem; /*  2px */
+    --space-1: 0.25rem; /*  4px */
+    --space-1-5: 0.375rem; /*  6px */
+    --space-2: 0.5rem; /*  8px */
+    --space-2-5: 0.625rem; /* 10px */
+    --space-3: 0.75rem; /* 12px */
+    --space-3-5: 0.875rem; /* 14px */
+    --space-4: 1rem; /* 16px */
+    --space-5: 1.25rem; /* 20px */
+    --space-6: 1.5rem; /* 24px */
+    --space-7: 1.75rem; /* 28px */
+    --space-8: 2rem; /* 32px */
+
+    --radius-xs: 3px;
+    --radius-sm: 5px;
+    --radius-md: 7px;
+    --radius-lg: 9px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-full: 999px;
+
+    --font-size-10: 0.625rem;
+    --font-size-11: 0.6875rem;
+    --font-size-12: 0.75rem;
+    --font-size-13: 0.8125rem;
+    --font-size-14: 0.875rem;
+    --font-size-16: 1rem;
+    --font-size-20: 1.25rem;
+
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+
+    --line-height-tight: 1.2;
+    --line-height-snug: 1.35;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.65;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -49,12 +88,12 @@
   body {
     margin: 0; height: 100vh; display: flex; flex-direction: column;
     background: var(--bg); color: var(--text);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font: var(--font-size-14)/var(--line-height-normal) -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   #split { flex: 1; display: flex; min-height: 0; }
-  #flowpane { flex: 1; overflow: auto; padding: 20px 24px; min-width: 0; background: var(--surface); }
-  #flowpane h2 { margin: 0 0 14px; font-size: 11px; color: var(--faint); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; }
+  #flowpane { flex: 1; overflow: auto; padding: var(--space-5) var(--space-6); min-width: 0; background: var(--surface); }
+  #flowpane h2 { margin: 0 0 var(--space-3-5); font-size: var(--font-size-11); color: var(--faint); font-weight: var(--font-weight-semibold); text-transform: uppercase; letter-spacing: .07em; }
   #chatcol { width: 440px; max-width: 440px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); min-height: 0; background: var(--bg); }
   @media (max-width: 900px) {
     #split { flex-direction: column; }
@@ -63,22 +102,22 @@
   }
 
   /* ---------- Header ---------- */
-  header { display: flex; gap: 10px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg); }
-  header strong { margin-right: auto; font-size: 15px; letter-spacing: -.01em; }
+  header { display: flex; gap: var(--space-2-5); align-items: center; padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg); }
+  header strong { margin-right: auto; font-size: var(--font-size-16); letter-spacing: -.01em; }
   header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); flex: none; }
   select, input, button, textarea {
-    font: inherit; padding: 7px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg);
     background: var(--raised); color: inherit;
   }
   input::placeholder, textarea::placeholder { color: var(--faint); }
   select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   button { cursor: pointer; transition: background .12s ease, border-color .12s ease; }
   button:hover { border-color: var(--faint); }
-  #send { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding-inline: 18px; }
+  #send { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: var(--font-weight-semibold); padding-inline: var(--space-4); }
   #send:hover { filter: brightness(1.08); }
-  #who { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  #who { font-size: var(--font-size-12); color: var(--faint); font-variant-numeric: tabular-nums; }
 
-  main { flex: 1; overflow-y: auto; padding: 18px 20px; min-height: 0; }
+  main { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-5); min-height: 0; }
 
   /* ---------- Live flow ---------- */
   #flow svg { width: 100%; height: auto; }
@@ -100,69 +139,69 @@
   @media (prefers-reduced-motion: reduce) { #flow .flow-active { animation: none; } }
 
   /* ---------- Empty state ---------- */
-  .empty { padding: 28px 4px; }
-  .empty h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
-  .empty p { margin: 0; color: var(--muted); font-size: 14px; }
+  .empty { padding: var(--space-7) var(--space-1); }
+  .empty h3 { margin: 0 0 var(--space-1-5); font-size: var(--font-size-16); letter-spacing: -.01em; }
+  .empty p { margin: 0; color: var(--muted); font-size: var(--font-size-14); }
 
   /* ---------- A turn ---------- */
-  .turn { margin-bottom: 26px; }
+  .turn { margin-bottom: var(--space-6); }
   .q {
-    max-width: 88%; margin: 0 0 10px auto; width: fit-content;
-    padding: 8px 13px; background: var(--accent-soft);
-    border-radius: 14px 14px 4px 14px; font-size: 14px;
+    max-width: 88%; margin: 0 0 var(--space-2-5) auto; width: fit-content;
+    padding: var(--space-2) var(--space-3); background: var(--accent-soft);
+    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl); font-size: var(--font-size-14);
   }
 
   /* The steps are an activity strip, not a log: one quiet line per step, on a
      tinted rail, so they read as "what is happening" and never compete with
      the answer. */
   .steps {
-    font-size: 12px; color: var(--muted);
+    font-size: var(--font-size-12); color: var(--muted);
     background: var(--surface); border: 1px solid var(--line-soft);
-    border-radius: var(--radius-sm); padding: 7px 10px; margin: 0 0 8px;
-    display: flex; flex-direction: column; gap: 2px;
+    border-radius: var(--radius-lg); padding: var(--space-2) var(--space-2-5); margin: 0 0 var(--space-2);
+    display: flex; flex-direction: column; gap: var(--space-0-5);
   }
   .steps:empty { display: none; }
   .steps div { font-variant-numeric: tabular-nums; }
 
   /* ---------- Read-only run timeline ---------- */
-  details.tl { margin: 0 0 8px; font-size: 12px; }
+  details.tl { margin: 0 0 var(--space-2); font-size: var(--font-size-12); }
   details.tl[hidden] { display: none; }
   details.tl > summary {
     cursor: pointer; list-style: none; color: var(--faint);
-    text-transform: uppercase; letter-spacing: .07em; font-size: 10px; font-weight: 600;
-    padding: 2px 0;
+    text-transform: uppercase; letter-spacing: .07em; font-size: var(--font-size-10); font-weight: var(--font-weight-semibold);
+    padding: var(--space-0-5) 0;
   }
   details.tl > summary::-webkit-details-marker { display: none; }
   details.tl > summary:hover { color: var(--muted); }
-  .tl-body { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 2px; }
-  .tl-row { display: grid; grid-template-columns: 1.1em minmax(0, 1fr) minmax(48px, 1.5fr) auto; gap: 6px; align-items: center; color: var(--muted); }
+  .tl-body { display: flex; flex-direction: column; gap: var(--space-0-5); padding: var(--space-1-5) 0 var(--space-0-5); }
+  .tl-row { display: grid; grid-template-columns: 1.1em minmax(0, 1fr) minmax(48px, 1.5fr) auto; gap: var(--space-1-5); align-items: center; color: var(--muted); }
   .tl-n { text-align: right; color: var(--faint); font-variant-numeric: tabular-nums; }
   .tl-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
-  .tl-track { height: 5px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
-  .tl-bar { display: block; height: 100%; border-radius: 999px; background: var(--faint); }
+  .tl-track { height: 5px; border-radius: var(--radius-full); background: var(--line-soft); overflow: hidden; }
+  .tl-bar { display: block; height: 100%; border-radius: var(--radius-full); background: var(--faint); }
   .tl-row[data-repeat] .tl-bar { background: #8b5cf6; }
   .tl-ms { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--faint); }
-  .tl-note { color: var(--faint); margin: 4px 0 0; font-size: 11px; }
+  .tl-note { color: var(--faint); margin: var(--space-1) 0 0; font-size: var(--font-size-11); }
 
   /* Capped, like the editor's: a peek at the reasoning, not a transcript that
      pushes the answer off the screen. */
-  .thinking { font-size: 12.5px; color: var(--muted); white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
-  .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 8px 11px; margin-top: 8px; }
+  .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+  .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); }
   .answer {
-    background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 14px 16px; margin-top: 8px; overflow-x: auto; font-size: 14.5px;
+    background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-xl);
+    padding: var(--space-3-5) var(--space-4); margin-top: var(--space-2); overflow-x: auto; font-size: var(--font-size-14);
   }
   .answer > :first-child { margin-top: 0; } .answer > :last-child { margin-bottom: 0; }
-  .answer h3, .answer h4, .answer h5 { margin: 14px 0 6px; font-size: 15px; }
-  .answer table { border-collapse: collapse; margin: 8px 0; }
-  .answer td, .answer th { border: 1px solid var(--line); padding: 4px 9px; }
-  .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 5px; padding: 1px 5px; font-size: 13px; }
-  .answer pre { display: block; padding: 10px 12px; overflow-x: auto; }
+  .answer h3, .answer h4, .answer h5 { margin: var(--space-3-5) 0 var(--space-1-5); font-size: var(--font-size-16); }
+  .answer table { border-collapse: collapse; margin: var(--space-2) 0; }
+  .answer td, .answer th { border: 1px solid var(--line); padding: var(--space-1) var(--space-2-5); }
+  .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: var(--space-px) var(--space-1-5); font-size: var(--font-size-13); }
+  .answer pre { display: block; padding: var(--space-2-5) var(--space-3); overflow-x: auto; }
   .error { color: var(--danger); }
-  .hitl { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin-top: 8px; background: var(--surface); }
+  .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
 
-  footer { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); background: var(--bg); }
-  footer textarea { flex: 1; resize: none; height: 46px; border-radius: var(--radius); }
+  footer { display: flex; gap: var(--space-2); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--line); background: var(--bg); }
+  footer textarea { flex: 1; resize: none; height: 46px; border-radius: var(--radius-xl); }
 </style>
 </head>
 <body>
@@ -172,7 +211,7 @@
   <select id="wf" title="Workflow"></select>
   <button id="newconv" title="Start a fresh thread">New conversation</button>
   <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
-  <span id="who" style="font-size:12px;color:var(--muted)"></span>
+  <span id="who" style="font-size:var(--font-size-12);color:var(--muted)"></span>
 </header>
 <div id="split">
   <section id="flowpane">

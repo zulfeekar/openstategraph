@@ -233,21 +233,74 @@
  * writes it, so this stays a projection. Both a local preview run and a
  * backend-streamed one drive the identical channel.
  *
- * A drop-shadow filter rather than a box-shadow: the card is HTML inside a
- * `foreignObject`, and its own styling belongs to `NodeCard`. Filtering the
- * SVG group tints the whole cell — card, ports and all — without this layer
- * reaching into the card's internals. */
-.joint-element.is-active {
-  animation: node-pulse 1.4s var(--ease-in-out) infinite;
+ * The card is HTML inside a `foreignObject` (which is `overflow: visible`),
+ * so this is a real CSS border-glow rather than an SVG filter: a conic
+ * gradient sweeping around the card's edge, plus a blurred twin behind it
+ * for the bloom. Both live on pseudo-elements of the card, so this layer
+ * still never reaches into `NodeCard`'s own markup or stylesheet.
+ *
+ * The sweep is driven by an animated `<angle>` custom property rather than
+ * by rotating an oversized square inside an overflow-hidden box: same
+ * visual, but it needs no extra element and cannot be clipped by the
+ * card's own layout containment. Browsers without `@property` simply hold
+ * the gradient still, which degrades to a static accent ring. */
+@property --run-glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
 
-@keyframes node-pulse {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-status-running) 55%, transparent));
-  }
-  50% {
-    filter: drop-shadow(0 0 12px var(--color-status-running));
+.joint-element.is-active .node {
+  --run-glow-width: var(--space-0-5);
+  --run-glow-blur: var(--space-2);
+  --run-glow-duration: var(--duration-glow-sweep);
+  /* Positioning context for the ring; deliberately no `z-index`, so the
+   * blurred twin below can sit behind the card's own background. */
+  position: relative;
+}
+
+.joint-element.is-active .node::before,
+.joint-element.is-active .node::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--run-glow-width));
+  border-radius: calc(var(--radius-lg) + var(--run-glow-width));
+  /* Two accent hues, not one solid colour: the segment blends from the
+   * running-status accent into its companion so the sweep reads as a
+   * gradient stroke travelling around the card. */
+  background: conic-gradient(
+    from var(--run-glow-angle),
+    transparent 0deg,
+    var(--color-run-glow-from) 30deg,
+    var(--color-run-glow-to) 70deg,
+    transparent 100deg
+  );
+  animation: run-glow-sweep var(--run-glow-duration) linear infinite;
+  pointer-events: none;
+}
+
+/* Mask the fill out of the middle so only the border ring survives. */
+.joint-element.is-active .node::before {
+  padding: var(--run-glow-width);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* The bloom: the same sweep, blurred and pushed behind the card. */
+.joint-element.is-active .node::after {
+  z-index: -1;
+  filter: blur(var(--run-glow-blur));
+  opacity: 0.7;
+}
+
+@keyframes run-glow-sweep {
+  to {
+    --run-glow-angle: 1turn;
   }
 }
 
@@ -338,9 +391,16 @@
     animation: none;
   }
 
-  /* Same bargain for the active card: keep the glow, drop the pulse. */
-  .joint-element.is-active {
+  /* Same bargain for the active card: keep the gradient ring and its bloom,
+     drop the sweep. The card stays unmistakably marked without motion. */
+  .joint-element.is-active .node::before,
+  .joint-element.is-active .node::after {
     animation: none;
-    filter: drop-shadow(0 0 8px var(--color-status-running));
+    background: conic-gradient(
+      from 0deg,
+      var(--color-run-glow-from),
+      var(--color-run-glow-to),
+      var(--color-run-glow-from)
+    );
   }
 }
