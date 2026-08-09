@@ -217,7 +217,10 @@ export function AppShell() {
               the topbar's contents are fixed chrome. */}
           <DrillBanner />
           {paper ? <Minimap /> : null}
-          <ShortcutsDrawer shortcuts={paper?.shortcuts ?? []} />
+          <ShortcutsDrawer
+            shortcuts={paper?.shortcuts ?? []}
+            portTypes={workbench.registry.portTypes.list()}
+          />
           <AccessibilityCheck />
         </main>
 

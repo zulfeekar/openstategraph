@@ -145,12 +145,57 @@
 
 .joint-link [joint-selector='line'] {
   stroke: var(--color-canvas-link);
+  stroke-width: 2.25;
   transition: stroke var(--duration-fast) var(--ease-out);
+}
+
+/* ---------- Edge semantics ----------
+ *
+ * A link is tinted by the type of the port it *lands on* — the adapter
+ * stamps `data-accent` / `data-port-type` from the target port descriptor,
+ * so this is registry-driven and no node type is named here. `--accent-solid`
+ * is the same variable the port dots resolve, which is why a link and its two
+ * endpoints agree, in either theme, with no second palette.
+ *
+ * Colour is never the only channel: each type also carries a dash signature,
+ * so the five families stay distinguishable in greyscale or with any form of
+ * colour blindness. Neutral (a plain data/control edge) is the solid default;
+ * the specialised buses are the ones that get a pattern. */
+.joint-link[data-accent] [joint-selector='line'] {
+  stroke: var(--accent-solid);
+}
+
+/* Tool bus — a dotted feed. */
+.joint-link[data-port-type='tool'] [joint-selector='line'] {
+  stroke-dasharray: 1.5 3.5;
+}
+
+/* Skill fan-out — a long dash. */
+.joint-link[data-port-type='skill'] [joint-selector='line'] {
+  stroke-dasharray: 7 3;
+}
+
+/* Feedback — a short, urgent dash; the only type that closes a cycle. */
+.joint-link[data-port-type='feedback'] [joint-selector='line'] {
+  stroke-dasharray: 3 3;
+  stroke-width: 2.5;
+}
+
+/* Worker dispatch — dash-dot, matching its "one lane, many tasks" meaning. */
+.joint-link[data-port-type='worker'] [joint-selector='line'] {
+  stroke-dasharray: 9 3 2 3;
 }
 
 .joint-link:hover [joint-selector='line'] {
   stroke: var(--color-canvas-link-hover);
-  stroke-width: 2;
+  stroke-width: 2.75;
+}
+
+/* Hover deepens a typed link rather than washing it back to grey — losing
+ * the semantic colour on hover would hide exactly what the pointer is asking
+ * about. */
+.joint-link[data-accent]:hover [joint-selector='line'] {
+  stroke: var(--accent-strong);
 }
 
 .joint-link.is-selected [joint-selector='line'] {
@@ -166,9 +211,43 @@
   animation: link-flow 0.6s linear infinite;
 }
 
+/* The edge the run arrived *on*. Marked but not animated: only one direction
+ * should read as "moving", or the active node looks like it is both sending
+ * and receiving at once. */
+.joint-link.is-incoming [joint-selector='line'] {
+  stroke: var(--color-canvas-link-flow);
+  stroke-width: 2.5;
+  opacity: 0.85;
+}
+
 @keyframes link-flow {
   to {
     stroke-dashoffset: -9;
+  }
+}
+
+/* ---------- Run feedback on cards ----------
+ *
+ * Applied to the JointJS element's root group by `CanvasStage`, from the
+ * model's `node:runtime` channel — the canvas reads the model and never
+ * writes it, so this stays a projection. Both a local preview run and a
+ * backend-streamed one drive the identical channel.
+ *
+ * A drop-shadow filter rather than a box-shadow: the card is HTML inside a
+ * `foreignObject`, and its own styling belongs to `NodeCard`. Filtering the
+ * SVG group tints the whole cell — card, ports and all — without this layer
+ * reaching into the card's internals. */
+.joint-element.is-active {
+  animation: node-pulse 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes node-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-status-running) 55%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px var(--color-status-running));
   }
 }
 
@@ -257,5 +336,11 @@
 @media (prefers-reduced-motion: reduce) {
   .joint-link.is-active [joint-selector='line'] {
     animation: none;
+  }
+
+  /* Same bargain for the active card: keep the glow, drop the pulse. */
+  .joint-element.is-active {
+    animation: none;
+    filter: drop-shadow(0 0 8px var(--color-status-running));
   }
 }

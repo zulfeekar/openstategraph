@@ -46,26 +46,53 @@
   line-height: 1;
 }
 
+/* A real secondary action, not a hint.
+ *
+ * The earlier treatment — inherited caption type, a hairline border, no fill —
+ * read as part of the muted census line beside it and was repeatedly missed.
+ * At rest it now carries its own surface, a visible border and medium weight,
+ * which is the minimum a control needs to look pressable. It stays compact
+ * (11px type, 2px/6px padding) because it lives on a 252px card next to the
+ * disclosure toggle, and it must not out-shout the card's title. */
 .node__composition-open {
   flex: none;
   /* The pencil and its label read as one control, hence inline-flex with a
    * hair of gap rather than two baseline-aligned siblings. */
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   white-space: nowrap;
-  font: inherit;
+  font: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--color-text-secondary);
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 0 5px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
   cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .node__composition-open:hover:not(:disabled) {
-  color: var(--color-text);
-  border-color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-raised);
+  border-color: var(--color-border-emphasis);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.node__composition-open:active:not(:disabled) {
+  background: var(--color-bg-active);
+  box-shadow: none;
+}
+
+.node__composition-open:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .node__composition-open:disabled {

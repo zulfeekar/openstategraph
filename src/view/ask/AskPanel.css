@@ -1,5 +1,21 @@
-/* The chat panel. Kept close to the inspector's visual language so the two
-   right-hand panels read as the same surface rather than two apps. */
+/* The chat panel.
+ *
+ * Kept close to the inspector's visual language so the two right-hand panels
+ * read as the same surface rather than two apps.
+ *
+ * Every colour, radius, space and type ramp here comes from the design
+ * tokens. That is a correction, not a style preference: this file previously
+ * referred to `--surface-sunken`, `--text-primary`, `--border-subtle`,
+ * `--accent-violet-soft` and friends, none of which exist — the token names
+ * are `--color-bg-surface-sunken`, `--color-text-primary`,
+ * `--color-border-subtle`, `--violet-50`. An undefined custom property is not
+ * a fallback, it is an invalid value, so those declarations were being
+ * dropped: the answer card had no background, the question bubble no fill,
+ * the approval box no tint. Nothing in this pass invents a colour; it spells
+ * the existing ones correctly.
+ *
+ * The rhythm is one scale: `--space-2` inside a block, `--space-3` between
+ * blocks, `--space-5` between turns. */
 
 .ask .panel__body {
   display: flex;
@@ -17,54 +33,152 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
+  /* Room for the scrollbar so text never sits under it. */
+  padding-right: var(--space-1);
 }
 
+/* ---------- Empty state ---------- */
+
 .ask__empty {
-  padding: var(--space-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-6) 0;
 }
+
+.ask__empty-title {
+  margin: 0;
+  font: var(--type-heading-sm);
+  color: var(--color-text-primary);
+}
+
+/* ---------- A turn ---------- */
 
 .ask__turn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
 }
 
-.ask__turn:last-child {
-  border-bottom: none;
-}
+/* No rule between turns: the question bubble's own alignment already reads as
+   a boundary, and a divider every few lines makes a short thread look like a
+   table. */
 
 .ask__question {
   align-self: flex-end;
-  max-width: 85%;
+  max-width: 88%;
   padding: var(--space-2) var(--space-3);
-  background: var(--accent-violet-soft, var(--surface-sunken));
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font: var(--type-body-sm);
+  background: var(--color-bg-selected);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+  color: var(--color-text-primary);
+  font: var(--type-body-md);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* ---------- Composer ---------- */
+
 .ask__composer {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1-5);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+/* The affordance the panel was missing: typing visibly focuses one control,
+   rather than a field and a button lighting up separately. */
+.ask__composer:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus-ring) 18%, transparent);
+}
+
+.ask__composer-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.ask__composer-input:focus-within,
+.ask__composer-input:focus,
+.ask__composer-input .input__control:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.ask__composer-send {
+  flex: none;
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- Steps: trace / timeline ---------- */
+
+.ask__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.ask__views {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: var(--space-px);
+  padding: 2px;
+  background: var(--color-bg-muted);
+  border-radius: var(--radius-md);
+}
+
+.ask__view-tab {
+  padding: 2px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  font: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ask__view-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.ask__view-tab[aria-selected='true'] {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
 .ask__activity {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-0-5);
 }
+
+/* ---------- Streamed reasoning ---------- */
 
 .ask__thinking {
   margin: 0;
   padding: var(--space-2) var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px dashed var(--border-subtle);
+  background: var(--color-bg-surface-sunken);
+  border: 1px dashed var(--color-border-default);
   border-radius: var(--radius-md);
-  color: var(--text-muted);
+  color: var(--color-text-tertiary);
   font: var(--type-mono-sm);
   white-space: pre-wrap;
   word-break: break-word;
@@ -75,75 +189,38 @@
   overflow-y: auto;
 }
 
+.ask__thinking--settled {
+  white-space: normal;
+}
+
+/* ---------- The answer ---------- */
+
 .ask__answer-block {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.ask__decisions {
-  display: flex;
-  flex-direction: column;
-}
-
+/* Full width, raised, and the only block in a turn with real presence: the
+   answer is what the user asked for, and the machinery around it is
+   supporting material. */
 .ask__answer {
   margin: 0;
   padding: var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font: var(--type-body);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font: var(--type-body-md);
   /* An answer is prose, not code, so it wraps rather than scrolling sideways. */
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.ask__warning {
-  display: flex;
-  gap: var(--space-2);
-  align-items: flex-start;
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  background: var(--accent-amber-soft, var(--surface-sunken));
-  border: 1px solid var(--accent-amber-strong, var(--border-subtle));
-  border-radius: var(--radius-md);
-  color: var(--accent-amber-strong, var(--text-primary));
-  font: var(--type-body-sm);
-}
-
-.ask__error {
-  display: flex;
-  gap: var(--space-2);
-  align-items: flex-start;
-  margin: 0;
-  color: var(--text-danger);
-  font: var(--type-body-sm);
-}
-
-.ask__meta {
-  margin: 0;
-  color: var(--text-muted);
-  font: var(--type-body-sm);
-}
-
-.ask__approval {
+.ask__decisions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--accent-amber-soft, var(--surface-sunken));
-  border: 1px solid var(--accent-amber-strong, var(--border-subtle));
-  border-radius: var(--radius-md);
-}
-
-.ask__approval-message {
-  margin: 0;
-  font: var(--type-body-sm-strong, var(--type-body-sm));
-}
-
-.ask__approval-actions {
-  display: flex;
-  gap: var(--space-2);
+  gap: var(--space-px);
 }
 
 .ask__decision {
@@ -155,39 +232,116 @@
 }
 
 .ask__decision-node {
-  color: var(--text-muted);
+  color: var(--color-text-tertiary);
   font: var(--type-mono-sm);
 }
 
 .ask__decision-branch {
   padding: 0 var(--space-2);
-  background: var(--accent-violet-soft);
-  border-radius: var(--radius-sm);
-  color: var(--accent-violet-strong);
+  background: var(--violet-50);
+  border-radius: var(--radius-full);
+  color: var(--violet-600);
   font: var(--type-mono-sm);
 }
+
+[data-theme='dark'] .ask__decision-branch {
+  background: rgba(139, 92, 246, 0.16);
+  color: #a78bfa;
+}
+
+/* ---------- Status lines ---------- */
+
+.ask__warning {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--amber-50);
+  border: 1px solid var(--amber-100);
+  border-radius: var(--radius-md);
+  color: var(--amber-600);
+  font: var(--type-body-sm);
+}
+
+[data-theme='dark'] .ask__warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--color-status-warning);
+}
+
+.ask__error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--color-danger);
+  font: var(--type-body-sm);
+}
+
+.ask__meta {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-body-sm);
+}
+
+/* ---------- Human approval ---------- */
+
+.ask__approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--amber-50);
+  border: 1px solid var(--amber-100);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme='dark'] .ask__approval {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.ask__approval-message {
+  margin: 0;
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.ask__approval-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---------- Trace tree (ticket 63) ---------- */
 
 .ask__activity-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-1) 0;
+  padding: var(--space-0-5) 0;
   /* Newest row last: it reads top-to-bottom the same order the run happened. */
   animation: ask-activity-in 120ms ease-out;
 }
 
 .ask__activity-node {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font: var(--type-mono-sm);
 }
 
 .ask__activity-task {
   padding: 0 var(--space-2);
-  background: var(--accent-blue-soft, var(--surface-sunken));
-  border-radius: var(--radius-sm);
-  color: var(--accent-blue-strong, var(--text-muted));
+  background: var(--blue-50);
+  border-radius: var(--radius-full);
+  color: var(--blue-600);
   font: var(--type-mono-sm);
+}
+
+[data-theme='dark'] .ask__activity-task {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--color-text-link);
 }
 
 @keyframes ask-activity-in {
@@ -201,55 +355,61 @@
   }
 }
 
-/* Trace tree (ticket 63) */
 .ask__trace-step summary {
   cursor: pointer;
   list-style: none;
 }
+
 .ask__trace-step summary::-webkit-details-marker {
   display: none;
 }
+
 .ask__activity-row--child {
-  margin-left: 18px;
+  margin-left: var(--space-4);
   opacity: 0.75;
-  border-left: 1px solid var(--color-border);
-  padding-left: 8px;
+  border-left: 1px solid var(--color-border-default);
+  padding-left: var(--space-2);
 }
+
 .ask__activity-ms {
   margin-left: auto;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
   font-variant-numeric: tabular-nums;
 }
+
 .ask__activity-count {
-  font-size: 11px;
-  color: var(--color-text-muted);
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
 }
+
 .ask__trace-output {
-  margin: 4px 0 8px 18px;
-  padding: 6px 8px;
-  font-size: 12px;
-  border-left: 2px solid var(--color-border);
+  margin: var(--space-1) 0 var(--space-2) var(--space-4);
+  padding: var(--space-1-5) var(--space-2);
+  font: var(--type-body-sm);
+  border-left: 2px solid var(--color-border-default);
   max-height: 180px;
   overflow-y: auto;
 }
+
 .ask__export {
-  font: inherit;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 2px 8px;
-  cursor: pointer;
   align-self: flex-start;
+  padding: 2px var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  background: none;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
 }
+
 .ask__export:hover {
-  color: var(--color-text);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-emphasis);
 }
-.ask__thinking--settled {
-  white-space: normal;
-}
+
+/* ---------- Notice ---------- */
 
 /* Why the panel opened, when something other than the user opened it —
    today, Run handing a looping graph to the backend runtime. Informational
@@ -265,4 +425,148 @@
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font: var(--type-body-sm);
+}
+
+/* ================================================================== *
+ * Run timeline
+ *
+ * Thin bars on a shared track. Monochrome by default so the *shape* of the
+ * run carries the information; the single accent is spent on the step that is
+ * live and on the extra laps of a loop, which are the two things worth
+ * looking for.
+ * ================================================================== */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.timeline__head {
+  display: flex;
+  justify-content: space-between;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.timeline__total {
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline__lane {
+  display: grid;
+  /* order · label · track · duration — the track takes whatever is left, so
+     the bars share one baseline no matter how long a node's name is. */
+  grid-template-columns: 1.1em minmax(0, 1fr) minmax(48px, 1.5fr) auto;
+  align-items: center;
+  gap: var(--space-1-5);
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.timeline__order {
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.timeline__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+/* The name is its own element so the ellipsis lands on the *text* and the
+   badges beside it stay whole — truncating a "×2" would be worse than useless. */
+.timeline__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.timeline__badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
+  font: var(--type-label);
+  letter-spacing: 0;
+}
+
+.timeline__track {
+  display: flex;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.timeline__bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-text-quaternary);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+/* A lap of a revise loop. Same hue as the panel's other "this happened more
+   than once" signal, so a second bar is recognisable without a legend. */
+.timeline__lane[data-repeat='true'] .timeline__bar {
+  background: var(--violet-500);
+}
+
+.timeline__lane[data-repeat='true'] .timeline__badge {
+  background: var(--violet-50);
+  color: var(--violet-600);
+}
+
+[data-theme='dark'] .timeline__lane[data-repeat='true'] .timeline__badge {
+  background: rgba(139, 92, 246, 0.18);
+  color: #a78bfa;
+}
+
+/* The step still in flight. */
+.timeline__lane[data-live='true'] .timeline__bar {
+  background: var(--color-status-running);
+  animation: timeline-live 1.2s var(--ease-in-out) infinite;
+}
+
+.timeline__ms {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline__caveat {
+  margin: var(--space-1) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+@keyframes timeline-live {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__lane[data-live='true'] .timeline__bar,
+  .ask__activity-row {
+    animation: none;
+  }
 }

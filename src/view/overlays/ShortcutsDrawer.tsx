@@ -2,16 +2,31 @@ import { useMemo, useState } from 'react';
 import { ChevronRight, Keyboard } from 'lucide-react';
 import { Icon, Kbd } from '@design/primitives';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
+import type { IPortTypeDefinition } from '@core/model/contracts/ports';
 import './overlays.css';
 
 /**
- * The keyboard reference.
+ * The keyboard reference, plus the canvas legend.
  *
- * Rendered from the *same* binding table the keyboard feature dispatches on,
- * so the documentation cannot drift from the behaviour — the usual failure of
- * a hand-maintained shortcut list.
+ * Shortcut rows are rendered from the *same* binding table the keyboard
+ * feature dispatches on, so the documentation cannot drift from the
+ * behaviour — the usual failure of a hand-maintained shortcut list. That rule
+ * is untouched here: this drawer still reads the table and never restates it.
+ *
+ * The edge legend obeys the same discipline one level over: it is rendered
+ * from the registered port types, so a plugin that registers a port type gets
+ * a legend row for free and nothing here names a node type or a colour.
+ * Housed in this drawer rather than a fourth floating box because the canvas
+ * corner already carries three, and a legend is reference material — exactly
+ * what this surface is for.
  */
-export function ShortcutsDrawer({ shortcuts }: { shortcuts: readonly Shortcut[] }) {
+export function ShortcutsDrawer({
+  shortcuts,
+  portTypes = [],
+}: {
+  shortcuts: readonly Shortcut[];
+  portTypes?: readonly IPortTypeDefinition[];
+}) {
   const [open, setOpen] = useState(false);
 
   const groups = useMemo(() => {
@@ -37,7 +52,7 @@ export function ShortcutsDrawer({ shortcuts }: { shortcuts: readonly Shortcut[] 
         onClick={() => setOpen((value) => !value)}
       >
         <Icon glyph={open ? ChevronRight : Keyboard} size="sm" />
-        Keyboard shortcuts
+        Shortcuts &amp; legend
       </button>
 
       {open ? (
@@ -53,6 +68,26 @@ export function ShortcutsDrawer({ shortcuts }: { shortcuts: readonly Shortcut[] 
               ))}
             </section>
           ))}
+
+          {portTypes.length > 0 ? (
+            <section className="shortcuts__group">
+              <h3 className="shortcuts__group-title">Edge colours</h3>
+              {portTypes.map((portType) => (
+                <div key={portType.id} className="shortcuts__row">
+                  <span>{portType.label}</span>
+                  {/* The swatch is drawn with the same accent variable and
+                      the same dash signature the canvas uses, so the legend
+                      cannot describe a line the canvas does not draw. */}
+                  <span
+                    className="legend__swatch"
+                    data-accent={portType.accent}
+                    data-port-type={portType.id}
+                    aria-hidden="true"
+                  />
+                </div>
+              ))}
+            </section>
+          ) : null}
         </div>
       ) : null}
     </div>

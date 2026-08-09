@@ -295,6 +295,21 @@ export class JointGraphAdapter implements IDisposable {
       source: { id: edge.source.nodeId, port: edge.source.portId },
       target: { id: edge.target.nodeId, port: edge.target.portId },
     });
+    // What flows along a link is decided by the port it lands on, so the
+    // link is tinted by its *target* port's type — the same accent the two
+    // port dots already carry. Written as data attributes, never as a
+    // colour: `canvas.css` resolves the accent (so it re-themes) and the
+    // type (so the line also carries a dash signature, which is what keeps
+    // the distinction legible without colour vision). Keyed off the port
+    // descriptor, so a node type or plugin registering a new port type gets
+    // link semantics with no canvas edit.
+    const targetPort = this.model
+      .node(edge.target.nodeId)
+      ?.ports.find((port) => port.id === edge.target.portId);
+    if (targetPort) {
+      link.attr(['root', 'data-accent'], this.registry.portType(targetPort.type).accent);
+      link.attr(['root', 'data-port-type'], targetPort.type);
+    }
     if (edge.label) link.labels([buildLabel(edge.label)]);
     return link;
   }

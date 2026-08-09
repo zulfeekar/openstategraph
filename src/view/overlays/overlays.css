@@ -65,6 +65,54 @@
   color: var(--color-text-secondary);
 }
 
+/* ---------- Edge legend ----------
+ *
+ * A 44px rule drawn with a repeating-linear-gradient rather than a border, so
+ * the dash signature can be stated exactly and mirror the SVG `stroke-dasharray`
+ * the canvas applies to the same port type. Colour and pattern together: the
+ * legend is the one place the two channels must visibly be two channels. */
+.legend__swatch {
+  flex: none;
+  width: 44px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent-solid);
+}
+
+.legend__swatch[data-port-type='tool'] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent-solid) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.legend__swatch[data-port-type='skill'] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent-solid) 0 9px,
+    transparent 9px 13px
+  );
+}
+
+.legend__swatch[data-port-type='feedback'] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent-solid) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.legend__swatch[data-port-type='worker'] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent-solid) 0 11px,
+    transparent 11px 15px,
+    var(--accent-solid) 15px 18px,
+    transparent 18px 22px
+  );
+}
+
 /* ---------- Dialog ---------- */
 
 .dialog-backdrop {

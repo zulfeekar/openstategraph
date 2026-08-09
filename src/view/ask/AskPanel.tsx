@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Send, TriangleAlert } from 'lucide-react';
-import { Button, Field, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
+import { Button, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
 import {
   RuntimeClient,
   type RunOutcome,
@@ -13,6 +13,7 @@ import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
 import { Activity, exportTrace, type ActivityRow } from './traceTree';
+import { RunTimeline } from './RunTimeline';
 import './AskPanel.css';
 
 /**
@@ -266,6 +267,7 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
                         node: event.node,
                         taskId: event.taskId,
                         internal: event.internal,
+                        namespace: event.namespace,
                         durationMs,
                         output: event.output,
                       },
@@ -413,19 +415,30 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
         ) : null}
         <div className="ask__thread" ref={threadRef}>
           {turns.length === 0 ? (
-            <p className="ask__meta ask__empty">
-              Ask a question — it runs against the workflow on the canvas, live.
-            </p>
+            <div className="ask__empty">
+              <p className="ask__empty-title">Ask anything</p>
+              <p className="ask__meta">
+                Your question runs against the workflow on the canvas, live — the cards light up
+                as each step takes its turn.
+              </p>
+            </div>
           ) : null}
           {turns.map((turn) => (
             <Turn key={turn.id} turn={turn} onRespond={respondToApproval} />
           ))}
         </div>
 
-        <Field label="Message" className="ask__composer">
+        {/* One control, not a labelled field plus a detached button: the
+            composer is the panel's primary affordance and should read as a
+            single place to type and send, the way every chat does. The label
+            is carried by the placeholder and `aria-label`, so nothing is lost
+            to a screen reader. */}
+        <div className="ask__composer" data-running={running || undefined}>
           <TextInput
             ref={composerRef}
+            className="ask__composer-input"
             value={question}
+            aria-label="Message"
             placeholder="Which genre earned the most revenue?"
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={(event) => {
@@ -434,15 +447,17 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
               if (event.key === 'Enter' && !event.shiftKey) void send();
             }}
           />
-        </Field>
-        <Button
-          variant="primary"
-          icon={<Icon glyph={Send} size="sm" />}
-          disabled={running || question.trim() === ''}
-          onClick={() => void send()}
-        >
-          {running ? 'Running…' : 'Send'}
-        </Button>
+          <Button
+            variant="primary"
+            className="ask__composer-send"
+            icon={<Icon glyph={Send} size="sm" />}
+            disabled={running || question.trim() === ''}
+            aria-label={running ? 'Running' : 'Send'}
+            onClick={() => void send()}
+          >
+            {running ? 'Running…' : 'Send'}
+          </Button>
+        </div>
       </PanelBody>
     </Panel>
   );
@@ -455,11 +470,40 @@ function Turn({
   turn: ChatTurn;
   onRespond: (turnId: string, decision: 'approve' | 'reject') => void;
 }) {
+  // Per turn, and ephemeral: a run's timeline is a fact about that run, and
+  // nothing about it deserves to be persisted.
+  const [view, setView] = useState<'trace' | 'timeline'>('trace');
+
   return (
     <div className="ask__turn">
       <div className="ask__question">{turn.question}</div>
 
-      {turn.running || turn.activity.length > 0 ? <Activity rows={turn.activity} /> : null}
+      {turn.running || turn.activity.length > 0 ? (
+        <div className="ask__steps">
+          {/* Two readings of one record, never two records: the trace answers
+              *what* ran and what it produced, the timeline answers *when* and
+              for how long. Both are built from `turn.activity`. */}
+          <div className="ask__views" role="tablist" aria-label="Run steps view">
+            {(['trace', 'timeline'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                aria-selected={view === option}
+                className="ask__view-tab"
+                onClick={() => setView(option)}
+              >
+                {option === 'trace' ? 'Trace' : 'Timeline'}
+              </button>
+            ))}
+          </div>
+          {view === 'trace' ? (
+            <Activity rows={turn.activity} />
+          ) : (
+            <RunTimeline rows={turn.activity} running={turn.running} />
+          )}
+        </div>
+      ) : null}
 
       {!turn.running && turn.activity.length > 0 ? (
         <button

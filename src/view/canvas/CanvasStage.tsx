@@ -89,11 +89,32 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
 
     // Light up the links leaving whichever node is running, so the eye can
     // follow execution rather than hunting for the active card.
+    //
+    // Only the *current* node is marked, and everything clears when the run
+    // ends. A persistent "path taken" tint was tried here and removed: this
+    // channel carries per-node status and no run boundary, so the editor
+    // cannot tell a new run from a slow step without guessing at an idle
+    // timeout — and a guess that is wrong leaves stale glow on the canvas.
+    // The customer `/chat` surface keeps its visited trail instead, because
+    // there the client owns the request and therefore knows where a run
+    // starts and stops.
     const markActive = (nodeId: string | null) => {
       for (const link of paper.graph.getLinks()) {
         const view = link.findView(paper.paper);
         const source = link.source();
+        const target = link.target();
+        // Outgoing links carry the flowing dash — data leaving the node.
         view?.el.classList.toggle('is-active', nodeId != null && source?.id === nodeId);
+        // Incoming links are marked too, so the eye can see *how* the run
+        // arrived at the active node, not only where it goes next.
+        view?.el.classList.toggle('is-incoming', nodeId != null && target?.id === nodeId);
+      }
+      // The active card itself: a pulse on the JointJS element root rather
+      // than anything written into the model — this stays a projection.
+      for (const element of paper.graph.getElements()) {
+        const view = element.findView(paper.paper);
+        if (!view) continue;
+        view.el.classList.toggle('is-active', nodeId != null && String(element.id) === nodeId);
       }
     };
 

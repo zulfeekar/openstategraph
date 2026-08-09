@@ -14,6 +14,11 @@ export interface ActivityRow {
   /** A step inside a node's own loop (model call, tool, middleware) —
    * rendered as a tree child, never a top-level row (ticket 63). */
   readonly internal: boolean;
+  /** LangGraph's checkpoint namespace — non-empty only inside a true nested
+   * subgraph (a mounted Workflow or Team). Carried so the timeline can
+   * collapse a whole subgraph to one lane; the trace tree does not use it,
+   * because its own nesting rule is positional (see `buildTrace`). */
+  readonly namespace?: readonly string[];
   /** Wall-clock gap since the previous frame — the same honest
    * approximation the Inspector's duration badge uses. */
   readonly durationMs: number;

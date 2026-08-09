@@ -5,38 +5,169 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenStateGraph Chat</title>
 <style>
-  :root { color-scheme: light dark; --line: #8884; --muted: #888; }
+  /* One file, no dependencies — so the palette is a handful of custom
+     properties defined once for light and re-declared once for dark, rather
+     than a colour scattered through the rules. `color-scheme` still does the
+     work for form controls and scrollbars. */
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --surface: #fbfbfd;
+    --raised: #ffffff;
+    --line: #e6e8ee;
+    --line-soft: #f0f1f5;
+    --text: #14171d;
+    --muted: #6b7280;
+    --faint: #9aa1ae;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --live: #2563eb;
+    --done: #16a34a;
+    --danger: #dc2626;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --surface: #12161c;
+      --raised: #171b22;
+      --line: #2b313b;
+      --line-soft: #22272f;
+      --text: #e8eaee;
+      --muted: #9aa2b1;
+      --faint: #6b7482;
+      --accent: #60a5fa;
+      --accent-soft: rgba(96, 165, 250, .14);
+      --live: #60a5fa;
+      --done: #34d399;
+      --danger: #f87171;
+    }
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
   #split { flex: 1; display: flex; min-height: 0; }
-  #flowpane { flex: 1; overflow: auto; padding: 16px; min-width: 0; }
-  #flowpane h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  #chatcol { width: 420px; max-width: 420px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); min-height: 0; }
-  @media (max-width: 900px) { #split { flex-direction: column; } #chatcol { width: 100%; max-width: none; border-left: none; border-top: 1px solid var(--line); } #flowpane { max-height: 45vh; } }
-  header { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  header strong { margin-right: auto; }
-  select, input, button, textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; }
-  button { cursor: pointer; }
-  main { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+  #flowpane { flex: 1; overflow: auto; padding: 20px 24px; min-width: 0; background: var(--surface); }
+  #flowpane h2 { margin: 0 0 14px; font-size: 11px; color: var(--faint); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; }
+  #chatcol { width: 440px; max-width: 440px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); min-height: 0; background: var(--bg); }
+  @media (max-width: 900px) {
+    #split { flex-direction: column; }
+    #chatcol { width: 100%; max-width: none; border-left: none; border-top: 1px solid var(--line); }
+    #flowpane { max-height: 42vh; }
+  }
+
+  /* ---------- Header ---------- */
+  header { display: flex; gap: 10px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg); }
+  header strong { margin-right: auto; font-size: 15px; letter-spacing: -.01em; }
+  header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); flex: none; }
+  select, input, button, textarea {
+    font: inherit; padding: 7px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--raised); color: inherit;
+  }
+  input::placeholder, textarea::placeholder { color: var(--faint); }
+  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { cursor: pointer; transition: background .12s ease, border-color .12s ease; }
+  button:hover { border-color: var(--faint); }
+  #send { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding-inline: 18px; }
+  #send:hover { filter: brightness(1.08); }
+  #who { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  main { flex: 1; overflow-y: auto; padding: 18px 20px; min-height: 0; }
+
+  /* ---------- Live flow ---------- */
   #flow svg { width: 100%; height: auto; }
-  #flow .flow-active > * { stroke: #22c55e !important; stroke-width: 2.5px !important; }
-  #flow .flow-active rect, #flow .flow-active polygon { fill: #22c55e33 !important; }
-  .turn { margin-bottom: 20px; }
-  .q { font-weight: 600; margin-bottom: 6px; }
-  .steps { font-size: 12px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; margin: 6px 0; }
-  .steps div.child { margin-left: 14px; opacity: .75; }
-  .thinking { font-size: 13px; color: var(--muted); white-space: pre-wrap; }
-  .answer { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 8px; overflow-x: auto; }
-  .answer table { border-collapse: collapse; } .answer td, .answer th { border: 1px solid var(--line); padding: 3px 8px; }
-  .answer code, .answer pre { background: #8881; border-radius: 4px; padding: 1px 4px; }
-  .error { color: #e5484d; }
-  .hitl { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 8px; }
-  footer { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
-  footer textarea { flex: 1; resize: none; height: 44px; }
+  /* Everything that is not the active node steps back, so the active one pops
+     without having to shout. */
+  #flow.running .node { opacity: .38; transition: opacity .25s ease; }
+  #flow .flow-active { opacity: 1 !important; }
+  #flow .flow-active > * { stroke: var(--live) !important; stroke-width: 2.5px !important; }
+  #flow .flow-active rect, #flow .flow-active polygon, #flow .flow-active circle { fill: color-mix(in srgb, var(--live) 16%, transparent) !important; }
+  #flow .flow-active { animation: flow-pulse 1.4s ease-in-out infinite; }
+  /* The path already taken keeps a faint tint, so the route through the graph
+     is readable at the end of a run and not only during it. */
+  #flow .flow-done { opacity: .8 !important; }
+  #flow .flow-done > * { stroke: var(--done) !important; }
+  #flow .flow-done rect, #flow .flow-done polygon { fill: color-mix(in srgb, var(--done) 10%, transparent) !important; }
+  #flow path.flow-edge-active { stroke: var(--live) !important; stroke-width: 2.5px !important; opacity: 1 !important; }
+  #flow.running path.flowchart-link { opacity: .3; transition: opacity .25s ease; }
+  @keyframes flow-pulse { 50% { filter: drop-shadow(0 0 6px var(--live)); } }
+  @media (prefers-reduced-motion: reduce) { #flow .flow-active { animation: none; } }
+
+  /* ---------- Empty state ---------- */
+  .empty { padding: 28px 4px; }
+  .empty h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
+  .empty p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* ---------- A turn ---------- */
+  .turn { margin-bottom: 26px; }
+  .q {
+    max-width: 88%; margin: 0 0 10px auto; width: fit-content;
+    padding: 8px 13px; background: var(--accent-soft);
+    border-radius: 14px 14px 4px 14px; font-size: 14px;
+  }
+
+  /* The steps are an activity strip, not a log: one quiet line per step, on a
+     tinted rail, so they read as "what is happening" and never compete with
+     the answer. */
+  .steps {
+    font-size: 12px; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm); padding: 7px 10px; margin: 0 0 8px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .steps:empty { display: none; }
+  .steps div { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Read-only run timeline ---------- */
+  details.tl { margin: 0 0 8px; font-size: 12px; }
+  details.tl[hidden] { display: none; }
+  details.tl > summary {
+    cursor: pointer; list-style: none; color: var(--faint);
+    text-transform: uppercase; letter-spacing: .07em; font-size: 10px; font-weight: 600;
+    padding: 2px 0;
+  }
+  details.tl > summary::-webkit-details-marker { display: none; }
+  details.tl > summary:hover { color: var(--muted); }
+  .tl-body { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 2px; }
+  .tl-row { display: grid; grid-template-columns: 1.1em minmax(0, 1fr) minmax(48px, 1.5fr) auto; gap: 6px; align-items: center; color: var(--muted); }
+  .tl-n { text-align: right; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .tl-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+  .tl-track { height: 5px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+  .tl-bar { display: block; height: 100%; border-radius: 999px; background: var(--faint); }
+  .tl-row[data-repeat] .tl-bar { background: #8b5cf6; }
+  .tl-ms { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--faint); }
+  .tl-note { color: var(--faint); margin: 4px 0 0; font-size: 11px; }
+
+  /* Capped, like the editor's: a peek at the reasoning, not a transcript that
+     pushes the answer off the screen. */
+  .thinking { font-size: 12.5px; color: var(--muted); white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+  .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 8px 11px; margin-top: 8px; }
+  .answer {
+    background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; margin-top: 8px; overflow-x: auto; font-size: 14.5px;
+  }
+  .answer > :first-child { margin-top: 0; } .answer > :last-child { margin-bottom: 0; }
+  .answer h3, .answer h4, .answer h5 { margin: 14px 0 6px; font-size: 15px; }
+  .answer table { border-collapse: collapse; margin: 8px 0; }
+  .answer td, .answer th { border: 1px solid var(--line); padding: 4px 9px; }
+  .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 5px; padding: 1px 5px; font-size: 13px; }
+  .answer pre { display: block; padding: 10px 12px; overflow-x: auto; }
+  .error { color: var(--danger); }
+  .hitl { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin-top: 8px; background: var(--surface); }
+
+  footer { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); background: var(--bg); }
+  footer textarea { flex: 1; resize: none; height: 46px; border-radius: var(--radius); }
 </style>
 </head>
 <body>
 <header>
+  <span class="dot" aria-hidden="true"></span>
   <strong>OpenStateGraph</strong>
   <select id="wf" title="Workflow"></select>
   <button id="newconv" title="Start a fresh thread">New conversation</button>
@@ -49,7 +180,12 @@
     <div id="flow">select a workflow…</div>
   </section>
   <div id="chatcol">
-    <main id="log"></main>
+    <main id="log">
+      <div class="empty" id="empty">
+        <h3>Ask anything</h3>
+        <p>I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.</p>
+      </div>
+    </main>
     <footer>
       <textarea id="msg" placeholder="Ask the selected workflow…"></textarea>
       <button id="send">Send</button>
@@ -85,7 +221,8 @@ function threadFor(slug) {
 $("newconv").onclick = () => {
   delete state.threads[state.workflow];
   localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
-  $("log").innerHTML = "";
+  $("log").innerHTML = '<div class="empty" id="empty"><h3>Ask anything</h3>'
+    + "<p>I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.</p></div>";
 };
 
 // Minimal markdown: headings, bold, code fences, inline code, tables, lists.
@@ -122,6 +259,28 @@ function md(text) {
 // up as stream frames arrive. Same safe_name rule as the compiler.
 const flow = { slug: null, ready: false };
 const safeName = (id) => id.replace(/[^a-zA-Z0-9_]/g, "_");
+const darkMode = matchMedia("(prefers-color-scheme: dark)");
+// Re-render rather than restyle: Mermaid bakes its palette into the SVG it
+// emits (inline, with `!important`), so a scheme change means asking it again.
+darkMode.addEventListener("change", () => { flow.ready = false; void renderFlow(flow.slug); });
+
+/**
+ * Re-tints the diagram for dark mode.
+ *
+ * It has to happen in the *source*, not in CSS and not in Mermaid's theme:
+ * `draw_mermaid()` emits its own `classDef default fill:#f2f0ff` lines, which
+ * Mermaid turns into an inline `style="fill:… !important"` on every node rect.
+ * An inline `!important` cannot be overridden from a stylesheet, and a theme
+ * variable loses to an explicit classDef — so the honest place to change it is
+ * the one declaration that actually decides. Everything else (edges, labels,
+ * edge-label backgrounds) still comes from the theme variables above.
+ */
+function themeMermaid(text) {
+  if (!darkMode.matches) return text;
+  return text
+    .replace(/fill:#f2f0ff/g, "fill:#1c2129,color:#e8eaee,stroke:#3a4250")
+    .replace(/fill:#bfb6fc/g, "fill:#2c2748,color:#e8eaee,stroke:#4a4270");
+}
 
 async function renderFlow(slug) {
   const host = $("flow");
@@ -132,24 +291,169 @@ async function renderFlow(slug) {
     const resp = await fetch(`/api/workflows/${slug}/graph`);
     if (!resp.ok) { host.textContent = "no compiled view: " + resp.status; return; }
     const { mermaid: text } = await resp.json();
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral" });
-    const { svg } = await mermaid.render("flow-" + Date.now(), text);
+    const source = themeMermaid(text);
+    // The diagram has to follow the page's scheme too — a light-on-white
+    // flowchart dropped into a dark shell was the loudest thing on the screen.
+    // The diagram must follow the page's scheme — a light-on-white flowchart
+    // in a dark shell was the loudest thing on the screen.
+    //
+    // It has to be done through Mermaid's own theme variables, not CSS:
+    // Mermaid writes `style="fill:… !important"` *inline* on every node rect,
+    // and an inline `!important` cannot be overridden from a stylesheet. That
+    // is also why `mainBkg` is set alongside `primaryColor` — the node fill
+    // comes from the former, and setting only the latter left pale boxes
+    // carrying pale text.
+    const dark = darkMode.matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: dark
+        ? {
+            darkMode: true,
+            background: "#12161c", mainBkg: "#1c2129", primaryColor: "#1c2129",
+            primaryTextColor: "#e8eaee", nodeTextColor: "#e8eaee", textColor: "#e8eaee",
+            primaryBorderColor: "#3a4250", nodeBorder: "#3a4250",
+            lineColor: "#6b7482", edgeLabelBackground: "#12161c",
+            secondaryColor: "#22272f", tertiaryColor: "#171b22",
+            clusterBkg: "#171b22", clusterBorder: "#2b313b", fontSize: "13px",
+          }
+        : {
+            background: "#fbfbfd", mainBkg: "#ffffff", primaryColor: "#ffffff",
+            primaryTextColor: "#14171d", nodeTextColor: "#14171d", textColor: "#14171d",
+            primaryBorderColor: "#c7ccd6", nodeBorder: "#c7ccd6",
+            lineColor: "#9aa1ae", edgeLabelBackground: "#fbfbfd",
+            secondaryColor: "#f4f5f8", tertiaryColor: "#f8f9fb",
+            clusterBkg: "#f8f9fb", clusterBorder: "#e6e8ee", fontSize: "13px",
+          },
+    });
+    const { svg } = await mermaid.render("flow-" + Date.now(), source);
     host.innerHTML = svg;
     flow.ready = true;
+    resetFlowHighlight();
   } catch (err) {
     host.textContent = "flow view unavailable: " + err;
   }
 }
 
+// Active-node indication, as strong as the DOM Mermaid gives us allows.
+//
+// Three signals rather than one, because a single colour swap on one node in a
+// twenty-node diagram is genuinely easy to miss:
+//   1. the active node pulses and keeps full opacity while everything else is
+//      dimmed — the contrast, not the colour, is what draws the eye;
+//   2. the edge(s) *into* the active node light up, so the route the run took
+//      to get there is visible, not just where it ended up;
+//   3. every node already visited keeps a faint green "done" tint, so at the
+//      end of a run the whole path taken is still on screen.
+//
+// Selectors are read off Mermaid's own output rather than assumed: nodes are
+// `<prefix>-flowchart-<name>-<n>`, edges are `<prefix>-L_<src>_<dst>_0`. Both
+// were confirmed against a rendered graph before being relied on here.
 let activeFlowNode = null;
+const visitedFlowNodes = new Set();
+
+function resetFlowHighlight() {
+  const host = $("flow");
+  host.classList.remove("running");
+  for (const el of host.querySelectorAll(".flow-active, .flow-done, .flow-edge-active")) {
+    el.classList.remove("flow-active", "flow-done", "flow-edge-active");
+  }
+  activeFlowNode = null;
+  visitedFlowNodes.clear();
+}
+
 function highlightFlow(nodeId) {
   if (!flow.ready || !nodeId) return;
+  const host = $("flow");
   const name = safeName(nodeId);
-  if (activeFlowNode) activeFlowNode.classList.remove("flow-active");
-  // Mermaid stamps flowchart node ids as `flowchart-<name>-N`.
-  const el = $("flow").querySelector(`[id*="-${CSS.escape(name)}-"]`);
-  if (el) { el.classList.add("flow-active"); activeFlowNode = el; }
+  host.classList.add("running");
+
+  if (activeFlowNode) {
+    activeFlowNode.classList.remove("flow-active");
+    activeFlowNode.classList.add("flow-done");
+  }
+  for (const p of host.querySelectorAll("path.flow-edge-active")) p.classList.remove("flow-edge-active");
+
+  const el = host.querySelector(`[id*="-flowchart-${CSS.escape(name)}-"]`)
+    || host.querySelector(`[id*="-${CSS.escape(name)}-"]`);
+  if (el) {
+    el.classList.remove("flow-done");
+    el.classList.add("flow-active");
+    activeFlowNode = el;
+    visitedFlowNodes.add(name);
+  }
+
+  // Edges landing on this node. Matching on the id's tail is deliberate: a
+  // node name may itself contain underscores, so `L_<src>_<dst>_0` cannot be
+  // split reliably — but the destination is always the suffix.
+  for (const path of host.querySelectorAll("path.flowchart-link")) {
+    if (path.id.endsWith(`_${name}_0`)) path.classList.add("flow-edge-active");
+  }
 }
+
+/** End of a run: stop dimming, and leave the path taken marked. */
+function finishFlow() {
+  const host = $("flow");
+  host.classList.remove("running");
+  if (activeFlowNode) {
+    activeFlowNode.classList.remove("flow-active");
+    activeFlowNode.classList.add("flow-done");
+    activeFlowNode = null;
+  }
+  for (const p of host.querySelectorAll("path.flow-edge-active")) p.classList.remove("flow-edge-active");
+}
+
+/* ---------------- Run timeline (read-only) ----------------
+ *
+ * The same idea as the editor's Ask panel timeline, reduced to what a
+ * customer benefits from: which steps fired, in what order, and where the
+ * time went. Collapsed by default — it is diagnostic detail, not the answer.
+ *
+ * Same folding rules as the editor's `buildTimeline`, and the same honesty
+ * about the numbers: a step's duration is the gap until the next frame, since
+ * the stream reports a node only after it finishes. */
+function renderTimeline(el, rows) {
+  const box = el.querySelector("details.tl");
+  const body = box.querySelector(".tl-body");
+  const steps = [];
+  const visits = {};
+  let clock = 0;
+  for (const row of rows) {
+    const d = Math.max(0, row.ms || 0);
+    const last = steps[steps.length - 1];
+    if (row.internal) { if (last) { last.ms += d; last.internal++; } clock += d; continue; }
+    const ns = (row.namespace && row.namespace[0]) || null;
+    if (ns && last && last.ns === ns && last.taskId === row.taskId) { last.ms += d; last.count++; clock += d; continue; }
+    const label = ns || row.node.replace(/^node:/, "");
+    visits[label] = (visits[label] || 0) + 1;
+    steps.push({ label, ns, taskId: row.taskId, ms: d, start: clock, count: 1, internal: 0, visit: visits[label] });
+    clock += d;
+  }
+  if (!steps.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.querySelector(".tl-count").textContent = steps.length + (steps.length === 1 ? " step" : " steps");
+  box.querySelector(".tl-total").textContent = fmtMs(clock);
+  body.innerHTML = "";
+  for (const s of steps) {
+    const row = document.createElement("div");
+    row.className = "tl-row";
+    if (s.visit > 1) row.dataset.repeat = "1";
+    const width = clock > 0 ? Math.max(1.5, (s.ms / clock) * 100) : 100;
+    const offset = clock > 0 ? Math.min(98.5, (s.start / clock) * 100) : 0;
+    row.innerHTML = '<span class="tl-n"></span><span class="tl-label"></span>'
+      + '<span class="tl-track"><span class="tl-bar"></span></span><span class="tl-ms"></span>';
+    row.querySelector(".tl-n").textContent = steps.indexOf(s) + 1;
+    row.querySelector(".tl-label").textContent = s.label + (s.visit > 1 ? " ×" + s.visit : "") + (s.ns ? " ⊞" + s.count : "");
+    row.querySelector(".tl-label").title = s.label + (s.internal ? " · " + s.internal + " internal steps" : "");
+    const bar = row.querySelector(".tl-bar");
+    bar.style.marginInlineStart = offset + "%";
+    bar.style.width = width + "%";
+    row.querySelector(".tl-ms").textContent = fmtMs(s.ms);
+    body.appendChild(row);
+  }
+}
+const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms");
 
 async function loadWorkflows() {
   const list = await (await fetch("/api/workflows")).json();
@@ -176,8 +480,13 @@ async function docFor(slug) {
 function turnEl(question) {
   const el = document.createElement("div");
   el.className = "turn";
-  el.innerHTML = `<div class="q"></div><div class="steps"></div><div class="thinking"></div><div class="answer" hidden></div>`;
+  el.innerHTML = `<div class="q"></div><div class="steps"></div>`
+    + `<details class="tl" hidden><summary>Timeline · <span class="tl-count"></span> · <span class="tl-total"></span></summary>`
+    + `<div class="tl-body"></div><p class="tl-note">Durations are gaps between stream frames, not measured spans.</p></details>`
+    + `<div class="thinking"></div><div class="answer" hidden></div>`;
   el.querySelector(".q").textContent = question;
+  const empty = $("empty");
+  if (empty) empty.remove();
   $("log").appendChild(el);
   el.scrollIntoView({ block: "end" });
   return el;
@@ -189,6 +498,10 @@ async function stream(path, body, el) {
   if (!resp.ok) { answer.hidden = false; answer.innerHTML = `<span class="error">Runtime error (${resp.status}): ${esc(await resp.text())}</span>`; return; }
   const reader = resp.body.getReader(); const dec = new TextDecoder();
   let buf = "", event = null, tokens = "";
+  // Client-side timestamps, gathered as frames arrive — the stream carries no
+  // timing of its own. Ephemeral: this list lives with the turn and is never
+  // stored anywhere.
+  const tlRows = []; let lastFrameAt = performance.now();
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   for (;;) {
     const { done, value } = await reader.read();
@@ -202,7 +515,17 @@ async function stream(path, body, el) {
         else if (line.startsWith("data: ")) {
           const d = JSON.parse(line.slice(6));
           if (event === "update") {
-            if (!d.internal) highlightFlow(d.node);
+            const now = performance.now();
+            tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], ms: now - lastFrameAt });
+            lastFrameAt = now;
+            renderTimeline(el, tlRows);
+            // A frame from inside a subgraph names a node that does not exist
+            // in *this* diagram — the diagram shows the mounted workflow as a
+            // single box. Highlight that box instead, so a run that spends 45
+            // seconds inside `wf_music` lights `wf_music` up rather than
+            // leaving the marker stuck on whatever ran last at the top level.
+            // The namespace segment is `<node>:<checkpoint-id>`.
+            if (!d.internal) highlightFlow((d.namespace && d.namespace[0] || "").split(":")[0] || d.node);
             if (d.internal) {
               // Internal machinery collapses to a live counter on its owning
               // step — a 20-call tool loop is one line, not twenty.
@@ -227,6 +550,7 @@ async function stream(path, body, el) {
           } else if (event === "interrupt") {
             renderInterrupt(el, d);
           } else if (event === "done") {
+            finishFlow();
             thinking.textContent = "";
             answer.hidden = false;
             answer.innerHTML = md(d.answer || "_no answer_");
@@ -299,6 +623,9 @@ async function send() {
   const q = $("msg").value.trim();
   if (!q || !state.workflow) return;
   $("msg").value = "";
+  // A fresh run starts from a clean diagram: the client owns the request, so
+  // unlike the editor it knows exactly where one run ends and the next begins.
+  resetFlowHighlight();
   const el = turnEl(q);
   try {
     const doc = await docFor(state.workflow);
