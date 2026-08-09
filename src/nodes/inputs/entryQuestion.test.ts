@@ -3,7 +3,7 @@ import { entryQuestion } from './entryQuestion';
 
 const node = (type: string, prompt: string) => ({
   type,
-  getText: (key: string) => (key === 'prompt' ? prompt : ''),
+  getField: (key: string) => (key === 'prompt' ? prompt : ''),
 });
 
 const source = (...nodes: ReturnType<typeof node>[]) => ({ nodes: () => nodes });

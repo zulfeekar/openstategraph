@@ -8,7 +8,7 @@ import { TEXT_INPUT_TYPE } from './TextInputNode';
  * module carries is "an entry question lives in `input.text`'s `prompt`".
  */
 export interface QuestionSource {
-  nodes(): readonly { readonly type: string; getText(key: string): string }[];
+  nodes(): readonly { readonly type: string; getField(key: string): unknown }[];
 }
 
 /** The field an entry `Text Input` holds its prompt in. */
@@ -34,7 +34,7 @@ export function entryQuestion(source: QuestionSource): string {
   return source
     .nodes()
     .filter((node) => node.type === TEXT_INPUT_TYPE)
-    .map((node) => node.getText(ENTRY_PROMPT_FIELD).trim())
+    .map((node) => String(node.getField(ENTRY_PROMPT_FIELD) ?? '').trim())
     .filter((text) => text !== '')
     .join('\n\n');
 }

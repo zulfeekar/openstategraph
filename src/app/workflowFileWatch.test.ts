@@ -11,6 +11,7 @@ import {
 const summary = (slug: string, savedAt: string): WorkflowSummary => ({
   slug,
   name: slug,
+  published: true,
   savedAt,
   nodeCount: 0,
   edgeCount: 0,
