@@ -2,7 +2,14 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import clsx from 'clsx';
 import './Button.css';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+/**
+ * `danger` is the *quiet* destructive treatment — danger-coloured text on a
+ * transparent ground, for a delete buried in a menu. `danger-solid` is its
+ * filled sibling: `primary`'s weight in the danger hue, for the one moment a
+ * destructive action IS the page's primary affordance — Stop, while a run
+ * streams. Both read from `--color-danger`, so there is one red in the system.
+ */
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {

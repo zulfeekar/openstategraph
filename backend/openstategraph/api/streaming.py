@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -232,6 +233,67 @@ class ActiveNodeResolver:
         return self._active
 
 
+async def _client_left(receive: Any) -> None:
+    """Resolves the moment the ASGI server reports the client is gone."""
+    while True:
+        message = await receive()
+        if message.get("type") == "http.disconnect":
+            return
+
+
+def _abandon(task: Any) -> None:
+    """Drops a task we are no longer waiting on, without a warning storm.
+
+    A cancelled `__anext__` whose thread is still inside `graph.stream` does
+    not finish immediately (a blocking call cannot be interrupted), so the
+    task outlives us. Retrieving its outcome here is what stops asyncio
+    logging "exception was never retrieved" for work nobody wanted.
+    """
+    task.cancel()
+    task.add_done_callback(lambda done: done.cancelled() or done.exception())
+
+
+async def stop_when_client_leaves(frames: Any, receive: Any) -> Any:
+    """Drives a sync SSE generator and stops pulling when the client hangs up.
+
+    **This is what makes Stop mean anything on this transport.** Starlette
+    does not listen for disconnects on a modern ASGI server: for
+    `spec_version >= 2.4` it only notices when a `send()` raises `OSError`,
+    and uvicorn's socket writes do not fail promptly. Measured, not assumed —
+    a browser that aborted its fetch mid-crew left the run streaming to its
+    natural end, with every remaining superstep billed to nobody, while the
+    UI already said "Stopped by you". That is precisely the fake cancel this
+    must not be.
+
+    So the disconnect is raced against each frame here. On disconnect we stop
+    pulling immediately and return; the frame already in flight is abandoned
+    and its generator finalised (which is the `GeneratorExit` `_stream_run`
+    logs). The boundary is unchanged and still honest — a blocking model call
+    inside the current superstep cannot be interrupted by anyone — but the
+    supersteps *after* it no longer run.
+    """
+    import asyncio
+
+    from starlette.concurrency import iterate_in_threadpool
+
+    stream = iterate_in_threadpool(frames)
+    gone = asyncio.ensure_future(_client_left(receive))
+    try:
+        while True:
+            step = asyncio.ensure_future(stream.__anext__())
+            done, _ = await asyncio.wait({step, gone}, return_when=asyncio.FIRST_COMPLETED)
+            if step not in done:
+                _abandon(step)
+                return
+            try:
+                frame = step.result()
+            except StopAsyncIteration:
+                return
+            yield frame
+    finally:
+        _abandon(gone)
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
 
@@ -281,6 +343,7 @@ def _stream_run(
     outputs: dict[str, str] = {}
     attempts = 0
 
+    stream = None
     try:
         stream = graph.stream(
             graph_input,
@@ -380,9 +443,47 @@ def _stream_run(
                             "content": content,
                         },
                     )
+    except GeneratorExit:
+        # Stop, pressed. The client aborted its fetch, so Starlette stopped
+        # consuming this generator and finalised it — `GeneratorExit` is that
+        # finalisation arriving at our `yield`.
+        #
+        # Logged rather than silent because "did the run actually stop?" is
+        # otherwise unanswerable from outside, and a Stop button whose effect
+        # cannot be observed is exactly the fake-cancel this ticket forbids.
+        #
+        # The honest boundary, measured live against the Store Analytics
+        # crew rather than assumed: `graph.stream` is a generator driven BY
+        # the loop above, so nothing further is *scheduled* from here. But
+        # tasks LangGraph already dispatched for the current superstep run
+        # in its own executor, a blocking model call cannot be interrupted,
+        # and the `close()` below drains them — an early stop trailed model
+        # calls for ~15s, a stop mid-fan-out for ~75s, in both cases ending
+        # far short of the run itself. Their results are discarded.
+        #
+        # There is no cancellation seam inside a superstep at this version:
+        # `RunControl.request_drain()` (langgraph 1.2) stops at exactly the
+        # same boundary — "after the current superstep completes" — and buys
+        # a resumable checkpoint rather than a faster stop. Nothing here may
+        # claim more than this.
+        logger.info(
+            "run stream stopped by the client (thread_id=%s) — no further supersteps",
+            thread_id,
+        )
+        raise
     except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
         yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
         return
+    finally:
+        # Explicit, not left to refcounting. CPython happens to close the
+        # inner generator when this frame is destroyed, but "happens to" is
+        # not a contract, and under a stop the checkpointer/DB handles the
+        # LangGraph stream holds should be released at a defined moment
+        # rather than at the collector's convenience.
+        closer = getattr(stream, "close", None)
+        if callable(closer):
+            with suppress(Exception):
+                closer()
 
     snapshot = graph.get_state(config)
     if snapshot.next:

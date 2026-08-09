@@ -68,6 +68,8 @@ export function AppShell() {
     question: string;
     nonce: number;
   } | null>(null);
+  /** A Stop press, handed to the same panel to act on (ticket 10). */
+  const [askStopRequest, setAskStopRequest] = useState<{ nonce: number } | null>(null);
   const [backendRunning, setBackendRunning] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
@@ -212,6 +214,9 @@ export function AppShell() {
           onOpenCredentials={() => setCredentialsOpen(true)}
           onNotify={onNotify}
           onRun={runWorkflow}
+          // The run lives in the Ask panel, so Stop is a request forwarded to
+          // it — never a second place that knows how to abort.
+          onStop={() => setAskStopRequest({ nonce: Date.now() })}
           runInFlight={backendRunning}
         />
         <div className="app-shell__workflow-btn">
@@ -270,6 +275,7 @@ export function AppShell() {
                 notice={askNotice}
                 focusNonce={askFocusNonce}
                 runRequest={askRunRequest}
+                stopRequest={askStopRequest}
                 onRunningChange={setBackendRunning}
               />
             ) : null}

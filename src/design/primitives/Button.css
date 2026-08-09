@@ -111,6 +111,21 @@
   background: var(--color-danger-subtle);
 }
 
+/* Filled danger — `primary`'s weight in the danger hue. The hover/active
+ * steps are mixed from the same token rather than added as new colours, so
+ * the palette still has exactly one red and both themes follow it. */
+.btn--danger-solid {
+  background: var(--color-danger);
+  color: var(--color-primary-text);
+  box-shadow: var(--shadow-xs);
+}
+.btn--danger-solid:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 88%, black);
+}
+.btn--danger-solid:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 78%, black);
+}
+
 /* Toggled-on state for buttons that represent a persistent mode
  * (grid visibility, panel open, theme). */
 .btn[data-state='on'] {

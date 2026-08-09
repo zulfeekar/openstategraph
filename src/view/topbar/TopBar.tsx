@@ -24,7 +24,6 @@ import {
   Icon,
   IconButton,
   Menu,
-  Spinner,
   Tooltip,
   useMenu,
   shortcutText,
@@ -70,6 +69,12 @@ interface TopBarProps {
    * toolbar's.
    */
   onRun: (question: string) => void;
+  /**
+   * Stops the run in flight (ticket 10). The toolbar owns the button but not
+   * the run — same division as `onRun` — so this only asks; the Ask panel
+   * holds the `AbortController` and does the aborting.
+   */
+  onStop: () => void;
   /** True while a backend run started from here is still streaming. */
   runInFlight: boolean;
 }
@@ -95,6 +100,7 @@ export function TopBar({
   onOpenCredentials,
   onNotify,
   onRun,
+  onStop,
   runInFlight,
 }: TopBarProps) {
   const [graphOpen, setGraphOpen] = useState(false);
@@ -327,23 +333,38 @@ export function TopBar({
               the tooltip is the entire explanation of why it is disabled. */}
           <Tooltip
             content={
-              question === ''
-                ? 'Type a question in the Input node first'
-                : `Run: ${truncate(question)}`
+              runInFlight
+                ? // Said here rather than only after the fact, because it is
+                  // the one thing a user needs to decide whether to press it:
+                  // the run stops between steps, and the step already in
+                  // flight finishes and is thrown away.
+                  'Stop this run — nothing further is scheduled; steps already dispatched finish and are discarded'
+                : question === ''
+                  ? 'Type a question in the Input node first'
+                  : `Run: ${truncate(question)}`
             }
             multiline
           >
             <span className="topbar__run">
+              {/* While a run streams this is a Stop, not a disabled
+                  "Running…" — the button in the place a user already looks
+                  for run control is the one that should offer to stop it.
+                  Danger-solid: the destructive action IS the primary
+                  affordance for as long as the run lasts. */}
               <Button
-                variant={runInFlight ? 'secondary' : 'primary'}
+                variant={runInFlight ? 'danger-solid' : 'primary'}
                 size="lg"
                 icon={
-                  runInFlight ? <Spinner /> : <Icon glyph={Play} size="sm" strokeWidth={2.25} />
+                  runInFlight ? (
+                    <Icon glyph={Square} size="sm" strokeWidth={2.25} />
+                  ) : (
+                    <Icon glyph={Play} size="sm" strokeWidth={2.25} />
+                  )
                 }
-                onClick={run}
-                disabled={!canRun}
+                onClick={runInFlight ? onStop : run}
+                disabled={runInFlight ? false : !canRun}
               >
-                {runInFlight ? 'Running…' : 'Run'}
+                {runInFlight ? 'Stop' : 'Run'}
               </Button>
             </span>
           </Tooltip>

@@ -26,7 +26,7 @@ from langgraph.graph.message import add_messages
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
-from openstategraph.compile.workflow_compiler import CompiledPlan
+from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
 
 
 #: Turn-start reset marker. A checkpointed thread carries the whole state
@@ -422,6 +422,76 @@ def advisor_context(node_id: str, catalog: str) -> str:
         "Tools that could be added to you:\n"
         f"{catalog}"
     )
+
+
+def branch_context(node_id: str, plan: CompiledPlan, nodes: dict[str, Any]) -> str:
+    """What the classifier feeding this agent can actually route to (ticket 11).
+
+    The **chainlogic** rule, made mechanical: a conversational branch that
+    tells the user "just ask me for X" is writing the *next* question, and the
+    router has to be able to place that question on a branch that can answer
+    it. Found live on `page-analytics`: the conversation agent — whose prompt
+    was hand-written and could see nothing but itself — offered "charts",
+    "dashboards" and "copy/paste reports" that no branch produces, and phrased
+    a data question ("Show trends: monthly sales, media-type mix, top genres")
+    in wording the router then classified as `full_report`, the one branch
+    that ends in a human approval gate and an email rather than an answer. The
+    user got no answer at all.
+
+    Its own prompt could never have prevented that, because the branch table
+    is not knowledge the prompt author holds — it is a fact about the *graph*,
+    and it changes whenever anyone renames a branch or draws an edge. So it is
+    **generated context**, resolved from the compiled plan at build time and
+    handed to `SystemPrompt` exactly like `advisor_context` and the skills
+    text: above the developer's rules, below nothing the developer edits, with
+    the locked output contract still rendering last.
+
+    The router's `rules` text rides verbatim rather than being parsed into
+    per-branch sentences. Splitting one free-text field into a table would be
+    duplicating *knowledge* — the classifier reads that same string, and two
+    renderings of it are two things that can disagree. Verbatim cannot.
+
+    Returns "" for any agent no classifier routes to, which is most of them.
+    """
+    for router_id, destinations in plan.conditional.items():
+        if (nodes.get(router_id) or {}).get("type") != ROUTER_TYPE:
+            continue
+        if node_id not in destinations.values():
+            continue
+        data = (nodes.get(router_id) or {}).get("data") or {}
+        by_id = {}
+        for entry in _branch_entries(data.get("branches")):
+            if isinstance(entry, dict):
+                by_id[str(entry.get("id") or entry.get("name") or "")] = str(
+                    entry.get("name") or entry.get("id") or ""
+                )
+            else:
+                by_id[str(entry)] = str(entry)
+        names = [by_id.get(key, key) for key in destinations]
+        mine = sorted(
+            {by_id.get(key, key) for key, dst in destinations.items() if dst == node_id}
+        )
+        if not names:
+            continue
+        lines = [
+            "This workflow routes every incoming question to exactly ONE of "
+            "these branches, by classifying the question's wording:",
+            "  " + ", ".join(names),
+        ]
+        if mine:
+            lines.append(f"You are the '{', '.join(mine)}' branch.")
+        rules = _text(data, "rules")
+        if rules:
+            lines.append("How the classifier decides:\n" + rules)
+        lines.append(
+            "So: never offer a capability no branch above provides, and when "
+            "you suggest what to ask next, phrase each suggestion the way the "
+            "branch that can answer it is described above — a suggestion the "
+            "classifier sends to the wrong branch is a suggestion the user "
+            "cannot get answered."
+        )
+        return "\n".join(lines)
+    return ""
 
 
 class NodeRuntime:
@@ -843,6 +913,12 @@ class NodeRuntime:
                         for part in (
                             self.skills_context,
                             skill,
+                            # The branches this agent's own classifier can
+                            # reach (ticket 11) — generated context, so an
+                            # agent's suggestions are grounded in the graph
+                            # rather than in what its prompt author guessed
+                            # the graph contained.
+                            branch_context(node_id, plan, self._nodes),
                             advisor_context(node_id, self.advisor_catalog),
                         )
                         if part

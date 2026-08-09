@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { RuntimeClient, type FetchLike } from './RuntimeClient';
+import {
+  RuntimeClient,
+  isCancelled,
+  type FetchLike,
+  type RunStreamEvent,
+} from './RuntimeClient';
 
 /**
  * The editor's route to the runtime.
@@ -290,7 +295,7 @@ describe('RuntimeClient.runStream', () => {
     const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
 
     expect(result.ok).toBe(true);
-    if (!result.ok || 'interrupted' in result.value) return;
+    if (!result.ok || 'interrupted' in result.value || 'cancelled' in result.value) return;
     expect(result.value.answer).toBe('Rock earns the most.');
     expect(result.value.decisions['node:route.grader-1']).toBe('pass');
   });
@@ -369,6 +374,160 @@ describe('RuntimeClient.runStream', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('Is the backend running?');
+  });
+});
+
+/**
+ * A stop, from the client's side.
+ *
+ * The interesting property is that stopping is **not an error**: the run did
+ * what it was told, so the outcome is `Ok` carrying a `cancelled` marker and
+ * every surface can render "Stopped by you" as a muted line rather than a
+ * failure. Anything already streamed still reached `onEvent` — a stopped run
+ * keeps the partial trace it earned.
+ */
+describe('RuntimeClient.runStream — stopping', () => {
+  /**
+   * A fetch whose body stays open until the caller's `AbortSignal` fires,
+   * which is what a real streaming run looks like when Stop is pressed
+   * mid-flight (a closed body would settle on its own and prove nothing).
+   */
+  const openStream = (
+    prelude: string,
+  ): { fetch: FetchLike; signals: (AbortSignal | undefined)[] } => {
+    const signals: (AbortSignal | undefined)[] = [];
+    const fetchImpl: FetchLike = (_url, init) => {
+      const signal = init?.signal ?? undefined;
+      signals.push(signal);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(prelude));
+          signal?.addEventListener('abort', () => {
+            controller.error(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        },
+      });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+      );
+    };
+    return { fetch: fetchImpl, signals };
+  };
+
+  it('forwards the signal to fetch, so the request itself is torn down', async () => {
+    const stub = openStream('');
+    const controller = new AbortController();
+    const client = new RuntimeClient('http://rt', stub.fetch);
+
+    const pending = client.runStream({ workflow: {}, question: 'q' }, () => {}, {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await pending;
+
+    expect(stub.signals[0]).toBe(controller.signal);
+  });
+
+  it('settles as a cancelled outcome, not a failure', async () => {
+    const stub = openStream(sseBody([['update', { node: 'node:input.text-1', namespace: [] }]]));
+    const controller = new AbortController();
+    const client = new RuntimeClient('http://rt', stub.fetch);
+    const seen: RunStreamEvent[] = [];
+
+    const pending = client.runStream(
+      { workflow: {}, question: 'q' },
+      (event) => {
+        seen.push(event);
+        controller.abort(); // stop the moment the first node reports
+      },
+      { signal: controller.signal },
+    );
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(true);
+    // The partial trace survives — a stop is not an undo.
+    expect(seen).toHaveLength(1);
+  });
+
+  it('is cancelled, not "is the backend running?", when the abort beats the response', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const client = new RuntimeClient('http://rt', () =>
+      Promise.reject(new DOMException('The operation was aborted.', 'AbortError')),
+    );
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {}, {
+      signal: controller.signal,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(true);
+  });
+
+  it('stops a resume the same way — one seam, both endpoints', async () => {
+    const stub = openStream('');
+    const controller = new AbortController();
+    const client = new RuntimeClient('http://rt', stub.fetch);
+
+    const pending = client.resume(
+      { threadId: 't1', workflow: {}, decision: 'approve' },
+      () => {},
+      { signal: controller.signal },
+    );
+    controller.abort();
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(true);
+  });
+
+  it('is cancelled, not "closed without a result", when the read just ends', async () => {
+    // The shape found live: cancelling a reader can resolve the pending read
+    // with `done: true` instead of throwing, so the loop exits cleanly with
+    // no `done` frame — indistinguishable from a server hanging up early
+    // except for the signal.
+    const controller = new AbortController();
+    controller.abort();
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse('', 0)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {}, {
+      signal: controller.signal,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(true);
+  });
+
+  it('still reports a real result that arrived before the stop', async () => {
+    // The signal is checked last on purpose: a `done` frame already parsed is
+    // the answer, and a stop pressed a moment later must not discard it.
+    const controller = new AbortController();
+    controller.abort();
+    const text = sseBody([['done', { answer: 'Rock.', decisions: {}, outputs: {} }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 4)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {}, {
+      signal: controller.signal,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(false);
+  });
+
+  it('leaves an unsignalled run exactly as it was', async () => {
+    const text = sseBody([['done', { answer: 'Rock.', decisions: {}, outputs: {} }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 4)));
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(false);
   });
 });
 

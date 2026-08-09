@@ -75,8 +75,40 @@ export interface RunInterrupted {
   readonly candidate: string;
 }
 
-/** What a stream settles into: a finished run, or one waiting on a human. */
-export type RunOutcome = RunResult | RunInterrupted;
+/**
+ * A stream the caller stopped — Stop, pressed mid-run (ticket 10).
+ *
+ * Deliberately an `Ok` outcome rather than an `Err`: the run did exactly what
+ * it was told, so every surface renders it as a muted "Stopped by you" line
+ * instead of a failure. Carries nothing, because a stopped run has no result
+ * to report — whatever it streamed before the stop already reached `onEvent`.
+ */
+export interface RunCancelled {
+  readonly cancelled: true;
+}
+
+/**
+ * What a stream settles into: a finished run, one waiting on a human, or one
+ * the caller stopped.
+ */
+export type RunOutcome = RunResult | RunInterrupted | RunCancelled;
+
+/** Narrows a settled outcome to "the caller pressed Stop". */
+export const isCancelled = (outcome: RunOutcome): outcome is RunCancelled =>
+  'cancelled' in outcome && outcome.cancelled === true;
+
+/**
+ * Per-call options that are about the *transport*, not the run.
+ *
+ * Separate from `RunRequest` on purpose: everything in that interface is
+ * serialised into the request body, and an `AbortSignal` is neither
+ * serialisable nor something the backend is told about. It also keeps the
+ * addition purely additive — an existing two-argument call is unchanged.
+ */
+export interface StreamOptions {
+  /** Aborts the request and its body reader. See `RunCancelled`. */
+  readonly signal?: AbortSignal;
+}
 
 export interface ResumeRequest {
   readonly threadId: string;
@@ -172,11 +204,13 @@ export interface IRuntimeClient {
   runStream(
     request: RunRequest,
     onEvent: (event: RunStreamEvent) => void,
+    options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>>;
   /** Continues a paused run with a human's decision. Same outcome shape as `runStream` — a resumed run can itself pause again at a later approval node. */
   resume(
     request: ResumeRequest,
     onEvent: (event: RunStreamEvent) => void,
+    options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>>;
   health(): Promise<Result<{ modelConfigured: boolean }, string>>;
 }
@@ -236,6 +270,7 @@ export class RuntimeClient implements IRuntimeClient {
   async runStream(
     request: RunRequest,
     onEvent: (event: RunStreamEvent) => void,
+    options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>> {
     const body = {
       workflow: request.workflow,
@@ -246,12 +281,13 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.credentials ? { credentials: request.credentials } : {}),
       ...(request.advisor ? { advisor: true } : {}),
     };
-    return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent);
+    return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent, options);
   }
 
   async resume(
     request: ResumeRequest,
     onEvent: (event: RunStreamEvent) => void,
+    options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>> {
     const body = {
       thread_id: request.threadId,
@@ -264,22 +300,36 @@ export class RuntimeClient implements IRuntimeClient {
       ...(request.credentials ? { credentials: request.credentials } : {}),
       ...(request.advisor ? { advisor: true } : {}),
     };
-    return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent);
+    return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent, options);
   }
 
   private async streamFrom(
     url: string,
     body: unknown,
     onEvent: (event: RunStreamEvent) => void,
+    options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>> {
+    const signal = options?.signal;
+    /**
+     * True for both spellings of "the caller stopped this": the signal is
+     * already aborted, or the rejection is a fetch/stream `AbortError`. Both
+     * checked, because which one a runtime raises depends on *when* the abort
+     * landed relative to the request, and a stop must never be reported as
+     * "is the backend running?".
+     */
+    const wasAborted = (error: unknown): boolean =>
+      signal?.aborted === true || (error as { name?: string } | null)?.name === 'AbortError';
+
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
+        ...(signal ? { signal } : {}),
       });
-    } catch {
+    } catch (error) {
+      if (wasAborted(error)) return Ok({ cancelled: true });
       return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
     }
 
@@ -361,21 +411,40 @@ export class RuntimeClient implements IRuntimeClient {
       }
     };
 
-    for (;;) {
-      const { value, done: streamDone } = await reader.read();
-      if (streamDone) break;
-      buffer += decoder.decode(value, { stream: true });
+    try {
+      for (;;) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        buffer += decoder.decode(value, { stream: true });
 
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary !== -1) {
-        consumeFrame(buffer.slice(0, boundary));
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf('\n\n');
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          consumeFrame(buffer.slice(0, boundary));
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf('\n\n');
+        }
       }
+    } catch (error) {
+      if (!wasAborted(error)) throw error;
+      // Stopped. Cancelling the reader is what actually closes the HTTP
+      // connection, and closing it is what makes the *server's* generator
+      // exit — so this line is the whole client half of "Stop stops work".
+      // Swallowed: cancelling an already-errored stream rejects, and that
+      // rejection carries no information a caller could act on.
+      await reader.cancel().catch(() => undefined);
+      return Ok({ cancelled: true });
     }
 
     if (failure) return Err(failure);
     if (outcome) return Ok(outcome);
+    // A stop does not always arrive as a thrown `AbortError`: cancelling a
+    // reader can instead resolve the pending read with `done: true`, which
+    // looks exactly like a server that hung up early. Found live — the loop
+    // exited cleanly and the surface reported "closed the stream without
+    // reporting a result", turning the user's own Stop into an error. The
+    // signal is the only thing that can tell the two apart, and it is
+    // checked last so a real `done` frame still wins.
+    if (signal?.aborted) return Ok({ cancelled: true });
     return Err('The runtime closed the stream without reporting a result.');
   }
 

@@ -285,6 +285,15 @@
   font: var(--type-body-sm);
 }
 
+/* A stop the developer asked for is a fact about the turn, not a failure —
+ * so it reads like `ask__meta`, deliberately NOT like `ask__error`. */
+.ask__stopped {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-body-sm);
+  font-style: italic;
+}
+
 /* ---------- Human approval ---------- */
 
 .ask__approval {

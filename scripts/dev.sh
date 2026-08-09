@@ -150,9 +150,38 @@ cd "$ROOT"
 # walk node_modules/ and dist/ and burn CPU (or hit the macOS fd limit) waiting
 # for changes that can never affect the Python process. backend/ and workflows/
 # are the only trees whose edits the server should react to.
+#
+# --reload-exclude and --timeout-graceful-shutdown are BOTH load-bearing, and
+# both were added after one wedged server was diagnosed end to end (ticket 11).
+# The failure looked like "the run never ends", and the mechanism was:
+#
+#   1. Something writes inside a watched tree while an SSE run is streaming.
+#      This is not only a developer typing — the app writes there ITSELF:
+#      `prebuilt_email.OUTBOX` is `workflows/_outbox/`, so the store-analytics
+#      report's own happy path (send the approved report) drops an `.eml` into
+#      a --reload-dir and reloads the server that is mid-send. Compiling a
+#      mounted workflow package writes `workflows/<slug>/__pycache__/*.pyc`
+#      for the same reason.
+#   2. uvicorn's reloader then logs "Shutting down / Waiting for connections
+#      to close" — and an SSE response never closes on its own, so the
+#      graceful wait never returns. No replacement child is ever spawned.
+#   3. The reloader parent still holds :8000, so every later request — the
+#      live run, the next run, even /api/health — connects and hangs FOREVER.
+#      Observed live: `curl /api/health` timed out at 30s with the log's last
+#      line being "Waiting for connections to close."
+#
+# So: exclude the paths the *runtime* writes (they are output, not source),
+# and cap the graceful wait so a genuine source edit restarts the server
+# instead of wedging it. A killed stream is a visible, recoverable failure;
+# a server that accepts connections and never answers is not.
 PYTHONPATH="backend:workflows/chinook-nl-to-sql" SSL_CERT_FILE="${CERT_FILE}" \
   supervise backend python3 -m uvicorn openstategraph.api.main:app --port 8000 --app-dir backend \
-    --reload --reload-dir backend --reload-dir workflows
+    --reload --reload-dir backend --reload-dir workflows \
+    --reload-exclude '*/_outbox/*' --reload-exclude '*.eml' \
+    --reload-exclude '*/__pycache__/*' --reload-exclude '*.pyc' \
+    --reload-exclude '*/.pytest_cache/*' \
+    --reload-exclude '*.sqlite' --reload-exclude '*.sqlite-*' \
+    --timeout-graceful-shutdown 3
 
 supervise vite npm run dev
 

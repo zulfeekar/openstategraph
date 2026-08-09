@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -87,7 +87,12 @@ from openstategraph.api.schemas import (  # noqa: E402
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
-from openstategraph.api.streaming import _coerce_update, _sse, _stream_run  # noqa: E402, F401  (underscored names re-exported for tests)
+from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored names re-exported for tests)
+    _coerce_update,
+    _sse,
+    _stream_run,
+    stop_when_client_leaves,
+)
 
 def _default_factory(model: str) -> Any:
     from graph import build_live_graph
@@ -616,7 +621,7 @@ def create_app(
         )
 
     @app.post("/api/runs/stream")
-    def run_workflow_stream(request: RunRequest) -> StreamingResponse:
+    def run_workflow_stream(request: RunRequest, http: Request) -> StreamingResponse:
         """The same run as `/api/runs`, surfaced as it happens.
 
         Ticket 27's sidebar needs to show **which node is currently in
@@ -701,12 +706,20 @@ def create_app(
         }
 
         return StreamingResponse(
-            _stream_run(graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id),
+            # Wrapped, never passed raw: `stop_when_client_leaves` is the
+            # only thing that makes a client's Stop end the run rather than
+            # merely stop watching it.
+            stop_when_client_leaves(
+                _stream_run(
+                    graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id
+                ),
+                http.receive,
+            ),
             media_type="text/event-stream",
         )
 
     @app.post("/api/runs/resume")
-    def resume_workflow_stream(request: ResumeRequest) -> StreamingResponse:
+    def resume_workflow_stream(request: ResumeRequest, http: Request) -> StreamingResponse:
         """Continues a run a `human.approval` node paused (see `NodeRuntime._human_approval`).
 
         Same event vocabulary as `/api/runs/stream` (`_stream_run`) — a
@@ -763,14 +776,17 @@ def create_app(
             resume_value["feedback"] = request.feedback
 
         return StreamingResponse(
-            _stream_run(
-                graph,
-                Command(resume=resume_value),
-                config,
-                plan,
-                node_ids_by_name,
-                runtime,
-                request.thread_id,
+            stop_when_client_leaves(
+                _stream_run(
+                    graph,
+                    Command(resume=resume_value),
+                    config,
+                    plan,
+                    node_ids_by_name,
+                    runtime,
+                    request.thread_id,
+                ),
+                http.receive,
             ),
             media_type="text/event-stream",
         )

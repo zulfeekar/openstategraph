@@ -115,6 +115,13 @@
   button:hover { border-color: var(--faint); }
   #send { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: var(--font-weight-semibold); padding-inline: var(--space-4); }
   #send:hover { filter: brightness(1.08); }
+  /* Send becomes Stop while a turn streams — same button, same place, so the
+   * control never moves out from under the pointer. Red from the existing
+   * `--danger` token; the page gains no new colour. */
+  #send[data-stop] { background: var(--danger); border-color: var(--danger); }
+  /* A stop the user asked for is not a failure, so it reads muted like a
+   * note — deliberately not `.error`. */
+  .stopped { color: var(--muted); font-style: italic; font-size: var(--font-size-14); }
   #who { font-size: var(--font-size-12); color: var(--faint); font-variant-numeric: tabular-nums; }
 
   main { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-5); min-height: 0; }
@@ -655,9 +662,9 @@ function turnEl(question) {
   return el;
 }
 
-async function stream(path, body, el) {
+async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
-  const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   if (!resp.ok) { answer.hidden = false; answer.innerHTML = `<span class="error">Runtime error (${resp.status}): ${esc(await resp.text())}</span>`; return; }
   const reader = resp.body.getReader(); const dec = new TextDecoder();
   let buf = "", event = null, tokens = "";
@@ -670,6 +677,7 @@ async function stream(path, body, el) {
   // namespace head for a mounted subgraph).
   const tlNames = {};
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  try {
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -753,6 +761,48 @@ async function stream(path, body, el) {
       }
     }
   }
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      // Stop, pressed. Cancelling the reader is what closes the connection,
+      // and closing it is what makes the server's stream generator exit —
+      // between supersteps, so the step already in flight finishes in the
+      // provider and is discarded. The note says exactly that rather than
+      // implying the whole run vanished mid-thought.
+      await reader.cancel().catch(() => {});
+      finishFlow();
+      thinking.textContent = "";
+      noteStopped(el);
+      return;
+    }
+    throw err;
+  }
+  // A stop does not always arrive as a thrown AbortError: cancelling a reader
+  // can instead resolve the pending read with `done: true`, so the loop above
+  // exits cleanly having received no `done` frame. Found live — the button
+  // went back to Send and the turn showed nothing at all. The signal is the
+  // only thing that separates "the user stopped it" from "the server hung up".
+  if (signal && signal.aborted) {
+    finishFlow();
+    thinking.textContent = "";
+    noteStopped(el);
+    return;
+  }
+  el.scrollIntoView({ block: "end" });
+}
+
+/* The muted "stopped by you" line — a note, never an error.
+ *
+ * One wording, unlike the editor's two: this composer is a Stop only while a
+ * stream is genuinely open, so a run paused at an approval can never be
+ * "stopped" here — that stream has already ended, the button says Send again,
+ * and the checkpointed thread is resumed by the Approve/Reject buttons. The
+ * approval-pause case therefore needs no line of its own on this page. */
+function noteStopped(el) {
+  const note = document.createElement("p");
+  note.className = "stopped";
+  note.textContent =
+    "Stopped by you — nothing further is scheduled. Steps already dispatched finish in the background and their results are discarded.";
+  el.appendChild(note);
   el.scrollIntoView({ block: "end" });
 }
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -801,7 +851,9 @@ function renderInterrupt(el, d) {
     b.onclick = async () => {
       box.remove();
       const doc = await docFor(state.workflow);
-      await stream("/api/runs/resume", {
+      // Through `runStream`, not `stream`: a resumed run streams exactly like
+      // a fresh one, so it must be stoppable exactly like one.
+      await runStream("/api/runs/resume", {
         // The interrupt event spells it `threadId` (camelCase) — reading the
         // snake_case spelling posted `undefined`, JSON.stringify dropped the
         // key, and every approval died 422 "thread_id: Field required".
@@ -813,8 +865,31 @@ function renderInterrupt(el, d) {
   }
 }
 
-$("send").onclick = send;
-$("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+/* The one open stream's abort handle, or null between runs.
+ *
+ * Module-scoped rather than per-turn because this page runs exactly one turn
+ * at a time — the composer is the only way to start one, and it is a Stop for
+ * as long as a turn is in flight. Cleared in a `finally`, so no path can
+ * leave the button stuck saying Stop. */
+let inFlight = null;
+
+/** Send ⇄ Stop. One button, one place; only its meaning changes. */
+function setComposerRunning(running) {
+  const btn = $("send");
+  btn.textContent = running ? "Stop" : "Send";
+  if (running) btn.dataset.stop = "1";
+  else delete btn.dataset.stop;
+}
+
+$("send").onclick = () => { if (inFlight) inFlight.abort(); else send(); };
+$("msg").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    // Enter never stops a run: a stop is deliberate, and the key people hold
+    // down to send should not be able to kill the turn they just started.
+    if (!inFlight) send();
+  }
+});
 async function send() {
   const q = $("msg").value.trim();
   if (!q || !state.workflow) return;
@@ -823,15 +898,34 @@ async function send() {
   // unlike the editor it knows exactly where one run ends and the next begins.
   resetFlowHighlight();
   const el = turnEl(q);
+  let doc;
   try {
-    const doc = await docFor(state.workflow);
-    await stream("/api/runs/stream", {
-      workflow: { document: doc }, question: q, workflow_slug: state.workflow,
-      thread_id: threadFor(state.workflow), session_id: state.sessionId, user_email: state.email || "anonymous",
-    }, el);
+    doc = await docFor(state.workflow);
   } catch (err) {
     const a = el.querySelector(".answer"); a.hidden = false;
     a.innerHTML = `<span class="error">${esc(String(err))}</span>`;
+    return;
+  }
+  await runStream("/api/runs/stream", {
+    workflow: { document: doc }, question: q, workflow_slug: state.workflow,
+    thread_id: threadFor(state.workflow), session_id: state.sessionId, user_email: state.email || "anonymous",
+  }, el);
+}
+
+/* Every stream this page opens goes through here, so every one of them is
+ * stoppable and none can leave the composer or the abort handle behind. */
+async function runStream(path, body, el) {
+  const aborter = new AbortController();
+  inFlight = aborter;
+  setComposerRunning(true);
+  try {
+    await stream(path, body, el, aborter.signal);
+  } catch (err) {
+    const a = el.querySelector(".answer"); a.hidden = false;
+    a.innerHTML = `<span class="error">${esc(String(err))}</span>`;
+  } finally {
+    inFlight = null;
+    setComposerRunning(false);
   }
 }
 loadWorkflows();

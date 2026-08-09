@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Info, Lightbulb, Send, TriangleAlert } from 'lucide-react';
+import { Info, Lightbulb, Send, Square, TriangleAlert } from 'lucide-react';
 import { Button, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
 import {
   RuntimeClient,
+  isCancelled,
   type RunOutcome,
   type RunResult,
   type RunStreamEvent,
@@ -66,6 +67,23 @@ interface ChatTurn {
   readonly error: string | null;
   /** Set while this turn's run is paused waiting for a human decision. */
   readonly pendingApproval: PendingApproval | null;
+  /**
+   * How this turn ended when the developer pressed Stop — and the two cases
+   * are genuinely different, so they are not collapsed into a boolean.
+   *
+   * `'streaming'`: a live run was aborted. The client closed the connection,
+   * the server's stream generator exited, and nothing further is scheduled.
+   * Measured, not assumed: work already dispatched into the current step —
+   * for a fan-out crew, every worker in it — runs to completion in the
+   * background and its result is thrown away.
+   *
+   * `'paused'`: the turn was sitting at a `human.approval` interrupt, where
+   * nothing is running to stop. Pressing Stop only walks away from the
+   * prompt — LangGraph has the thread checkpointed and it stays resumable,
+   * which is exactly what the line rendered for this case says. Calling that
+   * "stopped" without the qualification would be a lie about the server.
+   */
+  readonly stopped: 'streaming' | 'paused' | null;
   /**
    * A capability gap the agent named, already validated against this editor
    * (`parseSuggestion`) — so its presence means the offer can actually be
@@ -156,6 +174,15 @@ export interface AskPanelProps {
    * conversation rather than two parallel ones.
    */
   readonly runRequest?: { readonly question: string; readonly nonce: number } | null;
+  /**
+   * Bumped by the toolbar's Stop button (ticket 10). A nonce for the same
+   * reason `runRequest` is one: the *second* Stop press after a new run
+   * started must land, and a boolean could not express it.
+   *
+   * The panel owns the `AbortController`, not the toolbar — the toolbar owns
+   * the button but not the run, exactly as it already does for Run.
+   */
+  readonly stopRequest?: { readonly nonce: number } | null;
   /** Reports whether a run is streaming, so the toolbar's Run button can say so. */
   readonly onRunningChange?: (running: boolean) => void;
 }
@@ -164,6 +191,7 @@ export function AskPanel({
   notice = null,
   focusNonce = 0,
   runRequest = null,
+  stopRequest = null,
   onRunningChange,
 }: AskPanelProps = {}) {
   const controller = useController();
@@ -189,6 +217,25 @@ export function AskPanel({
   // overwrite the entry node's `prompt` out from under the paused thread.
   const running = turns.some((turn) => turn.running || turn.pendingApproval);
 
+  /**
+   * The abort handle for each turn that has a stream open, by turn id.
+   *
+   * A ref rather than state: nothing renders from it, and a re-render for a
+   * controller nobody looks at would be pure churn. Entries are deleted the
+   * moment their stream settles, so this map is empty between runs.
+   *
+   * Deliberately NOT aborted on unmount, for two reasons found in that
+   * order. The decisive one is correctness: React's development StrictMode
+   * mounts effects twice, so an abort-on-cleanup killed the very run the
+   * mount had just started — pressing Run produced a turn that said
+   * "Stopped by you" before a single node had reported. The second reason is
+   * that it was the wrong policy anyway: the Chat panel is a toggle, and
+   * hiding a panel is not a request to cancel the work you are watching.
+   * Stop is the only thing that stops a run, which is exactly what a button
+   * called Stop should mean.
+   */
+  const aborters = useRef(new Map<string, AbortController>());
+
   const updateTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
     setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
   }, []);
@@ -212,12 +259,19 @@ export function AskPanel({
   const streamAndSettle = useCallback(
     async (
       id: string,
-      call: (onEvent: (event: RunStreamEvent) => void) => Promise<{
+      call: (
+        onEvent: (event: RunStreamEvent) => void,
+        signal: AbortSignal,
+      ) => Promise<{
         readonly ok: boolean;
         readonly value?: RunOutcome;
         readonly error?: string;
       }>,
     ) => {
+      // Created here rather than by each caller, so every stream this panel
+      // opens is stoppable by construction and none can be forgotten.
+      const aborter = new AbortController();
+      aborters.current.set(id, aborter);
       const seen = new Set<string>();
       let activeNode: string | null = null;
 
@@ -369,12 +423,25 @@ export function AskPanel({
         }
       };
 
-      const outcome = await call(onEvent);
+      const outcome = await call(onEvent, aborter.signal);
+      // The stream is settled either way; nothing is left to abort. Dropped
+      // before any of the branches below so no path can leak the entry.
+      aborters.current.delete(id);
 
       // Waits for the last queued highlight's minimum-visible window before
       // finalising, so the very last node to act does not flash and vanish
       // the instant the run's own answer arrives.
       await highlightChain;
+
+      if (outcome.ok && outcome.value && isCancelled(outcome.value)) {
+        // Stopped. Not `success` (nothing completed) and not `error` (nothing
+        // failed) — the node returns to rest, which is the same state a
+        // canvas that never ran is in.
+        if (activeNode) controller.model.setNodeRuntime(activeNode, { status: 'idle' });
+        updateTurn(id, { running: false, pendingApproval: null, stopped: 'streaming' });
+        scrollToEnd();
+        return;
+      }
 
       if (outcome.ok && outcome.value && 'interrupted' in outcome.value) {
         // Paused, not finished: the last active node stays highlighted rather
@@ -432,10 +499,10 @@ export function AskPanel({
       if (!turn || !turn.pendingApproval) return;
       const { threadId } = turn.pendingApproval;
 
-      updateTurn(turnId, { running: true, pendingApproval: null });
+      updateTurn(turnId, { running: true, pendingApproval: null, stopped: null });
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
-      await streamAndSettle(turnId, (onEvent) =>
+      await streamAndSettle(turnId, (onEvent, signal) =>
         client.resume(
           {
             threadId,
@@ -445,6 +512,7 @@ export function AskPanel({
             ...credentialsPatch(workbench.providers),
           },
           onEvent,
+          { signal },
         ),
       );
     },
@@ -479,6 +547,7 @@ export function AskPanel({
           result: null,
           error: null,
           pendingApproval: null,
+          stopped: null,
           suggestion: null,
           suggestionDecision: null,
           notice: null,
@@ -493,7 +562,7 @@ export function AskPanel({
       // post the canvas as it now is, with the new tool wired in.
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
-      await streamAndSettle(id, (onEvent) =>
+      await streamAndSettle(id, (onEvent, signal) =>
         client.runStream(
           {
             workflow: document,
@@ -505,11 +574,51 @@ export function AskPanel({
             ...credentialsPatch(workbench.providers),
           },
           onEvent,
+          { signal },
         ),
       );
     },
     [client, controller, scrollToEnd, streamAndSettle, workbench],
   );
+
+  /**
+   * Stop, from either the composer or the toolbar.
+   *
+   * Two shapes, because "running" covers two genuinely different situations
+   * and only one of them has work to interrupt:
+   *
+   * - **A live stream.** Abort it. The fetch is torn down, the body reader is
+   *   cancelled, the connection closes, and the backend's stream generator
+   *   exits between supersteps (it logs that it did). A model call already in
+   *   flight finishes in the provider and is discarded — nothing client-side
+   *   can reach into it, and the UI never claims otherwise.
+   * - **A turn paused at an approval.** Nothing is running. Stop just walks
+   *   away from the prompt; the thread stays checkpointed on the server and
+   *   is still resumable, which the rendered line says out loud.
+   */
+  const stop = useCallback(() => {
+    const streaming = turns.find((turn) => turn.running);
+    if (streaming) {
+      aborters.current.get(streaming.id)?.abort();
+      return;
+    }
+    const paused = turns.find((turn) => turn.pendingApproval);
+    if (paused) updateTurn(paused.id, { pendingApproval: null, stopped: 'paused' });
+  }, [turns, updateTurn]);
+
+  // Stop, pressed in the toolbar. Same nonce discipline as Run above, and the
+  // same reason: the press is the event, not the value.
+  const stopNonce = stopRequest?.nonce ?? 0;
+  const stopRef = useRef(stop);
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
+  const stoppedNonce = useRef(0);
+  useEffect(() => {
+    if (stopNonce <= 0 || stoppedNonce.current === stopNonce) return;
+    stoppedNonce.current = stopNonce;
+    stopRef.current();
+  }, [stopNonce]);
 
   const send = useCallback(async () => {
     const trimmed = question.trim();
@@ -554,6 +663,15 @@ export function AskPanel({
   useEffect(() => {
     onRunningChange?.(running);
   }, [running, onRunningChange]);
+
+  // A closed panel reports nothing, so the toolbar must not be left showing a
+  // Stop it can no longer deliver — the panel that owns the abort handle is
+  // gone. Reopening the panel re-reports the truth on its next render.
+  const runningChangeRef = useRef(onRunningChange);
+  useEffect(() => {
+    runningChangeRef.current = onRunningChange;
+  }, [onRunningChange]);
+  useEffect(() => () => runningChangeRef.current?.(false), []);
 
   /**
    * Honours a suggestion: add the node, wire it, say so, ask again.
@@ -682,15 +800,19 @@ export function AskPanel({
               if (event.key === 'Enter' && !event.shiftKey) void send();
             }}
           />
+          {/* One control, two meanings — Send becomes Stop while the turn
+              streams, rather than a disabled "Running…" that leaves the
+              developer with nothing to press. Same slot, so the thing to
+              click never moves. */}
           <Button
-            variant="primary"
+            variant={running ? 'danger-solid' : 'primary'}
             className="ask__composer-send"
-            icon={<Icon glyph={Send} size="sm" />}
-            disabled={running || question.trim() === ''}
-            aria-label={running ? 'Running' : 'Send'}
-            onClick={() => void send()}
+            icon={<Icon glyph={running ? Square : Send} size="sm" />}
+            disabled={running ? false : question.trim() === ''}
+            aria-label={running ? 'Stop' : 'Send'}
+            onClick={() => (running ? stop() : void send())}
           >
-            {running ? 'Running…' : 'Send'}
+            {running ? 'Stop' : 'Send'}
           </Button>
         </div>
       </PanelBody>
@@ -771,6 +893,17 @@ function Turn({
           onApprove={() => onRespond(turn.id, 'approve')}
           onReject={() => onRespond(turn.id, 'reject')}
         />
+      ) : null}
+
+      {/* Muted, with no error styling and no warning glyph: the developer
+          asked for this, so presenting it as a failure would be the panel
+          disagreeing with them. */}
+      {turn.stopped ? (
+        <p className="ask__stopped">
+          {turn.stopped === 'paused'
+            ? 'Stopped by you — this run was waiting for approval, so nothing was interrupted. It stays checkpointed on the server and can still be resumed.'
+            : 'Stopped by you — nothing further is scheduled. Steps already dispatched finish in the background and their results are discarded.'}
+        </p>
       ) : null}
 
       {turn.error ? (
