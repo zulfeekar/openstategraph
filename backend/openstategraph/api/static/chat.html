@@ -120,6 +120,7 @@
   main { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-5); min-height: 0; }
 
   /* ---------- Live flow ---------- */
+  #flow { position: relative; }
   #flow svg { width: 100%; height: auto; }
   /* Everything that is not the active node steps back, so the active one pops
      without having to shout. */
@@ -127,7 +128,6 @@
   #flow .flow-active { opacity: 1 !important; }
   #flow .flow-active > * { stroke: var(--live) !important; stroke-width: 2.5px !important; }
   #flow .flow-active rect, #flow .flow-active polygon, #flow .flow-active circle { fill: color-mix(in srgb, var(--live) 16%, transparent) !important; }
-  #flow .flow-active { animation: flow-pulse 1.4s ease-in-out infinite; }
   /* The path already taken keeps a faint tint, so the route through the graph
      is readable at the end of a run and not only during it. */
   #flow .flow-done { opacity: .8 !important; }
@@ -135,8 +135,65 @@
   #flow .flow-done rect, #flow .flow-done polygon { fill: color-mix(in srgb, var(--done) 10%, transparent) !important; }
   #flow path.flow-edge-active { stroke: var(--live) !important; stroke-width: 2.5px !important; opacity: 1 !important; }
   #flow.running path.flowchart-link { opacity: .3; transition: opacity .25s ease; }
-  @keyframes flow-pulse { 50% { filter: drop-shadow(0 0 6px var(--live)); } }
-  @media (prefers-reduced-motion: reduce) { #flow .flow-active { animation: none; } }
+
+  /* The running glow, in the editor's visual language (ticket 02).
+     Was a blue `drop-shadow` pulse; the editor marks a running node with a
+     rotating two-hue conic-gradient ring plus a ring-masked bloom, and the
+     two surfaces should not describe the same state two ways.
+
+     WHY AN HTML OVERLAY, NOT SVG. A conic gradient is a CSS *background*;
+     an SVG shape can only be painted with an SVG paint server, and there is
+     no conic equivalent (`foreignObject` inside Mermaid's output is not
+     ours to add). The faithful options were: (a) an absolutely-positioned
+     HTML ring over the node's box, or (b) an approximation in SVG — a
+     dashed `stroke-dashoffset` chase, which is a *different* animation, not
+     this one. (a) is chosen: it is the same gradient, the same mask, the
+     same sweep. The diagram does not pan or zoom on this page — it is a
+     `width:100%` SVG in a scrolling pane — so the overlay has nothing to
+     fight; it lives inside `#flow` and therefore scrolls with the diagram,
+     and it is repositioned on resize and removed on every node change and
+     at the end of a run (see `placeGlow`). */
+  @property --run-glow-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+  :root {
+    /* The editor's `--color-run-glow-from/to`, restated here — same reason
+       as the spacing ladder above: this page cannot import `src/design`. */
+    --color-run-glow-from: #3b82f6;
+    --color-run-glow-to: #8b5cf6;
+    --run-glow-width: var(--space-0-5);
+    --run-glow-blur: var(--space-2);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --color-run-glow-from: #60a5fa; --color-run-glow-to: #a78bfa; }
+  }
+  .flow-glow { position: absolute; pointer-events: none; }
+  .flow-glow::before, .flow-glow::after {
+    content: ""; position: absolute; inset: calc(-1 * var(--run-glow-width));
+    border-radius: calc(var(--radius-md) + var(--run-glow-width));
+    background: conic-gradient(
+      from var(--run-glow-angle),
+      transparent 0deg,
+      var(--color-run-glow-from) 30deg,
+      var(--color-run-glow-to) 70deg,
+      transparent 100deg
+    );
+    animation: run-glow-sweep 3s linear infinite;
+    /* Masked to the border so only the ring survives — the node's own fill
+       must stay readable underneath. */
+    padding: var(--run-glow-width);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+  /* The bloom: the same ring, blurred, behind the diagram rather than over it. */
+  .flow-glow::after { z-index: -1; filter: blur(var(--run-glow-blur)); opacity: .7; }
+  @keyframes run-glow-sweep { to { --run-glow-angle: 1turn; } }
+  @media (prefers-reduced-motion: reduce) {
+    .flow-glow::before, .flow-glow::after { animation: none; }
+  }
 
   /* ---------- Empty state ---------- */
   .empty { padding: var(--space-7) var(--space-1); }
@@ -269,6 +326,10 @@ $("newconv").onclick = () => {
   localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
   $("log").innerHTML = '<div class="empty" id="empty"><h3>Ask anything</h3>'
     + "<p>I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.</p></div>";
+  // The diagram belongs to the conversation being cleared: leaving the run
+  // marker (and its glow) behind would claim a run is still in flight in a
+  // thread that no longer exists.
+  resetFlowHighlight();
 };
 
 // Minimal markdown: headings, bold, code fences, inline code, tables, lists.
@@ -397,7 +458,46 @@ async function renderFlow(slug) {
 // `<prefix>-flowchart-<name>-<n>`, edges are `<prefix>-L_<src>_<dst>_0`. Both
 // were confirmed against a rendered graph before being relied on here.
 let activeFlowNode = null;
+let activeFlowName = null;
 const visitedFlowNodes = new Set();
+
+/* The running glow is one HTML element, reused for the life of the page and
+ * moved onto whichever node is active (ticket 02) — see the `.flow-glow`
+ * rules for why a CSS conic gradient cannot live inside the SVG itself.
+ *
+ * Positioned from `getBoundingClientRect` rather than `getBBox` + CTM maths:
+ * the rect is already in CSS pixels with the SVG's own `viewBox` scaling and
+ * every ancestor transform applied, which is exactly what an absolutely
+ * positioned sibling needs, and it stays correct when the pane reflows. Both
+ * rects are read in the same frame, so the difference is scroll-independent
+ * and the overlay scrolls with the diagram it sits inside. */
+let glowEl = null;
+
+function removeGlow() {
+  if (glowEl) { glowEl.remove(); glowEl = null; }
+}
+
+function placeGlow(el) {
+  if (!el || !el.isConnected) return removeGlow();
+  const host = $("flow");
+  if (!glowEl) {
+    glowEl = document.createElement("div");
+    glowEl.className = "flow-glow";
+    glowEl.setAttribute("aria-hidden", "true");
+    host.appendChild(glowEl);
+  }
+  const hostBox = host.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  glowEl.style.left = (box.left - hostBox.left) + "px";
+  glowEl.style.top = (box.top - hostBox.top) + "px";
+  glowEl.style.width = box.width + "px";
+  glowEl.style.height = box.height + "px";
+}
+
+// The diagram is a `width:100%` SVG, so a pane resize rescales it and the
+// overlay's box goes stale. One observer for the life of the page — it is
+// created once and never re-created per run, so there is nothing to leak.
+new ResizeObserver(() => { if (glowEl) placeGlow(activeFlowNode); }).observe($("flow"));
 
 function resetFlowHighlight() {
   const host = $("flow");
@@ -406,7 +506,9 @@ function resetFlowHighlight() {
     el.classList.remove("flow-active", "flow-done", "flow-edge-active");
   }
   activeFlowNode = null;
+  activeFlowName = null;
   visitedFlowNodes.clear();
+  removeGlow();
 }
 
 function highlightFlow(nodeId) {
@@ -414,6 +516,12 @@ function highlightFlow(nodeId) {
   const host = $("flow");
   const name = safeName(nodeId);
   host.classList.add("running");
+  // Re-marking the node that is already active is a no-op visually but would
+  // restart the ring animation on every internal frame of a chatty agent
+  // loop, which reads as a stutter. Now that internal frames move the marker
+  // (ticket 01), that path is hot enough to guard.
+  if (activeFlowName === name) return;
+  activeFlowName = name;
 
   if (activeFlowNode) {
     activeFlowNode.classList.remove("flow-active");
@@ -428,6 +536,11 @@ function highlightFlow(nodeId) {
     el.classList.add("flow-active");
     activeFlowNode = el;
     visitedFlowNodes.add(name);
+    placeGlow(el);
+  } else {
+    // Nothing on this diagram matches — a stale ring over the previous node
+    // would claim the run is somewhere it is not.
+    removeGlow();
   }
 
   // Edges landing on this node. Matching on the id's tail is deliberate: a
@@ -447,6 +560,8 @@ function finishFlow() {
     activeFlowNode.classList.add("flow-done");
     activeFlowNode = null;
   }
+  activeFlowName = null;
+  removeGlow();
   for (const p of host.querySelectorAll("path.flow-edge-active")) p.classList.remove("flow-edge-active");
 }
 
@@ -504,7 +619,7 @@ function renderTimeline(el, rows, names) {
 const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms");
 
 async function loadWorkflows() {
-  const list = await (await fetch("/api/workflows")).json();
+  const list = await (await fetch("/api/workflows?surface=chat")).json();
   // "Auto" is the hidden concierge gateway (ticket 67): a predefined
   // router-of-workflows the customer never has to know about.
   $("wf").innerHTML = '<option value="concierge">Auto — let OpenStateGraph route</option>'
@@ -571,13 +686,18 @@ async function stream(path, body, el) {
             tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], ms: now - lastFrameAt });
             lastFrameAt = now;
             renderTimeline(el, tlRows, tlNames);
-            // A frame from inside a subgraph names a node that does not exist
-            // in *this* diagram — the diagram shows the mounted workflow as a
-            // single box. Highlight that box instead, so a run that spends 45
-            // seconds inside `wf_music` lights `wf_music` up rather than
-            // leaving the marker stuck on whatever ran last at the top level.
-            // The namespace segment is `<node>:<checkpoint-id>`.
-            if (!d.internal) highlightFlow((d.namespace && d.namespace[0] || "").split(":")[0] || d.node);
+            // What lights up is the stream's own `activeNode` (ticket 01) —
+            // the canvas node the run is genuinely inside for this frame. A
+            // frame from within a mounted workflow names a node that does not
+            // exist in *this* diagram (the mount is one box), and an agent's
+            // internal `model`/`tools` frames name no canvas node at all;
+            // both used to leave the marker on whatever ran last at the top
+            // level, i.e. the router. Internal frames move the marker but
+            // still never add a step row.
+            // `activeNode` is a canvas node id, so `highlightFlow`'s own
+            // `safeName` still applies. Older backends omit it — the previous
+            // namespace-head guess is kept as the fallback.
+            highlightFlow(d.activeNode || (d.namespace && d.namespace[0] || "").split(":")[0] || d.node);
             if (d.internal) {
               // Internal machinery collapses to a live counter on its owning
               // step — a 20-call tool loop is one line, not twenty.

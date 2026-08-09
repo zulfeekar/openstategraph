@@ -10,6 +10,7 @@ import {
 import { TopBar } from './topbar/TopBar';
 import { Palette } from './palette/Palette';
 import { AskPanel } from './ask/AskPanel';
+import { entryQuestion } from '@nodes/inputs/entryQuestion';
 import { Inspector } from './inspector/Inspector';
 import { CanvasStage } from './canvas/CanvasStage';
 import { Minimap } from './minimap/Minimap';
@@ -62,6 +63,12 @@ export function AppShell() {
   // `run:finish` effect below); cleared as soon as the panel is closed.
   const [askNotice, setAskNotice] = useState<string | null>(null);
   const [askFocusNonce, setAskFocusNonce] = useState(0);
+  /** A Run press, handed to the Ask panel to execute as a turn (ticket 03). */
+  const [askRunRequest, setAskRunRequest] = useState<{
+    question: string;
+    nonce: number;
+  } | null>(null);
+  const [backendRunning, setBackendRunning] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
@@ -80,6 +87,27 @@ export function AppShell() {
    * Contributed into the canvas keyboard feature rather than handled here,
    * so every binding in the app lives in one table and shows up in the
    * shortcuts drawer automatically. */
+
+  /**
+   * Run, from the toolbar or the shortcut (ticket 03).
+   *
+   * Opens the Ask panel *showing* the run rather than running invisibly, and
+   * hands the question to that panel's own thread — so the run has the same
+   * history, the same client and the same stream as a typed question, and a
+   * developer who then wants to follow up is already in the conversation.
+   *
+   * The nonce, not the text, is the trigger: pressing Run twice without
+   * editing the Input node must run twice.
+   */
+  const runWorkflow = useCallback((question: string) => {
+    if (question.trim() === '') return;
+    setAskNotice(null);
+    setAskOpen(true);
+    setAskRunRequest((previous) => ({
+      question,
+      nonce: (previous?.nonce ?? 0) + 1,
+    }));
+  }, []);
 
   const shellShortcuts = useMemo<readonly Shortcut[]>(
     () => [
@@ -127,7 +155,11 @@ export function AppShell() {
         label: 'Run workflow',
         group: 'Run',
         allowInTextEntry: true,
-        run: () => void workbench.engine.run(),
+        // Same meaning as the Run button, so the shortcut cannot drift into
+        // being a different feature: a real backend run of the Input node's
+        // text, shown in the Ask panel. Read at press time rather than
+        // subscribed — a keystroke needs the answer once, now.
+        run: () => runWorkflow(entryQuestion(workbench.model)),
       },
       {
         keys: 'Mod+K',
@@ -136,7 +168,7 @@ export function AppShell() {
         run: () => setCredentialsOpen(true),
       },
     ],
-    [workbench],
+    [workbench, runWorkflow],
   );
 
   /* ---------------- run feedback ---------------- */
@@ -164,6 +196,7 @@ export function AppShell() {
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
 
+
   return (
     <div className="app-shell">
       <div className="app-shell__topbar-row">
@@ -178,6 +211,8 @@ export function AppShell() {
           onInspectorToggle={() => setInspectorOpen((value) => !value)}
           onOpenCredentials={() => setCredentialsOpen(true)}
           onNotify={onNotify}
+          onRun={runWorkflow}
+          runInFlight={backendRunning}
         />
         <div className="app-shell__workflow-btn">
           {/* A button as well as a shortcut: asking the workflow a question is
@@ -230,7 +265,14 @@ export function AppShell() {
           // `right: 0`, which made whichever mounted second (Inspector)
           // silently intercept every click meant for the other.
           <div className="app-shell__right-panels">
-            {askOpen ? <AskPanel notice={askNotice} focusNonce={askFocusNonce} /> : null}
+            {askOpen ? (
+              <AskPanel
+                notice={askNotice}
+                focusNonce={askFocusNonce}
+                runRequest={askRunRequest}
+                onRunningChange={setBackendRunning}
+              />
+            ) : null}
             {inspectorOpen ? <Inspector /> : null}
           </div>
         ) : null}

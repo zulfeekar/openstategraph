@@ -74,16 +74,15 @@ export const LOOPABLE_TYPE = 'test.passthrough';
 /**
  * Registers a synthetic node type with a symmetric `text` in and `text` out.
  *
- * Needed because **no cycle is expressible with the shipped catalogue**: the
- * only input that accepts a `result` belongs to the output node, which has no
- * output port. So `acyclicRule` cannot be reached through the real node types,
- * and testing it via them is impossible rather than merely awkward.
- *
  * A unit test should exercise the rule, not the catalogue's ability to express
- * a cycle — those are different claims. This type isolates the rule.
+ * a cycle — those are different claims. This type isolates the rule, so a
+ * change to which real ports accept which types cannot quietly disarm the
+ * acyclic tests.
  *
- * (That the rule is currently unreachable in production is itself a finding:
- * see ticket 09, where cycles become required for grader loop-back.)
+ * (Until ticket 08 a cycle was not expressible with the shipped catalogue at
+ * all — `result` was terminal. Now `agent.prompt` accepts a `result`, so the
+ * catalogue-level pins live beside the rule tests in
+ * `ConnectionValidator.test.ts`.)
  */
 export function registerLoopableType(workbench: Workbench): void {
   workbench.registry.nodeTypes.register({

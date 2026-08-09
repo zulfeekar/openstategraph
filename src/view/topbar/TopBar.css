@@ -98,3 +98,10 @@
   position: relative;
   display: flex;
 }
+
+/* The Run button's tooltip anchor. A disabled button fires no pointer events,
+   so the tooltip has to hang off a wrapper — and the wrapper must not change
+   the button's layout. */
+.topbar__run {
+  display: inline-flex;
+}

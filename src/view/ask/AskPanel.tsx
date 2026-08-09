@@ -148,9 +148,24 @@ export interface AskPanelProps {
    * a row, and focus must follow both times.
    */
   readonly focusNonce?: number;
+  /**
+   * A question the *toolbar* asked to run (ticket 03: Run is a real backend
+   * run of the Input node's text). It arrives as a turn in this thread,
+   * exactly as if the developer had typed it here — same client, same
+   * stream, same history — so pressing Run and asking a question are one
+   * conversation rather than two parallel ones.
+   */
+  readonly runRequest?: { readonly question: string; readonly nonce: number } | null;
+  /** Reports whether a run is streaming, so the toolbar's Run button can say so. */
+  readonly onRunningChange?: (running: boolean) => void;
 }
 
-export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) {
+export function AskPanel({
+  notice = null,
+  focusNonce = 0,
+  runRequest = null,
+  onRunningChange,
+}: AskPanelProps = {}) {
   const controller = useController();
   const workbench = useWorkbench();
   const [question, setQuestion] = useState('');
@@ -264,14 +279,31 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
       };
 
       let lastFrameAt = performance.now();
+      /** The node most recently *queued* to glow — `activeNode` above is the
+       * one currently glowing, which lags by the paced highlight chain. */
+      let queuedActive: string | null = null;
       const onEvent = (event: RunStreamEvent) => {
         if (event.type === 'update') {
           const now = performance.now();
           const durationMs = Math.round(now - lastFrameAt);
           lastFrameAt = now;
-          if (!event.internal) {
-            seen.add(event.node);
-            activate(event.node, event.output);
+          // What glows is the stream's own answer to "where is the run right
+          // now" (ticket 01), not this frame's reporting node. During a
+          // mounted team or a long agent step every frame is `internal`, so
+          // the old `if (!event.internal)` gate left the highlight on the
+          // previous top-level node — the router — for the entire time
+          // something else was working.
+          //
+          // Internal frames are still not *rows* in the flat feed; they only
+          // move the glow, and only when the owner actually changes, so a
+          // chatty agent loop cannot flood the paced highlight queue.
+          const target = event.activeNode || event.node;
+          if (target && (!event.internal || target !== queuedActive)) {
+            seen.add(target);
+            // The output belongs to the frame's own node; a frame reporting
+            // from inside a mount has nothing to write onto the mount's card.
+            activate(target, event.node === target ? event.output : null);
+            queuedActive = target;
           }
           // Data collection is never delayed by the animation pacing above —
           // only the visual glow is paced, not the record of what happened.
@@ -485,6 +517,43 @@ export function AskPanel({ notice = null, focusNonce = 0 }: AskPanelProps = {}) 
     setQuestion('');
     await ask(trimmed);
   }, [ask, question, running]);
+
+  // Run, pressed in the toolbar. Keyed on the nonce alone: pressing Run twice
+  // with the *same* Input text must run twice, which a value-keyed effect
+  // could not express. `ask` is deliberately not a dependency — it changes
+  // identity whenever the canvas does, and re-running the last question
+  // because a node moved would be a run nobody asked for.
+  const runNonce = runRequest?.nonce ?? 0;
+  const askRef = useRef(ask);
+  const runningRef = useRef(running);
+  // Kept current in effects, never assigned during render: these refs exist
+  // only so the run effect below can read the *latest* `ask` without taking
+  // it as a dependency.
+  useEffect(() => {
+    askRef.current = ask;
+  }, [ask]);
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+  // Which nonce has already been honoured. Necessary, not defensive: React's
+  // development StrictMode mounts effects twice, and without this a single
+  // Run press started two real backend runs (seen live, two identical turns
+  // in the thread).
+  const ranNonce = useRef(0);
+  useEffect(() => {
+    if (runNonce <= 0 || ranNonce.current === runNonce) return;
+    const trimmed = (runRequest?.question ?? '').trim();
+    if (trimmed === '' || runningRef.current) return;
+    ranNonce.current = runNonce;
+    void askRef.current(trimmed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce is the trigger; see above
+  }, [runNonce]);
+
+  // The toolbar owns the Run button but not the run, so the one place that
+  // knows a stream is open tells it.
+  useEffect(() => {
+    onRunningChange?.(running);
+  }, [running, onRunningChange]);
 
   /**
    * Honours a suggestion: add the node, wire it, say so, ask again.

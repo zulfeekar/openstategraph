@@ -48,3 +48,21 @@
   display: flex;
   gap: var(--space-1);
 }
+
+/* Draft → publish lifecycle (launch-readiness ticket 04): a per-row badge
+   plus a publish/unpublish action. A draft is clearly labeled — it never
+   appears on the customer /chat surface until published. */
+.workflow-manager__badge {
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle, transparent);
+}
+
+.workflow-manager__badge--published {
+  color: var(--color-text-success, var(--color-text-primary));
+  border-color: currentColor;
+}

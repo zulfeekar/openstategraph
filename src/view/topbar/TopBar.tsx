@@ -49,6 +49,7 @@ import {
 import { GraphPreview } from '@view/overlays/GraphPreview';
 import { OnboardingHint } from '@view/overlays/OnboardingHint';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
+import { useEntryQuestion } from './useEntryQuestion';
 import './TopBar.css';
 
 interface TopBarProps {
@@ -62,6 +63,15 @@ interface TopBarProps {
   onInspectorToggle: () => void;
   onOpenCredentials: () => void;
   onNotify: (message: string) => void;
+  /**
+   * Starts a real backend run of the question the Input node holds
+   * (ticket 03). The shell owns it because running means *showing* the run in
+   * the Ask panel, and the panel's thread is the shell's state, not the
+   * toolbar's.
+   */
+  onRun: (question: string) => void;
+  /** True while a backend run started from here is still streaming. */
+  runInFlight: boolean;
 }
 
 /**
@@ -84,6 +94,8 @@ export function TopBar({
   onInspectorToggle,
   onOpenCredentials,
   onNotify,
+  onRun,
+  runInFlight,
 }: TopBarProps) {
   const [graphOpen, setGraphOpen] = useState(false);
   const workbench = useWorkbench();
@@ -119,12 +131,21 @@ export function TopBar({
     };
   }, [workbench, onNotify]);
 
+  /**
+   * What Run would actually ask. Live — it re-reads on every field edit, so
+   * the button's disabled state follows the developer's typing.
+   */
+  const question = useEntryQuestion();
+  const canRun = question !== '' && !runInFlight;
+
+  // Ticket 03: **Run means run.** It no longer starts the in-browser preview
+  // engine; it streams a real backend run of the Input node's text, through
+  // the same `RuntimeClient` the Ask panel uses, and shows it in that panel.
+  // The preview engine is untouched and still drives the internal tests — it
+  // is simply no longer what this button means.
   const run = () => {
-    if (running) {
-      workbench.engine.cancel();
-      return;
-    }
-    void workbench.engine.run();
+    if (!canRun) return;
+    onRun(question);
   };
 
   const exportEntries: MenuEntry[] = [
@@ -302,14 +323,30 @@ export function TopBar({
             <OnboardingHint onOpenCredentials={onOpenCredentials} />
           </div>
 
-          <Button
-            variant={running ? 'secondary' : 'primary'}
-            size="lg"
-            icon={running ? <Spinner /> : <Icon glyph={Play} size="sm" strokeWidth={2.25} />}
-            onClick={run}
+          {/* Wrapped, because a `disabled` button fires no pointer events and
+              the tooltip is the entire explanation of why it is disabled. */}
+          <Tooltip
+            content={
+              question === ''
+                ? 'Type a question in the Input node first'
+                : `Run: ${truncate(question)}`
+            }
+            multiline
           >
-            {running ? 'Stop' : 'Run'}
-          </Button>
+            <span className="topbar__run">
+              <Button
+                variant={runInFlight ? 'secondary' : 'primary'}
+                size="lg"
+                icon={
+                  runInFlight ? <Spinner /> : <Icon glyph={Play} size="sm" strokeWidth={2.25} />
+                }
+                onClick={run}
+                disabled={!canRun}
+              >
+                {runInFlight ? 'Running…' : 'Run'}
+              </Button>
+            </span>
+          </Tooltip>
 
           <Tooltip content="Export or import">
             <IconButton
@@ -347,6 +384,13 @@ export function TopBar({
       <GraphPreview open={graphOpen} onClose={() => setGraphOpen(false)} />
     </>
   );
+}
+
+/** One line of the question, for the Run tooltip — the Input node can hold
+ * paragraphs and a tooltip is not the place to re-read them. */
+function truncate(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length <= 80 ? flat : `${flat.slice(0, 79)}…`;
 }
 
 /** Re-exported so the shell can show the same glyph in its run affordances. */

@@ -307,6 +307,33 @@ describe('RuntimeClient.runStream', () => {
     expect(updates).toEqual([null, 'task-1']);
   });
 
+  it('carries the resolved active canvas node, falling back to the frame node', async () => {
+    // Ticket 01: the stream decides what is running; the client never guesses.
+    // A frame from an older backend has no `activeNode` and must still work.
+    const text = sseBody([
+      ['update', { node: 'node:router.1', namespace: [], activeNode: 'node:router.1' }],
+      [
+        'update',
+        {
+          node: 'inner_answer',
+          namespace: ['wf_music:ckpt-1'],
+          internal: true,
+          activeNode: 'node:mount.music',
+        },
+      ],
+      ['update', { node: 'node:legacy.1', namespace: [] }],
+      ['done', { answer: 'a', decisions: {}, outputs: {}, attempts: 0, mermaid: '', warnings: [] }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 7)));
+
+    const active: string[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'update') active.push(event.activeNode);
+    });
+
+    expect(active).toEqual(['node:router.1', 'node:mount.music', 'node:legacy.1']);
+  });
+
   it('a frame split exactly at the blank-line boundary still parses correctly', async () => {
     // The boundary the parser looks for is "\n\n" — splitting the byte stream
     // exactly there is the sharpest edge case for a buffering parser.

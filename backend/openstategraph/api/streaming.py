@@ -174,6 +174,64 @@ class SpawnWatcher:
         return spawns
 
 
+class ActiveNodeResolver:
+    """Which **canvas** node is honestly executing, frame by frame.
+
+    Ticket 01: both clients used to guess this from what a frame said about
+    itself, and both guessed the same way — "the last frame that was not
+    internal". While a mounted team ran, or an agent spent thirty seconds in
+    its own `model`/`tools` loop, every frame was internal, so the highlight
+    stayed on the *previous* top-level node (in practice: the router). The
+    UI said the router was working while a team was.
+
+    The namespace is the missing evidence, and it is already on the frame.
+    A checkpoint namespace segment is `<graph-node-name>:<checkpoint-id>`,
+    and `node_ids_by_name` maps a graph-node name back to the canvas node it
+    was compiled from — so a namespaced frame names its owner precisely:
+
+    - **innermost mapped segment wins** — a mount inside a mount, or an
+      agent's loop inside a mount, resolves to the deepest thing that is
+      actually a node on this canvas;
+    - a top-level frame that *is* a canvas node is itself active;
+    - anything else (a middleware step with no namespace, an inner node of a
+      mounted workflow whose own ids are not on this canvas) **keeps the
+      last resolved owner** rather than falling back to a stale sibling.
+
+    Resolved once here rather than twice in the clients, because it is one
+    fact about the run and two implementations of it is two chances to drift
+    (`AskPanel`'s canvas highlight and `chat.html`'s `highlightFlow` had
+    already drifted from each other).
+
+    One instance per run, like `SpawnWatcher` — the stickiness is the state.
+    """
+
+    def __init__(self, node_ids_by_name: dict[str, str] | None = None) -> None:
+        self._known = dict(node_ids_by_name or {})
+        #: Membership on `.values()` is a linear scan and this is asked once
+        #: per namespace segment per frame; the mapping is fixed per run.
+        self._known_ids = set(self._known.values())
+        self._active = ""
+
+    def resolve(self, node_id: str, namespace: tuple[str, ...] | list[str]) -> str:
+        """The canvas node id to highlight for this frame ("" before any)."""
+        for segment in reversed(list(namespace)):
+            head = str(segment).split(":")[0]
+            if not head:
+                continue
+            if not self._known:
+                self._active = head
+                return self._active
+            if head in self._known:
+                self._active = self._known[head]
+                return self._active
+            if head in self._known_ids:
+                self._active = head
+                return self._active
+        if not self._known or node_id in self._known_ids:
+            self._active = node_id
+        return self._active
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
 
@@ -213,6 +271,7 @@ def _stream_run(
 
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
+    active = ActiveNodeResolver(node_ids_by_name)
     # `dict.values()` is a *view*, so `x in view` is a linear scan. Asking it
     # once per update frame made "is this an internal step" O(canvas nodes)
     # per frame; the mapping never changes during a run, so the set is built
@@ -297,6 +356,11 @@ def _stream_run(
                             "namespace": list(namespace),
                             "taskId": task_ids[0] if task_ids else None,
                             "internal": is_internal,
+                            # Additive (ticket 01): the canvas node a client
+                            # should show as running for this frame. Both
+                            # surfaces read it instead of guessing; an older
+                            # client that ignores it behaves exactly as before.
+                            "activeNode": active.resolve(node_id, namespace),
                             "output": (update.get("outputs") or {}).get(node_id)
                             or (update.get("worker_results") or {}).get(
                                 task_ids[0] if task_ids else "", None

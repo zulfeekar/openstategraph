@@ -119,6 +119,20 @@ export type RunStreamEvent =
        * flat-feed rows. */
       readonly internal: boolean;
       readonly output: string | null;
+      /**
+       * The canvas node the run is *actually* inside for this frame, resolved
+       * by the stream itself (ticket 01).
+       *
+       * `node` answers "which graph step reported"; this answers "what should
+       * glow". They differ exactly when the interesting things happen: an
+       * internal `model` frame of a long agent step resolves to that agent, a
+       * frame from inside a mounted team resolves to the mount. Guessing it
+       * client-side is what made both surfaces leave the highlight on the
+       * router while a team worked.
+       *
+       * Falls back to `node` when the backend predates the field.
+       */
+      readonly activeNode: string;
     }
   | {
       readonly type: 'token';
@@ -305,6 +319,7 @@ export class RuntimeClient implements IRuntimeClient {
           taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
           internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
+          activeNode: asString(payload['activeNode']) || asString(payload['node']),
         });
       } else if (eventName === 'spawn') {
         const kind = asString(payload['kind']);
