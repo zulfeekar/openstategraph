@@ -1,10 +1,10 @@
 import { useState, type ComponentType } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Expand, Minimize2 } from 'lucide-react';
 import { Icon, IconButton } from '@design/primitives';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import { MARKDOWN_COMPONENTS, MARKDOWN_PLUGINS } from '@view/common/RichText';
 import { FieldRenderer } from './FieldRenderer';
 import { SubgraphCompositionBody, TeamCompositionBody } from './CompositionBody';
 import { KnowledgeBody } from './KnowledgeBody';
@@ -69,7 +69,7 @@ function FormattedOutputBody({ node }: NodeBodyProps) {
         />
       </span>
       <div className="prose">
-        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{text}</Markdown>
       </div>
     </div>
   );
@@ -90,7 +90,7 @@ function GroupBody({ node }: NodeBodyProps) {
       {title ? <div className="node__group-title">{title}</div> : null}
       {notes ? (
         <div className="prose">
-          <Markdown remarkPlugins={[remarkGfm]}>{notes}</Markdown>
+          <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{notes}</Markdown>
         </div>
       ) : null}
     </>
@@ -139,7 +139,7 @@ function NoteBody({ node }: NodeBodyProps) {
       title="Double-click to edit"
     >
       {body ? (
-        <Markdown remarkPlugins={[remarkGfm]}>{body}</Markdown>
+        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{body}</Markdown>
       ) : (
         <span className="node__note-placeholder">Double-click to write a note…</span>
       )}

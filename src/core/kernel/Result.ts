@@ -13,30 +13,10 @@ export type Result<T, E = string> =
 export const Ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 export const Err = <E>(error: E): Result<never, E> => ({ ok: false, error });
 
-export function isOk<T, E>(result: Result<T, E>): result is { ok: true; value: T } {
-  return result.ok;
-}
-
-export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
-  return result.ok ? result.value : fallback;
-}
-
-export function mapResult<T, U, E>(result: Result<T, E>, fn: (value: T) => U): Result<U, E> {
-  return result.ok ? Ok(fn(result.value)) : result;
-}
-
 /** Runs a throwing function and normalises the throw into an `Err`. */
 export function attempt<T>(fn: () => T): Result<T, Error> {
   try {
     return Ok(fn());
-  } catch (error) {
-    return Err(error instanceof Error ? error : new Error(String(error)));
-  }
-}
-
-export async function attemptAsync<T>(fn: () => Promise<T>): Promise<Result<T, Error>> {
-  try {
-    return Ok(await fn());
   } catch (error) {
     return Err(error instanceof Error ? error : new Error(String(error)));
   }

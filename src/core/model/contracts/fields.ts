@@ -128,8 +128,6 @@ export type FieldSchema =
   | ReadonlyFieldSchema
   | RepeatableGroupSchema;
 
-export type FieldKind = FieldSchema['kind'];
-
 /** Node configuration state: a flat, JSON-safe record keyed by field. */
 export type NodeData = Record<string, FieldValue>;
 

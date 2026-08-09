@@ -82,6 +82,11 @@ class SpawnWatcher:
         #: and friends), not to a mounted workflow — announcing it as a spawn
         #: showed internal machinery as if it were a new actor.
         self._known = dict(node_ids_by_name or {})
+        #: `self._known.values()` is a view, so membership on it is a linear
+        #: scan — and `inspect` asked for it once per stream frame. The
+        #: mapping is fixed for the life of a run (one watcher per run), so
+        #: the set is built here.
+        self._known_ids = set(self._known.values())
         self._namespaces: set[str] = set()
         self._tasks: set[str] = set()
         self._tool_calls: set[str] = set()
@@ -106,7 +111,7 @@ class SpawnWatcher:
         # announced the same worker node once per task on top of the `fanout`
         # rows that already named each child. One announcement per mounted
         # node per run is the honest count.
-        is_canvas_node = not self._known or mounted in self._known or mounted in self._known.values()
+        is_canvas_node = not self._known or mounted in self._known or mounted in self._known_ids
         if mounted and is_canvas_node and mounted not in self._namespaces:
             self._namespaces.add(mounted)
             mounted = self._known.get(mounted, mounted)
@@ -204,10 +209,15 @@ def _stream_run(
     never completed; the loop above just stops, indistinguishable from a
     normal finish without this check).
     """
-    from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty, merge_decisions
+    from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
 
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
+    # `dict.values()` is a *view*, so `x in view` is a linear scan. Asking it
+    # once per update frame made "is this an internal step" O(canvas nodes)
+    # per frame; the mapping never changes during a run, so the set is built
+    # once here instead.
+    canvas_node_ids = set(node_ids_by_name.values())
     decisions: dict[str, str] = {}
     outputs: dict[str, str] = {}
     attempts = 0
@@ -231,21 +241,31 @@ def _stream_run(
                     # merged verbatim it would wipe the parent's already-
                     # collected decisions (the router branch showed as None
                     # whenever a subgraph ran after it, found live).
-                    decisions = merge_decisions(
-                        decisions,
+                    #
+                    # Accumulated in place rather than through
+                    # `merge_decisions`: that reducer returns `{**left,
+                    # **right}`, so every frame rebuilt the whole dict —
+                    # O(frames x distinct nodes) over a run, twice per frame.
+                    # The two behaviours it adds over `dict.update` are the
+                    # RESET short-circuit and left-then-right precedence;
+                    # RESET is already stripped by the comprehensions below,
+                    # so only the precedence remains, and that is exactly
+                    # `update`. These dicts are local to this fold and are
+                    # read once at the end (the `complete` frame), never
+                    # snapshotted per frame, so mutating them cannot alias.
+                    decisions.update(
                         {
                             k: str(v)
                             for k, v in (update.get("decisions") or {}).items()
                             if k != RESET
-                        },
+                        }
                     )
-                    outputs = merge_decisions(
-                        outputs,
+                    outputs.update(
                         {
                             k: str(v)
                             for k, v in (update.get("outputs") or {}).items()
                             if k != RESET
-                        },
+                        }
                     )
                     if "attempts" in update:
                         attempts = max(0, int(update["attempts"]))
@@ -258,7 +278,7 @@ def _stream_run(
                     # (ticket 63) nests them under their owning canvas node —
                     # which is exactly where a LangSmith-style view wants
                     # them.
-                    is_internal = node_id not in node_ids_by_name.values()
+                    is_internal = node_id not in canvas_node_ids
                     # The spawn moment is emitted *before* the frame that
                     # revealed it, so a child's own steps read as arriving
                     # after the row that announced it.

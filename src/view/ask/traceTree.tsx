@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { RunResult } from '@core/runtime/RuntimeClient';
 import { RichText } from '@view/common/RichText';
 
@@ -96,7 +97,13 @@ export function exportTrace(turn: {
 }
 
 export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
-  const trace = buildTrace(rows);
+  // Keyed on the array identity, which changes only for the turn currently
+  // streaming: `AskPanel` appends to `turn.activity` per frame, so without
+  // this every *finished* turn refolds its whole (already final) trace on
+  // every frame of the live run — O(turns x frames x rows) for a record
+  // that cannot have changed. `buildTrace` is a pure fold of `rows`, so
+  // caching it is referentially transparent (see traceTree.test.ts).
+  const trace = useMemo(() => buildTrace(rows), [rows]);
   return (
     <div className="ask__activity">
       {rows.length === 0 ? <p className="ask__meta">Waiting for the first node to run…</p> : null}

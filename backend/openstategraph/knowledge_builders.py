@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.knowledge import BaseKnowledge
-from openstategraph.knowledge_engines import ENGINE_ADAPTERS, SqliteEngineAdapter, recognize
+from openstategraph.knowledge_engines import ENGINE_ADAPTERS, recognize
 
 #: First line prefix of every builder-owned doc. Its absence marks a file as
 #: hand-authored and untouchable — see the module docstring's policy.
@@ -257,21 +257,6 @@ class BaseKnowledgeBuilder(ABC):
 # ---------------------------------------------------------------------------
 
 
-def databases_in_document(document: dict[str, Any], workflows_root: Path) -> list[Path]:
-    """Every SQLite database file this document's tool nodes point at.
-
-    Kept for the SQLite path (jailed to the workflows root, limited to files
-    that exist — a bad path is a skipped source, never an escape hatch).
-    URL-schemed refs are the adapter seam's business: see
-    ``sql_sources_in_document``.
-    """
-    return [
-        workflows_root.resolve() / ref
-        for ref, engine in sql_sources_in_document(document, workflows_root)
-        if engine == "sqlite"
-    ]
-
-
 def sql_sources_in_document(
     document: dict[str, Any], workflows_root: Path
 ) -> list[tuple[str, str]]:
@@ -311,14 +296,6 @@ def sql_sources_in_document(
         seen.add(ref)
         found.append((ref, engine))
     return found
-
-
-def table_brief(database: Path, table: str, sample_rows: int = 5) -> str:
-    """One SQLite table's brief — schema (FKs both directions) + sample.
-
-    A thin veneer over the SQLite adapter, kept as the module's historical
-    public name."""
-    return SqliteEngineAdapter().table_brief(str(database), table, sample_rows)
 
 
 class SqlKnowledgeBuilder(BaseKnowledgeBuilder):
@@ -509,8 +486,6 @@ __all__ = [
     "KnowledgeTopic",
     "RootKnowledgeBuilder",
     "SqlKnowledgeBuilder",
-    "databases_in_document",
     "marker_source",
     "sql_sources_in_document",
-    "table_brief",
 ]

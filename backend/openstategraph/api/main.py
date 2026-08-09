@@ -125,9 +125,17 @@ def create_app(
         ever propose edits to the canvas."""
         from openstategraph.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
 
+        # Built once. `build_tool_registry` globs `tools/*.py` and `exec_module`s
+        # every one of them (it deliberately bypasses `sys.modules`), so calling
+        # it twice — as the `advisor=True` path did, once for `tools` and again
+        # for `advisor_catalog` — re-executed every tool module of the open
+        # package on every editor run. `suggestible_tool_catalog` only reads the
+        # mapping, so one registry serves both.
+        tools = tool_registry_for(slug)
+
         return NodeRuntime(services=RuntimeServices(
             model=model,
-            tools=tool_registry_for(slug),
+            tools=tools,
             functions=build_function_registry(workflow_store, slug),
             document_loader=lambda child_slug: _document_of(workflow_store.load(child_slug)),
             package_loader=lambda child_slug: PackageAssets(
@@ -152,7 +160,7 @@ def create_app(
             # open package auto-binds the lookup tool to every agent.
             knowledge_package_dir=(workflow_store.directory_for(slug) if slug else None),
             advisor_catalog=(
-                suggestible_tool_catalog(tool_registry_for(slug)) if advisor else ""
+                suggestible_tool_catalog(tools) if advisor else ""
             ),
         ))
     from openstategraph.api.capability_discovery import discover_middlewares, discover_skills

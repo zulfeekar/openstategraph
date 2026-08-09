@@ -108,11 +108,9 @@ export const NODE_TYPE = {
   chinookExecuteSql: 'tool.chinook-execute-sql',
 } as const;
 
-export { TextInputNodeModel } from './inputs/TextInputNode';
-export { MarkdownFileNodeModel } from './inputs/MarkdownFileNode';
-export { AgentNodeModel } from './agent/AgentNode';
-export { RedditSearchNodeModel } from './tools/RedditSearchNode';
-export { FormattedOutputNodeModel } from './output/FormattedOutputNode';
-export { GroupNodeModel } from './annotate/GroupNode';
-export { NoteNodeModel } from './annotate/NoteNode';
+// Concrete node model classes are deliberately NOT re-exported here. Nothing
+// imported them through this barrel, only 7 of the 15 were listed (so it was
+// never a contract anyway), and CLAUDE.md's ladder is explicit that consumers
+// depend on `INodeModel`, never on a concrete class. The registry's `create`
+// is how a model gets instantiated.
 export { CATEGORY, PORT } from './vocabulary';

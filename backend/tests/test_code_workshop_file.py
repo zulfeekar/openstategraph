@@ -21,10 +21,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
@@ -32,42 +30,10 @@ from openstategraph.api.capability_discovery import discover_tool_registry
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
+from conftest import RespondingModel, RouteRule  # noqa: F401  (shared test double)
+
 WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
 WORKSHOP_DIR = WORKFLOWS_ROOT / "code-workshop"
-
-RouteRule = tuple[Callable[[str], bool], str]
-
-
-class RespondingModel(GenericFakeChatModel):
-    """Predicate-routed fake — same shape as `test_intent_routed_demo_file`'s."""
-
-    rules: list[RouteRule] = []
-    default: str = "PASS"
-    calls: list[str] = []
-
-    def __init__(self, rules: list[RouteRule], default: str = "PASS"):
-        super().__init__(messages=iter([]))
-        object.__setattr__(self, "rules", rules)
-        object.__setattr__(self, "default", default)
-        object.__setattr__(self, "calls", [])
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001
-        from langchain_core.outputs import ChatGeneration, ChatResult
-
-        content = "\n".join(str(m.content) for m in messages)
-        self.calls.append(content)
-        answer = self.default
-        for predicate, reply in self.rules:
-            if predicate(content):
-                answer = reply
-                break
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=answer))])
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # noqa: ANN001
-        """The coder is `tier: "deep"` — `create_deep_agent` always binds its
-        built-in tools, and the six workshop tools bind besides."""
-        return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
-
 
 def load_document(slug: str) -> dict[str, Any]:
     payload = json.loads((WORKFLOWS_ROOT / slug / "workflow.json").read_text())

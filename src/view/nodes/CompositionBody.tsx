@@ -340,9 +340,3 @@ function resolvePeek(slug: string): Promise<PeekState> {
   });
   return inFlight;
 }
-
-/** Test/dev seam: forget everything, e.g. after a workflow is saved. */
-export function clearCompositionCache(): void {
-  CACHE.clear();
-  PEEKS.clear();
-}

@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.readable_tree import admitted_files
 
 WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
 
@@ -128,9 +129,6 @@ class DescribeWorkflowTool(BaseTool):
         return ToolResult(content="\n\n".join(parts))
 
 
-PLATFORM_TOOLS = [ListWorkflowsTool(), DescribeWorkflowTool()]
-
-
 # --- read-only filesystem tools: everything readable, nothing writable ---- #
 
 REPO_ROOT = WORKFLOWS_ROOT.parent
@@ -153,6 +151,14 @@ def _excluded(path: Path) -> bool:
     # `.git` holds history; a read-only jail that reads secrets isn't one
     # (found in self-review after shipping).
     return any(part in EXCLUDED_DIRS or part.startswith(".") for part in path.parts)
+
+
+def _admitted_files(root: Path) -> list[Path]:
+    """Every readable file under `root`, sorted — see `readable_tree`.
+
+    `EXCLUDED_DIRS` stays this module's own policy; only the walk is shared.
+    """
+    return admitted_files(root, EXCLUDED_DIRS)
 
 
 class LsArgs(BaseModel):
@@ -245,9 +251,9 @@ class PlatformGrepTool(BaseTool):
         if not needle:
             return ToolResult.failure("Give a non-empty pattern.")
         matches: list[str] = []
-        for path in sorted(root.rglob("*")):
+        for path in _admitted_files(root):
             rel = path.relative_to(REPO_ROOT)
-            if not path.is_file() or _excluded(rel) or path.stat().st_size > 400_000:
+            if path.stat().st_size > 400_000:
                 continue
             if path.suffix in {".sqlite", ".png", ".pdf", ".ico", ".lock"}:
                 continue

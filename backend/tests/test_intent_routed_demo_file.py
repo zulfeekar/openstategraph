@@ -22,67 +22,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
+from conftest import RespondingModel, RouteRule  # noqa: F401  (shared test double)
+
 WORKFLOW_PATH = (
     Path(__file__).resolve().parent.parent.parent / "workflows" / "intent-routed-demo" / "workflow.json"
 )
-
-RouteRule = tuple[Callable[[str], bool], str]
-
-
-class RespondingModel(GenericFakeChatModel):
-    """Answers by matching a predicate over the incoming message. See
-    `test_orchestrator_graph.py`'s own copy of this class for why a predicate
-    rather than a call-order queue: `Send` gives no ordering guarantee.
-    """
-
-    rules: list[RouteRule] = []
-    default: str = "PASS"
-    calls: list[str] = []
-
-    def __init__(self, rules: list[RouteRule], default: str = "PASS"):
-        super().__init__(messages=iter([]))
-        object.__setattr__(self, "rules", rules)
-        object.__setattr__(self, "default", default)
-        object.__setattr__(self, "calls", [])
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001
-        content = "\n".join(str(m.content) for m in messages)
-        self.calls.append(content)
-        answer = self.default
-        for predicate, reply in self.rules:
-            if predicate(content):
-                answer = reply
-                break
-        return self._reply(answer)
-
-    def _reply(self, text: str):  # noqa: ANN001
-        from langchain_core.outputs import ChatGeneration, ChatResult
-
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # noqa: ANN001
-        """`GenericFakeChatModel.bind_tools` raises by default.
-
-        Needed for two reasons this real document exercises that the
-        simpler hand-built fixtures elsewhere don't: `worker1` has three
-        real Chinook tool bindings (`create_agent` calls `bind_tools` for
-        any agent given tools), and `grader-data`'s `tier: deep` wraps the
-        model in `create_deep_agent`, which calls `bind_tools` even with
-        `tools=[]` passed at construction — it always attaches its own
-        built-in filesystem/subagent tools regardless. The fake still
-        answers purely from message content; it never looks at what tools
-        were bound.
-        """
-        return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
-
 
 def load_real_document() -> dict[str, Any]:
     payload = json.loads(WORKFLOW_PATH.read_text())

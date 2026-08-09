@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, chinook_tool_registry
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+from conftest import RespondingModel, RouteRule  # noqa: F401  (shared test double)
 
 WORKFLOW_PATH = (
     Path(__file__).resolve().parent.parent.parent / "workflows" / "chinook-nl-to-sql" / "workflow.json"
@@ -45,43 +45,6 @@ SQL_ANSWER = (
     "JOIN Genre g ON t.GenreId = g.GenreId GROUP BY g.Name ORDER BY revenue DESC LIMIT 1\n"
     "Rock earns the most revenue: 826.65."
 )
-
-RouteRule = tuple[Callable[[str], bool], str]
-
-
-class RespondingModel(GenericFakeChatModel):
-    """Predicate-scripted model — see `test_intent_routed_demo_file.py`."""
-
-    rules: list[RouteRule] = []
-    default: str = "PASS"
-    calls: list[str] = []
-
-    def __init__(self, rules: list[RouteRule], default: str = "PASS"):
-        super().__init__(messages=iter([]))
-        object.__setattr__(self, "rules", rules)
-        object.__setattr__(self, "default", default)
-        object.__setattr__(self, "calls", [])
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001
-        content = "\n".join(str(m.content) for m in messages)
-        self.calls.append(content)
-        answer = self.default
-        for predicate, reply in self.rules:
-            if predicate(content):
-                answer = reply
-                break
-        return self._reply(answer)
-
-    def _reply(self, text: str):  # noqa: ANN001
-        from langchain_core.outputs import ChatGeneration, ChatResult
-
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # noqa: ANN001
-        """The agent has three real Chinook tool bindings, so `create_agent`
-        calls `bind_tools`; the base fake raises by default."""
-        return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
-
 
 def load_real_document() -> dict[str, Any]:
     payload = json.loads(WORKFLOW_PATH.read_text())

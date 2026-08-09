@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.knowledge import BaseKnowledge
 from openstategraph.knowledge_builders import BaseKnowledgeBuilder, KnowledgeTopic
+from openstategraph.readable_tree import admitted_files
 
 #: Superstep budget for one exploration (a `config` key, NOT an iteration
 #: count — one tool round-trip costs two supersteps).
@@ -368,12 +369,24 @@ class _JailedCodeTool(BaseTool):
         return None
 
     def _files(self):
+        """Readable files under each root — see `readable_tree.admitted_files`.
+
+        Two things changed here beyond sharing the walk. The traversal now
+        prunes `_CODE_EXCLUDED` instead of enumerating everything and
+        discarding it afterwards, which matters because `code_ls` and
+        `code_grep` each re-walk on *every* tool call inside the builder's
+        agent loop, not once per build.
+
+        And each admitted path is re-jailed. It was not before: `_files`
+        trusted `relative_to(root)`, so a symlink inside a root pointing
+        outside it was listed by `code_ls` even though `code_read` — which
+        resolves through `_jailed` — would refuse to open it. Listing and
+        reading disagreeing about what is inside the jail is the kind of gap
+        that becomes a real hole later; they now use the same test.
+        """
         for root in self._roots:
-            for path in sorted(root.rglob("*")):
-                rel = path.relative_to(root)
-                if any(p in _CODE_EXCLUDED or p.startswith(".") for p in rel.parts):
-                    continue
-                if path.is_file():
+            for path in admitted_files(root, _CODE_EXCLUDED):
+                if _jailed(path, self._roots) is not None:
                     yield root, path
 
 

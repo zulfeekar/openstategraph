@@ -25,59 +25,13 @@ the fan-out step rather than resuming after it, and that the loop is bounded.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
-
-RouteRule = tuple[Callable[[str], bool], str]
-
-
-class RespondingModel(GenericFakeChatModel):
-    """Answers by matching a **predicate** over the incoming message, not call order.
-
-    A queue-based fake (`iter(["a", "b"])`) would make the test's correctness
-    depend on which of two concurrently dispatched tasks happens to call the
-    model first — which `Send` does not guarantee. Matching on content instead
-    means the answer is deterministic regardless of dispatch order.
-
-    A predicate rather than a substring, because substring containment cannot
-    express what this file actually needs to distinguish: "the report has only
-    task-1" is a *negative* condition (task-2 absent), and the grader's own
-    prompt legitimately echoes the original question into its context, so a
-    short worker-routing string is a genuine, unavoidable substring of the
-    grader's call too. A predicate can say exactly what is meant instead of
-    fighting string containment to approximate it.
-    """
-
-    rules: list[RouteRule] = []
-    default: str = "PASS"
-    calls: list[str] = []
-
-    def __init__(self, rules: list[RouteRule], default: str = "PASS"):
-        super().__init__(messages=iter([]))
-        object.__setattr__(self, "rules", rules)
-        object.__setattr__(self, "default", default)
-        object.__setattr__(self, "calls", [])
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001
-        content = "\n".join(str(m.content) for m in messages)
-        self.calls.append(content)
-        answer = self.default
-        for predicate, reply in self.rules:
-            if predicate(content):
-                answer = reply
-                break
-        return self._reply(answer)
-
-    def _reply(self, text: str):  # noqa: ANN001
-        from langchain_core.outputs import ChatGeneration, ChatResult
-
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
+from conftest import RespondingModel, RouteRule  # noqa: F401  (shared test double)
 
 
 def node(node_id: str, type_: str, **data: Any) -> dict[str, Any]:

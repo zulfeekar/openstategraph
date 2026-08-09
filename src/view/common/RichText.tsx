@@ -1,6 +1,27 @@
-import Markdown from 'react-markdown';
+import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './RichText.css';
+
+/**
+ * How this app renders model- and user-authored Markdown. One owner.
+ *
+ * Exported because the node cards render Markdown *without* `RichText`'s
+ * wrapper element — their `.prose` container is styled by the card, not by
+ * `rich-text.css` — and before this existed they each restated
+ * `remarkPlugins={[remarkGfm]}` and silently omitted the link rule below,
+ * so a link in a model's answer navigated the whole editor away. The
+ * plugin list and the components map are the security-relevant part; the
+ * wrapper is not. Anything rendering Markdown spreads these.
+ */
+export const MARKDOWN_PLUGINS = [remarkGfm];
+
+export const MARKDOWN_COMPONENTS: Components = {
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noreferrer noopener">
+      {children}
+    </a>
+  ),
+};
 
 /**
  * Model output, rendered as Markdown — ticket 46.
@@ -19,16 +40,7 @@ import './RichText.css';
 export function RichText({ text, className }: { text: string; className?: string }) {
   return (
     <div className={className ? `rich-text ${className}` : 'rich-text'}>
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noreferrer noopener">
-              {children}
-            </a>
-          ),
-        }}
-      >
+      <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
         {text}
       </Markdown>
     </div>

@@ -19,11 +19,10 @@ from openstategraph.knowledge_builders import (
     KnowledgeTopic,
     RootKnowledgeBuilder,
     SqlKnowledgeBuilder,
-    databases_in_document,
     marker_source,
     sql_sources_in_document,
-    table_brief,
 )
+from openstategraph.knowledge_engines import SqliteEngineAdapter
 
 
 class ScriptedModel:
@@ -81,6 +80,21 @@ class TestBuilderLadder:
         assert any(isinstance(b, SqlKnowledgeBuilder) for b in BUILDERS)
 
 
+def _sqlite_files(document: dict, workflows_root: Path) -> list[Path]:
+    """What the removed `databases_in_document` veneer used to return.
+
+    Inlined here because production never called it: the real path is
+    `sql_sources_in_document`, and these tests are about *its* jailing and
+    de-duplication, so they should go through it rather than through a
+    wrapper kept alive only by this file.
+    """
+    return [
+        workflows_root.resolve() / ref
+        for ref, engine in sql_sources_in_document(document, workflows_root)
+        if engine == "sqlite"
+    ]
+
+
 class TestDatabaseDiscovery:
     def test_sql_tool_database_fields_are_found_and_deduped(self, tmp_path: Path) -> None:
         _seed_db(tmp_path, "flow/data/shop.sqlite")
@@ -91,7 +105,7 @@ class TestDatabaseDiscovery:
             ],
             "edges": [],
         }
-        found = databases_in_document(document, tmp_path)
+        found = _sqlite_files(document, tmp_path)
         assert found == [tmp_path / "flow/data/shop.sqlite"]
 
     def test_chinook_nodes_imply_the_bundled_database(self, tmp_path: Path) -> None:
@@ -100,7 +114,7 @@ class TestDatabaseDiscovery:
             "nodes": [{"id": "a", "type": "tool.chinook-execute-sql", "data": {}}],
             "edges": [],
         }
-        found = databases_in_document(document, tmp_path)
+        found = _sqlite_files(document, tmp_path)
         assert found == [tmp_path / "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"]
 
     def test_missing_files_and_escaping_paths_are_ignored(self, tmp_path: Path) -> None:
@@ -111,16 +125,16 @@ class TestDatabaseDiscovery:
             ],
             "edges": [],
         }
-        assert databases_in_document(document, tmp_path) == []
+        assert _sqlite_files(document, tmp_path) == []
 
 
 class TestTableBrief:
     def test_the_brief_carries_schema_fks_both_directions_and_a_sample(self, tmp_path: Path) -> None:
         db = _seed_db(tmp_path, "flow/data/shop.sqlite")
-        brief = table_brief(db, "orders")
+        brief = SqliteEngineAdapter().table_brief(str(db), "orders")
         assert "customer_id" in brief and "customers" in brief
         assert "9.5" in brief  # data sample
-        inbound = table_brief(db, "customers")
+        inbound = SqliteEngineAdapter().table_brief(str(db), "customers")
         assert "orders" in inbound  # referenced-by direction
 
 

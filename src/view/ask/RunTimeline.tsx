@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   barOffsetPercent,
   barWidthPercent,
@@ -27,7 +28,9 @@ export function RunTimeline({
   rows: readonly TimelineRow[];
   readonly running?: boolean;
 }) {
-  const { steps, totalMs } = buildTimeline(rows);
+  // See the note in `Activity`: same pure fold, same per-frame re-render, so
+  // the same cache. `rows` identity changes only for the streaming turn.
+  const { steps, totalMs } = useMemo(() => buildTimeline(rows), [rows]);
 
   if (steps.length === 0) {
     return <p className="ask__meta">No steps have fired yet.</p>;
