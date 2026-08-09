@@ -151,9 +151,12 @@ def create_app(
         """The customer chat surface (ticket 64) — one self-contained page."""
         from fastapi.responses import HTMLResponse
 
-        from openstategraph.api.chat_page import CHAT_PAGE
+        from openstategraph.api.chat_page import chat_page_html
 
-        return HTMLResponse(CHAT_PAGE)
+        # Read per request, not the import-time constant: chat.html is not a
+        # .py file, so uvicorn's reloader never picks up edits to it — a
+        # cached constant serves stale markup until a coincidental restart.
+        return HTMLResponse(chat_page_html())
 
     @app.get("/api/node-contracts")
     def node_contracts() -> dict[str, dict[str, str]]:
