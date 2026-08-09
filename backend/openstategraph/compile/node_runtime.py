@@ -647,6 +647,15 @@ class NodeRuntime:
                 "answer": RESET,
                 "feedback": RESET,
                 "attempts": -1,
+                # The fan-out channels are per-run scratch too (audit
+                # 2026-08): a second turn replans from attempts=0, so its
+                # ids (`task-1`...) alias the first turn's — a turn-2 worker
+                # that died before writing would let `_format_report_function`
+                # silently blend turn 1's stale result in under the same key,
+                # and stale plans would render phantom "failed before
+                # reporting" gaps.
+                "subtasks": {RESET: ""},
+                "worker_results": {RESET: ""},
             }
             prior = state.get("messages") or []
             already_recorded = bool(
@@ -1061,12 +1070,28 @@ class NodeRuntime:
                 )
             )
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # Same feedback-trust rule as `_agent` (audit 2026-08): `feedback` is
+        # `keep_latest_nonempty`, so a later pass's "" can never clear it.
+        # Only feedback whose deciding node's revise/rejected edge targets
+        # THIS orchestrator — and whose latest decision is still that label —
+        # may be folded into a replan; anything else is a stale rejection (or
+        # another branch's) dispatched into every subtask as if it were live.
+        feedback_sources = [
+            src
+            for src, dests in plan.conditional.items()
+            if node_id in (dests.get("revise"), dests.get("rejected"))
+        ]
 
         def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
             if instruction == state.get("question", ""):
                 instruction = _thread_question(state)
+            decisions = state.get("decisions") or {}
             feedback = state.get("feedback", "")
+            if not any(
+                decisions.get(src) in ("revise", "rejected") for src in feedback_sources
+            ):
+                feedback = ""
             generation = state.get("attempts", 0)
             subtasks = orchestrator.plan(
                 instruction, generation=generation, archetypes=archetypes
@@ -1161,6 +1186,11 @@ class NodeRuntime:
         self._attach_ambient_knowledge(lc_tools)
 
         skills = plan.skill_bindings.get(node_id, [])
+        # The worker is an agent too: its card carries the same `model` select
+        # as every model-driven node, and `_resolve_model`'s docstring records
+        # exactly this class of bug — a visible per-node choice silently
+        # ignored for the graph-wide default (audit 2026-08).
+        model = self._resolve_model(node.get("data") or {})
         # Directive, not a nudge. A weaker version of this ("use tools if
         # available") was tried live first and the model answered a database
         # question from general industry knowledge anyway — a vague
@@ -1187,22 +1217,24 @@ class NodeRuntime:
             task_id = state.get("task_id", "")
             instruction = state.get("task_instruction", "")
 
-            if self.model is None:
+            if model is None:
                 return {"worker_results": {task_id: ""}}
 
             system_prompt = _upstream_text(state, skills) or default_prompt
-            if self.skills_context:
-                system_prompt = f"{self.skills_context}\n\n{system_prompt}".strip()
             # Same ladder as `_agent`: the family owns construction, this
             # factory owns state plumbing. The worker's directive is its
-            # *rules* — the editable half of the prompt — with no context.
+            # *rules*; the workflow's skills text is generated *context*, and
+            # SystemPrompt owns the ordering (context above rules, contract
+            # last) — concatenating it into `rules` bypassed that composition
+            # (audit 2026-08).
             from openstategraph.abc import agent as agent_family
 
             agent = agent_family.ReactAgentNode(
                 name=f"worker_{node_id}",
-                model=self.model,
+                model=model,
                 tools=lc_tools,
                 rules=system_prompt,
+                context=self.skills_context,
             ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
