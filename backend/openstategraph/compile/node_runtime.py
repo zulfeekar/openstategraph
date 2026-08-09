@@ -27,6 +27,18 @@ from openstategraph.abc.router import Router
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
 
+#: Turn-start reset marker. A checkpointed thread carries the whole state
+#: forward between runs, which is exactly right for `messages` (that IS the
+#: conversation) and exactly wrong for per-run scratch: `outputs`/`answer`
+#: from turn 1 leaked into turn 2's output node (a follow-up replayed the
+#: previous report — found live), stale `attempts` ate graders' retry
+#: budgets, and stale `decisions` could re-arm dead feedback. Reducers can
+#: only ever *add*, so clearing needs a vocabulary word the reducers
+#: themselves understand; the input node — the one node every turn starts
+#: at, and which a mid-run resume never revisits — emits it.
+RESET = "__turn_reset__"
+
+
 def merge_decisions(left: dict, right: dict) -> dict:
     """Reducer for the decisions channel.
 
@@ -35,6 +47,8 @@ def merge_decisions(left: dict, right: dict) -> dict:
     invisible. (CLAUDE.md: reducers are a named enum, never arbitrary functions —
     this is the `merge` member.)
     """
+    if RESET in right:
+        return {k: v for k, v in right.items() if k != RESET}
     return {**left, **right}
 
 
@@ -51,7 +65,15 @@ def keep_max(left: int, right: int) -> int:
     per step`. `max` matches the field's meaning — a budget counter should
     only ever grow, so the higher of two concurrent writes is correct
     regardless of which node produced it.
+
+    Turn-start reset: a negative write zeroes the budget (the numeric
+    spelling of `RESET`, keeping this channel `int` end to end — a string
+    marker here broke every consumer that casts). Without it, a thread's
+    second run inherits the first run's count and graders burn through
+    `maxAttempts` before ever retrying.
     """
+    if right < 0:
+        return 0
     return max(left, right)
 
 
@@ -72,7 +94,12 @@ def keep_latest_nonempty(left: str, right: str) -> str:
     preferring the later one when both are. This is the `merge` reducer member
     CLAUDE.md requires for any state two nodes might write concurrently; a bare
     scalar field is only safe for state exactly one node type can ever produce.
+
+    `RESET` clears at turn start — "" can never do it, by this reducer's own
+    design, which is precisely how turn 1's answer leaked into turn 2.
     """
+    if right == RESET:
+        return ""
     return right or left
 
 
@@ -217,33 +244,6 @@ def _branch_entries(raw: Any) -> list[Any]:
         entries = [entry for entry in raw if isinstance(entry, (str, dict))]
         return entries or ["default"]
     return ["default"]
-
-
-def _thread_question(state: RunState, limit: int = 6) -> str:
-    """The user's message *in conversation* — the classify/decompose input.
-
-    Found live (ticket 73's general case): "what is the weather?" →
-    assistant asks which city → "oslo" arrives as a bare fragment, and a
-    router or supervisor classifying it context-free sent it to the
-    knowledge worker for a Wikipedia article. Any node that interprets
-    intent must see the recent exchange, not the fragment. Bounded to the
-    last few turns; a fresh thread reduces to the plain question.
-    """
-    question = state.get("question", "")
-    history = [
-        m for m in (state.get("messages") or [])
-        if isinstance(getattr(m, "content", None), str) and m.content.strip()
-    ][-limit:]
-    if not history:
-        return question
-    lines = [
-        f"{'User' if m.type == 'human' else 'Assistant'}: {m.content.strip()}"
-        for m in history
-    ]
-    return (
-        "Conversation so far:\n" + "\n".join(lines) +
-        f"\n\nThe user's new message (interpret it in the context above): {question}"
-    )
 
 
 def _thread_question(state: RunState, limit: int = 6) -> str:
@@ -518,7 +518,19 @@ class NodeRuntime:
             from langchain_core.messages import HumanMessage
 
             text = state.get("question") or configured
-            update: dict[str, Any] = {"outputs": {node_id: text}}
+            # Turn boundary: wipe per-run scratch a checkpointed thread would
+            # otherwise carry over (stale outputs replayed as answers, spent
+            # attempts, dead decisions re-arming feedback). `messages` is
+            # deliberately NOT reset — that is the conversation. A mid-run
+            # resume never re-enters this node, so within-run state survives
+            # approval pauses untouched.
+            update: dict[str, Any] = {
+                "outputs": {RESET: "", node_id: text},
+                "decisions": {RESET: ""},
+                "answer": RESET,
+                "feedback": RESET,
+                "attempts": -1,
+            }
             prior = state.get("messages") or []
             already_recorded = bool(
                 prior

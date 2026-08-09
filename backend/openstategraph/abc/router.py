@@ -103,7 +103,11 @@ class BaseRouter(ABC):
     #: developer who deletes it gets a router that cannot be parsed.
     PREAMBLE: ClassVar[str] = (
         "You are a router. Your only job is to decide which single branch a "
-        "message belongs to. You never answer the message itself."
+        "message belongs to. You never answer the message itself. When a "
+        "conversation is shown, classify the NEW message in its light: a "
+        "follow-up about a previous answer (how did you get it, explain, "
+        "why, tell me more) belongs to the branch that produced that "
+        "answer, not to whichever branch the follow-up's words resemble."
     )
 
     #: Locked, and appended *after* the developer's rules so it cannot be

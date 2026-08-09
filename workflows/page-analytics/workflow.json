@@ -49,10 +49,14 @@
             {
               "id": "b-context",
               "name": "industry_context"
+            },
+            {
+              "id": "b-chat",
+              "name": "conversation"
             }
           ],
-          "fallback": "quick_metric",
-          "rules": "full_report: asks for the complete page-analytics report (views, revenue, falloff, trends) or to send/email the report. quick_metric: one specific number or comparison. database_deep_dive: open-ended exploration of the analytics database. industry_context: questions about industry benchmarks or the wider world, not our data."
+          "fallback": "conversation",
+          "rules": "full_report: asks for the complete page-analytics report (views, revenue, falloff, trends) or to send/email the report. quick_metric: asks for one specific NEW number or comparison from our data. database_deep_dive: open-ended exploration of the analytics database. industry_context: benchmarks or facts about the wider world/industry, not our data. conversation: greetings, follow-ups about a previous answer (how did you get this, explain, why), questions about what this workflow can do, and anything that fits no other branch."
         },
         "position": {
           "x": 360,
@@ -268,6 +272,31 @@
         "position": {
           "x": 2740,
           "y": 560
+        }
+      },
+      {
+        "id": "agent-chat",
+        "type": "agent.llm",
+        "title": "Analytics Concierge",
+        "data": {
+          "systemPrompt": "You are the Page Analytics assistant's conversational side. Use the conversation history to answer follow-ups and meta questions. When asked how a previous answer was produced: figures come from read-only SQL queries against this workflow's analytics SQLite (tables: pages, referrers, experiments, sessions, pageviews, revenue); industry facts come from the research team's web search. Answer greetings briefly and offer the report, a quick metric, a deep dive, or industry context. Never invent figures - if a new number is wanted, say to ask for it directly so the data branch runs."
+        },
+        "position": {
+          "x": 700,
+          "y": 1220
+        }
+      },
+      {
+        "id": "grader-chat",
+        "type": "route.grader",
+        "data": {
+          "criteria": "- Answers the user's actual question from the conversation.\n- Invents no figures.",
+          "criteriaMode": "replace",
+          "maxAttempts": 1
+        },
+        "position": {
+          "x": 1040,
+          "y": 1220
         }
       }
     ],
@@ -650,6 +679,46 @@
         "target": {
           "nodeId": "out1",
           "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-chat"
+        },
+        "target": {
+          "nodeId": "agent-chat",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-chat",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader-chat",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-chat",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader-chat",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "agent-chat",
+          "portId": "feedback"
         }
       }
     ]

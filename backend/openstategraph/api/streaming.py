@@ -61,7 +61,7 @@ def _stream_run(
     never completed; the loop above just stops, indistinguishable from a
     normal finish without this check).
     """
-    from openstategraph.compile.node_runtime import keep_latest_nonempty, merge_decisions
+    from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty, merge_decisions
 
     answer = ""
     decisions: dict[str, str] = {}
@@ -81,14 +81,30 @@ def _stream_run(
                     update = _coerce_update(raw_update)
                     node_id = node_ids_by_name.get(raw_name, raw_name)
                     answer = keep_latest_nonempty(answer, str(update.get("answer") or ""))
+                    # Strip the turn-reset marker before accumulating: this
+                    # dict is per-run (it needs no reset), and a mounted
+                    # child workflow's OWN input node emits the marker too —
+                    # merged verbatim it would wipe the parent's already-
+                    # collected decisions (the router branch showed as None
+                    # whenever a subgraph ran after it, found live).
                     decisions = merge_decisions(
-                        decisions, {k: str(v) for k, v in (update.get("decisions") or {}).items()}
+                        decisions,
+                        {
+                            k: str(v)
+                            for k, v in (update.get("decisions") or {}).items()
+                            if k != RESET
+                        },
                     )
                     outputs = merge_decisions(
-                        outputs, {k: str(v) for k, v in (update.get("outputs") or {}).items()}
+                        outputs,
+                        {
+                            k: str(v)
+                            for k, v in (update.get("outputs") or {}).items()
+                            if k != RESET
+                        },
                     )
                     if "attempts" in update:
-                        attempts = int(update["attempts"])
+                        attempts = max(0, int(update["attempts"]))
                     task_ids = list((update.get("worker_results") or {}).keys())
                     # Internal frames — `model`, `tools`, a middleware's own
                     # node — are real LangGraph steps inside an agent's
