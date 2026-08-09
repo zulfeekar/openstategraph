@@ -53,6 +53,7 @@ export interface WorkflowCapabilities {
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   load(slug: string): Promise<Result<unknown, string>>;
+  loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
   capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
@@ -109,6 +110,33 @@ export class WorkflowFileClient implements IWorkflowFileClient {
     try {
       const payload = (await response.json()) as { document?: unknown };
       return Ok(payload.document);
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * `load`, but "there is no such workflow" is an **answer, not a failure**.
+   *
+   * A slug typed into a mount node is a reference that may not resolve yet —
+   * half-typed, or renamed since. `load` folds that into the same `Err`
+   * channel as "the backend is down", and a caller that only wants to
+   * annotate a card must tell those apart: one says *unknown workflow*, the
+   * other must say nothing at all rather than accuse the document.
+   */
+  async loadIfPresent(slug: string): Promise<Result<unknown | null, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`);
+    } catch {
+      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+    }
+    if (response.status === 404) return Ok(null);
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as { document?: unknown };
+      return Ok(payload.document ?? null);
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
     }

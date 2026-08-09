@@ -1,0 +1,14 @@
+/* The composition annotation: one muted line above a mount's own fields.
+ * Subordinate to the card's title and to the outcome the user wrote — it is
+ * derived information, and derived information must never out-shout the
+ * authored kind. */
+.node__composition {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+
+.node__composition--missing {
+  color: var(--color-text-quaternary);
+  font-style: italic;
+}

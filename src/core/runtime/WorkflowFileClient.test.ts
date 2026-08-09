@@ -89,6 +89,32 @@ describe('WorkflowFileClient.load', () => {
   });
 });
 
+describe('WorkflowFileClient.loadIfPresent', () => {
+  it('returns the document when it exists', async () => {
+    const stub = stubFetch(jsonResponse({ slug: 'x', document: { nodes: [1] } }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.loadIfPresent('x');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ nodes: [1] });
+  });
+
+  it('treats a 404 as an answer, not a failure', async () => {
+    const stub = stubFetch(jsonResponse({ detail: "No workflow named 'x'" }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.loadIfPresent('x');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+
+  it('still fails when the runtime is unreachable', async () => {
+    const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
+    const result = await client.loadIfPresent('x');
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe('WorkflowFileClient.remove', () => {
   it('DELETEs the slug-specific path', async () => {
     const stub = stubFetch(new Response(null, { status: 204 }));

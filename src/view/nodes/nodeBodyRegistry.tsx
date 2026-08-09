@@ -6,6 +6,7 @@ import { Icon, IconButton } from '@design/primitives';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import { FieldRenderer } from './FieldRenderer';
+import { SubgraphCompositionBody, TeamCompositionBody } from './CompositionBody';
 
 export interface NodeBodyProps {
   node: AbstractNodeModel;
@@ -147,5 +148,7 @@ function NoteBody({ node }: NodeBodyProps) {
 
 /** Registered here so the map is populated before the first card renders. */
 registerNodeBody('output.formatted', FormattedOutputBody);
+registerNodeBody('team.workflow', TeamCompositionBody);
+registerNodeBody('workflow.subgraph', SubgraphCompositionBody);
 registerNodeBody('annotate.group', GroupBody);
 registerNodeBody('annotate.note', NoteBody);

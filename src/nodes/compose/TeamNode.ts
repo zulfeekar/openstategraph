@@ -24,6 +24,15 @@ const FIELD_OUTCOME = 'outcome';
  * (`scripts/new_team.py`) ships supervisor + default worker + grader wired
  * into that loop, per the user's minimum-viable-prebuilt rule.
  *
+ * The card carries a second, *derived* line beneath that contract: a census
+ * of the referenced document — "1 supervisor · 1 worker · 1 grader · 3 tools
+ * — loops until its grader passes" — registered as a card body
+ * (`view/nodes/CompositionBody`) and computed by the pure
+ * `summarizeComposition`. It restores orientation without reopening the box:
+ * a reader learns what the team costs and whether it loops, and still cannot
+ * see or edit an atom inside it. Nothing is shown while the slug is unset;
+ * an unresolvable slug says so plainly.
+ *
  * Drill-in is the ordinary load path: open the referenced workflow from the
  * Workflows panel. A dedicated breadcrumb affordance is recorded on ticket
  * 56 as follow-up UX, not blocking the mechanism.

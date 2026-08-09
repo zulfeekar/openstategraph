@@ -21,7 +21,12 @@ const FIELD_WORKFLOW = 'workflow';
  * reports a result.
  *
  * The reference is the child's **slug** — data, never code — so the document
- * stays serialisable and vendor-neutral. A workflow that (transitively)
+ * stays serialisable and vendor-neutral. Because the slug is all the card
+ * would otherwise show, a registered card body
+ * (`view/nodes/CompositionBody`) annotates it with a census of the
+ * referenced document — node-type counts in the palette's own vocabulary,
+ * derived by the pure `summarizeComposition`. Unlike a Team's, this one
+ * never claims a loop: a plain mount promises no outcome. A workflow that (transitively)
  * includes itself is refused by the compiler at build time with the chain
  * spelled out.
  */
