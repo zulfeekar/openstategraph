@@ -37,12 +37,21 @@ def run_build(
     workflows_root: Path,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Runs the builders and reports ``{written, skipped, sources}``.
+    """Runs the builders; reports ``{written, skipped, collisions, warnings, sources}``.
 
     ``source=None`` means auto: every registered builder whose ``discover``
     finds topics in this workflow runs. Written/skipped name topics (the
     normalized names double as the ``knowledge/*.md`` stems); ``sources``
-    groups the same lists per builder ``source_kind``.
+    groups the same lists per builder ``source_kind``. Two additive fields
+    keep the original shape backward compatible:
+
+    - ``warnings`` — sources a builder recognized but could not open (e.g. a
+      postgres ref with no driver installed): reported, never a crash.
+    - ``collisions`` (invariant 5) — a topic whose on-disk marker names a
+      *different* builder is refused and reported here, never
+      last-write-wins. Since builders run in registration order and every
+      write stamps its owner, an in-run cross-builder collision and a
+      stale-on-disk one are the same case.
     """
     builders = BUILDERS
     if source is not None:
@@ -53,14 +62,27 @@ def run_build(
 
     written: list[str] = []
     skipped: list[str] = []
+    collisions: list[str] = []
+    warnings: list[str] = []
     sources: dict[str, dict[str, list[str]]] = {}
     for builder in builders:
-        topics = builder.discover(workflow_dir, document, workflows_root)
-        if not topics:
+        discovery = builder.discover(workflow_dir, document, workflows_root)
+        if not discovery.topics and not discovery.warnings:
             continue
-        entry = sources.setdefault(builder.source_kind, {"written": [], "skipped": []})
-        for topic in topics:
+        entry = sources.setdefault(
+            builder.source_kind,
+            {"written": [], "skipped": [], "collisions": [], "warnings": []},
+        )
+        entry["warnings"].extend(discovery.warnings)
+        warnings.extend(discovery.warnings)
+        for topic in discovery.topics:
             name = BaseKnowledge.normalize(topic.name)
+            other = builder.collides_with(workflow_dir, topic)
+            if other is not None:
+                message = f"{name}: owned by builder '{other}', refused for '{builder.source_kind}'"
+                collisions.append(message)
+                entry["collisions"].append(message)
+                continue
             # Skip-check before the model call: a hand-authored doc must not
             # cost a generation it will never use.
             if builder.owns(workflow_dir, topic) and builder.write(
@@ -71,7 +93,13 @@ def run_build(
             else:
                 skipped.append(name)
                 entry["skipped"].append(name)
-    return {"written": written, "skipped": skipped, "sources": sources}
+    return {
+        "written": written,
+        "skipped": skipped,
+        "collisions": collisions,
+        "warnings": warnings,
+        "sources": sources,
+    }
 
 
 __all__ = ["UnknownSourceError", "resolve_build_model", "run_build"]

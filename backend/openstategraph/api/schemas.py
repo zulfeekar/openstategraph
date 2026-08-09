@@ -195,4 +195,8 @@ class KnowledgeBuildResponse(BaseModel):
 
     written: list[str]
     skipped: list[str]
+    #: Additive (backward compatible): cross-builder topic collisions —
+    #: refused writes, invariant 5 — and recognized-but-unavailable sources.
+    collisions: list[str] = []
+    warnings: list[str] = []
     sources: dict[str, dict[str, list[str]]]

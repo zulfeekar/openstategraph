@@ -134,6 +134,9 @@ def create_app(
                 workflow_middleware=discover_middlewares(
                     workflow_store.directory_for(child_slug), child_slug
                 ),
+                # A routed child seeks ITS OWN second brain, never the
+                # parent's — the same isolation as skills (ticket 67).
+                knowledge_dir=workflow_store.directory_for(child_slug),
             ),
             store=memory_store,
             skills_context=(
@@ -142,6 +145,9 @@ def create_app(
             workflow_middleware=(
                 discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
             ),
+            # Ambient knowledge seeking: a non-empty knowledge/ under the
+            # open package auto-binds the lookup tool to every agent.
+            knowledge_package_dir=(workflow_store.directory_for(slug) if slug else None),
             advisor_catalog=(
                 suggestible_tool_catalog(tool_registry_for(slug)) if advisor else ""
             ),
@@ -349,12 +355,12 @@ def create_app(
             )
         except knowledge_build.UnknownSourceError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        if not report["written"] and not report["skipped"]:
+        if not any(report[key] for key in ("written", "skipped", "collisions", "warnings")):
             raise HTTPException(
                 status_code=422,
                 detail=(
                     "No knowledge source found in this workflow — no SQL tool "
-                    "node names a database file under workflows/."
+                    "node names a database, and it mounts no child workflows."
                 ),
             )
         return KnowledgeBuildResponse(**report)

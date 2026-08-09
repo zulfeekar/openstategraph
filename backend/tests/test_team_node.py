@@ -114,6 +114,9 @@ class TestConciergeGateway:
             "tool.platform-list-workflows", "tool.platform-describe-workflow",
             "tool.platform-ls", "tool.platform-read-file", "tool.platform-grep",
             "tool.web-search", "tool.web-fetch",
+            # The gateway's routing second brain (knowledge-architecture.md):
+            # read-only by construction, one doc per child workflow.
+            "tool.knowledge-lookup",
         }
 
 

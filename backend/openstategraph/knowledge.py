@@ -30,21 +30,35 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 _TOPIC_RE = re.compile(r"[^a-z0-9]+")
 
 
+@dataclass(frozen=True)
+class TopicIndexEntry:
+    """One line of the free index tier: a topic name and its one-sentence hint.
+
+    The hint IS the doc's first meaningful line (see ``extract_hint``), so
+    the index is self-assembling — authoring the doc authors the index.
+    """
+
+    name: str
+    hint: str
+
+
 class UnknownTopicError(KeyError):
     """A lookup for a topic the store does not hold.
 
-    Carries the available topics so the caller — above all the lookup tool —
-    can answer with the *menu* rather than a bare miss: a model that asked
-    for the wrong table name gets the right ones to try next.
+    Carries the available topic index entries so the caller — above all the
+    lookup tool — can answer with the *menu* rather than a bare miss: a model
+    that asked for the wrong table name gets the right ones to try next, each
+    with its index hint.
     """
 
-    def __init__(self, topic: str, available: list[str]) -> None:
+    def __init__(self, topic: str, available: list[TopicIndexEntry]) -> None:
         super().__init__(topic)
         self.topic = topic
         self.available = available
@@ -54,7 +68,7 @@ class UnknownTopicError(KeyError):
 class IKnowledge(Protocol):
     """The contract consumers depend on. Two members, deliberately."""
 
-    def topics(self) -> list[str]: ...
+    def topics(self) -> list[TopicIndexEntry]: ...
 
     def lookup(self, topic: str) -> str: ...
 
@@ -77,9 +91,25 @@ class BaseKnowledge(ABC):
         """
         return _TOPIC_RE.sub("-", topic.strip().lower()).strip("-")
 
+    @staticmethod
+    def extract_hint(text: str) -> str:
+        """The doc's index line: its first meaningful line, noise stripped.
+
+        Skips blank lines and HTML-comment lines (the generated marker),
+        strips a leading Markdown heading prefix. A doc with no meaningful
+        first line (empty file, marker-only file) yields an empty hint —
+        the topic still appears in the index, just without a sentence.
+        """
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("<!--"):
+                continue
+            return stripped.lstrip("#").strip()
+        return ""
+
     @abstractmethod
-    def topics(self) -> list[str]:
-        """Every topic this store can answer for, sorted."""
+    def topics(self) -> list[TopicIndexEntry]:
+        """The index tier: every topic with its hint, sorted by name."""
 
     @abstractmethod
     def _fetch(self, topic: str) -> str | None:
@@ -103,10 +133,17 @@ class PackageKnowledge(BaseKnowledge):
     def __init__(self, package_dir: Path) -> None:
         self._directory = Path(package_dir) / "knowledge"
 
-    def topics(self) -> list[str]:
+    def topics(self) -> list[TopicIndexEntry]:
         if not self._directory.is_dir():
             return []
-        return sorted(path.stem for path in self._directory.glob("*.md"))
+        entries: list[TopicIndexEntry] = []
+        for path in sorted(self._directory.glob("*.md"), key=lambda p: p.stem):
+            try:
+                text = path.read_text()
+            except OSError:
+                text = ""
+            entries.append(TopicIndexEntry(name=path.stem, hint=self.extract_hint(text)))
+        return entries
 
     def _fetch(self, topic: str) -> str | None:
         if not topic:
@@ -120,4 +157,10 @@ class PackageKnowledge(BaseKnowledge):
             return None
 
 
-__all__ = ["BaseKnowledge", "IKnowledge", "PackageKnowledge", "UnknownTopicError"]
+__all__ = [
+    "BaseKnowledge",
+    "IKnowledge",
+    "PackageKnowledge",
+    "TopicIndexEntry",
+    "UnknownTopicError",
+]

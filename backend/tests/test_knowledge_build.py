@@ -14,9 +14,14 @@ from openstategraph.knowledge_builders import (
     BUILDERS,
     GENERATED_MARKER,
     BaseKnowledgeBuilder,
+    Discovery,
     IKnowledgeBuilder,
+    KnowledgeTopic,
+    RootKnowledgeBuilder,
     SqlKnowledgeBuilder,
     databases_in_document,
+    marker_source,
+    sql_sources_in_document,
     table_brief,
 )
 
@@ -127,9 +132,10 @@ class TestLivingExample:
 
         store = WorkflowStore()
         document = store.load("chinook-nl-to-sql")
-        topics = SqlKnowledgeBuilder().discover(
+        discovery = SqlKnowledgeBuilder().discover(
             store.directory_for("chinook-nl-to-sql"), document, store.root
         )
+        topics = discovery.topics
         names = {t.name for t in topics}
         assert {"Album", "Track", "InvoiceLine"} <= names
         album = next(t for t in topics if t.name == "Album")
@@ -241,3 +247,319 @@ class TestEndpoint:
             "/api/workflows/shop-flow/knowledge/build", json={"source": "carrier-pigeon"}
         )
         assert response.status_code == 422
+
+
+class TestEngineRecognition:
+    """Recognition from wiring — a ref's scheme (or barenesss) names its engine."""
+
+    def test_bare_paths_and_sqlite_refs_are_sqlite(self) -> None:
+        from openstategraph.knowledge_engines import recognize
+
+        assert recognize("flow/data/shop.sqlite") == "sqlite"
+        assert recognize("sqlite://flow/data/shop.sqlite") == "sqlite"
+
+    def test_url_schemes_name_their_engines(self) -> None:
+        from openstategraph.knowledge_engines import recognize
+
+        assert recognize("postgres://u:p@host:5432/shop") == "postgres"
+        assert recognize("postgresql://host/shop") == "postgres"
+        assert recognize("mssql://host/shop") == "mssql"
+        assert recognize("sqlserver://host/shop") == "mssql"
+
+    def test_unknown_schemes_and_empty_refs_are_unrecognized(self) -> None:
+        from openstategraph.knowledge_engines import recognize
+
+        assert recognize("mongodb://host/db") is None
+        assert recognize("   ") is None
+
+    def test_document_sources_carry_ref_and_engine(self, tmp_path: Path) -> None:
+        _seed_db(tmp_path, "flow/data/shop.sqlite")
+        document = {
+            "nodes": [
+                {"id": "a", "type": "tool.sql-query", "data": {"database": "flow/data/shop.sqlite"}},
+                {"id": "b", "type": "tool.sql-query", "data": {"database": "postgres://h/warehouse"}},
+            ],
+            "edges": [],
+        }
+        assert sql_sources_in_document(document, tmp_path) == [
+            ("flow/data/shop.sqlite", "sqlite"),
+            ("postgres://h/warehouse", "postgres"),
+        ]
+
+
+class TestEngineAdapters:
+    """The IEngineAdapter seam — SQLite proven for real, pg/mssql pinned."""
+
+    def test_the_sqlite_adapter_satisfies_the_contract_for_real(self, tmp_path: Path) -> None:
+        from openstategraph.knowledge_engines import IEngineAdapter, SqliteEngineAdapter
+
+        db = _seed_db(tmp_path, "flow/data/shop.sqlite")
+        adapter = SqliteEngineAdapter()
+        assert isinstance(adapter, IEngineAdapter)
+        assert adapter.available() == (True, None)
+        assert adapter.list_tables(str(db)) == ["customers", "orders"]
+        schema = adapter.table_schema(str(db), "orders")
+        assert "customer_id" in schema and "references customers.id" in schema
+        inbound = adapter.table_schema(str(db), "customers")
+        assert "referenced by" in inbound and "orders.customer_id" in inbound
+        assert "9.5" in adapter.sample(str(db), "orders")
+        assert "## Data sample" in adapter.table_brief(str(db), "orders")
+
+    def test_the_postgres_introspection_sql_is_pinned(self) -> None:
+        from openstategraph.knowledge_engines import PostgresEngineAdapter
+
+        adapter = PostgresEngineAdapter()
+        assert "information_schema.tables" in adapter.LIST_TABLES_SQL
+        assert "information_schema.columns" in adapter.COLUMNS_SQL
+        assert "pg_constraint" in adapter.FOREIGN_KEYS_SQL
+        assert "conrelid" in adapter.FOREIGN_KEYS_SQL and "confrelid" in adapter.FOREIGN_KEYS_SQL
+
+    def test_the_mssql_introspection_sql_is_pinned(self) -> None:
+        from openstategraph.knowledge_engines import MssqlEngineAdapter
+
+        adapter = MssqlEngineAdapter()
+        assert "INFORMATION_SCHEMA.TABLES" in adapter.LIST_TABLES_SQL
+        assert "INFORMATION_SCHEMA.COLUMNS" in adapter.COLUMNS_SQL
+        assert "sys.foreign_key_columns" in adapter.FOREIGN_KEYS_SQL
+        assert "sys.tables" in adapter.FOREIGN_KEYS_SQL
+
+    def test_a_missing_driver_reports_unavailable_with_a_hint(self, monkeypatch: Any) -> None:
+        from openstategraph.knowledge_engines import MssqlEngineAdapter, PostgresEngineAdapter
+
+        for adapter in (PostgresEngineAdapter(), MssqlEngineAdapter()):
+            monkeypatch.setattr(type(adapter), "_driver", lambda self: None)
+            usable, warning = adapter.available()
+            assert usable is False
+            assert warning is not None and adapter.engine in warning and "pip install" in warning
+
+    def test_a_recognized_but_unavailable_source_is_a_warning_not_a_crash(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        from openstategraph import knowledge_engines
+
+        monkeypatch.setattr(
+            type(knowledge_engines.ENGINE_ADAPTERS["postgres"]), "_driver", lambda self: None
+        )
+        document = {
+            "nodes": [
+                {"id": "a", "type": "tool.sql-query", "data": {"database": "postgres://h/warehouse"}}
+            ],
+            "edges": [],
+        }
+        discovery = SqlKnowledgeBuilder().discover(tmp_path / "flow", document, tmp_path)
+        assert discovery.topics == []
+        [warning] = discovery.warnings
+        assert "postgres://h/warehouse" in warning
+        assert "recognized as postgres" in warning and "unavailable" in warning
+
+    def test_the_warning_reaches_the_run_report(self, tmp_path: Path, monkeypatch: Any) -> None:
+        from openstategraph import knowledge_engines
+
+        monkeypatch.setattr(
+            type(knowledge_engines.ENGINE_ADAPTERS["postgres"]), "_driver", lambda self: None
+        )
+        document = {
+            "nodes": [
+                {"id": "a", "type": "tool.sql-query", "data": {"database": "postgres://h/warehouse"}}
+            ],
+            "edges": [],
+        }
+        report = run_build(tmp_path / "flow", document, ScriptedModel(), tmp_path)
+        assert report["written"] == [] and report["skipped"] == []
+        assert report["warnings"] and "postgres://h/warehouse" in report["warnings"][0]
+        assert report["sources"]["sql"]["warnings"] == report["warnings"]
+
+
+class TestOwnershipAndCollisions:
+    """Invariant 5: markers record the owning builder; collisions are refused."""
+
+    def test_the_marker_records_the_owning_builder(self, tmp_path: Path) -> None:
+        builder = SqlKnowledgeBuilder()
+        topic = KnowledgeTopic(name="orders", brief="b")
+        builder.write(tmp_path / "flow", topic, "orders — a doc.")
+        text = (tmp_path / "flow" / "knowledge" / "orders.md").read_text()
+        assert text.startswith(GENERATED_MARKER)
+        assert marker_source(text) == "sql"
+
+    def test_marker_source_distinguishes_hand_authored_and_legacy(self) -> None:
+        assert marker_source("# orders\nhand-written") is None
+        assert marker_source(f"{GENERATED_MARKER}; regenerate -->\nbody") == ""
+        assert marker_source(f"{GENERATED_MARKER} source=root; regenerate -->\nbody") == "root"
+
+    def test_owns_gates_regeneration_by_marker_source(self, tmp_path: Path) -> None:
+        builder = SqlKnowledgeBuilder()
+        topic = KnowledgeTopic(name="orders", brief="b")
+        knowledge = tmp_path / "flow" / "knowledge"
+        knowledge.mkdir(parents=True)
+        assert builder.owns(tmp_path / "flow", topic)  # absent file
+        (knowledge / "orders.md").write_text(f"{GENERATED_MARKER} source=sql -->\nmine")
+        assert builder.owns(tmp_path / "flow", topic)
+        (knowledge / "orders.md").write_text(f"{GENERATED_MARKER} source=root -->\ntheirs")
+        assert not builder.owns(tmp_path / "flow", topic)
+        assert builder.collides_with(tmp_path / "flow", topic) == "root"
+        (knowledge / "orders.md").write_text("# orders\nhand-authored")
+        assert not builder.owns(tmp_path / "flow", topic)
+        assert builder.collides_with(tmp_path / "flow", topic) is None
+
+    def test_a_cross_builder_collision_is_refused_and_reported(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        _seed_db(tmp_path, "flow/data/shop.sqlite")
+
+        class OverlappingBuilder(BaseKnowledgeBuilder):
+            source_kind = "overlap"
+
+            def discover(self, workflow_dir: Path, document: Any, workflows_root: Path) -> Discovery:
+                return Discovery(topics=[KnowledgeTopic(name="orders", brief="also orders")])
+
+        from openstategraph.api import knowledge_build as kb
+
+        monkeypatch.setattr(
+            kb, "BUILDERS", [SqlKnowledgeBuilder(), OverlappingBuilder()]
+        )
+        report = run_build(
+            tmp_path / "flow", _document("flow/data/shop.sqlite"), ScriptedModel(), tmp_path
+        )
+        assert sorted(report["written"]) == ["customers", "orders"]
+        [collision] = report["collisions"]
+        assert "orders" in collision and "'sql'" in collision and "'overlap'" in collision
+        assert report["sources"]["overlap"]["collisions"] == [collision]
+        # never last-write-wins: the sql builder's doc survives untouched
+        assert marker_source((tmp_path / "flow" / "knowledge" / "orders.md").read_text()) == "sql"
+
+
+class TestIndexLineDrafting:
+    """Generated docs open with their index line right after the marker."""
+
+    def test_the_instruction_demands_a_first_line_summary(self) -> None:
+        prompt = SqlKnowledgeBuilder().compose_prompt(KnowledgeTopic(name="orders", brief="b"))
+        assert "FIRST line" in prompt and "index" in prompt
+
+    def test_the_written_doc_serves_the_body_first_line_as_its_hint(self, tmp_path: Path) -> None:
+        from openstategraph.knowledge import PackageKnowledge
+
+        builder = SqlKnowledgeBuilder()
+        builder.write(
+            tmp_path / "flow",
+            KnowledgeTopic(name="orders", brief="b"),
+            "orders — one row per purchase.\n\nDetails.",
+        )
+        [entry] = PackageKnowledge(tmp_path / "flow").topics()
+        assert entry.name == "orders"
+        assert entry.hint == "orders — one row per purchase."
+
+
+class TestRootKnowledgeBuilder:
+    """Topics = visible child workflows; docs route, never copy detail up."""
+
+    @staticmethod
+    def _save_child(
+        root: Path, slug: str, *, hidden: bool = False, with_knowledge: bool = False
+    ) -> None:
+        package = root / slug
+        package.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 1,
+            "name": slug.replace("-", " ").title(),
+            "savedAt": "2026-01-01T00:00:00Z",
+            "document": {
+                "nodes": [
+                    {"id": "in1", "type": "input.text", "data": {}},
+                    {
+                        "id": "r1",
+                        "type": "route.classifier",
+                        "data": {"branches": [{"id": "b1", "name": "sales"}]},
+                    },
+                ],
+                "edges": [],
+            },
+        }
+        if hidden:
+            payload["hidden"] = True
+        (package / "workflow.json").write_text(json.dumps(payload))
+        (package / "AGENTS.md").write_text(f"# {slug}\n\nAnswers {slug} questions.\n")
+        if with_knowledge:
+            (package / "knowledge").mkdir()
+            (package / "knowledge" / "sales.md").write_text("sales — child detail.\n")
+
+    @staticmethod
+    def _root_document() -> dict[str, Any]:
+        return {
+            "nodes": [
+                {"id": "m1", "type": "workflow.subgraph", "data": {"workflow": "shop-child"}}
+            ],
+            "edges": [],
+        }
+
+    def test_it_only_fires_on_root_ish_workflows(self, tmp_path: Path) -> None:
+        builder = RootKnowledgeBuilder()
+        leaf = {"nodes": [{"id": "a", "type": "agent.llm", "data": {}}], "edges": []}
+        assert builder.discover(tmp_path / "leaf-flow", leaf, tmp_path).topics == []
+        # slug 'concierge' is root by definition, mounts or not
+        self._save_child(tmp_path, "shop-child")
+        assert builder.discover(tmp_path / "concierge", leaf, tmp_path).topics
+
+    def test_topics_are_the_visible_children_hidden_excluded(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "shop-child", with_knowledge=True)
+        self._save_child(tmp_path, "quiet-child")
+        self._save_child(tmp_path, "ghost-child", hidden=True)
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document(), tmp_path
+        )
+        assert sorted(t.name for t in discovery.topics) == ["quiet-child", "shop-child"]
+
+    def test_the_root_workflow_never_lists_itself(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "gateway")  # visible and root-named
+        self._save_child(tmp_path, "shop-child")
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document(), tmp_path
+        )
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_the_brief_carries_topology_agents_head_and_drill_flag(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "shop-child", with_knowledge=True)
+        self._save_child(tmp_path, "quiet-child")
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document(), tmp_path
+        )
+        briefs = {t.name: t.brief for t in discovery.topics}
+        assert "route.classifier" in briefs["shop-child"]
+        assert "sales" in briefs["shop-child"]  # router branch
+        assert "Answers shop-child questions" in briefs["shop-child"]
+        assert "HAS its own knowledge store" in briefs["shop-child"]
+        assert "no knowledge store of its own" in briefs["quiet-child"]
+
+    def test_a_child_with_string_branches_does_not_crash_discovery(self, tmp_path: Path) -> None:
+        # Found live on the real concierge build: a child node whose
+        # data.branches is a string (or otherwise not a list of dicts).
+        package = tmp_path / "odd-child"
+        package.mkdir(parents=True)
+        (package / "workflow.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "name": "Odd Child",
+                    "savedAt": "2026-01-01T00:00:00Z",
+                    "document": {
+                        "nodes": [{"id": "n1", "type": "agent.llm", "data": {"branches": "oops"}}],
+                        "edges": [],
+                    },
+                }
+            )
+        )
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document(), tmp_path
+        )
+        assert [t.name for t in discovery.topics] == ["odd-child"]
+
+    def test_a_scripted_build_writes_one_routing_doc_per_child(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "shop-child", with_knowledge=True)
+        self._save_child(tmp_path, "quiet-child")
+        (tmp_path / "gateway").mkdir()
+        model = ScriptedModel()
+        report = run_build(tmp_path / "gateway", self._root_document(), model, tmp_path)
+        assert sorted(report["sources"]["root"]["written"]) == ["quiet-child", "shop-child"]
+        doc = (tmp_path / "gateway" / "knowledge" / "shop-child.md").read_text()
+        assert marker_source(doc) == "root"
+        joined = "\n".join(model.prompts)
+        assert "drill pointer" in joined and "route there for depth" in joined

@@ -63,9 +63,12 @@ class KnowledgeLookupTool(BaseTool):
                     "second brain' on the Knowledge node (or add "
                     "knowledge/<topic>.md files) to create them."
                 )
+            listing = "\n".join(
+                f"- {entry.name} — {entry.hint}" if entry.hint else f"- {entry.name}"
+                for entry in exc.available
+            )
             return ToolResult.failure(
-                f"No knowledge for topic '{args.topic}'. Available topics: "
-                + ", ".join(exc.available)
+                f"No knowledge for topic '{args.topic}'. Available topics:\n{listing}"
             )
 
 
@@ -74,4 +77,30 @@ def knowledge_lookup_for(package_dir: Path | None) -> dict[str, Any]:
     return {KnowledgeLookupTool.node_type: KnowledgeLookupTool(package_dir=package_dir)}
 
 
-__all__ = ["KnowledgeLookupArgs", "KnowledgeLookupTool", "knowledge_lookup_for"]
+def ambient_knowledge_tool(package_dir: Path | str | None) -> KnowledgeLookupTool | None:
+    """The ambient-seeking rule: knowledge is a capability by configuration.
+
+    Exactly mirroring how the memory tools auto-attach when the runtime's
+    store is present: when the workflow package's ``knowledge/`` directory is
+    non-empty, every agent and worker in that workflow gets the lookup tool
+    — no Knowledge atom wiring required. The atom stays as the visible
+    canvas declaration and the Build-second-brain button's home; wiring it
+    explicitly must not double-bind (callers dedupe by tool name).
+
+    None when there is nothing to look up — an always-failing tool would be
+    worse than no tool.
+    """
+    if package_dir is None:
+        return None
+    directory = Path(package_dir) / "knowledge"
+    if not any(directory.glob("*.md")):
+        return None
+    return KnowledgeLookupTool(package_dir=Path(package_dir))
+
+
+__all__ = [
+    "KnowledgeLookupArgs",
+    "KnowledgeLookupTool",
+    "ambient_knowledge_tool",
+    "knowledge_lookup_for",
+]

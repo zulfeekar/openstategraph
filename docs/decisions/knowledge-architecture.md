@@ -50,6 +50,18 @@ Intelligence is agentic only where discovery is genuinely hard:
   to route well: first line is a great index line, body ends with the drill
   pointer.
 
+## Ambient seeking (business rule, owner amendment 2026-08-09)
+
+Knowledge-seeking is **ambient, not opt-in** — exactly mirroring how the
+memory tools auto-attach when the runtime's Store is present ("capability by
+configuration"): when the current workflow's `knowledge/` directory is
+non-empty, every agent and worker in that workflow automatically gets the
+`knowledge_lookup` tool, no Knowledge atom wiring required. The atom remains
+the visible canvas declaration and the Build-second-brain button's home;
+wiring it explicitly does not double-bind (deduped by tool name). Subgraph
+children each seek their OWN package's knowledge, never the parent's — the
+same isolation skills earned after the ticket-67 lesson.
+
 ## Curation contract (the UI half)
 
 Builder generates → developer owns every word:

@@ -349,6 +349,11 @@ class PackageAssets:
     functions: dict[str, Any]
     skills_context: str = ""
     workflow_middleware: dict[str, Any] | None = None
+    #: The package directory whose `knowledge/` powers ambient knowledge
+    #: seeking (see `NodeRuntime.knowledge_package_dir`). A child gets ITS
+    #: OWN package's knowledge, never the parent's — the same isolation as
+    #: skills after the ticket-67 lesson.
+    knowledge_dir: Any = None
 
 
 @dataclass(frozen=True)
@@ -370,6 +375,9 @@ class RuntimeServices:
     store: Any = None
     skills_context: str = ""
     workflow_middleware: dict[str, Any] | None = None
+    #: The open workflow's package directory, for ambient knowledge seeking
+    #: (a non-empty `knowledge/` under it auto-binds the lookup tool).
+    knowledge_package_dir: Any = None
     max_attempts: int = 3
     #: The editor-advisor tool catalogue, or "" for a normal run. See
     #: `advisor_context` — one field rather than a `bool` + the text it needs,
@@ -430,6 +438,7 @@ class NodeRuntime:
         store: Any = None,
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
+        knowledge_package_dir: Any = None,
         max_attempts: int = 3,
         advisor_catalog: str = "",
         _ancestry: tuple[str, ...] = (),
@@ -443,6 +452,7 @@ class NodeRuntime:
             store = services.store
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
+            knowledge_package_dir = services.knowledge_package_dir
             max_attempts = services.max_attempts
             advisor_catalog = services.advisor_catalog
         #: Non-empty only for an editor run that asked for it (`advisor: true`
@@ -473,6 +483,12 @@ class NodeRuntime:
         #: every agent in this workflow as prompt *context* (above rules,
         #: below the locked preamble; SystemPrompt owns the ordering).
         self.skills_context = skills_context
+        #: Ambient knowledge seeking (knowledge-architecture decision):
+        #: mirroring how `store` turns the memory tools on, a non-empty
+        #: `knowledge/` under this package directory auto-binds the
+        #: knowledge-lookup tool to every agent and worker — capability by
+        #: configuration, no Knowledge atom wiring required.
+        self.knowledge_package_dir = knowledge_package_dir
         #: Slot-name -> middleware instance from `workflows/<slug>/middlewares/`
         #: (ticket 32): merged into every agent's slot table AFTER the tier
         #: preset and BEFORE per-node config, so a workflow file replaces a
@@ -644,6 +660,25 @@ class NodeRuntime:
 
         return run
 
+    def _attach_ambient_knowledge(self, lc_tools: list[Any]) -> None:
+        """Ambient knowledge seeking — capability by configuration.
+
+        The exact mirror of the memory rule above (`self.store is not None`
+        → memory tools): when this workflow package's `knowledge/` directory
+        is non-empty, the knowledge-lookup tool is bound to every agent and
+        worker with no Knowledge atom wired. The atom remains the visible
+        canvas declaration and the build button's home; an explicitly wired
+        atom plus this rule is deduped by tool name to exactly one binding.
+        """
+        from openstategraph.prebuilt_knowledge import ambient_knowledge_tool
+
+        ambient = ambient_knowledge_tool(self.knowledge_package_dir)
+        if ambient is None:
+            return
+        if any(getattr(t, "name", "") == ambient.name for t in lc_tools):
+            return
+        lc_tools.append(ambient.as_langchain_tool())
+
     def _bound_tool(self, tool_node_id: str) -> Any | None:
         """Resolves one bound tool node to the implementation it should use.
 
@@ -709,6 +744,12 @@ class NodeRuntime:
             from openstategraph.memory import memory_tools
 
             lc_tools.extend(memory_tools())
+
+        # Same rule for knowledge: a non-empty knowledge/ in this workflow's
+        # package auto-binds the lookup tool. Deduped by tool name, so an
+        # explicitly wired Knowledge atom plus the ambient rule is one tool,
+        # never two.
+        self._attach_ambient_knowledge(lc_tools)
 
         data = node.get("data") or {}
         model = self._resolve_model(data)
@@ -1103,6 +1144,10 @@ class NodeRuntime:
             if tool is not None:
                 lc_tools.append(tool.as_langchain_tool())
 
+        # Workers are agents too: the ambient knowledge rule applies (deduped
+        # against an explicitly wired atom, same as `_agent`).
+        self._attach_ambient_knowledge(lc_tools)
+
         skills = plan.skill_bindings.get(node_id, [])
         # Directive, not a nudge. A weaker version of this ("use tools if
         # available") was tried live first and the model answered a database
@@ -1292,6 +1337,7 @@ class NodeRuntime:
                     functions=self.functions,
                     skills_context=self.skills_context,
                     workflow_middleware=self.workflow_middleware,
+                    knowledge_dir=self.knowledge_package_dir,
                 )
                 if self.package_loader is not None:
                     try:
@@ -1308,6 +1354,9 @@ class NodeRuntime:
                         store=self.store,
                         skills_context=child_assets.skills_context,
                         workflow_middleware=child_assets.workflow_middleware or {},
+                        # The child's OWN knowledge, never the parent's —
+                        # the same isolation as skills (ticket 67's lesson).
+                        knowledge_package_dir=child_assets.knowledge_dir,
                         max_attempts=self.max_attempts,
                         # Deliberately NOT inherited. A child subgraph's node
                         # ids do not exist in the document open on the canvas,
