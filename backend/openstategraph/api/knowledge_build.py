@@ -14,6 +14,7 @@ from typing import Any
 
 from openstategraph.knowledge import BaseKnowledge
 from openstategraph.knowledge_builders import BUILDERS
+from openstategraph.knowledge_explorer import AgenticKnowledgeBuilder  # registers agentic builders
 
 
 class UnknownSourceError(ValueError):
@@ -36,6 +37,7 @@ def run_build(
     model: Any,
     workflows_root: Path,
     source: str | None = None,
+    instruction: str | None = None,
 ) -> dict[str, Any]:
     """Runs the builders; reports ``{written, skipped, collisions, warnings, sources}``.
 
@@ -66,6 +68,30 @@ def run_build(
     warnings: list[str] = []
     sources: dict[str, dict[str, list[str]]] = {}
     for builder in builders:
+        if isinstance(builder, AgenticKnowledgeBuilder):
+            # The escalation ladder's second rung: not enumerable, so no
+            # discover/build split — one bounded exploration through the
+            # workflow's own read-only tools, writing solely via the store
+            # seam. `instruction` is the developer's optional steering text.
+            exploration = builder.explore(
+                workflow_dir, document, workflows_root, model, instruction=instruction
+            )
+            if not exploration.touched:
+                continue
+            entry = sources.setdefault(
+                builder.source_kind,
+                {"written": [], "skipped": [], "collisions": [], "warnings": []},
+            )
+            entry["written"].extend(exploration.written)
+            entry["skipped"].extend(exploration.skipped)
+            entry["collisions"].extend(exploration.collisions)
+            entry["warnings"].extend(exploration.warnings)
+            entry["uncovered"] = list(exploration.uncovered)
+            written.extend(exploration.written)
+            skipped.extend(exploration.skipped)
+            collisions.extend(exploration.collisions)
+            warnings.extend(exploration.warnings)
+            continue
         discovery = builder.discover(workflow_dir, document, workflows_root)
         if not discovery.topics and not discovery.warnings:
             continue

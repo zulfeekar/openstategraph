@@ -188,6 +188,10 @@ class KnowledgeBuildRequest(BaseModel):
     model: str | None = None
     credentials: dict[str, str] | None = None
     source: str | None = None
+    #: Optional developer steering text for the agentic builders (the
+    #: instructed explorer / codebase builder) — "focus on billing; fiscal
+    #: year starts April". Additive; mechanical builders ignore it.
+    instruction: str | None = None
 
 
 class KnowledgeBuildResponse(BaseModel):
@@ -200,3 +204,34 @@ class KnowledgeBuildResponse(BaseModel):
     collisions: list[str] = []
     warnings: list[str] = []
     sources: dict[str, dict[str, list[str]]]
+
+
+class KnowledgeTopicStatusResponse(BaseModel):
+    """One row of GET /api/workflows/{slug}/knowledge — the curation list."""
+
+    name: str
+    hint: str
+    #: True while the builder's marker is present; the first saved edit
+    #: strips it (auto-claim) and this flips to False forever.
+    generated: bool
+    #: The owning builder's kind (sql/root/explorer/codebase); "" once claimed.
+    source: str
+    #: The source content-hash behind this doc no longer matches — the doc
+    #: (generated OR claimed) describes a source that has since changed.
+    stale: bool
+
+
+class KnowledgeTopicDocResponse(BaseModel):
+    """GET/PUT /api/workflows/{slug}/knowledge/{topic} — the raw doc."""
+
+    name: str
+    body: str
+    generated: bool
+    source: str
+    stale: bool
+
+
+class KnowledgeTopicSaveRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    body: str

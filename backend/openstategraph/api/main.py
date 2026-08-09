@@ -73,6 +73,9 @@ from openstategraph.api.schemas import (  # noqa: E402
     FunctionCapabilityResponse,
     KnowledgeBuildRequest,
     KnowledgeBuildResponse,
+    KnowledgeTopicDocResponse,
+    KnowledgeTopicSaveRequest,
+    KnowledgeTopicStatusResponse,
     ResumeRequest,
     RunRequest,
     RunResponse,
@@ -351,7 +354,12 @@ def create_app(
         )
         try:
             report = knowledge_build.run_build(
-                workflow_dir, document, model, workflow_store.root, source=request.source
+                workflow_dir,
+                document,
+                model,
+                workflow_store.root,
+                source=request.source,
+                instruction=request.instruction,
             )
         except knowledge_build.UnknownSourceError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -364,6 +372,95 @@ def create_app(
                 ),
             )
         return KnowledgeBuildResponse(**report)
+
+    def _knowledge_context(slug: str) -> tuple[Path, dict[str, Any]]:
+        """Shared loader for the curation endpoints: the package dir and the
+        document (the document is what staleness recomputes briefs from)."""
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            document = workflow_store.load(slug)
+            workflow_dir = workflow_store.directory_for(slug)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return workflow_dir, document
+
+    @app.get(
+        "/api/workflows/{slug}/knowledge",
+        response_model=list[KnowledgeTopicStatusResponse],
+    )
+    def list_knowledge(slug: str) -> list[KnowledgeTopicStatusResponse]:
+        """The curation list: every topic with its hint, ownership state
+        (generated vs claimed) and stale badge — the Knowledge card's data."""
+        from openstategraph.api import knowledge_curation
+
+        workflow_dir, document = _knowledge_context(slug)
+        return [
+            KnowledgeTopicStatusResponse(
+                name=s.name, hint=s.hint, generated=s.generated, source=s.source, stale=s.stale
+            )
+            for s in knowledge_curation.list_topics(workflow_dir, document, workflow_store.root)
+        ]
+
+    @app.get(
+        "/api/workflows/{slug}/knowledge/{topic}",
+        response_model=KnowledgeTopicDocResponse,
+    )
+    def read_knowledge_topic(slug: str, topic: str) -> KnowledgeTopicDocResponse:
+        from openstategraph.api import knowledge_curation
+
+        workflow_dir, document = _knowledge_context(slug)
+        try:
+            body = knowledge_curation.read_topic(workflow_dir, topic)
+        except knowledge_curation.UnknownTopicPathError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No knowledge topic {topic!r}") from exc
+        status = next(
+            (
+                s
+                for s in knowledge_curation.list_topics(workflow_dir, document, workflow_store.root)
+                if s.name == topic
+            ),
+            None,
+        )
+        return KnowledgeTopicDocResponse(
+            name=topic,
+            body=body,
+            generated=status.generated if status else False,
+            source=status.source if status else "",
+            stale=status.stale if status else False,
+        )
+
+    @app.put(
+        "/api/workflows/{slug}/knowledge/{topic}",
+        response_model=KnowledgeTopicDocResponse,
+    )
+    def save_knowledge_topic(
+        slug: str, topic: str, request: KnowledgeTopicSaveRequest
+    ) -> KnowledgeTopicDocResponse:
+        """Explicit save with the auto-claim: saving strips the generated
+        marker (human touch = human ownership) and records the claim-time
+        source hash, so the stale badge outlives the claim. No autosave —
+        the file lands in git, diffable."""
+        from openstategraph.api import knowledge_curation
+
+        workflow_dir, document = _knowledge_context(slug)
+        try:
+            status = knowledge_curation.save_topic(
+                workflow_dir, topic, request.body, document, workflow_store.root
+            )
+        except knowledge_curation.UnknownTopicPathError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return KnowledgeTopicDocResponse(
+            name=status.name,
+            body=knowledge_curation.read_topic(workflow_dir, status.name),
+            generated=status.generated,
+            source=status.source,
+            stale=status.stale,
+        )
 
     @app.get("/api/workflows/{slug}/graph")
     def compiled_graph(slug: str) -> dict[str, str]:
