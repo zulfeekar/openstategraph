@@ -1,0 +1,453 @@
+"""The Agent Plugins v1.0.0 seam — and the only file that knows their words.
+
+Research and verdict: `docs/decisions/agent-plugins.md`. In one line: Agent
+Plugins standardizes *the box* (a directory with `plugin.json`, `skills/`,
+`mcp.json`), it is genuinely multi-vendor (Amazon, Cursor, Microsoft, OpenAI,
+Vercel on the TSC; Google joining), and its v1 scope holds two component types
+only — Agent Skills and MCP servers. A workflow is not in that scope.
+
+So this is **interop, not adoption**. Nothing else in the repo may learn the
+strings ``plugin.json``, ``mcp.json``, ``SKILL.md``, ``${PLUGIN_ROOT}`` or the
+schema identifiers; CLAUDE.md's portability rule makes ``workflow.json`` the
+vendor-neutral layer, and a compile-style seam is one-directional by design.
+Delete this module and no other file changes shape.
+
+Two directions, both pure: ``export_plugin``/``import_plugin`` compute a
+*plan* (manifest, path → text layout, and the honest list of what was lost);
+``write_export``/``write_import`` are the only calls that touch a disk, and
+only at a destination the caller names.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+#: Canonical schema identifiers (spec §5.2, §7.2.1). They MUST be exact — a
+#: client selects its validation rules from the literal string, and MUST NOT
+#: fetch it. We never retrieve them either.
+PLUGIN_SCHEMA_ID = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+MCP_SCHEMA_ID = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+
+#: Our reverse-domain client namespace (spec §8). Everything of ours that v1
+#: cannot express travels here — labelled non-portable rather than mangled
+#: into a portable slot. Placeholder-grade: the spec SHOULDs a domain we
+#: control, so pin this before publishing anything public.
+EXTENSION_NAMESPACE = "org.openstategraph"
+
+#: Permitted top-level manifest fields — the schema is *closed* (§5.2).
+_MANIFEST_FIELDS = frozenset(
+    {
+        "$schema",
+        "name",
+        "version",
+        "description",
+        "author",
+        "homepage",
+        "repository",
+        "license",
+        "keywords",
+        "extensions",
+    }
+)
+
+#: §5.5 plugin name, and the Agent Skills name rule (which additionally
+#: forbids periods and must equal the skill's directory name).
+_PLUGIN_NAME_RE = re.compile(r"^(?!.*--)(?!.*\.\.)[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$")
+_SKILL_NAME_RE = re.compile(r"^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+
+_DESCRIPTION_MAX = 1024
+
+#: Package directories carried into our extension directory on export. `data/`
+#: is fixtures and binaries, not distribution payload; `__pycache__` is noise.
+_CARRIED_DIRS = ("knowledge", "tools", "functions", "middlewares", "tests")
+_CARRIED_FILES = ("workflow.json", "AGENTS.md")
+_EXCLUDED = ("__pycache__", ".pytest_cache")
+
+
+class InvalidPluginError(Exception):
+    """A package or plugin that cannot be represented in the other format.
+
+    Raised only for *fatal* boundaries — an unrepresentable identity, a
+    manifest violation the spec calls fatal (§5.3, §11.3), a destination that
+    already holds a package. Everything narrower is a note, never an
+    exception: the spec's own failure model is "skip the component, keep
+    loading, report it", and an interop tool that raises where the spec skips
+    would be less usable than the format it bridges.
+    """
+
+
+@dataclass(frozen=True)
+class PluginExport:
+    """One workflow package rendered as an Agent Plugins v1 layout."""
+
+    manifest: dict[str, Any]
+    #: Plugin-relative path -> file text. `plugin.json` is *not* in here; it
+    #: is `manifest`, serialized by `write_export`, so a caller can inspect
+    #: the manifest as data rather than reparse it.
+    files: dict[str, str]
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ImportPlan:
+    """One plugin rendered as a workflow package skeleton."""
+
+    name: str
+    #: Package-relative path -> file text, `workflow.json` included: unlike
+    #: the export direction, the envelope here is *synthesized*, so it is
+    #: content rather than metadata.
+    files: dict[str, str]
+    notes: list[str] = field(default_factory=list)
+
+
+# --------------------------------------------------------------- export
+
+
+def export_plugin(workflow_dir: Path, *, name: str | None = None) -> PluginExport:
+    """Render `workflows/<slug>/` as an Agent Plugins v1 layout.
+
+    The slug *is* the plugin name: identity is never silently rewritten to
+    satisfy a foreign naming rule, so a slug that cannot be a plugin name is
+    an error the human resolves, not a rename this function invents.
+    """
+    workflow_dir = Path(workflow_dir)
+    plugin_name = name or workflow_dir.name
+    if not _PLUGIN_NAME_RE.match(plugin_name):
+        raise InvalidPluginError(
+            f"{plugin_name!r} cannot be an Agent Plugins name: lowercase alphanumerics, "
+            "'-' and '.', 1-64 chars, alphanumeric at both ends, no '--' or '..'"
+        )
+
+    notes: list[str] = []
+    files: dict[str, str] = {}
+
+    manifest: dict[str, Any] = {"$schema": PLUGIN_SCHEMA_ID, "name": plugin_name}
+    description = _description_from_agents_md(workflow_dir / "AGENTS.md")
+    if description:
+        manifest["description"] = description
+
+    _export_skills(workflow_dir / "skills", files, notes)
+    _export_extension(workflow_dir, files, notes)
+
+    notes.append(
+        "No mcp.json emitted: this runtime models no MCP servers, and a Python tool in "
+        "tools/ is not one. Emitting a server entry would be a fabrication."
+    )
+    return PluginExport(manifest=manifest, files=files, notes=notes)
+
+
+def _export_skills(skills_dir: Path, files: dict[str, str], notes: list[str]) -> None:
+    """`skills/<x>.md` -> `skills/<x>/SKILL.md` with synthesized frontmatter."""
+    if not skills_dir.is_dir():
+        return
+    for path in sorted(skills_dir.glob("*.md")):
+        stem = path.stem
+        if not _SKILL_NAME_RE.match(stem):
+            notes.append(
+                f"skill {stem!r} skipped: an Agent Skills name is lowercase alphanumerics and "
+                "hyphens only, and must equal its directory name"
+            )
+            continue
+        body = _read_text(path)
+        if body is None:
+            notes.append(f"skill {stem!r} skipped: not readable as UTF-8 text")
+            continue
+        description = _first_meaningful_line(body)[:_DESCRIPTION_MAX] or f"The {stem} skill."
+        frontmatter = f"---\nname: {stem}\ndescription: {description}\n---\n\n"
+        files[f"skills/{stem}/SKILL.md"] = frontmatter + body.strip() + "\n"
+    if files:
+        notes.append(
+            "Skill descriptions are synthesized from each doc's first line — our flat "
+            "skills/*.md format declares none. Review them before publishing."
+        )
+
+
+def _export_extension(workflow_dir: Path, files: dict[str, str], notes: list[str]) -> None:
+    """Everything v1 has no component type for, into our namespace directory."""
+    carried: list[str] = []
+    for filename in _CARRIED_FILES:
+        text = _read_text(workflow_dir / filename)
+        if text is not None:
+            files[f"{EXTENSION_NAMESPACE}/{filename}"] = text
+            carried.append(filename)
+    for dirname in _CARRIED_DIRS:
+        source = workflow_dir / dirname
+        if not source.is_dir():
+            continue
+        found = False
+        for path in sorted(source.rglob("*")):
+            if not path.is_file() or any(part in _EXCLUDED for part in path.parts):
+                continue
+            text = _read_text(path)
+            if text is None:
+                notes.append(f"{path.relative_to(workflow_dir)} skipped: not UTF-8 text")
+                continue
+            files[f"{EXTENSION_NAMESPACE}/{path.relative_to(workflow_dir).as_posix()}"] = text
+            found = True
+        if found:
+            carried.append(f"{dirname}/")
+    if carried:
+        notes.append(
+            f"Carried into {EXTENSION_NAMESPACE}/ (no portable v1 component type, so no other "
+            f"client will load it): {', '.join(carried)}. knowledge/ in particular loses its "
+            "on-demand lookup semantics and reads as inert Markdown elsewhere."
+        )
+    if (workflow_dir / "data").is_dir():
+        notes.append("data/ excluded: fixtures and binaries are not distribution payload.")
+
+
+def write_export(export: PluginExport, destination: Path) -> Path:
+    """Materialize a `PluginExport` at `destination`. The only disk write."""
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "plugin.json").write_text(
+        json.dumps(export.manifest, indent=2, ensure_ascii=False) + "\n"
+    )
+    _write_files(export.files, destination)
+    return destination
+
+
+# --------------------------------------------------------------- import
+
+
+def import_plugin(plugin_dir: Path) -> ImportPlan:
+    """Render an Agent Plugins v1 package as a workflow package skeleton.
+
+    A *skeleton*: the plugin carries no graph, so the synthesized
+    `workflow.json` has zero nodes and zero edges. An imported plugin is a
+    package to open in the editor, never a runnable workflow.
+    """
+    plugin_dir = Path(plugin_dir)
+    root = plugin_dir.resolve()
+    manifest_path = plugin_dir / "plugin.json"
+    if not manifest_path.is_file():
+        raise InvalidPluginError(f"no plugin.json in {plugin_dir.name}/")
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise InvalidPluginError(f"plugin.json unreadable ({exc})") from exc
+    if not isinstance(manifest, dict):
+        raise InvalidPluginError("plugin.json must contain a top-level object")
+
+    notes: list[str] = []
+    # §5.2: an unknown top-level field is reported and ignored; every other
+    # violation of §5.3 is fatal to the whole plugin.
+    unknown = sorted(set(manifest) - _MANIFEST_FIELDS)
+    if unknown:
+        notes.append(f"ignored unknown plugin.json fields (not in the closed schema): {unknown}")
+    if manifest.get("$schema") != PLUGIN_SCHEMA_ID:
+        raise InvalidPluginError(
+            f"unsupported Agent Plugins version: $schema must be {PLUGIN_SCHEMA_ID}"
+        )
+    name = manifest.get("name")
+    if not isinstance(name, str) or not _PLUGIN_NAME_RE.match(name):
+        raise InvalidPluginError(f"invalid plugin name: {name!r}")
+
+    files: dict[str, str] = {}
+    _import_extension(plugin_dir, root, files, notes)
+    _import_skills(plugin_dir / "skills", root, files, notes)
+    _import_mcp(plugin_dir / "mcp.json", notes)
+
+    files.setdefault(
+        "workflow.json",
+        json.dumps(
+            {
+                "version": 1,
+                "name": name,
+                "savedAt": "",
+                "document": {"nodes": [], "edges": []},
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+    )
+    files.setdefault("AGENTS.md", _imported_agents_md(name, manifest.get("description")))
+    for entry in sorted(plugin_dir.iterdir()) if plugin_dir.is_dir() else []:
+        if entry.is_dir() and _is_extension_namespace(entry.name) and entry.name != EXTENSION_NAMESPACE:
+            notes.append(f"ignored client extension directory {entry.name}/ (§8: not ours)")
+    return ImportPlan(name=name, files=files, notes=notes)
+
+
+def _import_skills(skills_dir: Path, root: Path, files: dict[str, str], notes: list[str]) -> None:
+    """`skills/<x>/SKILL.md` -> our flat `skills/<x>.md`, frontmatter dropped."""
+    if not skills_dir.is_dir():
+        return
+    inert: list[str] = []
+    dropped = False
+    # §7.1: immediate children only, never a recursive search.
+    for child in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+        skill_md = child / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        if not _within(skill_md, root):
+            notes.append(f"skill {child.name!r} skipped: SKILL.md resolves outside the plugin root")
+            continue
+        text = _read_text(skill_md)
+        if text is None:
+            notes.append(f"skill {child.name!r} skipped: SKILL.md is not UTF-8 text")
+            continue
+        body, frontmatter = _strip_frontmatter(text)
+        if frontmatter:
+            dropped = True
+        files[f"skills/{child.name}.md"] = body.strip() + "\n"
+        for path in sorted(child.rglob("*")):
+            if not path.is_file() or path == skill_md or not _within(path, root):
+                continue
+            resource = _read_text(path)
+            if resource is None:
+                continue
+            relative = path.relative_to(skills_dir).as_posix()
+            files[f"skills/{relative}"] = resource
+            inert.append(relative)
+    if dropped:
+        notes.append(
+            "SKILL.md frontmatter (name/description/allowed-tools/compatibility/license) is "
+            "dropped: our skills loader concatenates plain Markdown and has nowhere to put it."
+        )
+    if inert:
+        notes.append(
+            "carried but inert — discover_skills globs skills/*.md only, so these are never "
+            f"loaded: {sorted(inert)}"
+        )
+
+
+def _import_extension(plugin_dir: Path, root: Path, files: dict[str, str], notes: list[str]) -> None:
+    """Restore our own extension directory — this is what round-trips."""
+    source = plugin_dir / EXTENSION_NAMESPACE
+    if not source.is_dir():
+        return
+    restored = False
+    for path in sorted(source.rglob("*")):
+        if not path.is_file() or not _within(path, root):
+            continue
+        text = _read_text(path)
+        if text is None:
+            continue
+        files[path.relative_to(source).as_posix()] = text
+        restored = True
+    if restored:
+        notes.append(f"restored this workflow's own parts from {EXTENSION_NAMESPACE}/")
+
+
+def _import_mcp(mcp_path: Path, notes: list[str]) -> None:
+    """Report every server. We have no MCP client, and silence would be a lie."""
+    if not mcp_path.is_file():
+        return
+    try:
+        config = json.loads(mcp_path.read_text())
+        servers = config["mcpServers"]
+        assert isinstance(servers, dict)
+    except (json.JSONDecodeError, OSError, KeyError, AssertionError):
+        notes.append("mcp.json present but unreadable or malformed; MCP disabled for this plugin")
+        return
+    for server, entry in sorted(servers.items()):
+        transport = entry.get("type") if isinstance(entry, dict) else "?"
+        notes.append(
+            f"MCP server {server!r} ({transport}) not imported: this runtime has no MCP client. "
+            "Nothing was dropped silently — wire it as a tool by hand, or see "
+            "docs/decisions/agent-plugins.md §7."
+        )
+
+
+def write_import(plan: ImportPlan, destination: Path) -> Path:
+    """Materialize an `ImportPlan` at `destination`, refusing to clobber."""
+    destination = Path(destination)
+    if (destination / "workflow.json").exists():
+        raise InvalidPluginError(
+            f"{destination} already holds a workflow package; import into a fresh directory"
+        )
+    destination.mkdir(parents=True, exist_ok=True)
+    _write_files(plan.files, destination)
+    return destination
+
+
+# --------------------------------------------------------------- shared
+
+
+def _write_files(files: dict[str, str], destination: Path) -> None:
+    root = destination.resolve()
+    for relative, text in files.items():
+        target = (destination / relative).resolve()
+        if not _within(target, root):
+            raise InvalidPluginError(f"{relative!r} escapes {destination}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+
+def _within(path: Path, root: Path) -> bool:
+    """§4.1 containment: the *resolved* path must stay inside the root."""
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return resolved == root or root in resolved.parents
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _first_meaningful_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip().lstrip("#").strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+def _description_from_agents_md(path: Path) -> str:
+    text = _read_text(path)
+    if not text:
+        return ""
+    lines = [line.strip() for line in text.splitlines()]
+    body = [line for line in lines[1:] if line] if lines and lines[0].startswith("#") else [
+        line for line in lines if line
+    ]
+    return (body[0] if body else "")[:_DESCRIPTION_MAX]
+
+
+def _strip_frontmatter(text: str) -> tuple[str, bool]:
+    if not text.startswith("---"):
+        return text, False
+    parts = text.split("\n---", 2)
+    if len(parts) < 2:
+        return text, False
+    remainder = parts[1]
+    return remainder.split("\n", 1)[1] if "\n" in remainder else "", True
+
+
+def _is_extension_namespace(name: str) -> bool:
+    return "." in name and name.split(".")[0] in {"com", "org", "io", "net", "dev", "ai"}
+
+
+def _imported_agents_md(name: str, description: str | None) -> str:
+    return (
+        f"# {name}\n\n"
+        f"{description or 'Imported from an Agent Plugins v1 package.'}\n\n"
+        "Imported as a **skeleton**: an Agent Plugins package carries skills and MCP servers, "
+        "never a graph, so `workflow.json` has no nodes yet. Open it in the editor and build "
+        "one. See `docs/decisions/agent-plugins.md` for what the import could and could not "
+        "carry across.\n"
+    )
+
+
+__all__ = [
+    "EXTENSION_NAMESPACE",
+    "MCP_SCHEMA_ID",
+    "PLUGIN_SCHEMA_ID",
+    "ImportPlan",
+    "InvalidPluginError",
+    "PluginExport",
+    "export_plugin",
+    "import_plugin",
+    "write_export",
+    "write_import",
+]
