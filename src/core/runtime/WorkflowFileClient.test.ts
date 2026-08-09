@@ -28,7 +28,9 @@ describe('slugify', () => {
 describe('WorkflowFileClient.list', () => {
   it('maps the snake_case backend fields to camelCase', async () => {
     const stub = stubFetch(
-      jsonResponse([{ slug: 'a', name: 'A', saved_at: 't', node_count: 2, edge_count: 1 }]),
+      jsonResponse([
+        { slug: 'a', name: 'A', saved_at: 't', node_count: 2, edge_count: 1, published: false },
+      ]),
     );
     const client = new WorkflowFileClient('http://rt', stub.fetch);
 
@@ -37,14 +39,50 @@ describe('WorkflowFileClient.list', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toEqual([
-      { slug: 'a', name: 'A', savedAt: 't', nodeCount: 2, edgeCount: 1 },
+      { slug: 'a', name: 'A', savedAt: 't', nodeCount: 2, edgeCount: 1, published: false },
     ]);
+    // The editor sees everything, drafts included — its surface is explicit.
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows?surface=editor');
+  });
+
+  it('treats a row without the published field as published (pre-lifecycle backend)', async () => {
+    const stub = stubFetch(
+      jsonResponse([{ slug: 'a', name: 'A', saved_at: 't', node_count: 0, edge_count: 0 }]),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.list();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]!.published).toBe(true);
   });
 
   it('is a failure, not a crash, when nothing is listening', async () => {
     const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
     const result = await client.list();
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('WorkflowFileClient.setPublished', () => {
+  it('POSTs the flag to the publish endpoint', async () => {
+    const stub = stubFetch(jsonResponse({ slug: 'my-flow', published: true, note: 'n' }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.setPublished('my-flow', true);
+
+    expect(result.ok).toBe(true);
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/my-flow/publish');
+    expect(stub.calls[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(stub.calls[0]!.init?.body as string)).toEqual({ published: true });
+  });
+
+  it('reports a 404 plainly', async () => {
+    const stub = stubFetch(jsonResponse({ detail: "No workflow named 'x'" }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.setPublished('x', false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("No workflow named 'x'");
   });
 });
 

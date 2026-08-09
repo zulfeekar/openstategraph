@@ -130,6 +130,25 @@ class WorkflowSummaryResponse(BaseModel):
     edge_count: int
     #: Package-contract findings (ticket 49) — "error: ..." / "warning: ...".
     findings: list[str] = []
+    #: Draft→publish lifecycle (launch-readiness ticket 04). Drafts stay off
+    #: the customer /chat surface until published.
+    published: bool = True
+
+
+class PublishWorkflowRequest(BaseModel):
+    """POST /api/workflows/{slug}/publish — one endpoint for both directions;
+    the flag IS the whole state, so publish/unpublish is one body field."""
+
+    model_config = {"extra": "forbid"}
+    published: bool
+
+
+class PublishWorkflowResponse(BaseModel):
+    slug: str
+    published: bool
+    #: Build-time-only invariant: publishing never auto-runs the knowledge
+    #: model builder — this note reminds the caller it can be rebuilt.
+    note: str
 
 
 class WorkflowDocumentResponse(BaseModel):

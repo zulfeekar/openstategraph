@@ -83,6 +83,8 @@ def main() -> None:
     envelope = {
         "version": 1,
         "name": name,
+        # Ticket 04: scaffolded workflows are DRAFTS until published.
+        "published": False,
         "savedAt": datetime.now(timezone.utc).isoformat(),
         "document": document(name, outcome),
     }

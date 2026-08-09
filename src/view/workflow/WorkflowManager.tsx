@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileJson, FolderOpen, Plus, Save, Trash2, X } from 'lucide-react';
+import { FileJson, FolderOpen, Globe, GlobeLock, Plus, Save, Trash2, X } from 'lucide-react';
 import {
   Button,
   Field,
@@ -134,6 +134,29 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     [client, workbench, onNotify, onClose],
   );
 
+  // Draft → publish lifecycle (launch-readiness ticket 04): flipping the
+  // flag is the deliberate act that puts a workflow on the customer /chat
+  // surface (picker + concierge Auto routing). Publishing never rebuilds
+  // routing knowledge as a side effect — the toast passes that reminder on.
+  const handleSetPublished = useCallback(
+    async (slug: string, name: string, published: boolean) => {
+      setBusy(true);
+      const outcome = await client.setPublished(slug, published);
+      setBusy(false);
+      if (outcome.ok) {
+        onNotify(
+          published
+            ? `Published: ${name} — now visible in /chat. Rebuild knowledge to update Auto routing.`
+            : `Unpublished: ${name} — back to draft, hidden from /chat.`,
+        );
+        void refreshList();
+      } else {
+        onNotify(`Could not ${published ? 'publish' : 'unpublish'}: ${outcome.error}`);
+      }
+    },
+    [client, onNotify, refreshList],
+  );
+
   const handleDelete = useCallback(
     async (slug: string, name: string) => {
       if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
@@ -209,6 +232,20 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                   <div className="workflow-manager__info">
                     <Icon glyph={FileJson} size="sm" />
                     <span className="workflow-manager__name">{wf.name}</span>
+                    <span
+                      className={
+                        wf.published
+                          ? 'workflow-manager__badge workflow-manager__badge--published'
+                          : 'workflow-manager__badge'
+                      }
+                      title={
+                        wf.published
+                          ? 'Visible in the customer /chat picker and Auto routing'
+                          : 'Draft — not visible in /chat until published'
+                      }
+                    >
+                      {wf.published ? 'Published' : 'Draft'}
+                    </span>
                     <span className="workflow-manager__date">
                       {wf.savedAt ? new Date(wf.savedAt).toLocaleDateString() : ''}
                     </span>
@@ -221,6 +258,15 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                       icon={<Icon glyph={FolderOpen} size="xs" />}
                     >
                       Load
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleSetPublished(wf.slug, wf.name, !wf.published)}
+                      icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
+                    >
+                      {wf.published ? 'Unpublish' : 'Publish'}
                     </Button>
                     <Button
                       variant="danger"

@@ -168,3 +168,93 @@ class TestPackageValidator:
         tools = tmp_path / "tools"; tools.mkdir()
         (tools / "t.py").write_text("x=1")
         assert any("tools/ without tests/" in f for f in validate_package(tmp_path))
+
+
+class TestPublishLifecycle:
+    """Ticket 04 (launch-readiness): drafts by default, publish gates /chat.
+
+    The flag lives on the envelope as `"published": bool`, sibling of
+    `"hidden"`. An envelope WITHOUT the field counts as published — every
+    workflow that existed before the field did stays visible, so nothing
+    breaks. `hidden` stays for infrastructure and trumps `published`.
+    """
+
+    def _write_envelope(self, root: Path, slug: str, **extra: object) -> None:
+        import json
+
+        directory = root / slug
+        directory.mkdir(parents=True)
+        (directory / "workflow.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "name": slug,
+                    "savedAt": "2026-01-01T00:00:00",
+                    "document": {"nodes": [], "edges": []},
+                    **extra,
+                }
+            )
+        )
+
+    def test_an_envelope_without_the_field_counts_as_published(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        self._write_envelope(tmp_path, "legacy")
+        [summary] = store.list()
+        assert summary.published is True
+
+    def test_a_newly_saved_workflow_is_a_draft(self, store: WorkflowStore) -> None:
+        store.save("fresh", name="Fresh", document={"nodes": [], "edges": []}, saved_at="t")
+        [summary] = store.list()
+        assert summary.published is False
+
+    def test_resaving_preserves_the_published_flag(self, store: WorkflowStore) -> None:
+        store.save("flow", name="Flow", document={"nodes": [], "edges": []}, saved_at="t")
+        store.set_published("flow", True)
+        store.save("flow", name="Flow v2", document={"nodes": [], "edges": []}, saved_at="t2")
+        [summary] = store.list()
+        assert summary.published is True
+
+    def test_resaving_preserves_hidden(self, store: WorkflowStore, tmp_path: Path) -> None:
+        self._write_envelope(tmp_path, "gateway", hidden=True)
+        store.save("gateway", name="Gateway", document={"nodes": [], "edges": []}, saved_at="t")
+        import json
+
+        payload = json.loads((tmp_path / "gateway" / "workflow.json").read_text())
+        assert payload["hidden"] is True
+
+    def test_resaving_a_legacy_envelope_does_not_invent_the_field(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        # An envelope that predates the field stays implicitly published even
+        # through a resave — nothing churns the two seeded examples' files.
+        self._write_envelope(tmp_path, "legacy")
+        store.save("legacy", name="Legacy", document={"nodes": [], "edges": []}, saved_at="t")
+        import json
+
+        payload = json.loads((tmp_path / "legacy" / "workflow.json").read_text())
+        assert "published" not in payload
+
+    def test_set_published_round_trips(self, store: WorkflowStore) -> None:
+        store.save("flow", name="Flow", document={"nodes": [], "edges": []}, saved_at="t")
+        store.set_published("flow", True)
+        assert store.list()[0].published is True
+        store.set_published("flow", False)
+        assert store.list()[0].published is False
+
+    def test_set_published_on_an_unknown_workflow_raises(self, store: WorkflowStore) -> None:
+        with pytest.raises(WorkflowNotFoundError):
+            store.set_published("nope", True)
+
+    def test_published_only_listing_excludes_drafts(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        self._write_envelope(tmp_path, "live", published=True)
+        self._write_envelope(tmp_path, "draft", published=False)
+        assert {s.slug for s in store.list()} == {"live", "draft"}
+        assert {s.slug for s in store.list(published_only=True)} == {"live"}
+
+    def test_hidden_trumps_published(self, store: WorkflowStore, tmp_path: Path) -> None:
+        self._write_envelope(tmp_path, "infra", hidden=True, published=True)
+        assert store.list() == []
+        assert store.list(published_only=True) == []

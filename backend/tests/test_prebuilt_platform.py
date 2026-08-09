@@ -79,3 +79,18 @@ class TestDotfilesAreSecrets:
         assert PlatformReadTool().run(path=".env").error is not None
         assert PlatformReadTool().run(path=".env.example").error is not None
         assert PlatformLsTool().run(path=".github").error is not None
+
+
+class TestPublishGate:
+    """Ticket 04: the concierge's platform tools are a customer surface, so a
+    draft (`"published": false`) is as invisible to them as a hidden one.
+    The visibility predicate is pinned directly — the tools run against the
+    real workflows/ tree, where planting a draft would be litter."""
+
+    def test_hidden_and_drafts_are_invisible_absence_is_published(self) -> None:
+        from openstategraph.prebuilt_platform import _visible
+
+        assert _visible({}) is True  # pre-lifecycle envelope: published
+        assert _visible({"published": True}) is True
+        assert _visible({"published": False}) is False
+        assert _visible({"hidden": True, "published": True}) is False  # hidden trumps

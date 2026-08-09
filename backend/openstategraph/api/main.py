@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -77,6 +77,8 @@ from openstategraph.api.schemas import (  # noqa: E402
     KnowledgeTopicSaveRequest,
     KnowledgeTopicStatusResponse,
     PluginExportResponse,
+    PublishWorkflowRequest,
+    PublishWorkflowResponse,
     ResumeRequest,
     RunRequest,
     RunResponse,
@@ -250,7 +252,14 @@ def create_app(
         return {"ok": True, "model_configured": True}
 
     @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
-    def list_workflows() -> list[WorkflowSummaryResponse]:
+    def list_workflows(surface: Literal["editor", "chat"] = "editor") -> list[WorkflowSummaryResponse]:
+        """Ticket 04 (launch-readiness): the listing is surface-aware.
+
+        - ``surface=editor`` (default): everything non-hidden, drafts
+          included, each row carrying its ``published`` flag.
+        - ``surface=chat``: the customer surface — published AND not hidden
+          only (hidden trumps published, enforced in the store).
+        """
         from openstategraph.api.workflow_store import WorkflowSummary, validate_package
 
         def to_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
@@ -258,9 +267,37 @@ def create_app(
                 slug=s.slug, name=s.name, saved_at=s.saved_at,
                 node_count=s.node_count, edge_count=s.edge_count,
                 findings=validate_package(workflow_store.directory_for(s.slug)),
+                published=s.published,
             )
 
-        return [to_response(s) for s in workflow_store.list()]
+        return [to_response(s) for s in workflow_store.list(published_only=surface == "chat")]
+
+    @app.post("/api/workflows/{slug}/publish", response_model=PublishWorkflowResponse)
+    def publish_workflow(slug: str, request: PublishWorkflowRequest) -> PublishWorkflowResponse:
+        """Flip the draft→publish flag. One endpoint for both directions —
+        the body's ``published`` bool IS the whole lifecycle state.
+
+        Deliberately does NOT auto-run the knowledge model builder (knowledge
+        builds are build-time-only, never a side effect); the note reminds
+        the caller routing knowledge can be rebuilt.
+        """
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            workflow_store.set_published(slug, request.published)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return PublishWorkflowResponse(
+            slug=slug,
+            published=request.published,
+            note=(
+                "Concierge routing knowledge was not rebuilt automatically; "
+                "rebuild it via POST /api/workflows/{root}/knowledge/build "
+                "when routing should learn about this change."
+            ),
+        )
 
     @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
     def get_workflow(slug: str) -> WorkflowDocumentResponse:

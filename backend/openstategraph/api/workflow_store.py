@@ -70,6 +70,10 @@ class WorkflowSummary:
     saved_at: str
     node_count: int
     edge_count: int
+    #: Ticket 04 (launch-readiness): drafts by default, publish gates /chat.
+    #: An envelope without the field counts as published — back-compat for
+    #: every workflow that predates the lifecycle.
+    published: bool = True
 
 
 class WorkflowStore:
@@ -100,7 +104,7 @@ class WorkflowStore:
             raise InvalidSlugError(f"{slug!r} escapes the workflows root")
         return candidate
 
-    def list(self) -> list[WorkflowSummary]:
+    def list(self, *, published_only: bool = False) -> list[WorkflowSummary]:
         if not self.root.exists():
             return []
         summaries: list[WorkflowSummary] = []
@@ -121,6 +125,12 @@ class WorkflowStore:
             # by slug but never advertised — the list is the customer surface.
             if payload.get("hidden") is True:
                 continue
+            # Draft → publish lifecycle (ticket 04): `published` is a sibling
+            # of `hidden` on the envelope. A missing field means published —
+            # the back-compat default — and `hidden` above trumps it.
+            published = payload.get("published") is not False
+            if published_only and not published:
+                continue
             summaries.append(
                 WorkflowSummary(
                     slug=entry.name,
@@ -128,6 +138,7 @@ class WorkflowStore:
                     saved_at=str(payload.get("savedAt") or ""),
                     node_count=len(document.get("nodes") or []),
                     edge_count=len(document.get("edges") or []),
+                    published=published,
                 )
             )
         return sorted(summaries, key=lambda s: s.saved_at, reverse=True)
@@ -147,6 +158,21 @@ class WorkflowStore:
         directory.mkdir(parents=True, exist_ok=True)
 
         payload = {"version": 1, "name": name, "savedAt": saved_at, "document": document}
+        if is_new:
+            # Ticket 04: a workflow born in the editor is a DRAFT. Publishing
+            # (set_published) is a deliberate, separate act.
+            payload["published"] = False
+        else:
+            # A resave must not churn lifecycle fields it does not own: carry
+            # `published`/`hidden` over exactly as they were — including their
+            # absence, so a pre-lifecycle envelope stays implicitly published.
+            try:
+                previous = json.loads((directory / "workflow.json").read_text())
+            except (json.JSONDecodeError, OSError):
+                previous = {}
+            for key in ("published", "hidden"):
+                if key in previous:
+                    payload[key] = previous[key]
         # Two-space indent, trailing newline, sorted-by-the-serializer-not-here
         # keys: `workflow.json`'s own determinism is ticket 19's job upstream
         # of this — this just needs to not *add* nondeterminism on top of a
@@ -162,6 +188,21 @@ class WorkflowStore:
             # against. Generation is a separate, explicit export step
             # (ticket 15), not something a save silently produces.
             (directory / "AGENTS.md").write_text(_agents_md(name, slug))
+
+    def set_published(self, slug: str, published: bool) -> None:
+        """Flip the draft→publish flag in place, touching nothing else.
+
+        Rewrites only the envelope's `published` field; `savedAt`, `hidden`
+        and the document stay byte-identical apart from that one key, so the
+        editor's file watch never mistakes a publish for a content change it
+        must reload.
+        """
+        path = self.directory_for(slug) / "workflow.json"
+        if not path.is_file():
+            raise WorkflowNotFoundError(slug)
+        payload = json.loads(path.read_text())
+        payload["published"] = published
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
     def delete(self, slug: str) -> None:
         directory = self.directory_for(slug)

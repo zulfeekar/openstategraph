@@ -37,6 +37,16 @@ def _envelope(package: Path) -> dict[str, Any]:
         return {}
 
 
+def _visible(payload: dict[str, Any]) -> bool:
+    """Customer-surface visibility (ticket 04): hidden trumps everything,
+    and a draft (`"published": false`) is as invisible here as a hidden
+    workflow — these tools speak to /chat users. A missing `published`
+    field counts as published (pre-lifecycle envelopes stay visible)."""
+    if payload.get("hidden") is True:
+        return False
+    return payload.get("published") is not False
+
+
 class ListWorkflowsTool(BaseTool):
     """What exists — the same list the workflow picker shows (hidden ones stay hidden)."""
 
@@ -53,7 +63,7 @@ class ListWorkflowsTool(BaseTool):
         rows = []
         for package in _packages():
             payload = _envelope(package)
-            if payload.get("hidden") is True:
+            if not _visible(payload):
                 continue
             document = payload.get("document", payload)
             name = str(payload.get("name") or document.get("name") or package.name)
@@ -110,7 +120,7 @@ class DescribeWorkflowTool(BaseTool):
             known = ", ".join(p.name for p in _packages())
             return ToolResult.failure(f"No workflow '{slug}'. Available: {known}")
         payload = _envelope(package)
-        if payload.get("hidden") is True:
+        if not _visible(payload):
             return ToolResult.failure(f"No workflow '{slug}'.")
         document = payload.get("document", payload)
         node_types = sorted({str(n.get("type", "")) for n in document.get("nodes") or []})

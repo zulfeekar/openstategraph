@@ -664,3 +664,84 @@ class TestCapabilities:
         client.put("/api/workflows/bare", json={"name": "Bare", "document": {"nodes": [], "edges": []}})
         response = client.get("/api/workflows/bare/capabilities")
         assert response.json() == {"tools": [], "functions": []}
+
+
+class TestPublishLifecycle:
+    """Ticket 04 (launch-readiness): drafts by default, publish gates /chat.
+
+    `GET /api/workflows?surface=editor` (the default) lists everything
+    non-hidden with a `published` flag per row; `?surface=chat` lists only
+    published workflows — the customer surface. `POST
+    /api/workflows/{slug}/publish` with `{"published": bool}` flips the flag
+    (one endpoint for both directions, the flag being the whole state).
+    """
+
+    @staticmethod
+    def _client(tmp_path: Path) -> TestClient:
+        return TestClient(create_app(workflows_root=tmp_path))
+
+    @staticmethod
+    def _seed(tmp_path: Path, slug: str, **extra: Any) -> None:
+        import json
+
+        directory = tmp_path / slug
+        directory.mkdir(parents=True)
+        (directory / "workflow.json").write_text(
+            json.dumps({"version": 1, "name": slug, "savedAt": "t",
+                        "document": {"nodes": [], "edges": []}, **extra})
+        )
+
+    def test_a_workflow_created_through_the_editor_is_a_draft(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/fresh", json={"name": "Fresh", "document": {"nodes": [], "edges": []}})
+        [row] = client.get("/api/workflows").json()
+        assert row["published"] is False
+
+    def test_a_pre_lifecycle_envelope_counts_as_published(self, tmp_path: Path) -> None:
+        self._seed(tmp_path, "legacy")
+        [row] = self._client(tmp_path).get("/api/workflows").json()
+        assert row["published"] is True
+
+    def test_the_chat_surface_sees_only_published_workflows(self, tmp_path: Path) -> None:
+        self._seed(tmp_path, "live", published=True)
+        self._seed(tmp_path, "draft", published=False)
+        client = self._client(tmp_path)
+        editor = client.get("/api/workflows", params={"surface": "editor"}).json()
+        assert {r["slug"] for r in editor} == {"live", "draft"}
+        chat = client.get("/api/workflows", params={"surface": "chat"}).json()
+        assert [r["slug"] for r in chat] == ["live"]
+
+    def test_hidden_trumps_published_on_every_surface(self, tmp_path: Path) -> None:
+        self._seed(tmp_path, "infra", hidden=True, published=True)
+        client = self._client(tmp_path)
+        assert client.get("/api/workflows").json() == []
+        assert client.get("/api/workflows", params={"surface": "chat"}).json() == []
+
+    def test_an_unknown_surface_is_rejected(self, tmp_path: Path) -> None:
+        response = self._client(tmp_path).get("/api/workflows", params={"surface": "nope"})
+        assert response.status_code == 422
+
+    def test_publish_round_trip(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        client.put("/api/workflows/flow", json={"name": "Flow", "document": {"nodes": [], "edges": []}})
+
+        publish = client.post("/api/workflows/flow/publish", json={"published": True})
+        assert publish.status_code == 200, publish.text
+        body = publish.json()
+        assert body["published"] is True
+        # Build-time-only invariant: publishing must NOT auto-run the model
+        # builder — the response instead reminds that routing knowledge can
+        # be rebuilt.
+        assert "knowledge" in body["note"].lower()
+        assert [r["slug"] for r in client.get("/api/workflows", params={"surface": "chat"}).json()] == ["flow"]
+
+        unpublish = client.post("/api/workflows/flow/publish", json={"published": False})
+        assert unpublish.status_code == 200
+        assert unpublish.json()["published"] is False
+        assert client.get("/api/workflows", params={"surface": "chat"}).json() == []
+
+    def test_publishing_an_unknown_workflow_is_a_404(self, tmp_path: Path) -> None:
+        response = self._client(tmp_path).post(
+            "/api/workflows/nope/publish", json={"published": True}
+        )
+        assert response.status_code == 404

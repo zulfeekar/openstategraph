@@ -399,7 +399,10 @@ class RootKnowledgeBuilder(BaseKnowledgeBuilder):
 
         store = WorkflowStore(root=workflows_root)
         topics: list[KnowledgeTopic] = []
-        for summary in store.list():  # list() already excludes hidden workflows
+        # Published only (ticket 04): a draft is invisible to /chat, so a
+        # routing doc pointing at it would route customers to a workflow they
+        # cannot reach. Hidden is already excluded by list() itself.
+        for summary in store.list(published_only=True):
             if summary.slug == workflow_dir.name:
                 continue
             topics.append(

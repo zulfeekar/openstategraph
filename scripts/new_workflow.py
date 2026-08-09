@@ -48,6 +48,10 @@ def main() -> None:
     }
     (target / "workflow.json").write_text(json.dumps({
         "version": 1, "name": name,
+        # Ticket 04: new workflows are DRAFTS; publish via
+        # POST /api/workflows/<slug>/publish (or the editor's Workflows panel)
+        # to appear on the customer /chat surface.
+        "published": False,
         "savedAt": datetime.now(timezone.utc).isoformat(), "document": document,
     }, indent=2) + "\n")
     (target / "AGENTS.md").write_text(

@@ -577,3 +577,26 @@ class TestRootKnowledgeBuilder:
         assert marker_source(doc) == "root"
         joined = "\n".join(model.prompts)
         assert "drill pointer" in joined and "route there for depth" in joined
+
+
+class TestRootBuilderPublishGate:
+    """Ticket 04: the chat-facing brain only routes to PUBLISHED children.
+
+    A draft is invisible to /chat, so a routing doc pointing at it would
+    route customers to a workflow they cannot reach. Hidden already excluded;
+    drafts join it. Rebuild stays build-time-only — publishing never runs
+    this builder as a side effect.
+    """
+
+    def test_a_draft_child_yields_no_routing_topic(self, tmp_path: Path) -> None:
+        TestRootKnowledgeBuilder._save_child(tmp_path, "live-child")
+        TestRootKnowledgeBuilder._save_child(tmp_path, "draft-child")
+        manifest = tmp_path / "draft-child" / "workflow.json"
+        payload = json.loads(manifest.read_text())
+        payload["published"] = False
+        manifest.write_text(json.dumps(payload))
+
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", TestRootKnowledgeBuilder._root_document(), tmp_path
+        )
+        assert [t.name for t in discovery.topics] == ["live-child"]

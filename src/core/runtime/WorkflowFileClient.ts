@@ -36,6 +36,10 @@ export interface WorkflowSummary {
   readonly savedAt: string;
   readonly nodeCount: number;
   readonly edgeCount: number;
+  /** Draft→publish lifecycle (launch-readiness ticket 04): drafts stay off
+   * the customer /chat surface. A backend row without the field counts as
+   * published — the same back-compat default the backend applies. */
+  readonly published: boolean;
 }
 
 /** Ticket 18: one `BaseTool` subclass discovered in a workflow's `tools/` folder. */
@@ -56,6 +60,7 @@ export interface IWorkflowFileClient {
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
+  setPublished(slug: string, published: boolean): Promise<Result<void, string>>;
   capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
   compiledGraph(slug: string): Promise<Result<string, string>>;
 }
@@ -73,7 +78,10 @@ export class WorkflowFileClient implements IWorkflowFileClient {
   async list(): Promise<Result<readonly WorkflowSummary[], string>> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/api/workflows`);
+      // The editor's surface is explicit: everything non-hidden, drafts
+      // included, each row carrying its `published` flag. `/chat` asks for
+      // `surface=chat` and sees published workflows only.
+      response = await this.fetchImpl(`${this.baseUrl}/api/workflows?surface=editor`);
     } catch {
       return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
     }
@@ -90,6 +98,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
             savedAt: asString(record['saved_at']),
             nodeCount: typeof record['node_count'] === 'number' ? record['node_count'] : 0,
             edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
+            published: record['published'] !== false,
           };
         }),
       );
@@ -163,6 +172,30 @@ export class WorkflowFileClient implements IWorkflowFileClient {
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`, {
         method: 'DELETE',
       });
+    } catch {
+      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+    return Ok(undefined);
+  }
+
+  /**
+   * Flip the draft→publish flag (launch-readiness ticket 04). One endpoint
+   * for both directions — the flag IS the whole lifecycle state. Publishing
+   * never rebuilds concierge routing knowledge as a side effect; the backend
+   * response carries a note saying it can be rebuilt.
+   */
+  async setPublished(slug: string, published: boolean): Promise<Result<void, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/publish`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ published }),
+        },
+      );
     } catch {
       return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
     }
