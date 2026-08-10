@@ -57,6 +57,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
     const instance = new PaperController(stage, controller, workbench.registry, {
       shortcuts,
       showGrid,
+      flowDirection: workbench.preferences.flowDirection,
     });
 
     instance.observeConnectionRejections((reason) => {
@@ -85,6 +86,18 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
   useEffect(() => {
     paper?.setGridVisible(showGrid);
   }, [paper, showGrid]);
+
+  // Port sides rotate with the reading direction, and so must everything the
+  // canvas derives from them — the seeded port placement and the rhythm of the
+  // branch labels. Subscribing to the store rather than taking `useFlowDirection`
+  // keeps this out of the stage's render path: a re-render here would re-render
+  // every card, and every card measures itself on render.
+  useEffect(() => {
+    if (!paper) return;
+    const { preferences } = workbench;
+    paper.adapter.setFlowDirection(preferences.flowDirection);
+    return preferences.onChange(() => paper.adapter.setFlowDirection(preferences.flowDirection));
+  }, [paper, workbench]);
 
   /* ---------------- run feedback on links ---------------- */
 
@@ -148,20 +161,41 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
       }
     };
 
+    // Ticket 08. The follower needs the *set* of running nodes, not the last
+    // one to change: a `Send` fan-out lights three workers in the same
+    // superstep, and framing the third alone would leave the other two off
+    // screen. The model is the register of who is running, so it is read
+    // rather than a second tally being kept here.
+    const runningNodes = () =>
+      controller.model
+        .nodes()
+        .filter((node) => node.runtime.status === 'running')
+        .map((node) => node.id);
+
     const off = controller.model.on('node:runtime', ({ nodeId, runtime }) => {
       // Exactly one of the two marks at a time, and every status that is
       // neither clears both — a node cannot be running *and* waiting, and a
       // paused node that resumes must not keep its ring.
       markActive(runtime.status === 'running' ? nodeId : null);
       markPaused(runtime.status === 'paused' ? nodeId : null);
+      // A paused node is where the run *is*, so it is worth looking at too.
+      const active = runtime.status === 'paused' ? [nodeId] : runningNodes();
+      paper.follower.setActive(active);
     });
+
+    // A local preview run announces itself, so the follower can clear the
+    // latch: panning during one run must not disable following for every run
+    // after it. A backend-streamed run has no engine, so `AppShell` calls the
+    // same method when its Ask panel reports a stream starting.
+    const offStart = workbench.engine.on('run:start', () => paper.follower.runStarted());
 
     return () => {
       off();
+      offStart();
       markActive(null);
       markPaused(null);
     };
-  }, [paper, controller]);
+  }, [paper, controller, workbench]);
 
   /* ---------------- palette drop ---------------- */
 

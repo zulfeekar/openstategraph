@@ -5,10 +5,13 @@ import { CANVAS } from '@design/tokens';
 import type { Rect } from '@core/kernel/geometry';
 import type { WorkflowController } from '@controller/WorkflowController';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
+import type { FlowDirection } from '@core/model/contracts/ports';
 import { JointGraphAdapter } from './JointGraphAdapter';
 import { Viewport } from './Viewport';
 import { AutoLayout } from './AutoLayout';
 import { CELL_NAMESPACE, NodeMountRegistry, defineHtmlNodeView, FlowLink } from './shapes/HtmlNode';
+import { LINK_CONNECTOR } from './links/edgeDecoration';
+import { RunFollower } from './follow/RunFollower';
 import type { IPaperFeature, PaperFeatureContext } from './features/IPaperFeature';
 import { PanZoomFeature } from './features/PanZoomFeature';
 import { SelectionFeature } from './features/SelectionFeature';
@@ -37,6 +40,8 @@ export interface PaperControllerOptions {
   /** Additional features, installed after the defaults. */
   readonly features?: readonly IPaperFeature[];
   readonly showGrid?: boolean;
+  /** Which way the canvas reads when the paper is built. */
+  readonly flowDirection?: FlowDirection;
 }
 
 /**
@@ -54,6 +59,8 @@ export class PaperController implements IDisposable {
   readonly adapter: JointGraphAdapter;
   readonly viewport: Viewport;
   readonly autoLayout: AutoLayout;
+  /** Ticket 08 — the camera's run-following mode. A collaborator, not methods. */
+  readonly follower: RunFollower;
   readonly mounts = new NodeMountRegistry();
   readonly features = new Registry<IPaperFeature>('paperFeatures');
 
@@ -114,7 +121,7 @@ export class PaperController implements IDisposable {
 
       // ---- links ----
       defaultLink: () => new FlowLink(),
-      defaultConnector: { name: 'smooth' },
+      defaultConnector: LINK_CONNECTOR,
       defaultAnchor: { name: 'center' },
       defaultConnectionPoint: { name: 'boundary', args: { offset: 2 } },
       // A half-finished link is never a valid document state.
@@ -147,9 +154,15 @@ export class PaperController implements IDisposable {
       },
     });
 
-    this.adapter = new JointGraphAdapter(controller.model, this.graph, registry);
+    this.adapter = new JointGraphAdapter(
+      controller.model,
+      this.graph,
+      registry,
+      options.flowDirection ?? 'horizontal',
+    );
     this.viewport = new Viewport(this.paper, container);
     this.autoLayout = new AutoLayout(this.graph, controller);
+    this.follower = new RunFollower(this.viewport, this.graph, container);
 
     const panZoom = new PanZoomFeature();
     this.keyboard = new KeyboardFeature(createDefaultShortcuts(options.shortcuts ?? []));
@@ -170,6 +183,7 @@ export class PaperController implements IDisposable {
     this.disposables.addFn(() => this.paper.remove());
     this.disposables.addFn(() => this.viewport.dispose());
     this.disposables.addFn(() => this.adapter.dispose());
+    this.disposables.addFn(() => this.follower.dispose());
     this.disposables.addFn(() => this.mounts.clear());
   }
 

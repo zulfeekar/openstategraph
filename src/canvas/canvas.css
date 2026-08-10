@@ -135,12 +135,60 @@
 
 .joint-port.is-available [joint-selector='portHit'] {
   fill: color-mix(in srgb, var(--color-port-valid) 18%, transparent);
+  animation: port-pulse 1.15s var(--ease-out) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Motion, not just a colour: a static tint on twenty dots is a state, a pulse
+ * is an invitation. Only the halo breathes — pulsing the dot itself would
+ * move the thing the pointer is trying to hit. */
+@keyframes port-pulse {
+  0%,
+  100% {
+    transform: scale(0.62);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* The other half of "aim at a target": say what is *not* one. `markAvailable`
+ * only ever adds a class to the legal magnets, so the illegal ones have to be
+ * addressed by their absence — `:has()` on the paper detects that a link is
+ * mid-drag, and every port that did not light up recedes. Without this a user
+ * reads the dim majority as "nothing is happening" rather than "not there". */
+.joint-paper:has(.joint-temporary-link) .joint-port:not(.is-available) {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ---------- Links ---------- */
 
 .joint-link [joint-selector='outline'] {
   stroke: transparent;
+}
+
+/* The casing (ticket 07). Painted in the canvas colour so each link punches a
+ * small gap in whatever link was drawn before it — which is how a crossing
+ * reads as one line passing over another rather than as a junction. The
+ * geometry is on the shape; only the colour lives here, so it re-themes.
+ *
+ * Slightly wider than the line and butt-capped: a round cap would leave a
+ * visible nub past the endpoint where the line meets its port dot. */
+.joint-link [joint-selector='casing'] {
+  stroke: var(--color-bg-canvas);
+}
+
+/* A link being dragged, or one that is selected or carrying the run, must
+ * read as being *on top* — so it keeps its casing while the links it crosses
+ * lose the argument. Nothing to do here beyond letting z-order stand, but the
+ * temporary link has no casing at all: it is not part of the document yet and
+ * should not appear to cut through it. */
+.joint-link.joint-temporary-link [joint-selector='casing'] {
+  stroke: none;
 }
 
 .joint-link [joint-selector='line'] {
@@ -443,6 +491,13 @@
    reduced-motion preference — the colour change still marks the edge. */
 @media (prefers-reduced-motion: reduce) {
   .joint-link.is-active [joint-selector='line'] {
+    animation: none;
+  }
+
+  /* The valid-target pulse loses its motion and keeps its meaning: the halo
+     stays at full size and the dot keeps its grown radius and valid colour,
+     so the affordance survives intact. */
+  .joint-port.is-available [joint-selector='portHit'] {
     animation: none;
   }
 

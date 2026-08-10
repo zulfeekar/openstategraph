@@ -4,9 +4,15 @@ import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeModel, NodeId } from '@core/model/contracts/node';
-import { sideOf, type IPortDescriptor } from '@core/model/contracts/ports';
+import {
+  resolvePortSide,
+  type FlowDirection,
+  type IPortDescriptor,
+  type PortSide,
+} from '@core/model/contracts/ports';
 import type { EdgeId, IEdgeModel } from '@core/model/contracts/workflow';
 import { HtmlNode, FlowLink, PORT_GROUP, type NodeGeometry } from './shapes/HtmlNode';
+import { branchRank, edgeLabelText, labelPlacement, linkConnector } from './links/edgeDecoration';
 
 /**
  * Projects the workflow model onto a JointJS graph.
@@ -29,9 +35,33 @@ export class JointGraphAdapter implements IDisposable {
     private readonly model: WorkflowModel,
     private readonly graph: dia.Graph,
     private readonly registry: ModelRegistry,
+    private flow: FlowDirection = 'horizontal',
   ) {
     this.rebuild();
     this.listen();
+  }
+
+  /**
+   * Re-projects everything whose geometry depends on the reading direction.
+   *
+   * Port sides rotate (`resolvePortSide`) and label rhythm changes with them,
+   * so both the seeded port placement and every link label are re-derived.
+   * Still one-way: nothing here writes to the document, and the direction
+   * itself is a preference the shell owns.
+   */
+  setFlowDirection(flow: FlowDirection): void {
+    if (this.flow === flow) return;
+    this.flow = flow;
+    this.transaction(() => {
+      for (const node of this.model.nodes()) {
+        const element = this.element(node.id);
+        element?.prop(['ports', 'items'], this.portItems(node));
+      }
+      for (const edge of this.model.edges()) {
+        this.applyGeometryHints(edge);
+        this.applyLabel(edge);
+      }
+    });
   }
 
   /** Discards the graph and re-projects the whole document. */
@@ -178,6 +208,14 @@ export class JointGraphAdapter implements IDisposable {
     // fixed for the element's lifetime.
     on('node:data', ((payload: { nodeId: NodeId }) => {
       this.syncPorts(payload.nodeId);
+      // Renaming a router branch keeps its port *id* — the whole point of
+      // stable branch ids — so `syncPorts` sees no change while every link
+      // leaving that branch is now labelled with the old name.
+      this.transaction(() => {
+        for (const edge of this.model.edges()) {
+          if (edge.source.nodeId === payload.nodeId) this.applyLabel(edge);
+        }
+      });
     }) as never);
 
     on('edge:added', ((payload: { edge: IEdgeModel }) => {
@@ -191,12 +229,9 @@ export class JointGraphAdapter implements IDisposable {
       this.transaction(() => this.graph.getCell(payload.edgeId)?.remove());
     }) as never);
 
-    on('edge:label', ((payload: { edgeId: EdgeId; label: string | null }) => {
-      const link = this.link(payload.edgeId);
-      if (!link) return;
-      this.transaction(() => {
-        link.labels(payload.label ? [buildLabel(payload.label)] : []);
-      });
+    on('edge:label', ((payload: { edgeId: EdgeId }) => {
+      const edge = this.model.edge(payload.edgeId);
+      if (edge) this.transaction(() => this.applyLabel(edge));
     }) as never);
 
     on('workflow:reset', (() => this.rebuild()) as never);
@@ -235,7 +270,10 @@ export class JointGraphAdapter implements IDisposable {
    * stacked at the origin.
    */
   private portItem(node: AbstractNodeModel, port: IPortDescriptor): dia.Element.Port {
-    const side = sideOf(port);
+    // `resolvePortSide`, not `sideOf`: the seed has to agree with the side the
+    // card will measure to, or every node in vertical flow flashes with its
+    // links leaving sideways before the first measurement lands.
+    const side = resolvePortSide(port, this.flow);
     const { width, height } = node.size;
     const seed =
       side === 'left'
@@ -310,8 +348,46 @@ export class JointGraphAdapter implements IDisposable {
       link.attr(['root', 'data-accent'], this.registry.portType(targetPort.type).accent);
       link.attr(['root', 'data-port-type'], targetPort.type);
     }
-    if (edge.label) link.labels([buildLabel(edge.label)]);
+    this.applyGeometryHints(edge, link);
+    this.applyLabel(edge, link);
     return link;
+  }
+
+  /**
+   * Pins the curve's two tangents to the sides the ports sit on.
+   *
+   * Re-applied whenever the reading direction changes, because that is what
+   * moves the ports: `resolvePortSide` rotates every side 90°, and a tangent
+   * left pointing right would draw a link that leaves a bottom port sideways.
+   */
+  private applyGeometryHints(edge: IEdgeModel, existing?: dia.Link): void {
+    const link = existing ?? this.link(edge.id);
+    if (!link) return;
+    const side = (ref: { nodeId: NodeId; portId: string }): PortSide | undefined => {
+      const port = this.model.node(ref.nodeId)?.ports.find((item) => item.id === ref.portId);
+      return port ? resolvePortSide(port, this.flow) : undefined;
+    };
+    link.connector(linkConnector(side(edge.source), side(edge.target)));
+  }
+
+  /**
+   * Projects an edge's label — authored or derived — onto its link.
+   *
+   * Derived, never written back: a router branch's name lives on the port
+   * descriptor, and inferring the label here keeps `workflow.json` free of a
+   * denormalised copy that could go stale the moment a branch is renamed.
+   */
+  private applyLabel(edge: IEdgeModel, existing?: dia.Link): void {
+    const link = existing ?? this.link(edge.id);
+    if (!link) return;
+
+    const ports = this.model.node(edge.source.nodeId)?.ports ?? [];
+    const sourcePort = ports.find((port) => port.id === edge.source.portId);
+    const text = edgeLabelText(edge.label, sourcePort);
+
+    link.labels(
+      text ? [buildLabel(text, labelPlacement(this.flow, branchRank(ports, edge.source.portId)))] : [],
+    );
   }
 
   /**
@@ -332,7 +408,16 @@ export class JointGraphAdapter implements IDisposable {
   }
 }
 
-function buildLabel(text: string): dia.Link.Label {
+/**
+ * A label with a halo.
+ *
+ * `labelBody` is an opaque rounded rect sized from the text by `calc()`, drawn
+ * beneath it — so the words survive crossing a line, a dot grid or another
+ * card's edge instead of dissolving into whatever they land on. That is the
+ * free-tier answer to "make labels survive their surroundings"; it needs no
+ * collision search, and it is why the label can sit *on* its own line.
+ */
+function buildLabel(text: string, position: dia.Link.LabelPosition): dia.Link.Label {
   return {
     attrs: {
       labelText: {
@@ -347,8 +432,8 @@ function buildLabel(text: string): dia.Link.Label {
       },
       labelBody: {
         ref: 'labelText',
-        fill: 'var(--color-bg-surface)',
-        stroke: 'var(--color-border-default)',
+        fill: 'var(--color-bg-canvas)',
+        stroke: 'var(--color-border-subtle)',
         strokeWidth: 1,
         rx: 4,
         ry: 4,
@@ -362,6 +447,6 @@ function buildLabel(text: string): dia.Link.Label {
       { tagName: 'rect', selector: 'labelBody' },
       { tagName: 'text', selector: 'labelText' },
     ],
-    position: { distance: 0.5 },
+    position,
   };
 }

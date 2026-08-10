@@ -27,6 +27,7 @@ export class Viewport {
   // to the literal default and reject every later value.
   private currentZoom: number = CANVAS.zoom.default;
   private currentTranslate: Point = { x: 0, y: 0 };
+  private glideFrame: number | null = null;
 
   constructor(
     private readonly paper: dia.Paper,
@@ -159,8 +160,67 @@ export class Viewport {
     });
   }
 
+  /**
+   * Animated move: frame `rect` at `zoom`, easing rather than cutting.
+   *
+   * A cut leaves the reader to work out what moved; an ease preserves the
+   * sense that this is the same canvas seen from somewhere else, which is the
+   * whole reason to follow a run rather than just re-render it. Under
+   * `prefers-reduced-motion` it becomes exactly that cut — the destination is
+   * the point, the travel is the decoration.
+   *
+   * Interpolating zoom and translate together (rather than easing zoom and
+   * then panning) keeps the framed rectangle on a straight path across the
+   * screen; two sequential eases make it swoop.
+   *
+   * The duration is short on purpose, and not only for feel: every frame
+   * emits `changed`, and each card re-measures itself on a zoom change. A
+   * long glide is therefore a long re-measure, so the ease is bought in
+   * frames, not seconds.
+   */
+  glideTo(rect: Rect, zoom: number, durationMs = 340): void {
+    this.stopGlide();
+
+    const target = this.translationFor(rect, zoom);
+    const fromZoom = this.currentZoom;
+    const fromTranslate = this.currentTranslate;
+
+    if (durationMs <= 0 || prefersReducedMotion() || typeof requestAnimationFrame !== 'function') {
+      this.apply(zoom, target);
+      return;
+    }
+
+    const started = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / durationMs);
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      this.apply(fromZoom + (zoom - fromZoom) * eased, {
+        x: fromTranslate.x + (target.x - fromTranslate.x) * eased,
+        y: fromTranslate.y + (target.y - fromTranslate.y) * eased,
+      });
+      this.glideFrame = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    this.glideFrame = requestAnimationFrame(step);
+  }
+
+  /** Abandons an in-flight `glideTo`, leaving the camera wherever it got to. */
+  stopGlide(): void {
+    if (this.glideFrame == null) return;
+    cancelAnimationFrame(this.glideFrame);
+    this.glideFrame = null;
+  }
+
   onChange(handler: (payload: ViewportEvents['changed']) => void): Unsubscribe {
     return this.bus.on('changed', handler);
+  }
+
+  /** The translate that puts `rect` in the middle of the viewport at `zoom`. */
+  private translationFor(rect: Rect, zoom: number): Point {
+    const { width, height } = this.size;
+    return {
+      x: width / 2 - (rect.x + rect.width / 2) * zoom,
+      y: height / 2 - (rect.y + rect.height / 2) * zoom,
+    };
   }
 
   /** Pushes the current transform onto the paper and notifies listeners. */
@@ -180,6 +240,13 @@ export class Viewport {
   }
 
   dispose(): void {
+    this.stopGlide();
     this.bus.dispose();
   }
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 }

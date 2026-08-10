@@ -1,6 +1,7 @@
 import { dia } from '@joint/core';
 import { NODE } from '@design/tokens';
 import type { Point } from '@core/kernel/geometry';
+import { LINK_CONNECTOR } from '../links/edgeDecoration';
 
 export const HTML_NODE_TYPE = 'openstategraph.HtmlNode';
 export const LINK_TYPE = 'openstategraph.Link';
@@ -140,15 +141,33 @@ export const FlowLink = dia.Link.define(
         strokeLinecap: 'round',
         fill: 'none',
       },
+      // The casing: a stroke in the canvas colour, a little wider than the
+      // line and drawn just beneath it. Where two links cross, the one drawn
+      // later breaks the one drawn earlier, so a crossing reads as an
+      // over/under rather than as a junction where two flows merge.
+      //
+      // This is the cartographer's answer, and it is the only one available
+      // here: JointJS's `jumpover` connector works on straight polyline
+      // segments (`IGNORED_CONNECTORS = ['smooth']`, and its intersection
+      // maths is line-based), so adopting it would mean giving up curves for
+      // orthogonal geometry. Casing costs one path and keeps the curves.
+      casing: {
+        connection: true,
+        strokeWidth: 5,
+        strokeLinecap: 'butt',
+        fill: 'none',
+      },
     },
-    // Smooth curves read as dataflow; right-angled routing reads as
-    // circuitry and fights the soft card language.
-    connector: { name: 'smooth' },
+    // Curves read as dataflow; right-angled routing reads as circuitry and
+    // fights the soft card language. `curve` rather than `smooth` because its
+    // tangents come from the side the port sits on — see `LINK_CONNECTOR`.
+    connector: LINK_CONNECTOR,
     z: -1,
   },
   {
     markup: [
       { tagName: 'path', selector: 'outline', attributes: { 'pointer-events': 'stroke' } },
+      { tagName: 'path', selector: 'casing', attributes: { 'pointer-events': 'none' } },
       { tagName: 'path', selector: 'line', attributes: { 'pointer-events': 'none' } },
     ],
   },
