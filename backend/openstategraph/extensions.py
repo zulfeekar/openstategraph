@@ -174,12 +174,29 @@ def entry_point_tools() -> Discovered:
     reported rather than silently dropped, because there is nothing a document
     could bind it to.
     """
-    from openstategraph.abc.tool import BaseTool
+    import inspect
+
+    from openstategraph.abc.tool import BaseTool, _abstract_tool_diagnosis
 
     registry: dict[str, Any] = {}
+    #: node_type -> the distribution that claimed it first, so the second
+    #: claimant is reported rather than silently overwriting the first.
+    claimed: dict[str, str] = {}
     loaded, warnings = _load_group(TOOLS_GROUP)
     for entry_point, obj in loaded:
         for candidate in _each(obj):
+            if isinstance(candidate, type) and issubclass(candidate, BaseTool):
+                if inspect.isabstract(candidate):
+                    # The RC-04 trap, aimed outward. `candidate()` would raise
+                    # a TypeError here anyway, but its message ("Can't
+                    # instantiate abstract class X with abstract method
+                    # _execute") describes the symptom, not the mistake — and a
+                    # stranger's class is exactly the code we cannot go and
+                    # read for them. Say which method they implemented instead.
+                    warnings.append(
+                        _skipped(entry_point, TOOLS_GROUP, _abstract_tool_diagnosis(candidate))
+                    )
+                    continue
             try:
                 tool = candidate() if isinstance(candidate, type) else candidate
             except Exception as exc:
@@ -210,6 +227,21 @@ def entry_point_tools() -> Discovered:
                     )
                 )
                 continue
+            first = claimed.get(tool.node_type)
+            if first is not None:
+                # Two installed distributions claiming one wiring identity is
+                # not a precedence question the ordering rule answers — it is
+                # ambiguity, and a dict update would resolve it by whichever
+                # `.dist-info` sorted later. Name both; register the last.
+                message = (
+                    f'Two installed distributions claim tool node type "{tool.node_type}": '
+                    f"{first} and {_distribution_of(entry_point)}. "
+                    f"{_distribution_of(entry_point)} wins; {first}'s tool can never be "
+                    "bound. Uninstall one, or ask its author to namespace the node type."
+                )
+                logger.warning(message)
+                warnings.append(message)
+            claimed[tool.node_type] = _distribution_of(entry_point)
             registry[tool.node_type] = tool
     return Discovered(values=registry, warnings=warnings)
 

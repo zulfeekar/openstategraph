@@ -329,16 +329,19 @@ def load_workflow(
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     knowledge_override = Path(knowledge_dir).expanduser().resolve() if knowledge_dir else None
-    # A plugin distribution that failed to load is a capability this run does
-    # not have, so it belongs on `.warnings` beside every other one — not only
-    # in a log line the consumer's service will never show them (ticket 05).
-    plugin_warnings: list[str] = []
+    # A capability that failed to load — a half-installed plugin distribution
+    # (ticket 05), a tool class left abstract (ticket 07) — is a capability
+    # this run does not have, so it belongs on `.warnings` beside every other
+    # one, not only in a log line the consumer's service will never show them.
+    # It arrives through `runtime_warnings(runtime)` below: `runtime_for` hangs
+    # the findings on the runtime itself, so every transport reports them and
+    # this one no longer needs its own sink (passing one as well would report
+    # each finding twice).
     runtime = services.runtime_for(
         slug,
         document,
         resolved_model,
         knowledge_dir=knowledge_override,
-        warnings=plugin_warnings,
     )
 
     if checkpointer is None:
@@ -354,7 +357,7 @@ def load_workflow(
         store=services.memory_store,
     )
 
-    warnings = list(plan.warnings) + runtime_warnings(runtime) + plugin_warnings
+    warnings = list(plan.warnings) + runtime_warnings(runtime)
     if warnings:
         # Degrade loud, never silent — the same rule the run endpoints follow.
         logger.warning(

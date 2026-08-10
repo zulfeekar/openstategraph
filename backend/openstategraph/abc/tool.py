@@ -49,6 +49,15 @@ class ITool(Protocol):
     object can satisfy it without inheriting from us — the interface describes a
     shape, and requiring inheritance to participate is what makes a hierarchy
     closed for extension.
+
+    **If you are subclassing ``BaseTool``, do not implement this method.**
+    ``run`` is the *caller's* verb — what a consumer of any tool invokes — and
+    ``BaseTool`` already implements it for you (validate, execute, turn an
+    exception into data). The one method a ``BaseTool`` subclass implements is
+    ``_execute(self, args)``. Implementing ``run`` instead leaves ``_execute``
+    abstract, which makes the class uninstantiable and therefore invisible to
+    discovery; ``BaseTool.__init_subclass__`` now refuses that at class
+    definition time rather than letting it ship as a tool that does nothing.
     """
 
     name: str
@@ -65,6 +74,18 @@ class BaseTool(ABC):
     exception into a ``ToolResult``, and the LangChain adaptation — is declared
     **once** here and never repeated per tool. That is the anti-duplication rule,
     and it is why a new tool is a few lines rather than a copied file.
+
+    **``_execute`` is what you implement; ``run`` is what callers call.**
+    ``ITool`` advertises ``run(**kwargs)`` because that is the shape a
+    *consumer* depends on, and reading the interface first has led people to
+    override ``run`` — which leaves ``_execute`` abstract, so the class cannot
+    be instantiated and discovery finds nothing to register. That produced the
+    worst failure shape this project has: a plugin that installs cleanly, type
+    checks, and is simply absent. ``__init_subclass__`` below refuses it at
+    class-definition time, naming the class and the fix. A genuinely
+    intermediate base that wants to wrap ``run`` for its own subclasses opts
+    out by re-declaring ``_execute`` as ``@abstractmethod`` — an explicit "I
+    know, my subclasses supply the work".
     """
 
     name: ClassVar[str]
@@ -79,6 +100,23 @@ class BaseTool(ABC):
     #: Pydantic model describing the arguments. The source of truth for the
     #: generated TypeScript, and for the schema the LLM is shown.
     Args: ClassVar[type[BaseModel]]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Fail at import, the earliest honest moment.
+
+        Only one shape is refused: a subclass that defines ``run`` while no
+        class in its ancestry (below ``BaseTool``) defines ``_execute`` at all.
+        Such a class is *already* unusable — ``_execute`` stays abstract, so
+        ``cls()`` raises — so refusing it here cannot break code that works
+        today; it only moves an invisible failure (a tool absent from every
+        registry) to a loud one, at the line that caused it.
+        """
+        super().__init_subclass__(**kwargs)
+        if "run" not in cls.__dict__:
+            return
+        if any("_execute" in klass.__dict__ for klass in cls.__mro__ if klass is not BaseTool):
+            return
+        raise TypeError(_run_override_message(cls.__qualname__))
 
     @abstractmethod
     def _execute(self, args: BaseModel) -> ToolResult:
@@ -144,6 +182,78 @@ class BaseTool(ABC):
             "node_type": self.node_type,
             "args_schema": self.Args.model_json_schema(),
         }
+
+
+# --------------------------------------------------------------------------
+# Diagnoses, written once and reused everywhere a tool fails to materialise.
+#
+# Deliberately private (not in `__all__`): `openstategraph.abc` is Tier 1 and a
+# name exported from it is a promise. These are internal wording, shared so
+# that the definition-time TypeError, workflow-local discovery and entry-point
+# loading say the *same* sentence — a developer who hits the trap through the
+# plugin path and through their own `tools/` folder should not have to
+# recognise two different descriptions of one mistake.
+# --------------------------------------------------------------------------
+
+
+def _run_override_message(class_name: str) -> str:
+    """The RC-04 diagnosis: named class, named method, named fix."""
+    return (
+        f"{class_name} overrides run() but never implements _execute(), which leaves it "
+        "abstract — it can never be instantiated, so no registry can ever hold it. "
+        f"Implement `_execute(self, args)` on {class_name}; run() is the validated entry "
+        "point BaseTool already provides (it builds Args, calls _execute, and turns an "
+        "exception into a ToolResult), so leave it alone."
+    )
+
+
+def _abstract_tool_diagnosis(cls: type) -> str:
+    """Why this ``BaseTool`` subclass could not be instantiated.
+
+    The ``run``-override case gets its own sentence. A generic "skipped an
+    abstract class" would leave the reader exactly as stuck as the silence it
+    replaced, which is the whole point of the ticket.
+    """
+    missing = tuple(sorted(getattr(cls, "__abstractmethods__", ()) or ()))
+    overrides_run = any(
+        "run" in klass.__dict__ for klass in cls.__mro__ if klass is not BaseTool
+    )
+    if "_execute" in missing and overrides_run:
+        return _run_override_message(cls.__name__)
+    if "_execute" in missing and len(missing) == 1:
+        return (
+            f"{cls.__name__} does not implement _execute(), so it is abstract and cannot be "
+            "instantiated. Implement `_execute(self, args) -> ToolResult` — that is the one "
+            "method a BaseTool subclass supplies."
+        )
+    listed = ", ".join(f"{name}()" for name in missing) or "at least one abstract method"
+    return (
+        f"{cls.__name__} is abstract — {listed} still unimplemented — so it cannot be "
+        "instantiated. Implement it, or (if the class is a deliberate shared parent) name it "
+        "with a leading underscore, `Abstract…` or `Base…` so discovery knows to pass over it."
+    )
+
+
+def _is_deliberate_base(cls: type) -> bool:
+    """Two ways a class says "I am a parent of tools, not a tool".
+
+    **Re-declaring ``_execute`` as ``@abstractmethod``** is the explicit one,
+    and the same escape hatch ``__init_subclass__`` honours: a class that
+    writes the abstract method out has stated its intent in code.
+
+    **Its name** is the implicit one. `_SqlExplorerBase` in this very codebase
+    is the pattern: a `BaseTool` subclass that exists only to hold shared
+    configuration for a family and never declares `_execute` at all. There is
+    no other signal available — every abstract class looks alike to `inspect` —
+    and inventing a marker attribute would be a second spelling of something
+    the name already says. Warning about these would train developers to
+    ignore the channel, which costs more than the rare mis-named class it
+    misses.
+    """
+    if getattr(cls.__dict__.get("_execute"), "__isabstractmethod__", False):
+        return True
+    name = cls.__name__
+    return name.startswith(("_", "Abstract")) or (name.startswith("Base") and name != "Base")
 
 
 class NoArgs(BaseModel):

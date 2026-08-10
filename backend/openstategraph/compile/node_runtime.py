@@ -618,6 +618,17 @@ class NodeRuntime:
         #: Per-mount override problems (unknown child node id, wrong shape) —
         #: surfaced through `runtime_warnings` beside unresolved tools.
         self.override_warnings: list[str] = []
+        #: Capabilities that failed to *load* — a tool module that would not
+        #: import, an abstract class discovery could not instantiate, a plugin
+        #: distribution that half-installed (ticket 07 / RC-04).
+        #:
+        #: Distinct from `unresolved_tools`, which is about a node on the
+        #: canvas finding no implementation; this is about an implementation
+        #: that never became one. Both share the channel deliberately: from a
+        #: developer's seat, "the tool I wrote is not here" is one question,
+        #: and answering half of it in a server log they never open is how the
+        #: original bug survived. Populated by `WorkflowServices.runtime_for`.
+        self.capability_warnings: list[str] = []
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             "input.markdown": self._input,

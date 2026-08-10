@@ -88,13 +88,24 @@ class WorkflowServices:
         # `sys.modules`), so calling it twice — as the `advisor=True` path did,
         # once for `tools` and again for `advisor_catalog` — re-executed every
         # tool module of the open package on every editor run.
-        # `warnings` is the plugin-failure sink (ticket 05): an entry point that
-        # could not load is a *process*-level fact with no NodeRuntime field to
-        # live on, so the caller that reports capability warnings passes a list.
-        tools = self.tool_registry_for(slug, knowledge_dir=knowledge_dir, warnings=warnings)
+        # Every capability that failed to LOAD lands here — a half-installed
+        # plugin (ticket 05) and a tool class discovery could not instantiate
+        # (ticket 07) alike. The sink is created here rather than taken from
+        # the caller so that *every* transport gets these, not only the one
+        # that remembered to pass a list: they are hung on the runtime below,
+        # and `runtime_warnings()` carries them to the run response, the CLI
+        # and `CompiledWorkflow.warnings`. A caller's own list is still filled,
+        # for compatibility — such a caller must not then add
+        # `runtime_warnings()` on top, or it will report each finding twice.
+        capability_warnings: list[str] = []
+        tools = self.tool_registry_for(
+            slug, knowledge_dir=knowledge_dir, warnings=capability_warnings
+        )
+        if warnings is not None:
+            warnings.extend(capability_warnings)
         store = self.store
 
-        return NodeRuntime(
+        runtime = NodeRuntime(
             services=RuntimeServices(
                 model=model,
                 tools=tools,
@@ -123,6 +134,8 @@ class WorkflowServices:
                 advisor_catalog=(suggestible_tool_catalog(tools) if advisor else ""),
             )
         )
+        runtime.capability_warnings.extend(capability_warnings)
+        return runtime
 
 
 # No `__all__` here on purpose. In Python `__all__` reads as "this is the

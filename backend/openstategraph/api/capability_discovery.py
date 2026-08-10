@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from openstategraph.abc.tool import BaseTool
+from openstategraph.abc.tool import BaseTool, _abstract_tool_diagnosis, _is_deliberate_base
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,27 @@ def _import_module(path: Path, qualified_name: str) -> Any:
     return module
 
 
-def discover_tool_instances(workflow_dir: Path, slug: str) -> list[tuple[str, BaseTool]]:
+def _note(warnings: list[str] | None, message: str, *, exc_info: bool = False) -> None:
+    """One finding: logged **and** surfaced.
+
+    Both, never one or the other. The log line is what an operator greps after
+    the fact; the returned string is what reaches `runtime_warnings()`, the run
+    response, `CompiledWorkflow.warnings` and the CLI — the channel a developer
+    who never opens a server log actually reads. Ticket 07's rule is that a
+    capability which failed to load must not fail silently, and a WARNING in a
+    log nobody is watching is a quieter kind of silence.
+    """
+    logger.warning("%s", message, exc_info=exc_info)
+    if warnings is not None:
+        warnings.append(message)
+
+
+def discover_tool_instances(
+    workflow_dir: Path,
+    slug: str,
+    *,
+    warnings: list[str] | None = None,
+) -> list[tuple[str, BaseTool]]:
     """`(qualified_id, instance)` for every tool the workflow defines.
 
     The instances are the same objects `discover_tools` describes — returned
@@ -89,6 +109,30 @@ def discover_tool_instances(workflow_dir: Path, slug: str) -> list[tuple[str, Ba
     re-imported each class from its qualified id by string surgery:
     `__import__("chinook-nl-to-sql.tools")` — a hyphenated slug is never a
     legal module name, so every slug-based run silently lost all its tools.)
+
+    **Every skip in this loop is a decision, and each one is written down**
+    (ticket 07 / register RC-04). The loop used to drop six different
+    situations on the floor without a word, one of which — an abstract class,
+    which is what a subclass overriding `run` instead of `_execute` becomes —
+    produced a tool that installed, validated, ran and was simply absent. The
+    inventory, in the order the code meets it:
+
+    | Skip | Decision |
+    | --- | --- |
+    | `_`-prefixed module | **ignore** — the stated private-file convention |
+    | module will not import | **surface** — every tool in it is missing |
+    | not a `BaseTool` subclass | **ignore** — folder scopes, subclass decides |
+    | defined elsewhere (`__module__`) | **ignore**, then re-checked at the end |
+    | already seen | **ignore** — one class, two names in one module |
+    | abstract, deliberately named a base | **ignore** — see `_is_deliberate_base` |
+    | abstract for any other reason | **surface**, with a specific diagnosis |
+    | constructor raised | **surface** — names the tool and the exception |
+    | duplicate `node_type` | **surface** — names both classes and the winner |
+    | empty `node_type` | **ignore** — documented as "not placeable" |
+
+    `warnings` is an optional sink so no existing caller had to change; a
+    caller that passes one gets the findings, a caller that does not still
+    gets the log lines.
     """
     tools_dir = workflow_dir / "tools"
     if not tools_dir.is_dir():
@@ -96,41 +140,149 @@ def discover_tool_instances(workflow_dir: Path, slug: str) -> list[tuple[str, Ba
 
     found: list[tuple[str, BaseTool]] = []
     seen_classes: set[type] = set()
+    #: node_type -> the class name that claimed it first.
+    claimed: dict[str, str] = {}
+    #: Classes a scanned module re-exported, judged after the whole folder has
+    #: been walked — "defined elsewhere" is only innocent if that elsewhere was
+    #: itself scanned, and we cannot know that until the walk is over.
+    reexported: list[tuple[type, str]] = []
 
     for path in sorted(tools_dir.glob("*.py")):
         if path.stem.startswith("_"):
+            # IGNORED. `_helpers.py`/`__init__.py` are private by the same
+            # convention `discover_functions` uses for `_helper()`. A tool
+            # *defined* in one and re-exported is caught after this loop.
             continue
         qualified_module = f"{slug}.tools.{path.stem}"
         try:
             module = _import_module(path, qualified_module)
-        except Exception:
-            logger.warning("Skipping unimportable tool module %s", path, exc_info=True)
+        except Exception as exc:
+            _note(
+                warnings,
+                f"Tool module {path.name} could not be imported "
+                f"({type(exc).__name__}: {exc}) — every tool it defines is missing from "
+                "this run.",
+                exc_info=True,
+            )
             continue
 
         for _, obj in inspect.getmembers(module, inspect.isclass):
             if obj is BaseTool or not issubclass(obj, BaseTool):
+                # IGNORED. The settled predicate: the folder scopes where to
+                # look, subclassing decides what counts. A Pydantic Args model
+                # or a helper class living beside a tool is not a finding.
                 continue
             if obj.__module__ != qualified_module:
+                reexported.append((obj, path.name))
                 continue
-            if obj in seen_classes or inspect.isabstract(obj):
+            if obj in seen_classes:
+                # IGNORED. `inspect.getmembers` yields one class once per name
+                # it is bound to; an alias is not a second tool.
+                continue
+            if inspect.isabstract(obj):
+                if _is_deliberate_base(obj):
+                    # IGNORED, loudly in the log only: a family parent named
+                    # `_AcmeBase`/`AbstractAcme`/`BaseAcme` is doing its job.
+                    logger.debug(
+                        "Passing over deliberate tool base %s in %s", obj.__name__, path.name
+                    )
+                else:
+                    _note(warnings, f"{_abstract_tool_diagnosis(obj)} (in tools/{path.name})")
                 continue
             seen_classes.add(obj)
             try:
                 instance = obj()
-            except Exception:
-                logger.warning(
-                    "Skipping tool %s.%s: constructor failed",
-                    qualified_module,
-                    obj.__name__,
+            except Exception as exc:
+                _note(
+                    warnings,
+                    f"Tool {obj.__name__} in tools/{path.name} could not be constructed "
+                    f"({type(exc).__name__}: {exc}) — it is missing from this run.",
                     exc_info=True,
                 )
                 continue
+            if instance.node_type:
+                first = claimed.get(instance.node_type)
+                if first is not None:
+                    _note(
+                        warnings,
+                        f'Tool node type "{instance.node_type}" is declared by both {first} '
+                        f"and {obj.__name__} in {slug}/tools — {obj.__name__} wins and "
+                        f"{first} can never be bound. Give one of them its own node_type.",
+                    )
+                else:
+                    claimed[instance.node_type] = obj.__name__
+            else:
+                # IGNORED. `BaseTool.node_type` documents empty as "not
+                # placeable on a canvas", which is correct for a tool only ever
+                # handed to an agent programmatically. Listable, not bindable.
+                logger.debug(
+                    "Tool %s declares no node_type; listable but not placeable", obj.__name__
+                )
             found.append((f"{slug}/tools.{obj.__name__}", instance))
 
+    _warn_about_unreachable_reexports(reexported, seen_classes, tools_dir, warnings)
     return found
 
 
-def discover_tool_registry(workflow_dir: Path, slug: str) -> dict[str, BaseTool]:
+def _source_file(cls: type) -> Path | None:
+    """Which file a class was written in, without trusting `sys.modules`.
+
+    `inspect.getfile` resolves a class through `sys.modules[cls.__module__]`,
+    and discovery deliberately loads modules *without* registering them there
+    (that is how two workflows' identically named files stay apart). So the
+    reliable signal is the bytecode of any function the class body defines.
+    """
+    for member in cls.__dict__.values():
+        code = getattr(member, "__code__", None)
+        if code is not None:
+            return Path(code.co_filename).resolve()
+    try:
+        return Path(inspect.getfile(cls)).resolve()
+    except (TypeError, OSError):
+        return None
+
+
+def _warn_about_unreachable_reexports(
+    reexported: list[tuple[type, str]],
+    seen_classes: set[type],
+    tools_dir: Path,
+    warnings: list[str] | None,
+) -> None:
+    """The `__module__` guard's blind spot, made visible.
+
+    The guard exists so an `__init__.py` re-export does not register the same
+    tool twice, and for a class defined in a *scanned* module it is exactly
+    right. But a class defined in `tools/_hidden.py` — private, never scanned —
+    and re-exported from a public module reads as present in the source and is
+    absent from every run: the same silent-loss shape as the abstract skip.
+
+    Scoped by file location on purpose: `from openstategraph.prebuilt_web
+    import WebSearchTool` is a legitimate reuse of a framework tool, not a lost
+    capability, and only a class whose own file sits in *this* `tools/` folder
+    is something this workflow meant to ship.
+    """
+    folder = tools_dir.resolve()
+    for cls, through in reexported:
+        if cls in seen_classes:
+            continue
+        origin = _source_file(cls)
+        if origin is None or origin.parent != folder or origin.name == through:
+            continue
+        _note(
+            warnings,
+            f"Tool {cls.__name__} is re-exported by tools/{through} but defined in "
+            f"tools/{origin.name}, which discovery does not scan (a leading underscore "
+            "means private) — so it is absent from this run. Move the class into a module "
+            "without a leading underscore.",
+        )
+
+
+def discover_tool_registry(
+    workflow_dir: Path,
+    slug: str,
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, BaseTool]:
     """The runtime's tool registry: canvas node type → tool instance.
 
     Keyed by each tool's **own** `node_type` declaration — the single source
@@ -138,7 +290,7 @@ def discover_tool_registry(workflow_dir: Path, slug: str) -> dict[str, BaseTool]
     listable but not placeable, so it is simply absent here.
     """
     registry: dict[str, BaseTool] = {}
-    for _, instance in discover_tool_instances(workflow_dir, slug):
+    for _, instance in discover_tool_instances(workflow_dir, slug, warnings=warnings):
         if instance.node_type:
             registry[instance.node_type] = instance
     return registry

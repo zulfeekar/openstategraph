@@ -44,10 +44,15 @@ def build_tool_registry(
     a package's own `tools/`, or a workflow's behaviour would depend on an
     unrelated `pip install`.
 
-    `warnings` is an optional sink. Entry-point failures are process-level, not
-    runtime-level, so they have no `NodeRuntime` field to land on — a caller
-    that reports capability warnings (`load_workflow`) passes a list and gets
-    them; every other caller gets the log line and nothing more.
+    `warnings` is an optional sink for **everything that failed to load** —
+    entry-point failures (ticket 05) and, since ticket 07, workflow-local
+    discovery findings: a tool module that would not import, a class left
+    abstract, two classes claiming one `node_type`. A caller that passes a list
+    gets them; a caller that does not still gets the log lines. In practice
+    every transport passes one, because `WorkflowServices.runtime_for` supplies
+    the list and hangs it on `NodeRuntime.capability_warnings`, from where
+    `runtime_warnings()` carries it to the run response, `load_workflow`'s
+    `CompiledWorkflow.warnings` and the CLI.
     """
     from openstategraph.api.capability_discovery import discover_tool_registry
     from openstategraph.compile.node_runtime import chinook_tool_registry
@@ -121,9 +126,23 @@ def build_tool_registry(
         except Exception:
             logger.warning("Knowledge binding failed for %r", slug, exc_info=True)
         try:
-            registry.update(discover_tool_registry(workflow_store.directory_for(slug), slug))
-        except Exception:
-            logger.warning("Tool discovery failed for %r", slug, exc_info=True)
+            registry.update(
+                discover_tool_registry(
+                    workflow_store.directory_for(slug), slug, warnings=warnings
+                )
+            )
+        except Exception as exc:
+            # The whole discovery pass failing (an unreadable directory, a
+            # store that cannot resolve the slug) loses every tool the package
+            # ships, so it is surfaced too, not only logged — ticket 07's rule
+            # applied to the outermost skip in this chain.
+            message = (
+                f"Tool discovery failed for workflow {slug!r} "
+                f"({type(exc).__name__}: {exc}) — none of its own tools are available."
+            )
+            logger.warning(message, exc_info=True)
+            if warnings is not None:
+                warnings.append(message)
     return registry
 
 
@@ -201,5 +220,11 @@ def runtime_warnings(runtime: Any) -> list[str]:
         )
     for override_warning in getattr(runtime, "override_warnings", []):
         warnings.append(f"Mount override — {override_warning}")
+    # Capabilities that never loaded (ticket 07). Already full sentences
+    # naming the class, the file and the fix, so no prefix is added — a
+    # discovery finding is not a sub-species of an unresolved binding, it is
+    # the other half of the same question.
+    for capability_warning in getattr(runtime, "capability_warnings", []):
+        warnings.append(capability_warning)
     return warnings
 

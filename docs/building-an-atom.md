@@ -173,6 +173,15 @@ class GetTableSchemaTool(BaseTool):
 any raised exception into a result. That is declared once on the base, so no
 concrete tool writes its own try/except.
 
+> **The one method you implement is `_execute(self, args)` — never `run`.**
+> `ITool` advertises `run(**kwargs)` because that is the shape *callers*
+> depend on, and `BaseTool` already implements it for you. Overriding `run`
+> leaves `_execute` abstract, which makes your class uninstantiable and
+> therefore invisible to discovery — a tool that installs cleanly and is
+> simply absent. Python now refuses that class at import with a message
+> naming it and this fix, and discovery says the same thing in the run's
+> warnings if it ever reaches that far.
+
 ### Errors are data
 
 ```python
