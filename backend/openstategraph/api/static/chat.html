@@ -296,6 +296,49 @@
   .error { color: var(--danger); }
   .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
 
+  /* ---------- The approval card ----------
+   *
+   * The most important thing on the page while it is up, and the *same*
+   * design decision as the paused node on the diagram: the run is waiting on
+   * a person, so the card carries the same amber accent the ring does rather
+   * than inventing a second visual language for one state. No new colours —
+   * `--paused`, `--accent` and `--danger` are all already in this file. */
+  .hitl--approval {
+    border-color: color-mix(in srgb, var(--paused) 45%, var(--line));
+    background: color-mix(in srgb, var(--paused) 6%, var(--surface));
+    padding: var(--space-4);
+  }
+  .hitl--approval > p { margin: 0 0 var(--space-3); }
+  .hitl--approval b { color: color-mix(in srgb, var(--paused) 80%, var(--text)); }
+  .hitl--approval .answer { margin-bottom: var(--space-3); }
+  .hitl__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  /* Padding, radius and weight identical to `#send`, so the three controls a
+     customer can press on this page agree with each other. */
+  .hitl__actions button {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-lg);
+    font-weight: var(--font-weight-semibold);
+    transition: background .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease;
+  }
+  /* Approve is the primary action and looks like it — the eye should land
+     here first, so Reject is never solid at rest. */
+  .btn-approve { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-approve:hover:not([disabled]) { filter: brightness(1.08); border-color: var(--accent); }
+  .btn-reject { background: var(--raised); border-color: var(--danger); color: var(--danger); }
+  .btn-reject:hover:not([disabled]) { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .hitl__actions button:active:not([disabled]) { filter: brightness(.94); }
+  /* In flight: neither can be pressed twice (a double-click used to fire two
+     resumes), and the one that was chosen keeps its colour while the other
+     steps back — so the card still says what you decided. */
+  .hitl__actions button[disabled] { cursor: default; }
+  .hitl__actions button[disabled]:not([data-chosen]) { opacity: .4; }
+  .hitl__note { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--font-size-13); }
+  @media (max-width: 900px) {
+    /* The pane stacks here, so the row gets the full width and the two
+       controls stay comfortably tappable rather than shrinking. */
+    .hitl__actions button { flex: 1 1 auto; min-width: 8rem; text-align: center; }
+  }
+
   footer { display: flex; gap: var(--space-2); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--line); background: var(--bg); }
   footer textarea { flex: 1; resize: none; height: 46px; border-radius: var(--radius-xl); }
 </style>
@@ -469,7 +512,14 @@ async function renderFlow(slug) {
     const { svg } = await mermaid.render("flow-" + Date.now(), source);
     host.innerHTML = svg;
     flow.ready = true;
+    // A theme switch re-renders the diagram from scratch, which throws away
+    // every mark on it. A run waiting for a decision is still waiting, so the
+    // one mark that is a *claim about right now* is re-applied — losing it
+    // would leave the same silence this ticket is about, just triggered by
+    // the OS turning dark at sunset.
+    const waiting = pausedFlowId;
     resetFlowHighlight();
+    if (waiting) pauseFlow(waiting);
   } catch (err) {
     host.textContent = "flow view unavailable: " + err;
   }
@@ -491,8 +541,10 @@ async function renderFlow(slug) {
 // were confirmed against a rendered graph before being relied on here.
 let activeFlowNode = null;
 let activeFlowName = null;
-/** The node a `human.approval` interrupt parked the run on, if any. */
+/** The node a `human.approval` interrupt parked the run on, if any — the
+ *  element, and separately its id, which survives a re-render of the SVG. */
 let pausedFlowNode = null;
+let pausedFlowId = null;
 const visitedFlowNodes = new Set();
 
 /* The running glow is one HTML element, reused for the life of the page and
@@ -572,6 +624,7 @@ function resetFlowHighlight() {
   activeFlowNode = null;
   activeFlowName = null;
   pausedFlowNode = null;
+  pausedFlowId = null;
   visitedFlowNodes.clear();
   removeGlow();
   removeWait();
@@ -589,6 +642,7 @@ function highlightFlow(nodeId) {
   if (pausedFlowNode) {
     pausedFlowNode.classList.remove("flow-paused");
     pausedFlowNode = null;
+    pausedFlowId = null;
     removeWait();
   }
   // Re-marking the node that is already active is a no-op visually but would
@@ -637,18 +691,31 @@ function highlightFlow(nodeId) {
  * So: drop the "running" treatment entirely, and mark the paused node
  * distinctly instead — a static amber ring plus a "Waiting for you" badge. It
  * is deliberately not `flow-done` either; the node has not finished. */
-function pauseFlow() {
+function pauseFlow(nodeId) {
   const host = $("flow");
   host.classList.remove("running");
   removeGlow();
   for (const p of host.querySelectorAll("path.flow-edge-active")) p.classList.remove("flow-edge-active");
-  const el = activeFlowNode;
+  // The frame names the node that is actually waiting — the approval node,
+  // which never reports an `update` of its own because it never completes.
+  // The last node that *did* report is only the fallback, for an older
+  // backend or a name this diagram does not contain.
+  const name = nodeId ? safeName(nodeId) : "";
+  const named = name
+    && (host.querySelector(`[id*="-flowchart-${CSS.escape(name)}-"]`)
+      || host.querySelector(`[id*="-${CSS.escape(name)}-"]`));
+  const el = named || activeFlowNode;
+  if (activeFlowNode && activeFlowNode !== el) {
+    activeFlowNode.classList.remove("flow-active");
+    activeFlowNode.classList.add("flow-done");
+  }
   activeFlowNode = null;
   activeFlowName = null;
   if (!el) return;
   el.classList.remove("flow-active");
   el.classList.add("flow-paused");
   pausedFlowNode = el;
+  pausedFlowId = nodeId || null;
   placeWait(el);
 }
 
@@ -663,6 +730,7 @@ function finishFlow() {
     pausedFlowNode.classList.add("flow-done");
     pausedFlowNode = null;
   }
+  pausedFlowId = null;
   removeWait();
   if (activeFlowNode) {
     activeFlowNode.classList.remove("flow-active");
@@ -767,7 +835,11 @@ function turnEl(question) {
 async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
   const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
-  if (!resp.ok) { answer.hidden = false; answer.innerHTML = `<span class="error">Runtime error (${resp.status}): ${esc(await resp.text())}</span>`; return; }
+  if (!resp.ok) {
+    finishFlow();
+    answer.hidden = false; answer.innerHTML = `<span class="error">Runtime error (${resp.status}): ${esc(await resp.text())}</span>`;
+    return "http-error";
+  }
   const reader = resp.body.getReader(); const dec = new TextDecoder();
   let buf = "", event = null, tokens = "";
   // Client-side timestamps, gathered as frames arrive — the stream carries no
@@ -784,7 +856,7 @@ async function stream(path, body, el, signal) {
    * `--reload` restart or a crash closes the socket with nothing on it — so
    * this flag is what turns that silence into an honest line instead of a
    * turn that just stops. */
-  let ended = false;
+  let ended = null;
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   try {
   for (;;) {
@@ -857,7 +929,7 @@ async function stream(path, body, el, signal) {
           } else if (event === "error") {
             // Terminal. The run is over, so the diagram stops claiming to be
             // running — the same omission the `interrupt` branch had.
-            ended = true;
+            ended = "error";
             finishFlow();
             thinking.textContent = "";
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
@@ -865,12 +937,12 @@ async function stream(path, body, el, signal) {
             // Terminal too: this stream really is finished, and the run
             // continues only if the customer presses Approve or Reject. So
             // the diagram must stop saying "running" here — see `pauseFlow`.
-            ended = true;
-            pauseFlow();
+            ended = "interrupt";
+            pauseFlow(d.node);
             thinking.textContent = "";
             renderInterrupt(el, d);
           } else if (event === "done") {
-            ended = true;
+            ended = "done";
             finishFlow();
             thinking.textContent = "";
             answer.hidden = false;
@@ -893,7 +965,7 @@ async function stream(path, body, el, signal) {
       finishFlow();
       thinking.textContent = "";
       noteStopped(el);
-      return;
+      return "stopped";
     }
     // A server killed mid-stream usually arrives here rather than as a clean
     // end-of-body: the socket dies and `read()` rejects with a network error.
@@ -904,7 +976,7 @@ async function stream(path, body, el, signal) {
     finishFlow();
     thinking.textContent = "";
     noteDropped(el, String((err && err.message) || err));
-    return;
+    return "dropped";
   }
   // A stop does not always arrive as a thrown AbortError: cancelling a reader
   // can instead resolve the pending read with `done: true`, so the loop above
@@ -915,7 +987,7 @@ async function stream(path, body, el, signal) {
     finishFlow();
     thinking.textContent = "";
     noteStopped(el);
-    return;
+    return "stopped";
   }
   // The body ended, nobody pressed Stop, and no frame said how it ended. By
   // the server's own contract that can only mean the server never got to send
@@ -927,9 +999,10 @@ async function stream(path, body, el, signal) {
     finishFlow();
     thinking.textContent = "";
     noteDropped(el);
-    return;
+    return "dropped";
   }
   el.scrollIntoView({ block: "end" });
+  return ended;
 }
 
 /* The connection died mid-answer. An error, not a note: unlike a stop, this
@@ -999,17 +1072,26 @@ function offerSave(el, answerText) {
 
 function renderInterrupt(el, d) {
   const box = document.createElement("div");
-  box.className = "hitl";
+  box.className = "hitl hitl--approval";
   box.innerHTML = `<p><b>Approval needed:</b> ${esc(d.message || "")}</p><div class="answer">${md(d.candidate || "")}</div>
-    <button data-d="approve">Approve</button> <button data-d="reject">Reject</button>`;
+    <div class="hitl__actions">
+      <button type="button" class="btn-approve" data-d="approve">Approve</button>
+      <button type="button" class="btn-reject" data-d="reject">Reject</button>
+    </div>`;
   el.appendChild(box);
-  for (const b of box.querySelectorAll("button")) {
+  const buttons = [...box.querySelectorAll("button")];
+  for (const b of buttons) {
     b.onclick = async () => {
-      box.remove();
+      // Both disabled for the whole round trip: a double-click used to fire
+      // two resumes on one checkpoint. The chosen one keeps its colour and
+      // the other fades, so the card still says what was decided while the
+      // resumed run streams underneath it.
+      for (const other of buttons) other.disabled = true;
+      b.dataset.chosen = "1";
       const doc = await docFor(state.workflow);
       // Through `runStream`, not `stream`: a resumed run streams exactly like
       // a fresh one, so it must be stoppable exactly like one.
-      await runStream("/api/runs/resume", {
+      const outcome = await runStream("/api/runs/resume", {
         // The interrupt event spells it `threadId` (camelCase) — reading the
         // snake_case spelling posted `undefined`, JSON.stringify dropped the
         // key, and every approval died 422 "thread_id: Field required".
@@ -1017,6 +1099,20 @@ function renderInterrupt(el, d) {
         workflow: { document: doc }, decision: b.dataset.d,
         workflow_slug: state.workflow, session_id: state.sessionId, user_email: state.email || "anonymous",
       }, el);
+      // The decision was accepted and the run moved on — the card has done
+      // its job. Anything else means it did NOT: the thread is still parked
+      // on the same checkpoint, so the buttons come back rather than leaving
+      // a dead card and no way to answer.
+      if (outcome === "done" || outcome === "interrupt") {
+        box.remove();
+        return;
+      }
+      for (const other of buttons) { other.disabled = false; delete other.dataset.chosen; }
+      const note = box.querySelector(".hitl__note") || box.appendChild(document.createElement("p"));
+      note.className = "hitl__note";
+      note.textContent = outcome === "stopped"
+        ? "Stopped by you — the run is still waiting for this decision."
+        : "That decision did not go through — the run is still waiting. Try again.";
     };
   }
 }
@@ -1075,7 +1171,7 @@ async function runStream(path, body, el) {
   inFlight = aborter;
   setComposerRunning(true);
   try {
-    await stream(path, body, el, aborter.signal);
+    return await stream(path, body, el, aborter.signal);
   } catch (err) {
     // Nothing below `stream` throws any more, so this is a failure to even
     // reach the runtime. The diagram is stopped regardless: no path may leave
@@ -1083,6 +1179,7 @@ async function runStream(path, body, el) {
     finishFlow();
     const a = el.querySelector(".answer"); a.hidden = false;
     a.innerHTML = `<span class="error">${esc(String(err))}</span>`;
+    return "failed";
   } finally {
     inFlight = null;
     setComposerRunning(false);

@@ -321,17 +321,18 @@ class TestTheCustomerSurfaceHonoursTheContract:
         page = self._page()
         branch = page.split('event === "interrupt"')[1].split('event === "done"')[0]
 
-        assert "pauseFlow()" in branch
+        assert "pauseFlow(d.node)" in branch
         assert "renderInterrupt" in branch
 
     def test_pausing_removes_running_and_marks_the_node_distinctly(self) -> None:
         page = self._page()
-        body = page.split("function pauseFlow()")[1].split("function finishFlow()")[0]
+        body = page.split("function pauseFlow(")[1].split("function finishFlow()")[0]
 
         assert 'classList.remove("running")' in body
         assert "removeGlow()" in body  # no sweep over a node that is not working
         assert "flow-paused" in body
         assert "placeWait(el)" in body
+        assert "flow-active" in body  # the node that finished is not left "active"
         assert "Waiting for you" in page
 
     def test_the_error_branch_also_stops_claiming_to_run(self) -> None:
@@ -339,6 +340,36 @@ class TestTheCustomerSurfaceHonoursTheContract:
         branch = page.split('event === "error"')[1].split('event === "interrupt"')[0]
 
         assert "finishFlow()" in branch
+
+    def test_the_approval_controls_are_styled_and_single_use(self) -> None:
+        """The customer's only two buttons on a paused run.
+
+        Bare `<button>`s inheriting the generic control rule looked unfinished
+        beside `#send`, and a double-click fired two resumes against one
+        checkpoint. Both are behaviour worth pinning, not decoration: the
+        classes are what carry the primary/destructive distinction, and the
+        disable is what makes the decision happen once.
+        """
+        page = self._page()
+        body = page.split("function renderInterrupt(")[1].split("let inFlight")[0]
+
+        assert 'class="btn-approve"' in body
+        assert 'class="btn-reject"' in body
+        assert "other.disabled = true" in body
+        assert 'b.dataset.chosen = "1"' in body
+        # Re-enabled only when the decision did not land — the thread is still
+        # parked on the same checkpoint, so the card must remain answerable.
+        assert "other.disabled = false" in body
+        assert ".btn-approve { background: var(--accent)" in page
+        assert ".btn-reject { background: var(--raised); border-color: var(--danger)" in page
+
+    def test_the_resume_knows_whether_the_decision_landed(self) -> None:
+        """`renderInterrupt` can only re-open the card if `stream` reports an
+        ending — the same terminal vocabulary the frames use."""
+        page = self._page()
+
+        for outcome in ('"done"', '"interrupt"', '"error"', '"dropped"', '"stopped"'):
+            assert f"return {outcome};" in page or f"ended = {outcome};" in page
 
     def test_a_stream_that_never_said_how_it_ended_is_reported(self) -> None:
         """UX-02's client half — authoritative, because no frame can exist."""

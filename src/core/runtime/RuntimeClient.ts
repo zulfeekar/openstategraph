@@ -73,6 +73,18 @@ export interface RunInterrupted {
   readonly threadId: string;
   readonly message: string;
   readonly candidate: string;
+  /**
+   * The canvas node the run is parked on — the approval node itself.
+   *
+   * It never appears in an `update` frame, because `updates` reports a node
+   * only once it *completes* and this one never did. Without this field a
+   * surface can only mark the last node that reported, which is the node
+   * *before* the approval — the paused ring landed one box early on `/chat`
+   * before the backend started sending it. Empty when the backend predates
+   * the field or the name is not a node of this canvas; callers fall back to
+   * what they already knew rather than marking the wrong node.
+   */
+  readonly node: string;
 }
 
 /**
@@ -419,6 +431,7 @@ export class RuntimeClient implements IRuntimeClient {
           threadId: asString(payload['threadId']),
           message: asString(payload['message']),
           candidate: asString(payload['candidate']),
+          node: asString(payload['node']),
         };
       } else if (eventName === 'done') {
         outcome = {

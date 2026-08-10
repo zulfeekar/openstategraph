@@ -472,7 +472,18 @@ export function AskPanel({
         // person to decide, while the approval card asked them to. `paused`
         // is a static amber ring plus a "Waiting for you" label, and nothing
         // about it animates.
-        if (activeNode) controller.model.setNodeRuntime(activeNode, { status: 'paused' });
+        // The approval node itself when the backend names it (it never
+        // appears in an `update` frame, having never completed), falling back
+        // to the last node that acted — which is one box early, but is what
+        // the frame alone can support.
+        const waiting = outcome.value.node || activeNode;
+        // The node still glowing did finish; only the approval is waiting. If
+        // it were left `running` the sweep would simply move one box and the
+        // original lie would survive the fix.
+        if (activeNode && activeNode !== waiting) {
+          controller.model.setNodeRuntime(activeNode, { status: 'success' });
+        }
+        if (waiting) controller.model.setNodeRuntime(waiting, { status: 'paused' });
         updateTurn(id, {
           running: false,
           pendingApproval: {

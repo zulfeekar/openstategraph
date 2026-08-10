@@ -545,7 +545,15 @@ describe('RuntimeClient.runStream — how a stream ended', () => {
   it('settles on the interrupt frame, which is terminal and carries no answer', async () => {
     const text = sseBody([
       ['update', { node: 'node:input.text-1', namespace: [] }],
-      ['interrupt', { threadId: 'th-1', message: 'Approve this?', candidate: 'the draft' }],
+      [
+        'interrupt',
+        {
+          threadId: 'th-1',
+          node: 'node:human.approval-1',
+          message: 'Approve this?',
+          candidate: 'the draft',
+        },
+      ],
     ]);
     const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
 
@@ -554,6 +562,19 @@ describe('RuntimeClient.runStream — how a stream ended', () => {
     expect(result.ok).toBe(true);
     if (!result.ok || !('interrupted' in result.value)) throw new Error('expected a pause');
     expect(result.value.threadId).toBe('th-1');
+    // The node that is waiting, not the last one that reported — what lets a
+    // surface mark the approval node itself.
+    expect(result.value.node).toBe('node:human.approval-1');
+  });
+
+  it('leaves the paused node empty rather than inventing one', async () => {
+    const text = sseBody([['interrupt', { threadId: 'th-1', message: 'Approve this?' }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    if (!result.ok || !('interrupted' in result.value)) throw new Error('expected a pause');
+    expect(result.value.node).toBe('');
   });
 
   it('settles on the error frame as a failure, not a missing result', async () => {

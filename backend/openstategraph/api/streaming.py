@@ -572,10 +572,18 @@ def _run_frames(
     if snapshot.next:
         interrupts = snapshot.tasks[0].interrupts if snapshot.tasks else ()
         payload_value = interrupts[0].value if interrupts else {}
+        # Which node is waiting, not merely that something is. `snapshot.next`
+        # is the scheduled-but-not-run node — precisely the one that called
+        # `interrupt()` — mapped back to a canvas id like every other frame.
+        # Without it a surface can only mark the last node that *reported*,
+        # which is the node before the approval: found live on `/chat`, where
+        # the paused ring landed on `in1` while `approve1` was waiting.
+        paused = [node_ids_by_name.get(name, name) for name in (snapshot.next or ())]
         yield _sse(
             "interrupt",
             {
                 "threadId": thread_id,
+                "node": paused[0] if paused else "",
                 "message": (payload_value or {}).get("message", "Approval needed"),
                 "candidate": (payload_value or {}).get("candidate", ""),
             },
