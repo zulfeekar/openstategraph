@@ -1,10 +1,16 @@
 # OpenStateGraph documentation
 
+**OpenStateGraph is a framework built on top of LangGraph and LangChain**: a
+document format (`workflow.json`), a compiler from it to a plain LangGraph
+`StateGraph`, and the node semantics the compiler emits — organised by atomic
+design, atoms through organisms. The canvas editor, the HTTP API and the MCP
+layer are optional surfaces over those three.
+
 Start with what you came here to do.
 
 | I want to… | Read | Then |
 | --- | --- | --- |
-| **decide whether this is for me** | [What this is](what-is-this.md) — format + compiler + node semantics, the measured 36-distribution footprint, the escape hatches, and when *not* to use it | [The stability contract](stability.md) |
+| **decide whether this is for me** | [What this is](what-is-this.md) — the framework sentence, the atomic-design tiers, how the shape compares to other Lang\*-layered frameworks, the measured 36-distribution footprint, and when *not* to use it | [The stability contract](stability.md) |
 | **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run Store Analytics, ask it something in `/chat`. Or skip the clone: `openstategraph run ./workflows/chinook-nl-to-sql "…"` | [Patterns](patterns.md) |
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |

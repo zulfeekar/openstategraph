@@ -4,9 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0%20unreleased-informational.svg)](CHANGELOG.md)
 
-A visual AI-agent workflow editor built on the **open-source** JointJS core
-(`@joint/core`, MPL-2.0), reproducing the JointJS+ *AI Workflow Builder* demo
-without any commercial packages.
+**OpenStateGraph is a framework built on top of LangGraph and LangChain.** It
+adds a document format (`workflow.json`), a compiler from that document to a
+plain LangGraph `StateGraph`, and the node semantics the compiler emits. Its
+vocabulary is organised by **atomic design** — atoms (inputs, tools, output),
+molecules (agent, router, grader, approval, supervisor, worker, format-report),
+organisms (a whole workflow mounted as one step) — and the same ladder runs
+through the code as Interface → Abstract → Base → Concrete. The visual editor,
+the HTTP API and the MCP layer are *optional surfaces* over those three; the
+canvas is built on the **open-source** JointJS core (`@joint/core`, MPL-2.0),
+with no commercial packages.
 
 ### We compile; we do not interpret
 
@@ -51,12 +58,6 @@ core, 38 with a provider.
 
 New here and deciding? [**What this is**](docs/what-is-this.md) states plainly
 what the framework owns, what it deliberately does not, and when not to use it.
-
-Phase 1 (this repo) is the editor: canvas, design system, MVC engine, and a
-pluggable provider layer that already runs workflows end to end. Phase 2 —
-now live alongside phase 1 — is the Python LangGraph/LangChain backend that
-actually compiles and runs a canvas-authored workflow, persists it to real
-files, and streams a run back to the chat panel.
 
 ### Prerequisites
 

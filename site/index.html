@@ -381,9 +381,11 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
       <span class="badge"><span class="dot"></span> MIT licensed · compiles to LangGraph</span>
       <h1>Draw the flow.<br /><span class="fade">Ship the graph.</span></h1>
       <p class="lede">
-        OpenStateGraph is a visual AI workflow builder that <strong>compiles</strong> rather than
-        interprets. What you draw on the canvas becomes a plain LangGraph <code>StateGraph</code> —
-        real Python that runs anywhere Python runs, with or without this editor.
+        OpenStateGraph is a <strong>framework built on top of LangGraph and LangChain</strong>: a
+        document format, a compiler for it, and the node semantics it emits — organised by
+        <strong>atomic design</strong>. It <strong>compiles</strong> rather than interprets, so what
+        you draw becomes a plain LangGraph <code>StateGraph</code> — real Python that runs anywhere
+        Python runs, with or without this editor.
       </p>
       <div class="cta">
         <a class="btn btn-primary" href="#quickstart">
@@ -496,6 +498,31 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
           </p>
           <p style="margin-top:.75rem">
             <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/what-is-this.md">What this is, in full →</a>
+          </p>
+        </div>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:1.5rem">
+        <div class="card">
+          <h3>Atoms</h3>
+          <p>
+            <b>Inputs · Tools · Output.</b> One thing, made of nothing else: a source with no
+            logic, one capability bound to an agent, a sink with one input and no decision.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Molecules</h3>
+          <p>
+            <b>Reasoning &amp; control.</b> One decision step each — agent, router, grader,
+            approval, supervisor, worker, format-report. A supervisor alone is a molecule;
+            supervisor + workers + join is an organism you draw, not one you drag.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Organisms</h3>
+          <p>
+            <b>Composition.</b> A whole workflow — its own nodes, state and loop — mounted as one
+            step. The same ladder runs through the code: Interface → Abstract → Base → Concrete.
           </p>
         </div>
       </div>
@@ -993,9 +1020,9 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
         <div class="card">
           <h3>What this actually is</h3>
           <p>
-            Start here if you are deciding. Format + compiler + runtime semantics + optional
-            surfaces; what it adds over raw LangGraph, what it refuses to own, the measured
-            dependency picture, and when <em>not</em> to use it.
+            Start here if you are deciding. The framework sentence, the atomic-design tiers, how
+            the adoption interface compares to other Lang* frameworks, what it refuses to own, and
+            when <em>not</em> to use it.
           </p>
           <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/what-is-this.md">docs/what-is-this.md &rarr;</a></p>
         </div>

@@ -227,7 +227,8 @@ itself which to call, how often, and when it is done.
 
 **Our vocabulary:** `agent.llm` with a fat `tools` bus — the same node as
 pattern 1, given more tools and less structure around it. Its `Runtime` field
-picks the tier, mirroring LangChain's own layering:
+picks the runtime, mirroring LangChain's own layering (a different axis from
+the palette's atomic-design tiers — `agent.llm` is a molecule at every setting):
 
 | Field value | Construct | When |
 | --- | --- | --- |
@@ -264,7 +265,7 @@ reach is a thing it may decide to do.
 ## Beyond one graph
 
 Two things this list does not cover, because they compose *patterns* rather
-than sit among them:
+than sit among them — the palette's only two **organisms**:
 
 - **`workflow.subgraph`** mounts another workflow as one node. Store Analytics
   mounts `chinook-nl-to-sql` this way for deep SQL questions — real reuse, not

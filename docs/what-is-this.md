@@ -1,17 +1,81 @@
 # What OpenStateGraph is
 
-**A document format, a compiler for it, and the node semantics the compiler
-emits. Everything else — the canvas, the HTTP API, the MCP layer — is an
-optional surface over those three.**
+**OpenStateGraph is a framework built on top of LangGraph and LangChain.** It
+adds three things they do not have — a document format (`workflow.json`), a
+compiler from that document to a plain LangGraph `StateGraph`, and the node
+semantics the compiler emits. Everything else — the canvas editor, the HTTP
+API, the MCP layer — is an optional surface over those three. You write a
+document; we compile it; from that moment LangGraph owns execution, and the
+graph is a standard Python object that runs in your service, in pytest or in a
+Lambda with none of our surfaces present.
 
-If you read one paragraph: you write a `workflow.json`, we compile it into a
-plain LangGraph `StateGraph`, and from that moment LangGraph owns execution.
-The graph is a standard Python object. It runs in your service, in pytest, in a
-Lambda, with none of our surfaces present.
+---
 
-The honest framing of the whole trade is at the bottom of this page. It starts
-with **you take a dependency on us to get the format and the compiler; the
-alternative is hand-writing LangGraph.**
+## How it is organised: atomic design
+
+The palette is tiered, and the tier is the thing you are actually choosing
+between. The tiers are declared once, in
+[`src/nodes/vocabulary.ts`](../src/nodes/vocabulary.ts), and a test asserts the
+ordering:
+
+| Tier | Sections | What qualifies |
+| --- | --- | --- |
+| **Atoms** | `Inputs`, `Tools`, `Output` | one thing, made of nothing else. Sources with no logic; one capability bound to an agent; sinks with one input and no decision. |
+| **Molecules** | `Reasoning & control` | one decision step — `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`. |
+| **Organisms** | `Composition` | `workflow.subgraph` and `team.workflow`, and only these: an entire compiled workflow — its own nodes, state and loop — mounted as one step. |
+| **No tier** | `Annotate` | `group` and `note`. Never compiled, never executed, so they are not made of anything and nothing is made of them. |
+
+Two boundaries are load-bearing, because getting them wrong is how a palette
+teaches the wrong mental model:
+
+- **A supervisor is a molecule, not an organism.** Alone it is one model call
+  emitting a plan and a `Send` fan-out — a single reasoning step, exactly like
+  a router. The organism is supervisor + workers + join, and that is a shape
+  you *draw*, not an item you drag.
+- **`function.format_report` is a molecule, not an output atom.** It joins many
+  worker results, so it composes. `output.formatted` — one input, no logic — is
+  the atom.
+
+**The same ladder runs through the code.** Each family declares
+Interface → Abstract/Base → Concrete and consumers import the interface:
+`ITool → BaseTool → your tool`, `IRouter → BaseRouter → Router`,
+`IGrader → BaseGrader → Grader`, `IOrchestrator → BaseOrchestrator →
+Orchestrator`, and for agents the full four rungs —
+`IAgent → AbstractAgentNode → BaseAgentNode → ReactAgentNode | DeepAgentNode`,
+with `CustomGraphNode` a sibling directly under the abstract because it has no
+prompt to compose. Composition is a *collaborator*, never a shared superclass:
+routers, graders and agents each compose a `SystemPrompt` and a middleware slot
+table rather than inheriting one, because they compile to different graph
+constructs. Above all of that, the composition unit is the **workflow
+package** — a directory of `workflow.json`, `tools/`, `functions/`,
+`middlewares/`, `skills/`, `knowledge/` and `tests/` that mounts inside another
+workflow as one organism.
+
+## Familiar shape, different core
+
+If you have adopted a packaged Lang\*-layered framework before, the surface
+here should need no explanation. That is deliberate: the adoption interface is
+the shape practitioners already expect, with a compiler underneath instead of
+an engine.
+
+**The same:**
+
+| | Here |
+| --- | --- |
+| `pip install` + provider extras | four-package core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[all]` |
+| one entry object | `from openstategraph import load_workflow` |
+| a CLI | `openstategraph run · validate · graph · new · knowledge · serve · mcp` |
+| a rich result object, not a string | `RunResult` — `.answer`, `.decisions`, `.outputs`, `.warnings`, `.attempts` |
+| markdown domain knowledge as a first-class input | `knowledge/*.md` in the package, `--knowledge-dir` to point elsewhere |
+| an optional drop-in for a team already on `create_agent` | `workflow.as_tool(...)` |
+
+**The difference, and it is the load-bearing one:** those frameworks own their
+agent loop — they drive the model themselves and a framework-agnostic core is
+the selling point. We do the opposite on purpose. We compile to a LangGraph
+`StateGraph` and never write an execution engine, so `langgraph` and
+`langchain` sit in the **core** rather than behind an extra, and the artifact
+you get back runs without us. Framework-agnosticism is not available to us, and
+claiming it would be the dishonesty this project exists to avoid.
 
 ---
 
@@ -31,28 +95,25 @@ alternative is hand-writing LangGraph.**
 
 ## What needs us at run time, precisely
 
-This is the question adopters test first, so here is the exact answer in three
-parts rather than one slogan:
+Adopters test this first, so: three parts, not one slogan.
 
 - **`workflow.json` needs us.** It is our format. Nothing else reads it.
 - **The compiled graph does not.** It is a plain LangGraph object.
   `CompiledWorkflow.graph` hands it over, and every LangGraph capability works
   on it with nothing of ours in the call stack.
 - **A *package* needs us**, because `tools/`, `functions/`, `middlewares/`,
-  `skills/` and `knowledge/` are wired by *our* discovery conventions. That
-  wiring is the difference between a workflow that answers and one that looks
-  like it answers — compile the document by hand and the agent is drawn with
-  three tools, bound to none, and confidently answers from parametric memory.
-  `load_workflow` exists because of that specific failure, and it reports what
-  it could not resolve on `.warnings` rather than raising.
+  `skills/` and `knowledge/` are wired by *our* discovery conventions. Compile
+  the document by hand and the agent is drawn with three tools, bound to none,
+  and confidently answers from parametric memory. `load_workflow` exists
+  because of that failure, and reports what it could not resolve on
+  `.warnings` rather than raising.
 
 ---
 
 ## What it adds over raw LangGraph
 
 Not "an easier `StateGraph`". LangGraph's API is already good. What you get is
-a different *artifact*, plus a set of decisions that are already correct on the
-things that bite in week three.
+a different *artifact*.
 
 **The graph becomes a reviewable diff.** A branch added to a router is four
 lines of JSON in a pull request, not a diff inside a thousand-line Python
@@ -122,11 +183,6 @@ is behind an extra you ask for by name:
 [mcp]                           the MCP transport
 [all]                           everything, for a checkout
 ```
-
-`langgraph` and `langchain` stay in the **core** rather than behind a
-`[langchain]` extra, unlike some comparable projects. Ours cannot be
-framework-agnostic and pretending otherwise would be the dishonesty this
-project exists to avoid.
 
 Read the list the way a sceptic does: of those 36, essentially all are
 LangChain's and LangGraph's own closure — which you would have installed anyway,
