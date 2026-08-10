@@ -240,15 +240,12 @@ def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]
     return registry
 
 
-__all__ = [
-    "FunctionCapability",
-    "ToolCapability",
-    "discover_function_callables",
-    "discover_functions",
-    "discover_tool_instances",
-    "discover_tool_registry",
-    "discover_tools",
-]
+# No `__all__` here on purpose. In Python `__all__` reads as "this is the
+# public surface", and this module is Tier 3 — internal, no stability
+# guarantee (see `openstategraph/api/__init__.py`). The names it exported
+# were the ones it hands its own siblings, and a third party would have read
+# that as a promise. `openstategraph.__all__` and `openstategraph.abc` are
+# the promises.
 
 
 def discover_skills(workflow_dir: Path) -> str:

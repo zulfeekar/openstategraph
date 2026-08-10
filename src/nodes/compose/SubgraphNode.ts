@@ -41,7 +41,7 @@ export class SubgraphNodeModel extends AbstractNodeModel {
 export const subgraphNode: INodeDefinition = defineNode(
   {
     id: SUBGRAPH_TYPE,
-    category: CATEGORY.agent,
+    category: CATEGORY.compose,
     label: 'Workflow',
     description: 'Runs another workflow as a single step.',
     iconId: 'node-subgraph',

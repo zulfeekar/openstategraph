@@ -44,9 +44,22 @@ class TestReadOnlyJail:
         assert PlatformReadTool().run(path=".git/config").error is not None
 
     def test_grep_finds_and_caps(self) -> None:
-        result = PlatformGrepTool().run(pattern="StateGraph", path="backend/openstategraph")
+        # Scoped to the compiler package on purpose. The same search across the
+        # whole backend used to assert that `workflow_compiler` appeared in the
+        # first 60 hits — which made an unrelated docstring mentioning
+        # "StateGraph" able to fail this test by pushing the file past the cap.
+        # What is worth pinning is that grep *finds* and that it *caps*, and
+        # each half now has its own assertion.
+        result = PlatformGrepTool().run(
+            pattern="StateGraph", path="backend/openstategraph/compile"
+        )
         assert result.error is None
         assert "workflow_compiler" in result.content
+
+    def test_grep_caps_a_wide_search(self) -> None:
+        result = PlatformGrepTool().run(pattern="StateGraph", path="backend/openstategraph")
+        assert result.error is None
+        assert "capped at 60 matches" in result.content
 
     def test_grep_never_reports_a_hit_from_an_excluded_directory(self) -> None:
         """Pins the jail's *result* rather than its traversal.

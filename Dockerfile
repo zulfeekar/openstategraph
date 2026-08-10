@@ -52,9 +52,18 @@ COPY backend/pyproject.toml ./pyproject.toml
 # Install the backend's *dependencies* but not the backend package itself.
 # pyproject.toml stays the single source of truth — the list is read out of it
 # with tomllib rather than duplicated into a requirements.txt that would drift.
+#
+# The core is lean by design, so the image must also take the extras: this
+# container serves the HTTP API and the MCP transport and runs deep agents, i.e.
+# everything `[all]` names. `all` itself is skipped because it is a
+# self-reference (`openstategraph[...]`) and the package is not installed here;
+# the concrete requirements are read from the other extras directly.
 RUN python -c "import tomllib,pathlib; \
 d=tomllib.loads(pathlib.Path('pyproject.toml').read_text()); \
-pathlib.Path('requirements.txt').write_text('\n'.join(d['project']['dependencies'])+'\n')" \
+p=d['project']; \
+extras=[r for name,rs in p.get('optional-dependencies',{}).items() \
+        if name not in ('all','dev') for r in rs]; \
+pathlib.Path('requirements.txt').write_text('\n'.join(p['dependencies']+extras)+'\n')" \
  && pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ---------------------------------------------------------------------------

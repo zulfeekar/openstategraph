@@ -8,13 +8,20 @@ runtime (`backend/`). Architecture rules live in `CLAUDE.md` — read the
 
 ```bash
 npm install && npm run dev                 # editor → http://localhost:5273
-pip install -e backend[dev]                # runtime deps
+pip install -e "backend[all,dev]"          # runtime deps — see below
 PYTHONPATH=backend:workflows/chinook-nl-to-sql \
   uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 ```
 
 No API keys required: the editor runs on a deterministic Mock provider, the
 backend defaults to Ollama cloud.
+
+`[all]` is a *contributor's* install. A consumer installs the lean core —
+`langgraph`, `langchain`, `langchain-core`, `pydantic` — plus whichever extras
+their workflow actually uses (`[anthropic]`, `[openai]`, `[ollama]`, `[deep]`,
+`[sqlite]`, `[server]`, `[mcp]`). Adding a dependency to the core table
+without the accompanying case for it fails
+`backend/tests/test_distribution_metadata.py`, which is the point.
 
 ## Tests — the gate for every PR
 

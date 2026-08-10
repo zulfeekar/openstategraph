@@ -17,7 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -e backend[dev] ruff
+      # `[all]` because a checkout exercises every surface — the HTTP API, the
+      # MCP transport, deep agents, sqlite. A *consumer* installs the lean core
+      # plus one provider extra; `backend/tests/test_distribution_metadata.py`
+      # is what keeps that promise honest, since CI cannot see it from here.
+      - run: pip install -e "backend[all,dev]" ruff
       - run: python -m ruff check backend
       # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
       # guards regressions, raised as it climbs. Live-API tests stay opt-in.

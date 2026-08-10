@@ -22,9 +22,20 @@ project's minimum-viable-prebuilt rule demands.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
+
+
+def _log() -> logging.Logger:
+    """One logger for this module's degradation warnings.
+
+    Named, not `logging.warning`, so a deployment can raise the level on
+    exactly this module and a test can assert against exactly this logger —
+    both of which matter for messages whose entire job is to be noticed.
+    """
+    return logging.getLogger(__name__)
 
 #: One namespace root for user facts, shared by both tools and any future
 #: memory middleware. A tuple prefix, per the Store API.
@@ -175,12 +186,25 @@ def build_store() -> Any:
             store = SqliteStore(conn)
             store.setup()
             return store
-        except Exception:
-            import logging
+        except ImportError:
+            # Same undeclared-dependency trap as `checkpointer_for`: the user
+            # set a path, so they expect memories on disk. Name the extra.
+            from openstategraph._extras import install_hint
 
-            logging.getLogger(__name__).warning(
-                "OPENSTATEGRAPH_MEMORY_PATH=%r unusable; falling back to in-memory store",
+            _log().warning(
+                "OPENSTATEGRAPH_MEMORY_PATH=%r asked for a durable store, but "
+                "langgraph-checkpoint-sqlite is not installed — falling back to an "
+                "IN-MEMORY store, so saved memories will NOT survive a restart. "
+                "Install it with: %s",
                 raw_path,
+                install_hint("sqlite"),
+            )
+        except Exception:
+            _log().warning(
+                "OPENSTATEGRAPH_MEMORY_PATH=%r unusable; falling back to an "
+                "IN-MEMORY store, so saved memories will NOT survive a restart.",
+                raw_path,
+                exc_info=True,
             )
     return InMemoryStore()
 
@@ -207,10 +231,31 @@ def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback
             root / f"checkpoints-{slug or 'default'}.sqlite", check_same_thread=False
         )
         return SqliteSaver(conn)
-    except Exception:  # pragma: no cover - environment-dependent
-        import logging
+    except ImportError:
+        # The one degradation this codebase was getting wrong. `langgraph-
+        # checkpoint-sqlite` is not a transitive of `langgraph` and was never
+        # declared, so *every install that existed* answered "yes" to
+        # `settings.checkpointer: "sqlite"` and quietly gave the user an
+        # in-process saver. They asked for durability, got a log line nobody
+        # reads, and find out when a restart eats a conversation.
+        #
+        # It is a declared extra now, so the message can name the fix instead
+        # of describing the symptom.
+        from openstategraph._extras import install_hint
 
-        logging.getLogger(__name__).warning(
-            "settings.checkpointer=sqlite requested but unavailable; using in-memory"
+        _log().warning(
+            "settings.checkpointer='sqlite' asked for durable threads, but "
+            "langgraph-checkpoint-sqlite is not installed — falling back to an "
+            "IN-MEMORY saver, so conversations will NOT survive a restart. "
+            "Install it with: %s",
+            install_hint("sqlite"),
+        )
+        return fallback
+    except Exception:  # pragma: no cover - environment-dependent
+        _log().warning(
+            "settings.checkpointer='sqlite' requested but the store could not be "
+            "opened; falling back to an IN-MEMORY saver, so conversations will "
+            "NOT survive a restart.",
+            exc_info=True,
         )
         return fallback

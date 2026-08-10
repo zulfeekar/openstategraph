@@ -21,10 +21,10 @@ from __future__ import annotations
 from typing import Any
 
 from openstategraph.api.registries import (
-    _document_of,
     build_function_registry,
     build_tool_registry,
 )
+from openstategraph.schema import normalize_document
 from openstategraph.api.workflow_store import WorkflowStore
 
 
@@ -80,7 +80,7 @@ class WorkflowServices:
                 model=model,
                 tools=tools,
                 functions=build_function_registry(store, slug),
-                document_loader=lambda child_slug: _document_of(store.load(child_slug)),
+                document_loader=lambda child_slug: normalize_document(store.load(child_slug)),
                 package_loader=lambda child_slug: PackageAssets(
                     tools=self.tool_registry_for(child_slug),
                     functions=build_function_registry(store, child_slug),
@@ -105,4 +105,9 @@ class WorkflowServices:
         )
 
 
-__all__ = ["WorkflowServices"]
+# No `__all__` here on purpose. In Python `__all__` reads as "this is the
+# public surface", and this module is Tier 3 — internal, no stability
+# guarantee (see `openstategraph/api/__init__.py`). The names it exported
+# were the ones it hands its own siblings, and a third party would have read
+# that as a promise. `openstategraph.__all__` and `openstategraph.abc` are
+# the promises.

@@ -33,6 +33,11 @@ implementation of anything to drift.
 
 Run it with ``python -m openstategraph.mcp_server`` (stdio). For a real server
 deployment set ``OPENSTATEGRAPH_MCP_TRANSPORT=streamable-http``.
+
+**Not part of the public API. Stability is not guaranteed** — Tier 3, see
+``docs/stability.md``. The MCP *protocol* surface is the contract here (and
+``EXPOSED_TOOLS`` is where it is enforced); the Python names in this module
+are not. Requires the ``[mcp]`` extra.
 """
 
 from __future__ import annotations
@@ -43,6 +48,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from openstategraph.api.services import WorkflowServices
+from openstategraph.errors import DocumentError as _DocumentError
+from openstategraph.schema import normalize_document as _normalize_document
 
 #: The complete, reviewed surface. A tool absent from this tuple does not
 #: exist over MCP — publishing, deleting and anything credential-shaped are
@@ -60,27 +67,20 @@ EXPOSED_TOOLS: tuple[str, ...] = (
 )
 
 
-class DocumentError(ValueError):
-    """A document that is not even shaped like a workflow document."""
+#: The one spelling, now that there is a public home for it
+#: (`openstategraph.errors`). Re-exported rather than redefined so
+#: `from openstategraph.mcp_server import DocumentError` keeps working and
+#: `except DocumentError` catches the same object either way — two classes with
+#: one name is how a caller ends up with a handler that never fires.
+DocumentError = _DocumentError
 
 
-def normalize_document(document: Any) -> dict[str, Any]:
-    """One spelling of "the document", whatever the client sent.
-
-    MCP clients serialize inconsistently — some send the object, some a JSON
-    string, some hand back the whole `workflow.json` envelope they were given.
-    All three mean the same thing, so all three are accepted here rather than
-    costing the client's model a round trip to learn our preference.
-    """
-    if isinstance(document, str):
-        try:
-            document = json.loads(document)
-        except json.JSONDecodeError as exc:
-            raise DocumentError(f"Not valid JSON: {exc}") from exc
-    if not isinstance(document, dict):
-        raise DocumentError("The document must be a JSON object.")
-    inner = document.get("document")
-    return inner if isinstance(inner, dict) else document
+#: The same object as `openstategraph.schema.normalize_document`, not a second
+#: spelling of it. This module used to carry its own copy that also accepted a
+#: JSON *string* (MCP clients serialize inconsistently); that behaviour moved
+#: into the one seam, so the envelope-peeling rule and the version guard cannot
+#: drift between the loader and the MCP layer.
+normalize_document = _normalize_document
 
 
 def _validate(document: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -670,13 +670,9 @@ def build_mcp_server(
     whole point of keeping validate/compile deterministic: a deployment with no
     provider key is a complete product, not a broken one.
     """
-    try:
-        from mcp.server.fastmcp import FastMCP
-    except ImportError as exc:  # pragma: no cover - deploy-time, not test-time
-        raise RuntimeError(
-            "The MCP layer needs the official Python SDK: `pip install mcp`. "
-            "It is declared in backend/pyproject.toml."
-        ) from exc
+    from openstategraph._extras import require_extra
+
+    FastMCP = require_extra("mcp.server.fastmcp", "mcp", "the MCP transport").FastMCP
 
     services = services or WorkflowServices()
     vocabulary = NodeVocabulary()

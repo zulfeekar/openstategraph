@@ -33,6 +33,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openstategraph.errors import InvalidPackageName, PackageNotFound
+from openstategraph.schema import normalize_document
+
 logger = logging.getLogger(__name__)
 
 #: Supersteps, not iterations — see CLAUDE.md. Matches the editor's own
@@ -137,11 +140,11 @@ def load_workflow(
     directory = Path(package_dir).expanduser().resolve()
     manifest = directory / "workflow.json"
     if not manifest.is_file():
-        raise FileNotFoundError(f"no workflow.json in {directory} — is that a workflow package?")
+        raise PackageNotFound(f"no workflow.json in {directory} — is that a workflow package?")
 
     # Lazy, all of it: this is where a consumer opts into the runtime.
     from openstategraph.api.model_resolution import resolve_model, workflow_default_model
-    from openstategraph.api.registries import _document_of, runtime_warnings
+    from openstategraph.api.registries import runtime_warnings
     from openstategraph.api.services import WorkflowServices
     from openstategraph.api.workflow_store import slugify
     from openstategraph.compile.node_runtime import RunState
@@ -154,21 +157,32 @@ def load_workflow(
         # function, skill and knowledge discovery. A directory the store
         # cannot address would silently discover nothing — the exact silent
         # degradation this function exists to prevent — so say it instead.
-        raise ValueError(
+        raise InvalidPackageName(
             f"workflow package directory {slug!r} is not a valid slug; "
             f"rename it to {slugify(slug)!r} (lowercase letters, digits and hyphens)"
         )
 
-    document = _document_of(json.loads(manifest.read_text()))
+    document = normalize_document(json.loads(manifest.read_text()))
 
     services = WorkflowServices(directory.parent)
     resolved_model = model
     if model is None or isinstance(model, str):
         from langchain.chat_models import init_chat_model
 
-        resolved_model = init_chat_model(
-            resolve_model(model or workflow_default_model(document))
-        )
+        from openstategraph._extras import provider_extra_hint
+
+        model_name = resolve_model(model or workflow_default_model(document))
+        try:
+            resolved_model = init_chat_model(model_name)
+        except ImportError as exc:
+            # Provider SDKs are extras (framework-packaging §3.1). The adopter
+            # installed *us*, not `langchain-anthropic`, so name our install
+            # line rather than leaving them to map a package to an extra.
+            hint = provider_extra_hint(model_name)
+            raise ImportError(
+                f"{exc} — model {model_name!r} needs its provider integration"
+                + (f": {hint}" if hint else "")
+            ) from exc
 
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)

@@ -155,11 +155,9 @@ def save_topic(
     )
 
 
-__all__ = [
-    "TopicStatus",
-    "UnknownTopicPathError",
-    "current_source_hashes",
-    "list_topics",
-    "read_topic",
-    "save_topic",
-]
+# No `__all__` here on purpose. In Python `__all__` reads as "this is the
+# public surface", and this module is Tier 3 — internal, no stability
+# guarantee (see `openstategraph/api/__init__.py`). The names it exported
+# were the ones it hands its own siblings, and a third party would have read
+# that as a promise. `openstategraph.__all__` and `openstategraph.abc` are
+# the promises.

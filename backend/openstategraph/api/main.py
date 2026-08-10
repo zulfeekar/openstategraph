@@ -52,7 +52,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 _HUMAN_IN_THE_LOOP_CHECKPOINTER = InMemorySaver()
 
 
-from openstategraph.api.model_resolution import (  # noqa: E402
+from openstategraph.api.model_resolution import (  # noqa: E402, F401  (re-exported for tests)
     OLLAMA_CLOUD_MODEL,
     GraphFactory,
     apply_credentials,
@@ -60,10 +60,10 @@ from openstategraph.api.model_resolution import (  # noqa: E402
     workflow_default_model,
 )
 from openstategraph.api.registries import (  # noqa: E402, F401  (re-exported for tests)
-    _document_of,
     build_tool_registry,
     runtime_warnings,
 )
+from openstategraph.schema import normalize_document  # noqa: E402
 from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
     AskResponse,
@@ -535,7 +535,7 @@ def create_app(
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        document = _document_of(request.workflow)
+        document = normalize_document(request.workflow)
         # Browser-held keys, applied only where the server has none — see
         # `apply_credentials` for why the server's own env always wins.
         apply_credentials(request.credentials)
@@ -610,7 +610,7 @@ def create_app(
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        document = _document_of(request.workflow)
+        document = normalize_document(request.workflow)
         # Browser-held keys, fallback-only (see `apply_credentials`).
         apply_credentials(request.credentials)
         model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
@@ -687,7 +687,7 @@ def create_app(
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
         from langchain.chat_models import init_chat_model
 
-        document = _document_of(request.workflow)
+        document = normalize_document(request.workflow)
         # Browser-held keys, fallback-only (see `apply_credentials`).
         apply_credentials(request.credentials)
         model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
@@ -772,16 +772,12 @@ def create_app(
 
 app = create_app()
 
-__all__ = [
-    "OLLAMA_CLOUD_MODEL",
-    "AskRequest",
-    "AskResponse",
-    "RunRequest",
-    "RunResponse",
-    "app",
-    "create_app",
-    "resolve_model",
-]
+# No `__all__` here on purpose. In Python `__all__` reads as "this is the
+# public surface", and this module is Tier 3 — internal, no stability
+# guarantee (see `openstategraph/api/__init__.py`). The names it exported
+# were the ones it hands its own siblings, and a third party would have read
+# that as a promise. `openstategraph.__all__` and `openstategraph.abc` are
+# the promises.
 
 
 # --- Container-only: serve the built editor SPA from this same process. ------

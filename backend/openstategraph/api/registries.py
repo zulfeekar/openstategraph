@@ -5,19 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from openstategraph.schema import normalize_document
+
 logger = logging.getLogger(__name__)
 
 
-def _document_of(workflow: dict[str, Any]) -> dict[str, Any]:
-    """Accepts a bare document or the store's `{…, document}` envelope.
-
-    The store saves `{version, name, savedAt, document}`; the editor's export
-    posts the bare document. Both arrive at the run endpoints, and compiling
-    the *envelope* silently produces a zero-node graph — so every endpoint
-    unwraps through this one helper, resume included.
-    """
-    inner = workflow.get("document")
-    return inner if isinstance(inner, dict) else workflow
+#: **Deprecated alias.** The real implementation moved to the public
+#: `openstategraph.schema.normalize_document` (ticket 03: the documented public
+#: loader must not import an underscore-prefixed name out of the internal HTTP
+#: tree). Kept as a re-export, not a second function, so anything still
+#: importing this name gets the *same* object and the version guard has one
+#: seam rather than two. Import `openstategraph.schema` in new code.
+_document_of = normalize_document
 
 
 

@@ -194,9 +194,11 @@ class DeepAgentNode(BaseAgentNode):
 
     def __init__(self, *, subagents: list[dict[str, Any]] | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        from deepagents import create_deep_agent
+        from openstategraph._extras import require_extra
 
-        self._constructor = create_deep_agent
+        deepagents = require_extra("deepagents", "deep", "tier='deep' agent nodes")
+
+        self._constructor = deepagents.create_deep_agent
         self.subagents = list(subagents or [])
 
     def build_agent(

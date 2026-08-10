@@ -217,15 +217,19 @@ today, and this page will not print a command that fails. The runtime is
 consumed one of two ways right now:
 
 ```bash
-# A checkout of the backend, installed into your environment
-pip install -e /path/to/openstategraph/backend
+# A checkout of the backend, installed into your environment. The extras are
+# the install story: the core is four packages, and you add only what your
+# workflow uses — [anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp],
+# or [all] for the lot.
+pip install -e "/path/to/openstategraph/backend[ollama]"
 
 # — or, without installing at all —
 PYTHONPATH=/path/to/openstategraph/backend python your_service.py
 ```
 
-The distribution is named `openstategraph-backend`; the import package is
-`openstategraph`. The Docker image is the third option — it already contains
+The distribution is named `openstategraph` (it was `openstategraph-backend`
+before 0.3.0); the import package is `openstategraph` either way. The Docker
+image is the third option — it already contains
 the runtime, so a service that shells out to the container needs nothing
 installed locally.
 

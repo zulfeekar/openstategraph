@@ -1,0 +1,50 @@
+openstategraph.CompiledWorkflow = dataclass(object) fields(graph,warnings,slug,package_dir,document)
+openstategraph.DEFAULT_RECURSION_LIMIT = int
+openstategraph.DocumentError = class(OpenStateGraphError,ValueError)(...)
+openstategraph.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
+openstategraph.OpenStateGraphError = class(Exception)(...)
+openstategraph.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
+openstategraph.SchemaVersionError = class(DocumentError)(...)
+openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
+openstategraph.__version__ = str
+openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'Any' = None) -> 'CompiledWorkflow'
+openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), rules: 'str' = '', context: 'str' = '', middleware: 'dict[str, Any] | None' = None) -> 'None'
+openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
+openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(**kwargs: 'Any') -> 'None'
+openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict] | None' = None, replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseTool = class(ABC)()
+openstategraph.abc.Classification = class(BaseModel)(*, branch: str, fell_back: bool = False, reason: str = '') -> None
+openstategraph.abc.CustomGraphNode = class(AbstractAgentNode)(*, name: 'str', runnable: 'Any') -> 'None'
+openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, **kwargs: 'Any') -> 'None'
+openstategraph.abc.Field = re-export of pydantic.fields.Field
+openstategraph.abc.Grader = class(BaseGrader)(*, criteria: 'str' = '', rubric: 'list[dict] | None' = None, replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
+openstategraph.abc.IAgent = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IGrader = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IOrchestrator = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IRouter = class(Protocol)(*args, **kwargs)
+openstategraph.abc.ITool = class(Protocol)(*args, **kwargs)
+openstategraph.abc.MiddlewareSlotTable = class(object)(order: 'Sequence[str]' = ()) -> 'None'
+openstategraph.abc.NoArgs = class(BaseModel)() -> None
+openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, model: 'Any' = None) -> 'None'
+openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'None'
+openstategraph.abc.Router = class(BaseRouter)(branches: 'list[str]', *, fallback: 'str | None' = None, rules: 'str' = '', model: 'Any' = None, destinations: 'dict[str, str] | None' = None) -> 'None'
+openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
+openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults)
+openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None) -> None
+openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
+openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
+openstategraph.errors.DocumentError = class(OpenStateGraphError,ValueError)(...)
+openstategraph.errors.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
+openstategraph.errors.OpenStateGraphError = class(Exception)(...)
+openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
+openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
+openstategraph.errors.WorkflowPackageError = class(OpenStateGraphError)(...)
+openstategraph.schema.MIGRATIONS = dict
+openstategraph.schema.MIN_SUPPORTED_VERSION = int
+openstategraph.schema.Migration = re-export of typing.Callable
+openstategraph.schema.SCHEMA_VERSION = int
+openstategraph.schema.document_version = def(document: 'dict[str, Any]') -> 'int'
+openstategraph.schema.migrate_document = def(document: 'dict[str, Any]') -> 'dict[str, Any]'
+openstategraph.schema.normalize_document = def(payload: 'Any') -> 'dict[str, Any]'

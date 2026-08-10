@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.3.0 — unreleased
+
+Packaging OpenStateGraph as a framework somebody else can install: an honest
+install footprint, a declared public surface, and a document version that is
+finally read by code. Wayfinder tickets 02–04;
+`docs/decisions/framework-packaging.md` is the reasoning.
+
+### Changed — breaking
+
+- **The distribution is now `openstategraph`** (was `openstategraph-backend`).
+  The import package is unchanged, and the old name was never on PyPI. A
+  checkout installs with `pip install -e "backend[all,dev]"` — see below for
+  why the extras are now required.
+- **The core is four dependencies.** `langgraph`, `langchain`,
+  `langchain-core`, `pydantic`. Everything else moved behind an extra:
+  `[anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp]`, plus `[all]`
+  and `[dev]`. Measured: **78 → 36 distributions**, 40 with one provider. A
+  consumer of `load_workflow` no longer installs a web server, an MCP SDK,
+  three provider SDKs and the Google GenAI SDK to run a graph in their own
+  process. Anyone wanting today's behaviour installs `openstategraph[all]`.
+- **A document whose schema version is newer than the build is refused**
+  (`SchemaVersionError`, naming both versions) instead of being compiled
+  best-effort. Nothing in this repository is affected — every committed
+  document is version 2 — but a future document previously loaded silently
+  into an older build and compiled into a graph that ran and answered
+  differently.
+
+### Added
+
+- **`openstategraph.errors`** — `OpenStateGraphError` and the failures the
+  loader raises. Every class also inherits the builtin it used to be
+  (`PackageNotFound` is a `FileNotFoundError`, `InvalidPackageName` is a
+  `ValueError`), so existing `except` clauses keep working.
+- **`openstategraph.abc` exports the ladders** — `ITool`/`BaseTool`,
+  `IRouter`/`BaseRouter`, `IGrader`/`BaseGrader`, the agent nodes, the
+  orchestrator, `SystemPrompt`, `MiddlewareSlotTable`. The package's
+  `__init__.py` was empty; the deep module paths still work.
+- **`openstategraph.schema`** — `normalize_document`, `migrate_document`,
+  `document_version`, `SCHEMA_VERSION`, `MIN_SUPPORTED_VERSION`, `MIGRATIONS`.
+  One seam for envelope-peeling and the version policy, replacing the private
+  `api.registries._document_of` that the public loader imported and the
+  second, subtly different normalizer in `mcp_server`.
+- **`openstategraph.__version__`**, from the installed distribution's metadata.
+- **`docs/stability.md`** — the three tiers, what is deliberately not public,
+  and the deprecation policy. Pre-1.0, a breaking change bumps the **minor**,
+  never the patch.
+- **`py.typed`** (PEP 561), `backend/LICENSE`, `backend/README.md`,
+  classifiers, project URLs and a `[build-system]` table — the wheel had none
+  of these.
+
+### Fixed
+
+- **`settings.checkpointer: "sqlite"` degraded silently to in-memory** in every
+  install that existed, because `langgraph-checkpoint-sqlite` was imported but
+  never declared and is not a transitive of `langgraph`. A user who asked for
+  durable threads got a log line and would have found out when a restart ate a
+  conversation. The dependency is now `[sqlite]` and the fallback says so, in
+  as many words, naming the install command. Same fix for
+  `OPENSTATEGRAPH_MEMORY_PATH`.
+- **A missing optional dependency now names its extra.** `deepagents is
+  required for tier='deep' agent nodes — pip install 'openstategraph[deep]'`,
+  rather than a bare `ModuleNotFoundError` an adopter has to map back to one of
+  seven extras themselves.
+
+### Internal
+
+- `__all__` removed from every module under `openstategraph/api/`, which is
+  Tier 3: in Python `__all__` reads as "this is the public surface", and those
+  lists were the names each module hands its own siblings.
+- New guards, run on every PR: a distribution-metadata test (the core is
+  exactly four, each extracted name is in the extra that claims it), a
+  signature snapshot of the public API, and a check that no Tier 1 module
+  imports a private name out of `openstategraph.api`.
+
 ## 0.2.0 — 2026-08-09
 
 The first release under the project's own name, plus the work that made the

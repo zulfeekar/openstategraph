@@ -236,3 +236,29 @@ class TestImportCost:
 
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "False"
+
+    def test_load_workflow_touches_no_extra_it_did_not_need(self, tmp_path: Path) -> None:
+        """Every package behind an extra, pinned absent on the consumer path.
+
+        This is the runtime half of `test_distribution_metadata.py`: metadata
+        proves we do not *declare* them, this proves we do not *import* them.
+        Both are needed — a lazy import that some module-scope line already
+        triggered costs the adopter the install anyway, and only this test
+        would notice.
+        """
+        package = write_package(tmp_path, "linear-pkg", LINEAR_DOCUMENT)
+        extras = ["fastapi", "uvicorn", "deepagents", "mcp"]
+        source = (
+            "import sys; from openstategraph import load_workflow; "
+            f"load_workflow({str(package)!r}); "
+            f"print(sorted(m for m in {extras!r} if m in sys.modules))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", source],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).resolve().parents[1]),
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "[]"

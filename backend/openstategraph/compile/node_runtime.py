@@ -187,7 +187,11 @@ class _DeepAgentAsChatModel:
         self._name = name
 
     def invoke(self, messages: list[Any]) -> Any:
-        from deepagents import create_deep_agent
+        from openstategraph._extras import require_extra
+
+        create_deep_agent = require_extra(
+            "deepagents", "deep", "the deep-agent grader"
+        ).create_deep_agent
 
         system_prompt = messages[0].content if messages else ""
         candidate_message = messages[-1]
@@ -890,7 +894,11 @@ class NodeRuntime:
                     # on invocation state (per the docs), so one middleware
                     # serves every question. This is the agent-internal atom;
                     # the Grader *node* stays the graph-level organism.
-                    from deepagents import RubricMiddleware
+                    from openstategraph._extras import require_extra
+
+                    RubricMiddleware = require_extra(
+                        "deepagents", "deep", "an agent node with a rubric"
+                    ).RubricMiddleware
 
                     contributions["rubric"] = RubricMiddleware(
                         model=model, max_iterations=3

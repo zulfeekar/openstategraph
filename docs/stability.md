@@ -1,0 +1,117 @@
+# The stability contract
+
+**Status: in force from 0.3.0.** Resolves wayfinder ticket 03; the reasoning
+is in `docs/decisions/framework-packaging.md` §3.3.
+
+This page answers one question: *if I import it, can it be taken away from me?*
+
+---
+
+## The tiers
+
+| Tier | Where | Promise |
+| --- | --- | --- |
+| **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
+| **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
+| **3 — internal** | `openstategraph.api.*`, `openstategraph.mcp_server`, and any `_`-prefixed name anywhere | No guarantee at all. May be renamed, split or deleted in a **patch**. These are surfaces we operate, not libraries you build on. |
+
+The tier is stated in each module's own docstring, so you never have to come
+back here to check.
+
+### Tier 1, exactly
+
+```python
+from openstategraph import (
+    load_workflow, CompiledWorkflow, DEFAULT_RECURSION_LIMIT, __version__,
+    OpenStateGraphError, WorkflowPackageError, PackageNotFound,
+    InvalidPackageName, DocumentError, SchemaVersionError,
+)
+from openstategraph.abc import (
+    ITool, BaseTool, ToolResult, NoArgs, Field,
+    IRouter, BaseRouter, Router, Classification,
+    IGrader, BaseGrader, Grader, Verdict,
+    IAgent, AbstractAgentNode, BaseAgentNode, ReactAgentNode, DeepAgentNode,
+    CustomGraphNode, agent_node_for_tier,
+    IOrchestrator, BaseOrchestrator, Orchestrator, Archetype, Subtask,
+    SystemPrompt, MiddlewareSlotTable,
+)
+from openstategraph.schema import (
+    SCHEMA_VERSION, MIN_SUPPORTED_VERSION, MIGRATIONS, Migration,
+    normalize_document, migrate_document, document_version,
+)
+```
+
+`backend/tests/public_api.txt` is the machine-readable form, and
+`backend/tests/test_public_api.py` fails when it drifts. That is deliberately a
+*signature* snapshot: a test asserting `"load_workflow" in dir(...)` passes
+while a parameter is renamed, a default flips, or a keyword-only argument
+becomes positional — each of which breaks an adopter at runtime, in their
+service, months later.
+
+### `workflow.json` is the most public thing here
+
+More public than any Python symbol, because a document is what you commit to
+*your* repository and diff in *your* pull requests. A document written against
+schema version *N* loads on every release that claims to support *N*. The
+version policy — what bumps the number, what is refused, the migration chain —
+lives in `openstategraph/schema.py`, whose module docstring is the normative
+statement. In short:
+
+- **Bump the version** for a removal, a rename, a changed meaning, a changed
+  port id or node-type id, or changed edge semantics.
+- **Do not bump** for anything additive an older build ignores harmlessly.
+  Additive-only is why we are still on 2.
+- A document **newer** than your build is **refused** with a message naming
+  both versions — never best-effort compiled, because the failure would
+  otherwise be a graph that runs and answers differently with nothing in the
+  output that looks wrong.
+- A document older than `MIN_SUPPORTED_VERSION` (currently 1) is refused;
+  anything between is migrated through `MIGRATIONS`, one step per version.
+- `MIN_SUPPORTED_VERSION` rises only in a major release.
+
+### What is deliberately *not* public
+
+- **The registries.** `build_tool_registry`, `discover_tool_registry`,
+  `discover_function_callables`. Extension is a supported *seam*, not a
+  reachable object: subclass the ladders in `openstategraph.abc`, and publish
+  `[project.entry-points."openstategraph.tools"]` from your own distribution
+  (ticket 05). If you find yourself importing a registry in order to extend the
+  framework, that is a missing entry-point group — please report it.
+- **`openstategraph.api.main:app`.** Currently the only way to mount the HTTP
+  server. That is a gap the console script closes, not permission.
+
+---
+
+## Deprecation policy
+
+**Pre-1.0, which is where we are: a breaking change bumps the MINOR version,
+never the patch.** Read `0.x` as "breaking changes ship in minors", the same
+way `deepagents` does — not as semver-stable.
+
+1. A Tier 1 name is never removed without at least **one minor release in which
+   it still works** and emits a `DeprecationWarning` naming its replacement.
+2. New parameters on Tier 1 callables are **keyword-only**, always. Not a
+   habit — a rule, so that adding one can never reorder an existing call.
+3. Every Tier 1 change carries a `CHANGELOG.md` entry under **Added /
+   Changed / Deprecated / Removed**, and updates `backend/tests/public_api.txt`
+   in the same commit.
+4. A removal or a signature change ships its shim in the same commit as the
+   change, not "before the release".
+5. **Post-1.0**: removals only in majors; deprecations live at least one minor;
+   the Python floor moves only in a major.
+
+### Errors are additive by construction
+
+Every class in `openstategraph.errors` inherits from **both**
+`OpenStateGraphError` and the builtin the failure used to raise —
+`PackageNotFound` is a `FileNotFoundError`, `InvalidPackageName` is a
+`ValueError`. Existing `except FileNotFoundError` handlers keep working
+untouched; `except OpenStateGraphError` is the new, narrower option. A new
+hierarchy that broke existing handlers would be a worse trade than the untyped
+errors it replaced.
+
+### If you need something that is not Tier 1
+
+Open an issue rather than importing it anyway. Promoting a name is cheap —
+adding it to `__all__`, the snapshot and this page — and it is how the surface
+grows on purpose instead of by accident.

@@ -1,35 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "openstategraph-backend"
-version = "0.1.0"
-description = "The Python LangGraph/LangChain runtime behind the OpenStateGraph editor."
+name = "openstategraph"
+version = "0.3.0"
+description = "A compiler from a vendor-neutral workflow.json to a LangGraph StateGraph."
+readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-dependencies = [
-    "fastapi>=0.115",
-    "uvicorn>=0.30",
-    "pydantic>=2.9",
-    "langgraph>=1.0",
-    "langchain>=1.0",
-    "langchain-core>=1.0",
-    "deepagents>=0.7",
-    # Provider packages. Ollama cloud is the default (see api/main.py's
-    # resolve_model) so langchain-ollama is not optional in practice, even
-    # though init_chat_model resolves the others lazily too.
-    "langchain-ollama>=1.0",
-    "langchain-anthropic>=1.0",
-    "langchain-openai>=1.0",
-    # The MCP layer (docs/decisions/mcp-layer.md): the official Python SDK,
-    # used through FastMCP. Imported lazily in `mcp_server.py` so the FastAPI
-    # runtime still starts if a deployment chose not to install it.
-    "mcp>=1.25",
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Zulfeekar Cheriyam Purath" }]
+keywords = ["langgraph", "langchain", "agents", "workflow", "compiler", "state-machine"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Compilers",
+    "Typing :: Typed",
 ]
 
+# The lean core (docs/decisions/framework-packaging.md §3.1). Four packages,
+# ~36 distributions resolved, down from 79. Everything a `load_workflow`
+# consumer may never touch — a web server, an MCP SDK, three provider SDKs and
+# the deepagents harness with its Google GenAI dependency — lives behind an
+# extra below and is already imported lazily at its one call site. Upper bounds
+# are deliberate: LangChain's published policy reserves breaking changes for
+# majors, so `<2` is a promise we can rely on rather than a guess.
+dependencies = [
+    "langgraph>=1.0,<2",
+    "langchain>=1.0,<2",
+    "langchain-core>=1.0,<2",
+    "pydantic>=2.9,<3",
+]
+
+# PROVISIONAL — this checkout has no configured git remote, so the canonical
+# host is not yet a fact. Pin these (and EXTENSION_NAMESPACE in
+# plugin_interop.py) before the first publish; ticket 06 owns that gate.
+[project.urls]
+Homepage = "https://github.com/openstategraph/openstategraph"
+Repository = "https://github.com/openstategraph/openstategraph"
+Changelog = "https://github.com/openstategraph/openstategraph/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/openstategraph/openstategraph/blob/main/docs/adoption.md"
+
 [project.optional-dependencies]
+# One provider per extra: `init_chat_model` resolves exactly the one the
+# adopter's `model` string names, so installing three to use one was pure cost.
+anthropic = ["langchain-anthropic>=1.0,<2"]
+openai = ["langchain-openai>=1.0,<2"]
+ollama = ["langchain-ollama>=1.0,<2"]
+# Only a document containing an `agent.deep` node needs this — 52 distributions
+# on its own, including the Google GenAI SDK and cryptography.
+deep = ["deepagents>=0.7,<1"]
+# Not an optional feature so much as an undeclared one: `memory.py` imports
+# these inside a try/except, so `settings.checkpointer: "sqlite"` and
+# OPENSTATEGRAPH_MEMORY_PATH degraded to in-memory in every install that
+# existed before this extra (ticket 04 makes that degradation loud).
+sqlite = [
+    "langgraph-checkpoint-sqlite>=3.1",
+]
+# The editor's HTTP API (`openstategraph.api.main`) — never on the consumer path.
+server = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+]
+mcp = ["mcp>=1.25"]
+all = [
+    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp]",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.6",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["openstategraph"]
 
 # Test configuration lives in the repo-root pytest.ini, not here — it already
 # covers both roots (backend/ and the workflow's own tools/), and pytest.ini
