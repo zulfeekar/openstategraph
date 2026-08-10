@@ -74,6 +74,7 @@ from openstategraph.api.schemas import (  # noqa: E402
     RunRequest,
     RunResponse,
     SaveWorkflowRequest,
+    TemplateResponse,
     PluginToolCapabilityResponse,
     ToolCapabilityResponse,
     ToolFieldResponse,
@@ -302,6 +303,31 @@ def create_app(
         # and a provider actually being reachable is a separate question this
         # endpoint was never answering anyway.
         return {"ok": True, "model_configured": True}
+
+    @app.get("/api/templates", response_model=list[TemplateResponse])
+    def list_templates(name: str = "New Workflow") -> list[TemplateResponse]:
+        """The starting points, rendered — the same ones `openstategraph new`
+        offers, from the same catalogue (scale-and-adopt ticket 04).
+
+        `name` matters more than it looks: a template may put the display name
+        *inside* the document (the team template titles its supervisor
+        "<name> Lead"), so rendering server-side is what keeps the editor's
+        result identical to the CLI's rather than approximately like it.
+
+        A template is a scaffold input, so nothing here is a node type and no
+        saved document ever refers back to one: this returns a document, and
+        the template stops existing the moment it is imported.
+        """
+        from openstategraph import templates
+
+        return [
+            TemplateResponse(
+                name=template.name,
+                summary=template.summary,
+                document=template.document(name),
+            )
+            for template in templates.catalogue()
+        ]
 
     @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
     def list_workflows(surface: Literal["editor", "chat"] = "editor") -> list[WorkflowSummaryResponse]:

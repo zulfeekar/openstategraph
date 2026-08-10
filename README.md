@@ -114,6 +114,7 @@ openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
 openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
 openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network call
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
+openstategraph new my-qa --template routed-qa           # or: --list-templates
 ```
 
 Also `knowledge build|list`, `serve` and `mcp`. `--json` on `run` prints the
@@ -148,9 +149,10 @@ every figure any example produces can be checked against the same file.
   and the focused example itself mounted as a subgraph on `sql_specialist`.
 
 Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
-the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>`
-(or `scripts/new_workflow.py` / `scripts/new_team.py`, which call the same
-code) scaffolds your own packages.
+the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>
+[--template minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
+`scripts/new_team.py`, which call the same code) scaffolds your own packages
+from templates that ship inside the wheel.
 
 ### Environment variables
 

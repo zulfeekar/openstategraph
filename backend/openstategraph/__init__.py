@@ -9,6 +9,16 @@ is deliberately one function:
     workflow = load_workflow("path/to/my-workflow")
     print(workflow.ask("How many invoices are there?"))
 
+A directory of them is a catalogue instead — the root and the defaults are set
+once, listing is cheap and never compiles, and `load()` returns exactly the
+object above:
+
+    from openstategraph import Workflows
+
+    catalog = Workflows("./workflows", model="anthropic:claude-sonnet-4-5")
+    catalog.published()                    # slug, name, node/edge counts
+    catalog.load("billing").ask("…")
+
 Everything else — the editor's HTTP API, the MCP transport, the compiler and
 runtime internals — stays in its own module and is imported only when used.
 This package's own import touches neither LangGraph, LangChain nor FastAPI.
@@ -34,6 +44,7 @@ asserted `"load_workflow" in dir(...)` would never have caught the private
 `_document_of` import that the public loader shipped with for months.
 """
 
+from openstategraph.catalogue import WorkflowInfo, Workflows
 from openstategraph.errors import (
     DocumentError,
     InvalidPackageName,
@@ -80,7 +91,9 @@ __all__ = [
     "PackageNotFound",
     "RunResult",
     "SchemaVersionError",
+    "WorkflowInfo",
     "WorkflowPackageError",
+    "Workflows",
     "__version__",
     "load_workflow",
 ]

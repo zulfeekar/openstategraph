@@ -218,6 +218,88 @@ class TestNewIsNotASecondScaffold:
         assert cli.main(["new", "my-flow", "--root", str(tmp_path)]) == cli.EXIT_FAILURE
 
 
+class TestTemplates:
+    """`--template` is the adoption surface (scale-and-adopt ticket 04): a
+    stranger with an empty folder needs a starting point they did not have to
+    invent. The catalogue itself is tested in `test_templates.py`; what belongs
+    here is the *command line* over it, including the two exit codes."""
+
+    def test_the_default_is_minimal_so_a_first_run_is_one_model_call(
+        self, tmp_path: Path
+    ) -> None:
+        cli.main(["new", "my-flow", "--root", str(tmp_path)])
+        document = json.loads((tmp_path / "my-flow" / "workflow.json").read_text())["document"]
+
+        assert [n["type"] for n in document["nodes"]] == [
+            "input.text",
+            "agent.llm",
+            "output.formatted",
+        ]
+
+    def test_a_named_template_is_what_gets_scaffolded(self, tmp_path: Path) -> None:
+        code = cli.main(["new", "my-flow", "--template", "routed-qa", "--root", str(tmp_path)])
+        document = json.loads((tmp_path / "my-flow" / "workflow.json").read_text())["document"]
+
+        assert code == cli.EXIT_OK
+        assert any(n["type"] == "route.classifier" for n in document["nodes"])
+
+    def test_an_unknown_template_exits_two_and_names_the_valid_ones(self, capsys) -> None:
+        """argparse's own `choices` error — exit 2, not 1: a typo in a flag is
+        a usage error, and CI must be able to tell it from a failed run."""
+        with pytest.raises(SystemExit) as caught:
+            cli.main(["new", "my-flow", "--template", "wishful"])
+
+        assert caught.value.code == cli.EXIT_USAGE
+        message = capsys.readouterr().err
+        assert "routed-qa" in message and "minimal" in message and "team" in message
+
+    def test_list_templates_prints_a_name_and_a_line_for_each(self, capsys) -> None:
+        code = cli.main(["new", "--list-templates"])
+
+        assert code == cli.EXIT_OK
+        printed = capsys.readouterr().out
+        for name in ("minimal", "routed-qa", "team"):
+            assert name in printed
+        assert "(default)" in printed
+        assert len(printed.strip().splitlines()) == 3
+
+    def test_new_without_a_slug_is_a_usage_error(self, capsys) -> None:
+        code = cli.main(["new"])
+
+        assert code == cli.EXIT_USAGE
+        assert "slug" in capsys.readouterr().err
+
+    def test_team_still_works_and_says_what_replaced_it(self, tmp_path: Path, capsys) -> None:
+        """Gentle deprecation: every script and README line that already says
+        `--team` keeps working, and its user is told once where to go next."""
+        code = cli.main(["new", "a-team", "--team", "--root", str(tmp_path)])
+        document = json.loads((tmp_path / "a-team" / "workflow.json").read_text())["document"]
+
+        assert code == cli.EXIT_OK
+        assert any(n["type"] == "orchestrate.supervisor" for n in document["nodes"])
+        assert "--template team" in capsys.readouterr().err
+
+    def test_team_and_a_different_template_is_a_usage_error(self, tmp_path: Path) -> None:
+        code = cli.main(
+            ["new", "a-team", "--team", "--template", "routed-qa", "--root", str(tmp_path)]
+        )
+
+        assert code == cli.EXIT_USAGE
+        assert not (tmp_path / "a-team").exists()
+
+    def test_every_template_scaffolds_a_package_the_cli_can_validate(
+        self, tmp_path: Path
+    ) -> None:
+        """The end-to-end claim, through the commands rather than the API: a
+        template that does not survive `new` + `validate` is worse than none."""
+        from openstategraph import templates
+
+        for name in templates.names():
+            cli.main(["new", name, "--template", name, "--root", str(tmp_path)])
+
+            assert cli.main(["validate", str(tmp_path / name)]) == cli.EXIT_OK
+
+
 class TestKnowledge:
     def test_list_prints_topics_with_their_hints(self, package: Path, capsys) -> None:
         (package / "knowledge").mkdir()

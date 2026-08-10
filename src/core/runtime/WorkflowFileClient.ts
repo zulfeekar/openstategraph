@@ -100,6 +100,40 @@ export interface WorkflowCapabilities {
   readonly warnings: readonly string[];
 }
 
+/**
+ * One starting point offered by `openstategraph new` (scale-and-adopt ticket
+ * 04), already rendered into a document the canvas can import.
+ *
+ * A template is a **scaffold input**: it produces a document and stops
+ * existing. Nothing here is a node type, and no saved workflow records which
+ * template it came from — a document with a second, invisible owner is exactly
+ * what this boundary exists to prevent.
+ */
+export interface WorkflowTemplate {
+  readonly name: string;
+  /** One line, shown beside the name in the picker. */
+  readonly summary: string;
+  /** A v2 workflow document, ready for `document.importJSON`. */
+  readonly document: unknown;
+}
+
+/**
+ * The scaffold catalogue, read over HTTP — its own interface, for the same
+ * reason `ICatalogueEvents` is: `loadWorkflowIntoEditor` persists documents
+ * and has no business declaring a method about starting points it never asks
+ * for. One class implements all three, because it is one backend.
+ *
+ * There is deliberately **no second list** in the frontend. The templates the
+ * editor offers are the ones `openstategraph new --list-templates` prints,
+ * fetched from the package that owns them; a TypeScript copy would agree on
+ * the day it was written and drift on the first port rename.
+ */
+export interface IWorkflowTemplates {
+  /** `name` is substituted into the returned documents, so a template that
+   * titles a node after the workflow comes back correct rather than close. */
+  templates(name: string): Promise<Result<readonly WorkflowTemplate[], string>>;
+}
+
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   load(slug: string): Promise<Result<unknown, string>>;
@@ -151,7 +185,7 @@ export interface EventSourceLike {
 }
 export type EventSourceFactory = (url: string) => EventSourceLike;
 
-export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents {
+export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
@@ -230,6 +264,41 @@ export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents
             nodeCount: typeof record['node_count'] === 'number' ? record['node_count'] : 0,
             edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
             published: record['published'] !== false,
+          };
+        }),
+      );
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * The scaffold's templates, rendered for `name`.
+   *
+   * Failure is a plain `Err`, and the caller treats it as "offer a blank
+   * canvas only": a backend too old to know this endpoint must cost a user
+   * their template picker, never their ability to start a workflow.
+   */
+  async templates(name: string): Promise<Result<readonly WorkflowTemplate[], string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/templates?name=${encodeURIComponent(name)}`,
+      );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as unknown[];
+      return Ok(
+        payload.map((entry) => {
+          const record = entry as Record<string, unknown>;
+          return {
+            name: asString(record['name']),
+            summary: asString(record['summary']),
+            document: record['document'],
           };
         }),
       );

@@ -3,7 +3,8 @@
 Diagnosed live, end to end:
 
 1. The store-analytics report branch's happy path calls the email tool, which
-   writes `workflows/_outbox/<stamp>.eml` — **inside** `--reload-dir workflows`.
+   writes `<state dir>/outbox/<stamp>.eml` — and inside a checkout the state
+   dir is `workflows/.openstategraph`, **inside** `--reload-dir workflows`.
    Mounting a workflow package writes `workflows/<slug>/__pycache__/*.pyc`
    there too.
 2. uvicorn's reloader reacted with "Shutting down / Waiting for connections to
@@ -60,7 +61,9 @@ class TestReloadExcludesTheRuntimesOwnOutput:
     @pytest.mark.parametrize(
         "pattern",
         [
-            "'*/_outbox/*'",  # the email tool's dry-run drop
+            # everything the runtime writes: checkpoints, the email
+            # tool's dry-run drop, anything else `state_dir()` grows
+            "'*/.openstategraph/*'",
             "'*.eml'",
             "'*/__pycache__/*'",  # mounting a workflow package compiles it
             "'*.pyc'",

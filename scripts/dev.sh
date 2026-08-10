@@ -182,7 +182,7 @@ cd "$ROOT"
 PYTHONPATH="backend:workflows/chinook-nl-to-sql" SSL_CERT_FILE="${CERT_FILE}" \
   supervise backend python3 -m uvicorn openstategraph.api.main:app --port 8000 --app-dir backend \
     --reload --reload-dir backend --reload-dir workflows \
-    --reload-exclude '*/_outbox/*' --reload-exclude '*.eml' \
+    --reload-exclude '*/.openstategraph/*' --reload-exclude '*.eml' \
     --reload-exclude '*/__pycache__/*' --reload-exclude '*.pyc' \
     --reload-exclude '*/.pytest_cache/*' \
     --reload-exclude '*.sqlite' --reload-exclude '*.sqlite-*' \

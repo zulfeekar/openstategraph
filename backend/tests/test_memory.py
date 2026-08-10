@@ -79,10 +79,16 @@ class TestAgentsAreMemoryCapable:
 
 class TestDurableCheckpointer:
     def test_sqlite_is_opt_in_via_settings(self, tmp_path, monkeypatch) -> None:
+        """The file lands in the **state dir**, not in `./.dev` — scale-and-adopt
+        ticket 03. It was cwd-relative, so a workflow run from someone's home
+        directory created `~/.dev/`."""
         monkeypatch.chdir(tmp_path)
-        saver = checkpointer_for({"checkpointer": "sqlite"}, "my-flow", fallback=None)
+        saver = checkpointer_for(
+            {"checkpointer": "sqlite"}, "my-flow", fallback=None, workflows_root_dir=tmp_path
+        )
         assert type(saver).__name__ == "SqliteSaver"
-        assert (tmp_path / ".dev" / "checkpoints-my-flow.sqlite").exists()
+        assert (tmp_path / ".openstategraph" / "checkpoints-my-flow.sqlite").exists()
+        assert not (tmp_path / ".dev").exists()
 
     def test_anything_else_keeps_the_fallback(self) -> None:
         sentinel = object()

@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "The scaffold's template catalogue — scale-and-adopt ticket 04.",
+    "",
+    "Data, not code, because a template IS a workflow.json and a person who is",
+    "about to own one should be able to read it. `openstategraph/templates/` is",
+    "ordinary package data, so `pip install openstategraph` carries these files",
+    "and `openstategraph new --template routed-qa` works in an empty directory.",
+    "",
+    "Order is the order `--list-templates` prints and the order the editor's",
+    "picker shows: cheapest first. `minimal` stays the default so a stranger's",
+    "first run costs one model call and cannot be rejected by a grader.",
+    "",
+    "`{{name}}`, `{{slug}}` and any key under `defaults` are substituted into",
+    "every string of the template's workflow.json and AGENTS.md at scaffold",
+    "time. A template is a scaffold input: it produces a document and stops",
+    "existing. It is never a node type."
+  ],
+  "templates": [
+    {
+      "name": "minimal",
+      "summary": "input to agent to output — the smallest thing that runs (one model call).",
+      "directories": ["tools", "functions", "middlewares", "skills", "tests", "data"]
+    },
+    {
+      "name": "routed-qa",
+      "summary": "a router picks a branch, an agent answers, a grader sends weak answers back.",
+      "directories": ["tools", "functions", "middlewares", "skills", "tests", "data"]
+    },
+    {
+      "name": "team",
+      "summary": "supervisor plus worker plus grader — mountable as a Team node elsewhere.",
+      "directories": ["tools", "functions", "middlewares", "tests"],
+      "defaults": {
+        "outcome": "- The answer must actually complete the task it was given."
+      }
+    }
+  ]
+}

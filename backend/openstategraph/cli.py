@@ -46,6 +46,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Sequence
 
+# The one import this module makes eagerly, and it is stdlib-only: `--template`
+# uses argparse `choices`, so the catalogue has to exist while the parser is
+# being built. Everything else is still imported inside its command.
+from openstategraph import templates
+
 #: Fixed, documented above, and referenced by name everywhere below so a
 #: reader never has to decode a bare integer.
 EXIT_OK = 0
@@ -57,6 +62,13 @@ EXIT_MISSING_EXTRA = 3
 def _error(message: str) -> int:
     print(message, file=sys.stderr)
     return EXIT_FAILURE
+
+
+def _usage(message: str) -> int:
+    """A bad *invocation*, not a failed run — argparse's own code, so CI can
+    tell "you typed it wrong" from "it did not work"."""
+    print(message, file=sys.stderr)
+    return EXIT_USAGE
 
 
 def _load(args: argparse.Namespace) -> Any:
@@ -143,18 +155,37 @@ def cmd_graph(args: argparse.Namespace) -> int:
 
 def cmd_new(args: argparse.Namespace) -> int:
     """`openstategraph.scaffold` — the same function `scripts/new_workflow.py`
-    calls, so the two can never produce different packages."""
-    from openstategraph.scaffold import ScaffoldError, new_team, new_workflow
+    calls, so the two can never produce different packages.
 
+    `--template` is validated by argparse's `choices` (exit 2, valid names in
+    the message), so nothing here re-checks it. `--team` predates templates and
+    keeps working as an alias with a one-line notice; removing it would break
+    every script and README line that already uses it, for a flag whose whole
+    cost is this branch.
+    """
+    from openstategraph.scaffold import ScaffoldError, new_package
+
+    if args.list_templates:
+        width = max(len(name) for name in templates.names())
+        for entry in templates.catalogue():
+            default = "  (default)" if entry.name == templates.DEFAULT_TEMPLATE else ""
+            print(f"{entry.name.ljust(width)}  {entry.summary}{default}")
+        return EXIT_OK
+
+    if not args.slug:
+        return _usage("new needs a slug: openstategraph new my-flow [--template NAME]")
+    if args.team and args.template not in (None, "team"):
+        return _usage(f"--team and --template {args.template} ask for different templates")
+    if args.team:
+        print("note: --team is deprecated; use --template team", file=sys.stderr)
+
+    template = args.template or ("team" if args.team else templates.DEFAULT_TEMPLATE)
     root = Path(args.root).expanduser().resolve() if args.root else Path.cwd() / "workflows"
     try:
-        if args.team:
-            target = new_team(root, args.slug, args.name)
-        else:
-            target = new_workflow(root, args.slug, args.name)
+        target = new_package(root, args.slug, template=template, name=args.name)
     except ScaffoldError as exc:
         return _error(str(exc))
-    print(f"{'team' if args.team else 'workflow'} package created: {target}")
+    print(f"{template} package created: {target}")
     return EXIT_OK
 
 
@@ -323,10 +354,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     graph.set_defaults(handler=cmd_graph)
 
-    new = subparsers.add_parser("new", help="scaffold a workflow package")
-    new.add_argument("slug", help="lowercase letters, digits and hyphens")
+    new = subparsers.add_parser("new", help="scaffold a workflow package from a template")
+    # Optional so `--list-templates` can stand alone; `cmd_new` supplies the
+    # usage error argparse would otherwise give, with the same exit code.
+    new.add_argument("slug", nargs="?", help="lowercase letters, digits and hyphens")
     new.add_argument("name", nargs="?", help="display name (default: derived from the slug)")
-    new.add_argument("--team", action="store_true", help="supervisor + worker + grader instead")
+    # `choices` on purpose: argparse then rejects an unknown template with exit
+    # 2 and the valid names, which is exactly the contract, without this module
+    # growing a second copy of the catalogue to validate against.
+    new.add_argument(
+        "--template",
+        choices=templates.names(),
+        help=f"starting point (default: {templates.DEFAULT_TEMPLATE}); see --list-templates",
+    )
+    new.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="print the templates and what each is for, then exit",
+    )
+    new.add_argument(
+        "--team",
+        action="store_true",
+        help="deprecated alias for --template team",
+    )
     new.add_argument("--root", help="where to create it (default: ./workflows)")
     new.set_defaults(handler=cmd_new)
 

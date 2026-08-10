@@ -193,7 +193,22 @@ openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
 openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
 openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
+openstategraph new --list-templates                     # what you can start from
 ```
+
+The templates ship inside the package, so they are there on a machine that
+never cloned this repository — and the editor's **New Workflow → Start from**
+picker offers the same three:
+
+| `--template` | What you get | When |
+| --- | --- | --- |
+| `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
+| `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
+| `team` | supervisor + worker + grader | the work splits into parallel subtasks, and you want to mount it as a Team node elsewhere |
+
+An unknown name exits `2` and lists the valid ones. `--team` still works as a
+deprecated alias for `--template team`. Each scaffolded package gets an
+`AGENTS.md` describing what was created and the obvious next step.
 
 `--json` on `run` prints the whole result — answer, decisions, outputs,
 warnings, attempts, thread id — which is what you want when the answer is
@@ -220,9 +235,9 @@ The three directions from here:
 
 A workflow is a package under `workflows/<slug>/`: `workflow.json` and
 `AGENTS.md` are required; `tools/`, `functions/`, `middlewares/`, `tests/` and
-`data/` are discovered by convention. `openstategraph new <slug> [--team]`
-scaffolds one (as do `scripts/new_workflow.py` and `scripts/new_team.py`,
-which call the same code).
+`data/` are discovered by convention. `openstategraph new <slug> [--template
+NAME]` scaffolds one (as do `scripts/new_workflow.py` and
+`scripts/new_team.py`, which call the same code).
 
 That is the value: your flow is **a file in git** — reviewable in a pull
 request, diffable — and the compiled output is an ordinary Python

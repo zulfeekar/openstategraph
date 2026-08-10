@@ -1,9 +1,10 @@
 """`openstategraph.yaml` — versioned config a human or a coding agent edits.
 
 Ticket 03. What belongs here: which providers exist, what their models are,
-which is the default. What can never be here: a credential. The file **may**
-name the environment variable that holds one, which is the useful half of a
-secret without being a secret.
+which is the default, and — since scale-and-adopt ticket 02 — where the
+workflow packages live (`workflows_dir:`). What can never be here: a
+credential. The file **may** name the environment variable that holds one,
+which is the useful half of a secret without being a secret.
 
 **Why YAML, given the lean-core rule.** The rule is about *distributions*, and
 YAML costs none: `PyYAML` is already a transitive dependency of
@@ -195,6 +196,10 @@ class OpenStateGraphConfig(BaseModel):
     version: int = SUPPORTED_VERSION
     #: The fallback `provider:model` when the environment names no provider.
     default_model: str | None = None
+    #: Where `<slug>/workflow.json` packages live, when it is not `./workflows`.
+    #: **Relative to this file**, never to the working directory — see
+    #: `configured_workflows_dir`.
+    workflows_dir: str | None = None
     providers: list[ProviderConfig] = []
 
 
@@ -315,6 +320,29 @@ def reset_active_config() -> None:
     _LOADED = False
 
 
+def configured_workflows_dir() -> Path | None:
+    """The file's `workflows_dir:`, resolved, or `None` — the normal case.
+
+    **A relative value is relative to the config file, not to the working
+    directory.** The file is committed and shared; the working directory is
+    wherever the process happened to be started from. Resolving against the cwd
+    would make one committed line mean a different directory per developer, and
+    mean a *different* directory again when the same service is started from
+    `/` by a supervisor — which is the class of bug `workflows_root` exists to
+    have already fixed once.
+
+    One layer of `openstategraph.workflows_root`'s precedence chain, and it
+    lives here rather than there because the parsing, the validation and the
+    "which file was it" answer are all this module's.
+    """
+    config = active_config()
+    if config is None or not (config.workflows_dir or "").strip():
+        return None
+    source = find_config_file()
+    base = source.parent if source is not None else Path.cwd()
+    return (base / Path(config.workflows_dir or "").expanduser()).expanduser().resolve()
+
+
 _ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -377,6 +405,7 @@ __all__ = [
     "ProviderConfig",
     "active_config",
     "config_provider_specs",
+    "configured_workflows_dir",
     "find_config_file",
     "load_config",
     "looks_like_a_secret",

@@ -750,3 +750,37 @@ class TestPublishLifecycle:
             "/api/workflows/nope/publish", json={"published": True}
         )
         assert response.status_code == 404
+
+
+class TestTemplates:
+    """`GET /api/templates` — the editor's New Workflow picker and the CLI's
+    `--template` read one catalogue (scale-and-adopt ticket 04). If this
+    endpoint and `openstategraph.templates` ever disagree, there are two lists
+    and the editor is scaffolding something the CLI cannot reproduce."""
+
+    def test_it_offers_exactly_what_the_cli_offers(self, client: TestClient) -> None:
+        from openstategraph import templates
+
+        response = client.get("/api/templates")
+
+        assert response.status_code == 200
+        assert [t["name"] for t in response.json()] == list(templates.names())
+        assert [t["summary"] for t in response.json()] == [
+            t.summary for t in templates.catalogue()
+        ]
+
+    def test_each_entry_carries_an_importable_document(self, client: TestClient) -> None:
+        for entry in client.get("/api/templates").json():
+            document = entry["document"]
+            assert document["version"] == 2
+            assert document["nodes"] and document["edges"]
+            assert "{{" not in str(document)
+
+    def test_the_display_name_reaches_inside_the_document(self, client: TestClient) -> None:
+        """The team template titles its supervisor "<name> Lead" — rendering
+        server-side is what keeps the editor's result identical to the CLI's."""
+        entries = client.get("/api/templates", params={"name": "Payments"}).json()
+        team = next(e for e in entries if e["name"] == "team")
+
+        assert team["document"]["name"] == "Payments"
+        assert any(n.get("title") == "Payments Lead" for n in team["document"]["nodes"])

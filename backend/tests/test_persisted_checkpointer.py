@@ -157,12 +157,21 @@ class TestOneSeam:
     ) -> None:
         """`settings.checkpointer: "sqlite"` predates this ticket and keeps
         its own per-workflow file — the default is the *fallback*, not a
-        replacement for the document's own say."""
+        replacement for the document's own say.
+
+        Since scale-and-adopt ticket 03 that file lands in the **state dir**
+        beside the process-wide one, rather than in a cwd-relative `./.dev`."""
         monkeypatch.chdir(tmp_path)
         services = WorkflowServices(tmp_path, checkpointer=object())
-        saver = checkpointer_for({"checkpointer": "sqlite"}, "my-flow", services.checkpointer)
+        saver = checkpointer_for(
+            {"checkpointer": "sqlite"},
+            "my-flow",
+            services.checkpointer,
+            workflows_root_dir=tmp_path,
+        )
         assert type(saver).__name__ == "SqliteSaver"
-        assert (tmp_path / ".dev" / "checkpoints-my-flow.sqlite").exists()
+        assert (tmp_path / STATE_DIR_NAME / "checkpoints-my-flow.sqlite").exists()
+        assert not (tmp_path / ".dev").exists()
 
 
 class TestLoadWorkflowStillOwnsItsOwn:

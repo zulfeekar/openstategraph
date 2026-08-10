@@ -9,7 +9,8 @@ has two modes, chosen by environment, not by the model:
   over STARTTLS when ``OPENSTATEGRAPH_SMTP_STARTTLS=1`` (default), with
   optional ``OPENSTATEGRAPH_SMTP_USER``/``OPENSTATEGRAPH_SMTP_PASSWORD``.
 - **No SMTP** (the default): a dry run. The exact RFC-5322 message is
-  written to ``workflows/_outbox/<stamp>-<slug>.eml`` and the result says
+  written to ``<state dir>/outbox/<stamp>.eml`` (see `openstategraph.
+  state_dir` — never into the workflows tree) and the result says
   so loudly. The workflow is fully testable end-to-end without leaking a
   single packet — the same human-click philosophy as the Architect's
   "compose ephemerally, saving is a click".
@@ -34,19 +35,25 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, ToolResult
-from openstategraph.workflows_root import workflows_root
+from openstategraph.state_dir import state_dir
 
 
 def outbox() -> Path:
-    """Where a dry-run `.eml` is dropped: `<workflows root>/_outbox`.
+    """Where a dry-run `.eml` is dropped: `<state dir>/outbox`.
 
     A function, not a constant computed from `__file__`: inside an installed
     wheel that constant resolved to `<venv>/lib/python3.13/workflows/_outbox`,
     so an un-configured send would have quietly written the user's report into
-    their virtualenv (ticket 06's clean-venv proof). See
-    `openstategraph.workflows_root`.
+    their virtualenv (ticket 06's clean-venv proof).
+
+    It was `<workflows root>/_outbox` until ticket 03 (scale-and-adopt). A
+    dry-run message is **diagnostic output, not content the user authored**, so
+    it belongs with the checkpoints: putting it in the workflows tree littered
+    a directory we were only asked to read, was not covered by the repository's
+    own `.gitignore`, and raised on a read-only mount — which turned "send the
+    report" into a tool failure for a reason nobody could act on.
     """
-    return workflows_root() / "_outbox"
+    return state_dir() / "outbox"
 
 
 _ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

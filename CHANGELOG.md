@@ -73,7 +73,91 @@ finally read by code. Wayfinder tickets 02–04;
   into an older build and compiled into a graph that ran and answered
   differently.
 
+### Changed
+
+- **Pointing OpenStateGraph at a directory no longer writes into it**
+  (scale-and-adopt ticket 03). READ location and WRITE location are now
+  separate questions with separate answers: `openstategraph.workflows_root`
+  and the new `openstategraph.state_dir`. Inside this checkout **nothing
+  moves** — state is still `<workflows root>/.openstategraph`, which is where a
+  developer expects it and where `.gitignore` already covers it. Installed and
+  pointed at somebody else's folder, state goes to the platform's per-user
+  state directory instead (XDG `$XDG_STATE_HOME`/`~/.local/state` on Linux,
+  `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows),
+  keyed per project so two projects never share a thread namespace.
+  `OPENSTATEGRAPH_STATE_DIR` names it outright;
+  `OPENSTATEGRAPH_CHECKPOINT_PATH` stays authoritative above both. A read-only
+  workflows root now lists, compiles and runs, and when a write genuinely
+  cannot be made durability degrades loudly rather than the process failing.
+  Two writes moved with it: the email tool's dry-run outbox
+  (`<workflows root>/_outbox` → `<state dir>/outbox` — a `.eml` is diagnostic
+  output, not content the user authored, and it was not gitignored), and a
+  package's own `settings.checkpointer: "sqlite"` file, which was `./.dev/`
+  **relative to the working directory** and so created `~/.dev/` for anyone who
+  ran a workflow from their home directory.
+
 ### Added
+
+- **Named templates, shipped inside the wheel** (scale-and-adopt ticket 04). A
+  `pip install` user started in an empty folder with nothing to imitate: the
+  two example workflows live in this repository and were never in the package.
+  Three starting points now ship as ordinary package data under
+  `openstategraph/templates/`, and `openstategraph new --list-templates` prints
+  them:
+  - **`minimal`** — input → agent → output. **Still the default**, deliberately:
+    a stranger's first run must cost one model call and contain nothing that
+    can reject the answer.
+  - **`routed-qa`** — input → router → agent → grader → output, with a second
+    branch that skips the grader. The shape most assistants end up with, and
+    the one that teaches branches, the revise loop and typed feedback ports.
+  - **`team`** — the existing supervisor + worker + grader package, now reached
+    as `--template team`.
+
+  They are **data files, not Python builders**: a template is a `workflow.json`,
+  and the person about to own one should be able to read it first.
+  `openstategraph new my-flow --template routed-qa` works from an empty
+  directory on a machine that never cloned this repository — the wheel-contents
+  check in `scripts/clean_install_proof.sh` asserts the files are in the
+  artifact, and the proof scaffolds, validates and compiles **every** template
+  from the installed wheel. Each scaffolded package now gets an `AGENTS.md`
+  written for its own shape: what was created, and the obvious next step.
+
+  A template is a **scaffold input** — it produces a document and stops
+  existing. It is not a node type beside Team and Workflow, and no saved
+  document records which template made it.
+
+  **`openstategraph new --team` is deprecated but still works**, as an alias
+  for `--template team`; it prints one line naming its replacement. The command
+  line follows the Tier 1 policy, so it is not being removed in this release.
+  An unknown `--template` exits **2** with the valid names — a typo in a flag
+  is a usage error, and CI must be able to tell it from a failed run.
+- **`GET /api/templates`, and the editor's New Workflow picker uses it.**
+  "Start from" in the Workflows panel offers `Blank canvas` plus the same three
+  templates, rendered by the backend from the same catalogue `openstategraph
+  new` reads — one list, not two. Blank stays the editor's default, because a
+  canvas may legitimately be empty while a scaffolded *package* must run.
+- **`Workflows` — a catalogue, so a directory is named once** (scale-and-adopt
+  ticket 02). `load_workflow(path)` is the right shape for one package and the
+  wrong shape for twenty: the root is restated at every call site, and there is
+  no way to ask what is in a directory without compiling it.
+  `Workflows(root, **defaults)` has exactly four members — `.root`, `.list()`,
+  `.published()` and `.load(slug)` — and `.load()` returns the same
+  `CompiledWorkflow` through the same `load_workflow`, so there is no second
+  wiring path. **Listing never compiles**: it reads one `workflow.json` per
+  package through the store's existing traversal, imports neither LangGraph nor
+  LangChain, and needs no API key. A package whose `workflow.json` will not
+  parse comes back as a **row carrying `error`** rather than an omission or an
+  exception — the HTTP listing still omits it, because a customer surface must
+  not show rubble, but "what have I got" is exactly the question you ask when
+  something is broken. `.published()` mirrors `?surface=chat`.
+  `load_workflow(path)` is unchanged.
+- **`workflows_dir:` in `openstategraph.yaml`.** The workflows root now
+  resolves through all four layers of the project-wide precedence rule —
+  convention `./workflows` < config file < `OPENSTATEGRAPH_WORKFLOWS_ROOT` <
+  the explicit argument — with each adjacent pair pinned by its own test. A
+  relative value is resolved against the **config file**, never the working
+  directory, so one committed line cannot mean a different directory per
+  developer. There is deliberately no module-level setter.
 
 - **The wheel carries the canvas** (scale-and-adopt ticket 01). We called this
   a *visual* workflow builder and shipped 276 KiB of Python with no UI: the

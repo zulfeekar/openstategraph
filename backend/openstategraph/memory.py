@@ -223,39 +223,37 @@ CHECKPOINT_PATH_ENV = "OPENSTATEGRAPH_CHECKPOINT_PATH"
 #: accepted too, since that is sqlite's own spelling and someone will type it.
 IN_MEMORY_CHECKPOINT = "memory"
 
-#: The process's own state, kept beside the content it is state *about*, and
-#: dotted so `WorkflowStore.list` (which requires a `workflow.json`) and every
-#: `ls` treat it as plumbing rather than a workflow.
-STATE_DIR_NAME = ".openstategraph"
+#: Re-exported, not redefined. `state_dir` owns the whole write-location
+#: question since ticket 03 (scale-and-adopt); this name stays importable from
+#: here because that is where every caller and test already reaches for it.
+from openstategraph.state_dir import STATE_DIR_NAME as STATE_DIR_NAME  # noqa: F401
+from openstategraph.state_dir import state_dir
+
 CHECKPOINT_FILE_NAME = "checkpoints.sqlite"
 
 
 def checkpoint_path(workflows_root_dir: Any = None) -> Path | None:
     """Where the process-wide checkpointer writes, or None for in-memory.
 
-    Two sources, in order: the env var above, then the **default** —
-    ``<workflows root>/.openstategraph/checkpoints.sqlite``.
+    Two sources, in order: the env var above, then ``state_dir()`` — which is
+    ``<workflows root>/.openstategraph`` inside a checkout and the platform's
+    per-user state directory when installed. `CHECKPOINT_PATH_ENV` stays the
+    most specific answer there is, above `STATE_DIR_ENV` and above both.
 
     The default is durable rather than in-memory, and that is the ticket-05
     decision: ``openstategraph serve`` run by a stranger must not lose a
-    `human.approval` pause because someone saved a file. The workflows root is
-    the right home for it because it is the one directory this process already
-    owns and already writes to, it is resolved correctly both inside a
-    checkout and inside an installed wheel (`workflows_root()` — see that
-    module for what a frozen constant cost), and it is per-project, so two
-    projects on one machine never share a thread namespace.
+    `human.approval` pause because someone saved a file. What ticket 03 changed
+    is only *where*: durability must not be bought by writing into a directory
+    the user merely asked us to read (see `state_dir`).
     """
     import os
-
-    from openstategraph.workflows_root import workflows_root
 
     raw = os.environ.get(CHECKPOINT_PATH_ENV, "").strip()
     if raw:
         if raw.lower() in {IN_MEMORY_CHECKPOINT, ":memory:"}:
             return None
         return Path(raw).expanduser()
-    root = Path(workflows_root_dir) if workflows_root_dir else workflows_root()
-    return root / STATE_DIR_NAME / CHECKPOINT_FILE_NAME
+    return state_dir(workflows_root_dir) / CHECKPOINT_FILE_NAME
 
 
 def _open_sqlite_saver(path: Path, asked_by: str) -> Any | None:
@@ -372,7 +370,13 @@ def close_resource(resource: Any) -> None:
         _log().debug("could not close %r", resource, exc_info=True)
 
 
-def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback: Any) -> Any:
+def checkpointer_for(
+    settings: dict[str, Any] | None,
+    slug: str | None,
+    fallback: Any,
+    *,
+    workflows_root_dir: Any = None,
+) -> Any:
     """The thread checkpointer a document asked for.
 
     ``settings.checkpointer: "sqlite"`` opts a single workflow into its **own**
@@ -380,12 +384,22 @@ def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback
     way now, but a document that names sqlite keeps the per-workflow database
     it has always had. Anything else keeps `fallback`, which since ticket 05
     is the durable process-wide saver rather than a per-process `InMemorySaver`.
+
+    `workflows_root_dir` scopes that file the same way it scopes the
+    process-wide one, so a transport serving root A and a script pointed at
+    root B never share a per-workflow database. It goes through `state_dir()`:
+    the *file* is per workflow, but *where state lives* is one answer for the
+    whole process (scale-and-adopt ticket 03).
     """
     choice = str((settings or {}).get("checkpointer") or "").strip().lower()
     if choice != "sqlite":
         return fallback
-    root = Path(".dev")
+    # `Path(".dev")` until ticket 03 (scale-and-adopt) — relative to the
+    # *working directory*, so a workflow run from someone's home directory
+    # created `~/.dev/`. A per-workflow checkpoint file is state exactly as the
+    # process-wide one is, and it goes where all state goes.
     saver = _open_sqlite_saver(
-        root / f"checkpoints-{slug or 'default'}.sqlite", "settings.checkpointer='sqlite'"
+        state_dir(workflows_root_dir) / f"checkpoints-{slug or 'default'}.sqlite",
+        "settings.checkpointer='sqlite'",
     )
     return saver if saver is not None else fallback

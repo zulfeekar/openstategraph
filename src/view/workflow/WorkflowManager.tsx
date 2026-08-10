@@ -9,6 +9,7 @@ import {
   PanelBody,
   PanelHeader,
   PanelSection,
+  Select,
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
@@ -17,10 +18,23 @@ import {
   slugify,
   WorkflowFileClient,
   type WorkflowSummary,
+  type WorkflowTemplate,
 } from '@core/runtime/WorkflowFileClient';
 import { clearDrillStack } from '@app/drillStack';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import './WorkflowManager.css';
+
+/**
+ * The picker's "no template" option — the editor's original behaviour, kept as
+ * the default here on purpose.
+ *
+ * It is **not** a template, which is why it is a sentinel rather than a fourth
+ * entry in the catalogue: `openstategraph new` scaffolds a package that must
+ * run, so its default is `minimal`; the canvas can hold an empty document
+ * perfectly well, and someone who opens this panel to start drawing should not
+ * have three nodes appear under their cursor.
+ */
+const BLANK_TEMPLATE = 'blank';
 
 interface WorkflowManagerProps {
   open: boolean;
@@ -59,6 +73,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const [listError, setListError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
+  // The scaffold's own templates (scale-and-adopt ticket 04), fetched — never
+  // a second copy of the list. Empty is a legitimate state: a runtime that is
+  // down or too old costs the picker, never the blank canvas.
+  const [templates, setTemplates] = useState<readonly WorkflowTemplate[]>([]);
+  const [template, setTemplate] = useState(BLANK_TEMPLATE);
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
@@ -79,6 +98,19 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     if (open) void refreshList();
   }, [open, refreshList]);
 
+  // The template names and their one-liners, for the picker. The *document* is
+  // fetched again at apply time with the name the user actually typed, because
+  // a template may put that name inside the document (the team template titles
+  // its supervisor "<name> Lead") and the editor's result must be the CLI's,
+  // not an approximation of it. Failure is silent by design: no picker is a
+  // smaller loss than an error toast every time this panel opens.
+  useEffect(() => {
+    if (!open) return;
+    void client.templates('New Workflow').then((outcome) => {
+      if (outcome.ok) setTemplates(outcome.value);
+    });
+  }, [open, client]);
+
   // …and stay current while it is open. A second tab (or `/chat`, or a script)
   // publishing, saving or deleting a workflow makes this list wrong the moment
   // it happens; the backend's `/api/events` stream says so and this refetches.
@@ -93,9 +125,30 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     return client.watchCatalogue(() => void refreshList());
   }, [open, client, refreshList]);
 
-  const handleNewWorkflow = useCallback(() => {
-    controller.document.clear();
+  const handleNewWorkflow = useCallback(async () => {
     const name = newName.trim() || `Workflow ${new Date().getFullYear()}`;
+    // Fetched before anything is cleared: a failed fetch must leave the canvas
+    // exactly as it was, not empty and templateless.
+    let starting: unknown = null;
+    if (template !== BLANK_TEMPLATE) {
+      setBusy(true);
+      const outcome = await client.templates(name);
+      setBusy(false);
+      const chosen = outcome.ok ? outcome.value.find((t) => t.name === template) : undefined;
+      if (!chosen) {
+        onNotify(`Could not load the ${template} template — nothing was changed.`);
+        return;
+      }
+      starting = chosen.document;
+    }
+
+    controller.document.clear();
+    if (starting !== null) {
+      // The template's own document, imported exactly as a saved workflow
+      // would be. Nothing records which template it was: a template is a
+      // scaffold input, so from here on this is just a document.
+      controller.document.importJSON(JSON.stringify(starting));
+    }
     controller.document.setName(name);
     // A fresh workflow has no slug yet — the next save mints one from
     // whatever name it has at that moment.
@@ -103,10 +156,14 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // Same reasoning as a manual load: a brand-new document is not "inside"
     // anything, so there is nothing to go back to.
     clearDrillStack();
-    onNotify(`Created new workflow: ${name}`);
+    onNotify(
+      template === BLANK_TEMPLATE
+        ? `Created new workflow: ${name}`
+        : `Created new workflow: ${name} (from ${template})`,
+    );
     setNewName('');
     onClose();
-  }, [controller, newName, onNotify, onClose]);
+  }, [client, controller, newName, template, onNotify, onClose]);
 
   const handleSave = useCallback(async () => {
     const slug = sessionStorage.getItem(CURRENT_SLUG_KEY) || slugify(workbench.model.name);
@@ -205,14 +262,30 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
               onChange={(e) => setNewName(e.target.value)}
               placeholder="My Workflow"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleNewWorkflow();
+                if (e.key === 'Enter') void handleNewWorkflow();
               }}
             />
           </Field>
+          {templates.length > 0 && (
+            <Field
+              label="Start from"
+              hint={templates.find((t) => t.name === template)?.summary ?? 'An empty canvas.'}
+            >
+              <Select
+                value={template}
+                onValueChange={setTemplate}
+                options={[
+                  { value: BLANK_TEMPLATE, label: 'Blank canvas' },
+                  ...templates.map((t) => ({ value: t.name, label: t.name })),
+                ]}
+              />
+            </Field>
+          )}
           <Button
             variant="primary"
-            onClick={handleNewWorkflow}
+            onClick={() => void handleNewWorkflow()}
             icon={<Icon glyph={Plus} size="sm" />}
+            disabled={busy}
           >
             Create New
           </Button>

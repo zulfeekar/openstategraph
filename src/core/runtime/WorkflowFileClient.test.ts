@@ -339,3 +339,41 @@ describe('WorkflowFileClient.watchCatalogue', () => {
     expect(() => stop()).not.toThrow();
   });
 });
+
+describe('WorkflowFileClient.templates', () => {
+  it('asks the backend to render the templates for this workflow name', async () => {
+    const stub = stubFetch(
+      jsonResponse([
+        { name: 'minimal', summary: 'input to agent to output.', document: { version: 2 } },
+      ]),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.templates('My Flow');
+
+    expect(stub.calls[0]?.url).toBe('http://rt/api/templates?name=My%20Flow');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual([
+        { name: 'minimal', summary: 'input to agent to output.', document: { version: 2 } },
+      ]);
+    }
+  });
+
+  it('reports an unreachable runtime rather than throwing', async () => {
+    const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
+
+    const result = await client.templates('x');
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports a backend too old to know the endpoint', async () => {
+    const stub = stubFetch(jsonResponse({ detail: 'Not Found' }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.templates('x');
+
+    expect(result.ok).toBe(false);
+  });
+});

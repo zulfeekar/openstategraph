@@ -139,11 +139,16 @@ class TestTheFourCallersFollowIt:
 
         assert _resolve_database("pkg/data/x.sqlite") == database.resolve()
 
-    def test_the_email_outbox_follows_it_too(self, monkeypatch, tmp_path) -> None:
+    def test_the_email_outbox_follows_it_into_the_state_dir(self, monkeypatch, tmp_path) -> None:
+        """The outbox tracks the root the same way, but lands in the root's
+        **state dir** rather than in the root itself: a dry-run `.eml` is
+        diagnostic output, not content the user authored (scale-and-adopt
+        ticket 03, and `tests/test_state_dir.py` for the rest of that story)."""
         from openstategraph.prebuilt_email import EmailSendTool, outbox
 
         monkeypatch.setenv(WORKFLOWS_ROOT_ENV, str(tmp_path))
         result = EmailSendTool(to="someone@example.com").run(subject="Hi", body="There")
+        drop = tmp_path / ".openstategraph" / "outbox"
 
-        assert outbox() == tmp_path / "_outbox"
-        assert result.ok and list((tmp_path / "_outbox").glob("*.eml"))
+        assert outbox() == drop
+        assert result.ok and list(drop.glob("*.eml"))

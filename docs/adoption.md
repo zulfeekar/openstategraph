@@ -113,13 +113,33 @@ preview defaults to `Mock · Offline`.
 ### Where your work goes
 
 ```bash
-openstategraph new my-thing                   # or: openstategraph new my-team --team
+openstategraph new --list-templates           # what you can start from
+openstategraph new my-thing                   # the default: minimal
+openstategraph new my-qa --template routed-qa
+openstategraph new my-team --template team
 # in a checkout, without installing:
 python3 scripts/new_workflow.py my-thing      # or scripts/new_team.py
 ```
 
-That scaffolds `workflows/my-thing/`. From then on you are editing files in
-**your** fork:
+That scaffolds `workflows/my-thing/`.
+
+### Which template
+
+The three ship **inside the wheel**, so they are there on a machine that has
+never seen this repository, and the editor's **New Workflow → Start from**
+picker offers the same three from the same source.
+
+| Template | Start here when | Cost of one run |
+| --- | --- | --- |
+| `minimal` *(default)* | you are finding out whether any of this works, or you know exactly what you are building and want an empty-ish canvas | one model call |
+| `routed-qa` | you have more than one kind of request to handle, or you want the answer checked before it is returned. Router → agent → grader → output, plus a cheap branch that skips the grader | up to three, plus one per revision |
+| `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow as a Team node | several — a fan-out per subtask |
+
+Every scaffolded package carries an `AGENTS.md` that names what was created and
+the next step for that particular shape. `--team` still works as a deprecated
+alias for `--template team`.
+
+From then on you are editing files in **your** fork:
 
 ```
 workflows/my-thing/
@@ -225,7 +245,8 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
 | `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings. **Exit 1** on blocking findings, so it is a CI gate |
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
-| `openstategraph new <slug> [name] [--team]` | scaffold a package into `./workflows` (`--root` to change that) |
+| `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
+| `openstategraph new --list-templates` | the templates and one line on what each is for |
 | `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints (`--knowledge-dir` to look elsewhere) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
 | `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server]` |
@@ -270,6 +291,79 @@ print(answer.decisions)               # ...and which branch each router took
 | `.as_tool(name=…, description=…)` | this workflow as one LangChain tool (see below) |
 | `.mermaid()` | the compiled topology as text, no network call |
 | `.slug` / `.package_dir` / `.document` | what it loaded, and from where |
+
+### More than one workflow: the catalogue
+
+A path per call is right for one package and wrong for a directory of them —
+the root ends up restated at every call site, and there is no way to ask what
+is in there without compiling it. `Workflows` is the catalogue:
+
+```python
+from openstategraph import Workflows
+
+catalog = Workflows("./workflows", model="anthropic:claude-sonnet-4-5")
+
+for row in catalog.published():          # what a customer chat would show
+    print(row.slug, row.name, row.node_count, row.edge_count)
+
+billing = catalog.load("billing")        # compiles THIS one
+print(billing.ask("How much did we invoice in March?"))
+```
+
+Four members, and that is the whole class:
+
+| | |
+| --- | --- |
+| `.root` | the directory it reads. Absolute, and fixed for the object's life |
+| `.list()` | every non-hidden package: `slug`, `name`, `published`, `node_count`, `edge_count`, `saved_at`, `error` |
+| `.published()` | only the published, readable ones — mirrors the HTTP listing's `?surface=chat` |
+| `.load(slug, **overrides)` | the same `CompiledWorkflow` `load_workflow` returns, from the same function |
+
+**Listing never compiles.** `.list()` reads one `workflow.json` per package and
+stops: no LangGraph import, no model, no API key, and none of the package's own
+`tools/*.py` executed. Twenty workflows list instantly, and **one broken
+package does not break the list** — it comes back as a row with `error` set,
+rather than as a silent omission or an exception. (The HTTP listing still omits
+it: a customer surface must not show rubble. A developer asking "what have I
+got" wants the opposite.)
+
+Every keyword `load_workflow` takes can be set once on the catalogue and
+overridden per call — `model`, `checkpointer`, `store`, `knowledge_dir`,
+`trace_file`, and the `tools`/`functions`/`middleware` mappings, which **merge**
+rather than replace so a catalogue-wide stub survives a per-call substitution.
+`load_workflow(path)` is unchanged and stays the right call for one package.
+
+### Where it reads, and where it writes
+
+Two questions, deliberately not one answer. **Read** is the workflows root,
+resolved through four layers — later wins:
+
+| | |
+| --- | --- |
+| convention | `./workflows` under the working directory (this checkout's own, in-tree) |
+| config file | `workflows_dir:` in `openstategraph.yaml`, resolved **relative to that file**, never to the cwd |
+| environment | `OPENSTATEGRAPH_WORKFLOWS_ROOT` |
+| argument | `Workflows(root)` — or the package path you hand `load_workflow` |
+
+There is no `set_workflows_root()`, on purpose: process-wide mutable state is
+how two callers in one process come to disagree about which directory they read
+with nothing in either call to explain it.
+
+**Write** is the state dir, and it is never assumed to be the read location:
+
+| | |
+| --- | --- |
+| `OPENSTATEGRAPH_STATE_DIR` | names it outright — a container mounting a writable volume |
+| inside a checkout | `<workflows root>/.openstategraph`, where a developer expects it |
+| installed | your platform's per-user state directory — `$XDG_STATE_HOME` (default `~/.local/state`), `~/Library/Application Support`, or `%LOCALAPPDATA%` — keyed per project so two projects never share a thread namespace |
+
+`OPENSTATEGRAPH_CHECKPOINT_PATH` still outranks all of it for the checkpoint
+file itself, including `=memory` to opt out of durability deliberately.
+
+The consequence worth having: **pointing this at a directory does not put
+anything in it.** A workflows root on a read-only mount lists, compiles and
+runs; if a write genuinely cannot be made, durability degrades with a warning
+that says so rather than the process failing.
 
 ### What `.ask()` gives you back
 

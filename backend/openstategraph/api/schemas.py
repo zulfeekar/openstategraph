@@ -122,6 +122,21 @@ class SaveWorkflowRequest(BaseModel):
     document: dict[str, Any]
 
 
+class TemplateResponse(BaseModel):
+    """One entry of `GET /api/templates` — scale-and-adopt ticket 04.
+
+    The editor's New Workflow picker and `openstategraph new --list-templates`
+    read the **same** catalogue (`openstategraph.templates`); this endpoint is
+    the seam, not a second list. It carries the rendered `document` so picking
+    a template is one call: the canvas imports what it is given rather than
+    re-deriving a starting point the CLI would have built differently.
+    """
+
+    name: str
+    summary: str
+    document: dict[str, Any]
+
+
 class WorkflowSummaryResponse(BaseModel):
     slug: str
     name: str

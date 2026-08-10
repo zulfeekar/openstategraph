@@ -13,7 +13,7 @@ This page answers one question: *if I import it, can it be taken away from me?*
 | --- | --- | --- |
 | **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, `openstategraph.extensions` (the entry-point **group names**), the `openstategraph` **command line**, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
 | **1 — public, but the *objects* are somebody else's** | the collaborators you inject: `load_workflow(model=, checkpointer=, store=, tools=, functions=, middleware=)` | **The parameter** is Tier 1 — its name, its keyword-only-ness, and its `None` default are ours to keep. **The object** you pass is LangGraph's or LangChain's (`BaseStore`, a checkpoint saver, `AgentMiddleware`) or your own `openstategraph.abc` subclass; those contracts are theirs and ours respectively, not this page's. We will not silently start requiring a different type. |
-| **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree`, `.scaffold`, `.cli` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
+| **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree`, `.scaffold`, `.templates`, `.cli`, `.workflows_root`, `.state_dir`, `.config_file` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
 | **3 — internal** | `openstategraph.api.*`, `openstategraph.mcp_server`, and any `_`-prefixed name anywhere | No guarantee at all. May be renamed, split or deleted in a **patch**. These are surfaces we operate, not libraries you build on. |
 
 The tier is stated in each module's own docstring, so you never have to come
@@ -24,6 +24,7 @@ back here to check.
 ```python
 from openstategraph import (
     load_workflow, CompiledWorkflow, RunResult,
+    Workflows, WorkflowInfo,
     DEFAULT_RECURSION_LIMIT, __version__,
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
@@ -47,6 +48,28 @@ from openstategraph.extensions import (
     entry_point_tools, entry_point_knowledge_builders, plugins_enabled,
 )
 ```
+
+### Two directories, and only one of them is ours to write in
+
+`Workflows(root)` — and every environment variable and config key behind it —
+names where packages are **read** from. It is never where anything is
+**written**. Those are separate questions with separate answers, and conflating
+them is a defect an adopter discovers as either litter in their repository or a
+crash on a read-only mount:
+
+| | Answered by | Default |
+| --- | --- | --- |
+| **read** | `openstategraph.workflows_root` | convention `./workflows` < config file `workflows_dir:` < `OPENSTATEGRAPH_WORKFLOWS_ROOT` < the explicit argument |
+| **write** | `openstategraph.state_dir` | `OPENSTATEGRAPH_STATE_DIR`, else `<workflows root>/.openstategraph` **inside a checkout**, else the platform's per-user state directory (XDG `~/.local/state`, `~/Library/Application Support`, `%LOCALAPPDATA%`), keyed per project |
+
+`OPENSTATEGRAPH_CHECKPOINT_PATH` remains the most specific answer of all for
+the checkpoint file itself, above both, including its `=memory` opt-out.
+
+**There is no module-level setter for either.** Both are functions resolved per
+call, and a catalogue freezes its own answer at construction. A
+`set_workflows_root()` would be process-wide mutable state, which is how two
+callers in one process come to disagree about which directory they read with
+nothing in either call to explain the difference.
 
 ### The entry-point group names are the least reversible thing here
 

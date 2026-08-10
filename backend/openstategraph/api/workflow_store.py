@@ -52,6 +52,21 @@ def slugify(name: str) -> str:
     return slug or "workflow"
 
 
+def _broken(slug: str, reason: str) -> WorkflowSummary:
+    """A row for a package that could not be read. Never published, by
+    construction: rubble must not reach the customer surface even if the
+    envelope it came from claimed it was published."""
+    return WorkflowSummary(
+        slug=slug,
+        name=slug,
+        saved_at="",
+        node_count=0,
+        edge_count=0,
+        published=False,
+        error=reason,
+    )
+
+
 class WorkflowNotFoundError(Exception):
     pass
 
@@ -76,6 +91,10 @@ class WorkflowSummary:
     #: An envelope without the field counts as published — back-compat for
     #: every workflow that predates the lifecycle.
     published: bool = True
+    #: Why this row could not be read, for the callers that ask to see rubble
+    #: (`list(include_broken=True)`). Empty on every healthy row, which is what
+    #: lets `if summary.error:` be the whole check.
+    error: str = ""
 
 
 class WorkflowStore:
@@ -109,7 +128,24 @@ class WorkflowStore:
             raise InvalidSlugError(f"{slug!r} escapes the workflows root")
         return candidate
 
-    def list(self, *, published_only: bool = False) -> list[WorkflowSummary]:
+    def list(
+        self, *, published_only: bool = False, include_broken: bool = False
+    ) -> list[WorkflowSummary]:
+        """Every listable package. **Reads `workflow.json` and nothing else.**
+
+        This is the cheap half of the store, and it is cheap on purpose: it is
+        what draws a picker, and compiling twenty packages to draw one is the
+        cost `Workflows.list()` exists to refuse. Nothing here imports the
+        runtime, executes a `tools/*.py`, or builds a model.
+
+        `include_broken` chooses what an unreadable package *is*, and the two
+        callers genuinely want opposite answers. The HTTP listing omits it — a
+        customer surface must not show rubble, and the row would be
+        unopenable anyway. A developer's catalogue (`Workflows.list()`) gets
+        it as a row carrying `error`, because "what have I got" is exactly the
+        question you ask when something is broken, and a silent omission is
+        the answer that sends you looking in the wrong place.
+        """
         if not self.root.exists():
             return []
         summaries: list[WorkflowSummary] = []
@@ -119,13 +155,23 @@ class WorkflowStore:
                 continue
             try:
                 payload = json.loads(path.read_text())
-            except (json.JSONDecodeError, OSError):
+                if not isinstance(payload, dict):
+                    raise ValueError(f"top level is a {type(payload).__name__}, not an object")
+            except (json.JSONDecodeError, OSError, ValueError) as exc:
                 # One unreadable workflow must not blank the whole list —
                 # the same reasoning `workflowStore.ts`'s `listWorkflows`
                 # already applies on the frontend's own (soon to be former)
                 # localStorage store.
+                if include_broken:
+                    summaries.append(_broken(entry.name, f"workflow.json is unreadable: {exc}"))
                 continue
             document = payload.get("document", payload)
+            if not isinstance(document, dict):
+                if include_broken:
+                    summaries.append(
+                        _broken(entry.name, "workflow.json holds no document object")
+                    )
+                continue
             # A hidden workflow (the concierge gateway, ticket 67) is loadable
             # by slug but never advertised — the list is the customer surface.
             if payload.get("hidden") is True:

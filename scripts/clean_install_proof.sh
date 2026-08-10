@@ -132,8 +132,14 @@ echo "==> wheel contents"
 # is the generated node catalogue (RC-01), and a wheel without it raises
 # `CatalogueError` on the adopter's first import rather than in our CI.
 LISTING="$(python3 -m zipfile -l "$WHEEL")"
+# `templates/` is package data too (scale-and-adopt ticket 04): the whole point
+# of shipping starting points is that someone who never cloned this repository
+# has one, so a wheel without them is a wheel whose `--template` flag lies.
 for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
-                "compile/port_specs.json" "static/editor/index.html"; do
+                "compile/port_specs.json" "static/editor/index.html" \
+                "templates/index.json" "templates/minimal/workflow.json" \
+                "templates/minimal/AGENTS.md" "templates/routed-qa/workflow.json" \
+                "templates/team/workflow.json"; do
   printf '%s\n' "$LISTING" | grep -qF "$required" \
     || { echo "the wheel is missing package data it must ship: $required"; exit 1; }
 done
@@ -177,6 +183,21 @@ run openstategraph new proof-package "Proof Package"
 run openstategraph validate workflows/proof-package
 run openstategraph graph workflows/proof-package | head -3
 
+# Ticket 04: the templates are only real if they scaffold from the *wheel*, in
+# a directory that has never seen this checkout. Every one of them, because a
+# template nobody instantiates here is a template whose files could be missing
+# from the artifact and nothing would say so until an adopter tried it.
+echo "==> every template in the wheel scaffolds, validates and compiles"
+run openstategraph new --list-templates
+for template in $(run openstategraph new --list-templates | awk '{print $1}'); do
+  run openstategraph new "proof-$template" --template "$template"
+  run openstategraph validate "workflows/proof-$template"
+  run openstategraph graph "workflows/proof-$template" >/dev/null
+  test -s "$PROJECT/workflows/proof-$template/AGENTS.md" \
+    || { echo "the $template template scaffolded no AGENTS.md"; exit 1; }
+  echo "    $template  ok"
+done
+
 echo "==> a real package that binds NO chinook tool"
 cp -R "$REPO/workflows/page-analytics" "$PROJECT/"
 rm -rf "$PROJECT/page-analytics/tests/__pycache__"
@@ -201,6 +222,36 @@ assert checkout_root() is None, 'the wheel thinks it is inside a checkout'
 assert 'site-packages' not in str(workflows_root()), workflows_root()
 print('workflows root ->', workflows_root())
 print('read jail      ->', content_root())
+"
+
+# Scale-and-adopt tickets 02 and 03, and this file is the only place either can
+# actually be proven: both are claims about the INSTALLED process specifically.
+# `state_dir()`'s installed branch is unreachable in the test suite except by
+# monkeypatching `checkout_root`, and "listing does not import the runtime" is
+# only interesting in a venv where the runtime is a real, separate install.
+echo "==> the catalogue lists without compiling, and writes nothing into the project"
+run python -c "
+import sys
+from openstategraph import Workflows
+from openstategraph.state_dir import state_dir
+from openstategraph.workflows_root import workflows_root
+
+catalog = Workflows()
+rows = catalog.list()
+assert any(row.slug == 'proof-package' for row in rows), rows
+assert not [m for m in ('langgraph', 'langchain') if m in sys.modules], (
+    'listing imported the runtime — it compiled something'
+)
+assert catalog.root == workflows_root(), catalog.root
+
+# Ticket 03: pointing at a directory must not write into it. Installed, the
+# state dir is the platform's per-user one, so nothing this process persists
+# can land in the adopter's project — including on a read-only mount.
+where = state_dir()
+assert not str(where).startswith(str(catalog.root)), where
+assert 'site-packages' not in str(where), where
+print('catalogue ->', len(rows), 'workflow(s) listed, nothing compiled')
+print('state dir ->', where)
 "
 
 echo "==> a missing extra exits 3 and names its install line"

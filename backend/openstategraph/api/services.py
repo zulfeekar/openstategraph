@@ -135,7 +135,9 @@ class WorkflowServices:
         key = slug or ""
         if key in self._workflow_checkpointers:
             return self._workflow_checkpointers[key]
-        resolved = checkpointer_for(settings, slug, self.checkpointer)
+        resolved = checkpointer_for(
+            settings, slug, self.checkpointer, workflows_root_dir=self.store.root
+        )
         if resolved is self.checkpointer:
             # No per-workflow file was opened; nothing to own or to cache,
             # and caching it would pin a saver a later `close()` replaced.
