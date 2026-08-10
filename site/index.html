@@ -145,9 +145,11 @@ section.plain { border-top: 0; }
 /* ── cards ──────────────────────────────────────────────────────── */
 .grid { display: grid; gap: 1rem; }
 .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 900px) { .cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 680px) { .cols-4, .cols-2 { grid-template-columns: minmax(0, 1fr); } }
+.span-all { grid-column: 1 / -1; }
+@media (max-width: 900px) { .cols-3, .cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .cols-3, .cols-4, .cols-2 { grid-template-columns: minmax(0, 1fr); } }
 .card {
   border: 1px solid hsl(var(--border)); border-radius: var(--radius);
   background: hsl(var(--card)); padding: 1.5rem; box-shadow: var(--shadow);
@@ -558,7 +560,7 @@ result = app.<span class="f">invoke</span>(
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">What it achieves</span>
-        <h2>Four things that only work because it compiles</h2>
+        <h2>Five things that only work because it compiles</h2>
       </div>
       <div class="grid cols-4">
         <div class="card">
@@ -598,6 +600,26 @@ result = app.<span class="f">invoke</span>(
             checkpoint you can resume, inspect or rewind — not a thread parked in memory. Runs
             stream back onto the canvas token by token, node by node.
           </p>
+        </div>
+        <div class="card span-all">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a3 3 0 0 1 3-3M20 7v10a3 3 0 0 1-3 3"/><circle cx="12" cy="12" r="2"/><path d="M12 4v6M12 14v6"/></svg></div>
+          <h3>Your own LLM can compose the graph — over MCP</h3>
+          <p>
+            A workflow is data, and a compiler validates data without running anything. So the whole
+            surface is exposed over the Model Context Protocol: your client calls
+            <code>get_node_vocabulary()</code> for the exact node types and port contracts, composes
+            a document with <em>your</em> model, and calls <code>compile_workflow()</code> for a
+            deterministic verdict. Invalid documents come back as <code>findings</code> and no
+            artifacts — that verdict → revise loop is the product. It is stateless, calls no model
+            of ours, and a deployment needs <b>no provider key at all</b>.
+          </p>
+          <p>
+            Valid documents come back as a committable <code>workflow.json</code> envelope, a run
+            snippet, the package layout, and the Mermaid the compiler <em>actually produced</em> —
+            which clients like Claude render as a diagram on your machine. Drafts in, humans
+            publish: there is no publish tool and no delete tool over MCP, by design.
+          </p>
+          <p style="margin-top:.75rem"><a href="./docs/mcp.md">The MCP layer, with a worked example →</a></p>
         </div>
       </div>
     </div>
@@ -882,29 +904,46 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Documentation</span>
-        <h2>Three questions, three places to look</h2>
+        <h2>Six questions, six places to look</h2>
         <p>
           The deep material lives in the repository, next to the code it describes — so it is
           reviewed like code and cannot quietly drift. These are the entry points.
         </p>
       </div>
-      <div class="grid cols-4">
+      <div class="grid cols-3">
         <div class="card">
-          <h3>How to develop</h3>
+          <h3>How to start</h3>
           <p>
-            Two stacks, one repo, two commands. Tests are the gate for every pull request and land
-            with (ideally before) the change; the backend carries a coverage ratchet that only
-            moves up.
+            Clone, <code>./start dev</code>, open Store Analytics, ask it something in
+            <code>/chat</code>. Prerequisites, the two model paths, and why no API key is needed for
+            a first answer.
           </p>
-          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/CONTRIBUTING.md">CONTRIBUTING.md →</a></p>
+          <p style="margin-top:.75rem"><a href="./docs/getting-started.md">docs/getting-started.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to use it in your project</h3>
+          <p>
+            The three consumption modes — fork/checkout, artifact, MCP — with exact commands, the
+            upgrade friction stated honestly, what artifacts you own, and the draft → Publish →
+            <code>/chat</code> story.
+          </p>
+          <p style="margin-top:.75rem"><a href="./docs/adoption.md">docs/adoption.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to let an LLM build it</h3>
+          <p>
+            The MCP layer, worked end to end: the client config JSON, a document that genuinely
+            validates, the <code>compile_workflow</code> response shape, and the trust boundary.
+          </p>
+          <p style="margin-top:.75rem"><a href="./docs/mcp.md">docs/mcp.md →</a></p>
         </div>
         <div class="card">
           <h3>How to add a module</h3>
           <p>
             Find the registry for the thing you are adding, write the definition, register it. The
-            engine does not change. The extension-points table lists all seven.
+            engine does not change. A complete tool node, both halves, in about sixty lines.
           </p>
-          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/README.md">README.md →</a></p>
+          <p style="margin-top:.75rem"><a href="./docs/building-an-atom.md">docs/building-an-atom.md →</a></p>
         </div>
         <div class="card">
           <h3>How it works</h3>
@@ -920,11 +959,12 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             Decision records for the choices that were argued out — the knowledge architecture,
             rejected frameworks, and the trade-offs each one accepted.
           </p>
-          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/tree/main/docs/decisions">docs/decisions →</a></p>
+          <p style="margin-top:.75rem"><a href="./docs/decisions/">docs/decisions →</a></p>
         </div>
       </div>
       <p class="note">
-        <strong>Placeholder:</strong> every link on this page points at
+        <strong>Placeholder:</strong> the <code>docs/</code> links above are repository-relative and
+        work as published; every remaining GitHub link on this page points at
         <code>https://github.com/PLACEHOLDER/openstategraph</code>. Replace that string throughout
         <code>site/index.html</code> with the real repository URL before publishing.
       </p>
@@ -936,7 +976,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">FAQ</span>
-        <h2>The eight questions people actually ask</h2>
+        <h2>The nine questions people actually ask</h2>
         <p>
           Short answers, with the long version in the repository. If one of these is wrong or
           missing, that is a documentation bug — open an issue.
@@ -979,6 +1019,43 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             <p>
               Delete this repository and your workflow package still runs. That is the test we hold
               ourselves to: <b>the compiler is not portable; the output is.</b>
+            </p>
+            <p>
+              The three ways to consume it — fork/checkout, artifact, MCP — are written up with
+              exact commands in <a href="./docs/adoption.md">docs/adoption.md</a>, including the
+              honest note that there is no PyPI wheel yet.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Can my own LLM generate workflows?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Yes — that is what the MCP layer is for, and the inversion is deliberate. <b>Your</b>
+              model composes; this server is the ground truth and the artifact factory. A client
+              calls <code>get_node_vocabulary()</code> for the exact node types, port ids and
+              binding rules, composes a document, then calls <code>compile_workflow()</code>. The
+              verdict is deterministic and calls no model of ours: an invalid document returns
+              <code>findings</code> and no artifacts, so the client iterates against compiler
+              evidence rather than its own confidence.
+            </p>
+            <p>
+              A valid one returns the <code>workflow.json</code> envelope to commit to
+              <em>your</em> repository, the compiled Mermaid topology, a run snippet and the package
+              layout. Clients like Claude render that Mermaid as a diagram locally, so asking for a
+              workflow in a chat window gives you a picture of the compiled
+              <code>StateGraph</code> — with the graph never leaving your machine.
+            </p>
+            <p>
+              The trust boundary holds: no publish tool, no delete tool, no credentials over the
+              wire, writes validated server-side and always as drafts. A human clicks Publish.
+              Worked example in <a href="./docs/mcp.md">docs/mcp.md</a>; the honest limits —
+              starting with <b>no authentication layer</b> — in
+              <a href="./docs/decisions/mcp-layer.md">docs/decisions/mcp-layer.md</a>.
             </p>
           </div>
         </details>
@@ -1144,7 +1221,9 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
           <li><a href="#use">Using a workflow</a></li>
           <li><a href="#faq">FAQ</a></li>
           <li><a href="#contribute">Contribute</a></li>
-          <li><a href="https://github.com/PLACEHOLDER/openstategraph/tree/main/docs/decisions">Decisions</a></li>
+          <li><a href="./docs/adoption.md">Using it in your project</a></li>
+          <li><a href="./docs/mcp.md">The MCP layer</a></li>
+          <li><a href="./docs/decisions/">Decisions</a></li>
         </ul>
       </div>
       <div>

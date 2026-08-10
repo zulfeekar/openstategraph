@@ -134,7 +134,11 @@ of truth, no invented numbers.
 
 ## 6. Now extend it
 
-The two directions from here:
+The three directions from here:
+
+- **Use it in a project of your own** — read
+  [Using OpenStateGraph in your project](adoption.md). Fork/checkout, artifact
+  or MCP, with the upgrade friction of each stated honestly.
 
 - **Arrange existing pieces differently** — read
   [Patterns](patterns.md). Seven shapes, one question re-shaped seven ways,
