@@ -1,0 +1,64 @@
+# OpenStateGraph — providers and model defaults.
+#
+# Copy to `openstategraph.yaml` in your project root (or point
+# OPENSTATEGRAPH_CONFIG at it anywhere) and edit. This file is meant to be
+# committed and read: by a person, by a coding agent, and in review.
+#
+# ---------------------------------------------------------------------------
+# NO SECRETS. EVER. This file is committed, so a key here is a leaked key.
+# The loader does not merely discourage that — it REFUSES to load a file
+# containing a key-shaped field name (api_key, token, secret, …) or a
+# key-shaped value (sk-…, ghp_…, AIza…), and tells you to use .env instead.
+#
+# Name the variable, never the value:      api_key_env: ANTHROPIC_API_KEY
+# Put the value in .env, which is gitignored. See .env.example.
+# ---------------------------------------------------------------------------
+#
+# Precedence, lowest to highest — every adjacent pair is covered by a test in
+# backend/tests/test_config_file.py::TestPrecedence:
+#
+#   this file  <  environment  <  workflow settings.model
+#              <  a node's own model  <  the caller's model= argument
+#
+# The one that surprises people: the ENVIRONMENT BEATS THIS FILE. This file is
+# committed and shared; the environment is the machine in front of you. A
+# colleague's committed default must never silently outrank the key you set
+# for your own run.
+
+version: 1
+
+# The model used when no environment credential names a provider and nothing
+# more specific was asked for. Full `provider:model` form.
+default_model: ollama:gpt-oss:120b-cloud
+
+providers:
+  # Adjusting a provider this framework already knows about: every field you
+  # omit is inherited, so this changes one string and leaves the env vars,
+  # aliases and extra alone.
+  - name: anthropic
+    default_model: claude-haiku-4-5
+    api_key_env: ANTHROPIC_API_KEY
+
+  - name: openai
+    default_model: gpt-4.1-mini
+    api_key_env: OPENAI_API_KEY
+
+  # Ollama means Ollama CLOUD in this project, never a local model — a local
+  # model turns a wiring bug and a capability gap into the same symptom. Name
+  # a local model explicitly in a node if you really want one.
+  - name: ollama
+    default_model: gpt-oss:120b-cloud
+
+  # Introducing a provider this framework has never heard of. No fork, no code:
+  # `extra` names the pip extra carrying its LangChain integration, and the
+  # model string becomes `nvidia:meta/llama-3.3-70b-instruct`.
+  #
+  # (The other way to add one — for a plugin author shipping a package rather
+  # than editing a project — is the `openstategraph.providers` entry point
+  # group. Same ProviderSpec, same catalogue, no privileged fields.)
+  #
+  # - name: nvidia
+  #   label: NVIDIA NIM
+  #   default_model: meta/llama-3.3-70b-instruct
+  #   extra: nvidia
+  #   api_key_env: NVIDIA_API_KEY

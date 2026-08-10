@@ -2,20 +2,39 @@ import { useEffect, useState } from 'react';
 import { KeyRound, RotateCcw, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import { AbstractLLMProvider } from '@core/providers/ILLMProvider';
-import { OllamaProvider } from '@core/providers/OllamaProvider';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { Dialog } from './Dialog';
 import './overlays.css';
 
 /**
- * API keys and endpoints, one row per registered provider.
+ * Models and credentials — one row per registered provider.
  *
- * Built from the provider registry, so a newly registered vendor appears here
- * with no changes — including its own credentials hint and model list.
+ * Built entirely from the provider registry, so a newly registered vendor
+ * appears here with no change to this file: its own hint, its own model list,
+ * and its own endpoint field if it declares `configurableEndpoint`. There is
+ * no vendor literal left in this component.
  *
- * The storage warning is prominent on purpose. Keys entered here are held in
- * this browser, and a user handing over a production key deserves to know
- * that before they paste it, not in a changelog.
+ * **Two states, and neither of them shows a key** (ticket 04):
+ *
+ * | Key | What the row shows |
+ * | --- | --- |
+ * | stored in this browser | `sk-…9WxZ`, read-only, with **Forget** |
+ * | absent | a **disabled** input, `Add {provider} key in .env` |
+ *
+ * The input is disabled rather than merely discouraged because this dialog
+ * used to render the raw key into `<TextInput value={…}>` — the secret sat in
+ * the DOM and in React state, and it was re-fillable, so a mistyped paste
+ * silently replaced a working key. The component can no longer obtain the raw
+ * value at all: `ProviderRegistry.describeApiKey` is the only accessor it has,
+ * and it returns the redacted form.
+ *
+ * **Which keys live where** is the reconciliation this ticket asked for, and
+ * the dialog states it in one sentence rather than leaving it to a changelog:
+ * browser-held keys exist *only* for the local canvas preview, which calls the
+ * vendor directly from this page; every server-side and shared key belongs in
+ * `.env`, which is gitignored and never reaches the browser. Existing stored
+ * keys keep working and keep being forwarded to backend runs — they can be
+ * read out and forgotten, just not typed in.
  */
 export function CredentialsDialog({ onClose }: { onClose: () => void }) {
   const workbench = useWorkbench();
@@ -47,15 +66,17 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
       <p className="dialog__warning">
         <Icon glyph={TriangleAlert} size="sm" />
         <span>
-          Keys are stored in this browser&rsquo;s local storage and sent directly from this page to
-          the provider. Use a scoped, revocable key — and prefer a server-side deployment for
-          anything shared.
+          Keys belong in <code>.env</code> on the server, which is gitignored and never reaches
+          this page; keys held in this browser exist only for the local canvas preview, and cannot
+          be typed in here any more. Copy <code>.env.example</code> to <code>.env</code>, fill in
+          the variable for your provider, and restart the backend.
         </span>
       </p>
 
       {workbench.providers.list().map((provider) => {
         const configured = provider.isConfigured();
-        const isOllama = provider instanceof OllamaProvider;
+        // The redacted form is all this component can ever obtain.
+        const redacted = workbench.providers.describeApiKey(provider.id);
 
         return (
           <section key={provider.id} className="provider">
@@ -68,17 +89,23 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
             </div>
 
             {provider.requiresApiKey ? (
-              <Field label="API key" hint={provider.credentialsHint}>
+              <Field
+                label="API key"
+                hint={
+                  redacted
+                    ? `Held in this browser for the canvas preview only. ${provider.credentialsHint ?? ''}`.trim()
+                    : `Set ${provider.runtimeCredentialKey ?? 'the provider key'} in .env — see .env.example.`
+                }
+              >
                 <TextInput
-                  type="password"
                   mono
+                  disabled
+                  readOnly
                   autoComplete="off"
-                  placeholder="Paste key…"
-                  value={workbench.providers.getApiKey(provider.id) ?? ''}
-                  onChange={(event) => {
-                    workbench.providers.setApiKey(provider.id, event.target.value || null);
-                    refresh();
-                  }}
+                  // Never the value: `describeApiKey` is the only accessor
+                  // this component has, and it cannot return one.
+                  value={redacted ?? ''}
+                  placeholder={`Add ${provider.label} key in .env`}
                 />
               </Field>
             ) : (
@@ -87,7 +114,18 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
               </p>
             )}
 
-            {isOllama ? (
+            {redacted ? (
+              <Button
+                onClick={() => {
+                  workbench.providers.setApiKey(provider.id, null);
+                  refresh();
+                }}
+              >
+                Forget this key
+              </Button>
+            ) : null}
+
+            {provider.configurableEndpoint ? (
               <Field label="Endpoint">
                 <TextInput
                   mono

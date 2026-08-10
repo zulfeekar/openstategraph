@@ -148,6 +148,18 @@ export interface ILLMProvider extends IIdentifiable {
    */
   readonly allowsCustomModel?: boolean;
 
+  /**
+   * Whether this provider is reached at a caller-chosen endpoint, and so
+   * should be offered a base-url field in "Models and credentials".
+   *
+   * A *declared capability* rather than a check the dialog performs, because
+   * the dialog used to ask `provider instanceof OllamaProvider` — a vendor
+   * literal no third party could ever join, so a self-hosted or proxied
+   * fourth provider had nowhere to put its host. Ollama declares it; anyone
+   * else may.
+   */
+  readonly configurableEndpoint?: boolean;
+
   /** True when the provider can actually be called right now. */
   isConfigured(): boolean;
 
@@ -181,6 +193,7 @@ export abstract class AbstractLLMProvider implements ILLMProvider {
   abstract readonly requiresApiKey: boolean;
   readonly credentialsHint?: string;
   readonly allowsCustomModel?: boolean;
+  readonly configurableEndpoint?: boolean;
   readonly runtimeCredentialKey?: string;
 
   protected apiKey: string | null = null;

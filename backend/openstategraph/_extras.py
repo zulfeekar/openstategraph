@@ -20,17 +20,23 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
-#: Model-string prefix -> the extra that supplies its LangChain integration.
-#: `init_chat_model` imports the provider package by name, so a missing one
-#: surfaces as its own ImportError; `provider_extra_hint` turns that into our
-#: install line, because the adopter installed *us*, not `langchain-anthropic`.
-PROVIDER_EXTRAS: dict[str, str] = {
-    "anthropic": "anthropic",
-    "claude": "anthropic",
-    "openai": "openai",
-    "azure_openai": "openai",
-    "ollama": "ollama",
-}
+def provider_extras() -> dict[str, str]:
+    """Model-string prefix -> the extra supplying its LangChain integration.
+
+    `init_chat_model` imports the provider package by name, so a missing one
+    surfaces as its own ImportError; `provider_extra_hint` turns that into our
+    install line, because the adopter installed *us*, not `langchain-anthropic`.
+
+    Derived from the provider catalogue (ticket 02) rather than the five-entry
+    literal this used to be — a third-party provider's missing package now
+    produces an install hint too, instead of falling through to "we don't know
+    that prefix".
+    """
+    from openstategraph.providers import provider_catalogue
+
+    return provider_catalogue().extras_by_prefix()
+
+
 
 
 def install_hint(extra: str) -> str:
@@ -61,8 +67,18 @@ def provider_extra_hint(model_name: str) -> str | None:
     names the package it could not import.
     """
     prefix = str(model_name or "").split(":", 1)[0].strip().lower()
-    extra = PROVIDER_EXTRAS.get(prefix)
+    extra = provider_extras().get(prefix)
     return install_hint(extra) if extra else None
 
 
-__all__ = ["PROVIDER_EXTRAS", "install_hint", "provider_extra_hint", "require_extra"]
+#: `PROVIDER_EXTRAS`, the module-level dict this used to export, is gone rather
+#: than shimmed: a dict frozen at import time would lose every provider
+#: registered afterwards, which is the exact closedness ticket 02 removed. This
+#: module is internal (see the docstring), nothing imported the name, and
+#: `provider_extras()` answers the same question against the live catalogue.
+__all__ = [
+    "install_hint",
+    "provider_extra_hint",
+    "provider_extras",
+    "require_extra",
+]
