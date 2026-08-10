@@ -32,8 +32,23 @@ export interface INodeCategory extends IIdentifiable {
  */
 export type NodeKind = 'standard' | 'container' | 'annotation';
 
-/** Per-node execution state, surfaced as the status dot on the card. */
-export type NodeStatus = 'idle' | 'ready' | 'running' | 'success' | 'warning' | 'error';
+/**
+ * Per-node execution state, surfaced as the status dot on the card.
+ *
+ * `paused` is its own state and not a flavour of `running` (UX-01): a run
+ * stopped at a `human.approval` node is *not* working, and marking it
+ * `running` had the canvas sweep its glow over the very node that was waiting
+ * on the person reading it. It is not `success` either — the node has not
+ * completed. The visual rule that follows: nothing about `paused` animates.
+ */
+export type NodeStatus =
+  | 'idle'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'success'
+  | 'warning'
+  | 'error';
 
 /**
  * Whether a node type is always available or belongs to the open workflow.

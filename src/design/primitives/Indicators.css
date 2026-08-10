@@ -14,6 +14,13 @@
   background: var(--color-status-running);
   animation: status-pulse 1.1s var(--ease-in-out) infinite;
 }
+/* Paused: the same amber as a warning, and pointedly *not* animated. A run
+   waiting on a human decision is not working, so the dot must not pulse —
+   that pulse is the whole reason the canvas used to claim a paused run was
+   still running. */
+.status-dot--paused {
+  background: var(--color-status-warning);
+}
 .status-dot--success {
   background: var(--color-status-success);
 }

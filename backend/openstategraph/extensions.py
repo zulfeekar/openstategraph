@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -104,6 +105,13 @@ class Discovered:
     #: The group's product: `{node_type: tool}` for tools, a list for builders.
     values: Any
     warnings: list[str] = field(default_factory=list)
+    #: Who contributed each key — `{node_type: distribution name}` for tools.
+    #: The loader already computes this to detect two distributions claiming
+    #: one node type; returning it is what lets a surface *name* the plugin a
+    #: capability came from (register PK-06: a palette card that does not say
+    #: whose tool it is turns an unrelated `pip install` into a mystery).
+    #: Empty for groups whose product is a plain list.
+    sources: dict[str, str] = field(default_factory=dict)
 
 
 def plugins_enabled() -> bool:
@@ -173,7 +181,93 @@ def _each(obj: Any) -> list[Any]:
         return [obj]
 
 
+#: One `Discovered` per group, for the life of the process.
+#:
+#: **Why the cache lives here and not at a call site.** It began in
+#: `api/registries.py`, wrapping the tools group only, because that was where
+#: the cost was measured: `WorkflowServices.runtime_for` spent 14.8 ms, 12.2 ms
+#: of it inside `importlib.metadata.entry_points()`, which re-walks every
+#: installed distribution's `.dist-info` on every call. That fixed one third of
+#: the problem and left a note saying `extensions` was the better home — the
+#: other two groups paid that scan on every call. Measured on this checkout,
+#: median of 30, cache cleared between iterations for the "before" column:
+#:
+#:     entry_point_knowledge_builders   11.99 ms  ->  0.0005 ms
+#:     entry_point_providers            11.84 ms  ->  0.0005 ms
+#:     entry_point_tools                12.46 ms  ->  0.0005 ms
+#:
+#: and end to end, `providers.load_provider_catalogue()` 12.07 ms -> 0.004 ms.
+#: Three callers each memoising a shared scan is three chances to get the
+#: invalidation wrong; the module that owns the mechanism owns its cache.
+#:
+#: **It is still side-effect-free to import.** An empty dict is not a scan. The
+#: module docstring's "Cheap" promise is about not walking `sys.path` at
+#: `import openstategraph` time, and nothing here does.
+#:
+#: **What may invalidate it: only a `pip install`.** Which means a restart —
+#: the dev server reloads on any file save, a deployment redeploys. The one
+#: process where that is untrue is the test suite, which fakes installed entry
+#: points with `monkeypatch`; `reset_entry_point_cache()` is how `conftest.py`
+#: keeps one test's fake plugin out of the next test's registry.
+_CACHE: dict[str, Discovered] = {}
+
+
+def reset_entry_point_cache() -> None:
+    """Forget every cached group. For tests that fake installed entry points.
+
+    Deliberately all-or-nothing rather than per-group: a caller who has to
+    remember which of three groups their fake affects will eventually forget
+    one, and the failure — a plugin leaking between tests — surfaces as an
+    unrelated assertion in a later file.
+    """
+    _CACHE.clear()
+
+
+def _cached(group: str, discover: Callable[[], Discovered]) -> Discovered:
+    """`discover()`, at most once per group per process.
+
+    Not memoised when plugins are disabled: `OPENSTATEGRAPH_DISABLE_PLUGINS` is
+    read from the environment on every call by design (a test flips it, a
+    reproducible run sets it), and there is nothing to save anyway — the
+    disabled path never reaches the `sys.path` walk that costs the 12 ms.
+    """
+    if not plugins_enabled():
+        return discover()
+    cached = _CACHE.get(group)
+    if cached is None:
+        cached = _CACHE[group] = discover()
+    return cached
+
+
 def entry_point_tools() -> Discovered:
+    """`{node_type: tool instance}` contributed by installed distributions.
+
+    Resolved once per process — see `_CACHE`. The returned `Discovered` is
+    **shared**, so treat it as read-only: every caller today copies what it
+    needs (`dict(...)`, `list(...)`, `warnings.extend(...)`) rather than
+    mutating in place, and a caller that did would be editing what every later
+    caller sees.
+    """
+    return _cached(TOOLS_GROUP, _discover_tools)
+
+
+def entry_point_knowledge_builders() -> Discovered:
+    """Knowledge builders contributed by installed distributions.
+
+    Resolved once per process, and shared read-only — see `entry_point_tools`.
+    """
+    return _cached(KNOWLEDGE_BUILDERS_GROUP, _discover_knowledge_builders)
+
+
+def entry_point_providers() -> Discovered:
+    """`ProviderSpec`s contributed by installed distributions.
+
+    Resolved once per process, and shared read-only — see `entry_point_tools`.
+    """
+    return _cached(PROVIDERS_GROUP, _discover_providers)
+
+
+def _discover_tools() -> Discovered:
     """`{node_type: tool instance}` contributed by installed distributions.
 
     Keyed by each tool's own `node_type`, exactly as workflow-local discovery
@@ -250,10 +344,10 @@ def entry_point_tools() -> Discovered:
                 warnings.append(message)
             claimed[tool.node_type] = _distribution_of(entry_point)
             registry[tool.node_type] = tool
-    return Discovered(values=registry, warnings=warnings)
+    return Discovered(values=registry, warnings=warnings, sources=claimed)
 
 
-def entry_point_knowledge_builders() -> Discovered:
+def _discover_knowledge_builders() -> Discovered:
     """Knowledge builders contributed by installed distributions.
 
     The same jail and the same honesty as tools. Order is the caller's
@@ -292,7 +386,7 @@ def entry_point_knowledge_builders() -> Discovered:
     return Discovered(values=builders, warnings=warnings)
 
 
-def entry_point_providers() -> Discovered:
+def _discover_providers() -> Discovered:
     """`ProviderSpec`s contributed by installed distributions.
 
     The same jail and the same honesty as tools, with one difference worth
@@ -337,4 +431,5 @@ __all__ = [
     "entry_point_providers",
     "entry_point_tools",
     "plugins_enabled",
+    "reset_entry_point_cache",
 ]

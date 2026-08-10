@@ -94,7 +94,15 @@ server = [
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
 ]
-mcp = ["mcp>=1.25"]
+# The upper bound is not caution, it is a break we hit: `mcp` 2.0.0 removed
+# `mcp.server.fastmcp`, which `openstategraph.mcp_server` imports, so a fresh
+# `pip install 'openstategraph[mcp]'` produced an ImportError at the transport's
+# one entry point. Found by installing into a clean 3.11 environment while
+# adding the CI version matrix — the developer machine had a cached 1.25 and
+# was therefore blind to it. Same policy as the LangChain pins above: majors
+# are where these projects put breaking changes, so `<2` is a promise, not a
+# guess. Moving to 2.x is a deliberate migration of `mcp_server.py`.
+mcp = ["mcp>=1.25,<2"]
 all = [
     "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp]",
 ]

@@ -409,3 +409,20 @@
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
+
+/* Scope badge: marks a workflow-scoped type on the placed card, so a node
+   that will not exist in other workflows is visibly different from the
+   app-wide prebuilts. */
+.node__scope {
+  display: inline-block;
+  margin-right: var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font: var(--type-caption);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
+  vertical-align: middle;
+}

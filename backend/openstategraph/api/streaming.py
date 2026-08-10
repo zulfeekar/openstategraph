@@ -271,6 +271,11 @@ async def stop_when_client_leaves(frames: Any, receive: Any) -> Any:
     logs). The boundary is unchanged and still honest — a blocking model call
     inside the current superstep cannot be interrupted by anyone — but the
     supersteps *after* it no longer run.
+
+    This is the one path with **no terminal frame** (see `_stream_run`): the
+    consumer we would send it to is the one that left. The client's own
+    fallback is authoritative there — an aborted signal reads as "you stopped
+    it", a body that ended with no terminal frame as "the connection dropped".
     """
     import asyncio
 
@@ -304,7 +309,112 @@ def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+#: The event names that *end* a stream. Exactly one of these is the last
+#: frame of every stream that lives long enough to send one — see
+#: `_stream_run`, which is what guarantees it. Anything else (`update`,
+#: `token`, `spawn`) is progress, and a client must keep waiting after it.
+TERMINAL_EVENTS: tuple[str, ...] = ("done", "interrupt", "error")
+
+
+def _is_terminal(frame: str) -> bool:
+    """True if this SSE frame is one of the three that end a stream."""
+    return any(frame.startswith(f"event: {name}\n") for name in TERMINAL_EVENTS)
+
+
 def _stream_run(
+    graph: Any,
+    graph_input: Any,
+    config: dict[str, Any],
+    plan: Any,
+    node_ids_by_name: dict[str, str],
+    runtime: Any,
+    thread_id: str,
+) -> Any:
+    """The stream, with its ending guaranteed (UX-02).
+
+    `_run_frames` below does the actual work; this wrapper exists for one
+    reason, and it is a protocol rule rather than a convenience:
+
+    > **Every stream ends with a frame that says how it ended.** A client must
+    > never have to tell "still working", "finished" and "died" apart by
+    > waiting and guessing.
+
+    | Exit path | Terminal frame |
+    | --- | --- |
+    | the run completes | `done` |
+    | a `human.approval` node pauses it | `interrupt` |
+    | anything raises — in `graph.stream`, in the fold, in `get_state`, in `draw_mermaid` | `error` |
+    | the fold returns without saying how it ended (a bug) | `error`, and logged |
+    | **the client disconnects / the server is killed** | **none is possible — see below** |
+
+    The last row is the honest exception, not an oversight. After
+    `GeneratorExit` a generator may not yield (Python raises `RuntimeError:
+    generator ignored GeneratorExit`), and there is no longer a socket to
+    write to; a killed process runs no Python at all. **So on that path the
+    client's own fallback is authoritative**, and both clients implement it:
+    an aborted signal means "you stopped it", and a body that ends with no
+    terminal frame means "the connection dropped" — never a silent success
+    and never an open spinner. The disconnect is logged here because that log
+    line is the only record such a run leaves.
+
+    Before this wrapper, `error` covered only exceptions raised *inside* the
+    fold: a `get_state` or `draw_mermaid` failure unwound the generator with
+    the client having seen updates and no ending at all.
+    """
+    frames = _run_frames(
+        graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id
+    )
+    ended = False
+    try:
+        for frame in frames:
+            ended = ended or _is_terminal(frame)
+            yield frame
+    except GeneratorExit:
+        # Stop, pressed, or the client hung up. Nothing may be yielded from
+        # here — see the docstring. Logged rather than silent because "did the
+        # run actually stop?" is otherwise unanswerable from outside, and a
+        # Stop button whose effect cannot be observed is a fake cancel.
+        #
+        # The honest boundary, measured live against the Store Analytics crew
+        # rather than assumed: `graph.stream` is a generator driven BY the
+        # fold, so nothing further is *scheduled*. But tasks LangGraph already
+        # dispatched for the current superstep run in its own executor, a
+        # blocking model call cannot be interrupted, and closing the fold
+        # drains them — an early stop trailed model calls for ~15s, a stop
+        # mid-fan-out for ~75s, in both cases ending far short of the run
+        # itself. Their results are discarded. There is no cancellation seam
+        # inside a superstep at this version: `RunControl.request_drain()`
+        # (langgraph 1.2) stops at exactly the same boundary.
+        logger.info(
+            "run stream stopped by the client (thread_id=%s) — no further supersteps",
+            thread_id,
+        )
+        raise
+    except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
+        # One place turns an exception into a frame, so there is one spelling
+        # of a failed run no matter where in the pipeline it failed.
+        if not ended:
+            yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
+        return
+    finally:
+        # Not left to refcounting: under a stop the checkpointer/DB handles
+        # the LangGraph stream holds should be released at a defined moment
+        # rather than at the collector's convenience. `close()` is idempotent,
+        # so the normal path pays nothing for it.
+        frames.close()
+
+    if not ended:
+        # Unreachable by design — the fold's every path ends in `done`,
+        # `interrupt` or a raise. Kept because "unreachable by design" is a
+        # claim about today's code, and the cost of it becoming false is a
+        # client that waits forever.
+        logger.error(
+            "run stream for thread_id=%s ended without a terminal frame", thread_id
+        )
+        yield _sse("error", {"detail": "The run ended without reporting a result."})
+
+
+def _run_frames(
     graph: Any,
     graph_input: Any,
     config: dict[str, Any],
@@ -328,6 +438,10 @@ def _stream_run(
     or emit an `updates` chunk for the interrupted node itself, since it
     never completed; the loop above just stops, indistinguishable from a
     normal finish without this check).
+
+    Raises rather than reporting: turning an exception into an `error` frame
+    is `_stream_run`'s job, and doing it in both places is two spellings of
+    one failure.
     """
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
 
@@ -443,37 +557,6 @@ def _stream_run(
                             "content": content,
                         },
                     )
-    except GeneratorExit:
-        # Stop, pressed. The client aborted its fetch, so Starlette stopped
-        # consuming this generator and finalised it — `GeneratorExit` is that
-        # finalisation arriving at our `yield`.
-        #
-        # Logged rather than silent because "did the run actually stop?" is
-        # otherwise unanswerable from outside, and a Stop button whose effect
-        # cannot be observed is exactly the fake-cancel this ticket forbids.
-        #
-        # The honest boundary, measured live against the Store Analytics
-        # crew rather than assumed: `graph.stream` is a generator driven BY
-        # the loop above, so nothing further is *scheduled* from here. But
-        # tasks LangGraph already dispatched for the current superstep run
-        # in its own executor, a blocking model call cannot be interrupted,
-        # and the `close()` below drains them — an early stop trailed model
-        # calls for ~15s, a stop mid-fan-out for ~75s, in both cases ending
-        # far short of the run itself. Their results are discarded.
-        #
-        # There is no cancellation seam inside a superstep at this version:
-        # `RunControl.request_drain()` (langgraph 1.2) stops at exactly the
-        # same boundary — "after the current superstep completes" — and buys
-        # a resumable checkpoint rather than a faster stop. Nothing here may
-        # claim more than this.
-        logger.info(
-            "run stream stopped by the client (thread_id=%s) — no further supersteps",
-            thread_id,
-        )
-        raise
-    except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
-        yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
-        return
     finally:
         # Explicit, not left to refcounting. CPython happens to close the
         # inner generator when this frame is destroyed, but "happens to" is

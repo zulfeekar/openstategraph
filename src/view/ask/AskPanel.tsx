@@ -250,6 +250,25 @@ export function AskPanel({
   }, []);
 
   /**
+   * Retires the canvas's paused mark (UX-01) when the pause is over.
+   *
+   * Keyed off the model rather than off remembered node ids, because the
+   * model is where the state actually lives — one node is paused at a time,
+   * and asking it is what keeps this correct if a later edit ever pauses a
+   * different node than the one this panel last highlighted.
+   */
+  const clearPausedNodes = useCallback(
+    (status: 'idle' | 'running') => {
+      for (const node of controller.model.nodes()) {
+        if (node.runtime.status === 'paused') {
+          controller.model.setNodeRuntime(node.id, { status });
+        }
+      }
+    },
+    [controller],
+  );
+
+  /**
    * Runs the shared tail of both a fresh send and a resumed approval: wires
    * `onEvent` to the canvas highlight/activity feed, then settles the turn
    * into a result, an error, or — new for `human.approval` — a paused
@@ -444,8 +463,16 @@ export function AskPanel({
       }
 
       if (outcome.ok && outcome.value && 'interrupted' in outcome.value) {
-        // Paused, not finished: the last active node stays highlighted rather
-        // than flipping to "success", since it has not actually completed.
+        // Paused, not finished — and now said in those words (UX-01).
+        //
+        // Not `success` (the node has not completed), not `idle` (the run is
+        // still live, checkpointed, and resumable), and above all not
+        // `running`, which is what it used to be left as: the canvas kept
+        // sweeping its run glow over the very node that was waiting for this
+        // person to decide, while the approval card asked them to. `paused`
+        // is a static amber ring plus a "Waiting for you" label, and nothing
+        // about it animates.
+        if (activeNode) controller.model.setNodeRuntime(activeNode, { status: 'paused' });
         updateTurn(id, {
           running: false,
           pendingApproval: {
@@ -499,6 +526,10 @@ export function AskPanel({
       if (!turn || !turn.pendingApproval) return;
       const { threadId } = turn.pendingApproval;
 
+      // Answered: the node the run parked on is about to execute again, so it
+      // stops saying "Waiting for you" now rather than at whatever moment the
+      // first frame of the resumed stream happens to arrive.
+      clearPausedNodes('running');
       updateTurn(turnId, { running: true, pendingApproval: null, stopped: null });
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
@@ -516,7 +547,7 @@ export function AskPanel({
         ),
       );
     },
-    [client, controller, streamAndSettle, turns, updateTurn, workbench],
+    [client, clearPausedNodes, controller, streamAndSettle, turns, updateTurn, workbench],
   );
 
   /**
@@ -603,8 +634,15 @@ export function AskPanel({
       return;
     }
     const paused = turns.find((turn) => turn.pendingApproval);
-    if (paused) updateTurn(paused.id, { pendingApproval: null, stopped: 'paused' });
-  }, [turns, updateTurn]);
+    if (paused) {
+      // Walking away from the prompt clears the canvas's "Waiting for you"
+      // mark: nothing is waiting on this editor any more. The thread is still
+      // checkpointed server-side, which the rendered line says — but the
+      // canvas must not keep asking a question nobody will answer here.
+      clearPausedNodes('idle');
+      updateTurn(paused.id, { pendingApproval: null, stopped: 'paused' });
+    }
+  }, [clearPausedNodes, turns, updateTurn]);
 
   // Stop, pressed in the toolbar. Same nonce discipline as Run above, and the
   // same reason: the press is the event, not the value.

@@ -16,7 +16,17 @@ import type { NodeId } from '@core/model/contracts/node';
 import type { WorkflowEvents } from '@core/model/contracts/workflow';
 import type { FlowDirection } from '@core/model/contracts/ports';
 import type { PaperController } from '@canvas/PaperController';
-import { loadWorkflow, mostRecentWorkflowId, resolveSession, saveWorkflow } from './workflowStore';
+import {
+  claimSession,
+  isClaimedByAnother,
+  mostRecentWorkflowId,
+  newWriteGuard,
+  readWorkflow,
+  releaseSession,
+  resolveSession,
+  saveWorkflow,
+  type WriteGuard,
+} from './workflowStore';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 
 interface WorkbenchValue {
@@ -221,8 +231,18 @@ export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
  *
  * Restoring also clears the undo stack (`importJSON` must), so it happens at most
  * once per mount and never for a freshly minted id.
+ *
+ * **`report` is not optional decoration (UX-04).** Autosave used to call
+ * `saveWorkflow` and *discard its outcome*, so a full quota — the one failure
+ * that actually happens — left the user editing a document nothing was
+ * recording, with no signal of any kind. A store that reports failures to a
+ * caller that ignores them is a store that fails silently. Every path that can
+ * lose work now ends in a sentence the user sees.
  */
-export function useWorkflowSession(): { restored: boolean; workflowId: string | null } {
+export function useWorkflowSession(report: (message: string) => void = () => {}): {
+  restored: boolean;
+  workflowId: string | null;
+} {
   const controller = useController();
   const workbench = useWorkbench();
   const [state, setState] = useState<{ restored: boolean; workflowId: string | null }>({
@@ -231,42 +251,69 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
   });
   // StrictMode mounts effects twice; restoring twice would be visible.
   const done = useRef(false);
+  // This tab's write identity, minted once and never regenerated: it is what
+  // distinguishes "I wrote that" from "another tab did". A ref, filled inside
+  // the effects rather than during render — it is mutable by design
+  // (`lastSeenAt` advances with every write) and never read while rendering,
+  // which is exactly what a ref is for and what React state is not.
+  const writerRef = useRef<WriteGuard | null>(null);
+  // `report` is recreated by the toaster on every toast, and the restore
+  // effect below must not re-run because of that.
+  const reportRef = useRef(report);
+  useEffect(() => {
+    reportRef.current = report;
+  }, [report]);
 
   useEffect(() => {
     if (done.current) return;
     done.current = true;
+    const writer = (writerRef.current ??= newWriteGuard());
 
     const session = resolveSession({
       sessionId: sessionStorage.getItem(SESSION_KEY),
       mostRecentId: mostRecentWorkflowId(localStorage),
       mintId: () => `wf-${Date.now()}`,
+      // The clobber gate: a workflow another live tab is editing is not
+      // adopted at all, so two tabs never share one autosave key.
+      isClaimed: (id) => isClaimedByAnother(localStorage, id, writer),
     });
+    if (session.notice != null) reportRef.current(session.notice);
 
     if (session.shouldRestore) {
-      const json = loadWorkflow(localStorage, session.id);
-      // A missing or corrupt entry leaves the current document alone rather
-      // than blanking the canvas.
-      if (json != null) {
+      const outcome = readWorkflow(localStorage, session.id);
+      if (outcome.status === 'corrupt') {
+        // Recovered, not crashed: the seeded demo already on screen stays, the
+        // bad bytes are quarantined by the reader, and the user is told —
+        // which is the part that was missing when this returned a bare null.
+        reportRef.current(outcome.reason);
+      } else if (outcome.status === 'ok') {
+        // Remember which version we restored. Without this the first autosave
+        // cannot tell its own lineage from another tab's newer write.
+        writer.lastSeenAt = outcome.savedAt;
         try {
           // Same ordering requirement as the named-file Load path: a
           // workflow-scoped node type must be registered *before* import, or
           // `fromJSON` silently skips every node of that type.
           registerNodeTypesForRawDocument(
-            JSON.parse(json),
+            JSON.parse(outcome.json),
             workbench.registry,
             workbench.engine.executors,
           );
-          controller.document.importJSON(json);
+          controller.document.importJSON(outcome.json);
         } catch (error) {
-          // A corrupt autosave entry must not take the whole app down —
-          // the seeded demo (already on screen) stays, same as the
-          // missing-entry case just above.
-          console.error('Could not restore the autosaved workflow:', error);
+          // A structurally valid envelope holding a document this build cannot
+          // import. Same recovery, same duty to say so.
+          const detail = error instanceof Error ? error.message : String(error);
+          reportRef.current(
+            `The autosaved workflow could not be restored (${detail}). ` +
+              'The editor has started from a blank workflow; nothing was deleted.',
+          );
         }
       }
     }
 
     sessionStorage.setItem(SESSION_KEY, session.id);
+    claimSession(localStorage, session.id, writer);
     setState({ restored: session.shouldRestore, workflowId: session.id });
   }, [controller, workbench]);
 
@@ -275,12 +322,39 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
   const workflowId = state.workflowId;
   useEffect(() => {
     if (workflowId == null) return;
+    const writer = (writerRef.current ??= newWriteGuard());
+
+    // The heartbeat behind `isClaimedByAnother`. A claim is refreshed while
+    // this tab lives and goes stale when it does not, so a crashed tab cannot
+    // lock a user out of their own workflow.
+    claimSession(localStorage, workflowId, writer);
+    const heartbeat = setInterval(
+      () => claimSession(localStorage, workflowId, writer),
+      CLAIM_HEARTBEAT_MS,
+    );
 
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // One complaint per distinct failure, not one per keystroke: autosave runs
+    // on every edit, and a full quota would otherwise produce a toast per
+    // second forever. Cleared by the next success, so a recovery is visible.
+    let lastReported: string | null = null;
     const schedule = () => {
       if (timer != null) clearTimeout(timer);
       timer = setTimeout(() => {
-        saveWorkflow(localStorage, workflowId, workbench.model, workbench.serializer);
+        const outcome = saveWorkflow(
+          localStorage,
+          workflowId,
+          workbench.model,
+          workbench.serializer,
+          writer,
+        );
+        if (outcome.ok) {
+          lastReported = null;
+          return;
+        }
+        if (outcome.kind === lastReported) return;
+        lastReported = outcome.kind ?? 'error';
+        reportRef.current(outcome.reason ?? 'This change was not autosaved.');
       }, SAVE_DELAY_MS);
     };
 
@@ -289,7 +363,9 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
     const off = controller.onChange(schedule);
     return () => {
       off();
+      clearInterval(heartbeat);
       if (timer != null) clearTimeout(timer);
+      releaseSession(localStorage, workflowId, writer);
     };
   }, [controller, workbench, workflowId]);
 
@@ -298,3 +374,5 @@ export function useWorkflowSession(): { restored: boolean; workflowId: string | 
 
 const SESSION_KEY = 'openstategraph-current-workflow-id';
 const SAVE_DELAY_MS = 1000;
+/** Comfortably inside `CLAIM_STALE_MS`, so a live tab is never mistaken for dead. */
+const CLAIM_HEARTBEAT_MS = 10_000;

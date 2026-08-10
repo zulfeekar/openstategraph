@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from openstategraph.extensions import reset_entry_point_cache
 from openstategraph.providers import (
     PROVIDERS_GROUP,
     ProviderCatalogue,
@@ -51,6 +52,13 @@ def install(monkeypatch: pytest.MonkeyPatch, *entry_points: FakeEntryPoint) -> N
 
     monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
     reset_provider_catalogue()
+    # Faking installed entry points IS a change to the environment, so it must
+    # invalidate the process-lifetime discovery cache in
+    # `openstategraph.extensions` — otherwise a test that discovers before it
+    # fakes gets the real venv's answer, which is a passing test asserting
+    # nothing. `conftest.py` clears the cache *between* tests; this clears it
+    # mid-test, where the fake is installed.
+    reset_entry_point_cache()
 
 
 # --------------------------------------------------------------------- #

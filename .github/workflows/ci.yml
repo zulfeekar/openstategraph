@@ -69,24 +69,58 @@ jobs:
             exit 1
           fi
 
+  # Tested on the versions we ADVERTISE — the floor and the ceiling of the
+  # `Programming Language :: Python :: 3.x` classifiers in backend/pyproject.toml
+  # (sdk-practice.md §3 recommendation 4, copying SUP's stated principle: lint
+  # on one version, test on min and max).
+  #
+  # **The split, stated rather than implied.** Every leg runs the full pytest
+  # suite, unconditionally and with the same coverage ratchet — a leg that
+  # installs dependencies and asserts nothing is decoration, and
+  # `test_every_matrix_leg_actually_runs_the_test_suite` fails if one ever
+  # becomes that. Ruff and mypy run on the FLOOR leg only, and that is not an
+  # arbitrary "one of them": `[tool.ruff] target-version` and `[tool.mypy]
+  # python_version` are both `py311`, so both tools give an identical answer on
+  # every leg by construction. The floor is also where a too-new syntax or a
+  # too-new stdlib call actually fails, so the floor is where the static gates
+  # belong.
+  #
+  # Middle versions are deliberately not run. Min and max bracket the language
+  # changes; a break confined to 3.12 alone has no precedent in this codebase's
+  # dependency set and is not worth a third runner on every pull request.
+  #
+  # `PYTHON_VERSIONS` below is asserted against the classifiers by
+  # `backend/tests/test_python_support.py`, which parses THIS FILE. Widening the
+  # classifiers without widening this matrix fails that test, and vice versa —
+  # the claim and the proof cannot drift apart silently.
   backend:
     runs-on: ubuntu-latest
+    strategy:
+      # One version failing must not hide whether the other does.
+      fail-fast: false
+      matrix:
+        # PYTHON_VERSIONS — the parity test reads this list.
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+        with: { python-version: "${{ matrix.python-version }}" }
       # `[all]` because a checkout exercises every surface — the HTTP API, the
       # MCP transport, deep agents, sqlite. A *consumer* installs the lean core
       # plus one provider extra; `backend/tests/test_distribution_metadata.py`
       # is what keeps that promise honest, since CI cannot see it from here.
       - run: pip install -e "backend[all,dev]" ruff
-      - run: python -m ruff check backend
+      - if: matrix.python-version == '3.11'
+        run: python -m ruff check backend
       # The type gate (ticket 05). Runs from `backend/` because `[tool.mypy]`
       # in backend/pyproject.toml is the config, and mypy reads the nearest
       # one. Ruff catches undefined names; this is what catches a wrong one.
-      - run: cd backend && python -m mypy
+      - if: matrix.python-version == '3.11'
+        run: cd backend && python -m mypy
       # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
       # guards regressions, raised as it climbs. Live-API tests stay opt-in.
+      # Deliberately unconditional — every leg of the matrix must actually run
+      # the suite, and coverage is cheap next to the install above.
       - run: python -m pytest -q --cov=backend/openstategraph --cov-fail-under=85
   # The proof a green test suite cannot give (framework-packaging §3.6): build
   # the wheel, install it in an EMPTY venv outside the checkout, and drive it

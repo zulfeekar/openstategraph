@@ -296,13 +296,23 @@ def discover_tool_registry(
     return registry
 
 
-def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
+def discover_tools(
+    workflow_dir: Path,
+    slug: str,
+    *,
+    warnings: list[str] | None = None,
+) -> list[ToolCapability]:
     """Every `BaseTool` subclass defined in `<workflow_dir>/tools/*.py`.
 
     Only classes *defined* in the scanned module count — an import re-exported
     through the module (e.g. `from .other import SomeTool`) is skipped by
     checking `__module__`, so an `__init__.py` re-export never registers the
     same tool twice under two different qualified ids.
+
+    `warnings` is the same optional sink `discover_tool_instances` takes. The
+    *listing* path had never passed one, so a tool module that would not import
+    was a WARNING in a server log and an empty palette in the editor — the
+    silence register PK-06 names. The capabilities endpoint passes one.
     """
     return [
         ToolCapability(
@@ -312,7 +322,9 @@ def discover_tools(workflow_dir: Path, slug: str) -> list[ToolCapability]:
             args_schema=instance.Args.model_json_schema(),
             node_type=instance.node_type,
         )
-        for qualified_id, instance in discover_tool_instances(workflow_dir, slug)
+        for qualified_id, instance in discover_tool_instances(
+            workflow_dir, slug, warnings=warnings
+        )
     ]
 
 

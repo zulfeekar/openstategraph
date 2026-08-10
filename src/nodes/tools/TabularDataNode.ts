@@ -31,6 +31,7 @@ export class ListDataFilesNodeModel extends AbstractToolNodeModel {}
 export const listDataFilesNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.tabular-list-files',
+    scope: 'workflow',
     label: 'List Data Files',
     description: 'Lists all CSV and Parquet files available for analysis in the data directory.',
     iconId: 'node-database',
@@ -97,6 +98,7 @@ export class GetTableSchemaNodeModel extends AbstractToolNodeModel {
 export const getTableSchemaNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.tabular-get-schema',
+    scope: 'workflow',
     label: 'Get Table Schema',
     description: 'Retrieves column names, data types, and sample values for a CSV or Parquet file.',
     iconId: 'node-database',
@@ -183,6 +185,7 @@ export class QueryDataNodeModel extends AbstractToolNodeModel {
 export const queryDataNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.tabular-query',
+    scope: 'workflow',
     label: 'Query Data',
     description: 'Executes a SQL query against CSV/Parquet files using DuckDB.',
     iconId: 'node-database',
@@ -282,6 +285,7 @@ export class SampleDataNodeModel extends AbstractToolNodeModel {
 export const sampleDataNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.tabular-sample',
+    scope: 'workflow',
     label: 'Sample Data',
     description:
       'Returns a preview sample of rows from a CSV or Parquet file for quick exploration.',

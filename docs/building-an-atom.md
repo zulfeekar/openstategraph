@@ -271,8 +271,8 @@ discovered tool cannot run in the canvas preview — see honest refusal, above.
 
 **Published (your own distribution, no fork).** Ship the tool in a package of
 your own and declare an entry point. Anyone who `pip install`s it has your
-atom in every workflow they run — no edit to this repository, no merge to
-carry forever.
+atom in every workflow they run — palette card included — with no edit to this
+repository and no merge to carry forever.
 
 Same-`node_type` collisions resolve workflow-wins, mirroring the frontend's
 local-shadows-global registry rule.
@@ -341,9 +341,88 @@ a tool.
 | **Opt-out** | `OPENSTATEGRAPH_DISABLE_PLUGINS=1` excludes every entry point, so a reproducible run never depends on a colleague's `pip install`. |
 | **Cost** | Nothing is enumerated at import. Discovery happens when a tool registry is built. |
 
-The TypeScript half is not distributable this way yet: a published atom is
-bindable by any document and runs in the compiled graph, but its *card* still
-has to be registered in the editor. That gap is real and recorded, not solved.
+### What you must declare to get a card
+
+Your tool is bindable the moment it installs — but a capability nobody can
+*wire* is half a promise, and until register PK-06 that was the situation: the
+runtime resolved `tool.acme-ping` and no palette anywhere showed it. It does
+now, and here is exactly what the editor reads.
+
+**The minimum is `node_type`.** Declare one and your tool appears in the
+palette under **Always available** (app-scoped — it is installed in the
+environment, so unlike a workflow's own `tools/` it does not disappear when
+another workflow is opened). The card takes its label from `name`, its body
+text from `description`, and its argument schema from `Args`. Nothing else is
+required, and there is no TypeScript to write.
+
+**Add controls with `node_fields`.** A tool that needs configuration declares
+it on the class, and the value the user types reaches your tool through
+`configure()` — the same mechanism the bundled email tool's recipient uses:
+
+```python
+from openstategraph.abc import BaseTool, NoArgs, ToolField, ToolResult
+
+class Ping(BaseTool):
+    name = "acme_ping"
+    description = "Answers with a pong."
+    node_type = "tool.acme-ping"
+    Args = NoArgs
+    node_fields = (
+        ToolField(
+            key="endpoint",                       # where the value lands in node data
+            label="Endpoint",
+            kind="text",                          # text | textarea | select | toggle | number
+            default_value="",
+            placeholder="https://acme.example/ping",
+            hint="Where the ping goes.",
+        ),
+    )
+
+    def __init__(self, endpoint: str = "") -> None:
+        self.endpoint = endpoint
+
+    def configure(self, data: dict) -> "Ping":
+        # A FRESH instance, never a mutation: two nodes of your tool with
+        # different config in one document would otherwise clobber each other.
+        return Ping(endpoint=str(data.get("endpoint", "")))
+
+    def _execute(self, args) -> ToolResult:
+        return ToolResult(content=f"pong from {self.endpoint or 'nowhere'}")
+```
+
+A `kind` this editor does not recognise degrades to a text control rather than
+dropping the field, so a plugin built against a newer editor stays usable in an
+older one. A field with no `key` has nowhere to store its value and is reported
+rather than shown.
+
+**The wire contract** is `GET /api/workflows/{slug}/capabilities`, whose
+`plugin_tools` array carries `node_type`, `name`, `description`, `args_schema`,
+`fields`, the `distribution` that shipped each tool (always displayed on the
+card — a card that appeared because of an unrelated `pip install` has to be
+explicable) and `replaces_builtin`. It is built from **the same registry layer
+the runtime binds**, so the palette can never offer a tool the runtime lacks.
+
+**If you replace a bundled tool**, precedence is the documented one — built-in
+< your plugin < the workflow's own — so your card replaces the built-in card
+and your tool is what runs. The payload says so on the tool and in a warning
+naming your distribution, and uninstalling gives the bundled card back.
+
+**When the card appears.** Capabilities are fetched when a saved workflow is
+opened, and when the palette's Refresh is pressed — so after `pip install`,
+open a workflow (or press Refresh) rather than expecting a card to appear in a
+blank session. There is no push yet; that is the rest of RC-05.
+
+**Local preview cannot run your tool.** Its implementation is on the backend;
+the canvas Run button refuses honestly and points at Chat, exactly as a
+workflow-discovered tool does.
+
+> **The two-place authoring error, now loud.** A tool that exists in Python
+> with *neither* an editor card in `src/nodes/tools/` nor a plugin declaration
+> is bindable and invisible. The capabilities response now names every such
+> node type, and the editor shows it at the top of the palette: *"N tools the
+> runtime can bind have no editor card, so no one can wire them on a canvas:
+> …"* — with both ways to fix it. Silence was the old behaviour, and it was
+> the worst part of the gap.
 
 ---
 

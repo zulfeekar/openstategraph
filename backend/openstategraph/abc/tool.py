@@ -19,6 +19,7 @@ would stop being one-directional.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
@@ -39,6 +40,43 @@ class ToolResult(BaseModel):
     @classmethod
     def failure(cls, message: str) -> ToolResult:
         return cls(ok=False, content="", error=message)
+
+
+@dataclass(frozen=True)
+class ToolField:
+    """One control on the tool's editor card, declared by the tool itself.
+
+    **The two-place authoring problem this exists to remove** (register PK-06).
+    A tool is bindable the moment its Python class installs, but a tool the
+    editor cannot *render* is a capability nobody can wire — and a third party
+    cannot add a TypeScript file to this repo. So a distribution declares its
+    card's fields here, in the same class the runtime binds, and the editor
+    builds the card from the capabilities payload. One declaration, two
+    consumers, no hand-mirrored type across the boundary.
+
+    The value a user types lands in the node's `data` under `key`, and reaches
+    the tool through `BaseTool.configure(data)` — the mechanism that already
+    exists for a bundled tool's own config (the email tool's recipient). A tool
+    that declares fields but never overrides `configure` gets a card whose
+    values it ignores, which is why `configure` is where the docs point.
+
+    `kind` names an editor control, deliberately from a small closed set:
+    `text`, `textarea`, `select` (with `options`), `toggle`, `number`. An
+    unknown kind renders as text rather than failing the whole card — a
+    plugin built against a newer editor must degrade, not disappear.
+    """
+
+    #: Key within the node's `data` record — what `configure()` reads.
+    key: str
+    #: Micro-label above the control. Defaults to the key.
+    label: str = ""
+    kind: str = "text"
+    #: JSON-representable only: this crosses the wire. Never `Infinity`/`NaN`.
+    default_value: Any = ""
+    placeholder: str = ""
+    hint: str = ""
+    #: `select` only, `(value, label)` pairs — or bare strings, used for both.
+    options: tuple[Any, ...] = ()
 
 
 @runtime_checkable
@@ -100,6 +138,13 @@ class BaseTool(ABC):
     #: Pydantic model describing the arguments. The source of truth for the
     #: generated TypeScript, and for the schema the LLM is shown.
     Args: ClassVar[type[BaseModel]]
+    #: Controls the editor puts on this tool's card, declared by the tool
+    #: (register PK-06). Empty is the common case — a stateless tool needs no
+    #: configuration — and a *bundled* tool declares its card in TypeScript
+    #: instead, where the card can be as rich as it likes. This exists for the
+    #: half of the world that cannot add a TypeScript file: an installed
+    #: distribution. See `ToolField` and `configure`.
+    node_fields: ClassVar[tuple[ToolField, ...]] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Fail at import, the earliest honest moment.
@@ -262,4 +307,4 @@ class NoArgs(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-__all__ = ["BaseTool", "ITool", "NoArgs", "ToolResult", "Field"]
+__all__ = ["BaseTool", "ITool", "NoArgs", "ToolField", "ToolResult", "Field"]

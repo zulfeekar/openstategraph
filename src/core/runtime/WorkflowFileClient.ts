@@ -50,8 +50,53 @@ export interface ToolCapability {
   readonly argsSchema: Record<string, unknown>;
 }
 
+/** One control a plugin's tool asks the editor to put on its card. */
+export interface PluginToolField {
+  readonly key: string;
+  readonly label: string;
+  /** `text` | `textarea` | `select` | `toggle` | `number`; anything else is text. */
+  readonly kind: string;
+  readonly defaultValue: string | number | boolean;
+  readonly placeholder: string;
+  readonly hint: string;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+}
+
+/**
+ * A tool contributed by an **installed distribution** (register PK-06).
+ *
+ * Reported separately from `tools` because the two have different lifetimes,
+ * and the palette says so: a workflow's own tool disappears when another
+ * workflow is opened; a plugin's is available in every workflow until it is
+ * uninstalled. Its `nodeType` **is** its id — a plugin's tool is process-wide,
+ * so unlike a workflow-local capability there is no slug to qualify it with,
+ * and the document binds the same string at both ends.
+ */
+export interface PluginToolCapability {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly argsSchema: Record<string, unknown>;
+  readonly nodeType: string;
+  /** The distribution that shipped it — always shown, never inferred. */
+  readonly distribution: string;
+  readonly fields: readonly PluginToolField[];
+  /** True when it replaces a bundled tool of the same node type. */
+  readonly replacesBuiltin: boolean;
+}
+
 export interface WorkflowCapabilities {
   readonly tools: readonly ToolCapability[];
+  /** App-scoped tools installed distributions contribute. */
+  readonly pluginTools: readonly PluginToolCapability[];
+  /**
+   * Everything that failed to appear, and everything that appeared under
+   * someone else's name: a tool module that would not import, a plugin that
+   * replaced a built-in, a Python tool with no editor card at all. The
+   * capability-warning channel, applied to discovery — a developer who
+   * authored half a tool must get a message, not silence.
+   */
+  readonly warnings: readonly string[];
 }
 
 export interface IWorkflowFileClient {
@@ -243,8 +288,17 @@ export class WorkflowFileClient implements IWorkflowFileClient {
     if (!response.ok) return Err(await describeFailure(response));
 
     try {
-      const payload = (await response.json()) as { tools?: unknown[] };
+      const payload = (await response.json()) as {
+        tools?: unknown[];
+        plugin_tools?: unknown[];
+        warnings?: unknown[];
+      };
       const tools = Array.isArray(payload.tools) ? payload.tools : [];
+      // Every list defaults to empty rather than failing the parse: an older
+      // backend that predates plugin capabilities must still load a workflow,
+      // and a missing key is exactly the "nothing to report" it looks like.
+      const pluginTools = Array.isArray(payload.plugin_tools) ? payload.plugin_tools : [];
+      const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
       return Ok({
         tools: tools.map((entry) => {
           const record = entry as Record<string, unknown>;
@@ -255,6 +309,8 @@ export class WorkflowFileClient implements IWorkflowFileClient {
             argsSchema: (record['args_schema'] as Record<string, unknown>) ?? {},
           };
         }),
+        pluginTools: pluginTools.map((entry) => asPluginTool(entry as Record<string, unknown>)),
+        warnings: warnings.filter((w): w is string => typeof w === 'string'),
       });
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
@@ -274,3 +330,37 @@ async function describeFailure(response: Response): Promise<string> {
 }
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** One `plugin_tools` row, snake_case on the wire, camelCase in the editor. */
+function asPluginTool(record: Record<string, unknown>): PluginToolCapability {
+  const fields = Array.isArray(record['fields']) ? record['fields'] : [];
+  const nodeType = asString(record['node_type']);
+  return {
+    id: asString(record['id']) || nodeType,
+    name: asString(record['name']),
+    description: asString(record['description']),
+    argsSchema: (record['args_schema'] as Record<string, unknown>) ?? {},
+    nodeType,
+    distribution: asString(record['distribution']),
+    fields: fields.map((entry) => asPluginField(entry as Record<string, unknown>)),
+    replacesBuiltin: record['replaces_builtin'] === true,
+  };
+}
+
+function asPluginField(record: Record<string, unknown>): PluginToolField {
+  const raw = record['default_value'];
+  const options = Array.isArray(record['options']) ? record['options'] : [];
+  return {
+    key: asString(record['key']),
+    label: asString(record['label']),
+    kind: asString(record['kind']) || 'text',
+    defaultValue:
+      typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : '',
+    placeholder: asString(record['placeholder']),
+    hint: asString(record['hint']),
+    options: options.map((entry) => {
+      const option = entry as Record<string, unknown>;
+      return { value: asString(option['value']), label: asString(option['label']) };
+    }),
+  };
+}

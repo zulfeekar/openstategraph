@@ -29,9 +29,12 @@ from openstategraph.extensions import (
     DISABLE_PLUGINS_ENV,
     ENTRY_POINT_GROUPS,
     KNOWLEDGE_BUILDERS_GROUP,
+    PROVIDERS_GROUP,
     TOOLS_GROUP,
     entry_point_knowledge_builders,
+    entry_point_providers,
     entry_point_tools,
+    reset_entry_point_cache,
 )
 
 
@@ -89,6 +92,13 @@ def install(monkeypatch: pytest.MonkeyPatch, *entry_points: FakeEntryPoint) -> N
 
     monkeypatch.delenv(DISABLE_PLUGINS_ENV, raising=False)
     monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
+    # Faking installed entry points IS a change to the environment, so it must
+    # invalidate the process-lifetime discovery cache in
+    # `openstategraph.extensions` — otherwise a test that discovers before it
+    # fakes gets the real venv's answer, which is a passing test asserting
+    # nothing. `conftest.py` clears the cache *between* tests; this clears it
+    # mid-test, where the fake is installed.
+    reset_entry_point_cache()
 
 
 class TestTheGroupNamesAreTheContract:
@@ -354,3 +364,138 @@ class TestNothingIsImportedUntilARegistryIsBuilt:
         ]
 
         assert module_scope == []
+
+
+class TestDiscoveryIsResolvedOncePerProcess:
+    """The cache that used to cover one group of three.
+
+    `importlib.metadata.entry_points()` re-walks every installed
+    distribution's metadata on every call — measured on this checkout at
+    12-15 ms per group. `api/registries.py` memoised the tools group and left a
+    note saying `extensions` was the better home, which was right for a reason
+    stronger than tidiness: the other two groups paid the identical scan on
+    every call, and a mechanism memoised at one of its three call sites is a
+    mechanism whose invalidation nobody owns.
+    """
+
+    def _count_scans(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        """Record every group `importlib.metadata` is actually asked about."""
+        scanned: list[str] = []
+
+        def counting_entry_points(*, group: str = "") -> list[FakeEntryPoint]:
+            scanned.append(group)
+            return []
+
+        monkeypatch.delenv(DISABLE_PLUGINS_ENV, raising=False)
+        monkeypatch.setattr(importlib.metadata, "entry_points", counting_entry_points)
+        return scanned
+
+    @pytest.mark.parametrize(
+        "discover, group",
+        [
+            (entry_point_tools, TOOLS_GROUP),
+            (entry_point_knowledge_builders, KNOWLEDGE_BUILDERS_GROUP),
+            (entry_point_providers, PROVIDERS_GROUP),
+        ],
+    )
+    def test_every_group_scans_the_environment_at_most_once(
+        self, monkeypatch: pytest.MonkeyPatch, discover: Any, group: str
+    ) -> None:
+        scanned = self._count_scans(monkeypatch)
+
+        for _ in range(5):
+            discover()
+
+        assert scanned == [group]
+
+    def test_a_repeated_call_returns_the_same_object(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Identity, not just equality: a copy per call would still pay the scan."""
+        install(monkeypatch, FakeEntryPoint("acme", TOOLS_GROUP, "acme", AcmeTool))
+
+        assert entry_point_tools() is entry_point_tools()
+
+    def test_the_reset_hook_clears_all_three_groups(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The failure a partial reset would cause, asserted directly.
+
+        `conftest.py` calls `reset_process_tool_layer` between every test. When
+        the cache covered tools alone, resetting tools alone was complete; now
+        it would look like isolation while letting one test's faked provider
+        decide what every later test discovers.
+        """
+        from openstategraph.api.registries import reset_process_tool_layer
+
+        scanned = self._count_scans(monkeypatch)
+        entry_point_tools()
+        entry_point_knowledge_builders()
+        entry_point_providers()
+        assert len(scanned) == 3
+
+        reset_process_tool_layer()
+
+        entry_point_tools()
+        entry_point_knowledge_builders()
+        entry_point_providers()
+        assert len(scanned) == 6
+
+    def test_faking_a_plugin_after_discovery_has_already_run_still_works(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The trap a process-lifetime cache sets for a test suite.
+
+        Without invalidation this is a test that passes while asserting
+        nothing: the first call fills the cache from the real venv, and the
+        `install` below never reaches `importlib.metadata` at all. Two real
+        tests in `test_provider_registry.py` failed exactly this way the moment
+        providers joined the cache, which is why `install` clears it.
+        """
+        install(monkeypatch)
+        assert entry_point_tools().values == {}
+
+        install(monkeypatch, FakeEntryPoint("acme", TOOLS_GROUP, "acme", AcmeTool))
+
+        assert "tool.acme-ping" in entry_point_tools().values
+
+    def test_disabling_plugins_is_never_answered_from_the_cache(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`OPENSTATEGRAPH_DISABLE_PLUGINS` is read per call, by design.
+
+        Caching the *disabled* answer would make the switch depend on whether
+        anything happened to have discovered first — and the disabled path
+        costs nothing anyway, because it never reaches the `sys.path` walk.
+        """
+        install(monkeypatch, FakeEntryPoint("acme", TOOLS_GROUP, "acme", AcmeTool))
+        assert "tool.acme-ping" in entry_point_tools().values
+
+        monkeypatch.setenv(DISABLE_PLUGINS_ENV, "1")
+        assert entry_point_tools().values == {}
+
+        monkeypatch.delenv(DISABLE_PLUGINS_ENV)
+        assert "tool.acme-ping" in entry_point_tools().values
+
+    def test_the_cache_is_empty_at_import_time(self) -> None:
+        """Still side-effect-free to import: an empty dict is not a scan.
+
+        The module docstring's "Cheap" promise is about `import openstategraph`
+        not walking `sys.path`, and a cache is only a violation of it if
+        something fills the cache on the way in.
+        """
+        import ast
+
+        import openstategraph.extensions as extensions
+
+        tree = ast.parse(Path(extensions.__file__).read_text())
+        assignments = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "_CACHE"
+        ]
+        assert len(assignments) == 1
+        value = assignments[0].value
+        assert isinstance(value, ast.Dict) and value.keys == []

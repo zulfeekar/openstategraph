@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
-import { Package, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Package, RefreshCw, Search, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -18,6 +18,7 @@ import { matchesQuery } from '@core/model/ModelRegistry';
 import type { INodeCategory, INodeDefinition } from '@core/model/contracts/node';
 import { useController, usePaperController, useWorkbench } from '@app/WorkbenchContext';
 import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
+import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import './Palette.css';
@@ -96,6 +97,10 @@ export function Palette({ onNotify }: PaletteProps) {
 
   const searching = query.trim().length > 0;
 
+  // The capability-warning channel, subscribed the same way the registry is:
+  // warnings arrive after a load or a Refresh, long after this first painted.
+  const warnings = useSyncExternalStore(onCapabilityWarningsChange, capabilityWarnings);
+
   // Hot discovery, on demand. Writing a `tools/*.py` file changes nothing
   // `workflow.json`'s watcher looks at, and polling the discovery endpoint
   // every few seconds to catch an event that happens a handful of times a
@@ -169,6 +174,28 @@ export function Palette({ onNotify }: PaletteProps) {
       </PanelHeader>
 
       <PanelBody>
+        {/* The half-authored error, and everything else discovery could not
+            deliver (register PK-06). Shown here rather than as a toast because
+            it is a *standing* condition — a Python tool with no editor card is
+            still cardless after a toast fades, and the developer who needs to
+            read it may not have been looking when it appeared. Hidden while
+            searching: a filtered palette is a lookup. */}
+        {!searching && warnings.length > 0 ? (
+          <div className="palette-warnings" role="status">
+            <p className="palette-warnings__title">
+              <Icon glyph={AlertTriangle} size="xs" />
+              {warnings.length === 1
+                ? 'A capability needs attention'
+                : `${warnings.length} capabilities need attention`}
+            </p>
+            <ul className="palette-warnings__list">
+              {warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {matchCount === 0 ? (
           <PanelEmpty
             glyph={Search}

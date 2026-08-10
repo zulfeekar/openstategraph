@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "name": "Temp approval check",
+  "savedAt": "2026-08-10T18:40:05.929420+00:00",
+  "document": {
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        }
+      },
+      {
+        "id": "approve1",
+        "type": "human.approval",
+        "data": {
+          "message": "Approve this before it is sent."
+        },
+        "position": {
+          "x": 400,
+          "y": 200
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 760,
+          "y": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "approve1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "approve1",
+          "portId": "approved"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "value"
+        }
+      }
+    ]
+  },
+  "published": true
+}

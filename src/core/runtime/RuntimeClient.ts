@@ -220,6 +220,27 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 const DEFAULT_BASE = 'http://localhost:8000';
 
+/**
+ * What a stream that never said how it ended is reported as.
+ *
+ * The server's contract (`_stream_run`) is that every stream it can still
+ * write to ends with `done`, `interrupt` or `error`. The one case no frame
+ * can cover is the server's own death — a `--reload` restart, a crash, a cut
+ * connection — because nothing is left to send it. **So this message is the
+ * authoritative report of that case**, and it names the likely cause rather
+ * than leaving a surface to guess between "finished" and "still working".
+ *
+ * One constant, two arrival shapes: the body can end cleanly with no terminal
+ * frame, or the pending read can reject. Same fact, so the same wording.
+ */
+const DROPPED =
+  'The runtime closed the stream without saying how it ended — the backend most likely restarted or crashed mid-run. Nothing was saved from this run; ask again.';
+
+const describeError = (error: unknown): string => {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message !== '' ? ` (${message})` : '';
+};
+
 export class RuntimeClient implements IRuntimeClient {
   constructor(
     private readonly baseUrl: string = DEFAULT_BASE,
@@ -425,14 +446,24 @@ export class RuntimeClient implements IRuntimeClient {
         }
       }
     } catch (error) {
-      if (!wasAborted(error)) throw error;
-      // Stopped. Cancelling the reader is what actually closes the HTTP
-      // connection, and closing it is what makes the *server's* generator
-      // exit — so this line is the whole client half of "Stop stops work".
-      // Swallowed: cancelling an already-errored stream rejects, and that
-      // rejection carries no information a caller could act on.
+      if (wasAborted(error)) {
+        // Stopped. Cancelling the reader is what actually closes the HTTP
+        // connection, and closing it is what makes the *server's* generator
+        // exit — so this line is the whole client half of "Stop stops work".
+        // Swallowed: cancelling an already-errored stream rejects, and that
+        // rejection carries no information a caller could act on.
+        await reader.cancel().catch(() => undefined);
+        return Ok({ cancelled: true });
+      }
+      // The socket died mid-stream — how a killed or reloaded backend usually
+      // arrives, since the pending `read()` rejects rather than resolving.
+      // Settled as a failure rather than rethrown: this used to propagate out
+      // of `runStream` past callers that only `await` the `Result`, leaving a
+      // turn stuck on "Running…" with nothing to end it. Same fact and same
+      // wording as the no-terminal-frame case below; the raw error rides
+      // along so a genuine bug is still legible.
       await reader.cancel().catch(() => undefined);
-      return Ok({ cancelled: true });
+      return Err(`${DROPPED}${describeError(error)}`);
     }
 
     if (failure) return Err(failure);
@@ -445,7 +476,7 @@ export class RuntimeClient implements IRuntimeClient {
     // signal is the only thing that can tell the two apart, and it is
     // checked last so a real `done` frame still wins.
     if (signal?.aborted) return Ok({ cancelled: true });
-    return Err('The runtime closed the stream without reporting a result.');
+    return Err(DROPPED);
   }
 
   async health(): Promise<Result<{ modelConfigured: boolean }, string>> {

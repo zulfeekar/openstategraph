@@ -284,7 +284,17 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
             <StatusDot tone={tone} label={`Status: ${status}`} />
             <span className="node__title">{node.title}</span>
           </div>
-          <span className="node__subtitle">{node.subtitle}</span>
+          <span className="node__subtitle">
+            {definition.scope === 'workflow' ? (
+              <span
+                className="node__scope"
+                title="Workflow-scoped: this node type travels with this workflow and is unavailable elsewhere"
+              >
+                workflow
+              </span>
+            ) : null}
+            {node.subtitle}
+          </span>
         </div>
         <span className="node__menu" data-no-drag>
           <IconButton

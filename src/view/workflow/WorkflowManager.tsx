@@ -213,6 +213,17 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
           >
             Save {workbench.model.name}
           </Button>
+          {/* UX-04. The editor autosaves to browser storage, and nothing on
+              screen said where "saved" meant — so a user who cleared site
+              data, or opened the app in a different browser, discovered the
+              limit by losing work. Stated here, next to the button that makes
+              it durable, rather than in a doc nobody reads mid-edit. */}
+          <p className="workflow-manager__hint">
+            Edits autosave to <strong>this browser only</strong> — they are not on the backend and
+            will not follow you to another browser, another machine, or survive clearing site data.
+            Saving here writes <code>workflows/&lt;name&gt;/workflow.json</code>, which is the copy
+            that lasts.
+          </p>
         </PanelSection>
 
         <PanelSection heading="Saved Workflows">

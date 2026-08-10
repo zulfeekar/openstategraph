@@ -38,6 +38,7 @@ class WorkshopToolNodeModel extends AbstractToolNodeModel {}
 export const resetWorkspaceNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-reset',
+    scope: 'workflow',
     label: 'Reset Workspace',
     description:
       'Creates a fresh sandboxed copy of the fixture project with an isolated git baseline. The coder calls this first.',
@@ -67,6 +68,7 @@ export const resetWorkspaceExecutor: INodeExecutor = createToolExecutor(
 export const listWorkspaceFilesNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-list-files',
+    scope: 'workflow',
     label: 'List Workspace Files',
     description: 'Lists files inside the sandboxed workspace.',
     iconId: 'node-discovered-tool',
@@ -105,6 +107,7 @@ export const listWorkspaceFilesExecutor: INodeExecutor = createToolExecutor(
 export const readWorkspaceFileNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-read-file',
+    scope: 'workflow',
     label: 'Read Workspace File',
     description: 'Reads one file from the sandboxed workspace (path-jailed).',
     iconId: 'node-discovered-tool',
@@ -139,6 +142,7 @@ export const readWorkspaceFileExecutor: INodeExecutor = createToolExecutor(
 export const writeWorkspaceFileNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-write-file',
+    scope: 'workflow',
     label: 'Write Workspace File',
     description:
       'Writes (creates or fully replaces) one file in the sandboxed workspace. Escapes of the jail are refused.',
@@ -176,6 +180,7 @@ export const writeWorkspaceFileExecutor: INodeExecutor = createToolExecutor(
 export const runWorkspaceTestsNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-run-tests',
+    scope: 'workflow',
     label: 'Run Tests',
     description:
       'Runs the workspace test suite with a fixed pytest command — the only process the coder can start. Uses the shared "Timeout" field for the pytest budget.',
@@ -207,6 +212,7 @@ export const runWorkspaceTestsExecutor: INodeExecutor = createToolExecutor(
 export const workspaceDiffNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-diff',
+    scope: 'workflow',
     label: 'Workspace Diff',
     description: 'Shows the unified diff of every workspace change since the baseline commit.',
     iconId: 'node-discovered-tool',
@@ -244,6 +250,7 @@ export class CreatePrNodeModel extends AbstractToolNodeModel {
 export const createPrNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.workshop-create-pr',
+    scope: 'workflow',
     label: 'Create PR',
     description:
       'Packages the workspace change as a .patch + PR body in the output directory. Dry-run unless "Invoke gh" is explicitly enabled — and the graph gates this behind human approval regardless.',

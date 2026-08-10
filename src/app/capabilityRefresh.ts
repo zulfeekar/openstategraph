@@ -3,6 +3,7 @@ import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import { registerDiscoveredCapabilities } from '@nodes/workflowScoped';
+import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 
 /**
  * Ticket 18's hot-discovery gap, closed **on demand rather than on a timer**.
@@ -90,6 +91,15 @@ export async function refreshWorkflowCapabilities(
   const outcome = await client.capabilities(slug);
   const tools = outcome.ok ? outcome.value.tools : [];
   const action = decideCapabilityRefresh(tools, knownCapabilityIds.get(slug));
+
+  // Both of these run whatever the workflow-local decision was. An installed
+  // plugin's tools and the capability warnings are not keyed to this
+  // workflow's `tools/` folder at all (register PK-06): a `pip install`
+  // between two Refresh presses changes neither `tools` nor its ids, and
+  // skipping the re-registration on "unchanged" is how a newly installed
+  // plugin would stay invisible until a full reload.
+  registerPluginCapabilities(outcome.ok ? outcome.value.pluginTools : [], registry, executors);
+  setCapabilityWarnings(outcome.ok ? outcome.value.warnings : []);
 
   if (action.kind === 'unchanged') return { kind: 'unchanged', total: tools.length };
 

@@ -531,6 +531,106 @@ describe('RuntimeClient.runStream — stopping', () => {
   });
 });
 
+/**
+ * The other half of the terminal-frame contract (UX-02).
+ *
+ * The server guarantees exactly one of `done` / `interrupt` / `error` as the
+ * last frame of every stream it is still able to write to. The one case it
+ * cannot cover is its own death — a `--reload` restart or a crash runs no
+ * code and closes the socket — so **this client is the authority there**, and
+ * a body that ends with no terminal frame must settle as a named failure
+ * rather than a silent success or an open spinner.
+ */
+describe('RuntimeClient.runStream — how a stream ended', () => {
+  it('settles on the interrupt frame, which is terminal and carries no answer', async () => {
+    const text = sseBody([
+      ['update', { node: 'node:input.text-1', namespace: [] }],
+      ['interrupt', { threadId: 'th-1', message: 'Approve this?', candidate: 'the draft' }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || !('interrupted' in result.value)) throw new Error('expected a pause');
+    expect(result.value.threadId).toBe('th-1');
+  });
+
+  it('settles on the error frame as a failure, not a missing result', async () => {
+    const text = sseBody([
+      ['update', { node: 'node:input.text-1', namespace: [] }],
+      ['error', { detail: 'RuntimeError: the checkpointer is gone' }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('the checkpointer is gone');
+  });
+
+  it('names the dropped connection when the body ends with no terminal frame', async () => {
+    // A killed backend, exactly: frames arrived, then the socket closed with
+    // no `done`, no `interrupt`, no `error`, and no abort signal to explain
+    // it. Guessing "finished" here is what would show an empty answer as
+    // success; guessing "still running" is a spinner that never stops.
+    const text = sseBody([['update', { node: 'node:input.text-1', namespace: [] }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/without saying how it ended/);
+    expect(result.error).toMatch(/restarted or crashed/);
+  });
+
+  it('is a failure, not a thrown error, when the socket dies mid-stream', async () => {
+    // How a killed backend usually arrives: not a clean end of body, but a
+    // rejected `read()`. This used to propagate out of `runStream`, past
+    // `AskPanel`'s `await` — which has no `catch` — leaving the turn stuck on
+    // `running: true` forever. A stuck spinner is the exact failure mode the
+    // terminal-frame contract exists to prevent, so the transport settles it.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(sseBody([['update', { node: 'node:a', namespace: [] }]])),
+        );
+        controller.error(new TypeError('network error'));
+      },
+    });
+    const client = new RuntimeClient('http://rt', () =>
+      Promise.resolve(new Response(body, { status: 200 })),
+    );
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/without saying how it ended/);
+    expect(result.error).toContain('network error');
+  });
+
+  it('keeps a stop a stop, even though a stop also has no terminal frame', async () => {
+    // The two look identical on the wire — the signal is the only evidence
+    // that separates them, so the dropped-connection message must not
+    // swallow the user's own Stop.
+    const controller = new AbortController();
+    controller.abort();
+    const text = sseBody([['update', { node: 'node:input.text-1', namespace: [] }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {}, {
+      signal: controller.signal,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isCancelled(result.value)).toBe(true);
+  });
+});
+
 describe('RuntimeClient.health', () => {
   it('reports whether a model is configured', async () => {
     const client = new RuntimeClient(

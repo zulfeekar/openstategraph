@@ -59,7 +59,7 @@ from openstategraph.abc.orchestrator import (
 )
 from openstategraph.abc.prompt import SystemPrompt
 from openstategraph.abc.router import BaseRouter, Classification, IRouter, Router
-from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolResult
+from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolField, ToolResult
 
 __all__ = [
     "AbstractAgentNode",
@@ -86,6 +86,7 @@ __all__ = [
     "Router",
     "Subtask",
     "SystemPrompt",
+    "ToolField",
     "ToolResult",
     "Verdict",
     "agent_node_for_tier",

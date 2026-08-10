@@ -7,6 +7,7 @@ import {
   registerNodeTypesForRawDocument,
 } from '@nodes/workflowScoped';
 import { recordKnownCapabilities } from '@app/capabilityRefresh';
+import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 import { pushDrillFrame } from '@app/drillStack';
 
 /** The workflow a drill-in is leaving — recorded only once the load succeeds. */
@@ -55,6 +56,16 @@ export async function loadWorkflowIntoEditor(
     const capabilities = await client.capabilities(slug);
     const tools = capabilities.ok ? capabilities.value.tools : [];
     registerDiscoveredCapabilities(tools, workbench.registry, workbench.engine.executors);
+    // The other source, same moment and for the same reason (register PK-06):
+    // a tool an installed distribution ships is bindable by the runtime, so a
+    // saved document may already reference it, and `fromJSON` drops a node
+    // whose type is not registered *yet*.
+    registerPluginCapabilities(
+      capabilities.ok ? capabilities.value.pluginTools : [],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+    setCapabilityWarnings(capabilities.ok ? capabilities.value.warnings : []);
     // Baseline for the palette's manual Refresh: without it, the first press
     // after a load would report every tool the load itself registered as new.
     recordKnownCapabilities(slug, tools);

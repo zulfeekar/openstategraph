@@ -166,21 +166,20 @@ export function registerDiscoveredCapabilities(
 }
 
 /**
- * Stamps `scope: 'workflow'` onto a definition on its way into the registry.
+ * Safety net that stamps `scope: 'workflow'` onto a definition on its way
+ * into the registry.
  *
- * **Display metadata, and deliberately applied here rather than in each
- * node module.** This function *is* the definition of "workflow-scoped":
- * every family that travels with a workflow reaches the registry through
- * this file, so marking them at the registration seam means a new scoped
- * family cannot be added without being labelled, and a node module stays
- * ignorant of whether someone chose to scope it. The palette reads the
- * flag to keep these out of the always-available sections
- * (`src/view/palette/Palette.tsx`).
- *
- * The copy keeps the original `create`, so an *instance* still carries the
- * unstamped definition. That is intentional and sufficient: `scope` is a
- * catalogue-presentation fact ("can I always reach for this?"), which is
- * only ever asked of the palette, never of a placed node.
+ * The authoritative stamp now lives in each node module's spec
+ * (`scope: 'workflow'` in `ChinookDatabaseNode`, `TabularDataNode`,
+ * `CodeWorkshopNode`, `DiscoveredToolNode`). It has to: `defineNode` binds
+ * `create` to its own local definition, so a copy made here can never
+ * reach a *placed* node — `node.definition` on an instance is the one the
+ * spec produced, and `NodeCard` reads `definition.scope` to badge canvas
+ * cards for types that vanish when another workflow is opened. This
+ * wrapper stays as belt-and-braces at the registration seam so a future
+ * scoped family that forgets its spec stamp is still kept out of the
+ * palette's always-available sections — but its copy is presentation-only;
+ * the spec is where the stamp must go.
  */
 function asWorkflowScoped(definition: INodeDefinition): INodeDefinition {
   return { ...definition, scope: 'workflow' };

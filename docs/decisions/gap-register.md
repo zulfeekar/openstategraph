@@ -22,15 +22,16 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**46 gaps · 4 blocks-1.0 · 14 should-precede-launch · 28 fine-to-carry.**
+**43 gaps · 4 blocks-1.0 · 11 should-precede-launch · 28 fine-to-carry.**
 (RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
-`.scratch/docs-and-gaps/`.)
+`.scratch/docs-and-gaps/`; PK-06, UX-01 and UX-02 closed 2026-08-10 — the
+last two together, since they were one ticket: the terminal-frame contract.)
 
 | Theme | Total | blocks 1.0 | precede launch | carry |
 | --- | --- | --- | --- | --- |
 | A. Runtime correctness & capability | 14 | 0 | 4 | 10 |
-| B. Packaging & release | 10 | 4 | 2 | 4 |
-| C. UX | 10 | 0 | 4 | 6 |
+| B. Packaging & release | 9 | 4 | 1 | 4 |
+| C. UX | 8 | 0 | 2 | 6 |
 | D. Docs | 4 | 0 | 2 | 2 |
 | E. Security & ops | 4 | 0 | 2 | 2 |
 | F. Performance | 4 | 0 | 0 | 4 |
@@ -93,8 +94,13 @@ left open, not fabricated as done."* The frontend works around it by polling
 not: the full generic mechanism ticket 18 designs… That is real,
 separately-scoped work… and remains an honest gap."* **Size L** (a manifest, an
 SSE push, and dynamic field rendering from an arbitrary Pydantic schema).
-**Risk:** authoring a tool is a two-place job with no error message when you do
-half of it. **Verdict: should precede public launch.**
+**Risk:** authoring a tool is a two-place job — **and, since PK-06 closed, no
+longer one with no error message when you do half of it**: the capabilities
+response names every tool node type the runtime can bind that has no editor
+card, and the palette shows it. What remains open here is the rest of RC-05's
+scope: a *hand-written node type* (not a tool) reaching the palette, and the
+SSE push that would make either appear without asking. **Verdict: should
+precede public launch**, at reduced risk.
 
 **RC-06 — No MCP or OpenAPI knowledge adapters.** The trainer recognises SQL
 sources (sqlite/postgres/mssql —
@@ -197,7 +203,7 @@ carry** — and do not build them until something asks.
 
 ---
 
-## B. Packaging & release (10)
+## B. Packaging & release (9)
 
 ### Blocks 1.0
 
@@ -254,15 +260,8 @@ configured before the project exists on PyPI under a real repository."*
 Blocked by PK-01 and PK-02. **Size S.** **Risk:** a long-lived publish token in
 repository secrets. **Verdict: should precede public launch.**
 
-**PK-06 — A published atom is bindable but has no editor card.** The Python
-half of the plugin story shipped; the TypeScript half did not. Evidence:
-`.scratch/framework-packaging/tickets/05-extension-entry-points.md` — *"the
-honest gap: a published atom is bindable and runs, but its editor *card* still
-needs registering — the TypeScript counterpart remains fog, as the ticket
-said."* Same root cause as RC-05. **Size L, and genuinely unspecified.**
-**Risk:** "extend without forking" is half-true in a documented, advertised
-seam. **Verdict: should precede public launch.** Deliberately **not** charted
-as a ticket — see the map's "Not yet specified".
+**PK-06 — A published atom is bindable but has no editor card.**
+**Closed 2026-08-10** — see the closed list at the foot of this file.
 
 ### Fine to carry
 
@@ -295,36 +294,9 @@ is what makes it additive rather than breaking.
 
 ---
 
-## C. UX (10)
+## C. UX (8)
 
 ### Should precede public launch
-
-**UX-01 — An approval interrupt leaves the `/chat` diagram claiming
-"running".** The server yields `interrupt` and returns without a `done` frame;
-the client renders the approval card and never calls `finishFlow()`, so
-`#flow.running` stays on — every node dimmed, a live ring over the paused node.
-Verified in this sweep: `backend/openstategraph/api/static/chat.html:750-751`
-(the `interrupt` branch calls only `renderInterrupt`) against `:560-566`
-(`finishFlow` is what removes `.running`). Recorded at the time in
-`.scratch/launch-readiness/tickets/11-persona-sweep-both-flows.md` — *"**The
-`interrupt` frame ends the stream with no `done` and no answer**, so every
-surface must special-case it to stop showing 'running' — `chat.html` renders
-the approval card but never calls `finishFlow()`, leaving the diagram live
-under it. Real, and it is inside the composer/stream JS another agent holds
-this session. Left for a follow-up ticket rather than edited under someone
-else's hands."* **Size S.** **Risk:** the customer-facing surface tells a
-demonstrable lie about run state at the exact moment it is asking for a
-decision. **Verdict: should precede public launch.**
-
-**UX-02 — A reload-killed stream ends with no terminating frame at all.**
-Same source: *"A reload-killed stream ends with no terminating frame at all —
-a client cannot tell it from a clean finish. Now rare rather than routine, but
-the honest fix is a frame, not a smaller window."* Note the client-side half
-*is* handled — `chat.html:779-788` distinguishes a user stop by the abort
-signal, with the note *"Found live — the button went back to Send and the turn
-showed nothing at all."* The **server-side** gap (no terminating frame) is what
-remains. **Size S.** **Verdict: should precede public launch** — it is the
-protocol half of UX-01 and they are one ticket.
 
 **UX-03 — Tabular / CodeWorkshop node stubs are orphaned.**
 `src/nodes/tools/TabularDataNode.ts` and `CodeWorkshopNode.ts` (plus their
@@ -342,6 +314,78 @@ work.** Evidence: `src/app/workflowStore.ts:7-8` — *"A stopgap until the Pytho
 backend owns persistence (tickets 07/10/16), but a stopgap that can lose a
 user's work, so it is built to be tested rather than trusted."* **Size M.**
 **Verdict: should precede public launch.**
+
+**Status: the three ways it lost work are closed; durability is not, and the
+design for that is below.** "A stopgap that can lose work" was a label, not a
+diagnosis, so the first job was to name the actual failures. Reading
+`workflowStore.ts` against its only consumer (`useWorkflowSession` in
+`WorkbenchContext.tsx`) found three, each with a different fix:
+
+1. **The silent write.** `saveWorkflow` returned a `SaveOutcome` and the
+   autosave call site **discarded it** — a quota failure (or Safari private
+   mode, where *every* `setItem` throws) left the user editing a document
+   nothing was recording, with no signal at all. A store that reports to a
+   caller that ignores it fails silently. Now: a typed `kind`
+   (`quota | too-large | conflict | error`), a full sentence per kind, and the
+   hook raises a toast — once per distinct failure, cleared by the next
+   success, because autosave fires per edit. An oversized document is rejected
+   *before* the write, so the message names the document rather than blaming
+   the disk.
+2. **The corrupt payload.** The reader returned `null`, indistinguishable from
+   "nothing saved" — the user silently got the seeded demo instead of their
+   graph. Now `readWorkflow` returns `ok | missing | corrupt`, the corrupt case
+   is reported to the user, and the unreadable bytes are **quarantined** under
+   a separate `openstategraph-corrupt-workflow-` prefix rather than deleted
+   (they are that user's only copy) or left in place (they would fail every
+   subsequent load identically).
+3. **The second tab.** Two tabs adopted one id and the last write won —
+   recorded in the old code as an accepted trade ("a smaller problem than
+   unbounded duplicate entries"). It is not one: the losing tab shows the user
+   work it is simultaneously overwriting. Closed twice over, because one
+   mechanism is not enough. A **claim** (`openstategraph-claim-<id>`, refreshed
+   on a 10s heartbeat, believed for 30s) stops a second live tab adopting the
+   id at all — it mints a blank one and says so, rather than restoring a copy,
+   which would be the duplication bug in new clothing. A **compare-and-set** on
+   every write catches what the claim cannot (two tabs opening in the same
+   instant, a slept laptop). The CAS rule is deliberately *"newer than the
+   version this tab last saw"*, not *"written by someone else"* — the naive
+   identity check locks a workflow forever the first time its author closes the
+   tab, since no new tab's id ever matches the stored one.
+
+33 tests in `src/app/workflowStore.test.ts` cover these, including a throwing
+store (quota *and* wholly-unavailable), a corrupt payload, and two guards
+writing against one store.
+
+**What is still open, and the design for it.** None of the above makes the data
+*durable*: clearing site data, a different browser, or a different machine
+still loses whatever was never saved to the backend. The editor now says this
+out loud in the Workflows panel rather than implying a durability it does not
+have. The remaining work is server-side session persistence, and it is
+deliberately **not** "autosave to `workflows/<slug>/workflow.json`" — that
+directory is the *published* artifact, tracked in git and read by the runtime,
+and streaming every keystroke into it would make an experiment indistinguishable
+from a commit. The shape:
+
+- **A separate draft store.** `PUT/GET /api/drafts/{workflowId}` writing
+  `.openstategraph/drafts/<id>.json` outside `workflows/`, gitignored. A draft
+  is promoted to a workflow only by the existing explicit Save.
+- **The browser keeps its copy.** `localStorage` becomes the offline tier, not
+  the record: write locally first (fast, works offline), then push. The
+  reconciliation on load is `savedAt` comparison with an explicit
+  "this browser has a newer/older copy — keep which?" prompt. Silent
+  last-write-wins across *devices* is the same defect as across tabs, one
+  network away.
+- **The claim generalises to a lease.** The same `writerId`/`lastSeenAt` pair
+  becomes an ETag on the draft endpoint, so a 412 is the server-side spelling
+  of the `conflict` outcome already implemented. This is why the CAS was built
+  as compare-a-version rather than compare-an-owner.
+- **Identity needs an owner first.** There is no authentication in this
+  project, so a draft store today is per-installation, not per-user. That is
+  acceptable for a single-developer local editor and unacceptable for anything
+  hosted — so the draft endpoint must not ship as a hosted feature ahead of
+  auth. **Size M** for the draft store, **L** with auth. **Verdict on the
+  remainder: fine to carry** — the failure modes that silently destroyed work
+  are gone, and what is left is a documented limit the UI now states.
 
 ### Fine to carry
 
@@ -565,6 +609,77 @@ externally visible. Listed so nobody re-adds them from an old session report.
    missing install still degrades loudly. Externally visible: the limitation
    was stated in `README.md`, `docs/adoption.md`, `Dockerfile` and
    `scripts/dev.sh`, all now corrected.
+9. **PK-06 — a published atom was bindable but had no editor card.** Closed
+   2026-08-10. `GET /api/workflows/{slug}/capabilities` now also returns
+   `plugin_tools` — built by `backend/openstategraph/api/plugin_capabilities.py`
+   from `api/registries.process_tool_layer()`, i.e. **the same cached layer
+   `build_tool_registry` binds**, so the palette cannot claim a tool the
+   runtime lacks — and `src/app/pluginNodes.ts` registers one **app-scoped**
+   node type per entry, keyed by the tool's own `node_type` (a plugin's tool is
+   process-wide, so unlike a workflow-local capability there is no slug to
+   qualify it with). A plugin declares its card's controls on the class
+   (`openstategraph.abc.ToolField` / `BaseTool.node_fields`, read at runtime
+   through `configure()`), so a third party who cannot add a TypeScript file
+   still gets a configurable card. Collisions follow the documented order —
+   built-in < plugin < workflow-local: the plugin's card replaces the bundled
+   one, is labelled with the distribution, and the bundled definition and
+   executor are restored when the plugin stops reporting.
+
+   **The half-authored error is closed with it, and it was the worse half.** A
+   Python tool with neither an editor card nor a plugin declaration is bindable
+   and invisible, and produced no message anywhere. The response now carries a
+   `warnings` list — plugin load failures, built-in replacements, workflow
+   `tools/` findings the *listing* path used to discard, and one message naming
+   every cardless node type — which the palette shows in a standing block
+   rather than a toast. The live checkout produced four true positives on the
+   first run (`tool.sql-get-schema`, `tool.sql-list-tables`, `tool.sql-query`,
+   `tool.validate-workflow`), which is the point: the register said "genuinely
+   unspecified", and what was actually missing was a way to *notice*. Renderable
+   types are read from the generated `port_specs.json` (RC-01), so this is not
+   a second hand-kept mirror of the TypeScript. Proven by
+   `backend/tests/test_plugin_capabilities.py` (12) and
+   `src/app/pluginNodes.test.ts` (12); documented in `docs/building-an-atom.md`
+   Part 3, "What you must declare to get a card".
+
+   **One residue, named rather than hidden:** the payload is fetched per
+   workflow (`/api/workflows/{slug}/capabilities`), so a session that has never
+   opened a saved workflow sees no plugin cards until it opens one or presses
+   the palette's Refresh. App-scoped capabilities arriving through a
+   workflow-scoped URL is the shape ticket 18 left behind; carrying it costs a
+   click, and fixing it properly is RC-05's manifest-and-push work.
+10. **UX-01 — an approval interrupt left the `/chat` diagram claiming
+    "running".** Closed 2026-08-10. `interrupt` and `error` are now handled as
+    what they are — endings — on both surfaces. `/chat` calls a new
+    `pauseFlow()`: `#flow.running` comes off, the sweeping conic-gradient glow
+    is removed, and the paused node is marked distinctly instead — a **static**
+    amber ring plus a "Waiting for you" badge over it (`.flow-paused`,
+    `.flow-wait`). The editor had the same confusion in a different spelling:
+    `AskPanel` deliberately left the paused node on `status: 'running'`, so the
+    canvas swept its run glow over the very node waiting for the developer.
+    `NodeStatus` gained `'paused'` (and `StatusTone` with it), `CanvasStage`
+    marks it `is-paused` — static ring and label from `canvas.css`, no sweep,
+    no flowing edges — and the mark is retired when the pause is answered
+    (`running`) or walked away from (`idle`). Nothing about `paused` animates,
+    which is the whole rule: motion is what claimed the run was working.
+11. **UX-02 — a killed stream ended with no terminating frame at all.** Closed
+    2026-08-10. `_stream_run` is now a guard around the fold (`_run_frames`)
+    and the contract is stated on it: **every stream that can still be written
+    to ends with exactly one of `done`, `interrupt` or `error`, and nothing
+    follows it.** The gap was wider than "a reload": `error` previously covered
+    only exceptions raised *inside* the fold, so a failure in the post-loop
+    `graph.get_state` (which decides pause-versus-finish) or in the `done`
+    frame's own `draw_mermaid` unwound the generator with the client having
+    seen updates and no ending. The one path that genuinely cannot carry a
+    frame is the client leaving or the server dying — a generator may not yield
+    after `GeneratorExit`, and a killed process runs nothing — so that case is
+    **documented and delegated to the client**, which is now authoritative and
+    says so in one place per surface: a body that ends with no terminal frame,
+    or a `read()` that rejects mid-stream, is reported as "the backend most
+    likely restarted or crashed". That second shape also fixed a real hang —
+    `RuntimeClient` used to rethrow a mid-stream read failure past `AskPanel`'s
+    unguarded `await`, leaving a turn stuck on "Running…" with nothing to end
+    it. Pinned by `backend/tests/test_terminal_frame.py` (22) and four new
+    cases in `src/core/runtime/RuntimeClient.test.ts`.
 
 ---
 

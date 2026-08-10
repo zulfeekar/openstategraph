@@ -173,9 +173,53 @@ class FunctionCapabilityResponse(BaseModel):
     signature: str
 
 
+class ToolFieldResponse(BaseModel):
+    """One control a plugin's tool asks the editor to put on its card.
+
+    Mirrors `openstategraph.abc.ToolField`; `options` is always a
+    `{value,label}` list by the time it gets here, so the editor never has to
+    guess whether a plugin wrote bare strings or pairs.
+    """
+
+    key: str
+    label: str
+    kind: str
+    default_value: Any = ""
+    placeholder: str = ""
+    hint: str = ""
+    options: list[dict[str, str]] = []
+
+
+class PluginToolCapabilityResponse(BaseModel):
+    """A tool an installed distribution contributes — app-scoped, not workflow.
+
+    Reported separately from `tools` because the two have different lifetimes
+    and the palette says so: a workflow's own tool disappears when another
+    workflow is opened, a plugin's is available everywhere until it is
+    uninstalled.
+    """
+
+    id: str
+    name: str
+    description: str
+    args_schema: dict[str, Any]
+    node_type: str
+    distribution: str
+    fields: list[ToolFieldResponse] = []
+    replaces_builtin: bool = False
+
+
 class CapabilitiesResponse(BaseModel):
     tools: list[ToolCapabilityResponse]
     functions: list[FunctionCapabilityResponse]
+    #: App-scoped: installed distributions (`openstategraph.tools` entry
+    #: points), the same objects the runtime binds.
+    plugin_tools: list[PluginToolCapabilityResponse] = []
+    #: Everything that failed to appear, and everything that appeared under
+    #: someone else's name — the capability-warning channel `runtime_warnings()`
+    #: already carries for a *run*, applied to discovery. Silence here would
+    #: mean a developer who authored half a tool gets no message at all.
+    warnings: list[str] = []
 
 
 class PluginExportResponse(BaseModel):

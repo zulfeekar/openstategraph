@@ -132,13 +132,34 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
     // this is the one channel both a local preview run and a live backend
     // run pass through, so the flowing-edge animation works for either
     // without the canvas needing to know which kind of run is happening.
+    /**
+     * The paused card (UX-01): a run stopped at a `human.approval` node.
+     *
+     * A separate mark rather than a variant of `is-active`, because it is the
+     * *opposite* claim — nothing is executing, and the person reading the
+     * approval card is what the run is waiting for. So no sweep, no flowing
+     * edges: a static ring and a label, both from `canvas.css`.
+     */
+    const markPaused = (nodeId: string | null) => {
+      for (const element of paper.graph.getElements()) {
+        const view = element.findView(paper.paper);
+        if (!view) continue;
+        view.el.classList.toggle('is-paused', nodeId != null && String(element.id) === nodeId);
+      }
+    };
+
     const off = controller.model.on('node:runtime', ({ nodeId, runtime }) => {
+      // Exactly one of the two marks at a time, and every status that is
+      // neither clears both — a node cannot be running *and* waiting, and a
+      // paused node that resumes must not keep its ring.
       markActive(runtime.status === 'running' ? nodeId : null);
+      markPaused(runtime.status === 'paused' ? nodeId : null);
     });
 
     return () => {
       off();
       markActive(null);
+      markPaused(null);
     };
   }, [paper, controller]);
 

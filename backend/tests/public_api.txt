@@ -33,6 +33,7 @@ openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'No
 openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', model: 'Any' = None, destinations: 'dict[str, str] | None' = None) -> 'None'
 openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
 openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults)
+openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
 openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
 openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
@@ -44,7 +45,7 @@ openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundE
 openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
 openstategraph.errors.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.extensions.DISABLE_PLUGINS_ENV = str
-openstategraph.extensions.Discovered = dataclass(object) fields(values,warnings)
+openstategraph.extensions.Discovered = dataclass(object) fields(values,warnings,sources)
 openstategraph.extensions.ENTRY_POINT_GROUPS = tuple
 openstategraph.extensions.KNOWLEDGE_BUILDERS_GROUP = str
 openstategraph.extensions.PROVIDERS_GROUP = str
@@ -53,6 +54,7 @@ openstategraph.extensions.entry_point_knowledge_builders = def() -> 'Discovered'
 openstategraph.extensions.entry_point_providers = def() -> 'Discovered'
 openstategraph.extensions.entry_point_tools = def() -> 'Discovered'
 openstategraph.extensions.plugins_enabled = def() -> 'bool'
+openstategraph.extensions.reset_entry_point_cache = def() -> 'None'
 openstategraph.providers.ENV_EXAMPLE_BEGIN = str
 openstategraph.providers.ENV_EXAMPLE_END = str
 openstategraph.providers.OPTIONAL_ENV_VARS = dict

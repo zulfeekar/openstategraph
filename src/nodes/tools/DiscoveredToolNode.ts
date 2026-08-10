@@ -52,6 +52,7 @@ export function createDiscoveredToolNode(capability: ToolCapability): Discovered
   const definition = defineToolNode(
     {
       id: capability.id,
+      scope: 'workflow',
       label: capability.name,
       description: capability.description,
       iconId: 'node-discovered-tool',

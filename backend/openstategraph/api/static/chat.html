@@ -24,6 +24,9 @@
     --live: #2563eb;
     --done: #16a34a;
     --danger: #dc2626;
+    /* The editor's `--color-status-warning`, restated: a run paused on a
+       human decision is neither live nor done nor a failure. */
+    --paused: #f59e0b;
     /* The editor's design tokens, restated in-file — this page is served
        standalone by the backend and cannot import `src/design`. Same 4px
        spacing ladder, same radius steps, same type ramp, so the two
@@ -81,6 +84,7 @@
       --live: #60a5fa;
       --done: #34d399;
       --danger: #f87171;
+      --paused: #fbbf24;
     }
   }
 
@@ -142,6 +146,27 @@
   #flow .flow-done rect, #flow .flow-done polygon { fill: color-mix(in srgb, var(--done) 10%, transparent) !important; }
   #flow path.flow-edge-active { stroke: var(--live) !important; stroke-width: 2.5px !important; opacity: 1 !important; }
   #flow.running path.flowchart-link { opacity: .3; transition: opacity .25s ease; }
+
+  /* Paused on a human decision (UX-01).
+     `#flow.running` is off — the rest of the diagram comes back out of its
+     dimming, because nothing is executing to focus away from. The node the
+     run parked on keeps a mark of its own: a STATIC amber ring, never the
+     sweeping glow. The whole defect was that motion said "working" while the
+     customer was being asked to decide. */
+  #flow .flow-paused > * { stroke: var(--paused) !important; stroke-width: 2.5px !important; }
+  #flow .flow-paused rect, #flow .flow-paused polygon, #flow .flow-paused circle { fill: color-mix(in srgb, var(--paused) 16%, transparent) !important; }
+  /* An empty box the size of the paused node, so the badge below can be
+     positioned against the node's own edges — the same overlay trick the
+     running glow uses, and for the same reason (this is HTML over an SVG). */
+  .flow-wait-anchor { position: absolute; pointer-events: none; }
+  .flow-wait {
+    position: absolute; inset-inline-start: 0; bottom: calc(100% + var(--space-1));
+    padding: 0 var(--space-1-5); border-radius: var(--radius-sm); white-space: nowrap;
+    font-size: var(--font-size-10); font-weight: var(--font-weight-semibold);
+    letter-spacing: .04em; text-transform: uppercase; pointer-events: none;
+    background: color-mix(in srgb, var(--paused) 20%, var(--raised));
+    color: color-mix(in srgb, var(--paused) 80%, var(--text));
+  }
 
   /* The running glow, in the editor's visual language (ticket 02).
      Was a blue `drop-shadow` pulse; the editor marks a running node with a
@@ -466,6 +491,8 @@ async function renderFlow(slug) {
 // were confirmed against a rendered graph before being relied on here.
 let activeFlowNode = null;
 let activeFlowName = null;
+/** The node a `human.approval` interrupt parked the run on, if any. */
+let pausedFlowNode = null;
 const visitedFlowNodes = new Set();
 
 /* The running glow is one HTML element, reused for the life of the page and
@@ -484,38 +511,70 @@ function removeGlow() {
   if (glowEl) { glowEl.remove(); glowEl = null; }
 }
 
+/** Sizes and positions an absolute overlay onto one diagram node. */
+function placeOver(overlay, el) {
+  const host = $("flow");
+  const hostBox = host.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  overlay.style.left = (box.left - hostBox.left) + "px";
+  overlay.style.top = (box.top - hostBox.top) + "px";
+  overlay.style.width = box.width + "px";
+  overlay.style.height = box.height + "px";
+}
+
 function placeGlow(el) {
   if (!el || !el.isConnected) return removeGlow();
-  const host = $("flow");
   if (!glowEl) {
     glowEl = document.createElement("div");
     glowEl.className = "flow-glow";
     glowEl.setAttribute("aria-hidden", "true");
-    host.appendChild(glowEl);
+    $("flow").appendChild(glowEl);
   }
-  const hostBox = host.getBoundingClientRect();
-  const box = el.getBoundingClientRect();
-  glowEl.style.left = (box.left - hostBox.left) + "px";
-  glowEl.style.top = (box.top - hostBox.top) + "px";
-  glowEl.style.width = box.width + "px";
-  glowEl.style.height = box.height + "px";
+  placeOver(glowEl, el);
+}
+
+/* The "Waiting for you" badge over a node the run is paused on (UX-01).
+ *
+ * A second overlay rather than a state of the glow: the glow *is* the sweep,
+ * and the point of this state is that there is no sweep. Keeping them
+ * separate means neither can be left half-applied. */
+let waitEl = null;
+
+function removeWait() {
+  if (waitEl) { waitEl.remove(); waitEl = null; }
+}
+
+function placeWait(el) {
+  if (!el || !el.isConnected) return removeWait();
+  if (!waitEl) {
+    waitEl = document.createElement("div");
+    waitEl.className = "flow-wait-anchor";
+    waitEl.innerHTML = '<span class="flow-wait">Waiting for you</span>';
+    $("flow").appendChild(waitEl);
+  }
+  placeOver(waitEl, el);
 }
 
 // The diagram is a `width:100%` SVG, so a pane resize rescales it and the
 // overlay's box goes stale. One observer for the life of the page — it is
 // created once and never re-created per run, so there is nothing to leak.
-new ResizeObserver(() => { if (glowEl) placeGlow(activeFlowNode); }).observe($("flow"));
+new ResizeObserver(() => {
+  if (glowEl) placeGlow(activeFlowNode);
+  if (waitEl) placeWait(pausedFlowNode);
+}).observe($("flow"));
 
 function resetFlowHighlight() {
   const host = $("flow");
   host.classList.remove("running");
-  for (const el of host.querySelectorAll(".flow-active, .flow-done, .flow-edge-active")) {
-    el.classList.remove("flow-active", "flow-done", "flow-edge-active");
+  for (const el of host.querySelectorAll(".flow-active, .flow-done, .flow-edge-active, .flow-paused")) {
+    el.classList.remove("flow-active", "flow-done", "flow-edge-active", "flow-paused");
   }
   activeFlowNode = null;
   activeFlowName = null;
+  pausedFlowNode = null;
   visitedFlowNodes.clear();
   removeGlow();
+  removeWait();
 }
 
 function highlightFlow(nodeId) {
@@ -523,6 +582,15 @@ function highlightFlow(nodeId) {
   const host = $("flow");
   const name = safeName(nodeId);
   host.classList.add("running");
+  // A frame is arriving, so whatever was waiting for a human is not waiting
+  // any more — the resumed run is executing. Cleared before the no-op guard
+  // below, because the first frame of a resume is usually the paused node
+  // itself and would otherwise return early with its badge still on.
+  if (pausedFlowNode) {
+    pausedFlowNode.classList.remove("flow-paused");
+    pausedFlowNode = null;
+    removeWait();
+  }
   // Re-marking the node that is already active is a no-op visually but would
   // restart the ring animation on every internal frame of a chatty agent
   // loop, which reads as a stutter. Now that internal frames move the marker
@@ -558,10 +626,44 @@ function highlightFlow(nodeId) {
   }
 }
 
+/* A run paused on a human decision — NOT a run that is going (UX-01).
+ *
+ * The bug this replaces: the `interrupt` frame ends the stream, but the page
+ * only rendered the approval card, so `#flow.running` stayed on. Every other
+ * node kept its dimming, the edges stayed faded and the conic-gradient ring
+ * kept sweeping over the paused node — the diagram claiming to work while the
+ * customer was the one being asked to act.
+ *
+ * So: drop the "running" treatment entirely, and mark the paused node
+ * distinctly instead — a static amber ring plus a "Waiting for you" badge. It
+ * is deliberately not `flow-done` either; the node has not finished. */
+function pauseFlow() {
+  const host = $("flow");
+  host.classList.remove("running");
+  removeGlow();
+  for (const p of host.querySelectorAll("path.flow-edge-active")) p.classList.remove("flow-edge-active");
+  const el = activeFlowNode;
+  activeFlowNode = null;
+  activeFlowName = null;
+  if (!el) return;
+  el.classList.remove("flow-active");
+  el.classList.add("flow-paused");
+  pausedFlowNode = el;
+  placeWait(el);
+}
+
 /** End of a run: stop dimming, and leave the path taken marked. */
 function finishFlow() {
   const host = $("flow");
   host.classList.remove("running");
+  // A run that reached an ending is no longer waiting on anyone — including
+  // one that ended straight after a pause (approve, then a failure).
+  if (pausedFlowNode) {
+    pausedFlowNode.classList.remove("flow-paused");
+    pausedFlowNode.classList.add("flow-done");
+    pausedFlowNode = null;
+  }
+  removeWait();
   if (activeFlowNode) {
     activeFlowNode.classList.remove("flow-active");
     activeFlowNode.classList.add("flow-done");
@@ -676,6 +778,13 @@ async function stream(path, body, el, signal) {
   // child's own frames carry (`taskId` for a Send-dispatched worker, the
   // namespace head for a mounted subgraph).
   const tlNames = {};
+  /* Did this stream say how it ended? The server's contract is that every
+   * stream it can still write to ends with `done`, `interrupt` or `error`
+   * (see `_stream_run`). The one case it cannot cover is its own death — a
+   * `--reload` restart or a crash closes the socket with nothing on it — so
+   * this flag is what turns that silence into an honest line instead of a
+   * turn that just stops. */
+  let ended = false;
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   try {
   for (;;) {
@@ -746,10 +855,22 @@ async function stream(path, body, el, signal) {
           } else if (event === "token") {
             tokens += d.content; thinking.textContent = tokens.slice(-600);
           } else if (event === "error") {
+            // Terminal. The run is over, so the diagram stops claiming to be
+            // running — the same omission the `interrupt` branch had.
+            ended = true;
+            finishFlow();
+            thinking.textContent = "";
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
           } else if (event === "interrupt") {
+            // Terminal too: this stream really is finished, and the run
+            // continues only if the customer presses Approve or Reject. So
+            // the diagram must stop saying "running" here — see `pauseFlow`.
+            ended = true;
+            pauseFlow();
+            thinking.textContent = "";
             renderInterrupt(el, d);
           } else if (event === "done") {
+            ended = true;
             finishFlow();
             thinking.textContent = "";
             answer.hidden = false;
@@ -774,7 +895,16 @@ async function stream(path, body, el, signal) {
       noteStopped(el);
       return;
     }
-    throw err;
+    // A server killed mid-stream usually arrives here rather than as a clean
+    // end-of-body: the socket dies and `read()` rejects with a network error.
+    // Same fact as the no-terminal-frame case below, so it gets the same
+    // honest line — with the raw error appended, so a genuine bug in the
+    // frame handling above is still visible rather than dressed up as a
+    // network failure.
+    finishFlow();
+    thinking.textContent = "";
+    noteDropped(el, String((err && err.message) || err));
+    return;
   }
   // A stop does not always arrive as a thrown AbortError: cancelling a reader
   // can instead resolve the pending read with `done: true`, so the loop above
@@ -787,6 +917,32 @@ async function stream(path, body, el, signal) {
     noteStopped(el);
     return;
   }
+  // The body ended, nobody pressed Stop, and no frame said how it ended. By
+  // the server's own contract that can only mean the server never got to send
+  // one: killed, reloaded, or the connection cut. **This is the authoritative
+  // report of that case** — there is no frame for it and there cannot be — so
+  // it is said plainly rather than left as a turn that silently stops with a
+  // half-drawn diagram still glowing.
+  if (!ended) {
+    finishFlow();
+    thinking.textContent = "";
+    noteDropped(el);
+    return;
+  }
+  el.scrollIntoView({ block: "end" });
+}
+
+/* The connection died mid-answer. An error, not a note: unlike a stop, this
+ * is not something the customer asked for, and the run's fate is genuinely
+ * unknown from here — it may have finished on a server that is no longer
+ * listening. Says what to do next, because "ask again" is the whole remedy. */
+function noteDropped(el, detail) {
+  const note = document.createElement("p");
+  note.className = "error";
+  note.textContent =
+    "The connection to the runtime ended without saying how the run finished — the server most likely restarted or crashed. Nothing was saved from this turn; ask again."
+    + (detail ? ` (${detail})` : "");
+  el.appendChild(note);
   el.scrollIntoView({ block: "end" });
 }
 
@@ -921,6 +1077,10 @@ async function runStream(path, body, el) {
   try {
     await stream(path, body, el, aborter.signal);
   } catch (err) {
+    // Nothing below `stream` throws any more, so this is a failure to even
+    // reach the runtime. The diagram is stopped regardless: no path may leave
+    // it claiming to run.
+    finishFlow();
     const a = el.querySelector(".answer"); a.hidden = false;
     a.innerHTML = `<span class="error">${esc(String(err))}</span>`;
   } finally {

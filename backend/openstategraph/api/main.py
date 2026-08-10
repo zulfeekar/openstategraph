@@ -73,7 +73,9 @@ from openstategraph.api.schemas import (  # noqa: E402
     RunRequest,
     RunResponse,
     SaveWorkflowRequest,
+    PluginToolCapabilityResponse,
     ToolCapabilityResponse,
+    ToolFieldResponse,
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
@@ -294,13 +296,27 @@ def create_app(
 
     @app.get("/api/workflows/{slug}/capabilities", response_model=CapabilitiesResponse)
     def get_capabilities(slug: str) -> CapabilitiesResponse:
-        """Ticket 18: what a workflow's own `tools/`/`functions/` folders
-        offer, discovered by importing them — not a static registration.
+        """What this editor may put on a canvas, from all three sources.
+
+        Ticket 18 covered the first: a workflow's own `tools/`/`functions/`
+        folders, discovered by importing them rather than by registration.
+        Register PK-06 adds the second — tools **installed distributions**
+        contribute, which the runtime has been able to bind since ticket 05 and
+        the editor had no way to show — and the honesty that goes with both:
+        `warnings` carries every capability that failed to load, every plugin
+        that replaced a built-in, and every Python tool that has no editor card
+        at all (the half-authored case, which used to be pure silence).
 
         Requires the workflow to already be saved (so its directory exists);
         an unsaved, canvas-only workflow has no folder to scan yet.
         """
         from openstategraph.api.capability_discovery import discover_functions, discover_tools
+        from openstategraph.api.plugin_capabilities import (
+            bindable_tool_types,
+            editor_renderable_types,
+            plugin_tool_capabilities,
+            unrenderable_tool_warning,
+        )
         from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
@@ -310,8 +326,25 @@ def create_app(
         if not workflow_dir.is_dir():
             raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from WorkflowNotFoundError(slug)
 
-        tools = discover_tools(workflow_dir, slug=slug)
+        warnings: list[str] = []
+        tools = discover_tools(workflow_dir, slug=slug, warnings=warnings)
         functions = discover_functions(workflow_dir, slug=slug)
+        plugin_tools, plugin_warnings = plugin_tool_capabilities()
+        warnings.extend(plugin_warnings)
+
+        # A type is renderable if the editor ships a card for it (the generated
+        # catalogue) or if this very payload describes it — a plugin's declared
+        # fields and a workflow-local discovery both produce a card with no
+        # TypeScript at all. Anything left is authored on one side only.
+        declared = {t.node_type for t in tools if t.node_type} | {p.node_type for p in plugin_tools}
+        half_authored = unrenderable_tool_warning(
+            bindable=bindable_tool_types(),
+            renderable=editor_renderable_types(),
+            declared=declared,
+        )
+        if half_authored:
+            warnings.append(half_authored)
+
         return CapabilitiesResponse(
             tools=[
                 ToolCapabilityResponse(id=t.id, name=t.name, description=t.description, args_schema=t.args_schema, node_type=t.node_type)
@@ -321,6 +354,20 @@ def create_app(
                 FunctionCapabilityResponse(id=f.id, name=f.name, docstring=f.docstring, signature=f.signature)
                 for f in functions
             ],
+            plugin_tools=[
+                PluginToolCapabilityResponse(
+                    id=p.id,
+                    name=p.name,
+                    description=p.description,
+                    args_schema=p.args_schema,
+                    node_type=p.node_type,
+                    distribution=p.distribution,
+                    fields=[ToolFieldResponse(**f) for f in p.fields],
+                    replaces_builtin=p.replaces_builtin,
+                )
+                for p in plugin_tools
+            ],
+            warnings=warnings,
         )
 
     @app.get("/api/workflows/{slug}/plugin-export", response_model=PluginExportResponse)

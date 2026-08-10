@@ -662,8 +662,13 @@ class TestCapabilities:
     def test_a_workflow_with_no_tools_or_functions_folders_reports_empty(self, tmp_path: Path) -> None:
         client = self._client(tmp_path)
         client.put("/api/workflows/bare", json={"name": "Bare", "document": {"nodes": [], "edges": []}})
-        response = client.get("/api/workflows/bare/capabilities")
-        assert response.json() == {"tools": [], "functions": []}
+        body = client.get("/api/workflows/bare/capabilities").json()
+        assert body["tools"] == []
+        assert body["functions"] == []
+        # `plugin_tools` is empty in a clean venv and `warnings` is not part of
+        # *this* claim — a built-in tool with no editor card legitimately fills
+        # it (register PK-06, `tests/test_plugin_capabilities.py`).
+        assert body["plugin_tools"] == []
 
 
 class TestPublishLifecycle:

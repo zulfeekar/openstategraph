@@ -8,7 +8,18 @@ import './Indicators.css';
  * StatusDot — the small coloured dot preceding a node title.
  * ------------------------------------------------------------------ */
 
-export type StatusTone = 'idle' | 'ready' | 'running' | 'success' | 'warning' | 'error';
+/**
+ * `paused` is deliberately the one non-terminal tone that does not animate:
+ * it means "waiting for a person", and a pulse there would say "working".
+ */
+export type StatusTone =
+  | 'idle'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'success'
+  | 'warning'
+  | 'error';
 
 export function StatusDot({ tone = 'idle', label }: { tone?: StatusTone; label?: string }) {
   return (

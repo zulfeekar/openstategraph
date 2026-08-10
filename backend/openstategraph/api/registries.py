@@ -31,22 +31,38 @@ _document_of = normalize_document
 #: `pip install` can change, and a `pip install` means a restart (the dev
 #: server reloads on any file save; a deployment redeploys).
 #:
-#: It lives here rather than in `openstategraph.extensions` on purpose: this
-#: module owns *assembling the layers*, so caching its own immutable prefix is
-#: its own business, and `extensions` stays a plain, side-effect-free reader of
-#: the environment that a test can call directly and trust.
+#: **What remains cached here is the BUNDLED half only.** The entry-point half
+#: moved to `openstategraph.extensions._CACHE`, which is where an earlier note
+#: on this constant said it belonged: the tools group was never the only one
+#: paying that scan — `entry_point_knowledge_builders` and
+#: `entry_point_providers` each re-walked every distribution on every call, and
+#: memoising the mechanism at one of its three call sites left the other two
+#: paying full price for a shared answer. So `extensions` owns the discovery
+#: cache and this module keeps only what is genuinely its own: the assembled
+#: built-in layer (`chinook_tool_registry()` plus five prebuilt families), whose
+#: cost is imports rather than a `sys.path` walk.
 _PROCESS_LAYER: tuple[dict[str, Any], Any] | None = None
 
 
 def reset_process_tool_layer() -> None:
-    """Drop the cache above. For tests that fake installed entry points.
+    """Drop every process-lifetime discovery cache. For tests that fake plugins.
 
     `conftest.py` calls this between every test, so a fake plugin installed by
     one test can never survive into the next — the failure mode a
     process-lifetime cache introduces if nobody names it.
+
+    It now clears **all three** entry-point groups, not just tools. When the
+    cache covered one group the name was accurate; the moment providers and
+    knowledge builders are memoised too, a hook that resets only the tool layer
+    is worse than none — it looks like isolation and is not, so a test faking a
+    provider entry point would leak into every test that ran after it.
     """
     global _PROCESS_LAYER
     _PROCESS_LAYER = None
+
+    from openstategraph.extensions import reset_entry_point_cache
+
+    reset_entry_point_cache()
 
 
 def _process_tool_layer() -> tuple[dict[str, Any], Any]:
@@ -97,6 +113,23 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
 
     _PROCESS_LAYER = (builtin, entry_point_tools())
     return _PROCESS_LAYER
+
+
+def process_tool_layer() -> tuple[dict[str, Any], Any]:
+    """`(built-in tools, Discovered plugin tools)` — a copy of the layer above.
+
+    The read-only door onto the cache `build_tool_registry` itself layers, for
+    surfaces that need to *describe* what the runtime can bind rather than bind
+    it (the capabilities endpoint, register PK-06). Same objects, one source:
+    a palette fed from here can never offer a tool the runtime lacks, which is
+    exactly the failure a second, hand-kept list would eventually produce.
+
+    The built-in dict is copied on the way out for the same reason
+    `build_tool_registry` copies it — one caller's mutation must not become
+    every later caller's registry.
+    """
+    builtin, discovered = _process_tool_layer()
+    return dict(builtin), discovered
 
 
 def build_tool_registry(

@@ -44,7 +44,12 @@ export function AppShell() {
   // Enable auto-save and auto-load for the current workflow
   // Restores this tab's workflow, then keeps it saved. One hook, because
   // identity has to be resolved before either behaviour runs.
-  useWorkflowSession();
+  //
+  // `notify` is passed, not omitted (UX-04): browser storage fails in ways the
+  // user must hear about — a full quota, an unreadable autosave, a second tab
+  // that already owns this workflow. Autosave previously discarded every one
+  // of those outcomes, which made "your work is safe" a claim nothing checked.
+  useWorkflowSession(notify);
 
   // Ticket 16's other half: notices when the saved file changes on disk
   // underneath this open editor (another tab, a teammate's pull, a

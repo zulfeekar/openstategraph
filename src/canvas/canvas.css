@@ -326,6 +326,39 @@
   }
 }
 
+/* ---------- Paused on a human decision (UX-01) ----------
+ *
+ * The state the sweeping glow above used to be wrongly reused for. A run
+ * stopped at a `human.approval` node is waiting on the person looking at it,
+ * so the card is marked *distinctly and statically*: an amber ring in place
+ * of the gradient sweep, and a label saying who the run is waiting for.
+ * Nothing here animates, which is the entire point — motion is what claimed
+ * the run was still working.
+ *
+ * Same seam as `.is-active`: applied by `CanvasStage` to the JointJS element
+ * root from the model's `node:runtime` channel, styled on pseudo-elements, so
+ * this layer still never reaches into `NodeCard`'s markup or stylesheet. */
+.joint-element.is-paused .node {
+  position: relative;
+  box-shadow:
+    var(--shadow-node),
+    0 0 0 1.5px var(--color-status-warning);
+}
+
+.joint-element.is-paused .node::after {
+  content: 'Waiting for you';
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: calc(100% + var(--space-1));
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-status-warning) 18%, var(--color-bg-surface-raised));
+  color: color-mix(in srgb, var(--color-status-warning) 85%, var(--color-text-primary));
+  font: var(--type-label);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* The link being dragged out of a port, before it lands. */
 .joint-link.joint-temporary-link [joint-selector='line'] {
   stroke: var(--color-canvas-link-active);

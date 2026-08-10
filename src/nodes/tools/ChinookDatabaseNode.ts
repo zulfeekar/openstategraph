@@ -36,6 +36,7 @@ export class GetTableSchemaNodeModel extends AbstractToolNodeModel {
 export const getTableSchemaNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.chinook-get-schema',
+    scope: 'workflow',
     label: 'Get Table Schema',
     description: 'Retrieves the schema (column names and types) for a Chinook database table.',
     iconId: 'node-database',
@@ -248,6 +249,7 @@ export class GetAllTablesNodeModel extends AbstractToolNodeModel {}
 export const getAllTablesNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.chinook-get-all-tables',
+    scope: 'workflow',
     label: 'List All Tables',
     description: 'Returns a list of all tables in the Chinook database with descriptions.',
     iconId: 'node-database',
@@ -334,6 +336,7 @@ export class ExecuteSqlNodeModel extends AbstractToolNodeModel {
 export const executeSqlNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.chinook-execute-sql',
+    scope: 'workflow',
     label: 'Execute SQL Query',
     description: 'Executes a SQL SELECT query against the Chinook database and returns results.',
     iconId: 'node-database',

@@ -75,6 +75,52 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **`openstategraph.extensions.reset_entry_point_cache()`**, and with it a
+  process-lifetime cache covering **all three** entry-point groups rather than
+  one. Entry-point discovery re-walks every installed distribution's metadata
+  on every call — about 12 ms per group on a development checkout. That cost
+  was previously memoised for tools only, at a call site in `api/registries.py`,
+  leaving `entry_point_knowledge_builders` (11.99 ms → 0.0005 ms) and
+  `entry_point_providers` (11.84 ms → 0.0005 ms) paying it in full;
+  `providers.load_provider_catalogue()` went 12.07 ms → 0.004 ms end to end.
+  The cache now lives in `extensions`, which owns the mechanism, and importing
+  that module is still free of any `sys.path` scan. Only a `pip install` can
+  change the answer, and that means a restart — except in a test suite, which
+  is what the new public reset is for. `api.registries.reset_process_tool_layer`
+  keeps working and now clears every group.
+- **CI runs the Python versions the package advertises.** The classifiers claim
+  3.11, 3.12 and 3.13; CI ran 3.12 and only 3.12, so two thirds of the promise
+  on the PyPI page had never executed a line of this code. The backend job is
+  now a matrix over the floor and the ceiling of that claim (3.11 and 3.13),
+  each leg running the full suite and the coverage ratchet, with ruff and mypy
+  on the floor leg — where `target-version` and `python_version` are both pinned
+  anyway. `backend/tests/test_python_support.py` parses both `pyproject.toml`
+  and the workflow file and fails if the claim and the matrix disagree in either
+  direction, so widening one without the other cannot merge.
+- **A tool an installed distribution ships now appears in the editor palette**
+  (register PK-06). `pip install`-ing a plugin has made a tool *bindable* since
+  0.3.0's entry-point work, but nothing put it in the palette, so nobody could
+  wire the thing they had just installed — "extend without forking" was half a
+  promise. `GET /api/workflows/{slug}/capabilities` now also reports
+  `plugin_tools` (name, node type, description, argument schema, the
+  distribution that shipped it, and the card fields the tool declares) sourced
+  from the same cached registry layer `build_tool_registry` binds, so the
+  palette can never offer a tool the runtime lacks. A plugin's card is
+  app-scoped — available in every workflow, distinct from the "This workflow"
+  section — and a plugin that replaces a built-in says so on the card and in a
+  warning.
+- **`openstategraph.abc.ToolField`** — the declaration a plugin author writes to
+  get controls on their tool's card (`node_fields` on `BaseTool`), read by
+  `configure()` at runtime. One declaration, two consumers, no hand-mirrored
+  type across the boundary. A third party cannot add a TypeScript file to this
+  repository, so this is how they get a configurable card.
+- **`warnings` on the capabilities response** — the half-authored error. A tool
+  that exists in Python but has no editor card (no node definition, no plugin
+  declaration) is bindable and invisible, and used to produce no message
+  anywhere; it is now named, with both ways to fix it, and surfaced in the
+  palette. `extensions.Discovered` gained a `sources` field
+  (`node_type -> distribution`) so a capability can name who shipped it; the
+  loader already computed it.
 - **A type gate for the backend: `mypy`, configured in `backend/pyproject.toml`
   and run in CI beside `ruff`.** Chosen over pyright because the backend CI job
   is Python-only and pyright needs Node.js in it. Nine strictness flags are on
@@ -223,6 +269,35 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Fixed
 
+- **The editor's browser autosave could lose work three ways, all silently**
+  (register UX-04). (1) A failed write was invisible: `saveWorkflow` returned an
+  outcome and the autosave call site *discarded* it, so an exhausted ~5MB quota
+  — or Safari's private mode, where every `setItem` throws — left the user
+  editing a document nothing was recording. Failures now carry a typed kind
+  (`quota`, `too-large`, `conflict`, `error`) and a sentence the editor shows,
+  once per distinct failure rather than once per keystroke; an oversized
+  document is refused *before* the write so the message names the document
+  instead of blaming the disk. (2) A corrupt entry read back as `null`, which is
+  indistinguishable from "nothing saved" — the user silently got the seeded demo
+  instead of their graph. The reader now returns `ok`/`missing`/`corrupt`, says
+  so, and *quarantines* the unreadable bytes under a separate key rather than
+  deleting them (they are that user's only copy) or leaving them to fail every
+  subsequent load. (3) Two tabs shared one autosave key and the last write won,
+  so the losing tab displayed work it was overwriting. A claim record with a
+  10-second heartbeat stops a second live tab adopting the id at all — it starts
+  a blank workflow and says why — and a compare-and-set on every write catches
+  the race the claim cannot. The compare is against *the version this tab last
+  saw*, not the writer's identity, because an owner-based check would lock a
+  workflow forever the first time its author closed the tab. Browser storage is
+  still browser storage; the Workflows panel now says so out loud, and the
+  server-side design is written up in the register.
+- **`pip install 'openstategraph[mcp]'` was broken by an unpinned dependency.**
+  `mcp` 2.0.0 removed `mcp.server.fastmcp`, which `openstategraph.mcp_server`
+  imports, so a fresh install of the MCP extra failed at the transport's one
+  entry point. Pinned to `mcp>=1.25,<2`, matching the LangChain pins' policy
+  that majors are where these projects put breaking changes. Found by installing
+  into a clean Python 3.11 environment while adding the CI version matrix — a
+  developer machine with a cached 1.25 could not see it.
 - **SQLite connections were never closed.** `with sqlite3.connect(...) as conn:`
   is a *transaction* manager, not a close — it commits and leaves the file
   descriptor open. Both read-only SQL surfaces used it: the `tool.sql-*`
