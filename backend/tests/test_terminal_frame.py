@@ -22,6 +22,7 @@ does at moments no fixture reproduces on demand.
 
 from __future__ import annotations
 
+import json
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -122,6 +123,35 @@ def test_a_run_that_pauses_ends_with_interrupt() -> None:
     frames = list(_run(_Graph(state=_paused_state())))
 
     assert _events(frames)[-1] == "interrupt"
+
+
+def test_the_interrupt_frame_names_the_node_the_run_is_parked_on() -> None:
+    """Which node is waiting is a fact the snapshot already has (UX-01).
+
+    Without it a surface can only mark "the last node that reported", which is
+    the node *before* the approval — verified live on `/chat`, where the ring
+    and the "Waiting for you" badge landed on `in1` while `approve1` was the
+    node actually waiting. `snapshot.next` is exactly the scheduled-but-not-run
+    node, mapped back to a canvas id the same way every other frame is.
+    """
+    state = _paused_state()
+    state.next = ("step_two",)
+    payload = json.loads(list(_run(_Graph(state=state)))[-1].split("data: ", 1)[1])
+
+    assert payload["node"] == "node:b"
+
+
+def test_an_unmapped_paused_node_passes_through_under_its_own_name() -> None:
+    """Same rule as every other frame: `.get(raw, raw)`, never a guess.
+
+    A client that cannot find the name on its diagram keeps the mark it
+    already had rather than moving it somewhere wrong.
+    """
+    state = _paused_state()
+    state.next = ("a_graph_node_this_canvas_never_had",)
+    payload = json.loads(list(_run(_Graph(state=state)))[-1].split("data: ", 1)[1])
+
+    assert payload["node"] == "a_graph_node_this_canvas_never_had"
 
 
 def test_a_stream_that_raises_mid_fold_ends_with_error() -> None:
