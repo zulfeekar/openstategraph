@@ -387,6 +387,12 @@ class RuntimeServices:
     #: The open workflow's package directory, for ambient knowledge seeking
     #: (a non-empty `knowledge/` under it auto-binds the lookup tool).
     knowledge_package_dir: Any = None
+    #: `load_workflow(knowledge_dir=...)`'s explicit override — the directory
+    #: of topic files itself, replacing the `<package>/knowledge` convention.
+    #: Deliberately NOT inherited by a child subgraph: a routed child seeks
+    #: its own second brain (ticket 67's isolation lesson), and an override
+    #: aimed at the parent must not silently redirect the child's.
+    knowledge_dir_override: Any = None
     max_attempts: int = 3
     #: The editor-advisor tool catalogue, or "" for a normal run. See
     #: `advisor_context` — one field rather than a `bool` + the text it needs,
@@ -518,6 +524,7 @@ class NodeRuntime:
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
         knowledge_package_dir: Any = None,
+        knowledge_dir_override: Any = None,
         max_attempts: int = 3,
         advisor_catalog: str = "",
         _ancestry: tuple[str, ...] = (),
@@ -532,6 +539,7 @@ class NodeRuntime:
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
             knowledge_package_dir = services.knowledge_package_dir
+            knowledge_dir_override = services.knowledge_dir_override
             max_attempts = services.max_attempts
             advisor_catalog = services.advisor_catalog
         #: Non-empty only for an editor run that asked for it (`advisor: true`
@@ -568,6 +576,9 @@ class NodeRuntime:
         #: knowledge-lookup tool to every agent and worker — capability by
         #: configuration, no Knowledge atom wiring required.
         self.knowledge_package_dir = knowledge_package_dir
+        #: The explicit `load_workflow(knowledge_dir=...)` override, or None
+        #: for the convention. Applies to this workflow's own agents only.
+        self.knowledge_dir_override = knowledge_dir_override
         #: Slot-name -> middleware instance from `workflows/<slug>/middlewares/`
         #: (ticket 32): merged into every agent's slot table AFTER the tier
         #: preset and BEFORE per-node config, so a workflow file replaces a
@@ -765,7 +776,7 @@ class NodeRuntime:
             from openstategraph import prebuilt_knowledge
 
             self._ambient_knowledge_memo = prebuilt_knowledge.ambient_knowledge_tool(
-                self.knowledge_package_dir
+                self.knowledge_package_dir, knowledge_dir=self.knowledge_dir_override
             )
         ambient = self._ambient_knowledge_memo
         if ambient is None:

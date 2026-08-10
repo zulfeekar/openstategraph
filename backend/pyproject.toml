@@ -42,6 +42,11 @@ dependencies = [
 # PROVISIONAL — this checkout has no configured git remote, so the canonical
 # host is not yet a fact. Pin these (and EXTENSION_NAMESPACE in
 # plugin_interop.py) before the first publish; ticket 06 owns that gate.
+# The console script (framework-packaging §3.2(a)) — argparse only, so it adds
+# nothing to the four-package floor above.
+[project.scripts]
+openstategraph = "openstategraph.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/openstategraph/openstategraph"
 Repository = "https://github.com/openstategraph/openstategraph"

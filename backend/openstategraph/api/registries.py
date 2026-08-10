@@ -20,7 +20,9 @@ _document_of = normalize_document
 
 
 
-def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
+def build_tool_registry(
+    workflow_store: Any, slug: str | None, *, knowledge_dir: Any = None
+) -> dict[str, Any]:
     """Default tools, with the open workflow's own tools layered over.
 
     The defaults (Chinook) stay so documents that bind them — e.g. the
@@ -78,10 +80,18 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
     # The second brain (knowledge layer): registered unbound so the node type
     # always resolves, then re-bound below to the open workflow's own
     # knowledge/ directory — the same validated jail every slug path uses.
-    registry.update(knowledge_lookup_for(None))
+    # `knowledge_dir` is the explicit override a consumer passed to
+    # `load_workflow`; it names the topic directory itself and wins over the
+    # slug's conventional `knowledge/`, exactly as a positional argument
+    # should win over a discovered default.
+    registry.update(knowledge_lookup_for(None, knowledge_dir=knowledge_dir))
     if slug:
         try:
-            registry.update(knowledge_lookup_for(workflow_store.directory_for(slug)))
+            registry.update(
+                knowledge_lookup_for(
+                    workflow_store.directory_for(slug), knowledge_dir=knowledge_dir
+                )
+            )
         except Exception:
             logger.warning("Knowledge binding failed for %r", slug, exc_info=True)
         try:

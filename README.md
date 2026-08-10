@@ -67,6 +67,26 @@ npm run build      # tsc -b && vite build
 npm run typecheck
 ```
 
+### Or skip the editor entirely — the CLI
+
+A workflow package is a folder. Running one needs neither the canvas nor the
+server:
+
+```bash
+pip install -e "backend[ollama]"
+
+openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
+openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
+openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network call
+openstategraph new my-flow                              # scaffold ./workflows/my-flow
+```
+
+Also `knowledge build|list`, `serve` and `mcp`. `--json` on `run` prints the
+whole result rather than the answer alone, and the exit codes are fixed (`0`
+ok, `1` failure, `2` usage, `3` a missing extra) so `validate` works as a CI
+gate. The same thing from Python is `load_workflow("./workflows/my-thing")` —
+see [Using OpenStateGraph in your project](docs/adoption.md).
+
 Opens on a seeded demo that **runs with no credentials** on the canvas
 preview — the default model there is `Mock · Offline`, a deterministic
 simulator. The real backend, once running, defaults to **Ollama cloud** with
@@ -92,8 +112,9 @@ every figure any example produces can be checked against the same file.
   the focused example itself mounted as a subgraph for deep SQL questions.
 
 Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
-the chat gateway and the build-me-a-workflow flow; `scripts/new_team.py` and
-`scripts/new_workflow.py` scaffold your own packages.
+the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>`
+(or `scripts/new_workflow.py` / `scripts/new_team.py`, which call the same
+code) scaffolds your own packages.
 
 ### Environment variables
 

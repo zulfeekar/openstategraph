@@ -120,6 +120,29 @@ class TestDistributionIdentity:
         # to every adopter on mypy or pyright.
         assert (backend / "openstategraph" / "py.typed").is_file()
 
+    def test_the_console_script_is_declared_and_resolvable(self, pyproject) -> None:
+        """`openstategraph` on the PATH is what ticket 08 exists to add, and a
+        typo in this one line is invisible until someone installs the wheel."""
+        scripts = pyproject["project"]["scripts"]
+
+        assert scripts == {"openstategraph": "openstategraph.cli:main"}
+        module, _, attribute = scripts["openstategraph"].partition(":")
+        assert callable(getattr(__import__(module, fromlist=[attribute]), attribute))
+
+    def test_the_cli_costs_no_dependency(self, pyproject) -> None:
+        """argparse, deliberately. A project arguing for a four-package floor
+        cannot then spend two of them on `click` and `rich`."""
+        source = (PYPROJECT.parent / "openstategraph" / "cli.py").read_text()
+        imported = {
+            line.split()[1].split(".")[0]
+            for line in source.splitlines()
+            if line.strip().startswith(("import ", "from "))
+            for line in [line.strip()]
+        }
+
+        assert "argparse" in imported
+        assert imported & {"click", "typer", "rich"} == set()
+
     def test_classifiers_and_urls_are_present(self, pyproject) -> None:
         project = pyproject["project"]
 

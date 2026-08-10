@@ -132,6 +132,28 @@ database in this repository —
 music store — and both examples evaluate against it. One database, one source
 of truth, no invented numbers.
 
+## 5b. Ask it something without the stack — the CLI
+
+Neither the editor nor the server is needed to run a workflow. Install the
+backend once and the `openstategraph` command is on your `PATH`:
+
+```bash
+pip install -e "backend[ollama]"
+
+openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
+openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
+openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network
+openstategraph new my-flow                              # scaffold ./workflows/my-flow
+```
+
+`--json` on `run` prints the whole result — answer, decisions, outputs,
+warnings, attempts, thread id — which is what you want when the answer is
+wrong. Exit codes are fixed (`0` ok, `1` failure, `2` usage, `3` a missing
+extra), so `openstategraph validate` is a CI gate as it stands.
+
+Without installing at all, every command is
+`PYTHONPATH=backend python3 -m openstategraph.cli …`.
+
 ## 6. Now extend it
 
 The three directions from here:
@@ -149,8 +171,9 @@ The three directions from here:
 
 A workflow is a package under `workflows/<slug>/`: `workflow.json` and
 `AGENTS.md` are required; `tools/`, `functions/`, `middlewares/`, `tests/` and
-`data/` are discovered by convention. `scripts/new_workflow.py` and
-`scripts/new_team.py` scaffold one.
+`data/` are discovered by convention. `openstategraph new <slug> [--team]`
+scaffolds one (as do `scripts/new_workflow.py` and `scripts/new_team.py`,
+which call the same code).
 
 That is the value: your flow is **a file in git** — reviewable in a pull
 request, diffable — and the compiled output is an ordinary Python

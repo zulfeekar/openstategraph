@@ -47,6 +47,8 @@ preview defaults to `Mock · Offline`.
 ### Where your work goes
 
 ```bash
+openstategraph new my-thing                   # or: openstategraph new my-team --team
+# in a checkout, without installing:
 python3 scripts/new_workflow.py my-thing      # or scripts/new_team.py
 ```
 
@@ -126,8 +128,46 @@ compiled graph from your own service. The editor's involvement ends at
 authoring time.
 
 What you commit is exactly the package layout above — most importantly
-`workflow.json`. Loading and running it is one function call, and the argument
-is the **package folder**, not the JSON file:
+`workflow.json`.
+
+### The fastest path: the command line
+
+You do not have to write a Python file to find out whether a package works.
+
+```bash
+openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
+```
+
+That is the whole first five minutes. The rest of the commands each wrap a
+seam the library already has — there is no behaviour in the CLI that
+`load_workflow` does not have:
+
+| Command | What it does |
+| --- | --- |
+| `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
+| `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings. **Exit 1** on blocking findings, so it is a CI gate |
+| `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call |
+| `openstategraph new <slug> [name] [--team]` | scaffold a package into `./workflows` (`--root` to change that) |
+| `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints |
+| `openstategraph knowledge build <package> [--source X]` | generate them; prints `written / skipped / collisions / warnings` |
+| `openstategraph serve [--host --port]` | the editor's HTTP API. Needs `openstategraph[server]` |
+| `openstategraph mcp [--transport …]` | the MCP transport. Needs `openstategraph[mcp]` |
+
+Exit codes are fixed, because they are what CI consumes: **0** success, **1**
+run or validation failure, **2** usage error, **3** a required extra is missing
+(the message names the exact `pip install` line). Every command takes its paths
+from its arguments, so it works from any directory.
+
+> **Until the wheel is on PyPI** (see *Be honest about the install*, below),
+> `openstategraph` lands on your `PATH` when you `pip install -e
+> "/path/to/openstategraph/backend[ollama]"`. Without installing at all, every
+> command is also `PYTHONPATH=/path/to/backend python3 -m openstategraph.cli
+> …`.
+
+### In your own service
+
+Loading and running a package is one function call, and the argument is the
+**package folder**, not the JSON file:
 
 ```python
 from openstategraph import load_workflow
@@ -137,7 +177,9 @@ workflow = load_workflow("workflows/my-thing")
 if workflow.warnings:                 # capabilities that could not be resolved
     print("degraded:", workflow.warnings)
 
-print(workflow.ask("How many invoices are there?"))
+answer = workflow.ask("How many invoices are there?")
+print(answer)                         # it IS the answer string
+print(answer.decisions)               # ...and which branch each router took
 ```
 
 `load_workflow` returns a small value object:
@@ -146,9 +188,54 @@ print(workflow.ask("How many invoices are there?"))
 | --- | --- |
 | `.graph` | the compiled LangGraph `StateGraph` — **the escape hatch** |
 | `.warnings` | tools/functions/subgraphs the package names but could not be resolved |
-| `.ask(question, *, thread_id=None, recursion_limit=50)` | run it once, get the answer |
+| `.ask(question, *, thread_id=None, recursion_limit=50)` | run it once, get a `RunResult` |
+| `.as_tool(name=…, description=…)` | this workflow as one LangChain tool (see below) |
 | `.mermaid()` | the compiled topology as text, no network call |
 | `.slug` / `.package_dir` / `.document` | what it loaded, and from where |
+
+### What `.ask()` gives you back
+
+A `RunResult`, which **is** a string — it subclasses `str`, so `.strip()`,
+`+`, `json.dumps`, `re.search` and `isinstance(x, str)` all behave exactly as
+they did when this returned a bare `str`. Attached to it is what you need when
+the answer is wrong and used to require dropping to `.graph.invoke()` with
+hand-seeded state:
+
+| | |
+| --- | --- |
+| `.answer` | the text — identical to the object itself |
+| `.decisions` | node id → the branch that router or grader chose |
+| `.outputs` | node id → that node's own output |
+| `.warnings` | the workflow's unresolved capabilities, carried along |
+| `.attempts` | how many grader revise laps the run took |
+
+> At 1.0 this becomes a plain dataclass with `.answer`. Build on the five
+> attributes above, not on the string methods it also happens to have.
+
+### Calling a workflow from an agent you already have
+
+If your team is already on `create_agent`, you do not have to restructure:
+
+```python
+billing = load_workflow("workflows/billing").as_tool(
+    name="billing_analyst",
+    description="Answers questions about invoices and revenue.",
+)
+agent = create_agent(model, tools=[billing, other_tools...])
+```
+
+`as_tool()` returns a LangChain `StructuredTool` with one string argument, the
+question. **Be clear about what it is:** the workflow runs as its own graph. It
+sees the question and nothing else — not your agent's message history, not its
+state, not its tools — and returns its answer as the tool result. That is the
+same isolation any subagent has, and it is a feature: the workflow's behaviour
+does not change because of who called it. If it needs to know something, put it
+in the question.
+
+There is deliberately **no middleware equivalent**. Middleware would have to
+decide *when* to consult the workflow, which is a routing policy — and a router
+is something this framework already expresses as a document. A second, worse
+one inside the library would be duplicated knowledge.
 
 Arguments worth knowing:
 
@@ -163,6 +250,20 @@ Arguments worth knowing:
   `settings.checkpointer` decides (sqlite, or an in-process saver), which is
   what lets a `human.approval` node pause and `ask(thread_id="...")` continue a
   conversation. Pass a Postgres saver to own durability yourself.
+- **`knowledge_dir`** — where the package's second brain is read from.
+  Convention (`<package>/knowledge`) stays the default, because
+  discovery-by-convention is why this function takes one argument. Override it
+  when knowledge is shared between two packages, lives outside the repository,
+  or is a fixture directory in a test. It names the directory holding the
+  `<topic>.md` files, not the package above it.
+- **`trace_file`** — appends one JSON line per `ask()`: question, slug,
+  decisions, attempts, warnings, duration, and the answer's **length**. The
+  answer text itself is deliberately not written: a trace file gets committed,
+  emailed and pasted into issues, and the answer is the one field of a run that
+  reliably carries a customer's data — while `decisions` and `attempts` are
+  what actually tell you which way the graph went. It is a file sink, not a
+  tracing system; LangSmith and OpenTelemetry already exist. A path that cannot
+  be written logs a warning and never fails the run.
 
 ### Why not just compile it yourself?
 

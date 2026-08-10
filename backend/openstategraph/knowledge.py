@@ -130,8 +130,26 @@ class PackageKnowledge(BaseKnowledge):
     knowledge for the lifetime of the process.
     """
 
-    def __init__(self, package_dir: Path) -> None:
-        self._directory = Path(package_dir) / "knowledge"
+    def __init__(
+        self,
+        package_dir: Path | str | None = None,
+        *,
+        knowledge_dir: Path | str | None = None,
+    ) -> None:
+        """`knowledge_dir` names the directory of `<topic>.md` files itself.
+
+        The convention — `<package>/knowledge` — stays the default and is what
+        every canvas-authored workflow uses. The explicit form exists for the
+        cases convention cannot express (knowledge shared between packages, or
+        outside the repository); it is what `load_workflow(knowledge_dir=...)`
+        threads down to.
+        """
+        if knowledge_dir is not None:
+            self._directory = Path(knowledge_dir)
+        elif package_dir is not None:
+            self._directory = Path(package_dir) / "knowledge"
+        else:
+            raise ValueError("PackageKnowledge needs a package_dir or a knowledge_dir")
 
     def topics(self) -> list[TopicIndexEntry]:
         if not self._directory.is_dir():

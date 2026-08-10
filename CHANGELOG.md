@@ -43,6 +43,38 @@ finally read by code. Wayfinder tickets 02–04;
   `api.registries._document_of` that the public loader imported and the
   second, subtly different normalizer in `mcp_server`.
 - **`openstategraph.__version__`**, from the installed distribution's metadata.
+- **The `openstategraph` console script** (ticket 08) — `run`, `validate`,
+  `graph`, `new`, `knowledge build|list`, `serve`, `mcp`. argparse only, so it
+  adds nothing to the four-package core, and every command wraps a seam that
+  already existed. Exit codes are fixed: `0` success, `1` run or validation
+  failure, `2` usage error, `3` a required extra is missing (the message names
+  the `pip install` line). `openstategraph run ./workflows/my-thing "…"` is now
+  the shortest path from a package to an answer.
+- **`RunResult`** — what `CompiledWorkflow.ask()` returns. It **subclasses
+  `str`**, so it *is* the answer and every existing consumer is untouched
+  (`.strip()`, `+`, `json.dumps`, `re.search`, `isinstance(x, str)`), while
+  `.answer`, `.decisions`, `.outputs`, `.warnings` and `.attempts` remove the
+  need to drop to `.graph.invoke()` with hand-seeded state to find out why an
+  answer was wrong. The trade-off, and the plan to revisit it at 1.0, are
+  recorded in the module docstring and `framework-packaging.md` §3.2(b).
+- **`CompiledWorkflow.as_tool(name=…, description=…)`** — a whole workflow as
+  one LangChain `StructuredTool`, so a team already on `create_agent` adopts
+  without restructuring. Adapted at the seam, never subclassed. The workflow
+  runs as its own graph and sees only the question: the same subagent
+  isolation this codebase already states. There is deliberately **no**
+  middleware equivalent — it would need a routing policy, and a router is
+  something we already express as a document.
+- **`load_workflow(..., knowledge_dir=…, trace_file=…)`** — both keyword-only,
+  both defaulting to today's behaviour. `knowledge_dir` overrides the
+  `<package>/knowledge` convention for knowledge shared between packages or
+  living outside the repository; `trace_file` appends one JSON line per run
+  (question, slug, decisions, attempts, warnings, duration, and the answer's
+  **length** — never its text). An unwritable trace path warns and never fails
+  the run.
+- **`openstategraph.scaffold`** — the workflow/team scaffold, moved out of
+  `scripts/` so it ships in the wheel. `scripts/new_workflow.py` and
+  `scripts/new_team.py` keep their exact command lines and now call it, which
+  is what stops `openstategraph new` from becoming a second copy that drifts.
 - **`docs/stability.md`** — the three tiers, what is deliberately not public,
   and the deprecation policy. Pre-1.0, a breaking change bumps the **minor**,
   never the patch.

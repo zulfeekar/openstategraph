@@ -28,12 +28,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from openstategraph.errors import InvalidPackageName, PackageNotFound
+from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,10 @@ class CompiledWorkflow:
     package_dir: Path = Path()
     #: The vendor-neutral document that was compiled, envelope already peeled.
     document: dict[str, Any] = field(default_factory=dict)
+    #: Where `ask()` appends one JSON line per run, or None for no trace.
+    #: Set through `load_workflow(..., trace_file=...)`; see `_append_trace`
+    #: for exactly what is written and — more importantly — what is not.
+    trace_file: Path | None = None
 
     def mermaid(self, *, xray: bool = True) -> str:
         """The compiled topology as Mermaid **text**, with no network call.
@@ -83,8 +90,15 @@ class CompiledWorkflow:
         *,
         thread_id: str | None = None,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
-    ) -> str:
+    ) -> RunResult:
         """Run the graph once and return its answer.
+
+        The return value **is** the answer string — `RunResult` subclasses
+        `str`, so everything that worked when this returned a bare `str` still
+        works — with the rest of the run attached: `.decisions`, `.outputs`,
+        `.warnings`, `.attempts`. Those are what you need when the answer is
+        wrong, and reaching them used to mean dropping to `.graph.invoke()`
+        with hand-seeded state, which is the ceremony this function replaces.
 
         The initial state is not arbitrary — `attempts`/`decisions`/`outputs`
         must be seeded or a grader loop reads `None` where it expects a
@@ -96,15 +110,128 @@ class CompiledWorkflow:
         call continues the first. Use `.graph` directly for streaming,
         multi-key results, or an interrupted human-approval resume.
         """
+        thread = thread_id or f"load-workflow-{uuid.uuid4().hex}"
         config = {
             "recursion_limit": recursion_limit,
-            "configurable": {"thread_id": thread_id or f"load-workflow-{uuid.uuid4().hex}"},
+            "configurable": {"thread_id": thread},
         }
+        started = time.monotonic()
         final = self.graph.invoke(
             {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
             config,
         )
-        return str(final.get("answer") or "")
+        result = RunResult(
+            str(final.get("answer") or ""),
+            decisions=final.get("decisions") or {},
+            outputs=final.get("outputs") or {},
+            warnings=self.warnings,
+            attempts=int(final.get("attempts") or 0),
+        )
+        self._append_trace(question, result, time.monotonic() - started)
+        return result
+
+    def _append_trace(self, question: str, result: RunResult, seconds: float) -> None:
+        """One JSON line per run, appended to `trace_file`. Never fatal.
+
+        **A file sink, not a tracing framework.** LangSmith and OpenTelemetry
+        exist; this is the thing you attach to a support ticket, and inventing
+        a span model to compete with them would be inventing an abstraction we
+        do not have.
+
+        **The answer text is deliberately not written — only its length.** A
+        trace file gets committed, emailed and pasted into issues, and an
+        answer is the one field in a run that reliably contains a customer's
+        data. `decisions` and `attempts` are what tell you *which way the graph
+        went*, which is what a wrong answer is diagnosed from; the answer
+        itself you already have in front of you.
+
+        A path that cannot be written **warns and returns**. A trace is
+        diagnostics: losing it must never lose the run that produced it.
+        """
+        if self.trace_file is None:
+            return
+        line = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "slug": self.slug,
+            "question": question,
+            "decisions": result.decisions,
+            "attempts": result.attempts,
+            "warnings": result.warnings,
+            "seconds": round(seconds, 3),
+            "answer_chars": len(result),
+        }
+        try:
+            self.trace_file.parent.mkdir(parents=True, exist_ok=True)
+            with self.trace_file.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(line) + "\n")
+        except OSError as exc:
+            logger.warning("Could not write the run trace to %s: %s", self.trace_file, exc)
+
+    def as_tool(self, *, name: str | None = None, description: str | None = None) -> Any:
+        """This whole workflow, as one LangChain tool your existing agent can call.
+
+        For the team already on `create_agent` who does not want to restructure:
+
+            from langchain.agents import create_agent
+
+            billing = load_workflow("workflows/billing").as_tool(
+                name="billing_analyst",
+                description="Answers questions about invoices and revenue.",
+            )
+            agent = create_agent(model, tools=[billing, ...])
+
+        **Adapted at the seam, never subclassed** — the same rule and the same
+        `StructuredTool.from_function` shape `abc/tool.py` uses, so an upstream
+        change to LangChain's tool internals cannot reach into us.
+
+        **Isolation, stated plainly, because it is the part people get wrong.**
+        The workflow runs as its own graph. It sees the question string and
+        nothing else — not the calling agent's message history, not its state,
+        not its tools — and it returns its answer text as the tool's result.
+        That is exactly the subagent rule this codebase already states
+        (CLAUDE.md, "State flows down; subagents do not receive it"): a
+        subagent is invoked as a tool, gets a task, and reports a result. If
+        the caller needs the workflow to know something, it has to be in the
+        question.
+
+        Each call runs on its own thread id, so two calls never continue each
+        other's conversation. Use `.ask(thread_id=...)` directly if you want
+        one that does.
+
+        There is deliberately **no middleware equivalent**. Middleware would
+        have to decide *when* to consult the workflow, which is a routing
+        policy — and a router is something this framework already expresses as
+        a document (`route.classifier`). Shipping a second, worse one inside
+        the library would be the duplicated-knowledge defect CLAUDE.md names.
+        """
+        from pydantic import BaseModel, Field
+
+        from langchain_core.tools import StructuredTool
+
+        class _Question(BaseModel):
+            model_config = {"extra": "forbid"}
+            question: str = Field(description="The question to ask this workflow.")
+
+        def _call(question: str) -> str:
+            return str(self.ask(question))
+
+        tool_name = name or re.sub(r"[^a-zA-Z0-9_]+", "_", self.slug or "workflow").strip("_")
+        return StructuredTool.from_function(
+            func=_call,
+            name=tool_name or "workflow",
+            description=description or self._default_tool_description(),
+            args_schema=_Question,
+        )
+
+    def _default_tool_description(self) -> str:
+        """A description from the document, so the tool is usable un-configured.
+
+        Named `description=` is still the right answer — the calling model
+        picks tools by this text — but a missing one must not produce a tool
+        the model cannot tell apart from any other.
+        """
+        title = str(self.document.get("name") or self.slug or "workflow")
+        return f"Ask the {title!r} OpenStateGraph workflow a question and get its answer."
 
 
 def load_workflow(
@@ -112,6 +239,8 @@ def load_workflow(
     *,
     model: Any = None,
     checkpointer: Any = None,
+    knowledge_dir: str | Path | None = None,
+    trace_file: str | Path | None = None,
 ) -> CompiledWorkflow:
     """Compile the workflow package at `package_dir`, capabilities and all.
 
@@ -132,6 +261,19 @@ def load_workflow(
     `settings.checkpointer` decides (sqlite, or an in-process saver), which is
     what makes `human.approval` nodes able to pause and `ask(thread_id=...)`
     able to continue. Pass your own — a Postgres saver, say — to own durability.
+
+    `knowledge_dir` overrides where the package's second brain is read from.
+    The default stays the **convention** — `<package>/knowledge` — because
+    discovery-by-convention is why this function takes one argument. The
+    override is for the cases convention cannot express: knowledge shared
+    between two packages, knowledge that lives outside the repository, or a
+    test pointing at a fixture directory. It names the directory that *holds
+    the `<topic>.md` files*, not the package above it.
+
+    `trace_file` appends one JSON line per `ask()` — question, slug,
+    decisions, attempts, warnings, duration and the answer's **length**, never
+    the answer text (see `CompiledWorkflow._append_trace` for why). A path
+    that cannot be written warns; it never fails a run.
 
     **Unresolved capabilities never raise.** They land on `.warnings` and log
     one WARNING line naming them, because the alternative failure mode is a
@@ -186,7 +328,8 @@ def load_workflow(
 
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
-    runtime = services.runtime_for(slug, document, resolved_model)
+    knowledge_override = Path(knowledge_dir).expanduser().resolve() if knowledge_dir else None
+    runtime = services.runtime_for(slug, document, resolved_model, knowledge_dir=knowledge_override)
 
     if checkpointer is None:
         from langgraph.checkpoint.memory import InMemorySaver
@@ -217,7 +360,8 @@ def load_workflow(
         slug=slug,
         package_dir=directory,
         document=document,
+        trace_file=Path(trace_file).expanduser() if trace_file else None,
     )
 
 
-__all__ = ["CompiledWorkflow", "DEFAULT_RECURSION_LIMIT", "load_workflow"]
+__all__ = ["CompiledWorkflow", "DEFAULT_RECURSION_LIMIT", "RunResult", "load_workflow"]

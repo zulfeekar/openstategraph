@@ -39,8 +39,8 @@ class WorkflowServices:
         #: every run, namespaced per user inside the tools themselves.
         self.memory_store = build_store()
 
-    def tool_registry_for(self, slug: str | None) -> dict[str, Any]:
-        return build_tool_registry(self.store, slug)
+    def tool_registry_for(self, slug: str | None, *, knowledge_dir: Any = None) -> dict[str, Any]:
+        return build_tool_registry(self.store, slug, knowledge_dir=knowledge_dir)
 
     def runtime_for(
         self,
@@ -49,6 +49,7 @@ class WorkflowServices:
         model: Any,
         *,
         advisor: bool = False,
+        knowledge_dir: Any = None,
     ) -> Any:
         """One NodeRuntime construction shared by run/stream/resume — and now
         by MCP — so the call sites can never disagree about capabilities again.
@@ -58,6 +59,12 @@ class WorkflowServices:
         Passed per call rather than baked in, because the same process serves
         the editor, `/chat` and MCP, and only one of them may ever propose
         edits to the canvas.
+
+        `knowledge_dir` is `load_workflow`'s explicit second-brain override.
+        None — every transport but the artifact loader — keeps the convention
+        (`<package>/knowledge`). It applies to THIS workflow only: a routed
+        child still seeks its own package's knowledge, the same isolation
+        ticket 67 established for skills.
         """
         from openstategraph.api.capability_discovery import discover_middlewares, discover_skills
         from openstategraph.compile.node_runtime import (
@@ -72,7 +79,7 @@ class WorkflowServices:
         # `sys.modules`), so calling it twice — as the `advisor=True` path did,
         # once for `tools` and again for `advisor_catalog` — re-executed every
         # tool module of the open package on every editor run.
-        tools = self.tool_registry_for(slug)
+        tools = self.tool_registry_for(slug, knowledge_dir=knowledge_dir)
         store = self.store
 
         return NodeRuntime(
@@ -100,6 +107,7 @@ class WorkflowServices:
                 # Ambient knowledge seeking: a non-empty knowledge/ under the
                 # open package auto-binds the lookup tool to every agent.
                 knowledge_package_dir=(store.directory_for(slug) if slug else None),
+                knowledge_dir_override=knowledge_dir,
                 advisor_catalog=(suggestible_tool_catalog(tools) if advisor else ""),
             )
         )

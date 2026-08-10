@@ -43,9 +43,20 @@ class KnowledgeLookupTool(BaseTool):
     )
     Args = KnowledgeLookupArgs
 
-    def __init__(self, package_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        package_dir: Path | None = None,
+        *,
+        knowledge_dir: Path | str | None = None,
+    ) -> None:
         self._package_dir = Path(package_dir) if package_dir else None
-        self._knowledge = PackageKnowledge(package_dir) if package_dir else None
+        self._knowledge_dir = Path(knowledge_dir) if knowledge_dir else None
+        if self._knowledge_dir is not None:
+            self._knowledge = PackageKnowledge(knowledge_dir=self._knowledge_dir)
+        elif self._package_dir is not None:
+            self._knowledge = PackageKnowledge(self._package_dir)
+        else:
+            self._knowledge = None
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, KnowledgeLookupArgs)
@@ -72,12 +83,24 @@ class KnowledgeLookupTool(BaseTool):
             )
 
 
-def knowledge_lookup_for(package_dir: Path | None) -> dict[str, Any]:
-    """The registry fragment: node type → a tool bound to one package dir."""
-    return {KnowledgeLookupTool.node_type: KnowledgeLookupTool(package_dir=package_dir)}
+def knowledge_lookup_for(
+    package_dir: Path | None, *, knowledge_dir: Path | str | None = None
+) -> dict[str, Any]:
+    """The registry fragment: node type → a tool bound to one package dir.
+
+    `knowledge_dir` is the explicit override (`load_workflow(knowledge_dir=)`)
+    and names the directory of topic files itself; convention is the default.
+    """
+    return {
+        KnowledgeLookupTool.node_type: KnowledgeLookupTool(
+            package_dir=package_dir, knowledge_dir=knowledge_dir
+        )
+    }
 
 
-def ambient_knowledge_tool(package_dir: Path | str | None) -> KnowledgeLookupTool | None:
+def ambient_knowledge_tool(
+    package_dir: Path | str | None, *, knowledge_dir: Path | str | None = None
+) -> KnowledgeLookupTool | None:
     """The ambient-seeking rule: knowledge is a capability by configuration.
 
     Exactly mirroring how the memory tools auto-attach when the runtime's
@@ -90,12 +113,15 @@ def ambient_knowledge_tool(package_dir: Path | str | None) -> KnowledgeLookupToo
     None when there is nothing to look up — an always-failing tool would be
     worse than no tool.
     """
-    if package_dir is None:
+    if knowledge_dir is not None:
+        directory = Path(knowledge_dir)
+    elif package_dir is not None:
+        directory = Path(package_dir) / "knowledge"
+    else:
         return None
-    directory = Path(package_dir) / "knowledge"
     if not any(directory.glob("*.md")):
         return None
-    return KnowledgeLookupTool(package_dir=Path(package_dir))
+    return KnowledgeLookupTool(package_dir=package_dir, knowledge_dir=knowledge_dir)
 
 
 __all__ = [

@@ -11,8 +11,8 @@ This page answers one question: *if I import it, can it be taken away from me?*
 
 | Tier | Where | Promise |
 | --- | --- | --- |
-| **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
-| **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
+| **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, the `openstategraph` **command line**, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
+| **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree`, `.scaffold`, `.cli` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
 | **3 — internal** | `openstategraph.api.*`, `openstategraph.mcp_server`, and any `_`-prefixed name anywhere | No guarantee at all. May be renamed, split or deleted in a **patch**. These are surfaces we operate, not libraries you build on. |
 
 The tier is stated in each module's own docstring, so you never have to come
@@ -22,7 +22,8 @@ back here to check.
 
 ```python
 from openstategraph import (
-    load_workflow, CompiledWorkflow, DEFAULT_RECURSION_LIMIT, __version__,
+    load_workflow, CompiledWorkflow, RunResult,
+    DEFAULT_RECURSION_LIMIT, __version__,
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
 )
@@ -77,8 +78,41 @@ statement. In short:
   `[project.entry-points."openstategraph.tools"]` from your own distribution
   (ticket 05). If you find yourself importing a registry in order to extend the
   framework, that is a missing entry-point group — please report it.
-- **`openstategraph.api.main:app`.** Currently the only way to mount the HTTP
-  server. That is a gap the console script closes, not permission.
+- **`openstategraph.api.main:app`.** Use `openstategraph serve` — the console
+  script is the supported way to mount the HTTP server, and the import path
+  behind it stays Tier 3 and free to move.
+
+---
+
+## The command line is Tier 1 too
+
+More people will type `openstategraph run` than will import `load_workflow`,
+so the *commands* carry the same promise as the Python names: a command is not
+removed or renamed without a minor release in which it still works.
+
+**Exit codes are the contract CI consumes**, and they are fixed:
+
+| | |
+| --- | --- |
+| `0` | success |
+| `1` | the run failed, or validation found blocking findings |
+| `2` | usage error — bad arguments or an unknown command |
+| `3` | a required extra is not installed; the message names the `pip install` line |
+
+New flags are additive; a flag's *meaning* never changes under you. Output
+formats are not frozen — parse `--json`, not the human text.
+
+## `RunResult` is a `str`, on purpose and for now
+
+`CompiledWorkflow.ask()` returns a `RunResult`, which subclasses `str`. That is
+the compatible shape: `.ask()` shipped returning a plain string, so anything
+else would have broken `.strip()`, `+`, `json.dumps` and `isinstance(x, str)`
+at run time in an adopter's service rather than at import.
+
+**Recorded intent:** at 1.0, where a major bump makes it affordable, this
+becomes a plain frozen dataclass with `.answer`. Build on `.answer`,
+`.decisions`, `.outputs`, `.warnings` and `.attempts` — not on the ~40 string
+methods it currently also has.
 
 ---
 

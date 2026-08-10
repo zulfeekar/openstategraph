@@ -134,7 +134,18 @@ class TestTierOneDoesNotLeanOnTierThree:
     across that boundary is not, at any scope.
     """
 
-    TIER_ONE = ("loader.py", "errors.py", "schema.py", "_extras.py", "__init__.py")
+    TIER_ONE = (
+        "loader.py",
+        "errors.py",
+        "schema.py",
+        "results.py",
+        "_extras.py",
+        "__init__.py",
+        # Not Tier 1 itself, but it is the surface adopters type at, and it
+        # reaches into `api/` for `serve` and `knowledge build`. Those imports
+        # must stay on public names for the same reason the loader's did.
+        "cli.py",
+    )
 
     def _private_api_imports(self, path: Path) -> list[str]:
         tree = ast.parse(path.read_text())

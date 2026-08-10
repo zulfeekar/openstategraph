@@ -361,9 +361,9 @@ class TestAmbientKnowledgeEfficiency:
         calls = {"n": 0}
         real = pk.ambient_knowledge_tool
 
-        def counting(package_dir):
+        def counting(package_dir, **kwargs):
             calls["n"] += 1
-            return real(package_dir)
+            return real(package_dir, **kwargs)
 
         monkeypatch.setattr(pk, "ambient_knowledge_tool", counting)
 

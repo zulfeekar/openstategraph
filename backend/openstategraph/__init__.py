@@ -45,6 +45,7 @@ from openstategraph.loader import (
     CompiledWorkflow,
     load_workflow,
 )
+from openstategraph.results import RunResult
 
 
 def _installed_version() -> str:
@@ -75,6 +76,7 @@ __all__ = [
     "InvalidPackageName",
     "OpenStateGraphError",
     "PackageNotFound",
+    "RunResult",
     "SchemaVersionError",
     "WorkflowPackageError",
     "__version__",
