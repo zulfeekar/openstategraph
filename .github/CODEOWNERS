@@ -1,0 +1,32 @@
+# Code owners — who GitHub requests a review from, automatically.
+#
+# PLACEHOLDER, and deliberately un-mistakable: this checkout has no configured
+# git remote, so the maintainer's GitHub handle is not a fact yet. An owner
+# GitHub cannot resolve is worse than none — the rule is silently ignored, no
+# reviewer is requested, and "Require review from Code Owners" branch
+# protection blocks every pull request with an error nobody can act on.
+#
+# Before the first push to a real remote, run the same grep the packaging
+# metadata is gated on and replace every hit:
+#
+#   grep -rn PLACEHOLDER .github/CODEOWNERS backend/pyproject.toml site/index.html
+#
+# Last line wins in this file, so the specific rules come after the general one.
+
+* @PLACEHOLDER
+
+# The architecture contract, the release train, and anything that can publish
+# or grant permissions. These change rarely and are expensive to get wrong, so
+# they get a named owner even when the catch-all already covers them.
+/CLAUDE.md                  @PLACEHOLDER
+/AGENTS.md                  @PLACEHOLDER
+/CHANGELOG.md               @PLACEHOLDER
+/CONTRIBUTING.md            @PLACEHOLDER
+/SECURITY.md                @PLACEHOLDER
+/LICENSE                    @PLACEHOLDER
+/THIRD_PARTY_NOTICES.md     @PLACEHOLDER
+/.github/                   @PLACEHOLDER
+/scripts/                   @PLACEHOLDER
+/backend/pyproject.toml     @PLACEHOLDER
+/docs/decisions/            @PLACEHOLDER
+/docs/stability.md          @PLACEHOLDER

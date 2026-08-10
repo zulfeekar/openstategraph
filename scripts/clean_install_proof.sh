@@ -19,8 +19,37 @@
 # it has no lineage in this repository at all, plus a copy of a real package
 # that binds NO chinook tool. Exit non-zero on the first failure.
 #
-# Runs in CI on every pull request (.github/workflows/ci.yml) and before every
-# release (.github/workflows/release.yml).
+# TWO SOURCES, ONE PROOF
+#
+#   OSG_SOURCE=build   (default) build the wheel from this checkout and prove
+#                      that. What every pull request runs.
+#   OSG_SOURCE=index   download the wheel from a package index and prove
+#                      *that* — the artifact a stranger's `pip install` would
+#                      actually fetch. The release train runs this against
+#                      TestPyPI after upload and before the PyPI gate, because
+#                      a locally-built wheel and a published one are not the
+#                      same claim: sdist/wheel selection, index metadata, a
+#                      yanked file and a botched upload are all invisible to
+#                      the build-mode run.
+#
+#     OSG_VERSION           required in index mode, e.g. 0.3.0
+#     OSG_INDEX_URL         primary index (default https://pypi.org/simple)
+#     OSG_EXTRA_INDEX_URL   fallback index (the release train puts TestPyPI
+#                           here, NOT in OSG_INDEX_URL — see below)
+#     OSG_PIP_PRE           set to 1 to allow pre-release versions
+#     OSG_INDEX_RETRIES     attempts while the index catches up (default 10,
+#                           15s apart; TestPyPI is not instantly consistent)
+#
+#   Why TestPyPI is the *extra* index and PyPI the primary: TestPyPI carries
+#   stale and squatted copies of ordinary names, and `openstategraph`'s
+#   dependencies (langgraph, langchain, pydantic) must come from the real
+#   index. Pinning `openstategraph==$OSG_VERSION` — a version that by
+#   definition is not yet on PyPI when the rehearsal runs — is what forces the
+#   package itself to come from the extra index.
+#
+# Runs in CI on every pull request (.github/workflows/ci.yml) and twice per
+# release (.github/workflows/release.yml): once on the built wheel, once on the
+# published one. `docs/releasing.md` is the map.
 
 set -euo pipefail
 
@@ -28,18 +57,59 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${OSG_PROOF_DIR:-${TMPDIR:-/tmp}/osg-clean-install}"
 VENV="$WORK/venv"
 PROJECT="$WORK/project"
+SOURCE="${OSG_SOURCE:-build}"
 
 rm -rf "$WORK"
 mkdir -p "$PROJECT"
 
-echo "==> building sdist + wheel"
-rm -rf "$REPO/backend/dist"
-python3 -m pip install --quiet --upgrade build twine
-python3 -m build --outdir "$REPO/backend/dist" "$REPO/backend"
-WHEEL="$(ls "$REPO"/backend/dist/*.whl)"
+# Index arguments, empty in build mode so the same `pip` lines serve both.
+INDEX_ARGS=()
+if [ "$SOURCE" = "index" ]; then
+  [ -n "${OSG_VERSION:-}" ] || { echo "OSG_SOURCE=index needs OSG_VERSION"; exit 2; }
+  INDEX_ARGS+=(--index-url "${OSG_INDEX_URL:-https://pypi.org/simple}")
+  # `if`, not `[ … ] && …`: under `set -e` a failing `&&` list at top level
+  # exits the script, so the one-liner form would abort whenever the variable
+  # happened to be unset — which is the common case.
+  if [ -n "${OSG_EXTRA_INDEX_URL:-}" ]; then
+    INDEX_ARGS+=(--extra-index-url "$OSG_EXTRA_INDEX_URL")
+  fi
+  if [ "${OSG_PIP_PRE:-0}" = "1" ]; then
+    INDEX_ARGS+=(--pre)
+  fi
+fi
 
-echo "==> twine check"
-python3 -m twine check "$REPO"/backend/dist/*
+case "$SOURCE" in
+  build)
+    echo "==> building sdist + wheel"
+    rm -rf "$REPO/backend/dist"
+    python3 -m pip install --quiet --upgrade build twine
+    python3 -m build --outdir "$REPO/backend/dist" "$REPO/backend"
+    WHEEL="$(ls "$REPO"/backend/dist/*.whl)"
+
+    echo "==> twine check"
+    python3 -m twine check "$REPO"/backend/dist/*
+    ;;
+  index)
+    echo "==> fetching openstategraph==$OSG_VERSION from the index"
+    mkdir -p "$WORK/download"
+    attempt=1
+    until python3 -m pip download --quiet --no-deps --only-binary=:all: \
+            "${INDEX_ARGS[@]}" --dest "$WORK/download" \
+            "openstategraph==$OSG_VERSION"; do
+      if [ "$attempt" -ge "${OSG_INDEX_RETRIES:-10}" ]; then
+        echo "openstategraph==$OSG_VERSION never became installable from the index"
+        exit 1
+      fi
+      echo "    not visible yet (attempt $attempt) — the index is catching up"
+      attempt=$((attempt + 1))
+      sleep 15
+    done
+    WHEEL="$(ls "$WORK"/download/*.whl)"
+    echo "    got $(basename "$WHEEL")"
+    ;;
+  *)
+    echo "OSG_SOURCE must be 'build' or 'index', got '$SOURCE'"; exit 2 ;;
+esac
 
 echo "==> wheel contents"
 # One `grep -E` with alternation passed on any single hit, so four required
@@ -56,13 +126,28 @@ done
 echo "==> clean venv, core + one provider extra only"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip
-"$VENV/bin/pip" install --quiet "${WHEEL}[ollama]"
+if [ "$SOURCE" = "index" ]; then
+  # The owner's question — "how do you retest before it goes to PyPI" — is
+  # answered by this line: resolve and install the way a stranger would,
+  # from the index, not from a file we just built.
+  "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
+    "openstategraph[ollama]==$OSG_VERSION"
+else
+  "$VENV/bin/pip" install --quiet "${WHEEL}[ollama]"
+fi
 
 # Nothing below may see this checkout: no cwd inside it, no PYTHONPATH.
 run() { (cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/$@"); }
 
 echo "==> openstategraph --version"
 run openstategraph --version
+if [ "$SOURCE" = "index" ]; then
+  # The rehearsal must prove it tested the version being released, not a
+  # neighbour the resolver preferred. `--version` prints "openstategraph X.Y.Z".
+  reported="$(run openstategraph --version | tr -d '\r' | awk '{print $NF}')"
+  [ "$reported" = "$OSG_VERSION" ] \
+    || { echo "installed $reported but the release is $OSG_VERSION"; exit 1; }
+fi
 
 echo "==> import cost: the runtime is lazy, the web layer is absent"
 run python -c "

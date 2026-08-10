@@ -1,7 +1,26 @@
 name: CI
 on:
   push: { branches: [main] }
+  # `pull_request`, never `pull_request_target`. That is the whole fork-safety
+  # story: a pull request from a fork runs with a read-only GITHUB_TOKEN and no
+  # access to repository secrets, and every job below is built to need neither.
+  # `pull_request_target` would run trusted code with write permissions against
+  # an untrusted diff — do not change this line to make a job "work".
   pull_request:
+
+# Least privilege, stated rather than inherited: nothing in CI writes to the
+# repository. The release train is where write permissions live, and it is a
+# separate workflow that never runs on a pull request.
+permissions:
+  contents: read
+
+# Cost control (docs/decisions/sdk-practice.md §3, recommendation 3): a push to
+# an open pull request cancels the previous run instead of leaving it burning a
+# runner. Keyed per ref, so main and each PR are independent.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -62,6 +81,10 @@ jobs:
       # is what keeps that promise honest, since CI cannot see it from here.
       - run: pip install -e "backend[all,dev]" ruff
       - run: python -m ruff check backend
+      # The type gate (ticket 05). Runs from `backend/` because `[tool.mypy]`
+      # in backend/pyproject.toml is the config, and mypy reads the nearest
+      # one. Ruff catches undefined names; this is what catches a wrong one.
+      - run: cd backend && python -m mypy
       # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
       # guards regressions, raised as it climbs. Live-API tests stay opt-in.
       - run: python -m pytest -q --cov=backend/openstategraph --cov-fail-under=85
@@ -132,3 +155,31 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
+
+  # ONE status check to require in branch protection, instead of six that have
+  # to be re-listed by hand every time a job is added, renamed or given a
+  # matrix. Adding a job to `needs:` below is how it becomes mandatory.
+  #
+  # `if: always()` is load-bearing — without it this job is *skipped* when a
+  # dependency fails, and a skipped required check is treated as neutral, which
+  # would turn the gate into decoration. So it always runs and inspects the
+  # results itself. `skipped` is accepted because `docs-freshness` legitimately
+  # skips on push-to-main; `cancelled` is not.
+  ci-success:
+    if: always()
+    needs: [frontend, generated-port-specs, backend, clean-install, docs-freshness, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every check must have passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "::error::A required check reported '$result'."; exit 1 ;;
+            esac
+          done
+          echo "All required checks passed."

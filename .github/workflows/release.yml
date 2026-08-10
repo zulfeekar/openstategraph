@@ -1,42 +1,143 @@
-# Release — wayfinder ticket 06, framework-packaging §3.6.
+# Release — the second half of the release train. `docs/releasing.md` is the map.
 #
-# Triggered by a tag, and only by a tag:
+#   Release PR merged to main
+#        -> detect      is this commit a prepared release?
+#        -> tag         v0.3.0, annotated, from the merge commit
+#        -> build       wheel + sdist + the clean-venv proof of the BUILT wheel
+#        -> testpypi    upload
+#        -> rehearsal   install openstategraph==0.3.0 FROM TestPyPI into an
+#                       empty venv outside any checkout, and drive it
+#        -> [ HUMAN ]   the `pypi` environment's required reviewer
+#        -> pypi        upload — the irreversible step, and the only one
+#        -> release     the GitHub Release, notes lifted from CHANGELOG.md
 #
-#   v0.3.0rc1  ->  TestPyPI      (any tag containing rc/a/b)
-#   v0.3.0     ->  PyPI
+# WHAT MAKES THIS COMMIT A RELEASE, and why there is no tag trigger.
 #
-# **A wheel that has not been installed from scratch does not get published.**
-# `publish` needs `clean-install`, which is the same script a developer runs
-# locally (`scripts/clean_install_proof.sh`): build, `twine check`, install
-# into an empty venv OUTSIDE the checkout, then drive the CLI and
-# `load_workflow` with cwd outside the repo and PYTHONPATH empty. Every defect
-# this gate exists for is invisible to `pytest` — a module not shipped, missing
-# package data, a path computed from `__file__` that resolves into
-# site-packages once installed.
+# `detect` releases when, and only when, two things are true of the commit on
+# main: `backend/pyproject.toml`'s version has no `v<version>` git tag yet, AND
+# `CHANGELOG.md`'s section for that version is dated rather than "unreleased".
+# Both are set by the Release PR, so an ordinary merge is inert and no branch
+# needs a naming convention.
 #
-# REQUIRED REPOSITORY SECRETS
-#   PYPI_API_TOKEN      a PyPI API token, scoped to the `openstategraph`
-#                       project once it exists (`pypi-…`).
-#   TEST_PYPI_API_TOKEN the same, from test.pypi.org. Optional: without it the
-#                       pre-release path fails loudly rather than silently
-#                       publishing somewhere unintended.
+# A tag trigger is deliberately absent. A tag pushed by a workflow using
+# GITHUB_TOKEN does not start another workflow — the loop guard — so a
+# tag-triggered design silently does nothing the first time and gets "fixed"
+# with a long-lived personal access token whose write scope is much broader
+# than this needs. Creating the tag *inside* the run removes the problem
+# instead of paying for it. Consequence, documented in docs/releasing.md: a
+# tag pushed by hand publishes nothing.
 #
-# Preferred successor, deliberately not adopted yet: **PyPI Trusted Publishing
-# (OIDC)**, which removes the long-lived token entirely. It cannot be
-# configured until the project exists on PyPI under a real repository, which is
-# the owner's pre-publish step — along with pinning `project.urls` and
-# `plugin_interop.EXTENSION_NAMESPACE`, both of which are still PLACEHOLDER.
+# SECRETS. Two, and neither is reachable from a fork: this workflow does not
+# run on `pull_request` at all.
+#   TEST_PYPI_API_TOKEN  test.pypi.org token — the rehearsal cannot run without it
+#   PYPI_API_TOKEN       pypi.org token, project-scoped once the project exists
+# Preferred successor, still not adopted: PyPI Trusted Publishing (OIDC), which
+# deletes both. It cannot be configured until the project exists on PyPI under a
+# real repository — this checkout has no git remote yet.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      resume:
+        description: "The tag already exists — re-run the train from a failure without re-tagging"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# Never two trains on one track. `cancel-in-progress: false` because cancelling
+# a run that is mid-upload is how you get a half-published version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  clean-install:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      release: ${{ steps.read.outputs.release }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # tags, for the "already released?" test
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - id: read
+        env:
+          RESUME: ${{ inputs.resume }}
+        run: |
+          set -euo pipefail
+          version=$(python - <<'PY'
+          import re, pathlib
+          text = pathlib.Path("backend/pyproject.toml").read_text()
+          print(re.search(r'^version = "([^"]+)"$', text, re.M).group(1))
+          PY
+          )
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version in backend/pyproject.toml: $version"
+
+          # A pre-release stops at the rehearsal. The test is on the version
+          # itself, not on who pressed what, so the decision lives in the thing
+          # being released.
+          if printf '%s' "$version" | grep -Eq '(a|b|rc)[0-9]+$'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${RESUME:-false}" = "true" ]; then
+            echo "Manual resume — skipping the freshness tests."
+            echo "release=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version is already tagged — nothing to release."
+            exit 0
+          fi
+
+          when=$(python scripts/changelog_section.py "$version" --date-only)
+          if [ "$when" = "unreleased" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CHANGELOG.md still calls $version unreleased — run the 'Release PR' workflow when it is ready."
+            exit 0
+          fi
+
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Releasing v$version (changelog dated $when)."
+
+  tag:
+    needs: detect
+    if: needs.detect.outputs.release == 'true' && inputs.resume != true
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag this commit
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+
+  # The proof a green test suite cannot give: build, then install the built
+  # wheel into an empty venv OUTSIDE the checkout with PYTHONPATH unset. Same
+  # script every pull request runs, so a release cannot be the first time it is
+  # exercised.
+  build:
+    needs: [detect, tag]
+    # `always()` so a resume run — which skips `tag` — still builds.
+    if: >-
+      always() && needs.detect.outputs.release == 'true'
+      && needs.tag.result != 'failure' && needs.tag.result != 'cancelled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,10 +150,9 @@ jobs:
           path: backend/dist/*
           if-no-files-found: error
 
-  publish:
-    needs: clean-install
+  testpypi:
+    needs: [detect, build]
     runs-on: ubuntu-latest
-    environment: release
     steps:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
@@ -60,24 +160,134 @@ jobs:
         with: { name: dist, path: dist }
       - run: pip install --upgrade twine
       - run: twine check dist/*
-      - name: Publish
+      - name: Upload to TestPyPI
         env:
           TWINE_USERNAME: __token__
-          TAG: ${{ github.ref_name }}
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-          TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         run: |
           set -euo pipefail
-          # A pre-release tag never reaches PyPI. The test is on the tag, not
-          # on a workflow input, so the decision lives in the thing being
-          # released rather than in whoever clicked the button.
-          if printf '%s' "$TAG" | grep -Eq 'rc|a[0-9]+$|b[0-9]+$'; then
-            echo "Pre-release $TAG -> TestPyPI"
-            [ -n "${TEST_PYPI_API_TOKEN:-}" ] || { echo "TEST_PYPI_API_TOKEN is not set"; exit 1; }
-            TWINE_PASSWORD="$TEST_PYPI_API_TOKEN" \
-              twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-          else
-            echo "Release $TAG -> PyPI"
-            [ -n "${PYPI_API_TOKEN:-}" ] || { echo "PYPI_API_TOKEN is not set"; exit 1; }
-            TWINE_PASSWORD="$PYPI_API_TOKEN" twine upload dist/*
+          [ -n "${TWINE_PASSWORD:-}" ] || {
+            echo "::error::TEST_PYPI_API_TOKEN is not set. The rehearsal is not optional — see docs/releasing.md."
+            exit 1
+          }
+          # `--skip-existing` so re-running the train after a downstream failure
+          # is not blocked by an upload that already succeeded. An index refuses
+          # to overwrite a file; that is a feature, and this is how you live
+          # with it.
+          twine upload --skip-existing \
+            --repository-url https://test.pypi.org/legacy/ dist/*
+
+  # THE REHEARSAL — the owner's "how do you retest before it goes to PyPI".
+  # Everything above proves a wheel we built. This proves the artefact a
+  # stranger's `pip install` fetches from an index: the upload itself, the
+  # metadata the index derived from it, and wheel-vs-sdist selection. It runs
+  # the same script, in index mode, against TestPyPI.
+  rehearsal:
+    needs: [detect, testpypi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install from TestPyPI and drive it
+        env:
+          OSG_SOURCE: index
+          OSG_VERSION: ${{ needs.detect.outputs.version }}
+          # PyPI primary, TestPyPI as the fallback — TestPyPI carries stale and
+          # squatted copies of ordinary names, and langgraph/langchain/pydantic
+          # must come from the real index. The exact pin is what forces
+          # `openstategraph` itself to come from TestPyPI.
+          OSG_INDEX_URL: https://pypi.org/simple
+          OSG_EXTRA_INDEX_URL: https://test.pypi.org/simple/
+          OSG_PIP_PRE: ${{ needs.detect.outputs.prerelease == 'true' && '1' || '0' }}
+        run: scripts/clean_install_proof.sh
+      - name: Summary for the approver
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          {
+            echo "## Rehearsal passed for v$VERSION"
+            echo
+            echo "\`pip install openstategraph==$VERSION\` from TestPyPI, in an empty"
+            echo "venv outside any checkout, then CLI \`--version\`/\`validate\`/\`graph\`"
+            echo "and \`load_workflow\` with fastapi, deepagents and mcp absent."
+            echo
+            echo "Try it yourself before approving:"
+            echo
+            echo '```bash'
+            echo "pip install --index-url https://pypi.org/simple \\"
+            echo "  --extra-index-url https://test.pypi.org/simple/ \\"
+            echo "  openstategraph==$VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # THE HUMAN GATE. `environment: pypi` must be configured in repository
+  # settings with a **required reviewer**; this job then waits for a click.
+  # It is on this job and no other because publishing to PyPI is the only step
+  # in the train that cannot be undone — a version number, once used, is burned
+  # even if the file is yanked. What the reviewer should check is written in
+  # docs/releasing.md and summarised in the environment's own description.
+  pypi:
+    needs: [detect, rehearsal]
+    if: needs.detect.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/openstategraph/${{ needs.detect.outputs.version }}/
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - run: pip install --upgrade twine
+      - name: Refuse to republish a version that is already on PyPI
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://pypi.org/pypi/openstategraph/$VERSION/json")
+          if [ "$code" = "200" ]; then
+            echo "::error::openstategraph $VERSION is already on PyPI. It cannot be overwritten — yank and ship a patch. See docs/releasing.md."
+            exit 1
           fi
+          echo "PyPI does not have $VERSION yet (HTTP $code). Proceeding."
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "${TWINE_PASSWORD:-}" ] || { echo "::error::PYPI_API_TOKEN is not set"; exit 1; }
+          twine upload dist/*
+
+  # The release notes the owner asked about: the hand-written CHANGELOG section
+  # becomes the GitHub Release body, so the tag, the notes and the artefacts are
+  # one object people can link to.
+  github-release:
+    needs: [detect, pypi]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          python scripts/changelog_section.py "$VERSION" > /tmp/notes.md
+          {
+            echo
+            echo "---"
+            echo
+            echo "Install: \`pip install openstategraph==$VERSION\`"
+            echo "· [PyPI](https://pypi.org/project/openstategraph/$VERSION/)"
+            echo "· [full changelog](https://github.com/${{ github.repository }}/blob/v$VERSION/CHANGELOG.md)"
+          } >> /tmp/notes.md
+          gh release create "v$VERSION" dist/* \
+            --title "v$VERSION" --notes-file /tmp/notes.md
