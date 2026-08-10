@@ -55,17 +55,28 @@ def run_build(
       write stamps its owner, an in-run cross-builder collision and a
       stale-on-disk one are the same case.
     """
-    builders = BUILDERS
+    # Built-ins first, installed plugins after (ticket 05): builders run in
+    # order and every write stamps its owner, so the mechanical ladder claims
+    # its topics before anything a `pip install` added can, and a plugin that
+    # wants one anyway is refused as a collision rather than overwriting.
+    from openstategraph.extensions import entry_point_knowledge_builders
+
+    discovered = entry_point_knowledge_builders()
+    registered = list(BUILDERS) + list(discovered.values)
+
+    builders = registered
     if source is not None:
-        builders = [b for b in BUILDERS if b.source_kind == source]
+        builders = [b for b in registered if b.source_kind == source]
         if not builders:
-            known = ", ".join(sorted(b.source_kind for b in BUILDERS))
+            known = ", ".join(sorted(b.source_kind for b in registered))
             raise UnknownSourceError(f"Unknown knowledge source '{source}'. Known: {known}")
 
     written: list[str] = []
     skipped: list[str] = []
     collisions: list[str] = []
-    warnings: list[str] = []
+    # A plugin that could not load is a source this build silently did not
+    # consult; reporting it here is the same "degrade loud" rule as everywhere.
+    warnings: list[str] = list(discovered.warnings)
     sources: dict[str, dict[str, list[str]]] = {}
     for builder in builders:
         if isinstance(builder, AgenticKnowledgeBuilder):

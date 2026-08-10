@@ -33,8 +33,20 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, ToolResult
+from openstategraph.workflows_root import workflows_root
 
-OUTBOX = Path(__file__).resolve().parents[2] / "workflows" / "_outbox"
+
+def outbox() -> Path:
+    """Where a dry-run `.eml` is dropped: `<workflows root>/_outbox`.
+
+    A function, not a constant computed from `__file__`: inside an installed
+    wheel that constant resolved to `<venv>/lib/python3.13/workflows/_outbox`,
+    so an un-configured send would have quietly written the user's report into
+    their virtualenv (ticket 06's clean-venv proof). See
+    `openstategraph.workflows_root`.
+    """
+    return workflows_root() / "_outbox"
+
 
 _ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -60,7 +72,10 @@ class EmailSendTool(BaseTool):
 
     def __init__(self, to: str = "", outbox: Path | None = None) -> None:
         self._to = to
-        self._outbox = outbox or OUTBOX
+        # Kept as None rather than resolved here: the root is a per-call
+        # question, and a tool instance built at import time would freeze
+        # the answer before the process even knows where it is running.
+        self._outbox = outbox
 
     def configure(self, data: dict) -> "EmailSendTool":
         to = str(data.get("to") or "").strip()
@@ -99,15 +114,16 @@ class EmailSendTool(BaseTool):
         return ToolResult(content=f"Email sent to {self._to}: {message['Subject']}")
 
     def _dry_run(self, message: EmailMessage) -> ToolResult:
-        self._outbox.mkdir(parents=True, exist_ok=True)
+        drop = self._outbox or outbox()
+        drop.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
-        path = self._outbox / f"{stamp}.eml"
+        path = drop / f"{stamp}.eml"
         path.write_bytes(bytes(message))
         return ToolResult(
             content=(
                 f"DRY RUN — no SMTP configured (OPENSTATEGRAPH_SMTP_HOST unset). "
                 f"The complete email to {message['To']} was written to "
-                f"{path.relative_to(self._outbox.parents[1])} for review. "
+                f"{path.relative_to(drop.parents[1])} for review. "
                 "Tell the user delivery was a dry run."
             )
         )

@@ -39,19 +39,27 @@ dependencies = [
     "pydantic>=2.9,<3",
 ]
 
-# PROVISIONAL — this checkout has no configured git remote, so the canonical
-# host is not yet a fact. Pin these (and EXTENSION_NAMESPACE in
-# plugin_interop.py) before the first publish; ticket 06 owns that gate.
 # The console script (framework-packaging §3.2(a)) — argparse only, so it adds
 # nothing to the four-package floor above.
 [project.scripts]
 openstategraph = "openstategraph.cli:main"
 
+# PROVISIONAL, and deliberately un-mistakable. This checkout has no configured
+# git remote, so the canonical host is not a fact yet. The URLs below say
+# PLACEHOLDER — the same literal `site/index.html` uses — because a
+# plausible-looking `github.com/openstategraph/openstategraph` would ship a
+# dead link on the PyPI page and nobody would grep for it. Two owner steps
+# before the first publish, and ticket 06 owns the gate:
+#
+#   grep -rn PLACEHOLDER backend/pyproject.toml site/index.html
+#   pin EXTENSION_NAMESPACE in openstategraph/plugin_interop.py to a domain we
+#   actually control (it is the Agent Plugins v1 reverse-domain directory, not
+#   an entry-point group — those are pinned, see openstategraph/extensions.py)
 [project.urls]
-Homepage = "https://github.com/openstategraph/openstategraph"
-Repository = "https://github.com/openstategraph/openstategraph"
-Changelog = "https://github.com/openstategraph/openstategraph/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/openstategraph/openstategraph/blob/main/docs/adoption.md"
+Homepage = "https://github.com/PLACEHOLDER/openstategraph"
+Repository = "https://github.com/PLACEHOLDER/openstategraph"
+Changelog = "https://github.com/PLACEHOLDER/openstategraph/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/adoption.md"
 
 [project.optional-dependencies]
 # One provider per extra: `init_chat_model` resolves exactly the one the

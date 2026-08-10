@@ -29,6 +29,29 @@ We also inherit rather than reimplement: checkpointing, time travel,
 streaming are LangGraph's, not ours. **The compiler is not portable; the output
 is.**
 
+### Two ways in, and the checkout is only one of them
+
+This repository is the editor **and** the framework, and you do not need the
+first to use the second. From 0.3.0 the backend is a proper distribution — one
+wheel, a four-package core, seven named extras, `py.typed`, and an
+`openstategraph` console script:
+
+```bash
+pip install "openstategraph[ollama]"          # ← after the first PyPI release
+openstategraph run ./my-workflow "How many invoices are there?"
+```
+
+**That upload has not happened yet**, and this file will not print a command
+that silently fails, so until it does you install the identical artifact from a
+checkout: `pip install -e "backend[ollama]"`, or build the wheel with `python3
+-m build backend`. CI's `clean-install` job installs that wheel into an empty
+virtualenv **outside** this repository and runs a workflow there, so the path is
+verified rather than assumed. Measured footprint: **36 distributions** for the
+core, 38 with a provider.
+
+New here and deciding? [**What this is**](docs/what-is-this.md) states plainly
+what the framework owns, what it deliberately does not, and when not to use it.
+
 Phase 1 (this repo) is the editor: canvas, design system, MVC engine, and a
 pluggable provider layer that already runs workflows end to end. Phase 2 —
 now live alongside phase 1 — is the Python LangGraph/LangChain backend that
@@ -73,7 +96,7 @@ A workflow package is a folder. Running one needs neither the canvas nor the
 server:
 
 ```bash
-pip install -e "backend[ollama]"
+pip install -e "backend[ollama]"      # or the built wheel, from anywhere
 
 openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
 openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
@@ -256,6 +279,14 @@ edit to the engine.
 | A validation check | `IWorkflowRule` | none |
 | A canvas behaviour | `IPaperFeature` | none |
 | A bespoke card body | `NodeBody` | none |
+
+That table is the TypeScript half. On the Python side there is a further step
+that needs **no edit to this repository at all**: publish your own distribution
+declaring `[project.entry-points."openstategraph.tools"]`, and your tools
+register in every workflow the moment someone `pip install`s it — layered
+built-in < your plugin < the workflow's own `tools/`, jailed so a broken plugin
+warns and is skipped rather than taking the registry down. The exact stanza is
+in [Building an atom](docs/building-an-atom.md#publishing-an-atom-as-your-own-distribution).
 
 A node module is one file: model class, field schema, ports, executor. See
 [`nodes/tools/RedditSearchNode.ts`](src/nodes/tools/RedditSearchNode.ts) — a

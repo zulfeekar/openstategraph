@@ -218,7 +218,8 @@ reading before you build anything with an outward side effect:
 
 ## Part 3 — registration
 
-Three places, depending on what your atom is.
+Four places, depending on what your atom is — and only the first two are edits
+to this repository.
 
 **App-wide (in every workflow's palette).** Add the definition and executor to
 [`src/nodes/index.ts`](../src/nodes/index.ts) — the only file that knows the
@@ -244,8 +245,81 @@ it by importing the package and collecting `BaseTool` subclasses.
 frontend turns each capability into a connectable card generically. A
 discovered tool cannot run in the canvas preview — see honest refusal, above.
 
+**Published (your own distribution, no fork).** Ship the tool in a package of
+your own and declare an entry point. Anyone who `pip install`s it has your
+atom in every workflow they run — no edit to this repository, no merge to
+carry forever.
+
 Same-`node_type` collisions resolve workflow-wins, mirroring the frontend's
 local-shadows-global registry rule.
+
+### Publishing an atom as your own distribution
+
+The exact stanza, in **your** `pyproject.toml`:
+
+```toml
+[project]
+name = "openstategraph-acme"          # convention: openstategraph-<you>
+dependencies = ["openstategraph>=0.3"]
+
+[project.entry-points."openstategraph.tools"]
+acme = "acme_osg_tools:TOOLS"          # a list of BaseTool subclasses
+```
+
+The right-hand side may resolve to any of three things, because a plugin
+author should not have to guess which one we take:
+
+```python
+# acme_osg_tools/__init__.py
+from openstategraph.abc import BaseTool, NoArgs, ToolResult
+
+class Ping(BaseTool):
+    name = "acme_ping"
+    description = "Answers with a pong."
+    node_type = "tool.acme-ping"       # required: this IS the wiring identity
+    Args = NoArgs
+
+    def _execute(self, args) -> ToolResult:
+        return ToolResult(content="pong")
+
+TOOLS = [Ping]        # a list — or `= Ping`, or `= Ping()`. All three work.
+```
+
+A second group exists for the knowledge layer, with the same rules:
+
+```toml
+[project.entry-points."openstategraph.knowledge_builders"]
+acme = "acme_osg_knowledge:AcmeBuilder"   # an IKnowledgeBuilder concrete
+```
+
+Those two group names — `openstategraph.tools` and
+`openstategraph.knowledge_builders` — are **Tier 1**: they are covered by
+[the stability contract](stability.md) exactly like `load_workflow` is, because
+they live in *your* `pyproject.toml` and a rename would un-register your plugin
+silently, in your users' installs.
+
+**There is deliberately no `openstategraph.functions` group.** A `function.<x>`
+node binds a callable by the name written in the *document*, and the document
+belongs to the package; a distribution able to inject `function.format_report`
+process-wide would change what a package's own node resolves to, with nowhere
+in the document to name the provider or even see that one exists. A tool does
+not have that problem — it carries a namespaced `node_type` that is visible in
+the document. Functions stay package-local; if you want to publish one, publish
+a tool.
+
+**What you can count on when your plugin is installed:**
+
+| | |
+| --- | --- |
+| **Order** | built-in < your plugin < the workflow's own `tools/`. You may replace a bundled default — that is what installing a plugin is *for* — but a package's own tool always wins over whatever is in the venv. |
+| **Failure** | Your entry point loads in its own jail. If it raises, one WARNING naming **your distribution** is logged, the failure lands on `CompiledWorkflow.warnings`, and every other plugin still registers. One half-installed package never takes the registry down. |
+| **Silence** | A tool with no `node_type` is reported, not dropped — there would be nothing for a document to bind. |
+| **Opt-out** | `OPENSTATEGRAPH_DISABLE_PLUGINS=1` excludes every entry point, so a reproducible run never depends on a colleague's `pip install`. |
+| **Cost** | Nothing is enumerated at import. Discovery happens when a tool registry is built. |
+
+The TypeScript half is not distributable this way yet: a published atom is
+bindable by any document and runs in the compiled graph, but its *card* still
+has to be registered in the editor. That gap is real and recorded, not solved.
 
 ---
 

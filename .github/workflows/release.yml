@@ -1,0 +1,83 @@
+# Release — wayfinder ticket 06, framework-packaging §3.6.
+#
+# Triggered by a tag, and only by a tag:
+#
+#   v0.3.0rc1  ->  TestPyPI      (any tag containing rc/a/b)
+#   v0.3.0     ->  PyPI
+#
+# **A wheel that has not been installed from scratch does not get published.**
+# `publish` needs `clean-install`, which is the same script a developer runs
+# locally (`scripts/clean_install_proof.sh`): build, `twine check`, install
+# into an empty venv OUTSIDE the checkout, then drive the CLI and
+# `load_workflow` with cwd outside the repo and PYTHONPATH empty. Every defect
+# this gate exists for is invisible to `pytest` — a module not shipped, missing
+# package data, a path computed from `__file__` that resolves into
+# site-packages once installed.
+#
+# REQUIRED REPOSITORY SECRETS
+#   PYPI_API_TOKEN      a PyPI API token, scoped to the `openstategraph`
+#                       project once it exists (`pypi-…`).
+#   TEST_PYPI_API_TOKEN the same, from test.pypi.org. Optional: without it the
+#                       pre-release path fails loudly rather than silently
+#                       publishing somewhere unintended.
+#
+# Preferred successor, deliberately not adopted yet: **PyPI Trusted Publishing
+# (OIDC)**, which removes the long-lived token entirely. It cannot be
+# configured until the project exists on PyPI under a real repository, which is
+# the owner's pre-publish step — along with pinning `project.urls` and
+# `plugin_interop.EXTENSION_NAMESPACE`, both of which are still PLACEHOLDER.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  clean-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: scripts/clean_install_proof.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: backend/dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: clean-install
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - run: pip install --upgrade twine
+      - run: twine check dist/*
+      - name: Publish
+        env:
+          TWINE_USERNAME: __token__
+          TAG: ${{ github.ref_name }}
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # A pre-release tag never reaches PyPI. The test is on the tag, not
+          # on a workflow input, so the decision lives in the thing being
+          # released rather than in whoever clicked the button.
+          if printf '%s' "$TAG" | grep -Eq 'rc|a[0-9]+$|b[0-9]+$'; then
+            echo "Pre-release $TAG -> TestPyPI"
+            [ -n "${TEST_PYPI_API_TOKEN:-}" ] || { echo "TEST_PYPI_API_TOKEN is not set"; exit 1; }
+            TWINE_PASSWORD="$TEST_PYPI_API_TOKEN" \
+              twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+          else
+            echo "Release $TAG -> PyPI"
+            [ -n "${PYPI_API_TOKEN:-}" ] || { echo "PYPI_API_TOKEN is not set"; exit 1; }
+            TWINE_PASSWORD="$PYPI_API_TOKEN" twine upload dist/*
+          fi

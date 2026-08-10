@@ -16,7 +16,9 @@ This package's own import touches neither LangGraph, LangChain nor FastAPI.
 **Three tiers, and `__all__` here is the top one.**
 
 - **Tier 1, semver-public**: the names below, everything in
-  `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, and
+  `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`,
+  `openstategraph.extensions` (whose entry-point *group names* live in third
+  parties' own `pyproject.toml` files), and
   the `workflow.json` document format itself — which is more public than any
   Python symbol we ship, because a document written against schema version *N*
   must load on every release that claims to support *N*.

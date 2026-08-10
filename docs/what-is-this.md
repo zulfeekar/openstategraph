@@ -1,0 +1,199 @@
+# What OpenStateGraph is
+
+**A document format, a compiler for it, and the node semantics the compiler
+emits. Everything else — the canvas, the HTTP API, the MCP layer — is an
+optional surface over those three.**
+
+If you read one paragraph: you write a `workflow.json`, we compile it into a
+plain LangGraph `StateGraph`, and from that moment LangGraph owns execution.
+The graph is a standard Python object. It runs in your service, in pytest, in a
+Lambda, with none of our surfaces present.
+
+The honest framing of the whole trade is at the bottom of this page. It starts
+with **you take a dependency on us to get the format and the compiler; the
+alternative is hand-writing LangGraph.**
+
+---
+
+## The four layers, and who owns each
+
+| Layer | Owner |
+| --- | --- |
+| **The document format** — `workflow.json`: vendor-neutral, versioned, diffable in a pull request | **us**, entirely |
+| **The compiler** — document → `StateGraph`: ports, typed cycles, `Send` fan-out, reducer selection, subgraph mounting | **us** |
+| **Node and runtime semantics** — the `abc/` ladders, slot-table middleware order, the composed prompt (preamble / context / *your rules* / output contract), the state schema and its named reducers | **us** |
+| **Package conventions** — discovery of `tools/`, `functions/`, `middlewares/`, `skills/`, `knowledge/`, and the memory/checkpointer wiring | **us** |
+| **Optional surfaces** — the canvas editor, the HTTP API, `/chat`, the MCP layer | **us**, and all optional |
+| Graph execution, checkpointing, time travel, `interrupt()`, streaming, `Send`, reducer merging | **LangGraph** |
+| The agent loop, models, tools, messages, middleware | **LangChain** / `create_agent` |
+| The batteries-included harness | **deepagents**, and only when a node asks for it |
+| Provider SDKs, tracing backends, deployment | **not ours, ever** |
+
+## What needs us at run time, precisely
+
+This is the question adopters test first, so here is the exact answer in three
+parts rather than one slogan:
+
+- **`workflow.json` needs us.** It is our format. Nothing else reads it.
+- **The compiled graph does not.** It is a plain LangGraph object.
+  `CompiledWorkflow.graph` hands it over, and every LangGraph capability works
+  on it with nothing of ours in the call stack.
+- **A *package* needs us**, because `tools/`, `functions/`, `middlewares/`,
+  `skills/` and `knowledge/` are wired by *our* discovery conventions. That
+  wiring is the difference between a workflow that answers and one that looks
+  like it answers — compile the document by hand and the agent is drawn with
+  three tools, bound to none, and confidently answers from parametric memory.
+  `load_workflow` exists because of that specific failure, and it reports what
+  it could not resolve on `.warnings` rather than raising.
+
+---
+
+## What it adds over raw LangGraph
+
+Not "an easier `StateGraph`". LangGraph's API is already good. What you get is
+a different *artifact*, plus a set of decisions that are already correct on the
+things that bite in week three.
+
+**The graph becomes a reviewable diff.** A branch added to a router is four
+lines of JSON in a pull request, not a diff inside a thousand-line Python
+module where the topology is implied by call order. Non-authors can read it.
+
+**A visual editor, if you want one** — and an MCP layer if you would rather
+have your own LLM compose the document. Both are optional; neither is in the
+consumer's dependency path.
+
+**Semantics that are already right where they are easy to get wrong:**
+
+| | |
+| --- | --- |
+| `answer` carries a **named reducer**, not a bare field | a real fan-out scheduled two `answer`-writing nodes in one superstep and raised `InvalidUpdateError`; every single-writer test had passed |
+| **the output contract is locked and goes last** | a router whose editable prompt was pre-filled with the contract broke the moment anyone cleared it to write their own rules — so your rules shape the decision, ours keep the shape of the answer |
+| middleware is an ordered, **name-keyed slot table** | list position means three different things at once in LangChain (`before_*` forward, `after_*` reverse, `wrap_*` nested), so a single "priority" number expresses something that does not exist |
+| `draw_mermaid()`, never `draw_mermaid_png()` | the default posts your graph to a third-party API |
+| cycles are gated by **port type** | an accidental cycle stays inexpressible; the evaluator-optimizer loop is two clicks |
+| a missing tool is a **warning on the result**, never silence | the loudest failure mode in this domain is a workflow that answers well without the data it was drawn with |
+
+**A stability contract.** Three tiers, a signature-snapshot test, a versioned
+document schema with a migration chain, and a document newer than your build
+refused rather than best-effort compiled. See [stability.md](stability.md).
+
+## What it deliberately does not own
+
+- **An execution engine.** We compile to LangGraph and inherit checkpointing,
+  time travel, `interrupt()`, `Send`, reducer merging and streaming. Writing
+  our own would mean reimplementing all of it, and it is what makes the four
+  closed-system competitors closed systems.
+- **A second runtime target.** No `IOrchestrator` abstraction: no competing
+  framework accepts a serialisable graph, so the interface would be unbindable
+  rather than merely leaky. Portability is preserved in the *document* instead
+  — expressions are a JSON AST, reducers are a named enum, the compile seam is
+  one-directional, and no LangGraph type name leaks into `workflow.json`.
+- **Hosting.** The framework ships; deployment stays yours.
+- **Authentication for the MCP layer.** A stated gap, not a plan.
+- **Model and vector-store integrations.** Provider packages are extras and
+  `init_chat_model` resolves the one your `model` string names.
+- **A routing policy for teams already on `create_agent`.** The answer there is
+  `workflow.as_tool(...)`, not a middleware — middleware would have to decide
+  *when* to consult the workflow, which is a router, and a router is something
+  we already express as a document.
+
+---
+
+## The dependency picture, measured
+
+Not estimated. These are `pip list` counts from real clean virtualenvs built
+from the shipped wheel:
+
+| Install | Distributions besides ours |
+| --- | --- |
+| `pip install openstategraph` | **36** |
+| `pip install "openstategraph[ollama]"` | **38** |
+| the same tree before 0.3.0 | **79** |
+
+The core is exactly four declared dependencies — `langgraph`, `langchain`,
+`langchain-core`, `pydantic` — and our own wheel is ~217 KB. Everything else
+is behind an extra you ask for by name:
+
+```
+[anthropic] [openai] [ollama]   one provider — you need exactly one
+[deep]                          only a document with an agent.deep node
+[sqlite]                        durable threads (settings.checkpointer)
+[server]                        the editor's HTTP API — never on your path
+[mcp]                           the MCP transport
+[all]                           everything, for a checkout
+```
+
+`langgraph` and `langchain` stay in the **core** rather than behind a
+`[langchain]` extra, unlike some comparable projects. Ours cannot be
+framework-agnostic and pretending otherwise would be the dishonesty this
+project exists to avoid.
+
+Read the list the way a sceptic does: of those 36, essentially all are
+LangChain's and LangGraph's own closure — which you would have installed anyway,
+because the alternative to using us is writing the `StateGraph` by hand.
+
+**A test keeps this honest.** `backend/tests/test_distribution_metadata.py`
+asserts the unconditional requirements are exactly those four and that every
+other package appears only under an `extra ==` marker; a subprocess test asserts
+`load_workflow` leaves `fastapi`, `uvicorn`, `deepagents` and `mcp` out of
+`sys.modules`; and CI's `clean-install` job installs the built wheel into an
+empty venv outside the checkout and runs a workflow there.
+
+---
+
+## The escape hatches
+
+The point of listing these is that you should be able to leave.
+
+```python
+from openstategraph import load_workflow
+
+workflow = load_workflow("workflows/my-thing")
+graph = workflow.graph      # a plain compiled LangGraph StateGraph
+```
+
+- **`.graph` is complete.** No proprietary object stands between you and
+  LangGraph: `.stream()`, `.astream_events()`, `.get_state()`, `.invoke()`,
+  interrupt and resume, your own checkpointer. Nothing is wrapped, because
+  wrapping it would be the beginning of the execution engine we refuse to
+  write.
+- **`workflow.json` is documented, versioned and migrated**, and it is yours —
+  it lives in your repository, not in a database we control.
+- **`.warnings` tells you what did not wire**, so a degraded workflow is a
+  visible fact rather than a subtly worse answer.
+- **`as_tool()`** hands the whole workflow to an agent you already have, as one
+  LangChain `StructuredTool`.
+- **MIT**, and `requires_dist` is short enough to read in full.
+
+---
+
+## The honest trade
+
+**What you buy.** A graph that is a JSON diff rather than a module. An editor,
+if you want one. The semantics table above — every row of it is a bug someone
+hits in week three of hand-writing LangGraph.
+
+**What you pay.** A pre-1.0 dependency from a small project, on your production
+path. Our conventions: package layout, slugs, discovery rules, schema version,
+release cadence. And a real ceiling — anything our node vocabulary cannot
+express you write as a `CustomGraphNode` or drop to `.graph`, and at that point
+you are hand-writing LangGraph with extra steps.
+
+**When not to use us.** One agent and three tools: use `create_agent`
+directly. A graph whose shape is genuinely bespoke: use LangGraph directly. We
+are worth it when there are *several* workflows, when people who did not write
+them need to read them, or when the graph changes more often than the code
+around it.
+
+Saying that first is roughly the difference between a framework and a wrapper.
+
+---
+
+## Where to go next
+
+| | |
+| --- | --- |
+| [Using it in your project](adoption.md) | the three consumption modes, with exact commands |
+| [The stability contract](stability.md) | what is public, what can be taken away, and the deprecation policy |
+| [Patterns](patterns.md) | the seven arrangements, mapped to our node vocabulary |
+| [Building an atom](building-an-atom.md) | add a tool — including publishing one as your own distribution |

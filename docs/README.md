@@ -27,11 +27,13 @@ agent is a configured model; the patterns are how you arrange several of them.
 
 | Page | What it answers |
 | --- | --- |
+| [**What this is**](what-is-this.md) | Start here if you are deciding. Format + compiler + runtime semantics + optional surfaces; what it adds over raw LangGraph and what it deliberately does not own; the measured dependency picture (36 distributions); the escape hatches; and when *not* to use it. |
 | [**Getting started**](getting-started.md) | You cloned it — now what? Checkout → `./start dev` → run Store Analytics → ask it something in `/chat`. Prerequisites, model credentials, and the two value journeys (developer, end user). |
 | [**Using it in your project**](adoption.md) | The fine-day question. The three consumption modes — fork/checkout, artifact, MCP — with exact commands, the upgrade friction stated honestly, what artifacts you own, and the draft → Publish → `/chat` story. |
 | [**The MCP layer**](mcp.md) | Point your own LLM client at it and have *it* compose the graph. Client config, a worked transcript with a document that genuinely validates, the `compile_workflow` response shape, and why the client renders the compiled Mermaid as a diagram locally. |
 | [**Patterns**](patterns.md) | The seven arrangements — augmented LLM, prompt chaining, routing, parallelization, orchestrator-worker, evaluator-optimizer, agent — each mapped to our node vocabulary, with selection criteria and a diagram. |
 | [**Building an atom**](building-an-atom.md) | The walkthrough. Anatomy of a node definition, the Python half, registration, the TDD loop and the five gates, and a complete worked example in ~60 lines. |
+| [**The stability contract**](stability.md) | If I import it, can it be taken away from me? The three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules. |
 | [**Ports and edges**](ports-and-edges.md) | Reference. Port types, cardinality, edge categories, why `feedback` is the only cycle-closer, and the colour/dash legend that matches the canvas. |
 
 ## Where the rest lives

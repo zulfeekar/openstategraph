@@ -29,15 +29,22 @@ import pytest
 import openstategraph
 import openstategraph.abc
 import openstategraph.errors
+import openstategraph.extensions
 import openstategraph.schema
 
 SNAPSHOT = Path(__file__).resolve().parent / "public_api.txt"
 
 #: Every module whose `__all__` is a promise. Nothing else is.
+#:
+#: `extensions` is here because its *group name strings* are the most
+#: irreversible thing this framework publishes: they live in a third party's
+#: own `pyproject.toml`, so a rename un-registers every plugin ever shipped
+#: against them and does it silently, in their users' installs, not ours.
 PUBLIC_MODULES = (
     openstategraph,
     openstategraph.abc,
     openstategraph.errors,
+    openstategraph.extensions,
     openstategraph.schema,
 )
 

@@ -28,12 +28,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-#: `workflows/<slug>/` sits at the repo root, the same as the seeded
-#: `chinook-nl-to-sql` workflow — not inside the `backend/` package (ticket 12:
-#: Python-package code and authored-workflow content are different things
-#: with different owners and different lifecycles).
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_WORKFLOWS_ROOT = _REPO_ROOT / "workflows"
+# `workflows/<slug>/` sits at the repo root, the same as the seeded
+# `chinook-nl-to-sql` workflow — not inside the `backend/` package (ticket 12:
+# Python-package code and authored-workflow content are different things with
+# different owners and different lifecycles). *Which* root that is, for a
+# process that may be an installed wheel rather than this checkout, is
+# `openstategraph.workflows_root`'s one job — see its docstring for what a
+# constant frozen at import time cost.
+from openstategraph.workflows_root import workflows_root
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -86,8 +88,11 @@ class WorkflowStore:
     already follow.
     """
 
-    def __init__(self, root: Path | None = None) -> None:
-        self.root = root or DEFAULT_WORKFLOWS_ROOT
+    def __init__(self, root: Path | str | None = None) -> None:
+        # `Path(root)`, not `root`, because a caller with a string root used to
+        # get a `TypeError: unsupported operand type(s) for /: 'str' and 'str'`
+        # from `directory_for` — one call later, in a different module.
+        self.root = Path(root) if root else workflows_root()
 
     def directory_for(self, slug: str) -> Path:
         """The validated, resolved directory a slug maps to.

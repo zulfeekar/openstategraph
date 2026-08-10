@@ -39,8 +39,16 @@ class WorkflowServices:
         #: every run, namespaced per user inside the tools themselves.
         self.memory_store = build_store()
 
-    def tool_registry_for(self, slug: str | None, *, knowledge_dir: Any = None) -> dict[str, Any]:
-        return build_tool_registry(self.store, slug, knowledge_dir=knowledge_dir)
+    def tool_registry_for(
+        self,
+        slug: str | None,
+        *,
+        knowledge_dir: Any = None,
+        warnings: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return build_tool_registry(
+            self.store, slug, knowledge_dir=knowledge_dir, warnings=warnings
+        )
 
     def runtime_for(
         self,
@@ -50,6 +58,7 @@ class WorkflowServices:
         *,
         advisor: bool = False,
         knowledge_dir: Any = None,
+        warnings: list[str] | None = None,
     ) -> Any:
         """One NodeRuntime construction shared by run/stream/resume — and now
         by MCP — so the call sites can never disagree about capabilities again.
@@ -79,7 +88,10 @@ class WorkflowServices:
         # `sys.modules`), so calling it twice — as the `advisor=True` path did,
         # once for `tools` and again for `advisor_catalog` — re-executed every
         # tool module of the open package on every editor run.
-        tools = self.tool_registry_for(slug, knowledge_dir=knowledge_dir)
+        # `warnings` is the plugin-failure sink (ticket 05): an entry point that
+        # could not load is a *process*-level fact with no NodeRuntime field to
+        # live on, so the caller that reports capability warnings passes a list.
+        tools = self.tool_registry_for(slug, knowledge_dir=knowledge_dir, warnings=warnings)
         store = self.store
 
         return NodeRuntime(

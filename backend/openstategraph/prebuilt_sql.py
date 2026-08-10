@@ -21,18 +21,25 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.workflows_root import workflows_root
 
-WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
 DEFAULT_MAX_ROWS = 200
 
 
 def _resolve_database(configured: str) -> Path | None:
-    """The configured path, jailed to workflows/. None means refused."""
+    """The configured path, jailed to workflows/. None means refused.
+
+    The root is resolved per call (`openstategraph.workflows_root`), never
+    frozen at import: a module constant computed from `__file__` points inside
+    site-packages once this is an installed wheel, and every configured
+    database path would be refused for a reason nobody could see.
+    """
     if not configured.strip():
         return None
-    candidate = (WORKFLOWS_ROOT / configured.strip()).resolve()
+    root = workflows_root()
+    candidate = (root / configured.strip()).resolve()
     try:
-        candidate.relative_to(WORKFLOWS_ROOT)
+        candidate.relative_to(root)
     except ValueError:
         return None
     return candidate if candidate.is_file() else None

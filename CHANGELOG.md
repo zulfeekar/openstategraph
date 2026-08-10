@@ -75,15 +75,60 @@ finally read by code. Wayfinder tickets 02–04;
   `scripts/` so it ships in the wheel. `scripts/new_workflow.py` and
   `scripts/new_team.py` keep their exact command lines and now call it, which
   is what stops `openstategraph new` from becoming a second copy that drifts.
+- **`openstategraph.extensions`** — extension without forking (ticket 05). A
+  third party ships their own distribution with
+  `[project.entry-points."openstategraph.tools"]` (or
+  `"openstategraph.knowledge_builders"`) and their tools register on install,
+  with no edit to this repository. Layered as a third discovery source under
+  the two that existed: **built-in < third-party < workflow-local**, so a
+  plugin may replace a bundled default and a package's own `tools/` still wins
+  over anything in the venv. Every entry point loads in its own jail — a
+  failure logs one WARNING **naming the distribution**, lands on
+  `CompiledWorkflow.warnings`, and never stops the other plugins. Nothing is
+  enumerated at import time, and `OPENSTATEGRAPH_DISABLE_PLUGINS=1` switches
+  the whole mechanism off for a reproducible run. There is deliberately **no**
+  `openstategraph.functions` group — see `docs/building-an-atom.md`.
+- **`docs/what-is-this.md`** — the positioning page. What OpenStateGraph is
+  (a document format, a compiler for it, and the node semantics it emits —
+  with the canvas, HTTP API and MCP layer as *optional surfaces*), what it adds
+  over raw LangGraph, what it deliberately does not own, the dependency picture
+  measured rather than estimated, the escape hatches, and when not to use it at
+  all. The site, the README and `docs/adoption.md` no longer imply the checkout
+  is the only path.
 - **`docs/stability.md`** — the three tiers, what is deliberately not public,
   and the deprecation policy. Pre-1.0, a breaking change bumps the **minor**,
   never the patch.
+- **A release pipeline with a gate that cannot be waved through.**
+  `scripts/clean_install_proof.sh` builds the wheel and sdist, runs `twine
+  check`, installs into an **empty venv outside the checkout**, and drives the
+  CLI and `load_workflow` with `cwd` outside the repository and `PYTHONPATH`
+  empty. It runs on every pull request (`clean-install` in CI) and gates
+  publication: `.github/workflows/release.yml` publishes on a `v*` tag —
+  pre-release tags to TestPyPI, final tags to PyPI — and `publish` **needs**
+  the proof. Required repository secrets: `PYPI_API_TOKEN`, and
+  `TEST_PYPI_API_TOKEN` for pre-releases.
 - **`py.typed`** (PEP 561), `backend/LICENSE`, `backend/README.md`,
   classifiers, project URLs and a `[build-system]` table — the wheel had none
   of these.
 
 ### Fixed
 
+- **Four modules resolved the workflows root inside the virtualenv once
+  installed.** Each computed `Path(__file__).resolve().parents[N] /
+  "workflows"`, which is the repository only while the file sits in a
+  checkout; from a wheel it is `<venv>/lib/python3.13/workflows`. The symptom
+  was not a crash — `platform_list_workflows` answered **"No workflows exist
+  yet."** with the adopter's packages in their project directory, every
+  `tool.sql-*` database path was refused, and an un-configured
+  `tool.email-send` dry run wrote the user's report into their virtualenv. New
+  `openstategraph.workflows_root` answers the question once, **per call**:
+  `OPENSTATEGRAPH_WORKFLOWS_ROOT`, else the checkout (so every in-tree
+  behaviour is byte-identical), else `./workflows` — which is where
+  `openstategraph new` already writes. Found by the clean-venv proof, which no
+  amount of green test suite could have replaced.
+- **`WorkflowStore(root="…")` with a string root** raised `TypeError:
+  unsupported operand type(s) for /: 'str' and 'str'` one call later, in
+  another module. The root is coerced to a `Path`.
 - **`settings.checkpointer: "sqlite"` degraded silently to in-memory** in every
   install that existed, because `langgraph-checkpoint-sqlite` was imported but
   never declared and is not a transitive of `langgraph`. A user who asked for

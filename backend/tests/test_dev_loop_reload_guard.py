@@ -50,9 +50,9 @@ class TestReloadExcludesTheRuntimesOwnOutput:
     def test_the_email_outbox_lives_inside_a_reload_dir(self) -> None:
         """The premise of the whole guard — if this ever stops being true the
         exclusions below are dead weight and should be re-argued, not kept."""
-        from openstategraph.prebuilt_email import OUTBOX
+        from openstategraph.prebuilt_email import outbox
 
-        assert OUTBOX.is_relative_to(ROOT / "workflows"), (
+        assert outbox().is_relative_to(ROOT / "workflows"), (
             "prebuilt_email.OUTBOX moved; re-derive which --reload-dir it now "
             "sits under (or whether it needs excluding at all)"
         )

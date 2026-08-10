@@ -11,7 +11,7 @@ This page answers one question: *if I import it, can it be taken away from me?*
 
 | Tier | Where | Promise |
 | --- | --- | --- |
-| **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, the `openstategraph` **command line**, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
+| **1 — public** | `openstategraph.__all__`, `openstategraph.abc`, `openstategraph.errors`, `openstategraph.schema`, `openstategraph.extensions` (the entry-point **group names**), the `openstategraph` **command line**, and the `workflow.json` schema itself | Covered by the deprecation policy below. Changes are announced, shimmed, and visible in `CHANGELOG.md`. |
 | **2 — provisional** | `openstategraph.compile`, `.knowledge*`, `.plugin_interop`, `.prebuilt_*`, `.memory`, `.readable_tree`, `.scaffold`, `.cli` | Importable and documented. May change in a **minor** release with a changelog note. No deprecation window. |
 | **3 — internal** | `openstategraph.api.*`, `openstategraph.mcp_server`, and any `_`-prefixed name anywhere | No guarantee at all. May be renamed, split or deleted in a **patch**. These are surfaces we operate, not libraries you build on. |
 
@@ -40,7 +40,22 @@ from openstategraph.schema import (
     SCHEMA_VERSION, MIN_SUPPORTED_VERSION, MIGRATIONS, Migration,
     normalize_document, migrate_document, document_version,
 )
+from openstategraph.extensions import (
+    TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, ENTRY_POINT_GROUPS,
+    DISABLE_PLUGINS_ENV, Discovered,
+    entry_point_tools, entry_point_knowledge_builders, plugins_enabled,
+)
 ```
+
+### The entry-point group names are the least reversible thing here
+
+`"openstategraph.tools"` and `"openstategraph.knowledge_builders"` are written
+into a **third party's** `pyproject.toml`. Renaming one does not break a build
+or raise an import error — it silently stops their plugin from registering, in
+their users' installs, and the first symptom is a workflow that answers less
+well than it looks. So the strings are pinned by a test that asserts the
+literals, not merely their existence, and they move only under the deprecation
+policy below (both groups read for at least one minor release).
 
 `backend/tests/public_api.txt` is the machine-readable form, and
 `backend/tests/test_public_api.py` fails when it drifts. That is deliberately a
@@ -76,8 +91,9 @@ statement. In short:
   `discover_function_callables`. Extension is a supported *seam*, not a
   reachable object: subclass the ladders in `openstategraph.abc`, and publish
   `[project.entry-points."openstategraph.tools"]` from your own distribution
-  (ticket 05). If you find yourself importing a registry in order to extend the
-  framework, that is a missing entry-point group — please report it.
+  (see [Building an atom](building-an-atom.md#publishing-an-atom-as-your-own-distribution)).
+  If you find yourself importing a registry in order to extend the framework,
+  that is a missing entry-point group — please report it.
 - **`openstategraph.api.main:app`.** Use `openstategraph serve` — the console
   script is the supported way to mount the HTTP server, and the import path
   behind it stays Tier 3 and free to move.

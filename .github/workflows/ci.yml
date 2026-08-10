@@ -26,6 +26,21 @@ jobs:
       # Coverage ratchet: backend sits at 91% (2026-08-09); fail-under
       # guards regressions, raised as it climbs. Live-API tests stay opt-in.
       - run: python -m pytest -q --cov=backend/openstategraph --cov-fail-under=85
+  # The proof a green test suite cannot give (framework-packaging §3.6): build
+  # the wheel, install it in an EMPTY venv outside the checkout, and drive it
+  # with cwd outside the repo and PYTHONPATH empty. `pytest.ini` puts a
+  # workflow's tools on sys.path in-tree, so `backend` passing says nothing
+  # about what an adopter gets — and the defects this catches are silent ones
+  # (a module not shipped, package data missing, a path computed from
+  # `__file__` that resolves into site-packages once installed).
+  clean-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: scripts/clean_install_proof.sh
+
   # Docs freshness: code changes should carry their documentation. Pure
   # git + bash, no dependencies. Escape hatch: `docs: not-needed` in any
   # commit message in the PR.

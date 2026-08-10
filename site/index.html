@@ -458,6 +458,47 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
         <code>Send</code> fan-out, reducer merging and token streaming are inherited from
         LangGraph — never reimplemented. <strong>The compiler is not portable; the output is.</strong>
       </p>
+
+      <div class="grid cols-2" style="margin-top:1.5rem">
+        <div class="card">
+          <h3>It is a framework, not just an editor</h3>
+          <p>
+            One wheel: a document format, a compiler for it, and the node semantics the compiler
+            emits. The canvas, the HTTP API and the MCP layer are <em>optional surfaces</em> over
+            those three — none of them is on the path of a workflow running in your service.
+          </p>
+          <div class="codeblock" style="margin-top:.75rem">
+            <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> pip install <span class="s">"openstategraph[ollama]"</span>
+<span class="p">$</span> openstategraph run ./my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
+          </div>
+          <p class="muted" style="margin-top:.75rem; font-size:.875rem">
+            <b>Not on PyPI yet</b> — the wheel is built and CI installs it into an empty
+            virtualenv outside the repository on every pull request, but the upload has not
+            happened. Until it does, the same artifact comes from a checkout:
+            <code>pip install -e "backend[ollama]"</code>.
+          </p>
+        </div>
+        <div class="card">
+          <h3>A dependency list short enough to read</h3>
+          <p>
+            The core is four declared packages — <code>langgraph</code>, <code>langchain</code>,
+            <code>langchain-core</code>, <code>pydantic</code> — resolving to <b>36
+            distributions</b>, measured in a clean virtualenv. Everything else is an extra you ask
+            for by name: a provider, <code>[deep]</code>, <code>[sqlite]</code>,
+            <code>[server]</code>, <code>[mcp]</code>.
+          </p>
+          <p>
+            You never install a web server to run a graph in your own process. A test asserts
+            <code>load_workflow</code> leaves <code>fastapi</code>, <code>uvicorn</code>,
+            <code>deepagents</code> and <code>mcp</code> out of <code>sys.modules</code>
+            entirely.
+          </p>
+          <p style="margin-top:.75rem">
+            <a href="./docs/what-is-this.md">What this is, in full →</a>
+          </p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -719,9 +760,40 @@ result = app.<span class="f">invoke</span>(
           <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> if you have one. Nothing runs
           locally on your GPU; nothing is required to open the editor.
         </p>
+        <p>
+          <b>Only want to run a workflow?</b> Then you want the framework, not the checkout, and it
+          is two lines — step&nbsp;0. The clone is for the canvas.
+        </p>
       </div>
 
       <ol class="steps">
+        <li>
+          <h3>Step 0 — or skip the clone entirely</h3>
+          <p>
+            A workflow package is a folder with a <code>workflow.json</code> in it. Running one
+            needs neither the canvas nor a server — just the wheel and one command. Exit codes are
+            fixed (<code>0</code> ok, <code>1</code> failure, <code>2</code> usage, <code>3</code> a
+            missing extra), so <code>validate</code> works as a CI gate.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> pip install <span class="s">"openstategraph[ollama]"</span>
+<span class="p">$</span> openstategraph new my-workflow
+<span class="p">$</span> openstategraph validate ./workflows/my-workflow
+<span class="p">$</span> openstategraph run ./workflows/my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
+          </div>
+          <div class="callout callout-info">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>
+              <b>The PyPI upload has not happened yet.</b> The wheel is built and verified — CI
+              installs it into an empty virtualenv outside the repository and runs a workflow there
+              on every pull request — but this page will not pretend a command works before it
+              does. Until the first release, the identical artifact comes from a checkout:
+              <code>pip install -e "backend[ollama]"</code>, and everything below is unchanged.
+            </span>
+          </div>
+        </li>
+
         <li>
           <h3>Clone the repository</h3>
           <p>Everything — editor, runtime, example workflows and their sample database — is in this one tree.</p>
@@ -774,8 +846,8 @@ result = app.<span class="f">invoke</span>(
           <div class="codeblock">
             <div class="pane-bar">terminal · or run the same graph without the editor</div>
 <pre><code><span class="p">$</span> python -m pytest workflows/page-analytics
-<span class="p">$</span> PYTHONPATH=backend python -c <span class="s">"from openstategraph.compile import compile_workflow; \
-print(compile_workflow('workflows/page-analytics').compile().get_graph(xray=True).draw_mermaid())"</span></code></pre>
+<span class="p">$</span> openstategraph graph ./workflows/page-analytics   <span class="c"># Mermaid text, no network call</span>
+<span class="p">$</span> openstategraph run ./workflows/page-analytics <span class="s">"Revenue by genre?"</span></code></pre>
           </div>
           <div class="callout callout-tip">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
@@ -904,13 +976,22 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Documentation</span>
-        <h2>Six questions, six places to look</h2>
+        <h2>Seven questions, seven places to look</h2>
         <p>
           The deep material lives in the repository, next to the code it describes — so it is
           reviewed like code and cannot quietly drift. These are the entry points.
         </p>
       </div>
       <div class="grid cols-3">
+        <div class="card">
+          <h3>What this actually is</h3>
+          <p>
+            Start here if you are deciding. Format + compiler + runtime semantics + optional
+            surfaces; what it adds over raw LangGraph, what it refuses to own, the measured
+            dependency picture, and when <em>not</em> to use it.
+          </p>
+          <p style="margin-top:.75rem"><a href="./docs/what-is-this.md">docs/what-is-this.md &rarr;</a></p>
+        </div>
         <div class="card">
           <h3>How to start</h3>
           <p>
@@ -976,7 +1057,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">FAQ</span>
-        <h2>The nine questions people actually ask</h2>
+        <h2>The ten questions people actually ask</h2>
         <p>
           Short answers, with the long version in the repository. If one of these is wrong or
           missing, that is a documentation bug — open an issue.
@@ -1022,8 +1103,47 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             </p>
             <p>
               The three ways to consume it — fork/checkout, artifact, MCP — are written up with
-              exact commands in <a href="./docs/adoption.md">docs/adoption.md</a>, including the
-              honest note that there is no PyPI wheel yet.
+              exact commands in <a href="./docs/adoption.md">docs/adoption.md</a>.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Do I need OpenStateGraph installed to run my workflow?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              <b>Yes, and the honest answer has three parts</b> — because people test this claim,
+              and one slogan would be wrong in at least one of them.
+            </p>
+            <p>
+              <b><code>workflow.json</code> needs us.</b> It is our format; nothing else reads it.
+              <b>A <em>package</em> needs us</b> too, because <code>tools/</code>,
+              <code>functions/</code>, <code>middlewares/</code>, <code>skills/</code> and
+              <code>knowledge/</code> are wired by our discovery conventions — and that wiring is
+              the difference between a workflow that answers and one that only looks like it does.
+              Compile the document by hand and the agent is drawn with three tools, bound to none,
+              and answers confidently from memory instead of from your database.
+              <code>load_workflow</code> exists because of exactly that failure, and it reports
+              whatever it could not resolve on <code>.warnings</code>.
+            </p>
+            <p>
+              <b>The compiled graph does not need us.</b> <code>workflow.graph</code> is a plain
+              LangGraph <code>StateGraph</code> — <code>.stream()</code>,
+              <code>.astream_events()</code>, <code>.get_state()</code>, interrupt and resume, your
+              own checkpointer — with nothing of ours in the call stack. So the dependency buys you
+              the format, the compiler and the package conventions; it is not a runtime tax, and
+              there is a full escape hatch with no proprietary object in the way.
+            </p>
+            <p>
+              Footprint, measured in a clean virtualenv rather than estimated: <b>36
+              distributions</b> for the core, 38 with a provider — essentially all of them
+              LangChain's and LangGraph's own closure, which you would install anyway to write the
+              <code>StateGraph</code> by hand. The long version, including what we deliberately do
+              <em>not</em> own and when not to use us at all, is in
+              <a href="./docs/what-is-this.md">docs/what-is-this.md</a>.
             </p>
           </div>
         </details>

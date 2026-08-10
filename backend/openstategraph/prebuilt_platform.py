@@ -18,16 +18,20 @@ from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.readable_tree import admitted_files
+from openstategraph.workflows_root import content_root, workflows_root
 
-WORKFLOWS_ROOT = Path(__file__).resolve().parent.parent.parent / "workflows"
+# Both roots are resolved **per call**, never frozen at import: a constant
+# computed from `__file__` is the repository only while this file is inside
+# one, and inside an installed wheel it is `<venv>/lib/.../workflows`. That is
+# what made `platform_list_workflows` answer "No workflows exist yet." in a
+# clean venv with the adopter's packages sitting right there (ticket 06).
 
 
 def _packages() -> list[Path]:
-    if not WORKFLOWS_ROOT.is_dir():
+    root = workflows_root()
+    if not root.is_dir():
         return []
-    return sorted(
-        entry for entry in WORKFLOWS_ROOT.iterdir() if (entry / "workflow.json").is_file()
-    )
+    return sorted(entry for entry in root.iterdir() if (entry / "workflow.json").is_file())
 
 
 def _envelope(package: Path) -> dict[str, Any]:
@@ -111,10 +115,11 @@ class DescribeWorkflowTool(BaseTool):
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, DescribeWorkflowArgs)
         slug = args.slug.strip().strip("/")
-        package = WORKFLOWS_ROOT / slug
+        root = workflows_root()
+        package = root / slug
         # Resolve + containment check: the slug is model-supplied input.
         if (
-            not package.resolve().is_relative_to(WORKFLOWS_ROOT)
+            not package.resolve().is_relative_to(root)
             or not (package / "workflow.json").is_file()
         ):
             known = ", ".join(p.name for p in _packages())
@@ -141,7 +146,10 @@ class DescribeWorkflowTool(BaseTool):
 
 # --- read-only filesystem tools: everything readable, nothing writable ---- #
 
-REPO_ROOT = WORKFLOWS_ROOT.parent
+#: The read jail: one level above the packages — the repository in a checkout,
+#: the adopter's own project directory in an installed wheel. Never the
+#: interpreter's `lib/`, which is what `WORKFLOWS_ROOT.parent` used to resolve
+#: to and would have handed an agent a grep over site-packages.
 #: Never descended into: bulk, caches, VCS internals — noise, not knowledge.
 EXCLUDED_DIRS = {".git", "node_modules", ".venv", "venv", ".dev", "__pycache__",
                  "dist", "coverage", ".pytest_cache", "graphify-out"}
@@ -151,7 +159,7 @@ MAX_MATCHES = 60
 
 def _inside_repo(path: Path) -> bool:
     try:
-        return path.resolve().is_relative_to(REPO_ROOT)
+        return path.resolve().is_relative_to(content_root())
     except OSError:
         return False
 
@@ -189,8 +197,9 @@ class PlatformLsTool(BaseTool):
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, LsArgs)
-        target = (REPO_ROOT / args.path.strip().lstrip("/")).resolve()
-        if not _inside_repo(target) or _excluded(target.relative_to(REPO_ROOT)):
+        repo_root = content_root()
+        target = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(target) or _excluded(target.relative_to(repo_root)):
             return ToolResult.failure(f"'{args.path}' is outside the readable area.")
         if not target.is_dir():
             return ToolResult.failure(f"'{args.path}' is not a directory.")
@@ -220,8 +229,9 @@ class PlatformReadTool(BaseTool):
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, ReadArgs)
-        target = (REPO_ROOT / args.path.strip().lstrip("/")).resolve()
-        if not _inside_repo(target) or _excluded(target.relative_to(REPO_ROOT)):
+        repo_root = content_root()
+        target = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(target) or _excluded(target.relative_to(repo_root)):
             return ToolResult.failure(f"'{args.path}' is outside the readable area.")
         if not target.is_file():
             return ToolResult.failure(f"'{args.path}' is not a file.")
@@ -254,15 +264,16 @@ class PlatformGrepTool(BaseTool):
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, GrepArgs)
-        root = (REPO_ROOT / args.path.strip().lstrip("/")).resolve()
-        if not _inside_repo(root) or _excluded(root.relative_to(REPO_ROOT)):
+        repo_root = content_root()
+        root = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(root) or _excluded(root.relative_to(repo_root)):
             return ToolResult.failure(f"'{args.path}' is outside the readable area.")
         needle = args.pattern.strip().lower()
         if not needle:
             return ToolResult.failure("Give a non-empty pattern.")
         matches: list[str] = []
         for path in _admitted_files(root):
-            rel = path.relative_to(REPO_ROOT)
+            rel = path.relative_to(repo_root)
             if path.stat().st_size > 400_000:
                 continue
             if path.suffix in {".sqlite", ".png", ".pdf", ".ico", ".lock"}:

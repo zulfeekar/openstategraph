@@ -13,12 +13,21 @@ deliberately; mixing them is where confusion starts.
 | Your workflow lives in | `workflows/<slug>/` **in your fork** | your own repo | your own repo |
 | Who authors the graph | you, on the canvas | you, once, anywhere | your own LLM client |
 | Upgrading | `git merge upstream` | bump the runtime you vendored | restart the server |
-| Maturity | **primary today** | works, packaging still manual | works, no auth layer |
+| Maturity | mature | **a built wheel + a CLI; the PyPI upload is pending** | works, no auth layer |
 
 > **One honest framing before any of them.** OpenStateGraph is a *compiler*,
 > not a runtime. Whatever route you take, the thing you end up owning is a
 > plain LangGraph `StateGraph` and a folder of ordinary files. The editor is an
 > authoring tool, not a dependency of what you author.
+> [What this is](what-is-this.md) is the longer version, including what we
+> deliberately do not own and when not to use us at all.
+
+**The checkout is no longer the only path.** It was, before 0.3.0, and much of
+this page was written then. Today the backend is a distribution: one wheel, a
+four-package core, seven extras, `py.typed`, and an `openstategraph` console
+script — verified by a CI job that installs it into an empty virtualenv outside
+the checkout and runs a workflow there. Mode (b) is a first-class path; what is
+still outstanding is one `twine upload`, and this page says exactly where.
 
 ---
 
@@ -313,32 +322,42 @@ needed if you run the MCP transport.
 
 ### Be honest about the install
 
-**There is no PyPI package yet.** You cannot `pip install openstategraph`
-today, and this page will not print a command that fails. The runtime is
-consumed one of two ways right now:
+**The wheel is real; the PyPI upload has not happened yet.** From 0.3.0 the
+backend is a proper distribution — `hatchling`, `LICENSE`, `py.typed`,
+classifiers, a console script, a lean core and seven extras — built, `twine
+check`-clean, and proven by CI's `clean-install` job, which installs it into an
+empty virtualenv **outside** the checkout and runs a workflow there. What is
+outstanding is one `twine upload` by the maintainer. So the command that will
+be the headline is written here as the shape it takes, clearly flagged:
 
 ```bash
-# A checkout of the backend, installed into your environment. The extras are
-# the install story: the core is four packages, and you add only what your
-# workflow uses — [anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp],
-# or [all] for the lot.
+pip install "openstategraph[ollama]"     # ← after the first release
+```
+
+Until that tag ships, install exactly the same artifact from a checkout:
+
+```bash
+# Build the wheel and install it anywhere — this is the artifact CI verifies.
+python3 -m build /path/to/openstategraph/backend
+pip install "/path/to/openstategraph/backend/dist/openstategraph-0.3.0-py3-none-any.whl[ollama]"
+
+# Or editable, from the checkout. The extras are the install story: the core is
+# four packages and you add only what your workflow uses —
+# [anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp], or [all].
 pip install -e "/path/to/openstategraph/backend[ollama]"
 
-# — or, without installing at all —
+# Or nothing at all, if you would rather not install.
 PYTHONPATH=/path/to/openstategraph/backend python your_service.py
 ```
 
-The distribution is named `openstategraph` (it was `openstategraph-backend`
-before 0.3.0); the import package is `openstategraph` either way. The Docker
-image is the third option — it already contains
-the runtime, so a service that shells out to the container needs nothing
-installed locally.
+Either way you get the console script and the same import package. Measured
+from a real clean venv: **36 distributions** for the core, **38** with
+`[ollama]` — down from 79 before 0.3.0. The Docker image is the third option;
+it already contains the runtime, so a service that shells out to the container
+needs nothing installed locally.
 
-> **Recorded next step:** packaging the backend as an installable
-> `openstategraph` wheel (published, versioned, `pip install openstategraph`)
-> is the change that makes artifact mode a first-class consumption path rather
-> than a checkout dependency. Until it lands, mode (b) means vendoring a
-> backend checkout or the image.
+The distribution is named `openstategraph` (it was `openstategraph-backend`
+before 0.3.0); the import package is `openstategraph` either way.
 
 ---
 
@@ -420,8 +439,10 @@ draft on the canvas  ──►  Save  ──►  workflow.json (published: false
 
 - **Trying it, or building workflows as your product** → (a). It is the mode
   everything is tested against.
-- **Workflows are a component of an existing Python service** → (b), accepting
-  the vendored-backend caveat until the wheel lands.
+- **Workflows are a component of an existing Python service** → (b). Install
+  the wheel (from the checkout until the PyPI upload lands — the artifact is
+  the same one) and use `load_workflow`, the CLI, or `as_tool()` inside an
+  agent you already have.
 - **Your team already lives inside MCP clients and wants graphs generated from
   a chat** → (c), behind your own reverse proxy.
 

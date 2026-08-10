@@ -21,9 +21,13 @@ _document_of = normalize_document
 
 
 def build_tool_registry(
-    workflow_store: Any, slug: str | None, *, knowledge_dir: Any = None
+    workflow_store: Any,
+    slug: str | None,
+    *,
+    knowledge_dir: Any = None,
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Default tools, with the open workflow's own tools layered over.
+    """Default tools, with installed plugins and then the workflow's own over.
 
     The defaults (Chinook) stay so documents that bind them — e.g. the
     chinook-nl-to-sql example mounted as a subgraph elsewhere — keep working
@@ -33,6 +37,17 @@ def build_tool_registry(
     mirroring the frontend's local-shadows-global registry rule. A failed
     discovery degrades to the defaults with a log line, never a crash —
     `NodeRuntime.unresolved_tools` keeps missing bindings loud.
+
+    **Three sources, in one fixed order: built-in < third-party <
+    workflow-local** (ticket 05, `openstategraph.extensions`). Installing a
+    plugin is how you replace a bundled default; nothing installed can outrank
+    a package's own `tools/`, or a workflow's behaviour would depend on an
+    unrelated `pip install`.
+
+    `warnings` is an optional sink. Entry-point failures are process-level, not
+    runtime-level, so they have no `NodeRuntime` field to land on — a caller
+    that reports capability warnings (`load_workflow`) passes a list and gets
+    them; every other caller gets the log line and nothing more.
     """
     from openstategraph.api.capability_discovery import discover_tool_registry
     from openstategraph.compile.node_runtime import chinook_tool_registry
@@ -85,6 +100,17 @@ def build_tool_registry(
     # slug's conventional `knowledge/`, exactly as a positional argument
     # should win over a discovered default.
     registry.update(knowledge_lookup_for(None, knowledge_dir=knowledge_dir))
+
+    # Third party, layered over every built-in above and under the package's
+    # own tools below. Jailed: a broken distribution contributes a warning,
+    # never an exception (`openstategraph.extensions`).
+    from openstategraph.extensions import entry_point_tools
+
+    discovered = entry_point_tools()
+    registry.update(discovered.values)
+    if warnings is not None:
+        warnings.extend(discovered.warnings)
+
     if slug:
         try:
             registry.update(

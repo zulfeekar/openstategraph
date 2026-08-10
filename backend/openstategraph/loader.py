@@ -329,7 +329,17 @@ def load_workflow(
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     knowledge_override = Path(knowledge_dir).expanduser().resolve() if knowledge_dir else None
-    runtime = services.runtime_for(slug, document, resolved_model, knowledge_dir=knowledge_override)
+    # A plugin distribution that failed to load is a capability this run does
+    # not have, so it belongs on `.warnings` beside every other one — not only
+    # in a log line the consumer's service will never show them (ticket 05).
+    plugin_warnings: list[str] = []
+    runtime = services.runtime_for(
+        slug,
+        document,
+        resolved_model,
+        knowledge_dir=knowledge_override,
+        warnings=plugin_warnings,
+    )
 
     if checkpointer is None:
         from langgraph.checkpoint.memory import InMemorySaver
@@ -344,7 +354,7 @@ def load_workflow(
         store=services.memory_store,
     )
 
-    warnings = list(plan.warnings) + runtime_warnings(runtime)
+    warnings = list(plan.warnings) + runtime_warnings(runtime) + plugin_warnings
     if warnings:
         # Degrade loud, never silent — the same rule the run endpoints follow.
         logger.warning(
