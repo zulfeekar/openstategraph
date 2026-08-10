@@ -18,6 +18,10 @@ dependencies = [
     "langchain-ollama>=1.0",
     "langchain-anthropic>=1.0",
     "langchain-openai>=1.0",
+    # The MCP layer (docs/decisions/mcp-layer.md): the official Python SDK,
+    # used through FastMCP. Imported lazily in `mcp_server.py` so the FastAPI
+    # runtime still starts if a deployment chose not to install it.
+    "mcp>=1.25",
 ]
 
 [project.optional-dependencies]

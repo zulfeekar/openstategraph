@@ -59,12 +59,10 @@ from openstategraph.api.model_resolution import (  # noqa: E402
     resolve_model,
     workflow_default_model,
 )
-from openstategraph.api.registries import (  # noqa: E402
+from openstategraph.api.registries import (  # noqa: E402, F401  (re-exported for tests)
     _document_of,
-    build_function_registry,
     build_tool_registry,
     runtime_warnings,
-    suggestible_tool_catalog,
 )
 from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
@@ -112,71 +110,21 @@ def create_app(
     isolated `workflows_root` so a test never touches the real `workflows/`
     tree at the repo root.
     """
-    from openstategraph.api.workflow_store import WorkflowStore
+    from openstategraph.api.services import WorkflowServices
 
     factory = graph_factory or _default_factory
-    workflow_store = WorkflowStore(root=workflows_root)
 
-    def tool_registry_for(slug: str | None) -> dict[str, Any]:
-        return build_tool_registry(workflow_store, slug)
+    # The store, the process-wide memory Store and the one NodeRuntime
+    # construction live on a collaborator (`api/services.py`) rather than in
+    # closures here, because the MCP transport needs exactly the same assembly
+    # without starting FastAPI. Same objects, same behaviour — the local names
+    # below are kept so every endpoint reads as it did.
+    services = WorkflowServices(workflows_root)
+    workflow_store = services.store
+    memory_store = services.memory_store
+    runtime_for = services.runtime_for
 
-    def runtime_for(
-        slug: str | None, document: dict[str, Any], model: Any, *, advisor: bool = False
-    ) -> Any:
-        """One NodeRuntime construction shared by run/stream/resume, so the
-        three endpoints can never disagree about capabilities again.
-
-        `advisor` is the editor-only capability-gap flag: it turns the tool
-        catalogue into an extra agent context block (see `advisor_context`).
-        Passed per call rather than baked into the app, because the same
-        process serves both the editor and `/chat` and only one of them may
-        ever propose edits to the canvas."""
-        from openstategraph.compile.node_runtime import NodeRuntime, PackageAssets, RuntimeServices
-
-        # Built once. `build_tool_registry` globs `tools/*.py` and `exec_module`s
-        # every one of them (it deliberately bypasses `sys.modules`), so calling
-        # it twice — as the `advisor=True` path did, once for `tools` and again
-        # for `advisor_catalog` — re-executed every tool module of the open
-        # package on every editor run. `suggestible_tool_catalog` only reads the
-        # mapping, so one registry serves both.
-        tools = tool_registry_for(slug)
-
-        return NodeRuntime(services=RuntimeServices(
-            model=model,
-            tools=tools,
-            functions=build_function_registry(workflow_store, slug),
-            document_loader=lambda child_slug: _document_of(workflow_store.load(child_slug)),
-            package_loader=lambda child_slug: PackageAssets(
-                tools=tool_registry_for(child_slug),
-                functions=build_function_registry(workflow_store, child_slug),
-                skills_context=discover_skills(workflow_store.directory_for(child_slug)),
-                workflow_middleware=discover_middlewares(
-                    workflow_store.directory_for(child_slug), child_slug
-                ),
-                # A routed child seeks ITS OWN second brain, never the
-                # parent's — the same isolation as skills (ticket 67).
-                knowledge_dir=workflow_store.directory_for(child_slug),
-            ),
-            store=memory_store,
-            skills_context=(
-                discover_skills(workflow_store.directory_for(slug)) if slug else ""
-            ),
-            workflow_middleware=(
-                discover_middlewares(workflow_store.directory_for(slug), slug) if slug else {}
-            ),
-            # Ambient knowledge seeking: a non-empty knowledge/ under the
-            # open package auto-binds the lookup tool to every agent.
-            knowledge_package_dir=(workflow_store.directory_for(slug) if slug else None),
-            advisor_catalog=(
-                suggestible_tool_catalog(tools) if advisor else ""
-            ),
-        ))
-    from openstategraph.api.capability_discovery import discover_middlewares, discover_skills
-    from openstategraph.memory import build_store, checkpointer_for
-
-    #: Long-term memory, process-wide (ticket 65): one Store shared by every
-    #: run, namespaced per user inside the tools themselves.
-    memory_store = build_store()
+    from openstategraph.memory import checkpointer_for
 
     app = FastAPI(title="OpenStateGraph runtime", version="0.1.0")
     app.add_middleware(

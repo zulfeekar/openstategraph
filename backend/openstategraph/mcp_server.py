@@ -1,0 +1,809 @@
+"""The MCP layer — OpenStateGraph's capabilities, exposed to somebody else's LLM.
+
+The deployment this exists for: the platform runs on a server, **only MCP is
+exposed**, and a company's own MCP clients (Claude, Cursor, …) connect and use
+it to *generate* StateGraphs. The customer's model does the composing; we are
+the **ground truth and the artifact factory**, not the author.
+
+That inverts what a "workflow server" usually means, and the inversion is the
+design:
+
+- **The core loop is stateless and model-free.** `get_node_vocabulary` tells a
+  client what can be composed; `compile_workflow` takes a composed document and
+  returns a verdict plus artifacts, writing nothing and calling no model. A
+  deployment can serve that loop with **no provider key at all**. The verdict →
+  revise → verdict loop is the product: the client's model iterates against
+  deterministic compiler evidence rather than its own confidence.
+- **The artifact's home is the customer's repository.** `compile_workflow`
+  hands back a normalized `workflow.json` envelope, the compiled Mermaid
+  topology, a run snippet and the package skeleton. They commit it. Nothing
+  here needs to host it.
+- **Hosting is optional and drafts-only.** `save_workflow_draft` exists for
+  deployments that do host workflows. It always writes a draft; **publishing is
+  not exposed over MCP** and neither is deletion. A human clicks publish in the
+  editor. That is the trust boundary, and `EXPOSED_TOOLS` is where it is
+  enforced — see `docs/decisions/mcp-layer.md`.
+
+Structure follows the repo's own rule against god classes: four small
+collaborators (vocabulary, artifacts, library, runs), each with one reason to
+change, and `build_mcp_server` registers thin wrappers over them. Every tool is
+a wrapper over an existing seam — `ValidateWorkflowTool`, `WorkflowCompiler`,
+`WorkflowStore`, `PackageKnowledge`, `plugin_interop` — so there is no second
+implementation of anything to drift.
+
+Run it with ``python -m openstategraph.mcp_server`` (stdio). For a real server
+deployment set ``OPENSTATEGRAPH_MCP_TRANSPORT=streamable-http``.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+from openstategraph.api.services import WorkflowServices
+
+#: The complete, reviewed surface. A tool absent from this tuple does not
+#: exist over MCP — publishing, deleting and anything credential-shaped are
+#: absent deliberately, and a test asserts it.
+EXPOSED_TOOLS: tuple[str, ...] = (
+    "get_node_vocabulary",
+    "compile_workflow",
+    "validate_workflow",
+    "list_workflows",
+    "describe_workflow",
+    "get_knowledge",
+    "export_plugin",
+    "save_workflow_draft",
+    "run_workflow",
+)
+
+
+class DocumentError(ValueError):
+    """A document that is not even shaped like a workflow document."""
+
+
+def normalize_document(document: Any) -> dict[str, Any]:
+    """One spelling of "the document", whatever the client sent.
+
+    MCP clients serialize inconsistently — some send the object, some a JSON
+    string, some hand back the whole `workflow.json` envelope they were given.
+    All three mean the same thing, so all three are accepted here rather than
+    costing the client's model a round trip to learn our preference.
+    """
+    if isinstance(document, str):
+        try:
+            document = json.loads(document)
+        except json.JSONDecodeError as exc:
+            raise DocumentError(f"Not valid JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise DocumentError("The document must be a JSON object.")
+    inner = document.get("document")
+    return inner if isinstance(inner, dict) else document
+
+
+def _validate(document: dict[str, Any]) -> tuple[bool, list[str]]:
+    """The compile-check, reused verbatim from the Architect's own tool.
+
+    `ValidateWorkflowTool` is the existing seam: it plans the graph in memory,
+    throws it away, and reports unknown node types, compiler warnings and
+    missing entry/exit points. No second validator lives here.
+    """
+    from openstategraph.prebuilt_architect import ValidateWorkflowTool
+
+    result = ValidateWorkflowTool().run(document=json.dumps(document))
+    report = result.error if result.error is not None else result.content
+    findings = [line[2:].strip() for line in report.splitlines() if line.startswith("- ")]
+    if result.error is not None and not findings:
+        # A hard failure (unparseable, no nodes) has no bulleted list; the
+        # message itself is the single finding.
+        findings = [report.strip()]
+    return result.error is None, findings
+
+
+class NodeVocabulary:
+    """What can be composed, and how the pieces legally connect.
+
+    The mandatory first call. A client's model cannot invent our node types or
+    port ids, and guessing them produces documents that fail validation for
+    reasons the verdict can only describe after the fact.
+
+    Assembled from the three existing sources of truth — the compiler's port
+    table, the Architect's known-types set, and the Python ladder classes'
+    locked prompt sections (the same ones `/api/node-contracts` serves). It
+    declares nothing of its own.
+    """
+
+    def describe(self) -> dict[str, Any]:
+        from openstategraph.abc.agent import BaseAgentNode
+        from openstategraph.abc.grader import BaseGrader
+        from openstategraph.abc.orchestrator import BaseOrchestrator
+        from openstategraph.abc.router import BaseRouter
+        from openstategraph.compile.workflow_compiler import (
+            BINDING_PORT_TYPES,
+            CONTROL_PORT_TYPES,
+            DEFAULT_PORT_SPECS,
+            WORKER_PORT_TYPE,
+        )
+        from openstategraph.prebuilt_architect import KNOWN_NODE_TYPES, KNOWN_PREFIXES
+
+        contracts = {
+            "agent.llm": BaseAgentNode,
+            "route.classifier": BaseRouter,
+            "route.grader": BaseGrader,
+            "orchestrate.supervisor": BaseOrchestrator,
+        }
+
+        node_types = []
+        for node_type in sorted(set(KNOWN_NODE_TYPES) | set(DEFAULT_PORT_SPECS)):
+            ladder = contracts.get(node_type)
+            node_types.append(
+                {
+                    "type": node_type,
+                    "ports": [
+                        {"id": port_id, "type": spec.type, "direction": spec.direction}
+                        for port_id, spec in sorted(
+                            DEFAULT_PORT_SPECS.get(node_type, {}).items()
+                        )
+                    ],
+                    "prompt_contract": (
+                        {
+                            "preamble": ladder.PREAMBLE,
+                            "contract": ladder.OUTPUT_CONTRACT,
+                            "editable": (
+                                "Only your own rules are editable. The preamble and "
+                                "the output contract are supplied by the runtime and "
+                                "must NOT be restated in the node's config — the "
+                                "contract is appended last and later instructions win. "
+                                "An EMPTY preamble/contract means this node type locks "
+                                "nothing: its prompt is entirely yours."
+                            ),
+                        }
+                        if ladder is not None
+                        else None
+                    ),
+                }
+            )
+
+        return {
+            "node_types": node_types,
+            "dynamic_type_prefixes": {
+                prefix: hint
+                for prefix, hint in zip(
+                    KNOWN_PREFIXES,
+                    (
+                        "a tool node; the suffix names a tool discovered in the "
+                        "workflow package's tools/ folder",
+                        "a function node; the suffix names a callable in the "
+                        "workflow package's functions/ folder",
+                    ),
+                )
+            },
+            "port_semantics": {
+                "control": sorted(CONTROL_PORT_TYPES),
+                "binding": sorted(BINDING_PORT_TYPES),
+                "worker": WORKER_PORT_TYPE,
+                "feedback": "feedback",
+                "explanation": (
+                    "NOT every edge is a graph edge. An edge landing on a "
+                    "`tool` or `skill` port is a BINDING (the capability becomes "
+                    "available to that node) and produces no control flow. An "
+                    "edge landing on a `text` or `result` port is control flow. "
+                    "An edge landing on a `feedback` port is half of a "
+                    "conditional loop. An edge on a `worker` port declares "
+                    "fan-out. Wiring a tool as control flow makes the tool run "
+                    "once on its own before the agent ever calls it."
+                ),
+            },
+            "router_ports": (
+                "A route.classifier's outputs are generated from its config: one "
+                "`branch:<slug>` output port per configured branch, plus the "
+                "`question` text input."
+            ),
+            "cycles": (
+                "A loop is only drawable into a typed feedback input "
+                "(route.grader `revise` -> agent.llm `feedback`, or -> "
+                "orchestrate.supervisor `feedback`). Every cycle must contain a "
+                "conditional edge; an all-static cycle can never terminate."
+            ),
+            "document_shape": {
+                "version": 2,
+                "name": "Human readable name",
+                "settings": {"model": "optional; omit to use the server default"},
+                "nodes": [
+                    {
+                        "id": "in1",
+                        "type": "input.text",
+                        "title": "optional",
+                        "data": {},
+                        "position": {"x": 0, "y": 0},
+                    }
+                ],
+                "edges": [
+                    {
+                        "source": {"nodeId": "in1", "portId": "text"},
+                        "target": {"nodeId": "out1", "portId": "result"},
+                    }
+                ],
+            },
+            "rules": [
+                "Exactly one node should have no incoming control edge — that is "
+                "the entry point.",
+                "Some node must flow toward the end, or the graph has no exit.",
+                "Call compile_workflow after every revision. A document you have "
+                "not compiled is a guess.",
+                "Do not put Infinity or NaN anywhere: this document is JSON.",
+            ],
+        }
+
+
+class WorkflowArtifacts:
+    """The stateless centerpiece: verdict in, committable artifacts out.
+
+    Writes nothing, reads no workflow package, contacts no model. The graph is
+    genuinely compiled (so the Mermaid is what the compiler produced, never a
+    hand-drawn approximation) and then discarded.
+    """
+
+    #: What a full workflow package contains, for a client laying one out in
+    #: its own repository. Mirrors `workflow_store.validate_package`'s contract
+    #: and the layout `_agents_md` describes.
+    PACKAGE_SKELETON: tuple[str, ...] = (
+        "workflow.json",
+        "AGENTS.md",
+        "tools/",
+        "functions/",
+        "middlewares/",
+        "skills/",
+        "knowledge/",
+        "tests/",
+        "data/",
+    )
+
+    def compile(self, document: Any, name: str | None = None) -> dict[str, Any]:
+        try:
+            resolved = normalize_document(document)
+        except DocumentError as exc:
+            return self._refusal([str(exc)])
+
+        valid, findings = _validate(resolved)
+        if not valid:
+            return self._refusal(findings)
+
+        try:
+            mermaid, warnings = self._compile_topology(resolved)
+        except Exception as exc:  # noqa: BLE001 — the message IS the feedback
+            return self._refusal([f"Compile failed: {type(exc).__name__}: {exc}"])
+
+        workflow_name = name or str(resolved.get("name") or "Untitled workflow")
+        # One name, not two: an envelope naming the workflow one thing while
+        # the document inside names it another is a diff waiting to confuse.
+        resolved = {**resolved, "name": workflow_name}
+        return {
+            "validated": True,
+            "findings": [],
+            "document": {
+                "version": 1,
+                "name": workflow_name,
+                "savedAt": datetime.now(timezone.utc).isoformat(),
+                # A machine never publishes. What a client commits is a draft;
+                # a human flips the flag in the editor.
+                "published": False,
+                "document": resolved,
+            },
+            "mermaid": mermaid,
+            # Distinct from findings: the document IS valid, but a capability
+            # it names could not be resolved here. Never silent — a subgraph
+            # that produced nothing would otherwise look like a working graph.
+            "warnings": warnings,
+            "run_snippet": self._run_snippet(),
+            "package_skeleton": list(self.PACKAGE_SKELETON),
+        }
+
+    def validate(self, document: Any) -> dict[str, Any]:
+        """The verdict alone, for a client mid-iteration that does not yet
+        want the artifacts."""
+        try:
+            resolved = normalize_document(document)
+        except DocumentError as exc:
+            return {"validated": False, "findings": [str(exc)]}
+        valid, findings = _validate(resolved)
+        return {"validated": valid, "findings": findings}
+
+    @staticmethod
+    def _refusal(findings: list[str]) -> dict[str, Any]:
+        """Findings instead of artifacts. The client iterates against these."""
+        return {
+            "validated": False,
+            "findings": findings,
+            "document": None,
+            "mermaid": "",
+            "warnings": [],
+            "run_snippet": "",
+            "package_skeleton": [],
+        }
+
+    @staticmethod
+    def _compile_topology(document: dict[str, Any]) -> tuple[str, list[str]]:
+        """The COMPILED topology, `xray=True` so subgraph internals expand,
+        plus every capability the compile could not resolve.
+
+        `model=None` on purpose: the compiler owns topology and knows nothing
+        about models, so the whole structure compiles without a key. Text, never
+        a PNG — `draw_mermaid_png()` posts the graph to a third-party API.
+
+        The warnings matter more here than anywhere else in the codebase. This
+        path is stateless, so it holds no workflow library and no package: a
+        `workflow.subgraph` naming a hosted child, or an agent bound to a tool
+        that lives in a package folder, resolves to nothing. The runtime already
+        records exactly that (`unresolved_subgraphs`/`unresolved_tools`), and
+        `runtime_warnings` already spells it out — surfacing it is the whole
+        difference between "your graph is fine" and "your graph is fine here,
+        and will be missing three capabilities when you run it for real".
+        """
+        from openstategraph.api.registries import runtime_warnings
+        from openstategraph.compile.node_runtime import NodeRuntime, RunState
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        runtime = NodeRuntime(model=None)
+        compiler = WorkflowCompiler()
+        plan = compiler.plan(document)
+        graph = compiler.build(document, RunState, runtime.factory(document))
+        mermaid = graph.get_graph(xray=True).draw_mermaid()
+        return mermaid, list(plan.warnings) + runtime_warnings(runtime)
+
+    @staticmethod
+    def _run_snippet() -> str:
+        """How to run the artifact without this editor — the point of being a
+        compiler rather than a runtime. Honest about both paths."""
+        return (
+            "# The compiled output is a plain LangGraph StateGraph: it runs\n"
+            "# anywhere Python runs, with or without the OpenStateGraph editor.\n"
+            "#\n"
+            "# In-process (commit workflow.json beside this file):\n"
+            "import json\n"
+            "from langchain.chat_models import init_chat_model\n"
+            "from openstategraph.compile.node_runtime import NodeRuntime, RunState\n"
+            "from openstategraph.compile.workflow_compiler import WorkflowCompiler\n"
+            "\n"
+            'document = json.load(open("workflow.json"))["document"]\n'
+            'runtime = NodeRuntime(model=init_chat_model("ollama:gpt-oss:120b-cloud"))\n'
+            "graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))\n"
+            'final = graph.invoke({"question": "...", "attempts": 0,\n'
+            '                      "decisions": {}, "outputs": {}},\n'
+            '                     {"recursion_limit": 50})\n'
+            'print(final["answer"])\n'
+            "\n"
+            "# Or against a running OpenStateGraph server:\n"
+            '#   POST /api/runs  {"workflow": <the document>, "question": "..."}\n'
+        )
+
+
+class WorkflowLibrary:
+    """Reads over a hosted workflow library, plus the one guarded write.
+
+    Only meaningful for deployments that host workflows. The stateless flow
+    never touches it.
+    """
+
+    def __init__(self, services: WorkflowServices) -> None:
+        self._services = services
+
+    def list_workflows(self, surface: str = "editor") -> list[dict[str, Any]]:
+        summaries = self._services.store.list(published_only=surface == "chat")
+        return [
+            {
+                "slug": s.slug,
+                "name": s.name,
+                "saved_at": s.saved_at,
+                "node_count": s.node_count,
+                "edge_count": s.edge_count,
+                "published": s.published,
+            }
+            for s in summaries
+        ]
+
+    def describe(self, slug: str) -> dict[str, Any]:
+        from openstategraph.api.workflow_store import validate_package
+
+        loaded = self._load(slug)
+        if "error" in loaded:
+            return loaded
+        document = loaded["document"]
+        valid, findings = _validate(document)
+        return {
+            "slug": slug,
+            "document": document,
+            "validated": valid,
+            "findings": findings,
+            "package_findings": validate_package(self._services.store.directory_for(slug)),
+        }
+
+    def knowledge(self, slug: str, topic: str | None = None) -> dict[str, Any]:
+        """The workflow's second brain — index tier free, doc tier on demand.
+
+        Mirrors the runtime's own `knowledge_lookup` behaviour deliberately: a
+        miss answers with the *menu*, so a caller that guessed a topic name
+        gets the right ones to try next.
+        """
+        from openstategraph.knowledge import PackageKnowledge, UnknownTopicError
+
+        try:
+            directory = self._services.store.directory_for(slug)
+        except Exception as exc:  # noqa: BLE001 — InvalidSlugError, as data
+            return {"error": str(exc), "topics": [], "body": None}
+        if not directory.is_dir():
+            return {"error": f"No workflow named {slug!r}", "topics": [], "body": None}
+
+        store = PackageKnowledge(directory)
+        index = [{"name": e.name, "hint": e.hint} for e in store.topics()]
+        if topic is None:
+            return {"slug": slug, "topics": index, "body": None, "error": None}
+        try:
+            return {"slug": slug, "topics": index, "body": store.lookup(topic), "error": None}
+        except UnknownTopicError:
+            return {
+                "slug": slug,
+                "topics": index,
+                "body": None,
+                "error": f"No knowledge topic {topic!r} — the available topics are listed.",
+            }
+
+    def plugin_export(self, slug: str) -> dict[str, Any]:
+        """Preview this package as an Agent Plugins v1 plugin. A report only —
+        nothing is written, and the lossy edges come back as `notes`."""
+        from openstategraph.plugin_interop import InvalidPluginError, export_plugin
+
+        try:
+            directory = self._services.store.directory_for(slug)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+        if not directory.is_dir():
+            return {"error": f"No workflow named {slug!r}"}
+        try:
+            export = export_plugin(directory)
+        except InvalidPluginError as exc:
+            return {"error": str(exc)}
+        return {
+            "manifest": export.manifest,
+            "paths": sorted(export.files),
+            "notes": export.notes,
+            "error": None,
+        }
+
+    def save_draft(self, slug: str, name: str, document: Any) -> dict[str, Any]:
+        """Write a DRAFT. Never publishes, never overwrites a published one.
+
+        Validate-before-save is enforced here, server-side, rather than trusted
+        to the client: an invalid document comes back as findings and is not
+        written at all, so the library can never accumulate documents that do
+        not compile. The client iterates and calls again.
+        """
+        store = self._services.store
+        try:
+            resolved = normalize_document(document)
+        except DocumentError as exc:
+            return {"saved": False, "findings": [str(exc)], "slug": slug, "published": False}
+
+        try:
+            directory = store.directory_for(slug)
+        except Exception as exc:  # noqa: BLE001 — InvalidSlugError, as data
+            return {"saved": False, "findings": [str(exc)], "slug": slug, "published": False}
+
+        valid, findings = _validate(resolved)
+        if not valid:
+            return {"saved": False, "findings": findings, "slug": slug, "published": False}
+
+        existing = directory / "workflow.json"
+        if existing.is_file():
+            try:
+                previous = json.loads(existing.read_text())
+            except (json.JSONDecodeError, OSError):
+                previous = {}
+            if previous.get("published") is not False:
+                # Including the back-compat default (a missing flag means
+                # published): MCP does not get to change what customers are
+                # already talking to.
+                return {
+                    "saved": False,
+                    "slug": slug,
+                    "published": True,
+                    "findings": [
+                        f"{slug!r} is published. MCP writes drafts only — a human "
+                        "unpublishes in the editor before it can be replaced."
+                    ],
+                }
+
+        store.save(
+            slug,
+            name=name,
+            document=resolved,
+            saved_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return {
+            "saved": True,
+            "slug": slug,
+            "published": False,
+            "findings": [],
+            "note": (
+                "Saved as a DRAFT. Publishing is a human action in the editor and "
+                "is not exposed over MCP."
+            ),
+        }
+
+    def _load(self, slug: str) -> dict[str, Any]:
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        try:
+            return {"document": self._services.store.load(slug)}
+        except WorkflowNotFoundError:
+            return {"error": f"No workflow named {slug!r}"}
+        except (InvalidSlugError, json.JSONDecodeError, OSError) as exc:
+            return {"error": str(exc)}
+
+
+class WorkflowRuns:
+    """The only tool that can reach a model. A deployment may disable it."""
+
+    #: `recursion_limit` counts **supersteps, not iterations** — with fan-out
+    #: one lap of a loop costs several. Bounded server-side because an
+    #: unbounded value from an untrusted client is a denial-of-service knob.
+    MAX_RECURSION_LIMIT = 200
+    DEFAULT_RECURSION_LIMIT = 50
+
+    def __init__(self, services: WorkflowServices) -> None:
+        self._services = services
+
+    def run(
+        self,
+        question: str,
+        slug: str | None = None,
+        document: Any = None,
+        recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Compile and run, synchronously — the `/api/runs` path, no streaming.
+
+        Credentials are never accepted over MCP: the model resolves from the
+        server's own environment, exactly as `apply_credentials` guarantees the
+        server's env always wins.
+        """
+        from langchain.chat_models import init_chat_model
+
+        from openstategraph.api.model_resolution import resolve_model, workflow_default_model
+        from openstategraph.compile.node_runtime import RunState
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        if slug is None and document is None:
+            return {"error": "Pass either a saved `slug` or an inline `document`."}
+
+        if document is not None:
+            try:
+                resolved = normalize_document(document)
+            except DocumentError as exc:
+                return {"error": str(exc), "findings": [str(exc)]}
+        else:
+            loaded = WorkflowLibrary(self._services)._load(str(slug))
+            if "error" in loaded:
+                return {"error": loaded["error"]}
+            resolved = loaded["document"]
+
+        valid, findings = _validate(resolved)
+        if not valid:
+            # Refuse before reaching a model: an invalid graph cannot produce a
+            # meaningful answer, and the findings are the useful reply.
+            return {"error": "The document does not compile.", "findings": findings}
+
+        limit = max(10, min(int(recursion_limit), self.MAX_RECURSION_LIMIT))
+        chat_model = init_chat_model(resolve_model(model or workflow_default_model(resolved)))
+        compiler = WorkflowCompiler()
+        plan = compiler.plan(resolved)
+        runtime = self._services.runtime_for(slug, resolved, chat_model)
+
+        try:
+            graph = compiler.build(
+                resolved, RunState, runtime.factory(resolved), store=self._services.memory_store
+            )
+            final = graph.invoke(
+                {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
+                {"recursion_limit": limit},
+            )
+        except Exception as exc:  # noqa: BLE001 — errors are data to the client
+            return {"error": f"{type(exc).__name__}: {exc}", "findings": []}
+
+        from openstategraph.api.registries import runtime_warnings
+
+        return {
+            "answer": str(final.get("answer") or ""),
+            "decisions": {k: str(v) for k, v in (final.get("decisions") or {}).items()},
+            "outputs": {k: str(v) for k, v in (final.get("outputs") or {}).items()},
+            "attempts": int(final.get("attempts") or 0),
+            "mermaid": graph.get_graph().draw_mermaid(),
+            "warnings": list(plan.warnings) + runtime_warnings(runtime),
+            "recursion_limit": limit,
+            "error": None,
+        }
+
+
+SERVER_INSTRUCTIONS = """\
+OpenStateGraph compiles a vendor-neutral workflow document into a LangGraph
+StateGraph. You compose the document; this server is the ground truth.
+
+The loop, in order:
+
+1. `get_node_vocabulary()` FIRST, always. It lists every node type, its exact
+   port ids and directions, which port types are control flow and which are
+   capability bindings, and the locked prompt sections you must not restate.
+   Composing without it is guessing.
+2. Compose a document.
+3. `compile_workflow(document)`. It is deterministic and calls no model. An
+   invalid document returns `findings` and no artifacts — fix and call again.
+   A valid one returns the `workflow.json` envelope to commit to YOUR
+   repository, the compiled Mermaid topology, a run snippet and the package
+   layout.
+4. Optionally `save_workflow_draft(...)` if this deployment hosts workflows.
+   It always writes a DRAFT; publishing is a human action in the editor and is
+   not available here. Deletion and credentials are not exposed at all.
+"""
+
+
+def build_mcp_server(
+    services: WorkflowServices | None = None, *, allow_runs: bool = True
+) -> Any:
+    """Assemble the MCP server over the shared runtime services.
+
+    `services` is injected rather than constructed here so a test operates on a
+    throwaway workflows root — the same rule `WorkflowStore` and `NodeRuntime`
+    already follow.
+
+    `allow_runs=False` closes `run_workflow`, which is the only tool that can
+    reach a model. The rest of the surface stays fully functional, which is the
+    whole point of keeping validate/compile deterministic: a deployment with no
+    provider key is a complete product, not a broken one.
+    """
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError as exc:  # pragma: no cover - deploy-time, not test-time
+        raise RuntimeError(
+            "The MCP layer needs the official Python SDK: `pip install mcp`. "
+            "It is declared in backend/pyproject.toml."
+        ) from exc
+
+    services = services or WorkflowServices()
+    vocabulary = NodeVocabulary()
+    artifacts = WorkflowArtifacts()
+    library = WorkflowLibrary(services)
+    runs = WorkflowRuns(services)
+
+    server = FastMCP("openstategraph", instructions=SERVER_INSTRUCTIONS)
+
+    @server.tool(name="get_node_vocabulary")
+    def get_node_vocabulary() -> dict[str, Any]:
+        """CALL THIS BEFORE COMPOSING ANYTHING.
+
+        The complete node-type and port contract: every node type the runtime
+        implements, each port's id, type and direction, which port types are
+        control flow versus capability bindings, the locked prompt sections you
+        must not restate, the document shape, and the rules a valid graph obeys.
+        You cannot compose a workflow correctly without this.
+        """
+        return vocabulary.describe()
+
+    @server.tool(name="compile_workflow")
+    def compile_workflow(document: Any, name: str | None = None) -> dict[str, Any]:
+        """Compile-check a composed document and return committable artifacts.
+
+        Stateless: saves nothing, calls no model, deterministic. An INVALID
+        document returns `validated: false` with `findings` and no artifacts —
+        read them, revise, call again. That loop is how you converge.
+
+        A VALID document returns: `document` (the normalized workflow.json
+        envelope, ready to commit to your own repository), `mermaid` (the
+        topology the compiler actually produced, with subgraphs expanded),
+        `run_snippet` (how to run it without this editor) and
+        `package_skeleton` (the full package layout).
+
+        READ `warnings` even when validated is true. They name capabilities
+        the document refers to that could not be resolved here — a mounted
+        child workflow, a tool that lives in a package folder. "Compiles" is
+        not "will be fully capable when run".
+        """
+        return artifacts.compile(document, name)
+
+    @server.tool(name="validate_workflow")
+    def validate_workflow(document: Any) -> dict[str, Any]:
+        """The verdict alone: `validated` plus `findings`.
+
+        Cheaper than `compile_workflow` when you are mid-iteration and do not
+        yet want the artifacts.
+        """
+        return artifacts.validate(document)
+
+    @server.tool(name="list_workflows")
+    def list_workflows(surface: str = "editor") -> list[dict[str, Any]]:
+        """Workflows this deployment hosts, if it hosts any.
+
+        `surface="editor"` lists everything including drafts, each with its
+        `published` flag; `surface="chat"` lists only what a human published.
+        """
+        return library.list_workflows(surface)
+
+    @server.tool(name="describe_workflow")
+    def describe_workflow(slug: str) -> dict[str, Any]:
+        """One hosted workflow: its document, its compile verdict and its
+        package findings. Use it to read an existing graph before editing it."""
+        return library.describe(slug)
+
+    @server.tool(name="get_knowledge")
+    def get_knowledge(slug: str, topic: str | None = None) -> dict[str, Any]:
+        """A workflow's second brain, progressively.
+
+        Without `topic`: the index — one name and one-sentence hint per topic,
+        cheap enough to always afford. With `topic`: that topic's full document.
+        An unknown topic answers with the available menu, not a bare miss.
+        """
+        return library.knowledge(slug, topic)
+
+    @server.tool(name="export_plugin")
+    def export_plugin(slug: str) -> dict[str, Any]:
+        """Preview a hosted workflow as an Agent Plugins v1 plugin.
+
+        A report: the manifest, the file layout, and honest `notes` naming
+        everything that does not survive the crossing. Writes nothing.
+        """
+        return library.plugin_export(slug)
+
+    @server.tool(name="save_workflow_draft")
+    def save_workflow_draft(slug: str, name: str, document: Any) -> dict[str, Any]:
+        """Save a workflow into this deployment's library AS A DRAFT.
+
+        Optional — the primary flow keeps the artifact in your own repository
+        (see `compile_workflow`). Guardrails, enforced server-side: the
+        document is validated first and an invalid one is REFUSED with
+        findings rather than written; the write is always a draft; a published
+        workflow is never overwritten. Publishing is a human action in the
+        editor and is not exposed here.
+        """
+        return library.save_draft(slug, name, document)
+
+    if allow_runs:
+
+        @server.tool(name="run_workflow")
+        def run_workflow(
+            question: str,
+            slug: str | None = None,
+            document: Any = None,
+            recursion_limit: int = WorkflowRuns.DEFAULT_RECURSION_LIMIT,
+            model: str | None = None,
+        ) -> dict[str, Any]:
+            """Run a workflow once, synchronously, and return its answer.
+
+            Pass either a hosted `slug` or an inline `document`. This is the
+            only tool that reaches a model; it uses the SERVER's credentials —
+            never send keys over MCP. `recursion_limit` counts supersteps, not
+            iterations, and is bounded server-side.
+            """
+            return runs.run(question, slug, document, recursion_limit, model)
+
+    return server
+
+
+def main() -> None:
+    """`python -m openstategraph.mcp_server`.
+
+    stdio by default — the transport an MCP client spawns locally. For the
+    server deployment this decision is about, set
+    ``OPENSTATEGRAPH_MCP_TRANSPORT=streamable-http`` and put a reverse proxy in
+    front of it: **this layer has no authentication of its own** (recorded as
+    the known gap in `docs/decisions/mcp-layer.md`).
+
+    ``OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`` closes the one tool that needs a model.
+    """
+    transport = os.getenv("OPENSTATEGRAPH_MCP_TRANSPORT", "stdio")
+    allow_runs = os.getenv("OPENSTATEGRAPH_MCP_ALLOW_RUNS", "1") != "0"
+    build_mcp_server(allow_runs=allow_runs).run(transport=transport)  # type: ignore[arg-type]
+
+
+if __name__ == "__main__":
+    main()
