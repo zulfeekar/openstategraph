@@ -246,7 +246,61 @@ decide *when* to consult the workflow, which is a routing policy — and a route
 is something this framework already expresses as a document. A second, worse
 one inside the library would be duplicated knowledge.
 
-Arguments worth knowing:
+### It is an SDK: what you can substitute
+
+Convention is the default; configuration is the override. Every LangGraph or
+LangChain collaborator the runtime uses is the caller's to supply, and the ones
+that are not are listed too, with why — an SDK where half the dependencies are
+injectable and the other half are built from environment variables inside a
+constructor is worse than one that is honest about the line.
+
+| Collaborator | Parameter | Default when omitted | When you'd override |
+| --- | --- | --- | --- |
+| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, else Ollama **cloud**) | a pre-built model object with your own retry, base URL, temperature or gateway |
+| Thread persistence | `checkpointer=` | the package's `settings.checkpointer` — sqlite, or an in-process saver | you own durability: a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart |
+| Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
+| Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
+| Functions | `functions=` | the package's own `functions/` | the same reasons, for `function.*` steps |
+| Middleware | `middleware=` | the package's own `middlewares/`, one file per slot | your existing guardrail/redaction/tracing middleware, contributed by slot name without writing a file into the package |
+| Knowledge directory | `knowledge_dir=` | the convention, `<package>/knowledge` | knowledge shared between two packages, living outside the repository, or a fixture directory in a test |
+| Run trace sink | `trace_file=` | none | you want one JSON line per `ask()` on disk |
+
+```python
+app = load_workflow(
+    "workflows/billing",
+    model=my_model,
+    checkpointer=PostgresSaver(pool),
+    store=PostgresStore(pool),                       # the sibling, not an afterthought
+    tools={"tool.billing-ledger": LedgerTool(session)},
+    functions={"function.redact": redact},
+)
+```
+
+**Precedence, and the reasoning: built-in < installed plugin < the package's
+own files < these arguments.** An explicit mapping is the most specific source
+there is. The filesystem describes what a package *shipped*; an argument
+describes what *this process* is to run, and only the caller knows which is
+right. The reverse order would make substitution impossible — a package you
+vendored could veto your own application.
+
+A caller-supplied capability that collides with a discovered one is therefore a
+**deliberate substitution, not a duplicate**, and is never reported on
+`.warnings`. That list means "this run lost a capability"; filling it with
+things you asked for is how a list that matters gets ignored.
+
+#### What stays internal, and why
+
+| Not injectable | Why |
+| --- | --- |
+| The compiler (`WorkflowCompiler`) | it is not a collaborator, it **is** the product. A pluggable compiler is a second runtime, and [we are a single-target compiler on purpose](what-is-this.md) |
+| The state schema and its reducers | `workflow.json` is the vendor-neutral contract, and the reducers are a named enum by design. A swappable schema would make a document's meaning depend on the host |
+| The workflows root / `WorkflowStore` | **derived, not chosen**: a subgraph node names a sibling slug, so the root is `package_dir.parent` by definition. Deriving it is why this function takes one argument |
+| Skills context | discovery produces *text*, not an object. Injecting it would be prompt authoring, and the prompt is composed — preamble, context, your rules, output contract — not handed over |
+| `retry` / `timeout` / `cache` policies | per LangGraph these are `add_node` parameters, so they belong to the **workflow document** and compile to graph assembly. Putting them on the loader would be a second spelling of one feature |
+| The trace sink | `trace_file` is a file sink on purpose. A pluggable tracer would be us inventing a span model to compete with LangSmith and OpenTelemetry, which already exist and which `.graph` reaches directly |
+| Advisor mode | editor-only, per call, and it must never be reachable from `/chat` or MCP |
+
+#### The three with nuance the table cannot hold
 
 - **`model`** — a model string (`"anthropic:claude-haiku-4-5"`,
   `"ollama:gpt-oss:120b-cloud"`), resolved through the *same* path the HTTP API
@@ -255,10 +309,6 @@ Arguments worth knowing:
   otherwise the environment default: `ANTHROPIC_API_KEY` → Claude,
   `OPENAI_API_KEY` → GPT, else Ollama **cloud**. A node that names its own
   model still wins over all of it.
-- **`checkpointer`** — optional. By default the package's own
-  `settings.checkpointer` decides (sqlite, or an in-process saver), which is
-  what lets a `human.approval` node pause and `ask(thread_id="...")` continue a
-  conversation. Pass a Postgres saver to own durability yourself.
 - **`knowledge_dir`** — where the package's second brain is read from.
   Convention (`<package>/knowledge`) stays the default, because
   discovery-by-convention is why this function takes one argument. Override it

@@ -29,15 +29,47 @@ from openstategraph.api.workflow_store import WorkflowStore
 
 
 class WorkflowServices:
-    """Store + memory + the one runtime construction every transport shares."""
+    """Store + memory + the one runtime construction every transport shares.
 
-    def __init__(self, workflows_root: Any = None) -> None:
+    Every collaborator here is the caller's to supply. `store`, `tools`,
+    `functions` and `middleware` are the injection seam behind
+    `load_workflow`'s parameters of the same names; omitting one keeps the
+    behaviour that existed before the parameter did (an env-driven
+    `build_store()`, and discovery alone for capabilities).
+
+    **Injection is the most specific source, so it wins.** The registry order
+    is built-in < plugin < package-local < caller: the filesystem describes
+    what a package *shipped*, while an argument describes what *this process*
+    is to run, and only the caller can know which of the two is right. It is
+    also the only ordering that makes substitution possible at all — anything
+    else would mean a vendored package could veto the host application.
+    """
+
+    def __init__(
+        self,
+        workflows_root: Any = None,
+        *,
+        store: Any = None,
+        tools: dict[str, Any] | None = None,
+        functions: dict[str, Any] | None = None,
+        middleware: dict[str, Any] | None = None,
+    ) -> None:
         from openstategraph.memory import build_store
 
         self.store = WorkflowStore(root=workflows_root)
         #: Long-term memory, process-wide (ticket 65): one Store shared by
         #: every run, namespaced per user inside the tools themselves.
-        self.memory_store = build_store()
+        #: Injectable, because its sibling the checkpointer always was: a
+        #: caller who owns their own durability must be able to own both, and
+        #: a `build_store()` call hidden in a constructor made the memory half
+        #: unreachable — an `InMemoryStore` that looks like it works and loses
+        #: every fact on restart.
+        self.memory_store = store if store is not None else build_store()
+        # Copied, not aliased: a caller's dict must not become live state that
+        # a later mutation of theirs changes mid-run.
+        self._injected_tools = dict(tools or {})
+        self._injected_functions = dict(functions or {})
+        self._injected_middleware = dict(middleware or {})
 
     def tool_registry_for(
         self,
@@ -46,9 +78,40 @@ class WorkflowServices:
         knowledge_dir: Any = None,
         warnings: list[str] | None = None,
     ) -> dict[str, Any]:
-        return build_tool_registry(
+        registry = build_tool_registry(
             self.store, slug, knowledge_dir=knowledge_dir, warnings=warnings
         )
+        # Last, therefore highest. A collision with a discovered tool is a
+        # deliberate substitution and is deliberately NOT a warning: `warnings`
+        # means "this run lost a capability", and filling it with something the
+        # caller asked for is how a list that matters gets ignored.
+        registry.update(self._injected_tools)
+        return registry
+
+    def function_registry_for(self, slug: str | None) -> dict[str, Any]:
+        """`function.<name>` -> callable, discovery then the caller's over it.
+
+        A method rather than a bare `build_function_registry` call at each use
+        site, mirroring `tool_registry_for`, so the override is applied in one
+        place and the parent runtime and a routed child cannot disagree.
+        """
+        registry = build_function_registry(self.store, slug)
+        registry.update(self._injected_functions)
+        return registry
+
+    def middleware_for(self, slug: str | None) -> dict[str, Any]:
+        """Slot name -> middleware: the package's `middlewares/`, caller over.
+
+        Keyed by slot name exactly as `discover_middlewares` is, so an
+        injected entry fills or replaces a slot by the same rule a file does
+        (`middlewares/summarization.py`). The base still owns the canonical
+        slot *order*; nothing here expresses a position.
+        """
+        from openstategraph.api.capability_discovery import discover_middlewares
+
+        found = discover_middlewares(self.store.directory_for(slug), slug) if slug else {}
+        found.update(self._injected_middleware)
+        return found
 
     def runtime_for(
         self,
@@ -75,7 +138,7 @@ class WorkflowServices:
         child still seeks its own package's knowledge, the same isolation
         ticket 67 established for skills.
         """
-        from openstategraph.api.capability_discovery import discover_middlewares, discover_skills
+        from openstategraph.api.capability_discovery import discover_skills
         from openstategraph.compile.node_runtime import (
             NodeRuntime,
             PackageAssets,
@@ -109,24 +172,20 @@ class WorkflowServices:
             services=RuntimeServices(
                 model=model,
                 tools=tools,
-                functions=build_function_registry(store, slug),
+                functions=self.function_registry_for(slug),
                 document_loader=lambda child_slug: normalize_document(store.load(child_slug)),
                 package_loader=lambda child_slug: PackageAssets(
                     tools=self.tool_registry_for(child_slug),
-                    functions=build_function_registry(store, child_slug),
+                    functions=self.function_registry_for(child_slug),
                     skills_context=discover_skills(store.directory_for(child_slug)),
-                    workflow_middleware=discover_middlewares(
-                        store.directory_for(child_slug), child_slug
-                    ),
+                    workflow_middleware=self.middleware_for(child_slug),
                     # A routed child seeks ITS OWN second brain, never the
                     # parent's — the same isolation as skills (ticket 67).
                     knowledge_dir=store.directory_for(child_slug),
                 ),
                 store=self.memory_store,
                 skills_context=(discover_skills(store.directory_for(slug)) if slug else ""),
-                workflow_middleware=(
-                    discover_middlewares(store.directory_for(slug), slug) if slug else {}
-                ),
+                workflow_middleware=self.middleware_for(slug),
                 # Ambient knowledge seeking: a non-empty knowledge/ under the
                 # open package auto-binds the lookup tool to every agent.
                 knowledge_package_dir=(store.directory_for(slug) if slug else None),

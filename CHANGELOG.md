@@ -29,6 +29,19 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **`load_workflow(..., store=, tools=, functions=, middleware=)`** — the
+  remaining collaborators are now the caller's to supply, closing the
+  asymmetry where `checkpointer` was injectable but its sibling the long-term
+  memory `Store` was built internally from the environment. `store` is the
+  object the prebuilt memory tools read and write; `tools`/`functions`/
+  `middleware` are explicit mappings keyed exactly as a document names them
+  (`{"tool.my-thing": instance}`, `{"function.my_fn": callable}`,
+  `{"summarization": middleware}`). **Precedence: built-in < installed plugin
+  < the package's own files < these arguments** — an explicit mapping is the
+  most specific source, and a collision with a discovered capability is a
+  deliberate substitution, so it is never reported on `.warnings`. All four
+  are keyword-only with `None` defaults, and `None` means exactly what it
+  meant before the parameter existed. `docs/adoption.md` has the table.
 - **`openstategraph.errors`** — `OpenStateGraphError` and the failures the
   loader raises. Every class also inherits the builtin it used to be
   (`PackageNotFound` is a `FileNotFoundError`, `InvalidPackageName` is a

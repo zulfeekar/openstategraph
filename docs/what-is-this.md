@@ -86,7 +86,7 @@ claiming it would be the dishonesty this project exists to avoid.
 | **The document format** — `workflow.json`: vendor-neutral, versioned, diffable in a pull request | **us**, entirely |
 | **The compiler** — document → `StateGraph`: ports, typed cycles, `Send` fan-out, reducer selection, subgraph mounting | **us** |
 | **Node and runtime semantics** — the `abc/` ladders, slot-table middleware order, the composed prompt (preamble / context / *your rules* / output contract), the state schema and its named reducers | **us** |
-| **Package conventions** — discovery of `tools/`, `functions/`, `middlewares/`, `skills/`, `knowledge/`, and the memory/checkpointer wiring | **us** |
+| **Package conventions** — discovery of `tools/`, `functions/`, `middlewares/`, `skills/`, `knowledge/`, and the memory/checkpointer wiring | **us**, as the *default* only: convention is what you get for free, and every collaborator it discovers or builds can be replaced by an argument to `load_workflow` — see [It is an SDK](adoption.md#it-is-an-sdk-what-you-can-substitute) |
 | **Optional surfaces** — the canvas editor, the HTTP API, `/chat`, the MCP layer | **us**, and all optional |
 | Graph execution, checkpointing, time travel, `interrupt()`, streaming, `Send`, reducer merging | **LangGraph** |
 | The agent loop, models, tools, messages, middleware | **LangChain** / `create_agent` |

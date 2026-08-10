@@ -239,6 +239,10 @@ def load_workflow(
     *,
     model: Any = None,
     checkpointer: Any = None,
+    store: Any = None,
+    tools: dict[str, Any] | None = None,
+    functions: dict[str, Any] | None = None,
+    middleware: dict[str, Any] | None = None,
     knowledge_dir: str | Path | None = None,
     trace_file: str | Path | None = None,
 ) -> CompiledWorkflow:
@@ -261,6 +265,33 @@ def load_workflow(
     `settings.checkpointer` decides (sqlite, or an in-process saver), which is
     what makes `human.approval` nodes able to pause and `ask(thread_id=...)`
     able to continue. Pass your own — a Postgres saver, say — to own durability.
+
+    `store` is the long-term memory `Store` — the collaborator the prebuilt
+    `save_memory`/`search_memory` tools read and write, namespaced per user.
+    `None` keeps the environment-driven default (in-process, or sqlite when
+    `OPENSTATEGRAPH_MEMORY_PATH` is set). Pass a LangGraph `BaseStore` —
+    Postgres, Redis, your own — to own memory durability the same way
+    `checkpointer` lets you own thread durability. The two are siblings and
+    are meant to be supplied together: owning half of persistence is how a
+    deployment ends up with durable conversations and evaporating memories.
+
+    `tools` and `functions` are explicit capability mappings —
+    `{"tool.my-thing": instance}` and `{"function.my_fn": callable}` — keyed
+    exactly as a document names them. `middleware` is the same idea for the
+    slot table (`{"summarization": middleware_object}`), keyed by slot name
+    as `middlewares/<slot>.py` is.
+
+    **Precedence: built-in < installed plugin < the package's own files <
+    these arguments.** An explicit mapping is the most specific source there
+    is, so it outranks every discovered one. The filesystem describes what a
+    package *shipped*; an argument describes what *this process* is to run,
+    and only the caller knows which is right — a vendored package, a package
+    on a read-only mount, a test that needs one tool stubbed and the rest
+    real. The reverse order would make substitution impossible: a package
+    could veto the host application. A collision with a discovered capability
+    is therefore **not** reported on `.warnings`; it is a deliberate
+    substitution, and warning about it would train adopters to ignore the one
+    list that means "this run lost a capability".
 
     `knowledge_dir` overrides where the package's second brain is read from.
     The default stays the **convention** — `<package>/knowledge` — because
@@ -306,7 +337,15 @@ def load_workflow(
 
     document = normalize_document(json.loads(manifest.read_text()))
 
-    services = WorkflowServices(directory.parent)
+    # One assembly point, shared with HTTP and MCP: the caller's collaborators
+    # go in here rather than into a second wiring path beside it.
+    services = WorkflowServices(
+        directory.parent,
+        store=store,
+        tools=tools,
+        functions=functions,
+        middleware=middleware,
+    )
     resolved_model = model
     if model is None or isinstance(model, str):
         from langchain.chat_models import init_chat_model

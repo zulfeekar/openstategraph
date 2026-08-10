@@ -8,7 +8,7 @@ openstategraph.RunResult = class(str)(answer: 'str' = '', *, decisions: 'dict[st
 openstategraph.SchemaVersionError = class(DocumentError)(...)
 openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.__version__ = str
-openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'Any' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
+openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'Any' = None, store: 'Any' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
 openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), rules: 'str' = '', context: 'str' = '', middleware: 'dict[str, Any] | None' = None) -> 'None'
 openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
 openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(**kwargs: 'Any') -> 'None'
