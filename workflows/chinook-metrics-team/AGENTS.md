@@ -11,7 +11,14 @@ The worker explores the shared Chinook music-store database
 (`chinook-nl-to-sql/data/Chinook_Sqlite.sqlite`) through the generic SQL
 Explorer tools — the one sample database every example evaluates against.
 
+The package is deliberately just `workflow.json` and this file: its three
+`tool.sql-*` nodes are the **built-in** SQL Explorer family, so there is no
+package-local `tools/` to carry. `Store Analytics` mounts it on the
+`database_deep_dive` branch.
+
 - **Mount it**: add a **Team** node in any workflow with slug `chinook-metrics-team`.
 - **Outcome**: edit `grader1`'s criteria — that is what "done" means here.
-- **Members**: add workers (each a new archetype by title) and bind tools from
-  `tools/`; `middlewares/` and `functions/` are discovered by convention.
+- **Members**: add workers, each a new archetype named by its title, and wire
+  the tool bus into each one.
+- **Growing it**: `tools/`, `middlewares/`, `functions/`, `skills/` and
+  `knowledge/` are discovered by convention if you add them — none exists yet.

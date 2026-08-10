@@ -1,8 +1,23 @@
 # Building an atom
 
 An **atom** is a tool node: one capability, one card, one thing an agent can
-call. Agents are molecules — they are assembled from atoms — which is why the
-palette labels the two sections *Agents · molecules* and *Tools · atoms*.
+call. The palette says so out loud — every section heading carries its
+atomic-design tier, declared once in
+[`src/nodes/vocabulary.ts`](../src/nodes/vocabulary.ts) and locked by
+`vocabulary.test.ts`:
+
+| Section | Holds |
+| --- | --- |
+| `Inputs · atoms` | `input.text`, `input.markdown` |
+| `Tools · atoms` | every tool node — the built-ins, the platform family, and anything a workflow or a plugin adds |
+| `Output · atoms` | `output.formatted` |
+| `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
+| `Composition · organisms` | `workflow.subgraph`, `team.workflow` — the only organisms |
+| `Annotate · no tier` | `group`, `note` — canvas furniture, deliberately tier-less |
+
+Atoms sort first, organisms last; the test asserts that ordering, so the
+palette cannot drift from the vocabulary. **This page is about adding to the
+first row: a tool.**
 
 An atom has two halves that meet at a single seam:
 

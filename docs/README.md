@@ -1,5 +1,26 @@
 # OpenStateGraph documentation
 
+Start with what you came here to do.
+
+| I want to… | Read | Then |
+| --- | --- | --- |
+| **decide whether this is for me** | [What this is](what-is-this.md) — format + compiler + node semantics, the measured 36-distribution footprint, the escape hatches, and when *not* to use it | [The stability contract](stability.md) |
+| **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run Store Analytics, ask it something in `/chat`. Or skip the clone: `openstategraph run ./workflows/chinook-nl-to-sql "…"` | [Patterns](patterns.md) |
+| **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
+| **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
+| **add a capability that does not exist yet** | [Building an atom](building-an-atom.md) — a node definition, its Python half, the palette tiers, registration (including publishing your own distribution), and a worked example in ~60 lines | [Ports and edges](ports-and-edges.md) |
+| **have my own LLM compose the graph** | [The MCP layer](mcp.md) — client config, a worked transcript, the `compile_workflow` response shape, and the trust boundary | [`decisions/mcp-layer.md`](decisions/mcp-layer.md) |
+| **know what can be taken away from me** | [The stability contract](stability.md) — the three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules | [`../CHANGELOG.md`](../CHANGELOG.md) |
+| **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
+
+Each page has exactly one job, and nothing here restates another page:
+[Ports and edges](ports-and-edges.md) is the only reference for the type
+system; [adoption](adoption.md) is the only place the CLI's flags and exit
+codes are enumerated for a consumer; [stability](stability.md) is the only
+place a promise is made about them.
+
+## The one idea underneath all of it
+
 **Workflows have predetermined code paths; agents define their own process and
 tool usage.** That single line orders everything on this canvas. It is a
 spectrum, not a dichotomy, and every node type is a point on it:
@@ -23,27 +44,12 @@ calling, structured output and short-term memory. That is exactly one node —
 `agent.llm`, with its `tools` bus, its `skill` input and its `prompt`. An
 agent is a configured model; the patterns are how you arrange several of them.
 
-## The pages
-
-| Page | What it answers |
-| --- | --- |
-| [**What this is**](what-is-this.md) | Start here if you are deciding. Format + compiler + runtime semantics + optional surfaces; what it adds over raw LangGraph and what it deliberately does not own; the measured dependency picture (36 distributions); the escape hatches; and when *not* to use it. |
-| [**Getting started**](getting-started.md) | You cloned it — now what? Checkout → `./start dev` → run Store Analytics → ask it something in `/chat`. Prerequisites, model credentials, and the two value journeys (developer, end user). |
-| [**Using it in your project**](adoption.md) | The fine-day question. The three consumption modes — fork/checkout, artifact, MCP — with exact commands, the upgrade friction stated honestly, what artifacts you own, and the draft → Publish → `/chat` story. |
-| [**The MCP layer**](mcp.md) | Point your own LLM client at it and have *it* compose the graph. Client config, a worked transcript with a document that genuinely validates, the `compile_workflow` response shape, and why the client renders the compiled Mermaid as a diagram locally. |
-| [**Patterns**](patterns.md) | The seven arrangements — augmented LLM, prompt chaining, routing, parallelization, orchestrator-worker, evaluator-optimizer, agent — each mapped to our node vocabulary, with selection criteria and a diagram. |
-| [**Building an atom**](building-an-atom.md) | The walkthrough. Anatomy of a node definition, the Python half, registration, the TDD loop and the five gates, and a complete worked example in ~60 lines. |
-| [**The stability contract**](stability.md) | If I import it, can it be taken away from me? The three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules. |
-| [**Ports and edges**](ports-and-edges.md) | Reference. Port types, cardinality, edge categories, why `feedback` is the only cycle-closer, and the colour/dash legend that matches the canvas. |
-
 ## Where the rest lives
 
 - [`../CLAUDE.md`](../CLAUDE.md) — the architecture contract. Non-negotiables,
   the layering rule, the LangGraph vocabulary, the portability guardrails.
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — setup and the PR gate.
 - [`../README.md`](../README.md) — running the app, extension points, providers.
-- [`decisions/`](decisions/) — decision records for the choices that were
-  argued out.
 
 LangGraph and LangChain facts in these pages come from the `docs-langchain`
 MCP server, never from memory.

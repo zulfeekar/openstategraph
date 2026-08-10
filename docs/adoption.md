@@ -155,12 +155,12 @@ seam the library already has — there is no behaviour in the CLI that
 | --- | --- |
 | `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
 | `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings. **Exit 1** on blocking findings, so it is a CI gate |
-| `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call |
+| `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
 | `openstategraph new <slug> [name] [--team]` | scaffold a package into `./workflows` (`--root` to change that) |
-| `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints |
-| `openstategraph knowledge build <package> [--source X]` | generate them; prints `written / skipped / collisions / warnings` |
+| `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints (`--knowledge-dir` to look elsewhere) |
+| `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
 | `openstategraph serve [--host --port]` | the editor's HTTP API. Needs `openstategraph[server]` |
-| `openstategraph mcp [--transport …]` | the MCP transport. Needs `openstategraph[mcp]` |
+| `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
 
 Exit codes are fixed, because they are what CI consumes: **0** success, **1**
 run or validation failure, **2** usage error, **3** a required extra is missing
@@ -352,7 +352,7 @@ PYTHONPATH=/path/to/openstategraph/backend python your_service.py
 
 Either way you get the console script and the same import package. Measured
 from a real clean venv: **36 distributions** for the core, **38** with
-`[ollama]` — down from 79 before 0.3.0. The Docker image is the third option;
+`[ollama]` — down from 78 before 0.3.0. The Docker image is the third option;
 it already contains the runtime, so a service that shells out to the container
 needs nothing installed locally.
 
@@ -407,6 +407,26 @@ Two properties worth naming, because they are what "you own it" means:
 - **Runnable without us.** `tests/` runs under plain `pytest`; the compiled
   graph runs under plain Python. Delete this editor and the package still
   works.
+
+### `knowledge/` — generated, then claimed
+
+The second brain is the one artifact that starts machine-written, so it has an
+explicit hand-over rather than a convention:
+
+- **Build it** with `openstategraph knowledge build <package>`, or the
+  Knowledge card's rebuild in the editor. Generated files carry a marker
+  comment; `openstategraph knowledge list <package>` prints each topic with its
+  one-line index hint.
+- **Claim it by editing it.** The first save through the editor strips the
+  generated marker, and a claimed doc is never regenerated over. There is no
+  autosave — editing a topic is a dialog with an explicit Save, and the result
+  lands in git as a diff.
+- **Stale is a badge, not a rewrite.** Each generated marker records a hash of
+  the brief the doc was written from. When the underlying source moves, the
+  hash stops matching and the topic is badged stale — including topics you have
+  claimed, because a claimed doc can go out of date too. Topics written by the
+  agentic explorer have no recomputable brief and are never badged: unknown is
+  not stale.
 
 ---
 

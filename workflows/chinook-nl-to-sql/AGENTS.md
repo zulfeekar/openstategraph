@@ -18,5 +18,8 @@ for deep SQL questions.
 - `tools/` — the Chinook tool family (`tool.chinook-get-all-tables`,
   `tool.chinook-get-schema`, `tool.chinook-execute-sql`), read-only by
   construction.
+- `knowledge/` — the second brain: eleven docs, one per table, so the agent
+  knows what `InvoiceLine` means before it writes a join instead of inferring
+  it from a schema dump. `openstategraph knowledge list .` prints the index.
 - `tests/` — the workflow's own pytest suite; `graph.py`/`agents.py` show
   the compiled output is plain Python that runs without the editor.

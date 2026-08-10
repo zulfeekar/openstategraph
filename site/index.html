@@ -495,7 +495,7 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
             entirely.
           </p>
           <p style="margin-top:.75rem">
-            <a href="./docs/what-is-this.md">What this is, in full →</a>
+            <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/what-is-this.md">What this is, in full →</a>
           </p>
         </div>
       </div>
@@ -571,19 +571,18 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
         <div class="pane">
           <div class="pane-bar"><span class="fname">run.py</span> <span>· what you ship</span></div>
 <pre><code><span class="c"># No editor. No platform. No runtime of ours.</span>
-<span class="k">from</span> openstategraph.compile <span class="k">import</span> <span class="f">compile_workflow</span>
+<span class="k">from</span> openstategraph <span class="k">import</span> <span class="f">load_workflow</span>
 
-graph = <span class="f">compile_workflow</span>(<span class="s">"workflows/chinook-nl-to-sql"</span>)
-app   = graph.<span class="f">compile</span>(checkpointer=saver)
+workflow = <span class="f">load_workflow</span>(<span class="s">"workflows/chinook-nl-to-sql"</span>)
+<span class="k">if</span> workflow.warnings:          <span class="c"># what did not wire, never silence</span>
+    <span class="k">print</span>(<span class="s">"degraded:"</span>, workflow.warnings)
 
-result = app.<span class="f">invoke</span>(
-    {<span class="s">"question"</span>: <span class="s">"Top 5 genres by revenue?"</span>},
-    config={<span class="s">"configurable"</span>: {<span class="s">"thread_id"</span>: <span class="s">"t1"</span>},
-            <span class="s">"recursion_limit"</span>: <span class="s">100</span>},
-)
+answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by revenue?"</span>, thread_id=<span class="s">"t1"</span>)
+<span class="k">print</span>(answer)                   <span class="c"># it IS the answer string</span>
+<span class="k">print</span>(answer.decisions)         <span class="c"># …and which branch each router took</span>
 
-<span class="c"># …and it is an ordinary LangGraph object, so:</span>
-<span class="k">print</span>(app.<span class="f">get_graph</span>(xray=<span class="k">True</span>).<span class="f">draw_mermaid</span>())
+<span class="c"># .graph is an ordinary LangGraph object — the escape hatch:</span>
+<span class="k">print</span>(workflow.graph.<span class="f">get_graph</span>(xray=<span class="k">True</span>).<span class="f">draw_mermaid</span>())
 </code></pre>
         </div>
       </div>
@@ -638,8 +637,10 @@ result = app.<span class="f">invoke</span>(
           <h3>Humans in the loop</h3>
           <p>
             Approval nodes compile to LangGraph's <code>interrupt()</code>, so a paused run is a
-            checkpoint you can resume, inspect or rewind — not a thread parked in memory. Runs
-            stream back onto the canvas token by token, node by node.
+            checkpoint you can resume — not a thread parked in memory. Runs stream back token by
+            token, and every spawned worker or subgraph announces itself as it starts.
+            <b>Stop</b> really stops the server, not just your tab: no further supersteps are
+            scheduled, though work already dispatched still finishes.
           </p>
         </div>
         <div class="card span-all">
@@ -660,7 +661,7 @@ result = app.<span class="f">invoke</span>(
             which clients like Claude render as a diagram on your machine. Drafts in, humans
             publish: there is no publish tool and no delete tool over MCP, by design.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/mcp.md">The MCP layer, with a worked example →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/mcp.md">The MCP layer, with a worked example →</a></p>
         </div>
       </div>
     </div>
@@ -683,8 +684,9 @@ result = app.<span class="f">invoke</span>(
           <span class="eyebrow">Focused</span>
           <h3 style="margin-top:.5rem; font-size:1.0625rem">chinook-nl-to-sql</h3>
           <p>
-            Natural language to SQL over the Chinook music store. An agent with a read-only SQLite
-            tool, and a per-table second brain — eleven knowledge docs, one per entity — so the
+            Natural language to SQL over the Chinook music store. One agent behind a grader, bound
+            to three read-only tools (list tables → table schema → run query), and a per-table
+            second brain — eleven knowledge docs, one per entity — so the
             model learns what <code>InvoiceLine</code> means before it writes a join instead of
             guessing from a schema dump.
           </p>
@@ -695,7 +697,7 @@ result = app.<span class="f">invoke</span>(
         </div>
         <div class="card">
           <span class="eyebrow">Comprehensive</span>
-          <h3 style="margin-top:.5rem; font-size:1.0625rem">page-analytics</h3>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">Store Analytics <span class="muted" style="font-weight:400">· <code>page-analytics</code></span></h3>
           <p>
             Revenue by genre and country, top customers and invoice trends over the same Chinook
             database — routed by intent, researched by a supervisor and three workers sharing a SQL
@@ -711,8 +713,9 @@ result = app.<span class="f">invoke</span>(
         </div>
       </div>
       <p class="muted" style="margin-top:1.25rem; font-size:.8125rem">
-        The sample databases are deterministic and redistributed with the repo, so both examples
-        run offline — and the backend defaults to a hosted model, so neither needs an API key to try.
+        There is exactly <b>one</b> sample database, redistributed with the repo, and both examples
+        evaluate against it — so every figure either one produces is checkable against the same
+        file. The backend defaults to a hosted model, so neither needs an API key to try.
       </p>
     </div>
   </section>
@@ -780,7 +783,7 @@ result = app.<span class="f">invoke</span>(
 <pre><code><span class="p">$</span> pip install <span class="s">"openstategraph[ollama]"</span>
 <span class="p">$</span> openstategraph new my-workflow
 <span class="p">$</span> openstategraph validate ./workflows/my-workflow
-<span class="p">$</span> openstategraph run ./workflows/my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
+<span class="p">$</span> openstategraph run ./workflows/my-workflow <span class="s">"Say hello."</span>   <span class="c"># a fresh scaffold knows nothing yet</span></code></pre>
           </div>
           <div class="callout callout-info">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -838,7 +841,8 @@ result = app.<span class="f">invoke</span>(
         <li>
           <h3>Run the Store Analytics example</h3>
           <p>
-            Load <code>page-analytics</code> from the workflow picker and press Run. It routes the
+            Open <b>Store Analytics</b> from the workflow picker (the package is
+            <code>workflows/page-analytics</code>) and press Run. It routes the
             question by intent, fans a supervisor out to three workers on a shared SQL bus, formats
             a report, grades it with a revise loop and pauses at a human approval node. Tokens and
             active nodes stream back onto the canvas as it goes.
@@ -921,8 +925,11 @@ result = app.<span class="f">invoke</span>(
       <div class="callout callout-info" style="max-width:52rem">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
         <span>
-          <b>Draft → publish is landing now.</b> The lifecycle that gates the chat picker is in
-          active development; until it ships, the chat lists every workflow it can find.
+          <b>Publishing is one deliberate human action.</b> Saving writes
+          <code>published: false</code>; the chat only ever lists published workflows, so a draft
+          cannot answer a customer. There is no publish tool over MCP and no way to automate it —
+          a machine may compose and propose, a human looks at the graph and decides it may talk to
+          people.
         </span>
       </div>
     </div>
@@ -976,7 +983,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Documentation</span>
-        <h2>Seven questions, seven places to look</h2>
+        <h2>Nine questions, nine places to look</h2>
         <p>
           The deep material lives in the repository, next to the code it describes — so it is
           reviewed like code and cannot quietly drift. These are the entry points.
@@ -990,7 +997,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             surfaces; what it adds over raw LangGraph, what it refuses to own, the measured
             dependency picture, and when <em>not</em> to use it.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/what-is-this.md">docs/what-is-this.md &rarr;</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/what-is-this.md">docs/what-is-this.md &rarr;</a></p>
         </div>
         <div class="card">
           <h3>How to start</h3>
@@ -999,7 +1006,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             <code>/chat</code>. Prerequisites, the two model paths, and why no API key is needed for
             a first answer.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/getting-started.md">docs/getting-started.md →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/getting-started.md">docs/getting-started.md →</a></p>
         </div>
         <div class="card">
           <h3>How to use it in your project</h3>
@@ -1008,7 +1015,25 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             upgrade friction stated honestly, what artifacts you own, and the draft → Publish →
             <code>/chat</code> story.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/adoption.md">docs/adoption.md →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/adoption.md">docs/adoption.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>What can be taken away from me</h3>
+          <p>
+            The stability contract: three tiers of surface, a signature-snapshot test, the
+            <code>workflow.json</code> version policy, the CLI's fixed exit codes, and the
+            deprecation rules that apply before and after 1.0.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/stability.md">docs/stability.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>What to build, and how to arrange it</h3>
+          <p>
+            The seven agentic patterns — augmented LLM, prompt chaining, routing, parallelization,
+            orchestrator-worker, evaluator-optimizer, agent — each mapped to our node vocabulary,
+            with the one question that separates the pairs people confuse.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/patterns.md">docs/patterns.md →</a></p>
         </div>
         <div class="card">
           <h3>How to let an LLM build it</h3>
@@ -1016,7 +1041,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             The MCP layer, worked end to end: the client config JSON, a document that genuinely
             validates, the <code>compile_workflow</code> response shape, and the trust boundary.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/mcp.md">docs/mcp.md →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/mcp.md">docs/mcp.md →</a></p>
         </div>
         <div class="card">
           <h3>How to add a module</h3>
@@ -1024,7 +1049,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             Find the registry for the thing you are adding, write the definition, register it. The
             engine does not change. A complete tool node, both halves, in about sixty lines.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/building-an-atom.md">docs/building-an-atom.md →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/building-an-atom.md">docs/building-an-atom.md →</a></p>
         </div>
         <div class="card">
           <h3>How it works</h3>
@@ -1040,14 +1065,15 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             Decision records for the choices that were argued out — the knowledge architecture,
             rejected frameworks, and the trade-offs each one accepted.
           </p>
-          <p style="margin-top:.75rem"><a href="./docs/decisions/">docs/decisions →</a></p>
+          <p style="margin-top:.75rem"><a href="https://github.com/PLACEHOLDER/openstategraph/tree/main/docs/decisions">docs/decisions →</a></p>
         </div>
       </div>
       <p class="note">
-        <strong>Placeholder:</strong> the <code>docs/</code> links above are repository-relative and
-        work as published; every remaining GitHub link on this page points at
-        <code>https://github.com/PLACEHOLDER/openstategraph</code>. Replace that string throughout
-        <code>site/index.html</code> with the real repository URL before publishing.
+        <strong>Placeholder:</strong> GitHub Pages publishes <code>site/</code> alone, so every
+        documentation link on this page points into the repository at
+        <code>https://github.com/PLACEHOLDER/openstategraph</code>. Replace that one string
+        throughout <code>site/index.html</code> with the real repository URL before publishing —
+        <code>grep -c PLACEHOLDER site/index.html</code> counts what is left.
       </p>
     </div>
   </section>
@@ -1103,7 +1129,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             </p>
             <p>
               The three ways to consume it — fork/checkout, artifact, MCP — are written up with
-              exact commands in <a href="./docs/adoption.md">docs/adoption.md</a>.
+              exact commands in <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/adoption.md">docs/adoption.md</a>.
             </p>
           </div>
         </details>
@@ -1143,7 +1169,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
               LangChain's and LangGraph's own closure, which you would install anyway to write the
               <code>StateGraph</code> by hand. The long version, including what we deliberately do
               <em>not</em> own and when not to use us at all, is in
-              <a href="./docs/what-is-this.md">docs/what-is-this.md</a>.
+              <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/what-is-this.md">docs/what-is-this.md</a>.
             </p>
           </div>
         </details>
@@ -1173,9 +1199,9 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             <p>
               The trust boundary holds: no publish tool, no delete tool, no credentials over the
               wire, writes validated server-side and always as drafts. A human clicks Publish.
-              Worked example in <a href="./docs/mcp.md">docs/mcp.md</a>; the honest limits —
+              Worked example in <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/mcp.md">docs/mcp.md</a>; the honest limits —
               starting with <b>no authentication layer</b> — in
-              <a href="./docs/decisions/mcp-layer.md">docs/decisions/mcp-layer.md</a>.
+              <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/decisions/mcp-layer.md">docs/decisions/mcp-layer.md</a>.
             </p>
           </div>
         </details>
@@ -1213,9 +1239,12 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             </p>
             <p>
               A node type is one file (model, field schema, ports, executor) plus its registry
-              entry; a tool is a Python function discovered by convention inside a workflow's
-              <code>tools/</code> directory. See
-              <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/README.md">README.md →</a>
+              entry; a tool is a <code>BaseTool</code> subclass discovered by convention inside a
+              workflow's <code>tools/</code> directory. You can also skip this repository
+              altogether: publish your own distribution declaring
+              <code>[project.entry-points."openstategraph.tools"]</code> and your tool registers in
+              every workflow the moment someone <code>pip install</code>s it — no fork, no merge to
+              carry. See <a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/building-an-atom.md">docs/building-an-atom.md →</a>
             </p>
           </div>
         </details>
@@ -1341,9 +1370,9 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
           <li><a href="#use">Using a workflow</a></li>
           <li><a href="#faq">FAQ</a></li>
           <li><a href="#contribute">Contribute</a></li>
-          <li><a href="./docs/adoption.md">Using it in your project</a></li>
-          <li><a href="./docs/mcp.md">The MCP layer</a></li>
-          <li><a href="./docs/decisions/">Decisions</a></li>
+          <li><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/adoption.md">Using it in your project</a></li>
+          <li><a href="https://github.com/PLACEHOLDER/openstategraph/blob/main/docs/mcp.md">The MCP layer</a></li>
+          <li><a href="https://github.com/PLACEHOLDER/openstategraph/tree/main/docs/decisions">Decisions</a></li>
         </ul>
       </div>
       <div>

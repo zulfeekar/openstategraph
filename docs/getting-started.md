@@ -116,6 +116,34 @@ Press **View compiled graph** in the top bar to see what the compiler actually
 produced — rendered from `draw_mermaid()` locally, with no graph ever sent to
 a third party.
 
+### Watching a run, and stopping one
+
+While a run streams, the activity trace beside the conversation shows more
+than node names. When a run creates children — an orchestrator's `Send`
+fan-out, a deep agent's `task` call, or a mounted Team or subgraph starting —
+a row appears reading **`⤷ spawned <label>`** with the first ~120 characters
+of the instruction it was given. A spawn is an *announcement*, not a step: it
+takes no time of its own and occupies no lane in the timeline, it just names
+the child before the child produces anything. That is deliberate — the failure
+mode it exists to prevent is a run that looks stalled while five workers are
+busy. Spawns appear in the chat trace only; there is no canvas animation for
+them.
+
+The **Run** button becomes **Stop** while a run is streaming (so does the
+composer's Send). Stop is honest about where it can and cannot reach:
+
+- **It really does stop the backend**, not just your browser. Aborting the
+  request closes the SSE stream; the server races that disconnect against each
+  frame and stops pulling the graph's generator, so **no further supersteps are
+  scheduled**.
+- **It cannot interrupt work already dispatched.** Tasks LangGraph handed to
+  its executor for the *current* superstep run to completion — a blocking model
+  call has no cancellation seam — and their results are discarded. Draining
+  measures at roughly 15 seconds for an early stop and up to ~75 seconds in the
+  middle of a fan-out. The stream ends immediately; the process quietens after.
+- **Stopping a run paused at an approval discards only the local prompt.** The
+  thread is checkpointed, so it is still resumable.
+
 ## 5. Ask it something — `/chat`
 
 <http://localhost:8000/chat> is the customer-facing side: no canvas, just a

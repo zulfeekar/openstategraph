@@ -2,7 +2,7 @@
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0%20unreleased-informational.svg)](CHANGELOG.md)
 
 A visual AI-agent workflow editor built on the **open-source** JointJS core
 (`@joint/core`, MPL-2.0), reproducing the JointJS+ *AI Workflow Builder* demo
@@ -131,8 +131,9 @@ every figure any example produces can be checked against the same file.
   conversation fallback, a supervisor with three worker archetypes on the
   generic SQL Explorer bus (one also holding web search), report formatting,
   a grader revise loop, human approval, an email dispatcher (dry-run without
-  SMTP), a quick-metric agent, a mounted Team (`chinook-metrics-team`), and
-  the focused example itself mounted as a subgraph for deep SQL questions.
+  SMTP), a quick-metric agent, a conversational branch for follow-ups, a
+  mounted Team (`chinook-metrics-team`) on the `database_deep_dive` branch,
+  and the focused example itself mounted as a subgraph on `sql_specialist`.
 
 Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
 the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>`
@@ -152,7 +153,10 @@ of these for the backend process:
 | `OPENSTATEGRAPH_LOG_LEVEL` | backend log verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
 
 The canvas-preview providers (Anthropic/OpenAI/Ollama keys entered in the
-credentials dialog) are separate — see **Providers** below.
+credentials dialog) are separate — see **Providers** below. The canonical
+explanation of the *two* model paths and which credential reaches which is
+[docs/getting-started.md §3](docs/getting-started.md#3-models-and-credentials);
+this table is the quick reference.
 
 ### Tests
 
@@ -384,13 +388,15 @@ memory.
 Issues and pull requests are welcome. The house style is TDD, and `core/` is
 pure TypeScript with no excuse for untested logic.
 
-- [**docs/**](docs/README.md) — the documentation set: [getting
-  started](docs/getting-started.md), [using it in your
-  project](docs/adoption.md) (the three consumption modes), [the MCP
-  layer](docs/mcp.md) (your own LLM composes the graph), the seven
-  [patterns](docs/patterns.md), [building an atom](docs/building-an-atom.md) (a
-  node, both halves, end to end) and the [ports and
-  edges](docs/ports-and-edges.md) reference
+- [**docs/**](docs/README.md) — the documentation set, indexed by intent:
+  [what this is](docs/what-is-this.md) (deciding), [getting
+  started](docs/getting-started.md) (first run), [using it in your
+  project](docs/adoption.md) (the three consumption modes, the CLI,
+  `load_workflow`), [the stability contract](docs/stability.md) (what can be
+  taken away), [the MCP layer](docs/mcp.md) (your own LLM composes the graph),
+  the seven [patterns](docs/patterns.md), [building an
+  atom](docs/building-an-atom.md) (a node, both halves, end to end) and the
+  [ports and edges](docs/ports-and-edges.md) reference
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — setup, the test gate, and how to add
   a node type, tool, provider or workflow package
 - [**CLAUDE.md**](CLAUDE.md) — the architecture contract. Read

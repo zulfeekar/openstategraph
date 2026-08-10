@@ -11,12 +11,23 @@ generic node type at once:
 | Piece | Node types |
 | --- | --- |
 | Two entries | `input.text` (the question) + `input.markdown` (house style, fanned out to two agents) |
-| Intent routing | `route.classifier` — full_report / quick_metric / database_deep_dive / sql_specialist, with a `conversation` fallback |
+| Intent routing | `route.classifier` — five branches, `conversation` being the fallback. Each one owns a different downstream shape (see below) |
 | The report crew | `orchestrate.supervisor` + three `orchestrate.worker` archetypes (Sales, Customer, Trends) sharing the SQL Explorer bus; Trends also holds Web Search |
 | Join + quality | `function.format_report` → `route.grader` (revise loop) → `human.approval` |
 | Delivery | Report Dispatcher `agent.llm` bound to `tool.email-send` — recipient is **node config**, the model writes only subject and body; dry-run `.eml` to `workflows/_outbox/` unless SMTP is configured |
-| One-shot branch | `agent.llm` metric answerer with summarization on, its own grader |
-| Composition | `team.workflow` → `chinook-metrics-team`; `workflow.subgraph` → `chinook-nl-to-sql` (deep SQL questions route to the focused example — real reuse, not a demo prop) |
+| One-shot branch | `agent.llm` metric answerer with summarization on (`summarize: true`), its own grader |
+| Conversation branch | Analytics Concierge `agent.llm` + its own grader — follow-ups ("how did you get that") and meta questions, answered from history rather than a new query |
+| Composition | `team.workflow` → `chinook-metrics-team`; `workflow.subgraph` → `chinook-nl-to-sql` — real reuse, not a demo prop |
+
+Where each branch goes:
+
+| Branch | Downstream |
+| --- | --- |
+| `full_report` | supervisor → three workers → format → grader → approval → email dispatcher |
+| `quick_metric` | Metric Answerer + grader |
+| `database_deep_dive` | the mounted `chinook-metrics-team` Team |
+| `sql_specialist` | the mounted `chinook-nl-to-sql` subgraph |
+| `conversation` (fallback) | Analytics Concierge + grader |
 
 ## Data — one database, one source of truth
 

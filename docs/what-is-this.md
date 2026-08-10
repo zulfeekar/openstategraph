@@ -108,10 +108,10 @@ from the shipped wheel:
 | --- | --- |
 | `pip install openstategraph` | **36** |
 | `pip install "openstategraph[ollama]"` | **38** |
-| the same tree before 0.3.0 | **79** |
+| the same tree before 0.3.0 | **78** |
 
 The core is exactly four declared dependencies — `langgraph`, `langchain`,
-`langchain-core`, `pydantic` — and our own wheel is ~217 KB. Everything else
+`langchain-core`, `pydantic` — and our own wheel is ~215 KiB. Everything else
 is behind an extra you ask for by name:
 
 ```
