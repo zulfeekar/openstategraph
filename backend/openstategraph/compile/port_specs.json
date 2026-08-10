@@ -1,0 +1,1067 @@
+{
+  "schema_version": 1,
+  "generated_by": "npm run generate:ports",
+  "source": "src/nodes/portSpecs.ts",
+  "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
+  "port_types": [
+    {
+      "id": "feedback",
+      "label": "Feedback",
+      "accepts": [
+        "feedback"
+      ]
+    },
+    {
+      "id": "result",
+      "label": "Result",
+      "accepts": [
+        "result",
+        "text"
+      ]
+    },
+    {
+      "id": "skill",
+      "label": "Skill",
+      "accepts": [
+        "skill"
+      ]
+    },
+    {
+      "id": "text",
+      "label": "Text",
+      "accepts": [
+        "text"
+      ]
+    },
+    {
+      "id": "tool",
+      "label": "Tool",
+      "accepts": [
+        "tool"
+      ]
+    },
+    {
+      "id": "worker",
+      "label": "Worker",
+      "accepts": [
+        "worker"
+      ]
+    }
+  ],
+  "node_types": [
+    {
+      "type": "agent.llm",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "AI Agent",
+      "description": "Runs an LLM with tool calling.",
+      "ports": [
+        {
+          "id": "prompt",
+          "direction": "in",
+          "type": "text",
+          "label": "prompt",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "tools",
+          "direction": "in",
+          "type": "tool",
+          "label": "agent tools",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "feedback"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "annotate.group",
+      "kind": "container",
+      "category": "annotate",
+      "scope": "app",
+      "label": "Group",
+      "description": "Frames related nodes together.",
+      "ports": [],
+      "dynamic_ports": []
+    },
+    {
+      "type": "annotate.note",
+      "kind": "annotation",
+      "category": "annotate",
+      "scope": "app",
+      "label": "Note",
+      "description": "A Markdown note on the canvas.",
+      "ports": [],
+      "dynamic_ports": []
+    },
+    {
+      "type": "function.format_report",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Format Report",
+      "description": "Joins worker results into one Markdown report.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": true,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "report",
+          "direction": "out",
+          "type": "result",
+          "label": "report",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "human.approval",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Human approval",
+      "description": "Pauses the run and waits for a person to approve or reject the candidate.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "approved",
+          "direction": "out",
+          "type": "result",
+          "label": "approved",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "rejected",
+          "direction": "out",
+          "type": "feedback",
+          "label": "rejected",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "input.markdown",
+      "kind": "standard",
+      "category": "inputs",
+      "scope": "app",
+      "label": "Markdown File",
+      "description": "A Markdown instruction file for the agent.",
+      "ports": [
+        {
+          "id": "skill",
+          "direction": "out",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "skill"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "input.text",
+      "kind": "standard",
+      "category": "inputs",
+      "scope": "app",
+      "label": "Text Input",
+      "description": "The starting prompt for the flow.",
+      "ports": [
+        {
+          "id": "text",
+          "direction": "out",
+          "type": "text",
+          "label": "text",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "orchestrate.supervisor",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Orchestrator",
+      "description": "Splits an instruction into subtasks and fans them out to workers.",
+      "ports": [
+        {
+          "id": "instruction",
+          "direction": "in",
+          "type": "text",
+          "label": "instruction",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "feedback"
+          ]
+        },
+        {
+          "id": "workers",
+          "direction": "out",
+          "type": "worker",
+          "label": "workers",
+          "required": true,
+          "max_connections": null,
+          "accepts": [
+            "worker"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "orchestrate.worker",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Worker",
+      "description": "Runs one subtask dispatched by an orchestrator.",
+      "ports": [
+        {
+          "id": "dispatch",
+          "direction": "in",
+          "type": "worker",
+          "label": "dispatch",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "worker"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "tools",
+          "direction": "in",
+          "type": "tool",
+          "label": "worker tools",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "output.formatted",
+      "kind": "standard",
+      "category": "output",
+      "scope": "app",
+      "label": "Formatted Output",
+      "description": "Renders the result as Markdown.",
+      "ports": [
+        {
+          "id": "result",
+          "direction": "in",
+          "type": "result",
+          "label": "result",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "route.classifier",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Router",
+      "description": "Classifies the input and sends it down one branch.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "text",
+          "label": "question",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [
+        {
+          "prefix": "branch:",
+          "direction": "out",
+          "type": "text",
+          "max_connections": null,
+          "accepts": [
+            "text"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "route.grader",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Grader",
+      "description": "Checks an answer, and sends it back with feedback if it falls short.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "pass",
+          "direction": "out",
+          "type": "result",
+          "label": "pass",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "revise",
+          "direction": "out",
+          "type": "feedback",
+          "label": "revise",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "team.workflow",
+      "kind": "standard",
+      "category": "compose",
+      "scope": "app",
+      "label": "Team",
+      "description": "A workflow that loops until it meets its outcome, run as one step.",
+      "ports": [
+        {
+          "id": "input",
+          "direction": "in",
+          "type": "result",
+          "label": "task",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "outcome",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.chinook-execute-sql",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Execute SQL Query",
+      "description": "Executes a SQL SELECT query against the Chinook database and returns results.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.chinook-get-all-tables",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "List All Tables",
+      "description": "Returns a list of all tables in the Chinook database with descriptions.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.chinook-get-schema",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Get Table Schema",
+      "description": "Retrieves the schema (column names and types) for a Chinook database table.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.email-send",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Email Send",
+      "description": "Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.knowledge-lookup",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Knowledge",
+      "description": "The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. Build it from the card’s “Build second brain” button.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.platform-describe-workflow",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Describe Workflow",
+      "description": "One workflow’s docs and structure (read-only).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.platform-grep",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo Grep",
+      "description": "Searches repository text (read-only, jailed, capped).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.platform-list-workflows",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "List Workflows",
+      "description": "Lists every workflow on this platform (read-only).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.platform-ls",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo ls",
+      "description": "Lists a repository directory (read-only, jailed).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.platform-read-file",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo Read File",
+      "description": "Reads one repository text file (read-only, jailed, capped).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.reddit-search",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Search Reddit",
+      "description": "Finds trending posts in a subreddit.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.tabular-get-schema",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Get Table Schema",
+      "description": "Retrieves column names, data types, and sample values for a CSV or Parquet file.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.tabular-list-files",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "List Data Files",
+      "description": "Lists all CSV and Parquet files available for analysis in the data directory.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.tabular-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Query Data",
+      "description": "Executes a SQL query against CSV/Parquet files using DuckDB.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.tabular-sample",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Sample Data",
+      "description": "Returns a preview sample of rows from a CSV or Parquet file for quick exploration.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.web-fetch",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Web Fetch",
+      "description": "Reads one public web page as text (SSRF-guarded).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.web-search",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Web Search",
+      "description": "Keyless web search (DuckDuckGo); pair with Web Fetch.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-create-pr",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Create PR",
+      "description": "Packages the workspace change as a .patch + PR body in the output directory. Dry-run unless \"Invoke gh\" is explicitly enabled — and the graph gates this behind human approval regardless.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-diff",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Workspace Diff",
+      "description": "Shows the unified diff of every workspace change since the baseline commit.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-list-files",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "List Workspace Files",
+      "description": "Lists files inside the sandboxed workspace.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-read-file",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Read Workspace File",
+      "description": "Reads one file from the sandboxed workspace (path-jailed).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-reset",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Reset Workspace",
+      "description": "Creates a fresh sandboxed copy of the fixture project with an isolated git baseline. The coder calls this first.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-run-tests",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Run Tests",
+      "description": "Runs the workspace test suite with a fixed pytest command — the only process the coder can start. Uses the shared \"Timeout\" field for the pytest budget.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "tool.workshop-write-file",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Write Workspace File",
+      "description": "Writes (creates or fully replaces) one file in the sandboxed workspace. Escapes of the jail are refused.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    },
+    {
+      "type": "workflow.subgraph",
+      "kind": "standard",
+      "category": "compose",
+      "scope": "app",
+      "label": "Workflow",
+      "description": "Runs another workflow as a single step.",
+      "ports": [
+        {
+          "id": "input",
+          "direction": "in",
+          "type": "result",
+          "label": "input",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": []
+    }
+  ]
+}

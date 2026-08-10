@@ -37,6 +37,27 @@ TDD is the house style: tests land with (ideally before) the change.
 the change genuinely needs no documentation, put `docs: not-needed` in any
 commit message in the PR and the job passes.
 
+## Generated artifacts — regenerate, never hand-edit
+
+`backend/openstategraph/compile/port_specs.json` is **generated** from the
+TypeScript node catalogue and committed. Change a node type, a port, a port's
+cardinality or a port type, and you must run:
+
+```bash
+npm run generate:ports
+```
+
+The TypeScript side is authoritative here (the opposite direction to
+Pydantic → TypeScript, which is the rule for *runtime* types): `src/nodes/**`
+is where a node type is declared and where `ports` is a function of node data;
+Python only reads the shape. The artifact is committed because an installed
+wheel has no Node.js — a consumer running `load_workflow` cannot regenerate it.
+
+Two gates catch a stale copy: `src/nodes/portSpecs.test.ts` compares the built
+catalogue to the committed bytes inside `npm run verify`, and CI's
+`generated-port-specs` job regenerates and diffs the working tree. Both name
+the command in the failure. Do not edit the JSON by hand.
+
 ## Adding things
 
 Everything is a registry; extending never edits `core/`. See README's

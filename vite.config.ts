@@ -27,7 +27,10 @@ export default defineConfig({
       // The view and canvas layers are excluded from the coverage figure
       // rather than untested — they are verified in the browser. Counting
       // them would produce a number that rewards the wrong tests.
-      exclude: ['src/**/*.test.ts', 'src/**/index.ts'],
+      // `portSpecs.emit.spec.ts` is the artifact generator, run only by
+      // `npm run generate:ports` under its own config — counting it here would
+      // penalise the ratchet for a file the test run deliberately never loads.
+      exclude: ['src/**/*.test.ts', 'src/**/index.ts', 'src/**/*.emit.spec.ts'],
       // A ratchet, not a target: raised as waves of tests land (58% -> 73%
       // statements in the 2026-08-09 push). CI fails if coverage regresses
       // below the highest level already achieved.

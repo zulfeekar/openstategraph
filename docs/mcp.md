@@ -69,8 +69,11 @@ shared secret.
 The client's model cannot invent our node types or port ids, so the server's
 instructions make this the mandatory first call. The payload is
 machine-readable and assembled from three existing sources of truth (the
-compiler's port table, the Architect's known-types set, and the Python ladder
-classes' locked prompt sections) — it declares nothing of its own.
+**generated** node catalogue `compile/port_specs.json`, the Architect's
+known-types set, and the Python ladder classes' locked prompt sections) — it
+declares nothing of its own. The port table is emitted from the authoritative
+TypeScript definitions by `npm run generate:ports` and CI fails on drift, so a
+node type added in the editor cannot go missing here.
 
 The gist of what comes back:
 
@@ -421,8 +424,11 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   Use the editor or `/api/runs/stream` for those.
 - **No rate limiting, quotas or audit log.** `run_workflow` in particular
   spends the deployer's model budget.
-- **The port table is still hand-mirrored** from the TypeScript catalogue, so a
-  node type added there and not here is invisible to every connected client.
+- **Discovered `tool.*`/`function.*` node types are not enumerable.** They are
+  minted per workflow package at runtime, so the vocabulary names the prefixes
+  and their meaning rather than listing them. Everything the editor itself
+  ships — including workflow-scoped tool families — is generated into the
+  catalogue and cannot drift (RC-01, closed).
 
 All of these, with reasoning and re-open conditions, are in
 [`decisions/mcp-layer.md`](decisions/mcp-layer.md).

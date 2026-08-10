@@ -109,10 +109,16 @@ class NodeVocabulary:
     port ids, and guessing them produces documents that fail validation for
     reasons the verdict can only describe after the fact.
 
-    Assembled from the three existing sources of truth — the compiler's port
-    table, the Architect's known-types set, and the Python ladder classes'
-    locked prompt sections (the same ones `/api/node-contracts` serves). It
-    declares nothing of its own.
+    Assembled from the existing sources of truth — the **generated** node
+    catalogue (`compile/port_specs.json`, emitted from the authoritative
+    TypeScript definitions), the Architect's known-types set, and the Python
+    ladder classes' locked prompt sections (the same ones `/api/node-contracts`
+    serves). It declares nothing of its own.
+
+    Before RC-01 the port table it served was hand-copied, so a node type added
+    in the editor was invisible to every connected client — an LLM composing
+    against it could not use the node and got no error saying why. It is now
+    generated, and CI fails on drift.
     """
 
     def describe(self) -> dict[str, Any]:
@@ -120,6 +126,7 @@ class NodeVocabulary:
         from openstategraph.abc.grader import BaseGrader
         from openstategraph.abc.orchestrator import BaseOrchestrator
         from openstategraph.abc.router import BaseRouter
+        from openstategraph.compile.node_catalogue import CATALOGUE
         from openstategraph.compile.workflow_compiler import (
             BINDING_PORT_TYPES,
             CONTROL_PORT_TYPES,
@@ -134,18 +141,47 @@ class NodeVocabulary:
             "route.grader": BaseGrader,
             "orchestrate.supervisor": BaseOrchestrator,
         }
+        records = {node["type"]: node for node in CATALOGUE.nodes}
 
         node_types = []
         for node_type in sorted(set(KNOWN_NODE_TYPES) | set(DEFAULT_PORT_SPECS)):
             ladder = contracts.get(node_type)
+            record = records.get(node_type, {})
             node_types.append(
                 {
                     "type": node_type,
+                    "label": record.get("label", ""),
+                    "description": record.get("description", ""),
+                    # `annotate.*` node types are real and are allowed in a
+                    # document, but the compiler never schedules them. Said out
+                    # loud rather than dropped, so a client is not left to infer
+                    # from an empty port list that the node is broken.
+                    "executes": record.get("kind", "standard") == "standard",
+                    # `workflow` means the type travels with one workflow's own
+                    # package and is not available everywhere.
+                    "scope": record.get("scope", "app"),
                     "ports": [
-                        {"id": port_id, "type": spec.type, "direction": spec.direction}
+                        {
+                            "id": port_id,
+                            "type": spec.type,
+                            "direction": spec.direction,
+                            "label": spec.label,
+                            "required": spec.required,
+                            # `null` is unlimited — an agent's tool bus.
+                            "max_connections": spec.max_connections,
+                            "accepts": list(spec.accepts),
+                        }
                         for port_id, spec in sorted(
                             DEFAULT_PORT_SPECS.get(node_type, {}).items()
                         )
+                    ],
+                    "generated_ports": [
+                        {
+                            "prefix": group.prefix,
+                            "type": group.type,
+                            "direction": group.direction,
+                        }
+                        for group in CATALOGUE.dynamic_ports.get(node_type, ())
                     ],
                     "prompt_contract": (
                         {
@@ -185,6 +221,17 @@ class NodeVocabulary:
                 "binding": sorted(BINDING_PORT_TYPES),
                 "worker": WORKER_PORT_TYPE,
                 "feedback": "feedback",
+                # Generated alongside the ports themselves: which source types
+                # each port type accepts, so a client can check a connection
+                # before composing rather than after the verdict.
+                "types": [
+                    {
+                        "id": port_type["id"],
+                        "label": port_type.get("label", ""),
+                        "accepts": list(port_type.get("accepts") or ()),
+                    }
+                    for port_type in CATALOGUE.port_types
+                ],
                 "explanation": (
                     "NOT every edge is a graph edge. An edge landing on a "
                     "`tool` or `skill` port is a BINDING (the capability becomes "

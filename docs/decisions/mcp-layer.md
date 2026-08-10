@@ -63,7 +63,7 @@ stating plainly:
 
 | Tool | What it wraps | Writes? |
 | --- | --- | --- |
-| `get_node_vocabulary` | `DEFAULT_PORT_SPECS` + `KNOWN_NODE_TYPES` + the ladder classes' locked prompt sections | no |
+| `get_node_vocabulary` | the generated `compile/port_specs.json` + `KNOWN_NODE_TYPES` + the ladder classes' locked prompt sections | no |
 | `compile_workflow` | `ValidateWorkflowTool` + `WorkflowCompiler.build` + `draw_mermaid(xray=True)` | **no** |
 | `validate_workflow` | `ValidateWorkflowTool` | no |
 | `list_workflows` | `WorkflowStore.list` | no |
@@ -167,12 +167,15 @@ fix rather than an ImportError traceback.
   `unresolved_subgraphs`/`unresolved_tools` loudness. It is never silent, but a
   client must read that field: "compiles" is not "will be fully capable when
   run". Compose against a deployment that hosts the children, or inline them.
-- **The port table is still hand-mirrored.** `DEFAULT_PORT_SPECS` duplicates
-  the authoritative TypeScript node catalogue, which CLAUDE.md forbids as a
-  standing state — it is injectable pending generated output (ticket 02).
-  Serving it over MCP raises the stakes: a node type added in TypeScript and
-  not added there is now invisible to every connected client, not merely to the
-  compiler. That makes ticket 02 more urgent, not less.
+- ~~**The port table is still hand-mirrored.**~~ **Closed (RC-01).**
+  `DEFAULT_PORT_SPECS` now reads `compile/port_specs.json`, generated from the
+  authoritative TypeScript catalogue by `npm run generate:ports` and gated by
+  two CI checks. The mirror is gone, and serving the table over MCP is no
+  longer a way to publish drift. What the move surfaced: the hand-written table
+  was missing 28 of the 38 node types the editor actually registers, including
+  `workflow.subgraph` and `team.workflow` — which `get_node_vocabulary`
+  advertised with **zero ports**, so a client had no way to wire a mounted
+  workflow.
 - **No rate limiting, no quotas, no audit log.** `run_workflow` in particular
   spends the deployer's model budget on any connected client's request.
 

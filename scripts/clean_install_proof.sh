@@ -42,8 +42,16 @@ echo "==> twine check"
 python3 -m twine check "$REPO"/backend/dist/*
 
 echo "==> wheel contents"
-python3 -m zipfile -l "$WHEEL" | grep -E "py\.typed|LICENSE|entry_points\.txt|static/chat\.html" \
-  || { echo "the wheel is missing package data it must ship"; exit 1; }
+# One `grep -E` with alternation passed on any single hit, so four required
+# files were really one. Checked individually now — `compile/port_specs.json`
+# is the generated node catalogue (RC-01), and a wheel without it raises
+# `CatalogueError` on the adopter's first import rather than in our CI.
+LISTING="$(python3 -m zipfile -l "$WHEEL")"
+for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
+                "compile/port_specs.json"; do
+  printf '%s\n' "$LISTING" | grep -qF "$required" \
+    || { echo "the wheel is missing package data it must ship: $required"; exit 1; }
+done
 
 echo "==> clean venv, core + one provider extra only"
 python3 -m venv "$VENV"

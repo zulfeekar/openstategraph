@@ -22,11 +22,12 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**48 gaps · 6 blocks-1.0 · 14 should-precede-launch · 28 fine-to-carry.**
+**47 gaps · 5 blocks-1.0 · 14 should-precede-launch · 28 fine-to-carry.**
+(RC-01 closed 2026-08-10 by ticket 04 of `.scratch/docs-and-gaps/`.)
 
 | Theme | Total | blocks 1.0 | precede launch | carry |
 | --- | --- | --- | --- | --- |
-| A. Runtime correctness & capability | 16 | 2 | 4 | 10 |
+| A. Runtime correctness & capability | 15 | 1 | 4 | 10 |
 | B. Packaging & release | 10 | 4 | 2 | 4 |
 | C. UX | 10 | 0 | 4 | 6 |
 | D. Docs | 4 | 0 | 2 | 2 |
@@ -35,31 +36,14 @@ Verdicts are three, and only three:
 
 Six items on the intake list for this register were checked and found
 **already done** — they are listed at the bottom under "Verified closed", not
-silently dropped.
+silently dropped. Entries closed since are appended to that list when they were
+ever externally visible.
 
 ---
 
-## A. Runtime correctness & capability (16)
+## A. Runtime correctness & capability (15)
 
 ### Blocks 1.0
-
-**RC-01 — `DEFAULT_PORT_SPECS` hand-mirrors the TypeScript node catalogue.**
-The Python compiler carries its own copy of every node type's port table.
-Evidence: `backend/openstategraph/compile/workflow_compiler.py:169-174`, whose
-own comment says *"**Known duplication, deliberately visible.** The
-authoritative definitions live in the TypeScript node catalogue, and CLAUDE.md
-forbids hand-mirroring a type across the boundary."* Also
-`backend/tests/test_workflow_compiler.py:283` (*"temporary (ticket 02)"*).
-Deferred because the table is **injectable** via `port_resolver`, so the
-compiler works today and can consume generated output without a compiler
-change. **Size L** (a generator plus a build step across two languages).
-**Risk:** a node type added in TypeScript and not added here compiles as an
-opaque node with control-flow edges — silently wrong wiring, not a crash. The
-MCP layer raised the stakes: `mcp_server.py:126-147` serves this table as
-`get_node_vocabulary`, so the drift is now *"invisible to every connected
-client, not merely to the compiler"* (`docs/decisions/mcp-layer.md` §5).
-**Verdict: blocks 1.0** — CLAUDE.md names hand-mirroring across the Pydantic/TS
-boundary as a hard rule, and we are now publishing the mirror over a wire.
 
 **RC-02 — The API server's human-in-the-loop checkpointer is `InMemorySaver`.**
 An approval pause does not survive a restart and is invisible to a second
@@ -536,10 +520,11 @@ by RC-02. **Size M.** **Verdict: fine to carry.**
 
 ---
 
-## Verified closed — named on the intake list, checked, and not a gap
+## Verified closed — checked and not (or no longer) a gap
 
-These were investigated for this register and found already fixed. They are
-listed so nobody re-adds them from an old session report.
+Items 1-6 were on the intake list and found already fixed. Anything after that
+was a live entry in this register that has since been resolved and was
+externally visible. Listed so nobody re-adds them from an old session report.
 
 1. **`settings.checkpointer: "sqlite"` silently degrading to in-memory.**
    Fixed: the `[sqlite]` extra is declared (`backend/pyproject.toml:77-79`) and
@@ -558,6 +543,15 @@ listed so nobody re-adds them from an old session report.
 6. **`abc/__init__.py` empty, no `errors` module, no `__version__`, `__all__`
    on Tier 3 modules.** All closed by framework-packaging ticket 03; the
    surface is pinned by `backend/tests/public_api.txt`.
+7. **RC-01 — `DEFAULT_PORT_SPECS` hand-mirrored the TypeScript node
+   catalogue.** Closed 2026-08-10. `backend/openstategraph/compile/port_specs.json`
+   is generated from `src/nodes/portSpecs.ts` by `npm run generate:ports`,
+   loaded by `compile/node_catalogue.py`, and gated twice in CI
+   (`src/nodes/portSpecs.test.ts` byte-compares; the `generated-port-specs` job
+   regenerates and diffs). Externally visible because `docs/mcp.md` listed it
+   as a limitation of `get_node_vocabulary`. The mirror had drifted: it held 10
+   of the 38 node types the editor registers, and `workflow.subgraph` /
+   `team.workflow` were advertised over MCP with zero ports.
 
 ---
 

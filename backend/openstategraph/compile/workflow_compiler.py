@@ -30,6 +30,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
 from openstategraph.abc.orchestrator import archetype_key
+from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
 try:
@@ -154,83 +155,35 @@ def safe_name(node_id: str) -> str:
     return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in node_id)
 
 
-@dataclass(frozen=True)
-class PortSpec:
-    """What the compiler needs to know about one port."""
-
-    type: str
-    direction: str
-
-
-#: Port types per node type.
+#: Port types per node type — **generated**, never hand-written.
 #:
-#: **Known duplication, deliberately visible.** The authoritative definitions
-#: live in the TypeScript node catalogue, and CLAUDE.md forbids hand-mirroring a
-#: type across the boundary. This table exists so the compiler works today and is
-#: **injectable** (see `port_resolver`) so it can be replaced by generated output
-#: without touching the compiler. Ticket 02 owns that generation; until then, a
-#: node type added in TypeScript and not added here compiles as an opaque node
-#: with control-flow edges, which is the safe default rather than a crash.
-DEFAULT_PORT_SPECS: dict[str, dict[str, PortSpec]] = {
-    "input.text": {"text": PortSpec("text", "out")},
-    "input.markdown": {"skill": PortSpec("skill", "out")},
-    "agent.llm": {
-        "prompt": PortSpec("text", "in"),
-        "skill": PortSpec("skill", "in"),
-        "tools": PortSpec("tool", "in"),
-        "feedback": PortSpec("feedback", "in"),
-        "result": PortSpec("result", "out"),
-    },
-    "output.formatted": {"result": PortSpec("result", "in")},
-    GRADER_TYPE: {
-        "candidate": PortSpec("result", "in"),
-        "pass": PortSpec("result", "out"),
-        "revise": PortSpec("feedback", "out"),
-    },
-    ROUTER_TYPE: {"question": PortSpec("text", "in")},
-    ORCHESTRATOR_TYPE: {
-        "instruction": PortSpec("text", "in"),
-        # The other half of the only legal cycle (ticket 09): a grader's
-        # `revise` may close a loop here too, so a failed report can send the
-        # orchestrator back to re-plan with more subtasks — a strictly harder
-        # case than looping over one agent node, since the cycle re-enters a
-        # fan-out/join subgraph rather than a single call.
-        "feedback": PortSpec("feedback", "in"),
-        "workers": PortSpec(WORKER_PORT_TYPE, "out"),
-    },
-    WORKER_TYPE: {
-        "dispatch": PortSpec(WORKER_PORT_TYPE, "in"),
-        # Found live: these two were missing entirely, so an edge into either
-        # fell through `default_port_resolver`'s "unknown port" fallback and
-        # was treated as ordinary control flow rather than a binding — a
-        # worker with tools wired on the canvas silently ran with none,
-        # because `plan.tool_bindings` never saw the edge. `lc_tools` came
-        # back empty, `default_prompt` fell back to `""`, and the model
-        # answered from parametric knowledge with nothing to ground it.
-        "skill": PortSpec("skill", "in"),
-        "tools": PortSpec("tool", "in"),
-        "result": PortSpec("result", "out"),
-    },
-    "function.format_report": {
-        "candidate": PortSpec("result", "in"),
-        "report": PortSpec("result", "out"),
-    },
-    HUMAN_APPROVAL_TYPE: {
-        "candidate": PortSpec("result", "in"),
-        "approved": PortSpec("result", "out"),
-        "rejected": PortSpec("feedback", "out"),
-    },
-}
+#: The name is unchanged so no consumer had to move, but the contents now come
+#: from `compile/port_specs.json`, which `src/nodes/portSpecs.ts` emits from the
+#: authoritative TypeScript catalogue (register RC-01; see `node_catalogue.py`
+#: for the direction argument). The table stays **injectable** via the
+#: compiler's `port_resolver`, which is what let this swap happen without
+#: touching a line of compilation logic.
+DEFAULT_PORT_SPECS: dict[str, dict[str, PortSpec]] = CATALOGUE.port_specs
 
 
 def default_port_resolver(node_type: str, port_id: str) -> PortSpec:
     """Best-effort port lookup.
 
-    A router's outputs are `branch:<slug>` and generated from config, so they are
-    matched by prefix rather than enumerated.
+    Some ports are generated from a node's own configuration rather than
+    declared — a router's outputs are one `branch:<slug>` per configured branch
+    — so those are matched by prefix. The prefixes come from the same generated
+    artifact as the static ports: the generator discovers them by probing the
+    node's real `ports()` function, so this can never disagree with the editor
+    about what a branch port id looks like.
     """
-    if node_type == ROUTER_TYPE and port_id.startswith("branch:"):
-        return PortSpec("text", "out")
+    for group in CATALOGUE.dynamic_ports.get(node_type, ()):
+        if port_id.startswith(group.prefix):
+            return PortSpec(
+                type=group.type,
+                direction=group.direction,
+                max_connections=group.max_connections,
+                accepts=group.accepts,
+            )
     spec = DEFAULT_PORT_SPECS.get(node_type, {}).get(port_id)
     if spec is not None:
         return spec
@@ -623,7 +576,10 @@ class WorkflowCompiler:
 __all__ = [
     "BINDING_PORT_TYPES",
     "CONTROL_PORT_TYPES",
+    "DEFAULT_PORT_SPECS",
     "CompiledPlan",
+    # Re-exported from `node_catalogue` so existing importers keep working; the
+    # dataclass moved there because the loader has to build one.
     "PortSpec",
     "WorkflowCompiler",
     "default_port_resolver",

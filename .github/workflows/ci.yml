@@ -11,6 +11,45 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run verify   # tsc + eslint + prettier-check + vitest
+
+  # RC-01: `backend/openstategraph/compile/port_specs.json` is GENERATED from
+  # the TypeScript node catalogue and committed (the Python wheel must work
+  # with no Node.js installed). `npm run verify` already fails on drift via
+  # `src/nodes/portSpecs.test.ts`, which compares the built artifact to the
+  # committed bytes. This job proves the same thing the other way round —
+  # regenerate, then diff the working tree — so a drift that somehow slipped
+  # past the byte comparison (a generator that writes different bytes than it
+  # builds) still cannot merge.
+  generated-port-specs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run generate:ports
+      - name: The committed artifact must match the catalogue
+        run: |
+          # `--intent-to-add` so a *missing* artifact fails too: `git diff`
+          # alone is blind to an untracked file, which is exactly the state a
+          # deleted or never-committed artifact would be in.
+          git add --intent-to-add backend/openstategraph/compile/port_specs.json
+          if ! git diff --exit-code -- backend/openstategraph/compile/port_specs.json; then
+            echo "::error::backend/openstategraph/compile/port_specs.json is stale."
+            cat <<'MSG'
+
+          The TypeScript node catalogue (src/nodes/**) is authoritative for node
+          types and ports; the Python compiler and the MCP vocabulary read the
+          generated JSON above. You changed a node type or a port without
+          regenerating it.
+
+            npm run generate:ports
+            git add backend/openstategraph/compile/port_specs.json
+
+          MSG
+            exit 1
+          fi
+
   backend:
     runs-on: ubuntu-latest
     steps:
