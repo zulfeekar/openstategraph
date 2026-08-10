@@ -285,19 +285,19 @@ at the graph.
 # The compiled output is a plain LangGraph StateGraph: it runs
 # anywhere Python runs, with or without the OpenStateGraph editor.
 #
-# In-process (commit workflow.json beside this file):
-import json
-from langchain.chat_models import init_chat_model
-from openstategraph.compile.node_runtime import NodeRuntime, RunState
-from openstategraph.compile.workflow_compiler import WorkflowCompiler
+# In-process — point it at the package FOLDER (the one holding
+# workflow.json), so its tools/, functions/ and skills/ are wired
+# too. Compiling the document by hand skips exactly that, and an
+# agent that lost its tools answers from memory instead of failing.
+from openstategraph import load_workflow
 
-document = json.load(open("workflow.json"))["document"]
-runtime = NodeRuntime(model=init_chat_model("ollama:gpt-oss:120b-cloud"))
-graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
-final = graph.invoke({"question": "...", "attempts": 0,
-                      "decisions": {}, "outputs": {}},
-                     {"recursion_limit": 50})
-print(final["answer"])
+workflow = load_workflow("workflows/my-workflow")
+if workflow.warnings:
+    print("degraded:", workflow.warnings)
+print(workflow.ask("..."))
+
+# workflow.graph is the compiled LangGraph object — stream it,
+# checkpoint it, mount it in your own service.
 
 # Or against a running OpenStateGraph server:
 #   POST /api/runs  {"workflow": <the document>, "question": "..."}

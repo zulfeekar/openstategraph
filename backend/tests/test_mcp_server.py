@@ -188,6 +188,11 @@ class TestStatelessCompile:
         result = WorkflowArtifacts().compile(_linear_document())
 
         assert "workflow.json" in result["run_snippet"]
+        # The snippet must hand a client the seam that wires the package's own
+        # capabilities. The hand-rolled `NodeRuntime(...)` + `WorkflowCompiler`
+        # shape it used to print compiles, runs, and silently drops every tool.
+        assert "load_workflow" in result["run_snippet"]
+        assert "NodeRuntime" not in result["run_snippet"]
         skeleton = result["package_skeleton"]
         assert "workflow.json" in skeleton
         assert any(p.startswith("tools/") for p in skeleton)

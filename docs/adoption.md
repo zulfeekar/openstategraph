@@ -126,28 +126,89 @@ compiled graph from your own service. The editor's involvement ends at
 authoring time.
 
 What you commit is exactly the package layout above — most importantly
-`workflow.json`. Loading and running it is ordinary Python:
+`workflow.json`. Loading and running it is one function call, and the argument
+is the **package folder**, not the JSON file:
 
 ```python
-import json
+from openstategraph import load_workflow
 
-from langchain.chat_models import init_chat_model
-from openstategraph.compile.node_runtime import NodeRuntime, RunState
-from openstategraph.compile.workflow_compiler import WorkflowCompiler
+workflow = load_workflow("workflows/my-thing")
 
-document = json.load(open("workflow.json"))["document"]
-runtime = NodeRuntime(model=init_chat_model("ollama:gpt-oss:120b-cloud"))
-graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
+if workflow.warnings:                 # capabilities that could not be resolved
+    print("degraded:", workflow.warnings)
 
-final = graph.invoke(
-    {"question": "...", "attempts": 0, "decisions": {}, "outputs": {}},
-    {"recursion_limit": 50},
-)
-print(final["answer"])
+print(workflow.ask("How many invoices are there?"))
 ```
 
-`graph` is a compiled LangGraph object. Wrap it in your own FastAPI app, call
-it from a script, exercise it with `pytest`, deploy it wherever Python runs.
+`load_workflow` returns a small value object:
+
+| | |
+| --- | --- |
+| `.graph` | the compiled LangGraph `StateGraph` — **the escape hatch** |
+| `.warnings` | tools/functions/subgraphs the package names but could not be resolved |
+| `.ask(question, *, thread_id=None, recursion_limit=50)` | run it once, get the answer |
+| `.mermaid()` | the compiled topology as text, no network call |
+| `.slug` / `.package_dir` / `.document` | what it loaded, and from where |
+
+Arguments worth knowing:
+
+- **`model`** — a model string (`"anthropic:claude-haiku-4-5"`,
+  `"ollama:gpt-oss:120b-cloud"`), resolved through the *same* path the HTTP API
+  uses, or an already-built LangChain model object, passed through untouched.
+  Omit it and you get the document's own `settings.model` if it names one,
+  otherwise the environment default: `ANTHROPIC_API_KEY` → Claude,
+  `OPENAI_API_KEY` → GPT, else Ollama **cloud**. A node that names its own
+  model still wins over all of it.
+- **`checkpointer`** — optional. By default the package's own
+  `settings.checkpointer` decides (sqlite, or an in-process saver), which is
+  what lets a `human.approval` node pause and `ask(thread_id="...")` continue a
+  conversation. Pass a Postgres saver to own durability yourself.
+
+### Why not just compile it yourself?
+
+Because it works, and that is the problem. This shape —
+
+```python
+runtime = NodeRuntime(model=init_chat_model(...))          # DON'T
+graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
+```
+
+— compiles, runs, and returns an answer. It also never wires the package's own
+`tools/`, `functions/`, `middlewares/`, `skills/` or `knowledge/`, because
+those are discovered from the package **directory**, which a bare document
+knows nothing about. Run the Chinook example that way and
+`runtime.unresolved_tools` holds all three of its tools while the agent
+cheerfully replies *"we need to call chinook_list_tables"* — a workflow that
+looks like it works and answers nothing. The symptom to watch for is an agent
+answering from memory instead of failing.
+
+`load_workflow` derives the workflows root and the slug from the folder you
+hand it, wires the capability registries, injects the long-term memory store,
+and surfaces anything it could not resolve on `.warnings` (plus one `WARNING`
+log line) rather than raising. When you need more than one question and an
+answer, drop to `.graph` — it is a plain compiled LangGraph object, so
+`.stream()`, `.astream_events()`, `.get_state()` and interrupt/resume are all
+right there.
+
+### What you actually install
+
+The runtime dependencies are declared in
+[`backend/pyproject.toml`](../backend/pyproject.toml). To run a compiled
+workflow in-process you need:
+
+| Package | Why |
+| --- | --- |
+| `langgraph>=1.0` | the graph the compiler targets |
+| `langchain>=1.0`, `langchain-core>=1.0` | `create_agent`, messages, tools |
+| `deepagents>=0.7` | only if a node uses the Deep Agents tier |
+| `pydantic>=2.9` | tool argument schemas — the single source of truth |
+| one provider package | `langchain-ollama`, `langchain-anthropic` or `langchain-openai` — whichever your `model` names |
+
+**You do not need `fastapi` or `uvicorn` to run a workflow in-process.** They
+are dependencies of the *editor's server*, not of the compiled graph, and the
+`load_workflow` path imports neither — a pinned test asserts exactly that by
+importing in a subprocess and checking `sys.modules`. `mcp` is likewise only
+needed if you run the MCP transport.
 
 ### Be honest about the install
 

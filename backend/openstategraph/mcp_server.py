@@ -356,24 +356,32 @@ class WorkflowArtifacts:
     @staticmethod
     def _run_snippet() -> str:
         """How to run the artifact without this editor — the point of being a
-        compiler rather than a runtime. Honest about both paths."""
+        compiler rather than a runtime. Honest about both paths.
+
+        This snippet used to hand-roll `NodeRuntime` + `WorkflowCompiler`,
+        which compiles and runs and *silently drops the package's own tools*:
+        verified live, the agent answered "we need to call
+        chinook_list_tables" while `unresolved_tools` held all three. The
+        capability wiring is exactly what `load_workflow` exists to own, so
+        the snippet a client commits is the one function call.
+        """
         return (
             "# The compiled output is a plain LangGraph StateGraph: it runs\n"
             "# anywhere Python runs, with or without the OpenStateGraph editor.\n"
             "#\n"
-            "# In-process (commit workflow.json beside this file):\n"
-            "import json\n"
-            "from langchain.chat_models import init_chat_model\n"
-            "from openstategraph.compile.node_runtime import NodeRuntime, RunState\n"
-            "from openstategraph.compile.workflow_compiler import WorkflowCompiler\n"
+            "# In-process — point it at the package FOLDER (the one holding\n"
+            "# workflow.json), so its tools/, functions/ and skills/ are wired\n"
+            "# too. Compiling the document by hand skips exactly that, and an\n"
+            "# agent that lost its tools answers from memory instead of failing.\n"
+            "from openstategraph import load_workflow\n"
             "\n"
-            'document = json.load(open("workflow.json"))["document"]\n'
-            'runtime = NodeRuntime(model=init_chat_model("ollama:gpt-oss:120b-cloud"))\n'
-            "graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))\n"
-            'final = graph.invoke({"question": "...", "attempts": 0,\n'
-            '                      "decisions": {}, "outputs": {}},\n'
-            '                     {"recursion_limit": 50})\n'
-            'print(final["answer"])\n'
+            'workflow = load_workflow("workflows/my-workflow")\n'
+            "if workflow.warnings:\n"
+            '    print("degraded:", workflow.warnings)\n'
+            'print(workflow.ask("..."))\n'
+            "\n"
+            "# workflow.graph is the compiled LangGraph object — stream it,\n"
+            "# checkpoint it, mount it in your own service.\n"
             "\n"
             "# Or against a running OpenStateGraph server:\n"
             '#   POST /api/runs  {"workflow": <the document>, "question": "..."}\n'

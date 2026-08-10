@@ -38,7 +38,19 @@ def build_tool_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]
 
     from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
 
-    registry: dict[str, Any] = chinook_tool_registry()
+    registry: dict[str, Any] = {}
+    try:
+        registry.update(chinook_tool_registry())
+    except Exception:
+        # The bundled Chinook tools live in `workflows/chinook-nl-to-sql/tools`,
+        # which is only importable inside *this* checkout (pytest.ini puts that
+        # directory on the path). Outside it — a consumer running their own
+        # package through `load_workflow` — the import raises, and it used to
+        # take the whole registry down before a single one of *their* tools was
+        # discovered. Debug, not warning: a demo fixture being absent is normal
+        # elsewhere, and a document that actually binds a chinook tool still
+        # reports it loudly through `unresolved_tools`.
+        logger.debug("Bundled Chinook tools unavailable in this environment", exc_info=True)
     # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
     # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
     registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
