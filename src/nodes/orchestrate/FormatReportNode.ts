@@ -43,7 +43,7 @@ export class FormatReportNodeModel extends AbstractNodeModel {
 export const formatReportNode: INodeDefinition = defineNode(
   {
     id: FORMAT_REPORT_TYPE,
-    category: CATEGORY.output,
+    category: CATEGORY.agent,
     label: 'Format Report',
     description: 'Joins worker results into one Markdown report.',
     iconId: 'node-format-report',

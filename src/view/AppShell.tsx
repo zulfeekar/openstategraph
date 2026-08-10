@@ -50,7 +50,7 @@ export function AppShell() {
   // underneath this open editor (another tab, a teammate's pull, a
   // hand-edit) — independent of whether "Manage Workflows" happens to be
   // open, since an external change can land at any time.
-  useWorkflowFileWatch(notify, workbench.registry, workbench.engine.executors);
+  useWorkflowFileWatch(notify);
 
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);

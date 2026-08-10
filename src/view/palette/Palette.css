@@ -134,3 +134,26 @@
   line-clamp: 2;
   overflow: hidden;
 }
+
+/* Badge and Refresh share the scoped section's heading slot. */
+.palette-scoped-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.palette-refresh--spinning {
+  animation: palette-refresh-spin 900ms linear infinite;
+}
+
+@keyframes palette-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-refresh--spinning {
+    animation: none;
+  }
+}

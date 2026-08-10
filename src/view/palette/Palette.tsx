@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
-import { Package, Search, X } from 'lucide-react';
+import { Package, RefreshCw, Search, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -17,6 +17,8 @@ import {
 import { matchesQuery } from '@core/model/ModelRegistry';
 import type { INodeCategory, INodeDefinition } from '@core/model/contracts/node';
 import { useController, usePaperController, useWorkbench } from '@app/WorkbenchContext';
+import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
+import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import './Palette.css';
 
@@ -40,6 +42,7 @@ export function Palette({ onNotify }: PaletteProps) {
   const controller = useController();
   const paper = usePaperController();
   const [query, setQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Node types are not only registered once at startup: workflow-scoped
   // node types (Chinook's tools) are registered and unregistered as the
@@ -93,6 +96,50 @@ export function Palette({ onNotify }: PaletteProps) {
 
   const searching = query.trim().length > 0;
 
+  // Hot discovery, on demand. Writing a `tools/*.py` file changes nothing
+  // `workflow.json`'s watcher looks at, and polling the discovery endpoint
+  // every few seconds to catch an event that happens a handful of times a
+  // session is a bad trade — so the author, who already knows the moment
+  // they saved the file, asks. The registry is an external store the
+  // palette already subscribes to, so a successful refresh repaints this
+  // list with no extra state.
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const outcome = await refreshWorkflowCapabilities(
+        sessionStorage.getItem(CURRENT_SLUG_KEY),
+        workbench.registry,
+        workbench.engine.executors,
+      );
+      switch (outcome.kind) {
+        case 'no-workflow':
+          onNotify('Save this workflow first — tools are discovered from its own folder.');
+          break;
+        case 'changed':
+          // A change with nothing added is a *removal* — a tool file that
+          // was deleted or stopped exporting a tool. Saying "0 new tools"
+          // would report the one thing that did not happen.
+          onNotify(
+            outcome.added.length === 0
+              ? 'Tools refreshed — one is no longer discovered.'
+              : outcome.added.length === 1
+                ? `Discovered a new tool: ${outcome.added[0]}`
+                : `Discovered ${outcome.added.length} new tools`,
+          );
+          break;
+        case 'unchanged':
+          onNotify(
+            outcome.total === 0
+              ? 'No tools found in this workflow’s tools/ folder.'
+              : 'Tools are up to date.',
+          );
+          break;
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const add = (definition: INodeDefinition) => {
     const at = paper?.viewportCenter() ?? { x: 120, y: 120 };
     const outcome = controller.nodes.add(definition.id, at);
@@ -135,11 +182,26 @@ export function Palette({ onNotify }: PaletteProps) {
             className="palette-section--scoped"
             heading="This workflow"
             aside={
-              scoped.length > 0 ? (
-                <Badge tone="accent" numeric>
-                  {scoped.length}
-                </Badge>
-              ) : undefined
+              <span className="palette-scoped-aside">
+                {scoped.length > 0 ? (
+                  <Badge tone="accent" numeric>
+                    {scoped.length}
+                  </Badge>
+                ) : null}
+                <IconButton
+                  size="xs"
+                  label={refreshing ? 'Refreshing tools' : 'Refresh tools'}
+                  disabled={refreshing}
+                  icon={
+                    <Icon
+                      glyph={RefreshCw}
+                      size="xs"
+                      className={refreshing ? 'palette-refresh--spinning' : undefined}
+                    />
+                  }
+                  onClick={() => void refresh()}
+                />
+              </span>
             }
           >
             {scoped.length > 0 ? (
@@ -160,7 +222,7 @@ export function Palette({ onNotify }: PaletteProps) {
             ) : (
               <p className="palette-note">
                 This workflow has no tools of its own yet. Python tools in its <code>tools/</code>{' '}
-                folder show up here as nodes you can wire in.
+                folder show up here as nodes you can wire in — just added one? Press Refresh.
               </p>
             )}
           </PanelSection>
@@ -178,6 +240,13 @@ export function Palette({ onNotify }: PaletteProps) {
                 heading={section.category.label}
                 aside={searching ? <Badge numeric>{section.nodes.length}</Badge> : undefined}
               >
+                {/* The tier's meaning, once per section — the label says
+                    *which* tier, this says what makes something belong to
+                    it. Hidden while searching: a filtered palette is a
+                    lookup, not a lesson. */}
+                {!searching && section.category.description ? (
+                  <p className="palette-note">{section.category.description}</p>
+                ) : null}
                 {section.nodes.map((definition) => (
                   <PaletteItem
                     key={definition.id}

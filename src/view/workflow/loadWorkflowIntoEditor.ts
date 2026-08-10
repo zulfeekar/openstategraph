@@ -6,6 +6,7 @@ import {
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
 } from '@nodes/workflowScoped';
+import { recordKnownCapabilities } from '@app/capabilityRefresh';
 import { pushDrillFrame } from '@app/drillStack';
 
 /** The workflow a drill-in is leaving — recorded only once the load succeeds. */
@@ -52,11 +53,11 @@ export async function loadWorkflowIntoEditor(
     // discovered `tools/` capabilities become real, connectable node types
     // the same way.
     const capabilities = await client.capabilities(slug);
-    registerDiscoveredCapabilities(
-      capabilities.ok ? capabilities.value.tools : [],
-      workbench.registry,
-      workbench.engine.executors,
-    );
+    const tools = capabilities.ok ? capabilities.value.tools : [];
+    registerDiscoveredCapabilities(tools, workbench.registry, workbench.engine.executors);
+    // Baseline for the palette's manual Refresh: without it, the first press
+    // after a load would report every tool the load itself registered as new.
+    recordKnownCapabilities(slug, tools);
     registerNodeTypesForRawDocument(outcome.value, workbench.registry, workbench.engine.executors);
     workbench.controller.document.importJSON(JSON.stringify(outcome.value));
     // Continuing to edit and save now updates *this* workflow, not a new one.

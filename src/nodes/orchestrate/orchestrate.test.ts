@@ -178,7 +178,10 @@ describe('format report — a function, not a tool', () => {
     // The whole point of the function/tool split: it must be impossible to
     // configure one node type into the other's role.
     expect(formatReportNode.id).not.toBe(WORKER_TYPE);
-    expect(formatReportNode.category).toBe('output');
+    // A molecule, not an output atom: it composes many worker results into
+    // one, which is what the tier means. `output.formatted` — one input, no
+    // logic — is the atom in that family.
+    expect(formatReportNode.category).toBe('agent');
   });
 });
 

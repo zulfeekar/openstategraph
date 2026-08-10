@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolCapability, WorkflowSummary } from '@core/runtime/WorkflowFileClient';
+import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import {
-  decideCapabilityRefresh,
   decideFileWatchAction,
   forgetKnownSavedAt,
   getKnownSavedAt,
@@ -15,13 +14,6 @@ const summary = (slug: string, savedAt: string): WorkflowSummary => ({
   savedAt,
   nodeCount: 0,
   edgeCount: 0,
-});
-
-const capability = (id: string): ToolCapability => ({
-  id,
-  name: id,
-  description: `discovered tool ${id}`,
-  argsSchema: {},
 });
 
 /**
@@ -83,42 +75,5 @@ describe('recordKnownSavedAt / forgetKnownSavedAt', () => {
       kind: 'baseline',
       savedAt: 't1',
     });
-  });
-});
-
-/**
- * Ticket 18's hot-reload gap: a new file in a workflow's `tools/` folder
- * doesn't touch `workflow.json`'s `savedAt` at all, so it needs its own
- * comparison sharing the same poll cadence `decideFileWatchAction` uses.
- */
-describe('decideCapabilityRefresh', () => {
-  it('establishes a baseline on first observation, rather than treating it as new', () => {
-    const action = decideCapabilityRefresh([capability('a')], undefined);
-    expect(action).toEqual({ kind: 'baseline', ids: ['a'] });
-  });
-
-  it('does nothing when the observed set matches what is known', () => {
-    const action = decideCapabilityRefresh([capability('a'), capability('b')], ['a', 'b']);
-    expect(action).toEqual({ kind: 'unchanged' });
-  });
-
-  it('is unchanged regardless of ordering — the backend promises no stable order', () => {
-    const action = decideCapabilityRefresh([capability('b'), capability('a')], ['a', 'b']);
-    expect(action).toEqual({ kind: 'unchanged' });
-  });
-
-  it('flags a newly discovered tool, naming it', () => {
-    const action = decideCapabilityRefresh([capability('a'), capability('b')], ['a']);
-    expect(action).toEqual({ kind: 'changed', ids: ['a', 'b'], added: ['b'] });
-  });
-
-  it('flags a removed tool too, even though nothing was added', () => {
-    const action = decideCapabilityRefresh([capability('a')], ['a', 'b']);
-    expect(action).toEqual({ kind: 'changed', ids: ['a'], added: [] });
-  });
-
-  it('an empty list is a real baseline, not skipped', () => {
-    const action = decideCapabilityRefresh([], undefined);
-    expect(action).toEqual({ kind: 'baseline', ids: [] });
   });
 });

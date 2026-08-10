@@ -15,6 +15,12 @@ export interface INodeCategory extends IIdentifiable {
   readonly label: string;
   /** Lower sorts first in the palette. */
   readonly order: number;
+  /**
+   * One sentence shown under the section heading — what makes something
+   * belong to this tier. Optional: a section whose label already says it
+   * all should not be padded with prose.
+   */
+  readonly description?: string;
 }
 
 /**

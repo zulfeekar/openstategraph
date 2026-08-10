@@ -12,18 +12,82 @@ import type { IPortTypeDefinition } from '@core/model/contracts/ports';
 
 export const CATEGORY = {
   inputs: 'inputs',
-  agent: 'agent',
   tools: 'tools',
   output: 'output',
+  agent: 'agent',
+  compose: 'compose',
   annotate: 'annotate',
 } as const;
 
+/**
+ * Sections in atomic-design tier order — atoms, then molecules, then
+ * organisms — because the tier is the thing a developer is actually
+ * choosing between, and a palette that interleaves them teaches the wrong
+ * mental model.
+ *
+ * **Every label's tier is load-bearing and must stay honest.** The bug this
+ * ordering replaces: `Team` and `Workflow` (whole workflows, run as one
+ * step) sat under a section labelled `Agents · molecules`, so the palette
+ * claimed an organism was a molecule.
+ *
+ * The judgement calls, recorded here rather than in a commit message:
+ *
+ * - **Orchestrator (supervisor) is a molecule, not an organism.** Alone it
+ *   is one model call that emits a plan and a `Send` fan-out — a single
+ *   reasoning step, exactly like Router or Grader. The *organism* is
+ *   supervisor + workers + a join, and that organism is a shape you draw on
+ *   the canvas, not an item you drag from the palette. Tiering the palette
+ *   entry as an organism would promise an assembly the drag does not
+ *   deliver.
+ * - **Team and Workflow are organisms**, and are the only ones: each is an
+ *   entire compiled workflow — its own nodes, edges, state and loop —
+ *   mounted as one step. Dragging one *does* deliver the assembly.
+ * - **Function (Format Report) is a molecule, not an output atom.** It is a
+ *   deterministic reasoning-free graph step that joins many worker results;
+ *   it composes, so it is not an atom. `Formatted Output` — a sink with one
+ *   input and no logic — is the atom.
+ * - **Annotate carries no tier**, and says so instead of borrowing one:
+ *   notes and groups are excluded from execution entirely, so they are not
+ *   made of anything and nothing is made of them.
+ */
 export const CATEGORIES: readonly INodeCategory[] = [
-  { id: CATEGORY.inputs, label: 'Inputs', order: 10 },
-  { id: CATEGORY.agent, label: 'Agents · molecules', order: 20 },
-  { id: CATEGORY.tools, label: 'Tools · atoms', order: 30 },
-  { id: CATEGORY.output, label: 'Output', order: 40 },
-  { id: CATEGORY.annotate, label: 'Annotate', order: 50 },
+  {
+    id: CATEGORY.inputs,
+    label: 'Inputs · atoms',
+    order: 10,
+    description: 'Sources. No logic, nothing upstream.',
+  },
+  {
+    id: CATEGORY.tools,
+    label: 'Tools · atoms',
+    order: 20,
+    description: 'One capability each, bound to an agent rather than wired in sequence.',
+  },
+  {
+    id: CATEGORY.output,
+    label: 'Output · atoms',
+    order: 30,
+    description: 'Sinks. One input, no decision.',
+  },
+  {
+    id: CATEGORY.agent,
+    label: 'Reasoning & control · molecules',
+    order: 40,
+    description:
+      'One decision step each — agent, router, grader, approval, worker, supervisor, function. A supervisor alone is a molecule; supervisor + workers + join is an organism you draw, not one you drag.',
+  },
+  {
+    id: CATEGORY.compose,
+    label: 'Composition · organisms',
+    order: 50,
+    description: 'A whole workflow — its own nodes, state and loop — mounted as one step.',
+  },
+  {
+    id: CATEGORY.annotate,
+    label: 'Annotate · no tier',
+    order: 60,
+    description: 'Canvas decoration. Never compiled, never executed.',
+  },
 ];
 
 export const PORT = {
