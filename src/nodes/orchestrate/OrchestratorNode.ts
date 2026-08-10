@@ -2,6 +2,7 @@ import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import { BINDING_SIDE } from '@core/model/contracts/ports';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
@@ -97,7 +98,7 @@ export const orchestratorNode: INodeDefinition = defineNode(
         // exactly as before.
         maxConnections: null,
         required: true,
-        side: 'bottom',
+        side: BINDING_SIDE.consumer,
         appearance: 'pill',
         description: 'The worker archetype nodes subtasks are dispatched to.',
       },

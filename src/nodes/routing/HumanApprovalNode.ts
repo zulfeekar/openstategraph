@@ -59,6 +59,7 @@ export const humanApprovalNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.result,
         label: 'approved',
+        branch: true,
         description: 'Taken when the reviewer approves.',
       },
       {
@@ -66,6 +67,7 @@ export const humanApprovalNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.feedback,
         label: 'rejected',
+        branch: true,
         description: 'Taken when the reviewer rejects, optionally carrying feedback.',
       },
     ],

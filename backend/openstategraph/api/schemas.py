@@ -7,6 +7,50 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+class HealthResponse(BaseModel):
+    """`GET /api/health` — is this process up, and does it know a model?
+
+    Named rather than left a bare dict (scale-and-adopt ticket 05): a
+    published contract whose first endpoint answers `{}` teaches a reader
+    that the rest of the document is decoration too.
+    """
+
+    # `model_` is Pydantic's own protected prefix; `model_configured` is on the
+    # wire already and both clients read it, so the namespace is disabled here
+    # rather than the field renamed under them.
+    model_config = {"protected_namespaces": ()}
+
+    ok: bool
+    #: Always true since Ollama cloud became the default — `resolve_model` can
+    #: always name *a* model. Whether that provider is reachable is a different
+    #: question this endpoint has never answered.
+    model_configured: bool = Field(
+        description="A model name can be resolved. Not a reachability check."
+    )
+
+
+class NodeContractResponse(BaseModel):
+    """The two LOCKED prompt sections of one model-driven node type.
+
+    Served from the Python ladder classes, which are the single source of
+    truth. An editor shows these read-only beside the developer's editable
+    rules; a custom editor should do the same rather than restate them.
+    """
+
+    preamble: str
+    contract: str
+
+
+class CompiledGraphResponse(BaseModel):
+    """`GET /api/workflows/{slug}/graph` — the compiled topology as Mermaid.
+
+    Text, never a PNG: `draw_mermaid_png()` posts the graph to a third-party
+    API, and a user's graph is not ours to send anywhere.
+    """
+
+    mermaid: str
+
+
 class AskRequest(BaseModel):
     model_config = {"extra": "forbid"}
 

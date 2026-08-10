@@ -37,6 +37,51 @@ logger = logging.getLogger(__name__)
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
 ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]
 
+#: How a third-party browser client is let in (scale-and-adopt ticket 05).
+#: Comma-separated origins, ADDED to the two above.
+ALLOWED_ORIGINS_ENV = "OPENSTATEGRAPH_ALLOWED_ORIGINS"
+
+
+class WildcardOriginError(ValueError):
+    """`*` was asked for on an API that holds provider credentials."""
+
+
+def allowed_origins(env: Any = None) -> list[str]:
+    """The CORS allowlist for this process.
+
+    "Build your own UI" was true for a server-side client and only
+    accidentally true for a browser one: the list above is the editor's Vite
+    dev origin, so anybody else's page was blocked with no way to say
+    otherwise short of editing this file. `OPENSTATEGRAPH_ALLOWED_ORIGINS`
+    is that way.
+
+    Three properties, each deliberate:
+
+    - **Additive.** A developer letting their own page in must not silently
+      lock the editor out of the same server.
+    - **Explicit, never `*`.** This process holds provider keys; a wildcard
+      allowlist on a credential-holding API is how one key becomes
+      everyone's. Asking for it *raises* rather than being dropped, because
+      a silently ignored `*` leaves the developer believing their client is
+      allowed until the browser says otherwise.
+    - **Order preserved, duplicates dropped**, so the resulting list reads
+      like what was configured.
+    """
+    raw = (env if env is not None else os.environ).get(ALLOWED_ORIGINS_ENV, "")
+    origins = list(ALLOWED_ORIGINS)
+    for candidate in (piece.strip() for piece in str(raw).split(",")):
+        if not candidate:
+            continue
+        if candidate == "*":
+            raise WildcardOriginError(
+                f"{ALLOWED_ORIGINS_ENV} may not contain '*'. This process holds "
+                "provider credentials, so every origin is named explicitly. "
+                "List the origins your client is served from instead."
+            )
+        if candidate not in origins:
+            origins.append(candidate)
+    return origins
+
 # Human-in-the-loop's prerequisite — `interrupt()` requires the compiled graph
 # to have a checkpointer, or LangGraph raises at compile time — used to be a
 # module-level `InMemorySaver` right here. It is gone (ticket 05): the saver
@@ -51,6 +96,7 @@ from openstategraph.api.model_resolution import (  # noqa: E402, F401  (re-expor
     resolve_model,
     workflow_default_model,
 )
+from openstategraph.api import auth  # noqa: E402
 from openstategraph.api.editor_assets import mount_editor  # noqa: E402
 from openstategraph.api.registries import (  # noqa: E402, F401  (re-exported for tests)
     build_tool_registry,
@@ -61,7 +107,10 @@ from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
     AskResponse,
     CapabilitiesResponse,
+    CompiledGraphResponse,
     FunctionCapabilityResponse,
+    HealthResponse,
+    NodeContractResponse,
     KnowledgeBuildRequest,
     KnowledgeBuildResponse,
     KnowledgeTopicDocResponse,
@@ -82,11 +131,14 @@ from openstategraph.api.schemas import (  # noqa: E402
     WorkflowSummaryResponse,
 )
 from openstategraph.api.catalogue_events import (  # noqa: E402
+    CATALOGUE_EVENT,
     KEEPALIVE_SECONDS,
     CatalogueEvent,
     ChangeReason,
 )
 from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored names re-exported for tests)
+    RUN_EVENTS,
+    TERMINAL_EVENTS,
     _coerce_update,
     _sse,
     _stream_run,
@@ -94,11 +146,80 @@ from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored nam
     stop_when_client_leaves_async,
 )
 
+
+#: Named once, because it is the sentence a custom client is most likely to
+#: get wrong and OpenAPI has nowhere to put it.
+STREAM_GUIDE = "docs/api.md"
+
+
+def sse_responses(events: tuple[str, ...], summary: str) -> dict[int | str, Any]:
+    """The OpenAPI `responses` entry for an endpoint that returns SSE.
+
+    OpenAPI 3.1 has no way to describe "an unbounded sequence of frames, each
+    tagged with one of these event names, exactly one of which is last". The
+    honest move is therefore to declare the media type, name the vocabulary in
+    the description, and send the reader to the prose — **not** to advertise a
+    JSON body a client would then call `.json()` on and hang forever.
+    """
+    names = ", ".join(f"`{name}`" for name in events)
+    return {
+        200: {
+            "description": (
+                f"{summary}\n\nA `text/event-stream`. Event names: {names}. "
+                f"The full frame vocabulary, and the guarantee that every "
+                f"stream ends with one of "
+                f"{', '.join(f'`{n}`' for n in TERMINAL_EVENTS)}, are in "
+                f"`{STREAM_GUIDE}` — OpenAPI cannot express either."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "type": "string",
+                        "title": "Server-sent event frames",
+                        "description": (
+                            "`event: <name>` and `data: <json>` lines, blank-line "
+                            f"separated. See `{STREAM_GUIDE}`."
+                        ),
+                    }
+                }
+            },
+        }
+    }
+
 def _default_factory(model: str) -> Any:
     from graph import build_live_graph
 
     return build_live_graph(model)
 
+
+
+def single_server_lifespan(services: Any) -> Any:
+    """The startup guard that makes "one worker" true instead of documented.
+
+    An exclusive lock on this deployment's state directory, taken when the app
+    is actually *served* rather than when it is constructed — `create_app()` in
+    a test or an embedder is not a second server, but a second uvicorn worker
+    running lifespan is. `AnotherServerIsRunning` propagates: a worker that
+    cannot have the state must not start with it, and uvicorn's own failure is
+    louder than any log line we could write.
+
+    See `openstategraph.deployment` for why the answer is refusal.
+    """
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> Any:
+        from openstategraph.deployment import SingleServerLock
+        from openstategraph.state_dir import state_dir
+
+        lock = SingleServerLock(state_dir(services.store.root))
+        lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
+
+    return lifespan
 
 
 def create_app(
@@ -133,16 +254,56 @@ def create_app(
     # `services.checkpointer_for(...)`, which resolves this same property.
     services.checkpointer
 
-    app = FastAPI(title="OpenStateGraph runtime", version="0.1.0")
+    app = FastAPI(
+        title="OpenStateGraph runtime",
+        version="0.1.0",
+        # Ticket 06: one process may serve one state directory, and this is
+        # where that is enforced against `uvicorn --workers N` — the launcher
+        # that leaves no trace in the environment for the CLI to refuse.
+        lifespan=single_server_lifespan(services),
+        summary="The HTTP surface both shipped UIs are built on.",
+        description=(
+            "Everything the canvas editor and `/chat` do goes through the "
+            "endpoints below — there is no private API, so a third client is "
+            "a supported thing to build rather than a reverse-engineering "
+            "exercise.\n\n"
+            "**Two parts of the contract are not in this document, and cannot "
+            "be.** `POST /api/runs/stream`, `POST /api/runs/resume` and "
+            f"`GET /api/events` are Server-Sent Event streams; OpenAPI has no "
+            "vocabulary for a frame sequence, an event-name union, or the "
+            "guarantee that exactly one of `done`/`interrupt`/`error` is the "
+            f"last frame. Those are written out in `{STREAM_GUIDE}`, which is "
+            "also where the five calls a custom chat actually needs are shown "
+            "end to end.\n\n"
+            "This document is generated from the app and committed at "
+            "`docs/openapi.json`; the live one is served at `/openapi.json`."
+        ),
+    )
     #: The assembly point, reachable for ops and tests. Not a second wiring
     #: path — every endpoint below still goes through the local names above.
     app.state.services = services
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
+        allow_origins=allowed_origins(),
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["content-type"],
+        # `authorization` since ticket 06: with `OPENSTATEGRAPH_API_TOKEN` set,
+        # a cross-origin client (the Vite dev editor on :5273, a custom UI on
+        # its own host) sends the token in that header, and a preflight that
+        # does not list it strips the only thing that gets the request in.
+        allow_headers=["content-type", "authorization"],
     )
+    # Added after CORS and therefore *outside* it (Starlette wraps the last
+    # middleware added around everything before it), so a cross-origin request
+    # is refused by the gate rather than allowed by a browser convention. CORS
+    # is not an access control and must never be the outermost one.
+    if auth.install(app):
+        logger.info("authentication: on — shared token from %s", auth.API_TOKEN_ENV)
+    else:
+        logger.info(
+            "authentication: off — every caller that can reach this port has full "
+            "access. Set %s, or put a reverse proxy in front (docs/deploying.md).",
+            auth.API_TOKEN_ENV,
+        )
 
     @app.get("/chat", include_in_schema=False)
     def chat_page() -> Any:
@@ -156,8 +317,13 @@ def create_app(
         # cached constant serves stale markup until a coincidental restart.
         return HTMLResponse(chat_page_html())
 
-    @app.get("/api/node-contracts")
-    def node_contracts() -> dict[str, dict[str, str]]:
+    @app.get(
+        "/api/node-contracts",
+        response_model=dict[str, NodeContractResponse],
+        summary="The locked prompt sections, per model-driven node type",
+        tags=["Authoring"],
+    )
+    def node_contracts() -> dict[str, NodeContractResponse]:
         """The LOCKED prompt sections per model-driven node type (ticket 31).
 
         Served from the Python ladder classes — the single source of truth —
@@ -173,22 +339,20 @@ def create_app(
         from openstategraph.abc.router import BaseRouter
 
         return {
-            "agent.llm": {
-                "preamble": BaseAgentNode.PREAMBLE,
-                "contract": BaseAgentNode.OUTPUT_CONTRACT,
-            },
-            "route.classifier": {
-                "preamble": BaseRouter.PREAMBLE,
-                "contract": BaseRouter.OUTPUT_CONTRACT,
-            },
-            "route.grader": {
-                "preamble": BaseGrader.PREAMBLE,
-                "contract": BaseGrader.OUTPUT_CONTRACT,
-            },
-            "orchestrate.supervisor": {
-                "preamble": BaseOrchestrator.PREAMBLE,
-                "contract": BaseOrchestrator.OUTPUT_CONTRACT,
-            },
+            "agent.llm": NodeContractResponse(
+                preamble=BaseAgentNode.PREAMBLE,
+                contract=BaseAgentNode.OUTPUT_CONTRACT,
+            ),
+            "route.classifier": NodeContractResponse(
+                preamble=BaseRouter.PREAMBLE, contract=BaseRouter.OUTPUT_CONTRACT
+            ),
+            "route.grader": NodeContractResponse(
+                preamble=BaseGrader.PREAMBLE, contract=BaseGrader.OUTPUT_CONTRACT
+            ),
+            "orchestrate.supervisor": NodeContractResponse(
+                preamble=BaseOrchestrator.PREAMBLE,
+                contract=BaseOrchestrator.OUTPUT_CONTRACT,
+            ),
         }
 
     @app.get("/chat/mermaid.js", include_in_schema=False)
@@ -232,9 +396,18 @@ def create_app(
             CatalogueEvent(reason=reason, slug=slug, surface_visible=visible)
         )
 
-    @app.get("/api/events")
+    @app.get(
+        "/api/events",
+        summary="Catalogue changes, live (SSE)",
+        response_class=StreamingResponse,
+        responses=sse_responses((CATALOGUE_EVENT,), "One frame per catalogue change."),
+        tags=["Catalogue"],
+    )
     async def catalogue_events(http: Request) -> StreamingResponse:
         """Catalogue changes, live — `event: workflows.changed`.
+
+        Not expressible in OpenAPI beyond its media type; the frame shape and
+        the reconnect behaviour are in `docs/api.md`.
 
         Why this exists: `/chat` fetched its picker once, on load, so a
         customer sitting on the page never saw a newly published workflow
@@ -281,7 +454,7 @@ def create_app(
                         # is no task that could outlive this connection.
                         yield ": keepalive\n\n"
                     else:
-                        yield _sse("workflows.changed", event.as_dict())
+                        yield _sse(CATALOGUE_EVENT, event.as_dict())
 
         return StreamingResponse(
             # Wrapped for the same reason run streaming is: Starlette does not
@@ -295,16 +468,29 @@ def create_app(
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
-    @app.get("/api/health")
-    def health() -> dict[str, Any]:
-        # Always true now: Ollama cloud is the default, not an opt-in, so
-        # `resolve_model` never fails to name *a* model. Kept in the response
-        # rather than removed, since the frontend already reads this field
-        # and a provider actually being reachable is a separate question this
-        # endpoint was never answering anyway.
-        return {"ok": True, "model_configured": True}
+    @app.get(
+        "/api/health",
+        response_model=HealthResponse,
+        summary="Liveness, and whether a model name can be resolved",
+        tags=["Operations"],
+    )
+    def health() -> HealthResponse:
+        """Answers "is this process up?" and nothing more expensive.
 
-    @app.get("/api/templates", response_model=list[TemplateResponse])
+        `model_configured` is always true now: Ollama cloud is the default,
+        not an opt-in, so `resolve_model` never fails to name *a* model. It is
+        kept in the response rather than removed because both clients already
+        read it — and whether that provider is actually reachable is a
+        separate question this endpoint was never answering anyway.
+        """
+        return HealthResponse(ok=True, model_configured=True)
+
+    @app.get(
+        "/api/templates",
+        response_model=list[TemplateResponse],
+        summary="The starting points a new workflow can be created from",
+        tags=["Authoring"],
+    )
     def list_templates(name: str = "New Workflow") -> list[TemplateResponse]:
         """The starting points, rendered — the same ones `openstategraph new`
         offers, from the same catalogue (scale-and-adopt ticket 04).
@@ -329,7 +515,12 @@ def create_app(
             for template in templates.catalogue()
         ]
 
-    @app.get("/api/workflows", response_model=list[WorkflowSummaryResponse])
+    @app.get(
+        "/api/workflows",
+        response_model=list[WorkflowSummaryResponse],
+        summary="List workflows — the first call any client makes",
+        tags=["Catalogue"],
+    )
     def list_workflows(surface: Literal["editor", "chat"] = "editor") -> list[WorkflowSummaryResponse]:
         """Ticket 04 (launch-readiness): the listing is surface-aware.
 
@@ -350,7 +541,12 @@ def create_app(
 
         return [to_response(s) for s in workflow_store.list(published_only=surface == "chat")]
 
-    @app.post("/api/workflows/{slug}/publish", response_model=PublishWorkflowResponse)
+    @app.post(
+        "/api/workflows/{slug}/publish",
+        response_model=PublishWorkflowResponse,
+        summary="Publish or unpublish a workflow",
+        tags=["Catalogue"],
+    )
     def publish_workflow(slug: str, request: PublishWorkflowRequest) -> PublishWorkflowResponse:
         """Flip the draft→publish flag. One endpoint for both directions —
         the body's ``published`` bool IS the whole lifecycle state.
@@ -379,8 +575,19 @@ def create_app(
             ),
         )
 
-    @app.get("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
+    @app.get(
+        "/api/workflows/{slug}",
+        response_model=WorkflowDocumentResponse,
+        summary="Fetch one workflow.json document",
+        tags=["Catalogue"],
+    )
     def get_workflow(slug: str) -> WorkflowDocumentResponse:
+        """The vendor-neutral document itself — the thing a run takes as input.
+
+        A client fetches this and posts it back to `/api/runs/stream`: the
+        compile seam is one-directional and stateless per call, so the
+        workflow that executes is the one the caller can read.
+        """
         from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
@@ -391,8 +598,19 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return WorkflowDocumentResponse(slug=slug, document=document)
 
-    @app.put("/api/workflows/{slug}", response_model=WorkflowDocumentResponse)
+    @app.put(
+        "/api/workflows/{slug}",
+        response_model=WorkflowDocumentResponse,
+        summary="Create or overwrite a workflow document",
+        tags=["Catalogue"],
+    )
     def save_workflow(slug: str, request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
+        """Writes the package's `workflow.json` and stamps `saved_at`.
+
+        The slug is the path parameter and is frozen at creation; the body
+        carries the display name and the document, never the slug. Announces
+        the change on `/api/events` **after** the write succeeded.
+        """
         from datetime import datetime, timezone
 
         from openstategraph.api.workflow_store import InvalidSlugError
@@ -409,8 +627,18 @@ def create_app(
         announce("saved", slug)
         return WorkflowDocumentResponse(slug=slug, document=request.document)
 
-    @app.delete("/api/workflows/{slug}", status_code=204)
+    @app.delete(
+        "/api/workflows/{slug}",
+        status_code=204,
+        summary="Delete a workflow package",
+        tags=["Catalogue"],
+    )
     def delete_workflow(slug: str) -> None:
+        """Removes the package directory and announces it on `/api/events`.
+
+        Returns 204 with no body — there is nothing left to describe. A
+        deleted slug simply stops appearing in the listing.
+        """
         from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
         try:
@@ -421,7 +649,12 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         announce("deleted", slug)
 
-    @app.get("/api/workflows/{slug}/capabilities", response_model=CapabilitiesResponse)
+    @app.get(
+        "/api/workflows/{slug}/capabilities",
+        response_model=CapabilitiesResponse,
+        summary="Tools and functions this workflow may put on a canvas",
+        tags=["Authoring"],
+    )
     def get_capabilities(slug: str) -> CapabilitiesResponse:
         """What this editor may put on a canvas, from all three sources.
 
@@ -497,7 +730,12 @@ def create_app(
             warnings=warnings,
         )
 
-    @app.get("/api/workflows/{slug}/plugin-export", response_model=PluginExportResponse)
+    @app.get(
+        "/api/workflows/{slug}/plugin-export",
+        response_model=PluginExportResponse,
+        summary="Preview this package as an Agent Plugins v1 plugin",
+        tags=["Authoring"],
+    )
     def export_workflow_as_plugin(slug: str) -> PluginExportResponse:
         """Preview this workflow package as an Agent Plugins v1 plugin.
 
@@ -526,7 +764,12 @@ def create_app(
             manifest=export.manifest, paths=sorted(export.files), notes=export.notes
         )
 
-    @app.post("/api/workflows/{slug}/knowledge/build", response_model=KnowledgeBuildResponse)
+    @app.post(
+        "/api/workflows/{slug}/knowledge/build",
+        response_model=KnowledgeBuildResponse,
+        summary="Generate this workflow's knowledge docs",
+        tags=["Knowledge"],
+    )
     def build_knowledge(slug: str, request: KnowledgeBuildRequest) -> KnowledgeBuildResponse:
         """'Build second brain' (knowledge layer): one doc per topic, written
         to `workflows/<slug>/knowledge/` by every registered builder whose
@@ -592,6 +835,8 @@ def create_app(
     @app.get(
         "/api/workflows/{slug}/knowledge",
         response_model=list[KnowledgeTopicStatusResponse],
+        summary="List this workflow's knowledge topics",
+        tags=["Knowledge"],
     )
     def list_knowledge(slug: str) -> list[KnowledgeTopicStatusResponse]:
         """The curation list: every topic with its hint, ownership state
@@ -609,8 +854,16 @@ def create_app(
     @app.get(
         "/api/workflows/{slug}/knowledge/{topic}",
         response_model=KnowledgeTopicDocResponse,
+        summary="Read one knowledge topic",
+        tags=["Knowledge"],
     )
     def read_knowledge_topic(slug: str, topic: str) -> KnowledgeTopicDocResponse:
+        """The raw Markdown of one topic, with its ownership and stale flags.
+
+        `generated` says the builder still owns it; the first saved edit
+        strips that marker forever (the auto-claim), and `stale` says the
+        source it describes has changed since.
+        """
         from openstategraph.api import knowledge_curation
 
         workflow_dir, document = _knowledge_context(slug)
@@ -639,6 +892,8 @@ def create_app(
     @app.put(
         "/api/workflows/{slug}/knowledge/{topic}",
         response_model=KnowledgeTopicDocResponse,
+        summary="Save one knowledge topic, claiming it from the builder",
+        tags=["Knowledge"],
     )
     def save_knowledge_topic(
         slug: str, topic: str, request: KnowledgeTopicSaveRequest
@@ -664,8 +919,13 @@ def create_app(
             stale=status.stale,
         )
 
-    @app.get("/api/workflows/{slug}/graph")
-    def compiled_graph(slug: str) -> dict[str, str]:
+    @app.get(
+        "/api/workflows/{slug}/graph",
+        response_model=CompiledGraphResponse,
+        summary="The compiled topology, as Mermaid text",
+        tags=["Runs"],
+    )
+    def compiled_graph(slug: str) -> CompiledGraphResponse:
         """The COMPILED topology as Mermaid text (ticket 54) — what the
         compiler actually produced, not a hand-drawn approximation.
 
@@ -694,11 +954,22 @@ def create_app(
             mermaid_text = graph.get_graph(xray=True).draw_mermaid()
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}")
-        return {"mermaid": mermaid_text}
+        return CompiledGraphResponse(mermaid=mermaid_text)
 
-    @app.post("/api/runs", response_model=RunResponse)
+    @app.post(
+        "/api/runs",
+        response_model=RunResponse,
+        summary="Run a workflow and wait for the whole answer",
+        tags=["Runs"],
+    )
     def run_workflow(request: RunRequest) -> RunResponse:
-        """Compiles and runs a canvas-authored workflow."""
+        """Compiles and runs a canvas-authored workflow, blocking until it ends.
+
+        The simple call: one request, one JSON answer, no streaming to parse.
+        It cannot show progress and it cannot pause for an approval — a
+        `human.approval` node needs `/api/runs/stream`, which is what both
+        shipped UIs use.
+        """
         from openstategraph.compile.node_runtime import RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -742,9 +1013,19 @@ def create_app(
             warnings=warnings,
         )
 
-    @app.post("/api/runs/stream")
+    @app.post(
+        "/api/runs/stream",
+        summary="Run a workflow and watch it happen (SSE)",
+        response_class=StreamingResponse,
+        responses=sse_responses(RUN_EVENTS, "The run, frame by frame."),
+        tags=["Runs"],
+    )
     def run_workflow_stream(request: RunRequest, http: Request) -> StreamingResponse:
         """The same run as `/api/runs`, surfaced as it happens.
+
+        The event vocabulary and the terminal-frame guarantee are prose, in
+        `docs/api.md` — OpenAPI cannot express either, and they are the part a
+        custom client gets wrong.
 
         Ticket 27's sidebar needs to show **which node is currently in
         charge**, live — not just the final answer — and dynamically
@@ -840,9 +1121,18 @@ def create_app(
             media_type="text/event-stream",
         )
 
-    @app.post("/api/runs/resume")
+    @app.post(
+        "/api/runs/resume",
+        summary="Answer an approval and continue the run (SSE)",
+        response_class=StreamingResponse,
+        responses=sse_responses(RUN_EVENTS, "The resumed run, frame by frame."),
+        tags=["Runs"],
+    )
     def resume_workflow_stream(request: ResumeRequest, http: Request) -> StreamingResponse:
         """Continues a run a `human.approval` node paused (see `NodeRuntime._human_approval`).
+
+        Same event vocabulary as `/api/runs/stream`, documented once in
+        `docs/api.md`.
 
         Same event vocabulary as `/api/runs/stream` (`_stream_run`) — a
         resumed run is not a different kind of thing from the frontend's
@@ -918,7 +1208,18 @@ def create_app(
             media_type="text/event-stream",
         )
 
-    @app.post("/api/workflows/chinook-nl-to-sql/ask", response_model=AskResponse)
+    @app.post(
+        "/api/workflows/chinook-nl-to-sql/ask",
+        response_model=AskResponse,
+        summary="The Chinook demo's own endpoint (not a general API)",
+        tags=["Demo"],
+        description=(
+            "A fixed, hand-built demo graph — the NL-to-SQL example — kept as "
+            "its own endpoint because it predates the canvas and returns the "
+            "SQL and rows alongside the prose so an answer can be audited. It "
+            "does not generalise: a client of your own wants `/api/runs/stream`."
+        ),
+    )
     def ask(request: AskRequest) -> AskResponse:
         model = resolve_model(request.model)
         graph = factory(model)

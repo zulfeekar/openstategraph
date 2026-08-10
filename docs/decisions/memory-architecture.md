@@ -69,7 +69,7 @@ their Send payload (`task_id`, `task_instruction`).
   degrades **loudly**, naming `pip install 'openstategraph[sqlite]'` — never
   silently.
 
-### The worker ceiling is still one, for a smaller reason
+### The worker ceiling is one, and since ticket 06 it is enforced
 
 Checked against the package rather than assumed. `langgraph-checkpoint-sqlite`
 3.1.1's `SqliteSaver` docstring: *"meant for lightweight, synchronous use cases
@@ -88,10 +88,25 @@ So the change to the ceiling is a change of *reason*, not of number:
 | Restart | every paused approval lost | approvals resume |
 | Concurrent writes | n/a | uncoordinated across processes — silent |
 
-`uvicorn --workers 1` stays, in `Dockerfile` and `scripts/dev.sh`, and both say
-this. Raising it means `PostgresSaver` + `PostgresStore` passed to
-`WorkflowServices(checkpointer=…, store=…)` — **and now one more thing**, see
-directly below.
+**Scale-and-adopt ticket 06 stopped writing this down and started enforcing
+it.** A limit that lives only in a comment is a limit somebody's deploy script
+does not read: `openstategraph.deployment` refuses `--workers N`,
+`WEB_CONCURRENCY`, `UVICORN_WORKERS` and `GUNICORN_WORKERS` before a socket is
+bound, and takes an exclusive OS lock on `<state dir>/serve.lock` to catch
+`uvicorn --workers 4` and `gunicorn -w 4`, which leave no environment trace at
+all. `uvicorn --workers 1` stays in `Dockerfile` and `scripts/dev.sh`; it is now
+the *only* thing that starts.
+
+`PostgresSaver` + `PostgresStore` shipped in the same ticket
+(`openstategraph/postgres.py`, the `[postgres]` extra,
+`OPENSTATEGRAPH_POSTGRES_URL`) — dropped into these same two seams, which
+`WorkflowServices` already took by argument. Read what that does and does not
+mean carefully, because the obvious reading is wrong: **it does not raise the
+ceiling, and the refusal does not soften when it is set.** It moves durable
+state into a database an operations team backs up, which is worth having on one
+worker. The second cause of the ceiling is directly below, and until it is
+answered too, Postgres alone would be a scale-out story that fails silently —
+which is precisely the trade this section exists to refuse.
 
 ### Live catalogue events ride the same ceiling
 
@@ -105,11 +120,15 @@ the second part fails silently rather than loudly:
 
 | | Second worker today | What it needs |
 | --- | --- | --- |
-| Checkpoints | uncoordinated sqlite writes | `PostgresSaver` / `PostgresStore` |
-| Catalogue events | a publish on worker A never reaches a surface on worker B | Redis pub/sub or Postgres `LISTEN`/`NOTIFY` behind the same `publish`/`subscribe` pair |
+| Checkpoints | uncoordinated sqlite writes | `PostgresSaver` / `PostgresStore` — **shipped** (ticket 06) |
+| Catalogue events | a publish on worker A never reaches a surface on worker B | Redis pub/sub or Postgres `LISTEN`/`NOTIFY` behind the same `publish`/`subscribe` pair — **not shipped** (gap register RC-17) |
 
 The endpoint and both clients are unchanged by that swap — `CatalogueBroadcaster`
-is the whole seam.
+is the whole seam. One half shipped and one did not, and that asymmetry is why
+ticket 06's answer to "support multi-worker or refuse it" was **refuse**: a
+deployment that fixed the checkpointer and kept the in-process fan-out would
+look correct and drop catalogue updates, which is a worse failure than the one
+it fixed. Both halves or neither.
 
 Two further honest limits, stated so nobody has to discover them:
 

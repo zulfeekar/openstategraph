@@ -61,6 +61,22 @@ export interface IPortDescriptor {
    *          agent's tool bus where several tools converge on one point.
    */
   readonly appearance?: 'row' | 'pill';
+  /**
+   * This output is one of several **mutually exclusive** ways out of the node
+   * — a router branch, a grader's pass/revise, an approval's
+   * approved/rejected. The canvas puts the port's name on the *link* leaving
+   * it, because "which way did it go" is a fact about the connection, not
+   * about the card.
+   *
+   * Declared here rather than sniffed from the node type so a plugin's own
+   * conditional node gets the same treatment with no canvas edit (open-closed:
+   * a new capability registers, it does not amend `canvas/`).
+   *
+   * Only conditional outputs earn a label. A typed edge — tool, skill,
+   * feedback, worker — already carries colour plus a dash signature and has a
+   * legend; labelling those too is noise that hides the labels that matter.
+   */
+  readonly branch?: boolean;
   /** Tooltip / inspector help text. */
   readonly description?: string;
   /**
@@ -114,10 +130,41 @@ export function portAcceptsType(port: IPortDescriptor, sourceType: PortTypeId): 
   return accepts.includes('*') || accepts.includes(sourceType);
 }
 
-/** Resolves the effective side for a port. */
+/**
+ * Resolves the effective side for a port.
+ *
+ * **Position encodes role**, so a reader knows what a port is for before
+ * hovering it. Two roles, two axes:
+ *
+ * - **Flow** — the sequence of steps. Input `left`, output `right`, i.e.
+ *   along the reading axis. This is the default and needs no declaration.
+ * - **Binding** — a capability *attached* to a step rather than a step in
+ *   the sequence: a tool, a skill, a worker pool. Drawn across the reading
+ *   axis, so a binding never looks like a stage of the flow. Declared with
+ *   `side: BINDING_SIDE.provider` on the thing being attached, and
+ *   `BINDING_SIDE.consumer` on the bus that gathers them.
+ *
+ * Both rotate together under `resolvePortSide`, so the distinction survives
+ * the flow-direction toggle instead of being a horizontal-only convention.
+ */
 export function sideOf(port: IPortDescriptor): PortSide {
   return port.side ?? (port.direction === 'in' ? 'left' : 'right');
 }
+
+/**
+ * The two ends of a binding, named once.
+ *
+ * A tool node's `tool` output and a Markdown file's `skill` output are the
+ * same kind of thing — a capability offered upward — and had drifted onto
+ * different sides. Naming the convention is what stops that happening again;
+ * the alternative was two node files each asserting a bare string.
+ */
+export const BINDING_SIDE = {
+  /** The card offering a capability: its dot is on top, pointing up at the user of it. */
+  provider: 'top',
+  /** The card consuming several: a bus slung under the card. */
+  consumer: 'bottom',
+} as const satisfies Record<string, PortSide>;
 
 /** Which way the canvas reads: left→right, or top→bottom. Ticket 45. */
 export type FlowDirection = 'horizontal' | 'vertical';

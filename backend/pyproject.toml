@@ -103,8 +103,27 @@ server = [
 # are where these projects put breaking changes, so `<2` is a promise, not a
 # guess. Moving to 2.x is a deliberate migration of `mcp_server.py`.
 mcp = ["mcp>=1.25,<2"]
+# Durable state in a database an operations team already backs up
+# (scale-and-adopt ticket 06, `openstategraph/postgres.py`). Opt-in and never a
+# default, so it is an extra rather than part of `[server]`.
+#
+# `psycopg[binary]` rather than bare `psycopg`: langgraph-checkpoint-postgres
+# declares only the pure-Python package, which needs libpq and a compiler
+# present at install time — a `pip install` that fails on a slim container is
+# not an opt-in, it is a trap. `psycopg_pool` is a separate distribution and is
+# named explicitly because `postgres.py` imports it directly rather than
+# relying on it arriving transitively.
+#
+# NOTE: this does NOT lift the one-worker ceiling. The catalogue-events fan-out
+# is still in-process, and `openstategraph.deployment` refuses more than one
+# worker whether or not this is installed.
+postgres = [
+    "langgraph-checkpoint-postgres>=3.1,<4",
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
+]
 all = [
-    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp]",
+    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres]",
 ]
 dev = [
     "pytest>=8",

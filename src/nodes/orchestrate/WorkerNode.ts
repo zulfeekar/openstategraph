@@ -2,6 +2,7 @@ import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import { BINDING_SIDE } from '@core/model/contracts/ports';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
@@ -89,7 +90,7 @@ export const workerNode: INodeDefinition = defineNode(
         direction: 'in',
         type: PORT.tool,
         label: 'worker tools',
-        side: 'bottom',
+        side: BINDING_SIDE.consumer,
         appearance: 'pill',
         maxConnections: null,
         description: 'Tools this worker may call.',

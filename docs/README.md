@@ -15,7 +15,9 @@ Start with what you came here to do.
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
 | **add a capability that does not exist yet** | [Building an atom](building-an-atom.md) — a node definition, its Python half, the palette tiers, registration (including publishing your own distribution), and a worked example in ~60 lines | [Ports and edges](ports-and-edges.md) |
+| **build my own UI on top of it** | [The HTTP API](api.md) — the committed OpenAPI document, the three SSE streams OpenAPI cannot express (with their event vocabulary and the terminal-frame guarantee), the five calls a custom chat needs with real captured examples, a forty-line working client, and the CORS rules | [`openapi.json`](openapi.json) |
 | **have my own LLM compose the graph** | [The MCP layer](mcp.md) — client config, a worked transcript, the `compile_workflow` response shape, and the trust boundary | [`decisions/mcp-layer.md`](decisions/mcp-layer.md) |
+| **run it for other people** | [Deploying](deploying.md) — the threat model of an unauthenticated deployment, the committed Caddy and nginx configs (including what the SSE routes need), the optional shared token, and why a second worker is refused rather than discouraged | [`decisions/memory-architecture.md`](decisions/memory-architecture.md) |
 | **know what can be taken away from me** | [The stability contract](stability.md) — the three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules | [`../CHANGELOG.md`](../CHANGELOG.md) |
 | **cut a release, or fix one that went wrong** | [Releasing](releasing.md) — the train from pull request to PyPI, the one human gate and what to check before clicking it, the branch protection and environment settings to configure by hand, and the rollback commands for a burned version number | [`decisions/sdk-practice.md`](decisions/sdk-practice.md) |
 | **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
@@ -24,7 +26,9 @@ Each page has exactly one job, and nothing here restates another page:
 [Ports and edges](ports-and-edges.md) is the only reference for the type
 system; [adoption](adoption.md) is the only place the CLI's flags and exit
 codes are enumerated for a consumer; [stability](stability.md) is the only
-place a promise is made about them.
+place a promise is made about them; [the HTTP API](api.md) is the only place
+the SSE event vocabulary is written down; [deploying](deploying.md) is the only
+place authentication, the worker ceiling and the reverse proxy are explained.
 
 ## The one idea underneath all of it
 

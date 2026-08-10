@@ -178,6 +178,7 @@ export const graderNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.result,
         label: 'pass',
+        branch: true,
         description: 'Taken when the answer meets the criteria.',
       },
       {
@@ -185,6 +186,7 @@ export const graderNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.feedback,
         label: 'revise',
+        branch: true,
         description:
           'Feedback sent back upstream when the answer falls short. Wire this to an ' +
           'agent’s feedback input to form a revision loop.',

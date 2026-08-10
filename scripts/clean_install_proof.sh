@@ -284,7 +284,20 @@ fi
 
 echo "==> openstategraph serve --port 0, from outside the checkout"
 SERVE_LOG="$WORK/serve.log"
-(cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/openstategraph" serve --port 0) \
+# `exec` is load-bearing, and its absence used to leak a server on every run.
+# Without it `$!` is the SUBSHELL's pid, so the `kill` below reaps the subshell
+# and leaves the actual uvicorn process alive and holding its port and its
+# state directory. Nobody noticed while the leak was harmless; the ticket-06
+# serve lock turned it into "another OpenStateGraph server already holds …" on
+# the second launch below, which is exactly what that lock is for.
+# Its own state directory (ticket 06). `state_dir()`'s real answer — the
+# platform per-user directory, keyed by project — is asserted above and stays
+# asserted; but the *serve lock* is scoped to that directory, so two proof runs
+# on one machine (a CI matrix, two developers, two sessions) would refuse each
+# other for a reason that has nothing to do with the wheel. A hermetic run
+# needs a hermetic state directory.
+(cd "$PROJECT" && exec env -u PYTHONPATH OPENSTATEGRAPH_STATE_DIR="$WORK/state" \
+  "$VENV/bin/openstategraph" serve --port 0) \
   >"$SERVE_LOG" 2>&1 &
 SERVE_PID=$!
 # EXIT, not just the happy path: a failed assertion below must not leave a
@@ -354,6 +367,91 @@ status, _ = get("/chat/mermaid.js")
 assert status == 200, f"/chat/mermaid.js returned {status} — the wheel lost its Mermaid"
 print("    /chat/mermaid.js  the flow view's Mermaid, from the wheel, no CDN")
 PY
+
+kill "$SERVE_PID" 2>/dev/null || true
+wait "$SERVE_PID" 2>/dev/null || true
+trap - EXIT
+
+# --------------------------------------------------------------------------
+# The two ticket-06 deployment guarantees, proven from the INSTALLED WHEEL and
+# not from the checkout — which is the point of this script: a refusal that
+# only fires in a source tree is not a refusal a deployer ever gets.
+
+echo "==> more than one worker is refused, not warned about"
+set +e
+(cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/openstategraph" serve --workers 4) \
+  >"$WORK/workers.log" 2>&1
+code=$?
+set -e
+[ "$code" -ne 0 ] || { echo "serve --workers 4 exited 0"; cat "$WORK/workers.log"; exit 1; }
+grep -q -- "--workers 1" "$WORK/workers.log" || {
+  echo "the refusal does not say what to do instead:"; cat "$WORK/workers.log"; exit 1; }
+grep -qi "catalogue" "$WORK/workers.log" || {
+  echo "the refusal names only one of the two causes:"; cat "$WORK/workers.log"; exit 1; }
+echo "    serve --workers 4 -> exit $code, naming both causes and the fix"
+
+set +e
+(cd "$PROJECT" && env -u PYTHONPATH WEB_CONCURRENCY=4 \
+  "$VENV/bin/openstategraph" serve) >"$WORK/concurrency.log" 2>&1
+code=$?
+set -e
+[ "$code" -ne 0 ] || {
+  echo "WEB_CONCURRENCY=4 was accepted"; cat "$WORK/concurrency.log"; exit 1; }
+echo "    WEB_CONCURRENCY=4 -> exit $code"
+
+echo "==> the shared token gate works from the wheel"
+TOKEN="proof-token-$$"
+TOKEN_LOG="$WORK/token-serve.log"
+(cd "$PROJECT" && exec env -u PYTHONPATH OPENSTATEGRAPH_API_TOKEN="$TOKEN" \
+  OPENSTATEGRAPH_STATE_DIR="$WORK/state" \
+  "$VENV/bin/openstategraph" serve --port 0) >"$TOKEN_LOG" 2>&1 &
+SERVE_PID=$!
+trap 'kill "$SERVE_PID" 2>/dev/null || true' EXIT
+BASE=""
+for _ in $(seq 1 100); do
+  BASE="$(grep -m1 '^editor ' "$TOKEN_LOG" | awk '{print $2}' | sed 's:/$::' || true)"
+  [ -n "$BASE" ] && break
+  sleep 0.2
+done
+[ -n "$BASE" ] || {
+  echo "the gated server never printed its URL:"; cat "$TOKEN_LOG"; exit 1; }
+
+# One line: a here-document body starts on the line after the *whole* command,
+# so splitting the `|| { … }` across lines would swallow it into the script.
+"$VENV/bin/python" - "$BASE" "$TOKEN" <<'GATE' || { echo "--- serve log ---"; cat "$TOKEN_LOG"; exit 1; }
+import sys
+import time
+import urllib.error
+import urllib.request
+
+base, token = sys.argv[1], sys.argv[2]
+
+
+def call(path, header=None, tries=1):
+    request = urllib.request.Request(base + path)
+    if header:
+        request.add_header("Authorization", header)
+    last = None
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status
+        except urllib.error.HTTPError as exc:
+            return exc.code
+        except (urllib.error.URLError, OSError) as exc:  # not listening yet
+            last = exc
+            time.sleep(0.2)
+    raise SystemExit("%s never answered: %s" % (path, last))
+
+
+assert call("/api/health", tries=100) == 200, "a liveness probe must stay open"
+assert call("/api/workflows") == 401, "the gate did not refuse an anonymous call"
+assert call("/api/workflows", "Bearer " + token) == 200, "a valid token was refused"
+assert call("/api/workflows", "Bearer wrong") == 401, "a wrong token was accepted"
+assert call("/login") == 200, "there is no way for a browser to sign in"
+print("    /api/workflows  401 anonymous, 200 with the bearer token")
+print("    /api/health     200 without one (a probe carries no credentials)")
+GATE
 
 kill "$SERVE_PID" 2>/dev/null || true
 wait "$SERVE_PID" 2>/dev/null || true

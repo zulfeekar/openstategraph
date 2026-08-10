@@ -43,6 +43,7 @@ are not. Requires the ``[mcp]`` extra.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,8 @@ from typing import Any
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
 from openstategraph.schema import normalize_document as _normalize_document
+
+logger = logging.getLogger(__name__)
 
 #: The complete, reviewed surface. A tool absent from this tuple does not
 #: exist over MCP — publishing, deleting and anything credential-shaped are
@@ -877,17 +880,59 @@ def build_mcp_server(
 def main() -> None:
     """`python -m openstategraph.mcp_server`.
 
-    stdio by default — the transport an MCP client spawns locally. For the
-    server deployment this decision is about, set
-    ``OPENSTATEGRAPH_MCP_TRANSPORT=streamable-http`` and put a reverse proxy in
-    front of it: **this layer has no authentication of its own** (recorded as
-    the known gap in `docs/decisions/mcp-layer.md`).
-
+    stdio by default — the transport an MCP client spawns locally.
     ``OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`` closes the one tool that needs a model.
+
+    **Authentication (scale-and-adopt ticket 06).** ``streamable-http`` opens a
+    TCP port, and a port with no credential lets any client on the network run
+    `run_workflow` on the deployer's model budget. Setting
+    ``OPENSTATEGRAPH_API_TOKEN`` — the same variable the HTTP API uses, because
+    it is the same deployment and two secrets would mean one of them unset —
+    puts a bearer-token gate in front of the transport. It is machine-only
+    here: no login form, because an MCP client cannot fill one in.
+
+    stdio is deliberately **not** gated. The client is the parent process that
+    spawned this one; it already has whatever access the operating system gives
+    it, and a token on a pipe would be theatre. A reverse proxy
+    (`deploy/Caddyfile`) remains the supported answer for anything public — the
+    token is the floor, not the ceiling.
     """
     transport = os.getenv("OPENSTATEGRAPH_MCP_TRANSPORT", "stdio")
     allow_runs = os.getenv("OPENSTATEGRAPH_MCP_ALLOW_RUNS", "1") != "0"
-    build_mcp_server(allow_runs=allow_runs).run(transport=transport)  # type: ignore[arg-type]
+    server = build_mcp_server(allow_runs=allow_runs)
+    if transport == "streamable-http":
+        _run_gated_http(server)
+        return
+    server.run(transport=transport)  # type: ignore[arg-type]
+
+
+def _run_gated_http(server: Any) -> None:
+    """Serve the streamable-HTTP app, behind the token gate when one is set.
+
+    `FastMCP.run(transport="streamable-http")` would serve
+    `server.streamable_http_app()` itself; we ask for the Starlette app and run
+    uvicorn over it so the same `TokenGate` that guards the HTTP API guards
+    this too. One implementation of "is this caller allowed in", not two.
+    """
+    import uvicorn
+
+    from openstategraph.api.auth import API_TOKEN_ENV, TokenGate, configured_token
+
+    app: Any = server.streamable_http_app()
+    token = configured_token()
+    if token is None:
+        logger.warning(
+            "MCP streamable-http is listening with NO authentication: any client "
+            "that can reach this port can compile workflows, read hosted ones, "
+            "write drafts and spend this deployment's model budget. Set %s, or "
+            "put it behind the reverse proxy in deploy/Caddyfile. "
+            "See docs/deploying.md.",
+            API_TOKEN_ENV,
+        )
+    else:
+        app = TokenGate(app, token, open_paths=(), login_path=None)
+        logger.info("MCP streamable-http requires a bearer token (%s)", API_TOKEN_ENV)
+    uvicorn.run(app, host=server.settings.host, port=server.settings.port)
 
 
 if __name__ == "__main__":

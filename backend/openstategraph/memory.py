@@ -164,15 +164,27 @@ def build_store() -> Any:
     shape as ``settings.checkpointer: "sqlite"``, and the same constraint:
     one uvicorn worker, one connection (``check_same_thread=False`` makes
     the single shared connection usable across request threads, not across
-    processes). A PostgresStore drops into this same seam when hosting
-    ever comes into scope. An unusable path degrades loudly to in-memory
-    rather than failing startup.
+    processes). An unusable path degrades loudly to in-memory rather than
+    failing startup.
+
+    ``OPENSTATEGRAPH_POSTGRES_URL`` (ticket 06, the ``[postgres]`` extra) puts
+    the same store in a database instead — the seam this docstring used to
+    promise, now filled. It ranks *below* ``OPENSTATEGRAPH_MEMORY_PATH``
+    because that names one file outright and is therefore the more specific
+    answer; a deployment that set both meant the file. Unlike every other
+    backend here, a broken Postgres **raises** rather than degrading: see
+    `openstategraph.postgres` for why.
     """
     import os
 
     from langgraph.store.memory import InMemoryStore
 
+    from openstategraph import postgres
+
     raw_path = os.environ.get("OPENSTATEGRAPH_MEMORY_PATH", "").strip()
+    postgres_url = postgres.postgres_url()
+    if not raw_path and postgres_url:
+        return postgres.store(postgres_url)
     if raw_path:
         try:
             import sqlite3
@@ -324,8 +336,24 @@ def build_checkpointer(workflows_root_dir: Any = None) -> Any:
     discovers by losing work is not a stated limitation. (INFO rather than
     print: a library consumer who never configured logging stays quiet, while
     the server — which calls `basicConfig(INFO)` — always says it.)
+
+    Three backends now, in one order of specificity (ticket 06):
+    ``OPENSTATEGRAPH_CHECKPOINT_PATH`` names one file — or opts out with
+    ``memory`` — and wins outright; ``OPENSTATEGRAPH_POSTGRES_URL`` is next;
+    the state directory's sqlite file is the convention underneath both. The
+    opt-out has to stay on top: a stateless container that said "no
+    persistence" must not be handed a database because a sibling variable
+    happened to be in the environment too.
     """
+    import os
+
     from langgraph.checkpoint.memory import InMemorySaver
+
+    from openstategraph import postgres
+
+    postgres_url = postgres.postgres_url()
+    if postgres_url and not os.environ.get(CHECKPOINT_PATH_ENV, "").strip():
+        return postgres.checkpointer(postgres_url)
 
     path = checkpoint_path(workflows_root_dir)
     saver = _open_sqlite_saver(path, "the default checkpointer") if path is not None else None

@@ -245,13 +245,29 @@ def cmd_serve(args: argparse.Namespace) -> int:
     The socket is bound here and handed to uvicorn rather than passing it a
     number, because that is the only way `--port 0` can print the URL it landed
     on *before* the server starts talking.
+
+    Two refusals happen before anything is bound (scale-and-adopt ticket 06),
+    because a message printed after a server is listening is a message someone
+    scrolls past: more than one worker is refused outright, and an
+    unauthenticated bind to a non-loopback address is warned about by name.
     """
+    from openstategraph import deployment
+
+    refusal = deployment.check_worker_count(explicit=getattr(args, "workers", None))
+    if refusal is not None:
+        return _error(refusal)
+
     try:
         import uvicorn
     except ImportError:
         return _missing("uvicorn", "server", "the HTTP API")
 
+    from openstategraph.api import auth
     from openstategraph.api.listening import PortUnavailable, bind_listener, listen_urls
+
+    exposure = auth.exposure_warning(args.host)
+    if exposure is not None:
+        print(exposure, file=sys.stderr, flush=True)
 
     try:
         listener = bind_listener(args.host, args.port)
@@ -421,6 +437,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--open",
         action="store_true",
         help="open the editor in your browser once it is listening (default: off)",
+    )
+    # Accepted only so it can be REFUSED by name. Without the flag, argparse
+    # answers `--workers 4` with "unrecognized arguments", which reads like a
+    # version skew and sends the deployer to `uvicorn --workers 4` — the one
+    # path that skips every check we have. See `openstategraph.deployment`.
+    serve.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="must be 1. More than one worker is refused — see docs/deploying.md.",
     )
     serve.set_defaults(handler=cmd_serve)
 

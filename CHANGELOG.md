@@ -98,6 +98,37 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **A published API contract, so "build your own UI" is checkable**
+  (scale-and-adopt ticket 05). Both shipped surfaces already went through
+  public HTTP endpoints, but nothing said so in a form a stranger could read:
+  no OpenAPI document, no guide, no example.
+  - **`docs/openapi.json`** is generated from the app and committed, so an
+    endpoint changing shape appears in a pull-request diff next to the code
+    that changed it, and anyone can run
+    `npx openapi-typescript docs/openapi.json` without booting a server first.
+    Regenerate with `python3 scripts/generate_openapi.py`. Two gates keep it
+    honest: a byte comparison on every backend test leg, and a
+    `generated-openapi` CI job that regenerates and diffs — the same
+    belt-and-braces `port_specs.json` already had. The same suite fails an
+    endpoint with no description, or a JSON response with no named schema;
+    `/api/health`, `/api/node-contracts` and `/api/workflows/{slug}/graph`
+    returned bare dicts and now have models.
+  - **`docs/api.md`** carries the half OpenAPI structurally cannot: the SSE
+    event vocabulary of `/api/runs/stream`, `/api/runs/resume` and
+    `/api/events`, the guarantee that exactly one of `done`/`interrupt`/`error`
+    ends every stream, and the five calls a custom chat needs with request and
+    response examples captured from a running server. Plus a complete
+    forty-line client, `docs/examples/minimal-client.html`, verified in a
+    browser against a live server.
+  - **`OPENSTATEGRAPH_ALLOWED_ORIGINS`** lets a browser client on your own
+    origin call the API. Comma-separated, **added** to the editor's dev
+    origins rather than replacing them, and `*` is refused rather than
+    silently dropped — this process holds provider keys.
+  - **No npm client, deliberately.** A package is a version to maintain for a
+    surface a `fetch` covers, in one language out of three people ask in, and
+    it would still hand you an untyped `fetch` for the three streaming
+    endpoints that matter most. The schema plus the example is the answer.
+
 - **Named templates, shipped inside the wheel** (scale-and-adopt ticket 04). A
   `pip install` user started in an empty folder with nothing to imitate: the
   two example workflows live in this repository and were never in the package.

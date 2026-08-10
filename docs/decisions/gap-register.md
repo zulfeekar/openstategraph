@@ -43,7 +43,7 @@ ever externally visible.
 
 ---
 
-## A. Runtime correctness & capability (15)
+## A. Runtime correctness & capability (16)
 
 ### Blocks 1.0
 
@@ -51,23 +51,6 @@ ever externally visible.
 "Verified closed".)*
 
 ### Should precede public launch
-
-**RC-03 — Single worker, because sqlite is single-process.** Narrowed by ticket
-05 and **no longer about in-process state**: the checkpointer is a `SqliteSaver`
-on a file every process on the host can open, so a second worker can now see
-the first's threads. What remains is write coordination — `SqliteSaver`'s only
-serialisation is a `threading.Lock` held per instance (evidence:
-`langgraph-checkpoint-sqlite` 3.1.1 `SqliteSaver`, *"meant for lightweight,
-synchronous use cases (demos and small projects) and does not scale to multiple
-threads"*; LangChain's checkpointer-library page rates it *"ideal for
-experimentation and local workflows"*), and the sqlite memory `Store` is the
-same. Documented in `docs/decisions/memory-architecture.md` "The worker ceiling
-is still one, for a smaller reason", `Dockerfile`, `scripts/dev.sh`, `README.md`
-and `docs/adoption.md`. **Size M** — `PostgresSaver` + `PostgresStore` passed to
-`WorkflowServices`, which already takes both by argument. **Risk:** the first
-person to scale horizontally gets uncoordinated concurrent writes, silently.
-**Verdict: should precede public launch** — documented honestly, and the
-`--workers 1` in `Dockerfile` is what keeps it hypothetical.
 
 **RC-04 — A tool that overrides `run` instead of `_execute` is discovered as
 nothing, silently.** `BaseTool._execute` is `@abstractmethod`
@@ -118,6 +101,17 @@ sources" claim in the architecture doc is currently true of one source family.
 **Verdict: should precede public launch** — the claim is in a public doc.
 
 ### Fine to carry
+
+**RC-17 — The catalogue-events fan-out has no cross-process transport.**
+`api/catalogue_events.py` is an in-process deque, so a publish on one process
+never reaches a subscriber on another. Today this costs nothing, because
+`deployment.py` refuses the only configuration in which it would matter. It is
+the one thing standing between here and supported multi-worker: Postgres
+`LISTEN`/`NOTIFY` or Redis behind `CatalogueBroadcaster`'s existing
+`publish`/`subscribe` pair, with the endpoint and both clients unchanged.
+**Size M.** **Risk:** none today — the refusal is what makes that true, so this
+entry and the refusal have to be closed or removed together. **Verdict: fine to
+carry** until someone actually needs a second worker.
 
 **RC-07 — The `node_runtime.py` split is planned and not executed.** 1639
 lines (`backend/openstategraph/compile/node_runtime.py`), no `compile/nodes/`
@@ -480,26 +474,40 @@ mitigation, which is what keeps them off this line.)*
 
 ### Should precede public launch
 
-**SEC-01 — The MCP layer authenticates nobody.** Evidence:
-`docs/decisions/mcp-layer.md` §5 — *"**No authentication layer. This is the
-known gap.** The MCP server authenticates nobody and authorizes nothing; every
-connected client has the same capabilities. For v1 that is the **deployer's
-reverse proxy**… Do not expose `streamable-http` to the public internet as-is.
-The MCP specification has an authorization story; adopting it is the first
-thing to do when this leaves a trusted network, and it is deliberately not
-faked here with a shared secret."* Restated at
-`backend/openstategraph/mcp_server.py:802-803`. **Size L.** **Risk:** bounded
-by the trust boundary the design already enforces — no publish, no delete, no
-credentials, writes jailed and validated — but unbounded on model spend.
-**Verdict: should precede public launch** *if* the launch includes a hosted
-MCP endpoint; otherwise the proxy story holds.
-
-**SEC-02 — No rate limiting, quotas, or audit log on MCP.** Evidence: same
-section — *"`run_workflow` in particular spends the deployer's model budget on
-any connected client's request."* **Size M.** **Verdict: should precede public
-launch** — cheaper than SEC-01 and mitigates the same worst case.
+**SEC-02 — No rate limiting, quotas, or audit log.** Evidence:
+`docs/decisions/mcp-layer.md` §5 — *"`run_workflow` in particular spends the
+deployer's model budget on any connected client's request."* Unchanged by
+ticket 06 and now the *largest* remaining security gap, because the token
+answers "is this stranger allowed in" and says nothing about how much they may
+spend once they are. `docs/deploying.md` names it under "Not solved here" and
+points at the proxy as today's place to put a limit. **Size M.** **Verdict:
+should precede public launch** — a token holder can still exhaust a budget.
 
 ### Fine to carry
+
+**SEC-01 — ~~The MCP layer authenticates nobody.~~ Narrowed
+(scale-and-adopt ticket 06): a first-party token layer ships, off by default.**
+The old verdict — *"should precede public launch if the launch includes a
+hosted MCP endpoint; otherwise the proxy story holds"* — rested on a proxy that
+was not in the repository, and on the assumption that the exposed deployment is
+a hosted one. Both were wrong in the same direction: the commonest deployment
+is an MCP server on a laptop or a team VM with no proxy and no plan for one,
+and "configure a reverse proxy" is advice rather than a product.
+
+So both halves shipped. `deploy/Caddyfile` and `deploy/nginx.conf` are
+committed and checked against the app's real routes on every CI run
+(`backend/tests/test_reverse_proxy.py`) — including the three SSE endpoints,
+whose buffering and timeout requirements are the part everyone gets wrong.
+And `OPENSTATEGRAPH_API_TOKEN` (`openstategraph/api/auth.py`) puts a shared
+bearer token in front of the HTTP API *and* the MCP `streamable-http`
+transport, with a session cookie so the editor and `/chat` keep working. stdio
+is deliberately not gated: the client is the process that spawned it.
+
+The decision **not** faked here is still not faked: this is a shared secret,
+not identity, and `docs/deploying.md` says so in the same paragraph that offers
+it. What remains open is per-user identity and authorization, which is a
+different entry (see "Identity needs an owner first", §D) and genuinely blocked
+on there being an owner concept at all. **Verdict: no longer blocks anything.**
 
 **SEC-03 — Capability discovery imports and executes workflow Python with no
 sandboxing.** Evidence:
@@ -565,9 +573,33 @@ streaming. **Size S** now, not M. **Verdict: fine to carry.**
 
 ## Verified closed — checked and not (or no longer) a gap
 
+
 Items 1-6 were on the intake list and found already fixed. Anything after that
 was a live entry in this register that has since been resolved and was
 externally visible. Listed so nobody re-adds them from an old session report.
+
+**RC-03 — ~~Single worker, because sqlite is single-process.~~ Closed
+(scale-and-adopt ticket 06): multi-worker is now *refused*, not documented.**
+The entry survived two narrowings and stayed open both times because the fix on
+offer was always "ship Postgres", and Postgres was never the whole fix. Ticket
+06 answered the actual question — support it or refuse it — with **refuse**,
+and enforced it two ways: `openstategraph serve --workers N`, `WEB_CONCURRENCY`,
+`UVICORN_WORKERS` and `GUNICORN_WORKERS` are read and refused before a socket is
+bound, and an exclusive OS lock on `<state dir>/serve.lock`
+(`openstategraph/deployment.py`) catches `uvicorn --workers 4` and `gunicorn -w
+4`, which leave no trace in a child's environment for the first mechanism to
+find. The risk this entry recorded — *"the first person to scale horizontally
+gets uncoordinated concurrent writes, silently"* — is gone, because that person
+now gets a refusal naming both causes.
+
+The Postgres half shipped too, as `[postgres]` +
+`OPENSTATEGRAPH_POSTGRES_URL` (`openstategraph/postgres.py`), on its own merits:
+checkpoints and long-term memory in a database an operations team backs up. It
+is explicitly **not** sold as the lift, and the refusal does not soften when it
+is set — because the second cause, the in-process catalogue-events fan-out, has
+no cross-process transport. *That* is the remaining work, and it is recorded
+as **RC-17** in §A rather than left buried inside a closed entry.
+
 
 1. **`settings.checkpointer: "sqlite"` silently degrading to in-memory.**
    Fixed: the `[sqlite]` extra is declared (`backend/pyproject.toml:77-79`) and

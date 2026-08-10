@@ -2,7 +2,7 @@ import { Ok, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode, type NodeSpec } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
-import type { IPortDescriptor } from '@core/model/contracts/ports';
+import { BINDING_SIDE, type IPortDescriptor } from '@core/model/contracts/ports';
 import type {
   ExecutionContext,
   INodeExecutor,
@@ -23,7 +23,7 @@ export const TOOL_PORT: IPortDescriptor = {
   direction: 'out',
   type: PORT.tool,
   label: 'tool',
-  side: 'top',
+  side: BINDING_SIDE.provider,
   description: 'Connect to an agent’s tool bus.',
 };
 

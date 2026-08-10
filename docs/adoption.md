@@ -181,11 +181,16 @@ which one it got (`approvals persist at …` or `approvals are in-memory and
 will NOT survive a restart`); `OPENSTATEGRAPH_CHECKPOINT_PATH` moves it, or
 `=memory` opts out.
 
-Still one worker, deliberately: `SqliteSaver` and `SqliteStore` are
-single-process by their own documentation (a per-instance `threading.Lock`,
-which two processes do not share). Two workers would race each other's writes
-with no coordination. Scaling out means passing a `PostgresSaver` and
-`PostgresStore` to `WorkflowServices` — the same two seams, nothing else.
+One worker, and a second one is **refused at startup** rather than warned
+about: `SqliteSaver` and `SqliteStore` are single-process by their own
+documentation (a per-instance `threading.Lock`, which two processes do not
+share), and the live catalogue-event fan-out is an in-process queue. Postgres
+is available (`pip install 'openstategraph[postgres]'`,
+`OPENSTATEGRAPH_POSTGRES_URL`) and moves durable state into a database your
+operations team backs up — it does not raise the ceiling, because the event
+half has no cross-process transport yet. Deploying for other people —
+authentication, the committed reverse-proxy configs, the threat model — is
+[docs/deploying.md](deploying.md).
 
 ### Upgrading — the honest part
 

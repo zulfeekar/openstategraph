@@ -1,0 +1,108 @@
+# OpenStateGraph behind Caddy — the supported deployment for anything
+# reachable from more than one machine.
+#
+# This file is COMMITTED and tested (`backend/tests/test_reverse_proxy.py`
+# checks that the paths and timeouts here still match the app's real routes).
+# It is not an illustration: `caddy run --config deploy/Caddyfile` in front of
+# `openstategraph serve` is a working deployment.
+#
+# What it does and does not protect is written out in docs/deploying.md. In
+# one line: this file gives you TLS, one credential and sane limits; it does
+# not give you multi-tenancy, per-user authorization, or protection from
+# anyone you hand the credential to.
+#
+#   1. Replace osg.example.com with your hostname (Caddy gets the certificate
+#      itself; there is nothing else to configure for TLS).
+#   2. Choose an authentication block below — basic_auth here, or the app's own
+#      OPENSTATEGRAPH_API_TOKEN, or your organisation's OIDC proxy.
+#   3. Run the app on loopback only: `openstategraph serve --host 127.0.0.1`.
+#      If it binds 0.0.0.0, everything below is decoration — the port is
+#      reachable without passing through it.
+
+{
+	# ACME account contact. Caddy will not obtain a certificate without one.
+	email ops@example.com
+}
+
+osg.example.com {
+	# --- who is allowed in -------------------------------------------------
+	#
+	# Pick ONE. Uncomment basic_auth for the smallest thing that works;
+	# generate the hash with `caddy hash-password`. For an organisation, put
+	# forward_auth to your OIDC proxy here instead.
+	#
+	# basic_auth {
+	#	team $2a$14$replace.this.with.the.output.of.caddy.hash.password
+	# }
+	#
+	# If you use the app's own shared token instead (OPENSTATEGRAPH_API_TOKEN),
+	# leave this commented: the app does the checking, and Caddy's job is TLS
+	# and rate limiting. Do NOT leave *both* commented out.
+
+	# --- headers -----------------------------------------------------------
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		# The editor is not designed to be framed, and framing it is how a
+		# clickjacked "publish" button gets pressed.
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# --- the three Server-Sent Event streams -------------------------------
+	#
+	# These are matched FIRST and proxied differently, and every line here is
+	# load-bearing:
+	#
+	#   flush_interval -1  — write each frame through immediately. With the
+	#     default, a run's `update` frames sit in a buffer and the editor's
+	#     node highlighting arrives all at once when the run ends, which reads
+	#     as "the canvas is frozen".
+	#   read_timeout 24h   — a run is bounded by a model, an approval by a
+	#     human. The default (a few minutes) severs a paused human.approval
+	#     mid-wait, and an EventSource reconnect after the pause has already
+	#     been abandoned is a lost turn.
+	#
+	# `encode` is deliberately NOT applied here: a compressor is a buffer.
+	@sse path /api/events /api/runs/stream /api/runs/resume
+	handle @sse {
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+			}
+		}
+	}
+
+	# --- everything else ---------------------------------------------------
+	#
+	# The editor SPA at /, the chat surface at /chat, the JSON API under /api,
+	# the login form at /login and the OpenAPI document at /openapi.json all
+	# come from the same origin and need nothing special. Same-origin is not
+	# an accident: it is what lets the editor's fetches and its EventSource
+	# carry the session cookie without CORS entering the picture at all.
+	handle {
+		encode zstd gzip
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# --- limits ------------------------------------------------------------
+	#
+	# A workflow document is JSON in the tens of kilobytes; a request two
+	# orders of magnitude larger is not a workflow.
+	request_body {
+		max_size 10MB
+	}
+
+	log {
+		output file /var/log/caddy/openstategraph.log
+		# The token can arrive in the Authorization header and the session
+		# cookie. Neither belongs in a log file.
+		format json {
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+		}
+	}
+}

@@ -69,6 +69,47 @@ jobs:
             exit 1
           fi
 
+  # Scale-and-adopt ticket 05: `docs/openapi.json` is GENERATED from the FastAPI
+  # app and committed, so an endpoint changing shape shows up as a reviewable
+  # diff next to the code that changed it — and anyone can generate a client
+  # (`npx openapi-typescript docs/openapi.json`) without booting us first.
+  # `backend/tests/test_openapi_contract.py` already fails on drift by comparing
+  # the committed bytes to a freshly built document. This job proves the same
+  # thing the other way round — regenerate, then diff the working tree — so a
+  # drift that somehow slipped past the byte comparison still cannot merge.
+  # Exactly the shape of `generated-port-specs` above, deliberately.
+  generated-openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e "backend[all]"
+      - run: python3 scripts/generate_openapi.py
+      - name: The committed contract must match the app
+        run: |
+          # `--intent-to-add` so a *missing* artifact fails too: `git diff`
+          # alone is blind to an untracked file, which is exactly the state a
+          # deleted or never-committed artifact would be in.
+          git add --intent-to-add docs/openapi.json
+          if ! git diff --exit-code -- docs/openapi.json; then
+            echo "::error::docs/openapi.json is stale."
+            cat <<'MSG'
+
+          The published API contract no longer matches the app. You changed an
+          endpoint, a request model or a response model without regenerating it.
+
+            python3 scripts/generate_openapi.py
+            git add docs/openapi.json
+
+          The prose half of the contract — the SSE event vocabulary, which
+          OpenAPI cannot express — is docs/api.md. If you changed a stream,
+          change that too.
+
+          MSG
+            exit 1
+          fi
+
   # Tested on the versions we ADVERTISE — the floor and the ceiling of the
   # `Programming Language :: Python :: 3.x` classifiers in backend/pyproject.toml
   # (sdk-practice.md §3 recommendation 4, copying SUP's stated principle: lint
@@ -209,7 +250,7 @@ jobs:
   # skips on push-to-main; `cancelled` is not.
   ci-success:
     if: always()
-    needs: [frontend, generated-port-specs, backend, clean-install, docs-freshness, e2e]
+    needs: [frontend, generated-port-specs, generated-openapi, backend, clean-install, docs-freshness, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every check must have passed

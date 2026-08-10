@@ -2,6 +2,7 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import { BINDING_SIDE } from '@core/model/contracts/ports';
 import type {
   ExecutionContext,
   INodeExecutor,
@@ -169,7 +170,7 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           label: 'agent tools',
           // Several tools converge here, so this port sits below the card as
           // a shared bus rather than as one more row in the footer.
-          side: 'bottom',
+          side: BINDING_SIDE.consumer,
           appearance: 'pill',
           // Unlimited. `null`, not `Infinity`, so the descriptor survives JSON.
           maxConnections: null,

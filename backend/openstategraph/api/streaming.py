@@ -356,11 +356,22 @@ def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+#: The event names that report progress. A client must keep waiting after
+#: every one of them — none of these can be the last frame of a healthy run.
+PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "spawn")
+
 #: The event names that *end* a stream. Exactly one of these is the last
 #: frame of every stream that lives long enough to send one — see
-#: `_stream_run`, which is what guarantees it. Anything else (`update`,
-#: `token`, `spawn`) is progress, and a client must keep waiting after it.
+#: `_stream_run`, which is what guarantees it.
 TERMINAL_EVENTS: tuple[str, ...] = ("done", "interrupt", "error")
+
+#: The whole run vocabulary, in the order a client meets it. Named here
+#: rather than retyped in the guide: `docs/api.md` is what a stranger builds
+#: a client from, and `backend/tests/test_api_guide.py` reads this tuple to
+#: prove the page still describes every frame this code can emit. OpenAPI
+#: cannot express any of it (see `api/openapi_document.py`), so the prose is
+#: the contract and a drift there is a broken client, not a typo.
+RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
 
 
 def _is_terminal(frame: str) -> bool:

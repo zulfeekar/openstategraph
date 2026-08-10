@@ -123,14 +123,23 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # The container logs which one it got at startup: "approvals persist at X", or
 # "approvals are in-memory and will NOT survive a restart".
 #
-# It did NOT fix the concurrency half, and the honest ceiling is still one.
+# It did NOT fix the concurrency half, and the ceiling is one worker — enforced
+# since scale-and-adopt ticket 06, not merely written here. Two causes:
 # langgraph-checkpoint-sqlite's SqliteSaver documents itself as "meant for
 # lightweight, synchronous use cases (demos and small projects) and does not
-# scale to multiple threads"; its only serialisation is a threading.Lock held
-# per instance, which two OS processes do not share. Same story for the
-# long-term memory SqliteStore. Two workers would not lose the thread any more
-# — both can read the file — but they would race each other's writes with no
-# coordination, which is a worse failure than the one we just fixed because it
-# is silent. Scaling past one worker means PostgresSaver + PostgresStore
-# dropped into those same two seams (WorkflowServices takes both by argument).
+# scale to multiple threads" (its only serialisation is a threading.Lock held
+# per instance, which two OS processes do not share; same for SqliteStore), and
+# the live catalogue-event fan-out behind GET /api/events is an in-process
+# queue. Two workers would race sqlite writes silently AND drop catalogue
+# updates for half the users.
+#
+# So `--workers 1` below is no longer the only thing standing between a
+# deployer and that outcome: raising it fails at startup. openstategraph.
+# deployment reads --workers/WEB_CONCURRENCY/UVICORN_WORKERS/GUNICORN_WORKERS
+# and refuses, and the app takes an exclusive lock on <state dir>/serve.lock so
+# `--workers N` here — which leaves no environment trace in a child — is
+# refused too. `pip install 'openstategraph[postgres]'` plus
+# OPENSTATEGRAPH_POSTGRES_URL moves checkpoints and memories into a real
+# database; it does NOT lift the ceiling, because the event fan-out has no
+# cross-process transport (docs/deploying.md).
 CMD ["uvicorn", "openstategraph.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

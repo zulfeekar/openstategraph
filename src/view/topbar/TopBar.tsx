@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   Download,
   FileJson,
@@ -17,6 +17,7 @@ import {
   Undo2,
   Upload,
   GitBranch,
+  Crosshair,
 } from 'lucide-react';
 import {
   Badge,
@@ -113,6 +114,28 @@ export function TopBar({
 
   const [running, setRunning] = useState(false);
   const [tokens, setTokens] = useState(0);
+
+  /* ---------------- follow the run (ticket 08) ----------------
+   *
+   * Mirrored into React state rather than read on each render: the follower
+   * latches itself off on a pan or a zoom, so the button has to hear about a
+   * change it did not make. `reason` arrives exactly once per run, which is
+   * why it is toasted here rather than rendered — a persistent badge saying
+   * "not following" would be a second thing to dismiss. */
+  const following = useSyncExternalStore(
+    useCallback(
+      (onStoreChange: () => void) => paper?.follower.onChange(onStoreChange) ?? (() => {}),
+      [paper],
+    ),
+    () => paper?.follower.enabled ?? false,
+  );
+
+  useEffect(() => {
+    if (!paper) return;
+    return paper.follower.onChange(({ reason }) => {
+      if (reason) onNotify(reason);
+    });
+  }, [paper, onNotify]);
 
   useEffect(() => {
     const { engine } = workbench;
@@ -302,6 +325,21 @@ export function TopBar({
                   requestAnimationFrame(() => paper?.fitToContent());
                 });
               }}
+            />
+          </Tooltip>
+          <Tooltip
+            content={
+              following
+                ? 'Follow run: on — the canvas moves to whatever is running. Panning or zooming turns this off'
+                : 'Follow run: off — bring the running node into view, and fit them all on a fan-out'
+            }
+            multiline
+          >
+            <IconButton
+              label="Follow run"
+              active={following}
+              icon={<Icon glyph={Crosshair} size="md" />}
+              onClick={() => paper?.follower.setEnabled(!following)}
             />
           </Tooltip>
         </div>

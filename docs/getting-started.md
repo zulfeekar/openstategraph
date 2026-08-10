@@ -60,8 +60,11 @@ checkout once `npm run build` has run at least once.
 > you save a file. The backend log says which it got on startup — `approvals
 > persist at …`, or `approvals are in-memory and will NOT survive a restart`
 > (set `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` to choose the latter). The
-> worker count stays 1: `SqliteSaver` is documented single-process, so two
-> workers would race each other's writes. Scaling out means Postgres.
+> worker count stays 1, and asking for more is now refused rather than
+> discouraged — `SqliteSaver` is documented single-process and the live
+> catalogue-event fan-out is in-process. See
+> [Deploying for other people](deploying.md) when this stops being your own
+> machine.
 
 The editor opens on a seeded demo that runs with **no credentials at all**:
 the canvas preview's default model is `Mock · Offline`, a deterministic

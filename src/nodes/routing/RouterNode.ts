@@ -277,6 +277,9 @@ export const routerNode: INodeDefinition = defineNode(
           direction: 'out',
           type: PORT.text,
           label: entry.name,
+          // Exactly one of these is taken, and which one is the whole point of
+          // the node — so the canvas carries the name on the link.
+          branch: true,
           description: isFallback
             ? 'Fallback — taken when no other branch matches.'
             : `Taken when the input classifies as "${entry.name}".`,

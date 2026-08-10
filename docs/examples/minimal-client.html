@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Minimal OpenStateGraph client</title>
+<input id="q" size="48" value="How did revenue do this quarter?" /><button id="go">Ask</button>
+<pre id="out">loading…</pre>
+<script>
+  // Where your server is. `?api=http://host:port` overrides it.
+  const API = new URLSearchParams(location.search).get("api") ?? "http://127.0.0.1:8000";
+  const out = document.getElementById("out");
+  let doc = null, slug = null;
+
+  async function load() { // 1 + 2: what is published, and its document
+    const [first] = await (await fetch(`${API}/api/workflows?surface=chat`)).json();
+    slug = first.slug;
+    doc = (await (await fetch(`${API}/api/workflows/${slug}`)).json()).document;
+    out.textContent = `ready: ${first.name}\n`;
+  }
+
+  async function stream(path, body) { // 3 + 4: POST, then read the frames
+    const res = await fetch(`${API}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return void (out.textContent += "\n[connection dropped]\n"); // no terminal frame
+      buffer += value;
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop();
+      for (const frame of frames) {
+        const name = frame.match(/^event: (.*)$/m)?.[1];
+        const data = JSON.parse(frame.match(/^data: (.*)$/m)?.[1] ?? "{}");
+        // Every text-producing node emits tokens — the input node echoes your
+        // question, the output node re-renders the answer. Key on data.node.
+        if (name === "token") out.textContent += data.content;
+        if (name === "done") return void (out.textContent += `\n\n${data.answer}\n`);
+        if (name === "error") return void (out.textContent += `\n[error] ${data.detail}\n`);
+        if (name === "interrupt") {
+          if (!confirm(data.message)) return;
+          return stream("/api/runs/resume", { workflow: doc, workflow_slug: slug,
+            thread_id: data.threadId, decision: "approve" });
+        }
+      }
+    }
+  }
+
+  document.getElementById("go").onclick = () => {
+    out.textContent = "";
+    stream("/api/runs/stream", { workflow: doc, workflow_slug: slug,
+      question: document.getElementById("q").value, thread_id: `chat-${Date.now()}` });
+  };
+  load();
+</script>

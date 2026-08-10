@@ -214,14 +214,18 @@ startup: `approvals persist at …`, or `approvals are in-memory and will NOT
 survive a restart`. Set `OPENSTATEGRAPH_CHECKPOINT_PATH` to move the file, or
 to `memory` to opt out of durability on purpose.
 
-**Still one worker, deliberately.** Durability is fixed; concurrency is not.
-`SqliteSaver` documents itself as lightweight and single-process — its only
-serialisation is a `threading.Lock` per instance, which two OS processes do
-not share — and the long-term memory `SqliteStore` is the same. Two workers
-would race each other's writes silently. Raising the ceiling means
-`PostgresSaver` + `PostgresStore` passed to `WorkflowServices`; nothing else
-changes. `uvicorn --reload` is single-process for its own reasons too — it and
-`--workers N` are mutually exclusive.
+**One worker, and a second one is refused.** Durability is fixed; concurrency
+is not, and this stopped being a note you had to read. `SqliteSaver` and the
+long-term memory `SqliteStore` serialise writes with a `threading.Lock` held
+per instance, which two OS processes do not share; the live catalogue-event
+fan-out behind `GET /api/events` is an in-process queue. So `--workers 2`,
+`WEB_CONCURRENCY` and friends are refused before a socket is bound, and an
+exclusive lock on the state directory refuses `uvicorn --workers 4` and
+`gunicorn -w 4` too, which leave no environment trace. `[postgres]` +
+`OPENSTATEGRAPH_POSTGRES_URL` puts checkpoints and memories in a real database
+— worth doing, and deliberately **not** a lift on the ceiling, because the
+event fan-out still has no cross-process transport. **[docs/deploying.md](docs/deploying.md)**
+has the whole story, plus the threat model and a committed reverse proxy.
 
 Rationale for each choice is commented inline in `Dockerfile`,
 `docker-compose.yml`, `start` and `scripts/dev.sh`.
@@ -419,7 +423,9 @@ pure TypeScript with no excuse for untested logic.
   started](docs/getting-started.md) (first run), [using it in your
   project](docs/adoption.md) (the three consumption modes, the CLI,
   `load_workflow`), [the stability contract](docs/stability.md) (what can be
-  taken away), [the MCP layer](docs/mcp.md) (your own LLM composes the graph),
+  taken away), [the HTTP API](docs/api.md) (build your own UI: the OpenAPI
+  document, the SSE streams, five calls), [the MCP
+  layer](docs/mcp.md) (your own LLM composes the graph),
   the seven [patterns](docs/patterns.md), [building an
   atom](docs/building-an-atom.md) (a node, both halves, end to end) and the
   [ports and edges](docs/ports-and-edges.md) reference

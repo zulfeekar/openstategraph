@@ -1,0 +1,1893 @@
+{
+  "components": {
+    "schemas": {
+      "AskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "question": {
+            "description": "A natural-language question.",
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "recursion_limit": {
+            "default": 50,
+            "maximum": 1000.0,
+            "minimum": 10.0,
+            "title": "Recursion Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest",
+        "type": "object"
+      },
+      "AskResponse": {
+        "description": "What the editor renders.\n\nThe SQL and rows are returned alongside the prose deliberately: an answer a\ndeveloper cannot audit is not much use, and seeing the query is how they tell\na right answer from a plausible one.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "string"
+          },
+          "sql": {
+            "title": "Sql",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer",
+          "sql",
+          "rows",
+          "attempts",
+          "passed",
+          "reason"
+        ],
+        "title": "AskResponse",
+        "type": "object"
+      },
+      "CapabilitiesResponse": {
+        "properties": {
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/FunctionCapabilityResponse"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "plugin_tools": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PluginToolCapabilityResponse"
+            },
+            "title": "Plugin Tools",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCapabilityResponse"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools",
+          "functions"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "CompiledGraphResponse": {
+        "description": "`GET /api/workflows/{slug}/graph` \u2014 the compiled topology as Mermaid.\n\nText, never a PNG: `draw_mermaid_png()` posts the graph to a third-party\nAPI, and a user's graph is not ours to send anywhere.",
+        "properties": {
+          "mermaid": {
+            "title": "Mermaid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mermaid"
+        ],
+        "title": "CompiledGraphResponse",
+        "type": "object"
+      },
+      "FunctionCapabilityResponse": {
+        "properties": {
+          "docstring": {
+            "title": "Docstring",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "docstring",
+          "signature"
+        ],
+        "title": "FunctionCapabilityResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "`GET /api/health` \u2014 is this process up, and does it know a model?\n\nNamed rather than left a bare dict (scale-and-adopt ticket 05): a\npublished contract whose first endpoint answers `{}` teaches a reader\nthat the rest of the document is decoration too.",
+        "properties": {
+          "model_configured": {
+            "description": "A model name can be resolved. Not a reachability check.",
+            "title": "Model Configured",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "model_configured"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "KnowledgeBuildRequest": {
+        "additionalProperties": false,
+        "description": "POST /api/workflows/{slug}/knowledge/build \u2014 everything optional.\n\n`model`/`credentials` follow the run endpoints' resolution chain; `source`\nnames one registered builder (default: every builder that finds topics).",
+        "properties": {
+          "credentials": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials"
+          },
+          "instruction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "title": "KnowledgeBuildRequest",
+        "type": "object"
+      },
+      "KnowledgeBuildResponse": {
+        "description": "The build report: topic names written/skipped, grouped per source.",
+        "properties": {
+          "collisions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Collisions",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "sources": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            "title": "Sources",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "written": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Written",
+            "type": "array"
+          }
+        },
+        "required": [
+          "written",
+          "skipped",
+          "sources"
+        ],
+        "title": "KnowledgeBuildResponse",
+        "type": "object"
+      },
+      "KnowledgeTopicDocResponse": {
+        "description": "GET/PUT /api/workflows/{slug}/knowledge/{topic} \u2014 the raw doc.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "generated": {
+            "title": "Generated",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "body",
+          "generated",
+          "source",
+          "stale"
+        ],
+        "title": "KnowledgeTopicDocResponse",
+        "type": "object"
+      },
+      "KnowledgeTopicSaveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "KnowledgeTopicSaveRequest",
+        "type": "object"
+      },
+      "KnowledgeTopicStatusResponse": {
+        "description": "One row of GET /api/workflows/{slug}/knowledge \u2014 the curation list.",
+        "properties": {
+          "generated": {
+            "title": "Generated",
+            "type": "boolean"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "hint",
+          "generated",
+          "source",
+          "stale"
+        ],
+        "title": "KnowledgeTopicStatusResponse",
+        "type": "object"
+      },
+      "NodeContractResponse": {
+        "description": "The two LOCKED prompt sections of one model-driven node type.\n\nServed from the Python ladder classes, which are the single source of\ntruth. An editor shows these read-only beside the developer's editable\nrules; a custom editor should do the same rather than restate them.",
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "preamble": {
+            "title": "Preamble",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preamble",
+          "contract"
+        ],
+        "title": "NodeContractResponse",
+        "type": "object"
+      },
+      "PluginExportResponse": {
+        "description": "A preview of this workflow as an Agent Plugins v1 package.\n\nA report, not a write: `paths` is the layout a caller would materialize,\nand `notes` names every lossy edge (see `docs/decisions/agent-plugins.md`).\nThe mapping itself lives entirely in `plugin_interop.py` \u2014 this schema\ncarries their manifest as opaque data and adds no vocabulary of its own.",
+        "properties": {
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "manifest",
+          "paths",
+          "notes"
+        ],
+        "title": "PluginExportResponse",
+        "type": "object"
+      },
+      "PluginToolCapabilityResponse": {
+        "description": "A tool an installed distribution contributes \u2014 app-scoped, not workflow.\n\nReported separately from `tools` because the two have different lifetimes\nand the palette says so: a workflow's own tool disappears when another\nworkflow is opened, a plugin's is available everywhere until it is\nuninstalled.",
+        "properties": {
+          "args_schema": {
+            "additionalProperties": true,
+            "title": "Args Schema",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "distribution": {
+            "title": "Distribution",
+            "type": "string"
+          },
+          "fields": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ToolFieldResponse"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_type": {
+            "title": "Node Type",
+            "type": "string"
+          },
+          "replaces_builtin": {
+            "default": false,
+            "title": "Replaces Builtin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "args_schema",
+          "node_type",
+          "distribution"
+        ],
+        "title": "PluginToolCapabilityResponse",
+        "type": "object"
+      },
+      "PublishWorkflowRequest": {
+        "additionalProperties": false,
+        "description": "POST /api/workflows/{slug}/publish \u2014 one endpoint for both directions;\nthe flag IS the whole state, so publish/unpublish is one body field.",
+        "properties": {
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "published"
+        ],
+        "title": "PublishWorkflowRequest",
+        "type": "object"
+      },
+      "PublishWorkflowResponse": {
+        "properties": {
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "published",
+          "note"
+        ],
+        "title": "PublishWorkflowResponse",
+        "type": "object"
+      },
+      "ResumeRequest": {
+        "additionalProperties": false,
+        "description": "Continues a run a `human.approval` node paused.\n\nCarries the whole workflow again (not just the thread id) for the same\nreason `RunRequest` does \u2014 the compile seam is one-directional and\nstateless per call; nothing server-side remembers *which* document a\nthread belongs to between requests, only the checkpointed graph state\nLangGraph itself owns.",
+        "properties": {
+          "advisor": {
+            "default": false,
+            "title": "Advisor",
+            "type": "boolean"
+          },
+          "credentials": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials"
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "recursion_limit": {
+            "default": 50,
+            "maximum": 1000.0,
+            "minimum": 10.0,
+            "title": "Recursion Limit",
+            "type": "integer"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "workflow": {
+            "additionalProperties": true,
+            "title": "Workflow",
+            "type": "object"
+          },
+          "workflow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Slug"
+          }
+        },
+        "required": [
+          "thread_id",
+          "workflow",
+          "decision"
+        ],
+        "title": "ResumeRequest",
+        "type": "object"
+      },
+      "RunRequest": {
+        "additionalProperties": false,
+        "description": "Run **the posted document**, not a server-side graph.\n\nThis is what makes the editor's Run button honest: the workflow the developer\ncan see on the canvas is the workflow that executes. The document is\nvendor-neutral `workflow.json`, so the compile seam stays one-directional.",
+        "properties": {
+          "advisor": {
+            "default": false,
+            "title": "Advisor",
+            "type": "boolean"
+          },
+          "credentials": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "question": {
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "recursion_limit": {
+            "default": 50,
+            "maximum": 1000.0,
+            "minimum": 10.0,
+            "title": "Recursion Limit",
+            "type": "integer"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "workflow": {
+            "additionalProperties": true,
+            "description": "A workflow.json document.",
+            "title": "Workflow",
+            "type": "object"
+          },
+          "workflow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Slug"
+          }
+        },
+        "required": [
+          "workflow",
+          "question"
+        ],
+        "title": "RunRequest",
+        "type": "object"
+      },
+      "RunResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "decisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Decisions",
+            "type": "object"
+          },
+          "mermaid": {
+            "default": "",
+            "title": "Mermaid",
+            "type": "string"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Outputs",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "RunResponse",
+        "type": "object"
+      },
+      "SaveWorkflowRequest": {
+        "additionalProperties": false,
+        "description": "The whole document plus the display name \u2014 never the slug: the slug\nis the URL path parameter, frozen at creation (see `workflow_store.py`).",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "document"
+        ],
+        "title": "SaveWorkflowRequest",
+        "type": "object"
+      },
+      "TemplateResponse": {
+        "description": "One entry of `GET /api/templates` \u2014 scale-and-adopt ticket 04.\n\nThe editor's New Workflow picker and `openstategraph new --list-templates`\nread the **same** catalogue (`openstategraph.templates`); this endpoint is\nthe seam, not a second list. It carries the rendered `document` so picking\na template is one call: the canvas imports what it is given rather than\nre-deriving a starting point the CLI would have built differently.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "document"
+        ],
+        "title": "TemplateResponse",
+        "type": "object"
+      },
+      "ToolCapabilityResponse": {
+        "properties": {
+          "args_schema": {
+            "additionalProperties": true,
+            "title": "Args Schema",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_type": {
+            "default": "",
+            "title": "Node Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "args_schema"
+        ],
+        "title": "ToolCapabilityResponse",
+        "type": "object"
+      },
+      "ToolFieldResponse": {
+        "description": "One control a plugin's tool asks the editor to put on its card.\n\nMirrors `openstategraph.abc.ToolField`; `options` is always a\n`{value,label}` list by the time it gets here, so the editor never has to\nguess whether a plugin wrote bare strings or pairs.",
+        "properties": {
+          "default_value": {
+            "default": "",
+            "title": "Default Value"
+          },
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "placeholder": {
+            "default": "",
+            "title": "Placeholder",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "kind"
+        ],
+        "title": "ToolFieldResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkflowDocumentResponse": {
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "document"
+        ],
+        "title": "WorkflowDocumentResponse",
+        "type": "object"
+      },
+      "WorkflowSummaryResponse": {
+        "properties": {
+          "edge_count": {
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "findings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "published": {
+            "default": true,
+            "title": "Published",
+            "type": "boolean"
+          },
+          "saved_at": {
+            "title": "Saved At",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "saved_at",
+          "node_count",
+          "edge_count"
+        ],
+        "title": "WorkflowSummaryResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Everything the canvas editor and `/chat` do goes through the endpoints below \u2014 there is no private API, so a third client is a supported thing to build rather than a reverse-engineering exercise.\n\n**Two parts of the contract are not in this document, and cannot be.** `POST /api/runs/stream`, `POST /api/runs/resume` and `GET /api/events` are Server-Sent Event streams; OpenAPI has no vocabulary for a frame sequence, an event-name union, or the guarantee that exactly one of `done`/`interrupt`/`error` is the last frame. Those are written out in `docs/api.md`, which is also where the five calls a custom chat actually needs are shown end to end.\n\nThis document is generated from the app and committed at `docs/openapi.json`; the live one is served at `/openapi.json`.",
+    "summary": "The HTTP surface both shipped UIs are built on.",
+    "title": "OpenStateGraph runtime",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/events": {
+      "get": {
+        "description": "Catalogue changes, live \u2014 `event: workflows.changed`.\n\nNot expressible in OpenAPI beyond its media type; the frame shape and\nthe reconnect behaviour are in `docs/api.md`.\n\nWhy this exists: `/chat` fetched its picker once, on load, so a\ncustomer sitting on the page never saw a newly published workflow\nuntil they reloaded. The editor's Workflows panel had the same blind\nspot with respect to a second tab.\n\n**SSE, not WebSocket, not polling.** This process already speaks SSE\n(`/api/runs/stream`), the flow is one-way, and `EventSource` reconnects\nby itself. Framed by `_sse` \u2014 the one framer.\n\nThe payload is a **hint, not a catalogue**: `{reason, slug,\nsurface_visible}`. A client refetches `/api/workflows` on it, so there\nis exactly one spelling of the catalogue and it cannot go stale in a\ncache built from events.\n\nLimits, stated rather than discovered (full reasoning in\n`catalogue_events`): the fan-out is **in-process**, so it covers one\nworker \u2014 which is the documented ceiling (`uvicorn --workers 1`, for\nsqlite's per-instance write lock); a multi-worker deployment needs\nRedis pub/sub or Postgres LISTEN/NOTIFY behind the same\npublish/subscribe pair. And only writes **through this API** emit: a\n`workflow.json` hand-edited on disk or arriving by `git pull` produces\nnothing. A filesystem watch would close that gap and is recorded as\nfuture work rather than implied.",
+        "operationId": "catalogue_events_api_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+          }
+        },
+        "summary": "Catalogue changes, live (SSE)",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Answers \"is this process up?\" and nothing more expensive.\n\n`model_configured` is always true now: Ollama cloud is the default,\nnot an opt-in, so `resolve_model` never fails to name *a* model. It is\nkept in the response rather than removed because both clients already\nread it \u2014 and whether that provider is actually reachable is a\nseparate question this endpoint was never answering anyway.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness, and whether a model name can be resolved",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/node-contracts": {
+      "get": {
+        "description": "The LOCKED prompt sections per model-driven node type (ticket 31).\n\nServed from the Python ladder classes \u2014 the single source of truth \u2014\nso the editor can show a developer what the machinery already says\n(read-only, beside their editable rules) instead of letting them\nduplicate or contradict it. The original RouterNode bug this\nprevents: an editable field pre-filled with the output contract,\ncleared by the first person who wrote their own rules.",
+        "operationId": "node_contracts_api_node_contracts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/NodeContractResponse"
+                  },
+                  "title": "Response Node Contracts Api Node Contracts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The locked prompt sections, per model-driven node type",
+        "tags": [
+          "Authoring"
+        ]
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "description": "Compiles and runs a canvas-authored workflow, blocking until it ends.\n\nThe simple call: one request, one JSON answer, no streaming to parse.\nIt cannot show progress and it cannot pause for an approval \u2014 a\n`human.approval` node needs `/api/runs/stream`, which is what both\nshipped UIs use.",
+        "operationId": "run_workflow_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run a workflow and wait for the whole answer",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/resume": {
+      "post": {
+        "description": "Continues a run a `human.approval` node paused (see `NodeRuntime._human_approval`).\n\nSame event vocabulary as `/api/runs/stream`, documented once in\n`docs/api.md`.\n\nSame event vocabulary as `/api/runs/stream` (`_stream_run`) \u2014 a\nresumed run is not a different kind of thing from the frontend's\npoint of view, it is the same stream picking back up, so it reuses\nthe identical parsing code on the client rather than needing a\nsecond one.\n\nRequires the *same* `thread_id` the original run's `interrupt` event\ncarried \u2014 this is what tells the shared checkpointer\n(`WorkflowServices.checkpointer`) which paused run to continue. Since\nticket 05 that saver is durable by default, so the thread survives the\nrestart the dev stack performs on every file save; `thread_id` is\ntherefore a *persistent* identity, and a client that reuses a fixed\none across conversations will resume the old one rather than start a\nnew one.",
+        "operationId": "resume_workflow_stream_api_runs_resume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The resumed run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer an approval and continue the run (SSE)",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/stream": {
+      "post": {
+        "description": "The same run as `/api/runs`, surfaced as it happens.\n\nThe event vocabulary and the terminal-frame guarantee are prose, in\n`docs/api.md` \u2014 OpenAPI cannot express either, and they are the part a\ncustom client gets wrong.\n\nTicket 27's sidebar needs to show **which node is currently in\ncharge**, live \u2014 not just the final answer \u2014 and dynamically\ndispatched worker instances need to appear as they are created. A\nsingle blocking `/api/runs` response cannot do either: everything\narrives at once, after the fact.\n\n`stream_mode=[\"updates\", \"messages\"]` with `subgraphs=True` is what\nthe docs (and ticket 27's own notes) call mandatory for streaming a\ngraph containing an *actual* nested subgraph \u2014 without it, an inner\ngraph's tokens never surface. Verified directly against the installed\nLangGraph before writing this, against **both** shapes: a nested\nsubgraph does get its own `namespace_tuple`, but a `Send`-dispatched\nworker does not \u2014 every concurrently dispatched instance of the same\nstatic worker node reports `namespace: ()`, because `Send` fans out\n*tasks* against one node, not separate subgraphs. So `namespace`\nalone cannot tell two dispatched worker instances apart; the task id\npulled from `worker_results` below is what actually does that.\n`subgraphs=True` is kept anyway, both for correctness if a future\nnode type nests a real subgraph and because it costs nothing when\nthere is none.\n\nNo second LLM run to compute the final answer: the same reducers\n`RunState` declares (`keep_latest_nonempty`, `merge_decisions`) are\napplied here, by hand, to fold the incremental `updates` payloads into\nthe same shape `/api/runs` returns \u2014 replicating the *documented*\nreducer, not reimplementing new logic, so the two endpoints cannot\nsilently disagree about what \"the final answer\" means.",
+        "operationId": "run_workflow_stream_api_runs_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run a workflow and watch it happen (SSE)",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/templates": {
+      "get": {
+        "description": "The starting points, rendered \u2014 the same ones `openstategraph new`\noffers, from the same catalogue (scale-and-adopt ticket 04).\n\n`name` matters more than it looks: a template may put the display name\n*inside* the document (the team template titles its supervisor\n\"<name> Lead\"), so rendering server-side is what keeps the editor's\nresult identical to the CLI's rather than approximately like it.\n\nA template is a scaffold input, so nothing here is a node type and no\nsaved document ever refers back to one: this returns a document, and\nthe template stops existing the moment it is imported.",
+        "operationId": "list_templates_api_templates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "default": "New Workflow",
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateResponse"
+                  },
+                  "title": "Response List Templates Api Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The starting points a new workflow can be created from",
+        "tags": [
+          "Authoring"
+        ]
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "description": "Ticket 04 (launch-readiness): the listing is surface-aware.\n\n- ``surface=editor`` (default): everything non-hidden, drafts\n  included, each row carrying its ``published`` flag.\n- ``surface=chat``: the customer surface \u2014 published AND not hidden\n  only (hidden trumps published, enforced in the store).",
+        "operationId": "list_workflows_api_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "default": "editor",
+              "enum": [
+                "editor",
+                "chat"
+              ],
+              "title": "Surface",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowSummaryResponse"
+                  },
+                  "title": "Response List Workflows Api Workflows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List workflows \u2014 the first call any client makes",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/api/workflows/chinook-nl-to-sql/ask": {
+      "post": {
+        "description": "A fixed, hand-built demo graph \u2014 the NL-to-SQL example \u2014 kept as its own endpoint because it predates the canvas and returns the SQL and rows alongside the prose so an answer can be audited. It does not generalise: a client of your own wants `/api/runs/stream`.",
+        "operationId": "ask_api_workflows_chinook_nl_to_sql_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The Chinook demo's own endpoint (not a general API)",
+        "tags": [
+          "Demo"
+        ]
+      }
+    },
+    "/api/workflows/{slug}": {
+      "delete": {
+        "description": "Removes the package directory and announces it on `/api/events`.\n\nReturns 204 with no body \u2014 there is nothing left to describe. A\ndeleted slug simply stops appearing in the listing.",
+        "operationId": "delete_workflow_api_workflows__slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a workflow package",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "get": {
+        "description": "The vendor-neutral document itself \u2014 the thing a run takes as input.\n\nA client fetches this and posts it back to `/api/runs/stream`: the\ncompile seam is one-directional and stateless per call, so the\nworkflow that executes is the one the caller can read.",
+        "operationId": "get_workflow_api_workflows__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch one workflow.json document",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "put": {
+        "description": "Writes the package's `workflow.json` and stamps `saved_at`.\n\nThe slug is the path parameter and is frozen at creation; the body\ncarries the display name and the document, never the slug. Announces\nthe change on `/api/events` **after** the write succeeded.",
+        "operationId": "save_workflow_api_workflows__slug__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create or overwrite a workflow document",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/capabilities": {
+      "get": {
+        "description": "What this editor may put on a canvas, from all three sources.\n\nTicket 18 covered the first: a workflow's own `tools/`/`functions/`\nfolders, discovered by importing them rather than by registration.\nRegister PK-06 adds the second \u2014 tools **installed distributions**\ncontribute, which the runtime has been able to bind since ticket 05 and\nthe editor had no way to show \u2014 and the honesty that goes with both:\n`warnings` carries every capability that failed to load, every plugin\nthat replaced a built-in, and every Python tool that has no editor card\nat all (the half-authored case, which used to be pure silence).\n\nRequires the workflow to already be saved (so its directory exists);\nan unsaved, canvas-only workflow has no folder to scan yet.",
+        "operationId": "get_capabilities_api_workflows__slug__capabilities_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tools and functions this workflow may put on a canvas",
+        "tags": [
+          "Authoring"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/graph": {
+      "get": {
+        "description": "The COMPILED topology as Mermaid text (ticket 54) \u2014 what the\ncompiler actually produced, not a hand-drawn approximation.\n\n`xray=True` expands subgraph internals (a concierge shows its routed\nchildren; a Team shows its members), which is also the cheap half of\nthe editor's dual-view ask (ticket 68). Text, never a PNG \u2014\n`draw_mermaid_png()` posts the graph to a third-party API.",
+        "operationId": "compiled_graph_api_workflows__slug__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompiledGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The compiled topology, as Mermaid text",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/knowledge": {
+      "get": {
+        "description": "The curation list: every topic with its hint, ownership state\n(generated vs claimed) and stale badge \u2014 the Knowledge card's data.",
+        "operationId": "list_knowledge_api_workflows__slug__knowledge_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeTopicStatusResponse"
+                  },
+                  "title": "Response List Knowledge Api Workflows  Slug  Knowledge Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List this workflow's knowledge topics",
+        "tags": [
+          "Knowledge"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/knowledge/build": {
+      "post": {
+        "description": "'Build second brain' (knowledge layer): one doc per topic, written\nto `workflows/<slug>/knowledge/` by every registered builder whose\nsource material exists in this workflow \u2014 SQL tables today, codebase\nand OpenAPI sources by registration (`knowledge_builders.BUILDERS`).\n\nSynchronous on purpose: topics are few (tables of a workflow's own\ndatabases), and the report is the button's feedback. Regeneration is\nsafe \u2014 a doc without the generated marker is hand-authored and is\nskipped, never overwritten (see `knowledge_builders`' policy).",
+        "operationId": "build_knowledge_api_workflows__slug__knowledge_build_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeBuildResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate this workflow's knowledge docs",
+        "tags": [
+          "Knowledge"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/knowledge/{topic}": {
+      "get": {
+        "description": "The raw Markdown of one topic, with its ownership and stale flags.\n\n`generated` says the builder still owns it; the first saved edit\nstrips that marker forever (the auto-claim), and `stale` says the\nsource it describes has changed since.",
+        "operationId": "read_knowledge_topic_api_workflows__slug__knowledge__topic__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic",
+            "required": true,
+            "schema": {
+              "title": "Topic",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeTopicDocResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read one knowledge topic",
+        "tags": [
+          "Knowledge"
+        ]
+      },
+      "put": {
+        "description": "Explicit save with the auto-claim: saving strips the generated\nmarker (human touch = human ownership) and records the claim-time\nsource hash, so the stale badge outlives the claim. No autosave \u2014\nthe file lands in git, diffable.",
+        "operationId": "save_knowledge_topic_api_workflows__slug__knowledge__topic__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic",
+            "required": true,
+            "schema": {
+              "title": "Topic",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeTopicSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeTopicDocResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save one knowledge topic, claiming it from the builder",
+        "tags": [
+          "Knowledge"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/plugin-export": {
+      "get": {
+        "description": "Preview this workflow package as an Agent Plugins v1 plugin.\n\nA GET writes nothing: it returns the manifest, the layout a caller\nwould materialize, and the honest list of what does not survive the\ncrossing. The verdict and the full mapping are in\n`docs/decisions/agent-plugins.md` \u2014 adopt-as-interop, never as our\nformat, with all of their vocabulary confined to `plugin_interop.py`.",
+        "operationId": "export_workflow_as_plugin_api_workflows__slug__plugin_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview this package as an Agent Plugins v1 plugin",
+        "tags": [
+          "Authoring"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/publish": {
+      "post": {
+        "description": "Flip the draft\u2192publish flag. One endpoint for both directions \u2014\nthe body's ``published`` bool IS the whole lifecycle state.\n\nDeliberately does NOT auto-run the knowledge model builder (knowledge\nbuilds are build-time-only, never a side effect); the note reminds\nthe caller routing knowledge can be rebuilt.",
+        "operationId": "publish_workflow_api_workflows__slug__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish or unpublish a workflow",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    }
+  }
+}

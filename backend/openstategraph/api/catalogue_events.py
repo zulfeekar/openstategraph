@@ -22,15 +22,21 @@ and the subscriber count for tests.
 
 ## Limits, stated rather than discovered
 
-**One worker.** The fan-out is in-process: a publish reaches the subscribers of
-*this* Python process and no other. That is not a regression, because the
-deployment ceiling is already one worker — `docs/decisions/memory-architecture.md`
-records why (`SqliteSaver`'s only write serialisation is a `threading.Lock` held
-per instance, which two OS processes do not share), and `uvicorn --workers 1` is
-what `Dockerfile` and `scripts/dev.sh` actually run. Raising the ceiling means
-replacing this fan-out at the same time as the checkpointer: Redis pub/sub or
-Postgres `LISTEN`/`NOTIFY` behind this same `publish`/`subscribe` pair, with the
-endpoint and both clients unchanged. That is the named upgrade path.
+**One worker — and this module is now one of the two reasons why.** The fan-out
+is in-process: a publish reaches the subscribers of *this* Python process and no
+other. Since scale-and-adopt ticket 06 that is not a caveat but an enforced
+limit: `openstategraph.deployment` refuses a second worker outright, naming this
+queue alongside `SqliteSaver`'s per-instance write lock.
+
+The distinction that ticket turned on is worth keeping here, because it decides
+what a future change is allowed to do. The checkpointer half of the ceiling has
+a shipped fix (`openstategraph/postgres.py`, the `[postgres]` extra); **this
+half does not**. Raising the ceiling therefore means replacing this fan-out
+*at the same time*: Redis pub/sub or Postgres `LISTEN`/`NOTIFY` behind this same
+`publish`/`subscribe` pair, with the endpoint and both clients unchanged
+(register RC-17). Doing only the checkpointer half and lifting the refusal would
+produce a deployment that looks correct and silently drops catalogue updates for
+half its users — a worse failure than the one it fixed. Both halves or neither.
 
 **Only writes through the API emit.** `publish()` is called from the endpoints
 that change the catalogue — save, publish/unpublish, delete. A `workflow.json`
@@ -61,6 +67,12 @@ from dataclasses import dataclass
 from typing import Iterator, Literal
 
 logger = logging.getLogger(__name__)
+
+#: The SSE `event:` name every frame of `GET /api/events` carries. One name,
+#: named once: the endpoint frames with it and `docs/api.md` documents it, and
+#: `backend/tests/test_api_guide.py` reads this constant rather than a literal
+#: so a rename cannot leave the guide describing an event nobody sends.
+CATALOGUE_EVENT = "workflows.changed"
 
 #: Why a surface should refetch. One value per real mutation the API performs;
 #: a read never produces one.

@@ -141,21 +141,43 @@ fix rather than an ImportError traceback.
 
 ## 5. Honest limits
 
-- **No authentication layer. This is the known gap.** The MCP server
-  authenticates nobody and authorizes nothing; every connected client has the
-  same capabilities. For v1 that is the **deployer's reverse proxy** — put it
-  behind mTLS, an OAuth proxy, or a private network. Do not expose
-  `streamable-http` to the public internet as-is. The MCP specification has an
-  authorization story; adopting it is the first thing to do when this leaves a
-  trusted network, and it is deliberately not faked here with a shared secret.
-- **Single worker, and the reason narrowed (ticket 05).** State is no longer
+- **Authentication: a shared token, off by default (scale-and-adopt ticket
+  06).** This bullet used to say the layer authenticates nobody and that v1
+  delegates to the deployer's reverse proxy. Two things were wrong with that.
+  The proxy was not in the repository, so "put a proxy in front" was advice
+  rather than a product; and the commonest deployment of an MCP server is a
+  laptop or a team VM where there is no proxy and never will be one. So both
+  shipped: `deploy/Caddyfile` / `deploy/nginx.conf` (committed and checked
+  against the real routes by `backend/tests/test_reverse_proxy.py`) for
+  anything public, and `OPENSTATEGRAPH_API_TOKEN` — the **same** variable the
+  HTTP API uses, because it is the same deployment and two secrets would mean
+  one of them unset — gating the `streamable-http` transport. Machine-only
+  there: `Authorization: Bearer <token>`, no login form, because an MCP client
+  cannot fill one in. **`stdio` is deliberately not gated**: the client is the
+  process that spawned this one and already has whatever access the OS gives
+  it; a token on a pipe is theatre.
+
+  What is still **not** faked is the part the earlier text was right about. A
+  shared secret is not identity: every holder is the same principal, nothing is
+  attributed to a person, and the MCP specification's own authorization story
+  is still the answer when this needs per-user authorization. The token is the
+  floor, not the ceiling — see `docs/deploying.md` for the threat model in
+  full, and note that unauthenticated is still *possible* (it is the default),
+  just never silent: the transport logs what an open port exposes.
+- **Single worker, and since scale-and-adopt ticket 06 it is refused rather
+  than merely stated (see `openstategraph/deployment.py` and
+  `docs/deploying.md`; Postgres is available via `[postgres]` and does *not*
+  lift the limit).** State is no longer
   *in-process*: the checkpointer is a `SqliteSaver` on a file under the
   workflows root, held by `WorkflowServices` and shared with the HTTP
   transport, so a run paused here can be resumed there and both survive a
   restart. What is still single-process is *concurrency*: `SqliteSaver` and
   the sqlite-backed memory `Store` serialise with a per-instance
-  `threading.Lock`, which two OS processes do not share. So the ceiling stays
-  one worker until Postgres, for a smaller and more honest reason than before.
+  `threading.Lock`, which two OS processes do not share — and the catalogue
+  event fan-out is an in-process queue, which is the second cause and the one
+  with no shipped fix. So the ceiling stays one worker, and a second one now
+  fails at startup with both reasons named instead of corrupting a paused
+  approval quietly.
   The stateless compile loop is unaffected — it holds no state at all.
 - **`run_workflow` is synchronous and unstreamed.** No token streaming, and no
   resume *tool*. Since ticket 05 the run does compile with a checkpointer, so
@@ -183,12 +205,19 @@ fix rather than an ImportError traceback.
   advertised with **zero ports**, so a client had no way to wire a mounted
   workflow.
 - **No rate limiting, no quotas, no audit log.** `run_workflow` in particular
-  spends the deployer's model budget on any connected client's request.
+  spends the deployer's model budget on any connected client's request — and
+  the shared token does not change this, because it answers "may this stranger
+  in" and says nothing about how much they may spend once they are in. Now the
+  largest remaining gap on this layer (register SEC-02); the proxy is where a
+  limit goes today.
 
 ## 6. Re-open this decision when…
 
-- The MCP layer leaves a trusted network — authentication stops being the
-  proxy's job.
+- ~~The MCP layer leaves a trusted network — authentication stops being the
+  proxy's job.~~ **Done (ticket 06)**: a shared token ships and the proxy is
+  committed. Re-open when *identity* is needed rather than admission — the MCP
+  specification's authorization story, and an owner concept this project does
+  not yet have.
 - We want interrupts over MCP — the persisted checkpointer prerequisite is met
   (ticket 05); what remains is a `resume_workflow` tool and a way for a client
   to carry the `thread_id` between calls.

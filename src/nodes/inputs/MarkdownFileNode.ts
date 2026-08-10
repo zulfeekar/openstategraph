@@ -2,6 +2,7 @@ import { Ok, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
+import { BINDING_SIDE } from '@core/model/contracts/ports';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 
@@ -63,6 +64,11 @@ export const markdownFileNode: INodeDefinition = defineNode(
         direction: 'out',
         type: PORT.skill,
         label: 'skill',
+        // A skill is *bound* to an agent, not a stage in the flow — so it
+        // leaves across the reading axis, exactly like a tool does. It had
+        // drifted onto the flow-output side, which made a binding look like
+        // a step.
+        side: BINDING_SIDE.provider,
         description: 'Becomes the agent’s system instruction.',
       },
     ],

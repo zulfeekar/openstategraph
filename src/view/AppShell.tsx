@@ -281,7 +281,13 @@ export function AppShell() {
                 focusNonce={askFocusNonce}
                 runRequest={askRunRequest}
                 stopRequest={askStopRequest}
-                onRunningChange={setBackendRunning}
+                onRunningChange={(running) => {
+                  setBackendRunning(running);
+                  // Ticket 08: a backend-streamed run has no local engine to
+                  // fire `run:start`, so this is where the canvas learns a new
+                  // run has begun and the follow latch may be released.
+                  if (running) paper?.follower.runStarted();
+                }}
               />
             ) : null}
             {inspectorOpen ? <Inspector /> : null}
