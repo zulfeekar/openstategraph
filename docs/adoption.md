@@ -31,6 +31,63 @@ still outstanding is one `twine upload`, and this page says exactly where.
 
 ---
 
+## The shortest path — one install, one command, the whole product
+
+**The wheel carries the canvas.** It did not until now: we called this a
+*visual* workflow builder and shipped 215 KB of Python with no UI, so the
+canvas existed only for people who cloned the repository or ran Docker. The
+built editor now ships as package data.
+
+```bash
+pip install "openstategraph[server,ollama]"
+openstategraph serve --open
+```
+
+That is one process serving the whole product from **one origin**:
+
+| Path | What it is |
+| --- | --- |
+| `/` | the editor — the canvas, the inspector, the run panel |
+| `/chat` | the customer chat surface: no canvas, just a conversation |
+| `/api/…` | the HTTP API both surfaces use |
+
+The two surfaces are **one process over one workflows directory**, and
+publishing is what connects them: you draft on the canvas, click Publish, and
+the workflow becomes visible in `/chat`. A draft never appears there. (The
+whole rule is in *The publish story*, below.)
+
+The workflows directory is `./workflows` under wherever you ran the command —
+so `openstategraph new my-thing` and then `serve` in the same folder shows your
+own package on the canvas. `OPENSTATEGRAPH_WORKFLOWS_ROOT` points it elsewhere.
+
+### Ports — what each form means
+
+| You type | What happens |
+| --- | --- |
+| `openstategraph serve` | port 8000, or the **next free port** if 8000 is busy |
+| `openstategraph serve --port 8080` | exactly 8080, or a clear failure if it is taken |
+| `openstategraph serve --port 0` | the OS picks a free port |
+
+In every case the last thing printed before the server's own log is the URLs it
+actually ended up on — editor, chat and health — so `--port 0` is a usable mode
+rather than a guessing game. The editor's API calls are same-origin relative,
+so any port works; the absolute `http://localhost:8000` the bundle used to
+carry is gone.
+
+`--host` defaults to `127.0.0.1`, **this machine only**. Not `0.0.0.0`: this
+process holds your provider API keys and has no authentication, so publishing
+it to the network publishes those. `--open` launches a browser; it is off by
+default.
+
+### If you are in a source checkout
+
+A clone has no built editor until you build one. `openstategraph serve` there
+serves a page at `/` that says so and gives you the two ways out — `npm run
+build`, or `./start dev` for the hot-reloading stack. It is never a bare 404,
+because a 404 at `/` is indistinguishable from a broken install.
+
+---
+
 ## (a) Fork / checkout — the primary mode today
 
 **The repository is the workspace.** There is no "install OpenStateGraph into
@@ -91,9 +148,11 @@ reviewable in a pull request and diffable.
 `./start` builds a multi-stage image — Node compiles the editor, a throwaway
 stage builds the Python wheels, and the final layer is Python slim plus the
 built `dist/`, `backend/` and `workflows/`. **One container serves the editor,
-`/chat` and the API from a single origin on port 8000.** The frontend calls
-`http://localhost:8000` absolutely, so map that port as-is. `./workflows` is
-bind-mounted, so a workflow saved in the container lands in the repo.
+`/chat` and the API from a single origin on port 8000** — the same serving path
+`openstategraph serve` uses, switched on by `OPENSTATEGRAPH_SERVE_STATIC=1`.
+Map it to any host port: the editor's API calls are same-origin relative and
+follow the page. `./workflows` is bind-mounted, so a workflow saved in the
+container lands in the repo.
 
 Approvals persist across restarts: the checkpointer defaults to
 `<workflows root>/.openstategraph/checkpoints.sqlite`, which is inside the
@@ -169,7 +228,7 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph new <slug> [name] [--team]` | scaffold a package into `./workflows` (`--root` to change that) |
 | `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints (`--knowledge-dir` to look elsewhere) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
-| `openstategraph serve [--host --port]` | the editor's HTTP API. Needs `openstategraph[server]` |
+| `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server]` |
 | `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
 
 Exit codes are fixed, because they are what CI consumes: **0** success, **1**
@@ -503,8 +562,10 @@ draft on the canvas  ──►  Save  ──►  workflow.json (published: false
 ```
 
 - **Saving writes a draft.** `published` is `false` until someone flips it.
-- **`/chat`** (<http://localhost:8000/chat>) is the customer-facing surface: no
-  canvas, just a conversation. A concierge workflow routes the question to
+- **`/chat`** (`/chat` on whatever origin the server reported — 8000 by
+  default) is the customer-facing surface: no canvas, just a conversation. It
+  is the *same process* as the editor, reading the *same* workflows directory;
+  publishing is the only thing that decides what appears there. A concierge workflow routes the question to
   whichever *published* workflow can answer it and streams the run back token
   by token. Drafts are invisible there.
 - **Publishing is never automated.** It is not exposed over MCP, and MCP's

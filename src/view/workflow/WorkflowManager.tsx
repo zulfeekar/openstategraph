@@ -79,6 +79,20 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     if (open) void refreshList();
   }, [open, refreshList]);
 
+  // …and stay current while it is open. A second tab (or `/chat`, or a script)
+  // publishing, saving or deleting a workflow makes this list wrong the moment
+  // it happens; the backend's `/api/events` stream says so and this refetches.
+  //
+  // Deliberately scoped to the open panel: a subscription held for the whole
+  // session would keep a connection open for a list nobody is looking at. No
+  // new state library and no cache — the refetch this already had is the
+  // update. Two known limits, both the backend's: the fan-out is in-process
+  // (one worker), and a `workflow.json` hand-edited on disk emits nothing.
+  useEffect(() => {
+    if (!open) return;
+    return client.watchCatalogue(() => void refreshList());
+  }, [open, client, refreshList]);
+
   const handleNewWorkflow = useCallback(() => {
     controller.document.clear();
     const name = newName.trim() || `Workflow ${new Date().getFullYear()}`;

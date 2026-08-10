@@ -77,9 +77,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # The same two roots scripts/dev.sh exports on the host. The chinook entry
     # is the path shim pytest.ini documents for that workflow's tools package.
     PYTHONPATH=/app/backend:/app/workflows/chinook-nl-to-sql \
-    # Read by the guarded block at the end of api/main.py: mounts the built
-    # SPA at / so the editor is served by the backend itself. Off by default,
-    # so a host-run backend is completely unaffected by its presence.
+    # Read by api/editor_assets.py: mounts the built SPA at / so the editor is
+    # served by the backend itself. Off by default, so a host-run backend is
+    # completely unaffected by its presence. STATIC_DIR is explicit here and
+    # wins over the copy inside the wheel — this image runs from the repo
+    # layout, not from an installed distribution.
     OPENSTATEGRAPH_SERVE_STATIC=1 \
     OPENSTATEGRAPH_STATIC_DIR=/app/dist
 

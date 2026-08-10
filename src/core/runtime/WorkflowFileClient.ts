@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
  * File-backed workflow persistence (tickets 10/14/16).
@@ -110,15 +111,100 @@ export interface IWorkflowFileClient {
   compiledGraph(slug: string): Promise<Result<string, string>>;
 }
 
+/** Why the catalogue changed — the backend's `workflows.changed` vocabulary. */
+export type CatalogueChangeReason = 'published' | 'unpublished' | 'saved' | 'deleted';
+
+/**
+ * One live catalogue change.
+ *
+ * A **hint, not a row**: it says what moved, never what the catalogue now
+ * contains. A listener refetches, so there is exactly one spelling of the list
+ * and no event-built cache that can drift from it.
+ */
+export interface CatalogueChange {
+  readonly reason: CatalogueChangeReason;
+  readonly slug: string;
+  /** Whether that slug is on the customer `/chat` surface after the change. */
+  readonly surfaceVisible: boolean;
+}
+
+/**
+ * Live catalogue changes — deliberately its own interface, not another method
+ * on `IWorkflowFileClient`.
+ *
+ * `loadWorkflowIntoEditor` wants to load a document and nothing else; making it
+ * declare a subscription it never opens is the Interface Segregation failure
+ * this codebase keeps `INodeExecutor` and `IToolExecutor` apart to avoid. One
+ * class implements both, because it is one backend and one base URL.
+ */
+export interface ICatalogueEvents {
+  /** Subscribe until the returned function is called. */
+  watchCatalogue(onChange: (change: CatalogueChange) => void): () => void;
+}
+
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-const DEFAULT_BASE = 'http://localhost:8000';
+/** Just enough of `EventSource` to be faked in a test with no DOM. */
+export interface EventSourceLike {
+  addEventListener(type: string, listener: (event: MessageEvent) => void): void;
+  close(): void;
+}
+export type EventSourceFactory = (url: string) => EventSourceLike;
 
-export class WorkflowFileClient implements IWorkflowFileClient {
+export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents {
   constructor(
-    private readonly baseUrl: string = DEFAULT_BASE,
+    private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
+    /** Injected only by tests — Vitest's node environment has no `EventSource`. */
+    private readonly eventSourceImpl: EventSourceFactory | null = typeof EventSource === 'undefined'
+      ? null
+      : (url) => new EventSource(url),
   ) {}
+
+  /**
+   * Catalogue changes as they happen, over the backend's `/api/events` SSE
+   * stream — so a second tab publishing shows up in this one's Workflows panel
+   * without a reload.
+   *
+   * SSE and not a WebSocket because the flow is one-way and `EventSource`
+   * reconnects by itself; the same reasoning, and the same endpoint, `/chat`
+   * uses. Where `EventSource` is unavailable (an old browser, a unit test) this
+   * returns a no-op unsubscribe and the panel keeps its refresh-on-open
+   * behaviour — a live update is an improvement, never a dependency.
+   *
+   * Limits inherited from the backend, worth knowing at the call site: the
+   * fan-out is in-process, so it covers one worker (the documented ceiling),
+   * and a `workflow.json` edited by hand on disk emits nothing — the editor
+   * writes through the API, a text editor does not.
+   */
+  watchCatalogue(onChange: (change: CatalogueChange) => void): () => void {
+    if (!this.eventSourceImpl) return () => {};
+    const source = this.eventSourceImpl(`${this.baseUrl}/api/events`);
+    source.addEventListener('workflows.changed', (event) => {
+      try {
+        const record = JSON.parse(event.data as string) as Record<string, unknown>;
+        onChange({
+          reason: asString(record['reason']) as CatalogueChangeReason,
+          slug: asString(record['slug']),
+          surfaceVisible: record['surface_visible'] === true,
+        });
+      } catch {
+        // One unparseable frame is not a reason to tear the stream down — the
+        // next is very likely fine, and the listener refetches regardless.
+      }
+    });
+    // Closing here is what frees the server's subscription, rather than
+    // leaving it for a socket timeout that may never come.
+    return () => source.close();
+  }
+
+  /**
+   * The base said out loud. Same-origin resolves to an empty prefix, which is
+   * exactly right in a URL and meaningless in a sentence.
+   */
+  private unreachable(): string {
+    return `Could not reach the runtime at ${describeRuntimeBase(this.baseUrl)}. Is the backend running?`;
+  }
 
   async list(): Promise<Result<readonly WorkflowSummary[], string>> {
     let response: Response;
@@ -128,7 +214,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
       // `surface=chat` and sees published workflows only.
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows?surface=editor`);
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
 
@@ -157,7 +243,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`);
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
 
@@ -183,7 +269,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`);
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (response.status === 404) return Ok(null);
     if (!response.ok) return Err(await describeFailure(response));
@@ -205,7 +291,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
         body: JSON.stringify({ name, document }),
       });
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
     return Ok(undefined);
@@ -218,7 +304,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
         method: 'DELETE',
       });
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
     return Ok(undefined);
@@ -242,7 +328,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
         },
       );
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
     return Ok(undefined);
@@ -267,7 +353,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
         `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/graph`,
       );
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
     const payload = (await response.json()) as { mermaid?: string };
@@ -283,7 +369,7 @@ export class WorkflowFileClient implements IWorkflowFileClient {
         `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/capabilities`,
       );
     } catch {
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
 

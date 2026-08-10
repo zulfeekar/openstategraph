@@ -135,6 +135,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # Node is a build dependency of the WHEEL now, not just of the front end:
+      # since scale-and-adopt ticket 01 the distribution carries the built
+      # editor as package data, and `backend/hatch_build.py` fails the build
+      # rather than shipping a visual workflow builder with no visuals. The
+      # proof script runs `npm ci && npm run build` itself when `dist/` is
+      # missing, which is always the case on a fresh runner.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
       - run: scripts/clean_install_proof.sh
 
   # Docs freshness: code changes should carry their documentation. Pure

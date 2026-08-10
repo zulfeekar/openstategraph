@@ -18,7 +18,10 @@ Two things this module is really guarding:
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import socket
 from pathlib import Path
 from typing import Any
 
@@ -330,3 +333,121 @@ class TestCwdIndependence:
 
         assert cli.main(["validate", str(package)]) == cli.EXIT_OK
         assert cli.main(["graph", str(package)]) == cli.EXIT_OK
+
+
+class TestServe:
+    """`openstategraph serve` — the command that opens the product.
+
+    Scale-and-adopt ticket 01. uvicorn's own loop is stubbed out: what is being
+    tested is the contract *around* it — which port, which URLs, and that the
+    editor mount is switched on — not that uvicorn can serve HTTP.
+    """
+
+    @pytest.fixture
+    def served(self, monkeypatch):
+        """Captures the socket and config uvicorn would have run."""
+        import uvicorn
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(self, sockets=None) -> None:
+            captured["config"] = self.config
+            captured["sockets"] = sockets or []
+
+        monkeypatch.setattr(uvicorn.Server, "run", fake_run)
+        return captured
+
+    def test_it_prints_the_editor_the_chat_and_the_api_urls_it_landed_on(
+        self, served, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("OPENSTATEGRAPH_SERVE_STATIC", raising=False)
+
+        assert cli.main(["serve", "--port", "0"]) == cli.EXIT_OK
+
+        port = served["sockets"][0].getsockname()[1]
+        printed = capsys.readouterr().out
+        assert f"http://127.0.0.1:{port}/\n" in printed
+        assert f"http://127.0.0.1:{port}/chat" in printed
+        assert f"http://127.0.0.1:{port}/api/health" in printed
+        # The bound socket is handed to uvicorn, not a number re-bound later —
+        # otherwise the port just printed could be gone by the time it starts.
+        assert served["config"].port == port
+
+    def test_serving_the_editor_is_what_serve_means(self, served, monkeypatch) -> None:
+        monkeypatch.delenv("OPENSTATEGRAPH_SERVE_STATIC", raising=False)
+
+        cli.main(["serve", "--port", "0"])
+
+        assert os.environ["OPENSTATEGRAPH_SERVE_STATIC"] == "1"
+
+    def test_an_explicit_opt_out_is_respected(self, served, monkeypatch) -> None:
+        """API-only is a legitimate thing to ask for; `serve` must not overrule
+        an environment that asked for it."""
+        monkeypatch.setenv("OPENSTATEGRAPH_SERVE_STATIC", "0")
+
+        cli.main(["serve", "--port", "0"])
+
+        assert os.environ["OPENSTATEGRAPH_SERVE_STATIC"] == "0"
+
+    def test_an_explicit_port_that_is_taken_fails_with_the_way_out(
+        self, served, capsys
+    ) -> None:
+        held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        held.bind(("127.0.0.1", 0))
+        held.listen(1)
+        taken = held.getsockname()[1]
+        try:
+            code = cli.main(["serve", "--port", str(taken)])
+        finally:
+            held.close()
+
+        assert code == cli.EXIT_FAILURE
+        error = capsys.readouterr().err
+        assert f"port {taken} is in use" in error
+        assert "--port 0" in error
+        assert "sockets" not in served  # nothing was started
+
+    def test_no_port_flag_never_fails_because_8000_is_busy(
+        self, served, monkeypatch
+    ) -> None:
+        held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        held.bind(("127.0.0.1", 0))
+        held.listen(1)
+        taken = held.getsockname()[1]
+        monkeypatch.setattr("openstategraph.api.listening.DEFAULT_PORT", taken)
+        try:
+            code = cli.main(["serve"])
+        finally:
+            held.close()
+
+        assert code == cli.EXIT_OK
+        assert served["sockets"][0].getsockname()[1] != taken
+
+    def test_the_browser_stays_shut_unless_asked(self, served, monkeypatch) -> None:
+        opened: list[str] = []
+        import webbrowser
+
+        monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url) or True)
+
+        cli.main(["serve", "--port", "0"])
+        assert opened == []
+
+        cli.main(["serve", "--port", "0", "--open"])
+        assert opened and opened[0].endswith("/")
+
+    def test_the_default_bind_is_loopback_and_the_help_says_why(self) -> None:
+        """0.0.0.0 by default would publish a process that holds provider API
+        keys and has no authentication."""
+        parser = cli.build_parser()
+        serve = parser.parse_args(["serve"])
+
+        assert serve.host == "127.0.0.1"
+        assert serve.port is None
+        help_text = _subcommand_help(parser, "serve")
+        assert "127.0.0.1" in help_text
+        assert "authentication" in help_text
+
+
+def _subcommand_help(parser: "argparse.ArgumentParser", name: str) -> str:
+    action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    return action.choices[name].format_help()

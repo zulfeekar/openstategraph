@@ -2,12 +2,11 @@
 #
 # There is deliberately no second container for the frontend. The editor is a
 # static SPA that the Dockerfile builds and the backend serves (via the
-# env-guarded StaticFiles mount at the end of api/main.py), so a separate nginx
-# would add a container, a config file and a CORS boundary to serve files that
-# are already inside this one. It would also *break* the editor: the frontend
-# talks to a hardcoded http://localhost:8000 (src/core/runtime/RuntimeClient.ts),
-# so serving the UI from the same origin and port as the API is what makes it
-# work without touching src/.
+# env-guarded mount in api/editor_assets.py — the same one `openstategraph
+# serve` uses), so a separate nginx would add a container, a config file and a
+# CORS boundary to serve files that are already inside this one. Serving both
+# from one origin is also what lets the editor's API calls stay same-origin
+# relative (src/core/runtime/runtimeBaseUrl.ts) instead of naming a host.
 #
 # No `version:` key — obsolete since Compose v2 and warned about by the CLI.
 
@@ -18,9 +17,11 @@ services:
       dockerfile: Dockerfile
       target: runtime
     image: openstategraph:local
-    # Must be 8000 on the *host* side too, not just in the container: the
-    # editor bundle calls http://localhost:8000 absolutely. Changing the left
-    # number breaks the UI's API calls even though the server comes up fine.
+    # The left number is free to change now. It was not before scale-and-adopt
+    # ticket 01: the editor bundle called http://localhost:8000 absolutely, so
+    # any other host port produced a UI that loaded perfectly and could not
+    # reach its own API. The bundle is same-origin relative now, so it follows
+    # whatever port you publish here.
     ports:
       - "8000:8000"
     env_file:

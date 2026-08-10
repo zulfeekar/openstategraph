@@ -120,6 +120,66 @@ class TestDistributionIdentity:
         # to every adopter on mypy or pyright.
         assert (backend / "openstategraph" / "py.typed").is_file()
 
+    def test_the_wheel_is_built_with_the_hook_that_puts_the_editor_in_it(
+        self, pyproject
+    ) -> None:
+        """Scale-and-adopt ticket 01: we call this a *visual* workflow builder
+        and shipped 215 KB of Python with no UI. The build hook is what makes
+        `pip install` deliver the canvas, and losing this one line of config
+        would silently take it back out — the wheel would still build, still
+        install, still import, and `/` would be a 404."""
+        hooks = pyproject["tool"]["hatch"]["build"]["hooks"]
+
+        assert hooks["custom"]["path"] == "hatch_build.py"
+        assert (PYPROJECT.parent / "hatch_build.py").is_file()
+
+    def test_a_build_with_no_editor_fails_instead_of_shipping_without_one(
+        self, tmp_path
+    ) -> None:
+        """The failure mode this replaces is the silent one: a release job with
+        no `npm run build` produced a perfectly valid, perfectly useless wheel."""
+        import sys
+
+        sys.path.insert(0, str(PYPROJECT.parent))
+        try:
+            from hatch_build import editor_force_include
+        finally:
+            sys.path.pop(0)
+
+        backend = tmp_path / "backend"
+        backend.mkdir()
+
+        with pytest.raises(RuntimeError) as excinfo:
+            editor_force_include(backend, "standard")
+        assert "npm run build" in str(excinfo.value)
+
+        # …and the contributor path stays open: an editable install must not
+        # need Node.js, which is exactly how CI installs the backend.
+        assert editor_force_include(backend, "editable") == {}
+
+    def test_the_editor_is_shipped_without_its_sourcemaps(self, tmp_path) -> None:
+        """18 MB of the 23 MB `dist/` weighs is a debugging aid for people
+        working on THIS repository, not for anyone installing it."""
+        import sys
+
+        sys.path.insert(0, str(PYPROJECT.parent))
+        try:
+            from hatch_build import editor_force_include
+        finally:
+            sys.path.pop(0)
+
+        (tmp_path / "dist" / "assets").mkdir(parents=True)
+        (tmp_path / "dist" / "index.html").write_text("<div id='root'></div>")
+        (tmp_path / "dist" / "assets" / "app.js").write_text("//")
+        (tmp_path / "dist" / "assets" / "app.js.map").write_text("{}")
+        (tmp_path / "backend").mkdir()
+
+        shipped = set(editor_force_include(tmp_path / "backend", "standard").values())
+
+        assert "openstategraph/api/static/editor/index.html" in shipped
+        assert "openstategraph/api/static/editor/assets/app.js" in shipped
+        assert not [name for name in shipped if name.endswith(".map")]
+
     def test_the_console_script_is_declared_and_resolvable(self, pyproject) -> None:
         """`openstategraph` on the PATH is what ticket 08 exists to add, and a
         typo in this one line is invisible until someone installs the wheel."""

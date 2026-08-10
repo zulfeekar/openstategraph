@@ -791,8 +791,9 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           locally on your GPU; nothing is required to open the editor.
         </p>
         <p>
-          <b>Only want to run a workflow?</b> Then you want the framework, not the checkout, and it
-          is two lines — step&nbsp;0. The clone is for the canvas.
+          <b>Only want to use it?</b> Then you do not need the clone at all: the wheel carries
+          the built editor, so <code>pip install</code> plus <code>openstategraph serve</code> is
+          the whole thing — step&nbsp;0. The clone is for working on OpenStateGraph itself.
         </p>
       </div>
 
@@ -800,9 +801,26 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
         <li>
           <h3>Step 0 — or skip the clone entirely</h3>
           <p>
-            A workflow package is a folder with a <code>workflow.json</code> in it. Running one
-            needs neither the canvas nor a server — just the wheel and one command. Exit codes are
-            fixed (<code>0</code> ok, <code>1</code> failure, <code>2</code> usage, <code>3</code> a
+            <b>The wheel carries the canvas.</b> The built editor ships as package data, so one
+            install and one command give you the whole product from a single origin: the canvas at
+            <code>/</code>, the customer chat at <code>/chat</code>, the API under
+            <code>/api</code>. No clone, no Docker, no Node.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> pip install <span class="s">"openstategraph[server,ollama]"</span>
+<span class="p">$</span> openstategraph serve --open   <span class="c"># prints the URLs it landed on</span></code></pre>
+          </div>
+          <p>
+            No <code>--port</code> takes 8000, or the next free port if 8000 is busy;
+            <code>--port N</code> means exactly N and says so if it is taken;
+            <code>--port 0</code> lets the OS choose. It binds <code>127.0.0.1</code> by default —
+            this process holds your API keys and has no authentication.
+          </p>
+          <p>
+            <b>Only want to run a graph?</b> Then you need none of the web layer. A workflow package
+            is a folder with a <code>workflow.json</code> in it, and exit codes are fixed
+            (<code>0</code> ok, <code>1</code> failure, <code>2</code> usage, <code>3</code> a
             missing extra), so <code>validate</code> works as a CI gate.
           </p>
           <div class="codeblock">
@@ -894,7 +912,9 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           <h3>Open the chat</h3>
           <p>
             <code>http://localhost:8000/chat</code> is the end-user surface: no canvas, no node
-            inspector, just a conversation that dispatches to your published workflows.
+            inspector, just a conversation that dispatches to your published workflows. It is the
+            same process and the same workflows directory as the editor — <b>Publish</b> is the one
+            human action that makes a workflow visible there, and a saved draft never is.
           </p>
         </li>
       </ol>

@@ -51,6 +51,7 @@ from openstategraph.api.model_resolution import (  # noqa: E402, F401  (re-expor
     resolve_model,
     workflow_default_model,
 )
+from openstategraph.api.editor_assets import mount_editor  # noqa: E402
 from openstategraph.api.registries import (  # noqa: E402, F401  (re-exported for tests)
     build_tool_registry,
     runtime_warnings,
@@ -79,11 +80,17 @@ from openstategraph.api.schemas import (  # noqa: E402
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
+from openstategraph.api.catalogue_events import (  # noqa: E402
+    KEEPALIVE_SECONDS,
+    CatalogueEvent,
+    ChangeReason,
+)
 from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored names re-exported for tests)
     _coerce_update,
     _sse,
     _stream_run,
     stop_when_client_leaves,
+    stop_when_client_leaves_async,
 )
 
 def _default_factory(model: str) -> Any:
@@ -185,17 +192,107 @@ def create_app(
 
     @app.get("/chat/mermaid.js", include_in_schema=False)
     def chat_mermaid_asset() -> Any:
-        """Mermaid for the /chat live-flow view (ticket 68) — served from the
-        repo's own node_modules so the chat page stays CDN-free and cannot
-        version-skew against the editor's copy."""
+        """Mermaid for the /chat live-flow view (ticket 68) — never a CDN.
+
+        Two homes, one behaviour: the wheel carries its own copy as package
+        data (scale-and-adopt ticket 01, `hatch_build.py`), and a checkout
+        serves the repo's own `node_modules` so the page cannot version-skew
+        against the editor's copy. A checkout with no `npm install` still 404s
+        here, and `/chat` degrades to "flow view unavailable" rather than
+        breaking.
+        """
         from fastapi.responses import FileResponse
 
-        asset = Path(__file__).resolve().parent.parent.parent.parent / (
-            "node_modules/mermaid/dist/mermaid.min.js"
-        )
+        from openstategraph.api.editor_assets import PACKAGED_MERMAID
+
+        asset = PACKAGED_MERMAID
+        if not asset.is_file():
+            asset = Path(__file__).resolve().parent.parent.parent.parent / (
+                "node_modules/mermaid/dist/mermaid.min.js"
+            )
         if not asset.is_file():
             raise HTTPException(status_code=404, detail="mermaid asset not installed")
         return FileResponse(asset, media_type="text/javascript")
+
+    def announce(reason: ChangeReason, slug: str) -> None:
+        """Say that the catalogue changed. Called **after** a change succeeded.
+
+        One call per real mutation (save, publish/unpublish, delete) and never
+        on a read — an event that fires when nothing moved trains every client
+        to ignore it. `surface_visible` is recomputed from the store rather
+        than inferred from the request, because "is this on `/chat` now?" is
+        the conjunction of `published` and `hidden` and only the store knows
+        both; a deleted slug simply is not in the list, so it reports False
+        without a special case. The extra directory scan is paid at
+        human-click frequency.
+        """
+        visible = any(s.slug == slug for s in workflow_store.list(published_only=True))
+        services.events.publish(
+            CatalogueEvent(reason=reason, slug=slug, surface_visible=visible)
+        )
+
+    @app.get("/api/events")
+    async def catalogue_events(http: Request) -> StreamingResponse:
+        """Catalogue changes, live — `event: workflows.changed`.
+
+        Why this exists: `/chat` fetched its picker once, on load, so a
+        customer sitting on the page never saw a newly published workflow
+        until they reloaded. The editor's Workflows panel had the same blind
+        spot with respect to a second tab.
+
+        **SSE, not WebSocket, not polling.** This process already speaks SSE
+        (`/api/runs/stream`), the flow is one-way, and `EventSource` reconnects
+        by itself. Framed by `_sse` — the one framer.
+
+        The payload is a **hint, not a catalogue**: `{reason, slug,
+        surface_visible}`. A client refetches `/api/workflows` on it, so there
+        is exactly one spelling of the catalogue and it cannot go stale in a
+        cache built from events.
+
+        Limits, stated rather than discovered (full reasoning in
+        `catalogue_events`): the fan-out is **in-process**, so it covers one
+        worker — which is the documented ceiling (`uvicorn --workers 1`, for
+        sqlite's per-instance write lock); a multi-worker deployment needs
+        Redis pub/sub or Postgres LISTEN/NOTIFY behind the same
+        publish/subscribe pair. And only writes **through this API** emit: a
+        `workflow.json` hand-edited on disk or arriving by `git pull` produces
+        nothing. A filesystem watch would close that gap and is recorded as
+        future work rather than implied.
+        """
+        broadcaster = services.events
+
+        async def frames() -> Any:
+            # The subscription's lifetime IS this generator's: the `with` block
+            # unsubscribes on a normal end, on a disconnect (the wrapper closes
+            # this generator) and on a raise alike. Nothing has to remember to.
+            with broadcaster.subscribe() as subscriber:
+                # A first comment, immediately: it flushes response headers so
+                # `EventSource` fires `onopen` now rather than whenever the
+                # first change happens to occur — and the client's refetch on
+                # open is what recovers anything missed while disconnected.
+                yield ": connected\n\n"
+                async for event in subscriber.events(idle_timeout=KEEPALIVE_SECONDS):
+                    if event is None:
+                        # Keepalive. An SSE comment: proxies and load balancers
+                        # see bytes, `EventSource` ignores it, no client code
+                        # needs to know it exists. Produced by the idle timeout
+                        # on the wait rather than by a companion task, so there
+                        # is no task that could outlive this connection.
+                        yield ": keepalive\n\n"
+                    else:
+                        yield _sse("workflows.changed", event.as_dict())
+
+        return StreamingResponse(
+            # Wrapped for the same reason run streaming is: Starlette does not
+            # notice a disconnect on a modern ASGI server, and a subscription
+            # that outlives its socket is a leak that only shows up as an
+            # overflow drop much later.
+            stop_when_client_leaves_async(frames(), http.receive),
+            media_type="text/event-stream",
+            # Buffering an event stream defeats it; the hop-by-hop hint is the
+            # conventional way to tell nginx not to.
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -244,6 +341,8 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
         except InvalidSlugError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # After the store wrote, so a failed flip announces nothing.
+        announce("published" if request.published else "unpublished", slug)
         return PublishWorkflowResponse(
             slug=slug,
             published=request.published,
@@ -281,6 +380,7 @@ def create_app(
             )
         except InvalidSlugError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        announce("saved", slug)
         return WorkflowDocumentResponse(slug=slug, document=request.document)
 
     @app.delete("/api/workflows/{slug}", status_code=204)
@@ -293,6 +393,7 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
         except InvalidSlugError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        announce("deleted", slug)
 
     @app.get("/api/workflows/{slug}/capabilities", response_model=CapabilitiesResponse)
     def get_capabilities(slug: str) -> CapabilitiesResponse:
@@ -832,18 +933,13 @@ app = create_app()
 # the promises.
 
 
-# --- Container-only: serve the built editor SPA from this same process. ------
-# Off unless OPENSTATEGRAPH_SERVE_STATIC=1, so a host-run backend (scripts/dev.sh,
-# pytest) behaves exactly as before — Vite serves the editor there. Mounted last
-# and only at "/", so every route declared above (/api/*, /chat, /chat/mermaid.js)
-# still wins; StaticFiles only sees what nothing else claimed. html=True serves
-# index.html at "/" (it does not invent a catch-all for arbitrary deep links —
-# the editor has no client-side router, so it does not need one).
-if os.getenv("OPENSTATEGRAPH_SERVE_STATIC") == "1":
-    _static_dir = Path(os.getenv("OPENSTATEGRAPH_STATIC_DIR", "dist"))
-    if _static_dir.is_dir():
-        from fastapi.staticfiles import StaticFiles
-
-        app.mount("/", StaticFiles(directory=_static_dir, html=True), name="editor")
-    else:
-        logger.warning("OPENSTATEGRAPH_SERVE_STATIC=1 but %s is not a directory", _static_dir)
+# --- One origin serves the whole product: editor at /, chat at /chat, API -----
+# under /api. Off unless OPENSTATEGRAPH_SERVE_STATIC=1, so a host-run backend
+# (scripts/dev.sh, pytest) behaves exactly as before — Vite serves the editor
+# there. `openstategraph serve` and the container both set it; where the built
+# files come from, and what to serve when nobody built them, is
+# `api/editor_assets.py`'s single answer rather than a second serving path.
+#
+# Mounted LAST, after every route above is declared, so /api/*, /chat and
+# /chat/mermaid.js still win — StaticFiles only sees what nothing else claimed.
+mount_editor(app)

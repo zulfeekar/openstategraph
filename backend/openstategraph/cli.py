@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -203,13 +204,57 @@ def cmd_knowledge_list(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    """uvicorn on the editor's HTTP app. Requires the `[server]` extra."""
+    """The whole product on one origin: editor at `/`, chat at `/chat`, API
+    under `/api`. Requires the `[server]` extra.
+
+    Two collaborators do the work — `api.listening` decides the port and binds
+    it, `api.editor_assets` decides where the built editor comes from — so this
+    stays argument handling plus a call, per the rules at the top of the file.
+
+    The socket is bound here and handed to uvicorn rather than passing it a
+    number, because that is the only way `--port 0` can print the URL it landed
+    on *before* the server starts talking.
+    """
     try:
         import uvicorn
     except ImportError:
         return _missing("uvicorn", "server", "the HTTP API")
 
-    uvicorn.run("openstategraph.api.main:app", host=args.host, port=args.port)
+    from openstategraph.api.listening import PortUnavailable, bind_listener, listen_urls
+
+    try:
+        listener = bind_listener(args.host, args.port)
+    except PortUnavailable as exc:
+        return _error(str(exc))
+
+    # `serve` means "open the product", so the editor is served. `setdefault`
+    # rather than assignment: OPENSTATEGRAPH_SERVE_STATIC=0 in the environment
+    # is somebody deliberately asking for an API-only process, and that is
+    # theirs to ask for.
+    os.environ.setdefault("OPENSTATEGRAPH_SERVE_STATIC", "1")
+
+    port = int(listener.getsockname()[1])
+    urls = listen_urls(args.host, port)
+    # The last thing printed before uvicorn's own output, and the reason
+    # anyone ran the command: where to click.
+    #
+    # `flush=True` is load-bearing, not decoration. stdout is block-buffered
+    # whenever it is not a terminal — a log file, a pipe, a supervisor — and
+    # `Server.run` then blocks forever with these lines still in the buffer.
+    # The one thing a script waits for is the URL, and it never arrived.
+    for label, url in urls.items():
+        print(f"{label:<7} {url}", flush=True)
+
+    if args.open:
+        import webbrowser
+
+        # Safe before the loop starts: the socket is already listening, so the
+        # browser's connection queues rather than being refused.
+        webbrowser.open(urls["editor"])
+
+    uvicorn.Server(
+        uvicorn.Config("openstategraph.api.main:app", host=args.host, port=port)
+    ).run(sockets=[listener])
     return EXIT_OK
 
 
@@ -219,8 +264,6 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     `--transport` sets `OPENSTATEGRAPH_MCP_TRANSPORT` rather than replacing it:
     the environment variable is the shipped interface and keeps working.
     """
-    import os
-
     try:
         import mcp  # noqa: F401
     except ImportError:
@@ -302,9 +345,33 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("--knowledge-dir", dest="knowledge_dir")
     listing.set_defaults(handler=cmd_knowledge_list)
 
-    serve = subparsers.add_parser("serve", help="run the HTTP API (needs [server])")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
+    serve = subparsers.add_parser(
+        "serve", help="run the editor, the chat surface and the API (needs [server])"
+    )
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=(
+            "bind address (default: 127.0.0.1, this machine only). Not 0.0.0.0: "
+            "this process holds your provider API keys and has no authentication, "
+            "so exposing it to the network exposes those. Use 0.0.0.0 only behind "
+            "something that authenticates."
+        ),
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=(
+            "exactly this port, failing if it is taken. Omit to take 8000, or the "
+            "next free port if 8000 is busy. Use 0 to let the OS choose."
+        ),
+    )
+    serve.add_argument(
+        "--open",
+        action="store_true",
+        help="open the editor in your browser once it is listening (default: off)",
+    )
     serve.set_defaults(handler=cmd_serve)
 
     mcp_parser = subparsers.add_parser("mcp", help="run the MCP server (needs [mcp])")

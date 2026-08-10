@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { slugify, WorkflowFileClient, type FetchLike } from './WorkflowFileClient';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  slugify,
+  WorkflowFileClient,
+  type CatalogueChange,
+  type EventSourceLike,
+  type FetchLike,
+} from './WorkflowFileClient';
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -214,5 +220,122 @@ describe('WorkflowFileClient.capabilities', () => {
     const result = await client.capabilities('x');
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('the base URL a real page gets', () => {
+  it('is same-origin relative in a production bundle, so any port works', async () => {
+    vi.stubEnv('DEV', false);
+    const stub = stubFetch(jsonResponse([]));
+
+    await new WorkflowFileClient(undefined, stub.fetch).list();
+
+    expect(stub.calls[0]!.url).toBe('/api/workflows?surface=editor');
+    vi.unstubAllEnvs();
+  });
+
+  it('keeps the explicit cross-origin dev backend under Vite', async () => {
+    vi.stubEnv('DEV', true);
+    const stub = stubFetch(jsonResponse([]));
+
+    await new WorkflowFileClient(undefined, stub.fetch).list();
+
+    expect(stub.calls[0]!.url).toBe('http://localhost:8000/api/workflows?surface=editor');
+    vi.unstubAllEnvs();
+  });
+});
+
+describe('WorkflowFileClient.watchCatalogue', () => {
+  /** A stand-in for `EventSource`, which Vitest's node environment lacks. */
+  const fakeSource = () => {
+    const listeners = new Map<string, (event: MessageEvent) => void>();
+    let closed = false;
+    const source: EventSourceLike = {
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      close: () => {
+        closed = true;
+      },
+    };
+    return {
+      factory: (url: string) => {
+        urls.push(url);
+        return source;
+      },
+      emit: (data: string) => listeners.get('workflows.changed')?.({ data } as MessageEvent),
+      isClosed: () => closed,
+      listens: () => [...listeners.keys()],
+    };
+  };
+  const urls: string[] = [];
+
+  it('subscribes to the runtime event stream', () => {
+    const fake = fakeSource();
+    urls.length = 0;
+
+    new WorkflowFileClient(
+      'http://rt',
+      stubFetch(jsonResponse([])).fetch,
+      fake.factory,
+    ).watchCatalogue(() => {});
+
+    expect(urls).toEqual(['http://rt/api/events']);
+    expect(fake.listens()).toEqual(['workflows.changed']);
+  });
+
+  it('maps the snake_case event to a change', () => {
+    const fake = fakeSource();
+    const seen: CatalogueChange[] = [];
+    new WorkflowFileClient(
+      'http://rt',
+      stubFetch(jsonResponse([])).fetch,
+      fake.factory,
+    ).watchCatalogue((change) => seen.push(change));
+
+    fake.emit(JSON.stringify({ reason: 'published', slug: 'billing', surface_visible: true }));
+
+    expect(seen).toEqual([{ reason: 'published', slug: 'billing', surfaceVisible: true }]);
+  });
+
+  it('survives a frame it cannot parse rather than tearing the stream down', () => {
+    const fake = fakeSource();
+    const seen: CatalogueChange[] = [];
+    new WorkflowFileClient(
+      'http://rt',
+      stubFetch(jsonResponse([])).fetch,
+      fake.factory,
+    ).watchCatalogue((change) => seen.push(change));
+
+    fake.emit('not json');
+    fake.emit(JSON.stringify({ reason: 'deleted', slug: 'gone', surface_visible: false }));
+
+    expect(seen).toEqual([{ reason: 'deleted', slug: 'gone', surfaceVisible: false }]);
+    expect(fake.isClosed()).toBe(false);
+  });
+
+  it('closes the connection when the caller unsubscribes', () => {
+    const fake = fakeSource();
+    const stop = new WorkflowFileClient(
+      'http://rt',
+      stubFetch(jsonResponse([])).fetch,
+      fake.factory,
+    ).watchCatalogue(() => {});
+
+    expect(fake.isClosed()).toBe(false);
+    stop();
+    expect(fake.isClosed()).toBe(true);
+  });
+
+  it('degrades to a no-op where EventSource does not exist', () => {
+    // The whole feature is additive: a browser (or a test) without
+    // `EventSource` must keep the panel working exactly as before.
+    const stop = new WorkflowFileClient(
+      'http://rt',
+      stubFetch(jsonResponse([])).fetch,
+      null,
+    ).watchCatalogue(() => {
+      throw new Error('nothing can arrive');
+    });
+
+    expect(() => stop()).not.toThrow();
   });
 });

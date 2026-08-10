@@ -127,6 +127,25 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["openstategraph"]
 
+# The built editor, copied into `openstategraph/api/static/editor` at build
+# time (scale-and-adopt ticket 01). See `backend/hatch_build.py` for where the
+# assets come from, why sourcemaps are excluded, and why a non-editable build
+# without them fails rather than shipping a canvas-less "visual builder".
+#
+# ONE distribution, not two. The alternative — a separate
+# `openstategraph-editor` that `[server]` depends on — buys a `load_workflow`
+# consumer 1.7 MB of wheel and costs a second PyPI name, a second version to
+# keep in lockstep, and a second clean-install proof. Against the ~150 MB that
+# langgraph + langchain + pydantic already put in their site-packages, 1.7 MB
+# is not a decision worth a release train. If it ever becomes one, it is one
+# `force_include` and one extra away, because every consumer already goes
+# through `api/editor_assets.py` to find the files.
+# Declared globally rather than per target, so the sdist carries the assets too
+# — `pip install --no-binary` and any downstream repackager then get the same
+# product rather than a silent 404.
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 # Test configuration lives in the repo-root pytest.ini, not here — it already
 # covers both roots (backend/ and the workflow's own tools/), and pytest.ini
 # takes precedence over this file's [tool.pytest.ini_options] table when both

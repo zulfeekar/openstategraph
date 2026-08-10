@@ -172,8 +172,8 @@ from the shipped wheel:
 | the same tree before 0.3.0 | **78** |
 
 The core is exactly four declared dependencies — `langgraph`, `langchain`,
-`langchain-core`, `pydantic` — and our own wheel is ~215 KiB. Everything else
-is behind an extra you ask for by name:
+`langchain-core`, `pydantic`. Everything else is behind an extra you ask for by
+name:
 
 ```
 [anthropic] [openai] [ollama]   one provider — you need exactly one
@@ -188,12 +188,26 @@ Read the list the way a sceptic does: of those 36, essentially all are
 LangChain's and LangGraph's own closure — which you would have installed anyway,
 because the alternative to using us is writing the `StateGraph` by hand.
 
+**Our own wheel is 2.9 MB, and 2.7 MB of that is the editor.** The Python is
+276 KiB compressed; the built canvas is 1,553 KiB and the `/chat` flow view's
+Mermaid is 952 KiB. That weight rides in the main wheel rather than a separate
+`openstategraph-editor` distribution, deliberately: against the ~72 MB a
+`[server]` install puts in `site-packages`, 2.7 MB does not justify a second
+package name, a second version to keep in lockstep and a second clean-install
+proof — and a `pip install openstategraph && openstategraph serve` that opens
+the real product is the whole reason anyone tries this in the first place.
+Sourcemaps (another 18 MB) are excluded; they are a debugging aid for people
+working on *this* repository.
+
 **A test keeps this honest.** `backend/tests/test_distribution_metadata.py`
 asserts the unconditional requirements are exactly those four and that every
 other package appears only under an `extra ==` marker; a subprocess test asserts
 `load_workflow` leaves `fastapi`, `uvicorn`, `deepagents` and `mcp` out of
 `sys.modules`; and CI's `clean-install` job installs the built wheel into an
-empty venv outside the checkout and runs a workflow there.
+empty venv outside the checkout, runs a workflow there, and then starts
+`openstategraph serve --port 0` and asserts that `/` is the editor, `/chat` is
+the chat page and `/api/workflows` is JSON — because a canvas that quietly
+stopped shipping would look exactly like a 404.
 
 ---
 

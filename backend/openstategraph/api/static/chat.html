@@ -339,6 +339,16 @@
     .hitl__actions button { flex: 1 1 auto; min-width: 8rem; text-align: center; }
   }
 
+  /* The catalogue notice bar: what a live `workflows.changed` event has to
+     SAY rather than silently do. It is never used to swap the selection —
+     only to tell the person their selection changed underneath them. */
+  #notice { display: flex; gap: var(--space-2); align-items: baseline; padding: var(--space-2) var(--space-5);
+            border-bottom: 1px solid var(--line); background: var(--accent-soft); color: var(--text);
+            font-size: var(--font-size-13); }
+  #notice[hidden] { display: none; }
+  #notice span { flex: 1; }
+  #notice button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: var(--font-size-14); }
+
   footer { display: flex; gap: var(--space-2); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--line); background: var(--bg); }
   footer textarea { flex: 1; resize: none; height: 46px; border-radius: var(--radius-xl); }
 </style>
@@ -352,6 +362,7 @@
   <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
   <span id="who" style="font-size:var(--font-size-12);color:var(--muted)"></span>
 </header>
+<div id="notice" hidden role="status"><span></span><button type="button" title="Dismiss">×</button></div>
 <div id="split">
   <section id="flowpane">
     <h2>Live flow</h2>
@@ -795,18 +806,128 @@ function renderTimeline(el, rows, names) {
 }
 const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms");
 
-async function loadWorkflows() {
-  const list = await (await fetch("/api/workflows?surface=chat")).json();
+/* Repaints the picker from a catalogue listing, PRESERVING the selection.
+ *
+ * The preservation is the whole point. A refresh that rebuilt the options and
+ * let the browser fall back to the first one would silently move a customer
+ * from the workflow they chose to whatever happens to sort first — and would
+ * do it mid-conversation, since the thread is keyed by slug.
+ *
+ * Returns true when the current selection is no longer in the catalogue; the
+ * caller says so out loud. The row is kept, labelled, rather than removed:
+ * removing it is the silent swap again, one step later. */
+function renderPicker(list) {
+  const sel = $("wf");
+  const chosen = state.workflow || "concierge";
   // "Auto" is the hidden concierge gateway (ticket 67): a predefined
   // router-of-workflows the customer never has to know about.
-  $("wf").innerHTML = '<option value="concierge">Auto — let OpenStateGraph route</option>'
-    + list.map((w) => `<option value="${w.slug}">${w.name}</option>`).join("");
+  const options = ['<option value="concierge">Auto — let OpenStateGraph route</option>']
+    .concat(list.map((w) => `<option value="${esc(w.slug)}">${esc(w.name)}</option>`));
+  const gone = chosen !== "concierge" && !list.some((w) => w.slug === chosen);
+  if (gone) options.push(`<option value="${esc(chosen)}">${esc(chosen)} — no longer available</option>`);
+  sel.innerHTML = options.join("");
+  sel.value = chosen;
+  return gone;
+}
+
+async function loadWorkflows() {
+  const list = await (await fetch("/api/workflows?surface=chat")).json();
   state.workflow = "concierge";
+  renderPicker(list);
   $("wf").onchange = async () => {
     state.workflow = $("wf").value; state.doc = null;
+    hideNotice();
     void renderFlow(state.workflow);
   };
   void renderFlow(state.workflow);
+}
+
+// --- Live catalogue (SSE) --------------------------------------------------
+//
+// The page used to fetch its picker once, on load: a customer sitting here
+// when someone published a workflow never saw it without a reload. `GET
+// /api/events` streams `workflows.changed` hints and this refetches on each
+// one — the catalogue itself stays the single source of truth, the event is
+// only a nudge to go and look.
+//
+// SSE rather than a WebSocket or a poll: it is one-way, the server already
+// speaks it, and `EventSource` reconnects on its own. Everything below is
+// **strictly additive** — if `EventSource` is missing, or the stream fails for
+// good, the page behaves exactly as it did before, silently.
+//
+// Known limits, so nobody has to discover them: the backend's fan-out is
+// in-process (one uvicorn worker — the documented ceiling), and a
+// `workflow.json` hand-edited on disk emits nothing, because the editor writes
+// through the API and a text editor does not.
+
+function showNotice(text) {
+  const bar = $("notice");
+  bar.querySelector("span").textContent = text;
+  bar.hidden = false;
+}
+function hideNotice() { $("notice").hidden = true; }
+$("notice").querySelector("button").onclick = hideNotice;
+
+/** Refetch the catalogue and repaint, disturbing nothing else. */
+async function refreshPicker(reason, slug) {
+  let list;
+  try {
+    const resp = await fetch("/api/workflows?surface=chat");
+    if (!resp.ok) return;
+    list = await resp.json();
+  } catch { return; }  // A failed refresh leaves the last good picker in place.
+  const gone = renderPicker(list);
+  if (!slug || slug !== state.workflow) return;
+  if (gone) {
+    // Said plainly, never acted on: the selection stays, the thread stays, and
+    // an in-flight run is untouched. Swapping the workflow under someone
+    // mid-conversation would be the worse failure.
+    showNotice(reason === "deleted"
+      ? `“${slug}” was deleted. It is still selected here but can no longer answer — please pick another workflow.`
+      : `“${slug}” was unpublished and is no longer offered. It is still selected here; pick another workflow to continue.`);
+    return;
+  }
+  if (reason === "saved") {
+    // The cached document is now stale — the next turn must fetch the new one.
+    state.doc = null;
+    // The diagram is only redrawn between runs: repainting it mid-run would
+    // wipe the live highlight of the turn in flight.
+    if (!inFlight) void renderFlow(state.workflow);
+    showNotice(`“${slug}” was updated — your next message will use the new version.`);
+  }
+}
+
+/** The one open catalogue stream, or null. */
+let catalogue = null;
+function watchCatalogue() {
+  if (catalogue || typeof EventSource === "undefined") return;
+  let opened = false;
+  const es = new EventSource("/api/events");
+  catalogue = es;
+  es.onopen = () => {
+    // On a RE-open, refetch once: `EventSource` reconnects by itself, and
+    // whatever changed while the socket was down was never sent to anyone.
+    if (opened) void refreshPicker(null, null);
+    opened = true;
+  };
+  es.addEventListener("workflows.changed", (e) => {
+    let d;
+    try { d = JSON.parse(e.data); } catch { return; }
+    void refreshPicker(d.reason, d.slug);
+  });
+  es.onerror = () => {
+    // While `readyState` is CONNECTING the browser is retrying on its own —
+    // nothing to do, and nothing to say. CLOSED means it has given up for
+    // good; fall back to the load-time picker rather than breaking the page.
+    if (es.readyState === EventSource.CLOSED) catalogue = null;
+  };
+  // Both ends of the connection get closed. `pagehide` is the one that fires
+  // reliably on mobile Safari and on bfcache navigation; `beforeunload` covers
+  // the rest. Closing frees the server's subscription at once instead of
+  // leaving it for a socket timeout to notice.
+  const shut = () => { es.close(); catalogue = null; };
+  addEventListener("pagehide", shut);
+  addEventListener("beforeunload", shut);
 }
 
 async function docFor(slug) {
@@ -1063,7 +1184,11 @@ function offerSave(el, answerText) {
     });
     if (resp.ok) {
       note.textContent = "saved ✔ — now in the workflow picker";
-      loadWorkflows();
+      // `refreshPicker`, not `loadWorkflows`: a reload of the picker used to
+      // reset the selection to Auto, which threw away the workflow this very
+      // conversation was using. (The save also emits `workflows.changed`, so
+      // this is belt-and-braces for a page whose stream is not up.)
+      void refreshPicker("saved", slug);
     } else {
       note.textContent = "save failed: " + esc(await resp.text()).slice(0, 120);
     }
@@ -1186,6 +1311,9 @@ async function runStream(path, body, el) {
   }
 }
 loadWorkflows();
+// Started independently of the initial load: a backend that was briefly down
+// at page load must not also cost this page its live updates.
+watchCatalogue();
 </script>
 </body>
 </html>

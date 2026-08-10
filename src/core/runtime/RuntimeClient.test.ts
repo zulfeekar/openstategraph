@@ -1,10 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import {
-  RuntimeClient,
-  isCancelled,
-  type FetchLike,
-  type RunStreamEvent,
-} from './RuntimeClient';
+import { describe, expect, it, vi } from 'vitest';
+import { RuntimeClient, isCancelled, type FetchLike, type RunStreamEvent } from './RuntimeClient';
 
 /**
  * The editor's route to the runtime.
@@ -472,11 +467,9 @@ describe('RuntimeClient.runStream — stopping', () => {
     const controller = new AbortController();
     const client = new RuntimeClient('http://rt', stub.fetch);
 
-    const pending = client.resume(
-      { threadId: 't1', workflow: {}, decision: 'approve' },
-      () => {},
-      { signal: controller.signal },
-    );
+    const pending = client.resume({ threadId: 't1', workflow: {}, decision: 'approve' }, () => {}, {
+      signal: controller.signal,
+    });
     controller.abort();
     const result = await pending;
 
@@ -668,5 +661,44 @@ describe('RuntimeClient.health', () => {
   it('is a failure, not a crash, when nothing is listening', async () => {
     const client = new RuntimeClient('http://rt', () => Promise.reject(new Error('down')));
     expect((await client.health()).ok).toBe(false);
+  });
+});
+
+describe('the base URL a real page gets', () => {
+  /**
+   * The regression this pins: served from the wheel on port 51423, an absolute
+   * `http://localhost:8000` sends every call to a port with nothing on it, and
+   * the editor loads perfectly while doing nothing at all.
+   */
+  it('is same-origin relative in a production bundle', async () => {
+    vi.stubEnv('DEV', false);
+    const stub = stubFetch(jsonResponse(GOOD));
+
+    await new RuntimeClient(undefined, stub.fetch).run({ workflow: {}, question: 'q' });
+
+    expect(stub.calls[0]).toBe('/api/runs');
+    vi.unstubAllEnvs();
+  });
+
+  it('is the dev backend when Vite is serving the app', async () => {
+    vi.stubEnv('DEV', true);
+    const stub = stubFetch(jsonResponse(GOOD));
+
+    await new RuntimeClient(undefined, stub.fetch).run({ workflow: {}, question: 'q' });
+
+    expect(stub.calls[0]).toBe('http://localhost:8000/api/runs');
+    vi.unstubAllEnvs();
+  });
+
+  it('names the origin rather than an empty string when nothing answers', async () => {
+    vi.stubEnv('DEV', false);
+    const client = new RuntimeClient(undefined, () => Promise.reject(new Error('down')));
+
+    const result = await client.run({ workflow: {}, question: 'q' });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('this page’s own origin');
+    vi.unstubAllEnvs();
   });
 });

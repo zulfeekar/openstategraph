@@ -44,7 +44,18 @@ wheel, a four-package core, seven named extras, `py.typed`, and an
 `openstategraph` console script:
 
 ```bash
-pip install "openstategraph[ollama]"          # ← after the first PyPI release
+pip install "openstategraph[server,ollama]"   # ← after the first PyPI release
+openstategraph serve --open                   # canvas at /, customer chat at /chat
+```
+
+**The wheel carries the canvas.** The built editor ships as package data
+(2.7 MB of a 2.9 MB wheel), so `serve` starts one process that serves the
+editor at `/`, the customer chat surface at `/chat` and the API under `/api`
+— from one origin, on whatever port it reports. No clone, no Docker, no `npm`.
+Just running graphs needs none of that:
+
+```bash
+pip install "openstategraph[ollama]"          # the lean core, no web layer
 openstategraph run ./my-workflow "How many invoices are there?"
 ```
 
@@ -186,8 +197,10 @@ One command, either way:
 `./start` builds a multi-stage image (Node compiles the editor, a throwaway
 stage builds the Python wheels) whose final layer is Python slim plus runtime
 deps, the built `dist/`, `backend/` and `workflows/`. The backend serves the
-editor, `/chat` and the API from a single origin on port 8000 — the frontend
-calls `http://localhost:8000` absolutely, so map that port as-is.
+editor, `/chat` and the API from a single origin on port 8000. Map it to any
+host port you like: the editor's API calls are **same-origin relative**, so
+they follow the page wherever it is published (`src/core/runtime/runtimeBaseUrl.ts`
+— an absolute `http://localhost:8000` used to make port 8000 mandatory).
 `./workflows` is bind-mounted, so workflows saved in the container land in the
 repo.
 

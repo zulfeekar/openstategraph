@@ -299,6 +299,53 @@ async def stop_when_client_leaves(frames: Any, receive: Any) -> Any:
         _abandon(gone)
 
 
+async def stop_when_client_leaves_async(frames: Any, receive: Any) -> Any:
+    """`stop_when_client_leaves`, for a source that is already asynchronous.
+
+    Same finding, same fix, different input: Starlette does not notice a
+    disconnect on a modern ASGI server, so the disconnect has to be raced
+    against each frame. The other function drives a *sync* generator through a
+    threadpool because `graph.stream()` is blocking; `/api/events` is a pure
+    asyncio source (a queue and a timer), and pushing it through a threadpool
+    would occupy a worker thread for the entire life of every open surface.
+
+    On disconnect the source generator is closed rather than abandoned: it owns
+    a broadcaster subscription, and a subscription that outlived its socket
+    would be fed for the life of the process. There is no work in flight to
+    abandon here — the only thing it can be doing is waiting.
+    """
+    import asyncio
+
+    gone = asyncio.ensure_future(_client_left(receive))
+    stream = frames.__aiter__()
+    try:
+        while True:
+            step = asyncio.ensure_future(stream.__anext__())
+            done, _ = await asyncio.wait({step, gone}, return_when=asyncio.FIRST_COMPLETED)
+            if step not in done:
+                # Cancelled **and awaited**, unlike the sync path's `_abandon`.
+                # There the pending step is a blocking model call that cannot be
+                # interrupted, so waiting for it would defeat the stop. Here it
+                # is a wait on a queue, it unwinds at once — and it must, because
+                # `aclose()` on a generator whose `__anext__` is still in flight
+                # raises "already running", which the `suppress` below would
+                # swallow, silently skipping the very cleanup this exists for.
+                step.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await step
+                return
+            try:
+                yield step.result()
+            except StopAsyncIteration:
+                return
+    finally:
+        _abandon(gone)
+        closer = getattr(stream, "aclose", None)
+        if callable(closer):
+            with suppress(Exception):
+                await closer()
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
 

@@ -75,6 +75,41 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **The wheel carries the canvas** (scale-and-adopt ticket 01). We called this
+  a *visual* workflow builder and shipped 276 KiB of Python with no UI: the
+  canvas existed only for someone who cloned the repository or ran Docker.
+  `npm run build`'s output now ships as package data through a hatchling build
+  hook (`backend/hatch_build.py`), so `pip install "openstategraph[server]" &&
+  openstategraph serve` opens the real product on a machine that has never seen
+  the repository — editor at `/`, customer chat at `/chat`, API under `/api`,
+  one process, one origin, one workflows directory. Sourcemaps are excluded;
+  the measured cost is 2.7 MB of a 2.9 MB wheel (1,553 KiB editor + 952 KiB of
+  Mermaid for the `/chat` flow view) against the ~72 MB a `[server]` install
+  already puts in `site-packages`, which is why it rides in the main wheel
+  rather than a separate `openstategraph-editor` distribution. A build with no
+  editor anywhere now **fails** instead of quietly producing a canvas-less
+  "visual builder"; editable installs stay exempt, so the contributor path
+  needs no Node.js.
+- **`openstategraph serve` grew the port behaviour a first five minutes needs.**
+  No flag takes 8000, or the **next free port** if 8000 is busy — running two
+  copies is a normal thing to want and `Address already in use` is not an
+  answer to it. `--port N` means exactly N and fails with the way out (`try
+  --port 0`). `--port 0` lets the OS choose. In every case the URLs it actually
+  landed on — editor, chat, health — are the last thing printed before the
+  server's own log, flushed, so a script or a supervisor can read them.
+  `--host` defaults to `127.0.0.1` and the help text says why it is not
+  `0.0.0.0`; `--open` launches a browser and is off by default.
+- **A source checkout that never ran `npm run build` gets a sentence, not a
+  404.** `serve` there serves a page at `/` (503) naming the two ways out. A
+  bare 404 is indistinguishable from a broken install, which is the failure
+  this replaces.
+- **The clean-install proof now proves the product, not just the compiler.**
+  After installing the wheel in an empty venv outside the checkout, it starts
+  `openstategraph serve --port 0`, waits for readiness and asserts `/` is the
+  editor SPA, `/chat` is the chat page, `/api/workflows` is JSON and
+  `/chat/mermaid.js` is served from the wheel. Without it the canvas could
+  silently stop shipping and everything else would stay green.
+
 - **`openstategraph.extensions.reset_entry_point_cache()`**, and with it a
   process-lifetime cache covering **all three** entry-point groups rather than
   one. Entry-point discovery re-walks every installed distribution's metadata
@@ -268,6 +303,26 @@ finally read by code. Wayfinder tickets 02–04;
   of these.
 
 ### Fixed
+
+- **The editor bundle called `http://localhost:8000` absolutely**
+  (`src/core/runtime/RuntimeClient.ts`, `WorkflowFileClient.ts`, two view
+  components). True of exactly one deployment — Docker published on port 8000
+  — and false of the one that now matters: served from the wheel on any other
+  port, the editor loaded perfectly and every API call inside it went to a port
+  with nothing on it. The base URL is resolved once
+  (`src/core/runtime/runtimeBaseUrl.ts`) and is **same-origin relative** in a
+  production bundle, so it follows the page to whatever host and port it was
+  opened on. The dev stack keeps its absolute URL, because Vite on :5273 and
+  uvicorn on :8000 are genuinely different origins and CORS still names exactly
+  those two; `VITE_RUNTIME_BASE_URL` overrides either mode. Both modes are
+  pinned by tests. Consequence: `docker-compose.yml`'s host port is no longer
+  required to be 8000.
+- **The static mount had no answer for an installed distribution.** It read a
+  relative `dist` from the process's working directory, so it worked in the
+  container and nowhere else. Resolution now has an order —
+  `OPENSTATEGRAPH_STATIC_DIR`, then the wheel's own copy, then a checkout's
+  `dist/` — in one module (`api/editor_assets.py`) that both the container and
+  `openstategraph serve` go through. No second serving path was forked.
 
 - **The editor's browser autosave could lose work three ways, all silently**
   (register UX-04). (1) A failed write was invisible: `saveWorkflow` returned an

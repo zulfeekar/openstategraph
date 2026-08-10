@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BrainCircuit, NotebookPen } from 'lucide-react';
 import { Button, Icon } from '@design/primitives';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
+import { describeRuntimeBase, runtimeBaseUrl } from '@core/runtime/runtimeBaseUrl';
 import { Dialog } from '../overlays/Dialog';
 import type { NodeBodyProps } from './nodeBodyRegistry';
 import './KnowledgeBody.css';
@@ -40,7 +41,9 @@ interface TopicStatus {
   stale: boolean;
 }
 
-const API_BASE = 'http://localhost:8000';
+//: Same-origin when the backend serves this bundle, the dev backend under
+//: Vite — one rule, `core/runtime/runtimeBaseUrl.ts`, for every caller.
+const API_BASE = runtimeBaseUrl();
 
 function openSlug(): string | null {
   return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(CURRENT_SLUG_KEY);
@@ -49,13 +52,19 @@ function openSlug(): string | null {
 async function requestBuild(slug: string): Promise<BuildState> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/api/workflows/${encodeURIComponent(slug)}/knowledge/build`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
+    response = await fetch(
+      `${API_BASE}/api/workflows/${encodeURIComponent(slug)}/knowledge/build`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
   } catch {
-    return { status: 'failed', message: `Could not reach the runtime at ${API_BASE}.` };
+    return {
+      status: 'failed',
+      message: `Could not reach the runtime at ${describeRuntimeBase(API_BASE)}.`,
+    };
   }
   if (!response.ok) {
     let detail = `HTTP ${response.status}`;
@@ -81,9 +90,7 @@ async function requestBuild(slug: string): Promise<BuildState> {
 
 async function fetchTopics(slug: string): Promise<TopicStatus[]> {
   try {
-    const response = await fetch(
-      `${API_BASE}/api/workflows/${encodeURIComponent(slug)}/knowledge`,
-    );
+    const response = await fetch(`${API_BASE}/api/workflows/${encodeURIComponent(slug)}/knowledge`);
     if (!response.ok) return [];
     const payload = (await response.json()) as unknown;
     if (!Array.isArray(payload)) return [];
@@ -204,7 +211,10 @@ export function KnowledgeBody(_props: NodeBodyProps) {
   const build = async () => {
     const slug = openSlug();
     if (!slug) {
-      setState({ status: 'failed', message: 'Save the workflow first — no open slug to build for.' });
+      setState({
+        status: 'failed',
+        message: 'Save the workflow first — no open slug to build for.',
+      });
       return;
     }
     setState({ status: 'busy' });

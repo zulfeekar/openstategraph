@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { runtimeBaseUrl } from '@core/runtime/runtimeBaseUrl';
 
 /**
  * The machinery's own prompt sections, shown read-only — ticket 31.
@@ -17,7 +18,7 @@ let pending: Promise<ContractMap> | null = null;
 
 async function fetchContracts(): Promise<ContractMap> {
   if (cache) return cache;
-  pending ??= fetch('http://localhost:8000/api/node-contracts')
+  pending ??= fetch(`${runtimeBaseUrl()}/api/node-contracts`)
     .then(async (response) => (response.ok ? ((await response.json()) as ContractMap) : {}))
     .catch(() => ({}) as ContractMap)
     .then((map) => (cache = map));

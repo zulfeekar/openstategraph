@@ -143,6 +143,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # Node builds the editor the wheel ships (scale-and-adopt ticket 01).
+      # The proof script runs `npm ci && npm run build` when `dist/` is absent,
+      # and `backend/hatch_build.py` fails the build rather than releasing a
+      # visual workflow builder with no visuals.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
       - run: scripts/clean_install_proof.sh
       - uses: actions/upload-artifact@v4
         with:

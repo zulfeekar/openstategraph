@@ -80,6 +80,21 @@ fi
 
 case "$SOURCE" in
   build)
+    # The wheel carries the canvas (scale-and-adopt ticket 01), so the wheel
+    # cannot be built before the canvas is. `hatch_build.py` fails the build
+    # rather than shipping a visual builder with no visuals; this is where the
+    # front end gets built so that failure never happens in CI by surprise.
+    if [ ! -f "$REPO/dist/index.html" ]; then
+      command -v npm >/dev/null 2>&1 || {
+        echo "the editor is not built and npm is not on PATH."
+        echo "Install Node.js and run 'npm ci && npm run build', or set"
+        echo "OPENSTATEGRAPH_EDITOR_DIST to a directory that already has one."
+        exit 1
+      }
+      echo "==> building the editor (npm run build)"
+      (cd "$REPO" && npm ci --silent && npm run build >/dev/null)
+    fi
+
     echo "==> building sdist + wheel"
     rm -rf "$REPO/backend/dist"
     python3 -m pip install --quiet --upgrade build twine
@@ -118,7 +133,7 @@ echo "==> wheel contents"
 # `CatalogueError` on the adopter's first import rather than in our CI.
 LISTING="$(python3 -m zipfile -l "$WHEEL")"
 for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
-                "compile/port_specs.json"; do
+                "compile/port_specs.json" "static/editor/index.html"; do
   printf '%s\n' "$LISTING" | grep -qF "$required" \
     || { echo "the wheel is missing package data it must ship: $required"; exit 1; }
 done
@@ -194,6 +209,104 @@ set +e
 code=$?
 set -e
 [ "$code" -eq 3 ] || { echo "expected exit 3 for a missing extra, got $code"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# THE PROOF THAT MATTERS FOR ADOPTION (scale-and-adopt ticket 01)
+#
+# Everything above proves the compiler survives being installed. This proves
+# the *product* does: one process, one origin, editor at /, customer chat at
+# /chat, API under /api — from a wheel, in a venv, from a directory that has
+# never seen this repository. Without it the feature regresses to a 404 in
+# silence, because a 404 at / is exactly what "we forgot the package data"
+# looks like and nothing else in this file would notice.
+#
+# `--port 0` on purpose: it is the only mode that cannot accidentally pass by
+# landing on the port the editor bundle used to hardcode.
+# ---------------------------------------------------------------------------
+echo "==> installing the [server] extra (the exit-3 gate above is now satisfied)"
+if [ "$SOURCE" = "index" ]; then
+  "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
+    "openstategraph[server]==$OSG_VERSION"
+else
+  "$VENV/bin/pip" install --quiet "${WHEEL}[server]"
+fi
+
+echo "==> openstategraph serve --port 0, from outside the checkout"
+SERVE_LOG="$WORK/serve.log"
+(cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/openstategraph" serve --port 0) \
+  >"$SERVE_LOG" 2>&1 &
+SERVE_PID=$!
+# EXIT, not just the happy path: a failed assertion below must not leave a
+# server running on the machine that ran this.
+trap 'kill "$SERVE_PID" 2>/dev/null || true' EXIT
+
+# The URL it actually landed on, read from the line it promises to print. That
+# line IS the contract — `--port 0` is useless if you cannot find out where it
+# went — so parsing it is a test of the contract, not a workaround.
+BASE=""
+for _ in $(seq 1 150); do
+  if ! kill -0 "$SERVE_PID" 2>/dev/null; then
+    echo "the server exited before it printed a URL:"; cat "$SERVE_LOG"; exit 1
+  fi
+  # `|| true` because this file runs under `set -o pipefail`: until the line
+  # appears, grep exits 1 and would take the whole script down with it.
+  BASE="$(grep -m1 '^editor ' "$SERVE_LOG" | awk '{print $2}' | sed 's:/$::' || true)"
+  [ -n "$BASE" ] && break
+  sleep 0.2
+done
+[ -n "$BASE" ] || { echo "serve never printed its URL:"; cat "$SERVE_LOG"; exit 1; }
+echo "    listening on $BASE"
+
+"$VENV/bin/python" - "$BASE" <<'PY' || { echo "--- serve log ---"; cat "$SERVE_LOG"; exit 1; }
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+
+base = sys.argv[1]
+
+
+def get(path: str, tries: int = 1):
+    last = None
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(base + path, timeout=10) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except (urllib.error.URLError, OSError) as exc:  # not listening yet
+            last = exc
+            time.sleep(0.2)
+    raise SystemExit(f"{path} never answered: {last}")
+
+
+# Readiness first, so nothing below can fail merely for being early.
+status, _ = get("/api/health", tries=100)
+assert status == 200, f"/api/health returned {status}"
+
+status, body = get("/")
+assert status == 200, f"/ returned {status} — the wheel is not serving the editor"
+assert 'id="root"' in body, f"/ is not the editor SPA: {body[:300]!r}"
+assert "<script" in body, "the editor HTML carries no bundle"
+print("    /               the editor SPA (not a 404, not the 'not built' page)")
+
+status, body = get("/chat")
+assert status == 200, f"/chat returned {status}"
+assert "surface=chat" in body, "/chat is not the customer chat page"
+print("    /chat           the customer chat surface")
+
+status, body = get("/api/workflows")
+assert status == 200, f"/api/workflows returned {status}"
+assert isinstance(json.loads(body), list), "/api/workflows is not a JSON list"
+print("    /api/workflows  JSON, served under the same origin")
+
+status, _ = get("/chat/mermaid.js")
+assert status == 200, f"/chat/mermaid.js returned {status} — the wheel lost its Mermaid"
+print("    /chat/mermaid.js  the flow view's Mermaid, from the wheel, no CDN")
+PY
+
+kill "$SERVE_PID" 2>/dev/null || true
+wait "$SERVE_PID" 2>/dev/null || true
+trap - EXIT
 
 echo
 echo "CLEAN-INSTALL PROOF PASSED — $WHEEL"

@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
  * The editor's only route to a runtime.
@@ -230,8 +231,6 @@ export interface IRuntimeClient {
 /** Injected so tests need no server and no network. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-const DEFAULT_BASE = 'http://localhost:8000';
-
 /**
  * What a stream that never said how it ended is reported as.
  *
@@ -255,9 +254,17 @@ const describeError = (error: unknown): string => {
 
 export class RuntimeClient implements IRuntimeClient {
   constructor(
-    private readonly baseUrl: string = DEFAULT_BASE,
+    private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
   ) {}
+
+  /**
+   * The base said out loud. Same-origin resolves to an empty prefix, which is
+   * exactly right in a URL and meaningless in a sentence.
+   */
+  private unreachable(): string {
+    return `Could not reach the runtime at ${describeRuntimeBase(this.baseUrl)}. Is the backend running?`;
+  }
 
   async run(request: RunRequest): Promise<Result<RunResult, string>> {
     const body = {
@@ -280,7 +287,7 @@ export class RuntimeClient implements IRuntimeClient {
     } catch {
       // The single most likely failure in development, so it gets the message
       // that actually helps rather than a bare "Failed to fetch".
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
 
     if (!response.ok) return Err(await describeFailure(response));
@@ -363,7 +370,7 @@ export class RuntimeClient implements IRuntimeClient {
       });
     } catch (error) {
       if (wasAborted(error)) return Ok({ cancelled: true });
-      return Err(`Could not reach the runtime at ${this.baseUrl}. Is the backend running?`);
+      return Err(this.unreachable());
     }
 
     if (!response.ok) return Err(await describeFailure(response));

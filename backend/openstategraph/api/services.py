@@ -55,9 +55,18 @@ class WorkflowServices:
         functions: dict[str, Any] | None = None,
         middleware: dict[str, Any] | None = None,
     ) -> None:
+        from openstategraph.api.catalogue_events import CatalogueBroadcaster
         from openstategraph.memory import build_store
 
         self.store = WorkflowStore(root=workflows_root)
+        #: Live catalogue changes — the fan-out behind `GET /api/events`, so an
+        #: open `/chat` picker or Workflows panel sees a publish without a
+        #: reload. A **collaborator**, not behaviour on this class: it is here
+        #: because this is the assembly point every transport already shares,
+        #: exactly like the checkpointer and the memory Store. In-process, so
+        #: it reaches this worker only — which is the documented ceiling
+        #: anyway (see `catalogue_events` for the limits and the upgrade path).
+        self.events = CatalogueBroadcaster()
         #: Long-term memory, process-wide (ticket 65): one Store shared by
         #: every run, namespaced per user inside the tools themselves.
         #: Injectable, because its sibling the checkpointer always was: a

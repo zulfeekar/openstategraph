@@ -3,6 +3,15 @@
 You cloned the repository. This page takes you from that to a workflow you
 authored yourself, running against a real database, answering a real question.
 
+> **Not cloning?** Then you need none of it. `pip install
+> "openstategraph[server,ollama]"` followed by `openstategraph serve --open`
+> gives you the same product from one process — the canvas at `/`, the customer
+> chat at `/chat`, the API under `/api` — because the wheel ships the built
+> editor as package data. Node, Docker and this checkout are all optional; see
+> [Using OpenStateGraph in your project](adoption.md#the-shortest-path--one-install-one-command-the-whole-product).
+> The rest of this page is the *contributor's* path, where the editor is built
+> from source and hot-reloads.
+
 Two people arrive here, and they want different things:
 
 - **The developer** wants to open the canvas, understand the palette, change
@@ -41,7 +50,9 @@ Stop with `./start stop`; follow status with `scripts/status.sh`.
 
 The containerised alternative is `./start` on its own: one origin, port 8000,
 serving the editor, `/chat` and the API together. Use it when you want the
-production shape rather than hot reload.
+production shape rather than hot reload. `openstategraph serve` gives you that
+same one-origin shape without Docker, from an installed wheel or from this
+checkout once `npm run build` has run at least once.
 
 > **Approvals persist; still one worker.** The human-in-the-loop checkpointer
 > is a SQLite saver at `workflows/.openstategraph/checkpoints.sqlite`, so a
@@ -154,6 +165,11 @@ composer's Send). Stop is honest about where it can and cannot reach:
 <http://localhost:8000/chat> is the customer-facing side: no canvas, just a
 conversation. A concierge workflow routes your question to whichever published
 workflow can answer it, and streams the run back token by token.
+
+It is the **same process** as the editor, reading the **same** workflows
+directory — `/chat` is a path, not a second server. What makes a workflow
+appear there is one human action: **Publish**. Saving writes a draft, and
+drafts are invisible in `/chat`.
 
 Try:
 

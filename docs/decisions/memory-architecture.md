@@ -90,7 +90,41 @@ So the change to the ceiling is a change of *reason*, not of number:
 
 `uvicorn --workers 1` stays, in `Dockerfile` and `scripts/dev.sh`, and both say
 this. Raising it means `PostgresSaver` + `PostgresStore` passed to
-`WorkflowServices(checkpointer=…, store=…)`; nothing else changes.
+`WorkflowServices(checkpointer=…, store=…)` — **and now one more thing**, see
+directly below.
+
+### Live catalogue events ride the same ceiling
+
+`GET /api/events` streams `workflows.changed` so an open `/chat` picker or
+Workflows panel sees a publish without a reload
+(`openstategraph/api/catalogue_events.py`). Its fan-out is **in-process**: a
+publish reaches subscribers of *this* Python process and no other. That is not
+a new constraint — it is the same one worker this section already justifies —
+but it does mean raising the ceiling is now a **two-part** change, and skipping
+the second part fails silently rather than loudly:
+
+| | Second worker today | What it needs |
+| --- | --- | --- |
+| Checkpoints | uncoordinated sqlite writes | `PostgresSaver` / `PostgresStore` |
+| Catalogue events | a publish on worker A never reaches a surface on worker B | Redis pub/sub or Postgres `LISTEN`/`NOTIFY` behind the same `publish`/`subscribe` pair |
+
+The endpoint and both clients are unchanged by that swap — `CatalogueBroadcaster`
+is the whole seam.
+
+Two further honest limits, stated so nobody has to discover them:
+
+- **Only writes through the API emit.** Save, publish/unpublish and delete each
+  emit exactly once; a read emits nothing. A `workflow.json` edited by hand on
+  disk, or arriving via `git pull`, emits nothing at all — the editor writes
+  through the API, a text editor does not. A filesystem watch (`watchfiles`)
+  would close that gap and is **future work**, not something to assume works.
+  (Separately, the editor polls `savedAt` every 5s for the one *document* it has
+  open — `src/app/workflowFileWatch.ts` — which is a different question from the
+  catalogue.)
+- **No replay.** A surface receives what happens while it is connected;
+  `EventSource` reconnects on its own and both clients refetch on open, which is
+  the only correct recovery anyway — the catalogue is the truth, the event is a
+  hint to go and look.
 
 ### Thread identity and retention
 
