@@ -7,9 +7,12 @@ Three kinds, each mapped to the construct the LangGraph docs prescribe
   ``("memories", user_email)`` — the docs' canonical user-scoped pattern.
   ``thread_id``/``session_id`` never appear in a Store namespace; they scope
   the checkpointer only.
-- **Episodic**: checkpointer threads. In-memory by default; a workflow opts
-  into durability with ``settings.checkpointer: "sqlite"`` (ticket 47's
-  decision — a file beside the run data, matching files-first persistence).
+- **Episodic**: checkpointer threads. **Durable by default** since ticket 05 —
+  ``build_checkpointer`` puts one sqlite file under the workflows root, shared
+  by every transport, so a paused ``human.approval`` survives the restart the
+  dev stack performs on each file save. ``OPENSTATEGRAPH_CHECKPOINT_PATH``
+  moves it or (``=memory``) opts out, loudly. A single workflow can still
+  claim its own file with ``settings.checkpointer: "sqlite"`` (ticket 47).
 - **Procedural**: skills and Store-held instructions — surfaced through the
   middleware slot table, not this module (see ticket 66).
 
@@ -209,28 +212,64 @@ def build_store() -> Any:
     return InMemoryStore()
 
 
-def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback: Any) -> Any:
-    """The thread checkpointer a document asked for.
+#: The deployment's explicit answer for where thread checkpoints live. An
+#: absolute (or cwd-relative) sqlite path, or the literal ``memory`` to opt
+#: OUT of durability on purpose — a stateless container, or a test suite that
+#: must not leave files behind. Deliberately a *stated* opt-out rather than a
+#: silent one: "in-memory" is a real loss of work and has to be chosen.
+CHECKPOINT_PATH_ENV = "OPENSTATEGRAPH_CHECKPOINT_PATH"
 
-    ``settings.checkpointer: "sqlite"`` opts into durability — threads
-    survive a restart, which is what makes /chat conversations resumable.
-    Anything else (or a missing sqlite package) keeps the shared in-memory
-    saver, degrading loudly in the log rather than failing the run.
+#: The one value of the above that means "do not persist". ``:memory:`` is
+#: accepted too, since that is sqlite's own spelling and someone will type it.
+IN_MEMORY_CHECKPOINT = "memory"
+
+#: The process's own state, kept beside the content it is state *about*, and
+#: dotted so `WorkflowStore.list` (which requires a `workflow.json`) and every
+#: `ls` treat it as plumbing rather than a workflow.
+STATE_DIR_NAME = ".openstategraph"
+CHECKPOINT_FILE_NAME = "checkpoints.sqlite"
+
+
+def checkpoint_path(workflows_root_dir: Any = None) -> Path | None:
+    """Where the process-wide checkpointer writes, or None for in-memory.
+
+    Two sources, in order: the env var above, then the **default** —
+    ``<workflows root>/.openstategraph/checkpoints.sqlite``.
+
+    The default is durable rather than in-memory, and that is the ticket-05
+    decision: ``openstategraph serve`` run by a stranger must not lose a
+    `human.approval` pause because someone saved a file. The workflows root is
+    the right home for it because it is the one directory this process already
+    owns and already writes to, it is resolved correctly both inside a
+    checkout and inside an installed wheel (`workflows_root()` — see that
+    module for what a frozen constant cost), and it is per-project, so two
+    projects on one machine never share a thread namespace.
     """
-    choice = str((settings or {}).get("checkpointer") or "").strip().lower()
-    if choice != "sqlite":
-        return fallback
+    import os
+
+    from openstategraph.workflows_root import workflows_root
+
+    raw = os.environ.get(CHECKPOINT_PATH_ENV, "").strip()
+    if raw:
+        if raw.lower() in {IN_MEMORY_CHECKPOINT, ":memory:"}:
+            return None
+        return Path(raw).expanduser()
+    root = Path(workflows_root_dir) if workflows_root_dir else workflows_root()
+    return root / STATE_DIR_NAME / CHECKPOINT_FILE_NAME
+
+
+def _open_sqlite_saver(path: Path, asked_by: str) -> Any | None:
+    """A `SqliteSaver` on `path`, or None having said loudly why not.
+
+    One implementation for both callers — the process default and a
+    document's own ``settings.checkpointer: "sqlite"`` — because the
+    degradation message is knowledge, and two copies is how one of them ends
+    up describing a symptom instead of naming the fix.
+    """
     try:
         import sqlite3
 
         from langgraph.checkpoint.sqlite import SqliteSaver
-
-        root = Path(".dev")
-        root.mkdir(exist_ok=True)
-        conn = sqlite3.connect(
-            root / f"checkpoints-{slug or 'default'}.sqlite", check_same_thread=False
-        )
-        return SqliteSaver(conn)
     except ImportError:
         # The one degradation this codebase was getting wrong. `langgraph-
         # checkpoint-sqlite` is not a transitive of `langgraph` and was never
@@ -239,23 +278,83 @@ def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback
         # in-process saver. They asked for durability, got a log line nobody
         # reads, and find out when a restart eats a conversation.
         #
-        # It is a declared extra now, so the message can name the fix instead
-        # of describing the symptom.
+        # It is a declared extra now — and, since ticket 05, part of `[server]`
+        # as well, because the server's default *is* sqlite — so the message
+        # can name the fix instead of describing the symptom.
         from openstategraph._extras import install_hint
 
         _log().warning(
-            "settings.checkpointer='sqlite' asked for durable threads, but "
-            "langgraph-checkpoint-sqlite is not installed — falling back to an "
-            "IN-MEMORY saver, so conversations will NOT survive a restart. "
-            "Install it with: %s",
+            "%s asked for durable threads, but langgraph-checkpoint-sqlite is not "
+            "installed — falling back to an IN-MEMORY saver, so approvals and "
+            "conversations will NOT survive a restart. Install it with: %s",
+            asked_by,
             install_hint("sqlite"),
         )
-        return fallback
+        return None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path, check_same_thread=False)
+        saver = SqliteSaver(conn)
+        # Eager, though `SqliteSaver` would do it lazily on first use: it is
+        # what makes the file and its tables exist *now*, so the startup line
+        # below reports a location that is true rather than intended.
+        saver.setup()
+        return saver
     except Exception:  # pragma: no cover - environment-dependent
         _log().warning(
-            "settings.checkpointer='sqlite' requested but the store could not be "
-            "opened; falling back to an IN-MEMORY saver, so conversations will "
-            "NOT survive a restart.",
+            "%s requested a durable checkpointer at %s, but it could not be opened; "
+            "falling back to an IN-MEMORY saver, so approvals and conversations "
+            "will NOT survive a restart.",
+            asked_by,
+            path,
             exc_info=True,
         )
+        return None
+
+
+def build_checkpointer(workflows_root_dir: Any = None) -> Any:
+    """The process-wide thread checkpointer, and the one line that states it.
+
+    Held by `WorkflowServices` (the assembly point) and shared by HTTP, MCP
+    and `load_workflow`. It replaces the module-level `InMemorySaver` that
+    `api/main.py` used to own, whose two failures were the same failure: a
+    paused approval died on restart, and a second uvicorn worker got a second,
+    empty copy.
+
+    Exactly one status line is emitted, at INFO when the checkpoints are on
+    disk and at WARNING when they are not, because a limitation a user
+    discovers by losing work is not a stated limitation. (INFO rather than
+    print: a library consumer who never configured logging stays quiet, while
+    the server — which calls `basicConfig(INFO)` — always says it.)
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    path = checkpoint_path(workflows_root_dir)
+    saver = _open_sqlite_saver(path, "the default checkpointer") if path is not None else None
+    if saver is not None:
+        _log().info("approvals persist at %s", path)
+        return saver
+    _log().warning(
+        "approvals are in-memory and will NOT survive a restart%s",
+        f" ({CHECKPOINT_PATH_ENV}={IN_MEMORY_CHECKPOINT})" if path is None else "",
+    )
+    return InMemorySaver()
+
+
+def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback: Any) -> Any:
+    """The thread checkpointer a document asked for.
+
+    ``settings.checkpointer: "sqlite"`` opts a single workflow into its **own**
+    file, separate from the process default — threads survive a restart either
+    way now, but a document that names sqlite keeps the per-workflow database
+    it has always had. Anything else keeps `fallback`, which since ticket 05
+    is the durable process-wide saver rather than a per-process `InMemorySaver`.
+    """
+    choice = str((settings or {}).get("checkpointer") or "").strip().lower()
+    if choice != "sqlite":
         return fallback
+    root = Path(".dev")
+    saver = _open_sqlite_saver(
+        root / f"checkpoints-{slug or 'default'}.sqlite", "settings.checkpointer='sqlite'"
+    )
+    return saver if saver is not None else fallback

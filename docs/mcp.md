@@ -419,9 +419,11 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   a hosted child, or an agent bound to a package-local tool, resolves to
   nothing. Valid topology, real capability gap — it comes back as a `warning`,
   never silently.
-- **`run_workflow` is synchronous and unstreamed.** No token streaming, no
-  `interrupt()`/resume, so a `human.approval` node blocks rather than pausing.
-  Use the editor or `/api/runs/stream` for those.
+- **`run_workflow` is synchronous and unstreamed.** No token streaming, and no
+  resume *tool*. A `human.approval` node does now pause properly — the run
+  compiles against the same durable checkpointer the HTTP API uses — and
+  `run_workflow` returns an `error` naming the paused `thread_id` rather than a
+  blank answer. Continue it with `/api/runs/resume` or the editor.
 - **No rate limiting, quotas or audit log.** `run_workflow` in particular
   spends the deployer's model budget.
 - **Discovered `tool.*`/`function.*` node types are not enumerable.** They are

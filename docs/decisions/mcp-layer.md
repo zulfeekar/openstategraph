@@ -148,16 +148,22 @@ fix rather than an ImportError traceback.
   `streamable-http` to the public internet as-is. The MCP specification has an
   authorization story; adopting it is the first thing to do when this leaves a
   trusted network, and it is deliberately not faked here with a shared secret.
-- **Single worker, in-process state.** The memory `Store` and the
-  human-in-the-loop `InMemorySaver` are per-process, so a second worker cannot
-  see the first's. The same boundary `api/main.py` already draws. The stateless
-  compile loop is unaffected — it holds no state at all — so this constrains
-  `run_workflow` and hosted drafts only.
-- **`run_workflow` is synchronous and unstreamed.** No token streaming, no
-  `interrupt()`/resume over MCP. A workflow with a `human.approval` node will
-  block rather than pause-and-resume; use the editor or `/api/runs/stream` for
-  those. Making interrupts work over MCP needs a resume tool and a durable
-  checkpointer — both real work, neither speculatively built.
+- **Single worker, and the reason narrowed (ticket 05).** State is no longer
+  *in-process*: the checkpointer is a `SqliteSaver` on a file under the
+  workflows root, held by `WorkflowServices` and shared with the HTTP
+  transport, so a run paused here can be resumed there and both survive a
+  restart. What is still single-process is *concurrency*: `SqliteSaver` and
+  the sqlite-backed memory `Store` serialise with a per-instance
+  `threading.Lock`, which two OS processes do not share. So the ceiling stays
+  one worker until Postgres, for a smaller and more honest reason than before.
+  The stateless compile loop is unaffected — it holds no state at all.
+- **`run_workflow` is synchronous and unstreamed.** No token streaming, and no
+  resume *tool*. Since ticket 05 the run does compile with a checkpointer, so
+  a `human.approval` workflow genuinely pauses rather than failing to build —
+  and `run_workflow` reports the pause and names the durable `thread_id`
+  instead of returning a blank answer. Continuing it means the HTTP API's
+  `/api/runs/resume` or the editor. A resume tool here is the remaining work
+  (register PF-04); the durable checkpointer it was blocked on now exists.
 - **Compile is stateless, so it cannot resolve a document's children or its
   package.** A `workflow.subgraph` / `team.workflow` node naming a hosted slug,
   or an agent bound to a `tool.*` that lives in a package's `tools/` folder,
@@ -183,8 +189,9 @@ fix rather than an ImportError traceback.
 
 - The MCP layer leaves a trusted network — authentication stops being the
   proxy's job.
-- We want interrupts over MCP — needs a persisted checkpointer first, which is
-  the same prerequisite hosted multi-worker deployment has.
+- We want interrupts over MCP — the persisted checkpointer prerequisite is met
+  (ticket 05); what remains is a `resume_workflow` tool and a way for a client
+  to carry the `thread_id` between calls.
 - Ticket 02 lands generated port specs — the vocabulary tool should then be
   generated output rather than a read of a hand-maintained table.
 - We gain an MCP *client* (see `agent-plugins.md` §7). Being a server does not

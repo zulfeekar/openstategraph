@@ -8,9 +8,11 @@ with `Command(resume=...)`, instead of an LLM's own judgement).
 
 Requires a checkpointer (`WorkflowCompiler.build`'s `checkpointer` param):
 LangGraph raises at compile time for an `interrupt()`-containing graph with
-none. `InMemorySaver` is a real, honest limitation — fine for a single dev
-process, not for multi-worker production — recorded rather than papered
-over, the same way `capability_discovery.py`'s "no sandboxing" is.
+none. `InMemorySaver` here is a *test* choice — these cases are about the
+node's decide/dispatch behaviour, and an in-memory saver keeps them fast and
+isolated. It is no longer what the server runs: ticket 05 made the API's
+checkpointer durable by default, and `test_persisted_checkpointer.py` proves a
+pause resumes across a full teardown.
 """
 
 from __future__ import annotations

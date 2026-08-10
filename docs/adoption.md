@@ -95,8 +95,18 @@ built `dist/`, `backend/` and `workflows/`. **One container serves the editor,
 `http://localhost:8000` absolutely, so map that port as-is. `./workflows` is
 bind-mounted, so a workflow saved in the container lands in the repo.
 
-One worker, deliberately: the human-in-the-loop checkpointer is an in-process
-`InMemorySaver`. Scaling out needs a persisted checkpointer first.
+Approvals persist across restarts: the checkpointer defaults to
+`<workflows root>/.openstategraph/checkpoints.sqlite`, which is inside the
+bind-mounted `./workflows`, so it outlives the container. The startup log says
+which one it got (`approvals persist at …` or `approvals are in-memory and
+will NOT survive a restart`); `OPENSTATEGRAPH_CHECKPOINT_PATH` moves it, or
+`=memory` opts out.
+
+Still one worker, deliberately: `SqliteSaver` and `SqliteStore` are
+single-process by their own documentation (a per-instance `threading.Lock`,
+which two processes do not share). Two workers would race each other's writes
+with no coordination. Scaling out means passing a `PostgresSaver` and
+`PostgresStore` to `WorkflowServices` — the same two seams, nothing else.
 
 ### Upgrading — the honest part
 
@@ -257,7 +267,7 @@ constructor is worse than one that is honest about the line.
 | Collaborator | Parameter | Default when omitted | When you'd override |
 | --- | --- | --- | --- |
 | Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, else Ollama **cloud**) | a pre-built model object with your own retry, base URL, temperature or gateway |
-| Thread persistence | `checkpointer=` | the package's `settings.checkpointer` — sqlite, or an in-process saver | you own durability: a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart |
+| Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
 | Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
 | Functions | `functions=` | the package's own `functions/` | the same reasons, for `function.*` steps |

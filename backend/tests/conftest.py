@@ -17,8 +17,27 @@ from __future__ import annotations
 
 from typing import Callable
 
+import os
+
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
+
+# The suite opts OUT of the durable checkpointer — explicitly, the same way a
+# stateless deployment would, rather than through a private hook.
+#
+# Since ticket 05 the checkpointer defaults to a sqlite file under the
+# workflows root, and `api/main.py` ends with `app = create_app()` for
+# uvicorn's benefit — so merely *importing* a test module that imports it
+# would write `workflows/.openstategraph/checkpoints.sqlite` into this
+# checkout. That happens at collection time, before any fixture runs, which is
+# why this is a module-level statement in `conftest.py` (imported first) and
+# not an autouse fixture. A test suite must not leave files around.
+#
+# `setdefault`, so a developer who exports a real path still gets it, and the
+# tests that are *about* the default (`test_persisted_checkpointer.py`) repoint
+# or delete the variable through `monkeypatch` — which is what keeps the
+# default exercised rather than hidden.
+os.environ.setdefault("OPENSTATEGRAPH_CHECKPOINT_PATH", "memory")
 
 #: A predicate over the model's incoming context, and the reply to give.
 RouteRule = tuple[Callable[[str], bool], str]

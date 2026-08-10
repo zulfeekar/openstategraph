@@ -9,6 +9,42 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **A paused approval now survives a restart, and persists by default.** The
+  human-in-the-loop checkpointer was one module-level `InMemorySaver` in
+  `api/main.py`; a `human.approval` pause therefore died with the process, and
+  the dev stack restarts on every file save. It is now
+  `WorkflowServices.checkpointer` — the same assembly point that already owns
+  the store and the registries, so HTTP, MCP and `load_workflow` share one
+  saver instead of three wirings — defaulting to a SQLite database at
+  `<workflows root>/.openstategraph/checkpoints.sqlite`. Startup states which
+  one it got, in one line: `approvals persist at …`, or `approvals are
+  in-memory and will NOT survive a restart`. Set
+  `OPENSTATEGRAPH_CHECKPOINT_PATH` to move the file, or to `memory` to opt out
+  of durability deliberately. `load_workflow(checkpointer=…)` still outranks
+  everything, and a package's own `settings.checkpointer: "sqlite"` still takes
+  its per-workflow file. Listed as breaking because threads are now persistent
+  identities: a client reusing a fixed literal `thread_id` resumes the old
+  conversation rather than starting a new one.
+- **`langgraph-checkpoint-sqlite` is part of the `[server]` extra.** The
+  server's default is now sqlite, and a default that needs an undeclared extra
+  is a default that degrades for everybody. It did *not* move into the core
+  four — it drags `aiosqlite` and the `sqlite-vec` binary wheel, which a
+  `load_workflow` consumer who never pauses a run should not pay for. An
+  install missing it still degrades **loudly**, naming the install line.
+- **The MCP `run_workflow` tool compiles with that checkpointer too.** A
+  document containing `human.approval` used to raise at compile time and return
+  a stack-trace-shaped error; it now pauses properly and the tool reports the
+  pause with the durable `thread_id` to resume through `/api/runs/resume`. A
+  resume *tool* over MCP is still not built.
+- **The worker ceiling is still one — for a different, smaller reason.**
+  Checked against the package rather than assumed: `SqliteSaver` documents
+  itself as *"meant for lightweight, synchronous use cases (demos and small
+  projects) and does not scale to multiple threads"*, and its only write
+  serialisation is a `threading.Lock` held per instance, which two OS processes
+  do not share. So a second worker can now *see* the first's threads but would
+  race its writes with no coordination. `Dockerfile`, `scripts/dev.sh`,
+  `README.md`, `docs/adoption.md`, `docs/decisions/memory-architecture.md` and
+  `docs/decisions/mcp-layer.md` all said "in-process state"; all now say this.
 - **The distribution is now `openstategraph`** (was `openstategraph-backend`).
   The import package is unchanged, and the old name was never on PyPI. A
   checkout installs with `pip install -e "backend[all,dev]"` — see below for

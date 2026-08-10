@@ -191,12 +191,22 @@ calls `http://localhost:8000` absolutely, so map that port as-is.
 `./workflows` is bind-mounted, so workflows saved in the container land in the
 repo.
 
-**One worker, deliberately.** The human-in-the-loop checkpointer in
-`api/main.py` is an in-process `InMemorySaver`, so a second worker gets a
-second, empty copy and a `/api/runs/resume` routed to it cannot find its run.
-Scaling out needs a persisted checkpointer (SQLite for one host, Postgres
-beyond) wired into `main.py` first. `uvicorn --reload` is single-process for
-its own reasons too — it and `--workers N` are mutually exclusive.
+**Approvals persist by default.** The human-in-the-loop checkpointer is a
+SQLite saver on `<workflows root>/.openstategraph/checkpoints.sqlite`, so a
+`human.approval` pause survives a restart — including the restart `--reload`
+performs every time you save a file. The server logs which one it got at
+startup: `approvals persist at …`, or `approvals are in-memory and will NOT
+survive a restart`. Set `OPENSTATEGRAPH_CHECKPOINT_PATH` to move the file, or
+to `memory` to opt out of durability on purpose.
+
+**Still one worker, deliberately.** Durability is fixed; concurrency is not.
+`SqliteSaver` documents itself as lightweight and single-process — its only
+serialisation is a `threading.Lock` per instance, which two OS processes do
+not share — and the long-term memory `SqliteStore` is the same. Two workers
+would race each other's writes silently. Raising the ceiling means
+`PostgresSaver` + `PostgresStore` passed to `WorkflowServices`; nothing else
+changes. `uvicorn --reload` is single-process for its own reasons too — it and
+`--workers N` are mutually exclusive.
 
 Rationale for each choice is commented inline in `Dockerfile`,
 `docker-compose.yml`, `start` and `scripts/dev.sh`.

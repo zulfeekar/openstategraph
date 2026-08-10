@@ -13,14 +13,19 @@
 #   1. `--reload` and `--workers N` are mutually exclusive. uvicorn's reloader
 #      is itself the supervising process, so passing both makes it warn and
 #      run a single worker anyway. Asking for more here would be theatre.
-#   2. Even without --reload, this app cannot run multi-worker today. The
-#      human-in-the-loop checkpointer in api/main.py is a module-level
-#      `InMemorySaver` — per-process state. A second worker gets a second,
-#      empty copy, so a /api/runs/resume that lands on the wrong worker cannot
-#      find the run it is resuming. Fixing that is not a flag: it needs a
-#      persisted checkpointer (SqliteSaver on a file for one host, Postgres
-#      beyond that) wired into main.py. The container CMD is single-worker for
-#      exactly this reason, and says so.
+#   2. Even without --reload, this app cannot run multi-worker today — but the
+#      reason changed with ticket 05 and is now smaller and precise. The HITL
+#      checkpointer is no longer a module-level InMemorySaver: it is a
+#      SqliteSaver on workflows/.openstategraph/checkpoints.sqlite, so a paused
+#      approval now survives this script's restart-on-every-file-save. What it
+#      does NOT survive is a second process: langgraph-checkpoint-sqlite's own
+#      SqliteSaver documents itself as "lightweight, synchronous ... does not
+#      scale to multiple threads", and its only concurrency control is a
+#      threading.Lock per instance — which two OS processes do not share. The
+#      long-term memory Store (OPENSTATEGRAPH_MEMORY_PATH -> SqliteStore) has
+#      exactly the same shape. Raising the ceiling means PostgresSaver +
+#      PostgresStore dropped into the same two seams; nothing else changes.
+#      The container CMD is single-worker for exactly this reason, and says so.
 #
 # Encapsulates the two incantations the README used to ask you to hand-type:
 # the backend's PYTHONPATH (the chinook path shim pytest.ini documents) and

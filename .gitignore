@@ -38,6 +38,11 @@ coverage/
 harness-loop-graph.pdf
 .claude/settings.local.json
 .dev/
+
+# Runtime state, not content: thread checkpoints (ticket 05) live beside the
+# workflow packages they are state about. The -wal/-shm siblings are sqlite's.
+.openstategraph/
+workflows/.openstategraph/
 test-results/
 playwright-report/
 

@@ -43,9 +43,14 @@ The containerised alternative is `./start` on its own: one origin, port 8000,
 serving the editor, `/chat` and the API together. Use it when you want the
 production shape rather than hot reload.
 
-> **One worker, deliberately.** The human-in-the-loop checkpointer is an
-> in-process `InMemorySaver`, so a second worker cannot resume another
-> worker's run. Scaling out needs a persisted checkpointer first.
+> **Approvals persist; still one worker.** The human-in-the-loop checkpointer
+> is a SQLite saver at `workflows/.openstategraph/checkpoints.sqlite`, so a
+> `human.approval` pause survives the restart `--reload` performs every time
+> you save a file. The backend log says which it got on startup — `approvals
+> persist at …`, or `approvals are in-memory and will NOT survive a restart`
+> (set `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` to choose the latter). The
+> worker count stays 1: `SqliteSaver` is documented single-process, so two
+> workers would race each other's writes. Scaling out means Postgres.
 
 The editor opens on a seeded demo that runs with **no credentials at all**:
 the canvas preview's default model is `Mock · Offline`, a deterministic

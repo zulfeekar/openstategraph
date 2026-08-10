@@ -37,21 +37,13 @@ logger = logging.getLogger(__name__)
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.
 ALLOWED_ORIGINS = ["http://localhost:5273", "http://127.0.0.1:5273"]
 
-#: Human-in-the-loop's prerequisite: `interrupt()` requires the compiled
-#: graph to have a checkpointer, or LangGraph raises at compile time. One
-#: process-lifetime, in-memory instance, shared by every `/api/runs/stream`
-#: and `/api/runs/resume` call so a resume can find the run it is
-#: continuing. A real, stated limitation, not glossed over: this does not
-#: survive a process restart and does not work across multiple workers —
-#: the same "local dev tool, not hosted" boundary `capability_discovery.py`
-#: already draws for its own lack of sandboxing. A production deployment
-#: needs a real persisted checkpointer (Postgres), which is ticket 10's own
-#: already-named, still-open gap.
-from langgraph.checkpoint.memory import InMemorySaver
-
-_HUMAN_IN_THE_LOOP_CHECKPOINTER = InMemorySaver()
-
-
+# Human-in-the-loop's prerequisite — `interrupt()` requires the compiled graph
+# to have a checkpointer, or LangGraph raises at compile time — used to be a
+# module-level `InMemorySaver` right here. It is gone (ticket 05): the saver
+# lives on `WorkflowServices` like every other shared collaborator, so HTTP,
+# MCP and `load_workflow` reach the same one, a test can scope it, and a
+# paused approval outlives the process that paused it. `create_app` resolves
+# it at startup and logs where it landed.
 from openstategraph.api.model_resolution import (  # noqa: E402, F401  (re-exported for tests)
     OLLAMA_CLOUD_MODEL,
     GraphFactory,
@@ -126,7 +118,15 @@ def create_app(
 
     from openstategraph.memory import checkpointer_for
 
+    # Resolved at startup, not on the first approval: the one line it logs
+    # ("approvals persist at X" / "approvals are in-memory and will NOT survive
+    # a restart") has to reach the operator *before* anyone can lose work.
+    hitl_checkpointer = services.checkpointer
+
     app = FastAPI(title="OpenStateGraph runtime", version="0.1.0")
+    #: The assembly point, reachable for ops and tests. Not a second wiring
+    #: path — every endpoint below still goes through the local names above.
+    app.state.services = services
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -625,7 +625,7 @@ def create_app(
                 RunState,
                 runtime.factory(document),
                 checkpointer=checkpointer_for(
-                    document.get("settings"), request.workflow_slug, _HUMAN_IN_THE_LOOP_CHECKPOINTER
+                    document.get("settings"), request.workflow_slug, hitl_checkpointer
                 ),
                 store=memory_store,
             )
@@ -678,7 +678,12 @@ def create_app(
 
         Requires the *same* `thread_id` the original run's `interrupt` event
         carried — this is what tells the shared checkpointer
-        (`_HUMAN_IN_THE_LOOP_CHECKPOINTER`) which paused run to continue.
+        (`WorkflowServices.checkpointer`) which paused run to continue. Since
+        ticket 05 that saver is durable by default, so the thread survives the
+        restart the dev stack performs on every file save; `thread_id` is
+        therefore a *persistent* identity, and a client that reuses a fixed
+        one across conversations will resume the old one rather than start a
+        new one.
         """
         from openstategraph.compile.node_runtime import RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
@@ -702,7 +707,7 @@ def create_app(
                 RunState,
                 runtime.factory(document),
                 checkpointer=checkpointer_for(
-                    document.get("settings"), request.workflow_slug, _HUMAN_IN_THE_LOOP_CHECKPOINTER
+                    document.get("settings"), request.workflow_slug, hitl_checkpointer
                 ),
                 store=memory_store,
             )

@@ -78,7 +78,18 @@ sqlite = [
     "langgraph-checkpoint-sqlite>=3.1",
 ]
 # The editor's HTTP API (`openstategraph.api.main`) — never on the consumer path.
+#
+# It depends on `[sqlite]` on purpose (ticket 05). The server's checkpointer
+# now defaults to a sqlite file, because a `human.approval` pause that dies on
+# restart is not a 1.0-shaped feature — and a default that needs an extra
+# nobody was told to install is a default that degrades for everyone. The
+# alternative, moving sqlite into the core four, was rejected: it drags
+# aiosqlite and the sqlite-vec binary wheel onto every `load_workflow`
+# consumer, most of whom never pause a run. So the cost lands on the extra
+# whose behaviour changed. A hand-rolled install without it still degrades
+# LOUDLY, never silently — `memory._open_sqlite_saver` names this line.
 server = [
+    "openstategraph[sqlite]",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",

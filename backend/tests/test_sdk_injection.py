@@ -305,8 +305,13 @@ class TestTheAssemblyPointStaysSingular:
             middleware={"summarization": mw},
         )
 
+        # `checkpointer` joined the set in ticket 05: it used to be built
+        # inside `load_workflow` beside the services object, which is exactly
+        # the second wiring path this test exists to forbid. None here means
+        # "this caller did not pass one" — the services default then applies.
         assert seen == {
             "store": store,
+            "checkpointer": None,
             "tools": {"tool.demo-echo": tool},
             "functions": {"function.shout": fn},
             "middleware": {"summarization": mw},

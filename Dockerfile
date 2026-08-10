@@ -111,11 +111,24 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=4).status==200 else 1)"
 
 # ONE worker, on purpose — not a placeholder to be tuned up later.
-# api/main.py holds the human-in-the-loop checkpointer as a module-level
-# InMemorySaver (and the workflow/session state alongside it). That state lives
-# in the process, so a second worker gets a second, empty copy and a
-# /api/runs/resume load-balanced to the wrong worker cannot find the run it is
-# resuming. Scaling past one worker is not a flag flip: it needs a persisted
-# checkpointer (langgraph.checkpoint.sqlite.SqliteSaver against a file on a
-# volume for a single host, Postgres for more than one) wired into main.py.
+#
+# Ticket 05 fixed the durability half: the human-in-the-loop checkpointer is no
+# longer a module-level InMemorySaver. It is a SqliteSaver on
+# <workflows root>/.openstategraph/checkpoints.sqlite (WorkflowServices owns
+# it; OPENSTATEGRAPH_CHECKPOINT_PATH moves it), so a paused approval survives a
+# container restart PROVIDED the workflows directory is a volume — the same
+# bind mount docker-compose already needs for the editor to save workflows.
+# The container logs which one it got at startup: "approvals persist at X", or
+# "approvals are in-memory and will NOT survive a restart".
+#
+# It did NOT fix the concurrency half, and the honest ceiling is still one.
+# langgraph-checkpoint-sqlite's SqliteSaver documents itself as "meant for
+# lightweight, synchronous use cases (demos and small projects) and does not
+# scale to multiple threads"; its only serialisation is a threading.Lock held
+# per instance, which two OS processes do not share. Same story for the
+# long-term memory SqliteStore. Two workers would not lose the thread any more
+# — both can read the file — but they would race each other's writes with no
+# coordination, which is a worse failure than the one we just fixed because it
+# is silent. Scaling past one worker means PostgresSaver + PostgresStore
+# dropped into those same two seams (WorkflowServices takes both by argument).
 CMD ["uvicorn", "openstategraph.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

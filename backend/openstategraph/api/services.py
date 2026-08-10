@@ -50,6 +50,7 @@ class WorkflowServices:
         workflows_root: Any = None,
         *,
         store: Any = None,
+        checkpointer: Any = None,
         tools: dict[str, Any] | None = None,
         functions: dict[str, Any] | None = None,
         middleware: dict[str, Any] | None = None,
@@ -65,11 +66,34 @@ class WorkflowServices:
         #: unreachable — an `InMemoryStore` that looks like it works and loses
         #: every fact on restart.
         self.memory_store = store if store is not None else build_store()
+        #: Thread checkpoints — what makes a `human.approval` pause resumable
+        #: (ticket 05). It lives here, beside its sibling the memory Store,
+        #: because this is the assembly point every transport already shares:
+        #: it used to be a module-level `InMemorySaver` in `api/main.py`, which
+        #: MCP and `load_workflow` could not reach and no test could scope, and
+        #: which lost every paused approval on restart. Resolved lazily and
+        #: cached (see the property) so constructing services never opens a
+        #: file a caller was about to replace.
+        self._checkpointer = checkpointer
         # Copied, not aliased: a caller's dict must not become live state that
         # a later mutation of theirs changes mid-run.
         self._injected_tools = dict(tools or {})
         self._injected_functions = dict(functions or {})
         self._injected_middleware = dict(middleware or {})
+
+    @property
+    def checkpointer(self) -> Any:
+        """The one saver every transport compiles against, built on first ask.
+
+        Durable by default — `build_checkpointer` puts it under this services
+        object's own workflows root, and says so in one log line. A caller who
+        passed `checkpointer=` owns durability instead, and nothing is opened.
+        """
+        if self._checkpointer is None:
+            from openstategraph.memory import build_checkpointer
+
+            self._checkpointer = build_checkpointer(self.store.root)
+        return self._checkpointer
 
     def tool_registry_for(
         self,

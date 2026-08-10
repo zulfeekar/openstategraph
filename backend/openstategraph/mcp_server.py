@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -629,6 +630,7 @@ class WorkflowRuns:
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
         from openstategraph.compile.node_runtime import RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.memory import checkpointer_for
 
         if slug is None and document is None:
             return {"error": "Pass either a saved `slug` or an inline `document`."}
@@ -656,16 +658,43 @@ class WorkflowRuns:
         plan = compiler.plan(resolved)
         runtime = self._services.runtime_for(slug, resolved, chat_model)
 
+        # Same checkpointer as HTTP and `load_workflow`, from the same
+        # assembly point (ticket 05). Before it, this call site built with
+        # none, so a document containing `human.approval` raised at compile
+        # time and the client got a stack-trace-shaped error. It now pauses
+        # properly and is reported as paused — the resume *tool* is still not
+        # built (register PF-04), so the honest answer is to say the run is
+        # waiting and name the thread, not to pretend it finished.
+        thread_id = f"mcp-{uuid.uuid4().hex}"
         try:
             graph = compiler.build(
-                resolved, RunState, runtime.factory(resolved), store=self._services.memory_store
+                resolved,
+                RunState,
+                runtime.factory(resolved),
+                checkpointer=checkpointer_for(
+                    resolved.get("settings"), slug, self._services.checkpointer
+                ),
+                store=self._services.memory_store,
             )
             final = graph.invoke(
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
-                {"recursion_limit": limit},
+                {"recursion_limit": limit, "configurable": {"thread_id": thread_id}},
             )
         except Exception as exc:  # noqa: BLE001 — errors are data to the client
             return {"error": f"{type(exc).__name__}: {exc}", "findings": []}
+
+        if "__interrupt__" in final:
+            return {
+                "error": (
+                    "The run paused at a human-in-the-loop node and this server has no "
+                    f"resume tool. The pause is durable on thread {thread_id!r} — resume "
+                    "it through the HTTP API's /api/runs/resume, or run the workflow "
+                    "without an approval node."
+                ),
+                "findings": [
+                    str(getattr(i, "value", i)) for i in (final.get("__interrupt__") or [])
+                ],
+            }
 
         from openstategraph.api.registries import runtime_warnings
 

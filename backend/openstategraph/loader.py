@@ -261,10 +261,14 @@ def load_workflow(
     (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, else Ollama
     **cloud**). A node that names its own model still overrides all of this.
 
-    `checkpointer` is optional. By default the package's own
-    `settings.checkpointer` decides (sqlite, or an in-process saver), which is
-    what makes `human.approval` nodes able to pause and `ask(thread_id=...)`
-    able to continue. Pass your own — a Postgres saver, say — to own durability.
+    `checkpointer` is optional, and durable by default. Threads land in
+    `<workflows root>/.openstategraph/checkpoints.sqlite` — the workflows root
+    being this package's parent — so a `human.approval` pause and an
+    `ask(thread_id=...)` conversation both outlive the process. A package's own
+    `settings.checkpointer: "sqlite"` still takes its own per-workflow file;
+    `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default or, set to `memory`,
+    opts out of durability entirely. Pass your own — a Postgres saver, say —
+    to own durability, which outranks all of the above.
 
     `store` is the long-term memory `Store` — the collaborator the prebuilt
     `save_memory`/`search_memory` tools read and write, namespaced per user.
@@ -342,6 +346,7 @@ def load_workflow(
     services = WorkflowServices(
         directory.parent,
         store=store,
+        checkpointer=checkpointer,
         tools=tools,
         functions=functions,
         middleware=middleware,
@@ -384,9 +389,13 @@ def load_workflow(
     )
 
     if checkpointer is None:
-        from langgraph.checkpoint.memory import InMemorySaver
-
-        checkpointer = checkpointer_for(document.get("settings"), slug, InMemorySaver())
+        # The same seam the HTTP and MCP transports use, and the same default:
+        # `services.checkpointer` is durable (a sqlite file under the workflows
+        # root) unless the environment opts out. Before ticket 05 this was a
+        # fresh `InMemorySaver` per call, which meant a `human.approval` pause
+        # could not be resumed by a second process — or even by a second
+        # `load_workflow` in the same one.
+        checkpointer = checkpointer_for(document.get("settings"), slug, services.checkpointer)
 
     graph = compiler.build(
         document,

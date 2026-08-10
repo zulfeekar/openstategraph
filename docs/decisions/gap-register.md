@@ -22,12 +22,13 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**47 gaps · 5 blocks-1.0 · 14 should-precede-launch · 28 fine-to-carry.**
-(RC-01 closed 2026-08-10 by ticket 04 of `.scratch/docs-and-gaps/`.)
+**46 gaps · 4 blocks-1.0 · 14 should-precede-launch · 28 fine-to-carry.**
+(RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
+`.scratch/docs-and-gaps/`.)
 
 | Theme | Total | blocks 1.0 | precede launch | carry |
 | --- | --- | --- | --- | --- |
-| A. Runtime correctness & capability | 15 | 1 | 4 | 10 |
+| A. Runtime correctness & capability | 14 | 0 | 4 | 10 |
 | B. Packaging & release | 10 | 4 | 2 | 4 |
 | C. UX | 10 | 0 | 4 | 6 |
 | D. Docs | 4 | 0 | 2 | 2 |
@@ -45,30 +46,27 @@ ever externally visible.
 
 ### Blocks 1.0
 
-**RC-02 — The API server's human-in-the-loop checkpointer is `InMemorySaver`.**
-An approval pause does not survive a restart and is invisible to a second
-worker. Evidence: `backend/openstategraph/api/main.py:40-52` — *"needs a real
-persisted checkpointer (Postgres), which is ticket 10's own already-named,
-still-open gap"*; `backend/tests/test_human_approval.py:11` — *"`InMemorySaver`
-is a real, honest limitation — fine for a single dev process, not for
-multi-worker production — recorded rather than papered"*. **Size M** (the seam
-exists; `memory.py` already swaps a sqlite saver per workflow). **Risk:** a
-customer answering an approval after a deploy gets a 4xx and loses the thread.
-**Verdict: blocks 1.0** — HITL is a shipped, documented feature; a feature that
-loses state on restart is not 1.0-shaped.
+*(None. RC-02 was the last one in this theme — closed 2026-08-10, see
+"Verified closed".)*
 
 ### Should precede public launch
 
-**RC-03 — Single worker, in-process state.** The memory `Store` and the HITL
-saver are per-process, so `uvicorn --workers 2` gives two disagreeing servers.
-Evidence: `docs/decisions/memory-architecture.md` "Durability" — *"Both share
-the **single-worker constraint**: one uvicorn worker, one shared connection.
-Multi-process hosting means PostgresStore/PostgresSaver dropped into the same
-seams — nothing else changes"*; `docs/decisions/mcp-layer.md` §5; commit
-`61a8551` (*"Single worker documented as a correctness constraint"*). **Size
-M**, and the same work as RC-02. **Risk:** the first person to scale
-horizontally gets nondeterministic memory. **Verdict: should precede public
-launch** — documented honestly today, which is why it is not a 1.0 blocker.
+**RC-03 — Single worker, because sqlite is single-process.** Narrowed by ticket
+05 and **no longer about in-process state**: the checkpointer is a `SqliteSaver`
+on a file every process on the host can open, so a second worker can now see
+the first's threads. What remains is write coordination — `SqliteSaver`'s only
+serialisation is a `threading.Lock` held per instance (evidence:
+`langgraph-checkpoint-sqlite` 3.1.1 `SqliteSaver`, *"meant for lightweight,
+synchronous use cases (demos and small projects) and does not scale to multiple
+threads"*; LangChain's checkpointer-library page rates it *"ideal for
+experimentation and local workflows"*), and the sqlite memory `Store` is the
+same. Documented in `docs/decisions/memory-architecture.md` "The worker ceiling
+is still one, for a smaller reason", `Dockerfile`, `scripts/dev.sh`, `README.md`
+and `docs/adoption.md`. **Size M** — `PostgresSaver` + `PostgresStore` passed to
+`WorkflowServices`, which already takes both by argument. **Risk:** the first
+person to scale horizontally gets uncoordinated concurrent writes, silently.
+**Verdict: should precede public launch** — documented honestly, and the
+`--workers 1` in `Dockerfile` is what keeps it hypothetical.
 
 **RC-04 — A tool that overrides `run` instead of `_execute` is discovered as
 nothing, silently.** `BaseTool._execute` is `@abstractmethod`
@@ -512,11 +510,12 @@ plan, design barrel dead exports)."* **Size S.** **Verdict: fine to carry** —
 and it should ride along with RC-07, which rewrites those call sites anyway.
 
 **PF-04 — `run_workflow` over MCP is synchronous and unstreamed.** Evidence:
-`docs/decisions/mcp-layer.md` §5 — *"No token streaming, no `interrupt()`/resume
-over MCP. A workflow with a `human.approval` node will block rather than
-pause-and-resume… Making interrupts work over MCP needs a resume tool and a
-durable checkpointer — both real work, neither speculatively built."* Blocked
-by RC-02. **Size M.** **Verdict: fine to carry.**
+`docs/decisions/mcp-layer.md` §5. Half-unblocked by ticket 05: the durable
+checkpointer it waited on exists and is now wired into the MCP run path, so a
+`human.approval` document compiles and genuinely pauses instead of failing to
+build, and `run_workflow` reports the pause with its durable `thread_id` rather
+than a blank answer. What is left is a `resume_workflow` **tool** and token
+streaming. **Size S** now, not M. **Verdict: fine to carry.**
 
 ---
 
@@ -552,6 +551,20 @@ externally visible. Listed so nobody re-adds them from an old session report.
    as a limitation of `get_node_vocabulary`. The mirror had drifted: it held 10
    of the 38 node types the editor registers, and `workflow.subgraph` /
    `team.workflow` were advertised over MCP with zero ports.
+8. **RC-02 — the API's human-in-the-loop checkpointer was an `InMemorySaver`.**
+   Closed 2026-08-10 by ticket 05. The module-level saver in `api/main.py` is
+   gone; `WorkflowServices.checkpointer` is the one seam, shared by HTTP, MCP
+   and `load_workflow`, and it defaults to
+   `<workflows root>/.openstategraph/checkpoints.sqlite` with one startup line
+   stating which it got (`memory.build_checkpointer`).
+   `backend/tests/test_persisted_checkpointer.py` proves the case that matters
+   — pause, destroy the services object, rebuild against the same path, resume
+   the same thread — plus a negative control showing the in-memory opt-out
+   discards the human's answer and re-asks. `langgraph-checkpoint-sqlite` moved
+   onto the `[server]` extra, since the server's default now needs it; a
+   missing install still degrades loudly. Externally visible: the limitation
+   was stated in `README.md`, `docs/adoption.md`, `Dockerfile` and
+   `scripts/dev.sh`, all now corrected.
 
 ---
 
