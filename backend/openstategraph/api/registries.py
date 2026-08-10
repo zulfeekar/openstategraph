@@ -20,6 +20,85 @@ _document_of = normalize_document
 
 
 
+#: The part of the tool registry that cannot change while the process runs:
+#: the bundled tools, and the tools installed distributions contribute.
+#:
+#: Cached because it was being rebuilt on **every** run, stream and subgraph
+#: child, and `importlib.metadata.entry_points()` re-walks every installed
+#: distribution's metadata each time it is called. Measured on this checkout:
+#: `WorkflowServices.runtime_for` cost 14.8 ms steady-state, 12.2 ms of it in
+#: that one scan — 82% of the call spent rediscovering an answer that only a
+#: `pip install` can change, and a `pip install` means a restart (the dev
+#: server reloads on any file save; a deployment redeploys).
+#:
+#: It lives here rather than in `openstategraph.extensions` on purpose: this
+#: module owns *assembling the layers*, so caching its own immutable prefix is
+#: its own business, and `extensions` stays a plain, side-effect-free reader of
+#: the environment that a test can call directly and trust.
+_PROCESS_LAYER: tuple[dict[str, Any], Any] | None = None
+
+
+def reset_process_tool_layer() -> None:
+    """Drop the cache above. For tests that fake installed entry points.
+
+    `conftest.py` calls this between every test, so a fake plugin installed by
+    one test can never survive into the next — the failure mode a
+    process-lifetime cache introduces if nobody names it.
+    """
+    global _PROCESS_LAYER
+    _PROCESS_LAYER = None
+
+
+def _process_tool_layer() -> tuple[dict[str, Any], Any]:
+    """`(built-in tools, Discovered plugin tools)` — built at most once."""
+    global _PROCESS_LAYER
+    if _PROCESS_LAYER is not None:
+        return _PROCESS_LAYER
+
+    from openstategraph.compile.node_runtime import chinook_tool_registry
+    from openstategraph.extensions import entry_point_tools
+    from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
+    from openstategraph.prebuilt_email import EMAIL_TOOLS
+    from openstategraph.prebuilt_platform import PLATFORM_TOOLS
+    from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
+    from openstategraph.prebuilt_web import WEB_TOOLS
+
+    builtin: dict[str, Any] = {}
+    try:
+        builtin.update(chinook_tool_registry())
+    except Exception:
+        # The bundled Chinook tools live in `workflows/chinook-nl-to-sql/tools`,
+        # which is only importable inside *this* checkout (pytest.ini puts that
+        # directory on the path). Outside it — a consumer running their own
+        # package through `load_workflow` — the import raises, and it used to
+        # take the whole registry down before a single one of *their* tools was
+        # discovered. Debug, not warning: a demo fixture being absent is normal
+        # elsewhere, and a document that actually binds a chinook tool still
+        # reports it loudly through `unresolved_tools`.
+        logger.debug("Bundled Chinook tools unavailable in this environment", exc_info=True)
+    for family in (
+        # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
+        # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
+        SQL_EXPLORER_TOOLS,
+        # Read-only platform introspection (ticket 67, user spec: "no write,
+        # everything else") — list/describe workflows, jailed ls/read/grep.
+        PLATFORM_TOOLS,
+        # The open web, read-only (search + SSRF-guarded fetch) — the root
+        # assistant's generic-chat requirement (ticket 67 refinement).
+        WEB_TOOLS,
+        # The compiler as a tool (ticket 69): read-only compile-checking, the
+        # Architect's revise-loop evidence.
+        ARCHITECT_TOOLS,
+        # Report delivery (full-sweep capability test): SMTP when configured,
+        # loud .eml dry-run otherwise. Recipient is node config, never a model arg.
+        EMAIL_TOOLS,
+    ):
+        builtin.update({tool.node_type: tool for tool in family})
+
+    _PROCESS_LAYER = (builtin, entry_point_tools())
+    return _PROCESS_LAYER
+
+
 def build_tool_registry(
     workflow_store: Any,
     slug: str | None,
@@ -55,47 +134,13 @@ def build_tool_registry(
     `CompiledWorkflow.warnings` and the CLI.
     """
     from openstategraph.api.capability_discovery import discover_tool_registry
-    from openstategraph.compile.node_runtime import chinook_tool_registry
-
-    from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
-
-    registry: dict[str, Any] = {}
-    try:
-        registry.update(chinook_tool_registry())
-    except Exception:
-        # The bundled Chinook tools live in `workflows/chinook-nl-to-sql/tools`,
-        # which is only importable inside *this* checkout (pytest.ini puts that
-        # directory on the path). Outside it — a consumer running their own
-        # package through `load_workflow` — the import raises, and it used to
-        # take the whole registry down before a single one of *their* tools was
-        # discovered. Debug, not warning: a demo fixture being absent is normal
-        # elsewhere, and a document that actually binds a chinook tool still
-        # reports it loudly through `unresolved_tools`.
-        logger.debug("Bundled Chinook tools unavailable in this environment", exc_info=True)
-    # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
-    # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
-    registry.update({tool.node_type: tool for tool in SQL_EXPLORER_TOOLS})
-    from openstategraph.prebuilt_platform import PLATFORM_TOOLS
-
-    # Read-only platform introspection (ticket 67, user spec: "no write,
-    # everything else") — list/describe workflows, jailed ls/read/grep.
-    registry.update({tool.node_type: tool for tool in PLATFORM_TOOLS})
-    from openstategraph.prebuilt_web import WEB_TOOLS
-
-    # The open web, read-only (search + SSRF-guarded fetch) — the root
-    # assistant's generic-chat requirement (ticket 67 refinement).
-    registry.update({tool.node_type: tool for tool in WEB_TOOLS})
-    from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
-
-    # The compiler as a tool (ticket 69): read-only compile-checking, the
-    # Architect's revise-loop evidence.
-    registry.update({tool.node_type: tool for tool in ARCHITECT_TOOLS})
-    from openstategraph.prebuilt_email import EMAIL_TOOLS
-
-    # Report delivery (full-sweep capability test): SMTP when configured,
-    # loud .eml dry-run otherwise. Recipient is node config, never a model arg.
-    registry.update({tool.node_type: tool for tool in EMAIL_TOOLS})
     from openstategraph.prebuilt_knowledge import knowledge_lookup_for
+
+    builtin, discovered = _process_tool_layer()
+    # Copied, never handed out: the built-in layer is shared across every run
+    # in the process, and one caller's `registry[...] = ...` would otherwise
+    # become every later caller's tool.
+    registry: dict[str, Any] = dict(builtin)
 
     # The second brain (knowledge layer): registered unbound so the node type
     # always resolves, then re-bound below to the open workflow's own
@@ -108,10 +153,8 @@ def build_tool_registry(
 
     # Third party, layered over every built-in above and under the package's
     # own tools below. Jailed: a broken distribution contributes a warning,
-    # never an exception (`openstategraph.extensions`).
-    from openstategraph.extensions import entry_point_tools
-
-    discovered = entry_point_tools()
+    # never an exception (`openstategraph.extensions`). Resolved once per
+    # process — see `_process_tool_layer`.
     registry.update(discovered.values)
     if warnings is not None:
         warnings.extend(discovered.warnings)

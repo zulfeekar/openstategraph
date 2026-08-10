@@ -45,12 +45,14 @@ class KnowledgeLookupTool(BaseTool):
 
     def __init__(
         self,
-        package_dir: Path | None = None,
+        package_dir: Path | str | None = None,
         *,
         knowledge_dir: Path | str | None = None,
     ) -> None:
         self._package_dir = Path(package_dir) if package_dir else None
         self._knowledge_dir = Path(knowledge_dir) if knowledge_dir else None
+        #: `None` when nothing is bound; every read guards for it.
+        self._knowledge: PackageKnowledge | None
         if self._knowledge_dir is not None:
             self._knowledge = PackageKnowledge(knowledge_dir=self._knowledge_dir)
         elif self._package_dir is not None:

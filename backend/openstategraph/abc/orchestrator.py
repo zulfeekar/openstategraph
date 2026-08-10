@@ -45,7 +45,7 @@ def archetype_slug(text: str) -> str:
     return "".join(out).strip("-")
 
 
-def archetype_key(node: dict) -> str:
+def archetype_key(node: dict[str, Any]) -> str:
     """The dispatch key for one worker node — its title, slugified.
 
     Ticket 37's resolution verbatim: the label matches the worker node's

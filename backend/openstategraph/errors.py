@@ -70,9 +70,25 @@ class SchemaVersionError(DocumentError):
     """
 
 
+class MissingProviderKey(OpenStateGraphError, RuntimeError):
+    """A model names a provider whose credential is not set (ticket 03).
+
+    Raised in place of the vendor SDK's own error, which names *its*
+    environment variable and knows nothing about this project's `.env` or
+    `.env.example` — so an adopter had to work out for themselves that the two
+    were the same thing. The message carries the exact fix, built by
+    `providers.ProviderSpec.missing_key_message`.
+
+    Deliberately loud rather than a fallback to a working provider: silently
+    answering with a different model than the one asked for is the failure mode
+    that costs an afternoon, because the run *succeeds*.
+    """
+
+
 __all__ = [
     "DocumentError",
     "InvalidPackageName",
+    "MissingProviderKey",
     "OpenStateGraphError",
     "PackageNotFound",
     "SchemaVersionError",

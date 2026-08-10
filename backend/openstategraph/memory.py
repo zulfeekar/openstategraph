@@ -341,6 +341,37 @@ def build_checkpointer(workflows_root_dir: Any = None) -> Any:
     return InMemorySaver()
 
 
+def close_resource(resource: Any) -> None:
+    """Release the OS handle behind a saver or a store. Safe to call twice.
+
+    This lives here because this module is what opened the connection, and
+    because the knowledge is not obvious: neither langgraph's `SqliteSaver`
+    nor its `SqliteStore` defines `close()` or `__exit__`, so there is no
+    library-blessed way to release the handle — both simply hold the
+    `sqlite3.Connection` we handed their constructor as `.conn`. An
+    `InMemorySaver`/`InMemoryStore` has no `.conn` at all and correctly does
+    nothing here.
+
+    `SqliteStore` also runs a TTL sweeper thread when one is configured; its
+    `stop_ttl_sweeper` is called first where present, because closing the
+    connection out from under a live sweeper is how a background thread
+    raises into a log nobody is reading.
+    """
+    stop = getattr(resource, "stop_ttl_sweeper", None)
+    if callable(stop):
+        try:
+            stop()
+        except Exception:  # pragma: no cover - defensive, thread-timing dependent
+            _log().debug("could not stop the store's TTL sweeper", exc_info=True)
+    conn = getattr(resource, "conn", None)
+    if conn is None:
+        return
+    try:
+        conn.close()
+    except Exception:  # pragma: no cover - already-closed or foreign connection
+        _log().debug("could not close %r", resource, exc_info=True)
+
+
 def checkpointer_for(settings: dict[str, Any] | None, slug: str | None, fallback: Any) -> Any:
     """The thread checkpointer a document asked for.
 

@@ -16,11 +16,13 @@ Guard rails, structural as always:
 from __future__ import annotations
 
 import html
+import ssl
 import ipaddress
 import re
 import socket
 import urllib.parse
 import urllib.request
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -32,9 +34,7 @@ MAX_FETCH_CHARS = 8_000
 MAX_RESULTS = 6
 
 
-def _ssl_context():
-    import ssl
-
+def _ssl_context() -> ssl.SSLContext:
     try:
         import certifi
 
@@ -68,7 +68,9 @@ class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
     (found in self-review, not hypothetically rare: metadata-service
     redirects are the classic SSRF escalation)."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> Any:
         _validate_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -88,7 +90,8 @@ def _get(url: str) -> str:
     )
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with opener.open(request, timeout=FETCH_TIMEOUT) as resp:
-        return resp.read(600_000).decode("utf-8", errors="replace")
+        body: str = resp.read(600_000).decode("utf-8", errors="replace")
+    return body
 
 
 def _strip_html(raw: str) -> str:
@@ -115,7 +118,7 @@ class WebSearchTool(BaseTool):
     Args = SearchArgs
 
     #: Injectable for offline tests.
-    def __init__(self, fetcher=None) -> None:
+    def __init__(self, fetcher: Callable[[str], str] | None = None) -> None:
         self._fetch = fetcher or _get
 
     def _execute(self, args: BaseModel) -> ToolResult:
@@ -164,7 +167,7 @@ class WebFetchTool(BaseTool):
     )
     Args = FetchArgs
 
-    def __init__(self, fetcher=None) -> None:
+    def __init__(self, fetcher: Callable[[str], str] | None = None) -> None:
         self._fetch = fetcher or _get
 
     def _execute(self, args: BaseModel) -> ToolResult:

@@ -25,6 +25,7 @@ crashes over a missing wheel.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
@@ -104,9 +105,16 @@ class BaseEngineAdapter(ABC):
 # ---------------------------------------------------------------------------
 
 
-def _sqlite_connect(connection_ref: str) -> sqlite3.Connection:
+def _sqlite_connect(connection_ref: str) -> closing[sqlite3.Connection]:
+    """A read-only connection that the `with` block actually CLOSES.
+
+    `contextlib.closing`, not the bare connection: sqlite3's own context
+    manager is a *transaction* manager — it commits or rolls back and leaves
+    the descriptor open. Every caller here reads and exits, so what they want
+    from `with` is a close, and they were not getting one.
+    """
     path = connection_ref.removeprefix("sqlite://")
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    return closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True))
 
 
 class SqliteEngineAdapter(BaseEngineAdapter):
@@ -203,7 +211,7 @@ class _DriverBackedAdapter(BaseEngineAdapter):
     @abstractmethod
     def _connect(self, connection_ref: str) -> Any: ...
 
-    def _query(self, connection_ref: str, sql: str, params: tuple[Any, ...] = ()) -> list[tuple]:
+    def _query(self, connection_ref: str, sql: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
         conn = self._connect(connection_ref)
         try:
             cursor = conn.cursor()

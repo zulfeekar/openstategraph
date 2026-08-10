@@ -116,12 +116,12 @@ def create_app(
     memory_store = services.memory_store
     runtime_for = services.runtime_for
 
-    from openstategraph.memory import checkpointer_for
-
     # Resolved at startup, not on the first approval: the one line it logs
     # ("approvals persist at X" / "approvals are in-memory and will NOT survive
-    # a restart") has to reach the operator *before* anyone can lose work.
-    hitl_checkpointer = services.checkpointer
+    # a restart") has to reach the operator *before* anyone can lose work. The
+    # value is not bound to a name — every endpoint now asks
+    # `services.checkpointer_for(...)`, which resolves this same property.
+    services.checkpointer
 
     app = FastAPI(title="OpenStateGraph runtime", version="0.1.0")
     #: The assembly point, reachable for ops and tests. Not a second wiring
@@ -624,8 +624,8 @@ def create_app(
                 document,
                 RunState,
                 runtime.factory(document),
-                checkpointer=checkpointer_for(
-                    document.get("settings"), request.workflow_slug, hitl_checkpointer
+                checkpointer=services.checkpointer_for(
+                    document.get("settings"), request.workflow_slug
                 ),
                 store=memory_store,
             )
@@ -706,8 +706,8 @@ def create_app(
                 document,
                 RunState,
                 runtime.factory(document),
-                checkpointer=checkpointer_for(
-                    document.get("settings"), request.workflow_slug, hitl_checkpointer
+                checkpointer=services.checkpointer_for(
+                    document.get("settings"), request.workflow_slug
                 ),
                 store=memory_store,
             )

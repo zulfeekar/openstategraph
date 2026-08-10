@@ -271,7 +271,10 @@ class Router(BaseRouter):
 
     def __init__(
         self,
-        branches: list[str],
+        # Same widened element type as `BaseRouter` — narrowing it to `list[str]`
+        # here was a Liskov violation the type checker caught: the base accepts
+        # `Branch` objects and dicts, and this subclass forwards them verbatim.
+        branches: "list[str | dict[str, Any] | Branch]",
         *,
         fallback: str | None = None,
         rules: str = "",

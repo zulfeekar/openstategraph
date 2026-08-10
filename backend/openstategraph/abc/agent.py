@@ -248,7 +248,10 @@ def agent_node_for_tier(tier: str) -> type[BaseAgentNode]:
     no tier string can supply, so reaching it is a wiring step (the compiler
     resolves the referenced function), never a lookup.
     """
-    return {"react": ReactAgentNode, "deep": DeepAgentNode}.get(tier, ReactAgentNode)
+    # Annotated because an inferred dict of two ABCs joins to `ABCMeta`, which
+    # is not the return type and would make every caller's `.tier` untyped.
+    tiers: dict[str, type[BaseAgentNode]] = {"react": ReactAgentNode, "deep": DeepAgentNode}
+    return tiers.get(tier, ReactAgentNode)
 
 
 __all__ = [

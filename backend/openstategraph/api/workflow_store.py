@@ -155,7 +155,8 @@ class WorkflowStore:
         payload = json.loads(path.read_text())
         # Documents saved before the envelope existed (or a hand-authored
         # workflow.json with no envelope at all) are the document itself.
-        return payload.get("document", payload)
+        document: dict[str, Any] = payload.get("document", payload)
+        return document
 
     def save(self, slug: str, *, name: str, document: dict[str, Any], saved_at: str) -> None:
         directory = self.directory_for(slug)

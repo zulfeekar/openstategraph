@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -77,7 +78,7 @@ class EmailSendTool(BaseTool):
         # the answer before the process even knows where it is running.
         self._outbox = outbox
 
-    def configure(self, data: dict) -> "EmailSendTool":
+    def configure(self, data: dict[str, Any]) -> "EmailSendTool":
         to = str(data.get("to") or "").strip()
         return EmailSendTool(to=to, outbox=self._outbox) if to else self
 

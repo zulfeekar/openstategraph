@@ -47,6 +47,7 @@ import json
 import os
 import re
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -242,8 +243,12 @@ def _parse(source: Path) -> Any:
         raise ConfigError(f"{source}: invalid YAML{where}: {problem}") from exc
 
 
-def _describe(error: dict[str, Any]) -> str:
-    """One pydantic error as a line naming the field path."""
+def _describe(error: Mapping[str, Any]) -> str:
+    """One pydantic error as a line naming the field path.
+
+    `Mapping`, not `dict`: pydantic hands back `ErrorDetails`, a TypedDict,
+    and only the read side is used here.
+    """
     location = ".".join(str(part) for part in error.get("loc", ())) or "(root)"
     message = error.get("msg", "is invalid")
     if error.get("type") == "extra_forbidden":

@@ -15,6 +15,7 @@ statement is spelled, and the database path must resolve inside
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -45,11 +46,18 @@ def _resolve_database(configured: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _connect(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+def _connect(path: Path) -> closing[sqlite3.Connection]:
+    """A read-only connection that the `with` block actually CLOSES.
+
+    `contextlib.closing`, not the bare connection: sqlite3's own context
+    manager is a *transaction* manager — it commits or rolls back and leaves
+    the descriptor open. Every caller here reads and exits, so what they want
+    from `with` is a close, and they were not getting one.
+    """
+    return closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True))
 
 
-def _markdown(headers: list[str], rows: list[tuple]) -> str:
+def _markdown(headers: list[str], rows: list[tuple[Any, ...]]) -> str:
     head = "| " + " | ".join(headers) + " |"
     rule = "| " + " | ".join("---" for _ in headers) + " |"
     body = ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]

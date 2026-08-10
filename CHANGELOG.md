@@ -9,6 +9,16 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **`load_workflow(checkpointer=…, store=…)` now declare the types they always
+  required.** `checkpointer` is `BaseCheckpointSaver[Any] | None` and `store`
+  is `BaseStore | None` instead of `Any`; `CompiledWorkflow.as_tool()` returns
+  `BaseTool` instead of `Any`. No runtime behaviour changed — the same objects
+  were always the only ones that worked — but a caller who was passing
+  something else now hears about it from their own type checker rather than
+  from a stack trace inside LangGraph. Both names are imported under
+  `TYPE_CHECKING`, so `import openstategraph` stays free of langgraph.
+  `model` stays `Any` on purpose: a provider string and a built model object
+  are both correct.
 - **A paused approval now survives a restart, and persists by default.** The
   human-in-the-loop checkpointer was one module-level `InMemorySaver` in
   `api/main.py`; a `human.approval` pause therefore died with the process, and
@@ -65,6 +75,57 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **A type gate for the backend: `mypy`, configured in `backend/pyproject.toml`
+  and run in CI beside `ruff`.** Chosen over pyright because the backend CI job
+  is Python-only and pyright needs Node.js in it. Nine strictness flags are on
+  and clean — including `disallow_untyped_defs`, `disallow_any_generics` and
+  `warn_return_any` — which is what makes the checks reach inside function
+  bodies at all. It caught 35 real typing defects on the first run, among them
+  a `list[str]` parameter on `Router` that narrowed its base's
+  `list[str | dict | Branch]` (a Liskov violation an adopter passing `Branch`
+  objects would have hit), and a table of four ABCs whose only inferred
+  supertype was `ABCMeta`, so reading `.PREAMBLE` off it was unchecked.
+  `warn_unused_ignores` is deliberately off: one ignore's necessity depends on
+  whether the `[mcp]` extra is installed, and a gate that passes in CI and
+  fails in a lean checkout is worse than the ignore it polices.
+- **`load_workflow` and `CompiledWorkflow` are context managers**, and
+  `CompiledWorkflow.close()` releases the sqlite handles the load opened. A
+  script that loads one workflow and exits never needed it; a service that
+  loads them on demand did.
+- **The provider set is open: `openstategraph.providers` + the
+  `openstategraph.providers` entry point group.** Adding a vendor was three
+  literal lists that had to be edited together and never were — an
+  `if os.getenv(...)` chain in `resolve_model` (so a fourth vendor could never
+  be the default), a four-name `ACCEPTED_CREDENTIAL_KEYS` frozenset (so its key
+  was *silently dropped* from a run request), and a five-prefix
+  `PROVIDER_EXTRAS` dict (so its missing package produced no install hint).
+  All three now derive from one `ProviderCatalogue`. A third party registers a
+  `ProviderSpec` with a `pyproject.toml` stanza and no fork; the bundled three
+  go through the identical `register()` with no privileged field, so anything a
+  built-in can do a plugin can do. Precedence is
+  built-in < installed plugin < config file.
+- **`openstategraph.yaml` — a versioned config file, secrets excluded by
+  construction.** Declares which providers exist, their models and the default;
+  schema-validated with pydantic, `extra="forbid"` so a typo is refused rather
+  than ignored, and errors that name the file and the field or line. It can
+  never hold a credential: a key-shaped *field name* and a key-shaped *value*
+  are both rejected, each with a message pointing at `.env`. It may name the
+  environment variable holding a key, which is the useful half without the
+  secret. YAML because PyYAML already ships transitively with `langchain-core`
+  — so it costs no distribution — and because a file meant to be edited by a
+  human or a coding agent needs comments; `openstategraph.json` also works.
+  Precedence, documented and tested pair by pair:
+  `config file < environment < workflow settings.model < node's own model <
+  caller's model= argument`.
+- **`errors.MissingProviderKey`** — naming a provider whose key is unset now
+  fails at resolution with the exact fix (`set ANTHROPIC_API_KEY in .env — see
+  .env.example`) instead of the vendor SDK's own error, which names its own
+  variable and knows nothing about this project's `.env.example`.
+- **`openstategraph providers` and `openstategraph env-example` CLI
+  commands** — what is registered and whether it is configured (names only,
+  never values), and the generated provider block of `.env.example`. That block
+  is produced from the registry, and a test asserts the committed file matches
+  it exactly, so a newly registered vendor documents itself.
 - **`load_workflow(..., store=, tools=, functions=, middleware=)`** — the
   remaining collaborators are now the caller's to supply, closing the
   asymmetry where `checkpointer` was injectable but its sibling the long-term
@@ -161,6 +222,35 @@ finally read by code. Wayfinder tickets 02–04;
   of these.
 
 ### Fixed
+
+- **SQLite connections were never closed.** `with sqlite3.connect(...) as conn:`
+  is a *transaction* manager, not a close — it commits and leaves the file
+  descriptor open. Both read-only SQL surfaces used it: the `tool.sql-*`
+  explorer tools an agent calls on every turn, and the knowledge builder's
+  schema introspection, which opens a nested connection per table. A long
+  agent loop leaked one descriptor per tool call. Both now use
+  `contextlib.closing`, pinned by a test that asserts the connection actually
+  refuses a query afterwards.
+- **Nothing released the checkpointer or the memory store either.** langgraph's
+  `SqliteSaver` and `SqliteStore` define neither `close()` nor `__exit__`, so
+  every `load_workflow` call left two sqlite handles open for the life of the
+  process, and a document with `settings.checkpointer: "sqlite"` opened a
+  *fresh* connection to the same file on every run, stream and resume.
+  `WorkflowServices` and `CompiledWorkflow` are now context managers with an
+  idempotent `close()`, and the per-workflow saver is opened once per workflow
+  and owned by the services object. What the caller injected is never closed —
+  it is still theirs.
+- **The installed-plugin scan ran on every request.**
+  `importlib.metadata.entry_points()` re-walks every installed distribution's
+  metadata, and `build_tool_registry` called it per run, per stream, and again
+  per subgraph child. Measured on this checkout: `runtime_for` cost 14.8 ms
+  steady-state, 12.2 ms of it in that one scan. The built-in and plugin layers
+  are now resolved once per process (they cannot change without a restart);
+  `runtime_for` is **1.05 ms**.
+- **The knowledge curation panel read every document twice** — once for the
+  index hint, once for the marker and claim hashes — and saving a topic wrote
+  the file and then read the same bytes back to extract one line. One read per
+  document now; a 60-topic listing went from 120 reads / 16.2 ms to 60 / 8.8 ms.
 
 - **Four modules resolved the workflows root inside the virtualenv once
   installed.** Each computed `Path(__file__).resolve().parents[N] /

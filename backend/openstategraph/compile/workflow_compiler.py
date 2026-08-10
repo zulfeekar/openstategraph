@@ -268,8 +268,13 @@ class WorkflowCompiler:
 
         for edge in document.get("edges", []):
             src, dst = edge.get("source") or {}, edge.get("target") or {}
-            src_id, dst_id = src.get("nodeId"), dst.get("nodeId")
-            if src_id not in executable or dst_id not in executable:
+            # Annotated (and the `is None` arm spelled out) so the type checker
+            # can see what the `in executable` test already guaranteed: past
+            # this guard both ids are real strings, and every set/dict keyed by
+            # them below is keyed by `str`.
+            src_id: str | None = src.get("nodeId")
+            dst_id: str | None = dst.get("nodeId")
+            if src_id is None or dst_id is None or src_id not in executable or dst_id not in executable:
                 plan.warnings.append(f"Dropped an edge with an unknown endpoint: {src_id} -> {dst_id}")
                 continue
 
@@ -422,7 +427,10 @@ class WorkflowCompiler:
         """
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}
-        builder = StateGraph(state_schema)
+        # `state_schema` is a caller-supplied TypedDict class, so the builder's
+        # own type parameters cannot be inferred from it; `Any` here is honest —
+        # the state shape is a workflow's, not ours.
+        builder: StateGraph[Any, Any, Any, Any] = StateGraph(state_schema)
 
         # Graph-assembly parameters, never a node concern (CLAUDE.md): every
         # node gets the same retry/error-recovery policy from one place,
@@ -439,7 +447,12 @@ class WorkflowCompiler:
         if has_graph_defaults:
             builder.set_node_defaults(
                 retry_policy=default_retry,
-                error_handler=_default_error_handler,
+                # langgraph's published `StateNode` union does not include the
+                # `(state, error: NodeError)` shape it accepts at runtime via
+                # its name+annotation matcher — a gap in the library's types,
+                # not in ours. `test_node_overrides` proves the handler really
+                # fires, so the ignore is narrow and covered.
+                error_handler=_default_error_handler,  # type: ignore[arg-type]
             )
 
         for node_id in plan.nodes:
@@ -564,7 +577,9 @@ class WorkflowCompiler:
         default = next(iter(destinations))
 
         def route(state: Any) -> str:
-            decisions = state.get("decisions") or {} if hasattr(state, "get") else {}
+            decisions: dict[str, str] = (
+                state.get("decisions") or {} if hasattr(state, "get") else {}
+            )
             chosen = decisions.get(node_id)
             if chosen in destinations:
                 return chosen

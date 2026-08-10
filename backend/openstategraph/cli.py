@@ -311,7 +311,52 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_parser.add_argument("--transport", choices=("stdio", "streamable-http"))
     mcp_parser.set_defaults(handler=cmd_mcp)
 
+    providers_parser = subparsers.add_parser(
+        "providers", help="what model providers are registered, and are they configured"
+    )
+    providers_parser.set_defaults(handler=cmd_providers)
+
+    env_example = subparsers.add_parser(
+        "env-example", help="print the provider block of .env.example (names only)"
+    )
+    env_example.set_defaults(handler=cmd_env_example)
+
     return parser
+
+
+def cmd_providers(_args: argparse.Namespace) -> int:
+    """Which providers exist, where their keys come from, and which work now.
+
+    The question "why is it not using my key" has one honest answer and it is
+    a list: what is registered, what each one reads, and which of them is
+    actually configured on this machine.
+    """
+    from openstategraph.config_file import find_config_file
+    from openstategraph.providers import provider_catalogue
+
+    catalogue = provider_catalogue()
+    config = find_config_file()
+    print(f"config file: {config if config else '(none)'}")
+    print()
+    for spec in catalogue.list():
+        state = "ready" if spec.is_configured() else "needs a key"
+        variables = ", ".join(spec.env_vars) or "(no credential needed)"
+        print(f"{spec.name:<12} {state:<12} {spec.model_string()}")
+        print(f"{'':<12} reads {variables}; extra 'openstategraph[{spec.extra}]'")
+    for warning in catalogue.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return EXIT_OK
+
+
+def cmd_env_example(_args: argparse.Namespace) -> int:
+    """The provider block of `.env.example`, generated from the registry.
+
+    Names only, never values — see `providers.env_example_section`.
+    """
+    from openstategraph.providers import env_example_section
+
+    print(env_example_section())
+    return EXIT_OK
 
 
 def main(argv: Sequence[str] | None = None) -> int:

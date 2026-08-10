@@ -92,12 +92,15 @@ def install(monkeypatch: pytest.MonkeyPatch, *entry_points: FakeEntryPoint) -> N
 
 
 class TestTheGroupNamesAreTheContract:
-    def test_they_are_the_two_we_published(self) -> None:
+    def test_they_are_the_three_we_published(self) -> None:
         """A third party writes these strings into their own pyproject.toml, so
         renaming one silently un-registers every plugin that ever shipped."""
+        from openstategraph.extensions import PROVIDERS_GROUP
+
         assert TOOLS_GROUP == "openstategraph.tools"
         assert KNOWLEDGE_BUILDERS_GROUP == "openstategraph.knowledge_builders"
-        assert ENTRY_POINT_GROUPS == (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP)
+        assert PROVIDERS_GROUP == "openstategraph.providers"
+        assert ENTRY_POINT_GROUPS == (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)
 
 
 class TestAToolFromAnInstalledDistribution:

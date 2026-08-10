@@ -36,7 +36,8 @@ def _packages() -> list[Path]:
 
 def _envelope(package: Path) -> dict[str, Any]:
     try:
-        return json.loads((package / "workflow.json").read_text())
+        envelope: dict[str, Any] = json.loads((package / "workflow.json").read_text())
+        return envelope
     except (json.JSONDecodeError, OSError):
         return {}
 

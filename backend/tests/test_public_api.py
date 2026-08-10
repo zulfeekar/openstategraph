@@ -30,6 +30,7 @@ import openstategraph
 import openstategraph.abc
 import openstategraph.errors
 import openstategraph.extensions
+import openstategraph.providers
 import openstategraph.schema
 
 SNAPSHOT = Path(__file__).resolve().parent / "public_api.txt"
@@ -40,11 +41,17 @@ SNAPSHOT = Path(__file__).resolve().parent / "public_api.txt"
 #: irreversible thing this framework publishes: they live in a third party's
 #: own `pyproject.toml`, so a rename un-registers every plugin ever shipped
 #: against them and does it silently, in their users' installs, not ours.
+#:
+#: `providers` is here for the same reason one layer down: a plugin ships a
+#: `ProviderSpec`, so its *field names* are as irreversible as the group name
+#: that carries them. Dropping `aliases` would break a shipped plugin at
+#: import, in someone else's install.
 PUBLIC_MODULES = (
     openstategraph,
     openstategraph.abc,
     openstategraph.errors,
     openstategraph.extensions,
+    openstategraph.providers,
     openstategraph.schema,
 )
 
@@ -272,3 +279,41 @@ class TestTheOldPrivateNameStillWorks:
         from openstategraph.schema import normalize_document
 
         assert mcp_normalize is normalize_document
+
+
+class TestNoBareAnyWhereARealTypeExists:
+    """`Any` on the public surface is an untested contract (ticket 05).
+
+    It is *honest* for a LangChain model handle, which is legitimately either a
+    provider string or an already-built object, and for the vendor-neutral
+    `document` dict, which is JSON. It is not honest for `checkpointer`,
+    `store` or the tool `as_tool` hands back — those have one published base
+    class each, and leaving them `Any` meant an adopter passing the wrong
+    object found out at run time, inside LangGraph, with a stack trace that
+    names none of our code.
+    """
+
+    def test_the_loader_names_the_types_langgraph_publishes(self) -> None:
+        from langgraph.checkpoint.base import BaseCheckpointSaver
+        from langgraph.store.base import BaseStore
+
+        hints = inspect.signature(openstategraph.load_workflow).parameters
+        assert hints["checkpointer"].annotation == "BaseCheckpointSaver[Any] | None"
+        assert hints["store"].annotation == "BaseStore | None"
+        # Imported, not merely named in a string: an annotation that does not
+        # resolve is a comment.
+        assert BaseCheckpointSaver and BaseStore
+
+    def test_as_tool_declares_the_langchain_base_it_returns(self) -> None:
+        from langchain_core.tools import BaseTool
+
+        returned = inspect.signature(
+            openstategraph.CompiledWorkflow.as_tool
+        ).return_annotation
+        assert returned == "BaseTool"
+        assert BaseTool
+
+    def test_the_model_handle_stays_any_on_purpose(self) -> None:
+        """Not an oversight — a string and a model object are both correct."""
+        hints = inspect.signature(openstategraph.load_workflow).parameters
+        assert hints["model"].annotation == "Any"

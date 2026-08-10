@@ -41,7 +41,7 @@ from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
 RESET = "__turn_reset__"
 
 
-def merge_decisions(left: dict, right: dict) -> dict:
+def merge_decisions(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     """Reducer for the decisions channel.
 
     A named merge rather than last-write-wins, because two nodes can decide in the
@@ -108,12 +108,12 @@ def keep_latest_nonempty(left: str, right: str) -> str:
 class RunState(TypedDict, total=False):
     """The shared state schema for a compiled workflow."""
 
-    messages: Annotated[list, add_messages]
+    messages: Annotated[list[Any], add_messages]
     question: str
     #: node id -> branch label chosen. Read by the compiler's `path` functions.
-    decisions: Annotated[dict, merge_decisions]
+    decisions: Annotated[dict[str, Any], merge_decisions]
     #: node id -> that node's textual output, so a downstream node can read it.
-    outputs: Annotated[dict, merge_decisions]
+    outputs: Annotated[dict[str, Any], merge_decisions]
     answer: Annotated[str, keep_latest_nonempty]
     #: Same hazard, same fix as `answer`: this document alone has four
     #: `_grader` instances (one per intent), each writing `feedback` on
@@ -126,14 +126,14 @@ class RunState(TypedDict, total=False):
     attempts: Annotated[int, keep_max]
     #: orchestrator node id -> the subtasks it planned. Read by the compiler's
     #: fan-out routing function to build the `Send` list.
-    subtasks: Annotated[dict, merge_decisions]
+    subtasks: Annotated[dict[str, Any], merge_decisions]
     #: task id -> that worker instance's output. Joined by whatever reads it.
     #:
     #: Deliberately **not** keyed by node id: many dynamic worker *instances*
     #: share one static worker *node*, so node id would collide every one of
     #: them onto a single key. The task id — unique per dispatched Send — is
     #: what keeps every instance's result addressable.
-    worker_results: Annotated[dict, merge_decisions]
+    worker_results: Annotated[dict[str, Any], merge_decisions]
     #: Set only inside a dispatched worker instance, from the Send payload.
     #: Absent everywhere else — a worker cannot see the parent's other state,
     #: only what the orchestrator explicitly packed into its Send (see below).

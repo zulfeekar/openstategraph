@@ -66,6 +66,12 @@ class WorkflowServices:
         #: unreachable — an `InMemoryStore` that looks like it works and loses
         #: every fact on restart.
         self.memory_store = store if store is not None else build_store()
+        #: Ownership, recorded at construction rather than inferred at close.
+        #: What we opened, we close; what the caller injected stays theirs and
+        #: is still in use after we are done with it. Inferring this later
+        #: (say, "close it if it has a `.conn`") would close a caller's own
+        #: sqlite saver and break the process that lent it to us.
+        self._owns_memory_store = store is None
         #: Thread checkpoints — what makes a `human.approval` pause resumable
         #: (ticket 05). It lives here, beside its sibling the memory Store,
         #: because this is the assembly point every transport already shares:
@@ -75,6 +81,11 @@ class WorkflowServices:
         #: cached (see the property) so constructing services never opens a
         #: file a caller was about to replace.
         self._checkpointer = checkpointer
+        self._owns_checkpointer = checkpointer is None
+        #: slug -> the saver `settings.checkpointer: "sqlite"` opened for it.
+        #: Always ours, by construction: an entry only exists when this object
+        #: opened a per-workflow file.
+        self._workflow_checkpointers: dict[str, Any] = {}
         # Copied, not aliased: a caller's dict must not become live state that
         # a later mutation of theirs changes mid-run.
         self._injected_tools = dict(tools or {})
@@ -94,6 +105,66 @@ class WorkflowServices:
 
             self._checkpointer = build_checkpointer(self.store.root)
         return self._checkpointer
+
+    def checkpointer_for(self, settings: dict[str, Any] | None, slug: str | None) -> Any:
+        """The saver a document asked for — opened once per workflow, not per call.
+
+        `memory.checkpointer_for` is a pure resolver: given a document's
+        settings it decides whether to open a per-workflow sqlite file. Every
+        transport called it on **every** request, so a workflow with
+        `settings.checkpointer: "sqlite"` opened a new connection to the same
+        file per run, per stream, per resume — none of them closed. Keeping the
+        cache here rather than in `memory` is the ownership rule again: the
+        module that *opens* knows how, the object that *lives* decides when.
+
+        It is correctness as well as economy: `SqliteSaver`'s only concurrency
+        control is a `threading.Lock` held per instance, so two savers over one
+        file are two locks guarding nothing.
+        """
+        from openstategraph.memory import checkpointer_for
+
+        key = slug or ""
+        if key in self._workflow_checkpointers:
+            return self._workflow_checkpointers[key]
+        resolved = checkpointer_for(settings, slug, self.checkpointer)
+        if resolved is self.checkpointer:
+            # No per-workflow file was opened; nothing to own or to cache,
+            # and caching it would pin a saver a later `close()` replaced.
+            return resolved
+        self._workflow_checkpointers[key] = resolved
+        return resolved
+
+    def close(self) -> None:
+        """Release the sqlite handles this object opened. Idempotent.
+
+        A long-lived transport builds one of these and keeps it; a script, a
+        test or `load_workflow` builds one per use, and without this each one
+        left a file descriptor open until the process died — langgraph's
+        sqlite saver and store have no `close()` of their own.
+
+        Deliberately does **not** touch `self._checkpointer` through the
+        property: resolving it here would open the very file it is about to
+        close.
+        """
+        from openstategraph.memory import close_resource
+
+        if self._owns_checkpointer and self._checkpointer is not None:
+            close_resource(self._checkpointer)
+            # Cleared so a second close is a no-op and a resurrected use gets a
+            # fresh saver rather than a closed one.
+            self._checkpointer = None
+        for saver in self._workflow_checkpointers.values():
+            close_resource(saver)
+        self._workflow_checkpointers.clear()
+        if self._owns_memory_store and self.memory_store is not None:
+            close_resource(self.memory_store)
+            self._owns_memory_store = False
+
+    def __enter__(self) -> "WorkflowServices":
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        self.close()
 
     def tool_registry_for(
         self,

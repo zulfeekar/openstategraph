@@ -17,6 +17,7 @@ Start with what you came here to do.
 | **add a capability that does not exist yet** | [Building an atom](building-an-atom.md) — a node definition, its Python half, the palette tiers, registration (including publishing your own distribution), and a worked example in ~60 lines | [Ports and edges](ports-and-edges.md) |
 | **have my own LLM compose the graph** | [The MCP layer](mcp.md) — client config, a worked transcript, the `compile_workflow` response shape, and the trust boundary | [`decisions/mcp-layer.md`](decisions/mcp-layer.md) |
 | **know what can be taken away from me** | [The stability contract](stability.md) — the three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules | [`../CHANGELOG.md`](../CHANGELOG.md) |
+| **cut a release, or fix one that went wrong** | [Releasing](releasing.md) — the train from pull request to PyPI, the one human gate and what to check before clicking it, the branch protection and environment settings to configure by hand, and the rollback commands for a burned version number | [`decisions/sdk-practice.md`](decisions/sdk-practice.md) |
 | **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
 
 Each page has exactly one job, and nothing here restates another page:

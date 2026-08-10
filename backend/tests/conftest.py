@@ -19,6 +19,8 @@ from typing import Callable
 
 import os
 
+import pytest
+
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
@@ -104,3 +106,20 @@ class RespondingModel(GenericFakeChatModel):
         bound.
         """
         return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_process_tool_layer():
+    """No process-lifetime cache may outlive the test that populated it.
+
+    `api.registries` caches the built-in + installed-plugin tool layer for the
+    life of the process, because rebuilding it was 82% of every
+    `runtime_for` call (`tests/test_no_repeated_work.py` measures it). Tests
+    fake installed entry points with `monkeypatch`, so without this the first
+    test to build the registry would decide what every later test sees.
+    """
+    from openstategraph.api.registries import reset_process_tool_layer
+
+    reset_process_tool_layer()
+    yield
+    reset_process_tool_layer()

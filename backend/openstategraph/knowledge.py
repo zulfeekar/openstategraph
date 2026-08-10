@@ -151,17 +151,32 @@ class PackageKnowledge(BaseKnowledge):
         else:
             raise ValueError("PackageKnowledge needs a package_dir or a knowledge_dir")
 
-    def topics(self) -> list[TopicIndexEntry]:
+    def documents(self) -> list[tuple[str, str]]:
+        """`(topic name, full body)` for every doc, in index order, read once.
+
+        The walk lives here rather than in each caller so there is one place
+        that knows what a knowledge directory *is*. It exists at all because
+        `topics()` reads every file to take one line from it, and the curation
+        listing then re-read every one of those same files for the marker and
+        claim hashes — two full reads per document on every panel open. A
+        caller that wants both now gets both from one pass.
+        """
         if not self._directory.is_dir():
             return []
-        entries: list[TopicIndexEntry] = []
+        documents: list[tuple[str, str]] = []
         for path in sorted(self._directory.glob("*.md"), key=lambda p: p.stem):
             try:
                 text = path.read_text()
             except OSError:
                 text = ""
-            entries.append(TopicIndexEntry(name=path.stem, hint=self.extract_hint(text)))
-        return entries
+            documents.append((path.stem, text))
+        return documents
+
+    def topics(self) -> list[TopicIndexEntry]:
+        return [
+            TopicIndexEntry(name=name, hint=self.extract_hint(text))
+            for name, text in self.documents()
+        ]
 
     def _fetch(self, topic: str) -> str | None:
         if not topic:

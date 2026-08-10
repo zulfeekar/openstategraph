@@ -83,17 +83,19 @@ def list_topics(
 ) -> list[TopicStatus]:
     current = current_source_hashes(workflow_dir, document, workflows_root)
     statuses: list[TopicStatus] = []
-    for entry in PackageKnowledge(workflow_dir).topics():
-        text = read_topic(workflow_dir, entry.name)
+    # `documents()`, not `topics()` + `read_topic()`: the hint and the two
+    # hashes all come out of the same bytes, and reading the directory twice to
+    # get them was the whole cost of opening this panel.
+    for name, text in PackageKnowledge(workflow_dir).documents():
         owner = marker_source(text)
         generated = owner is not None
         recorded = marker_hash(text) if generated else claimed_hash(text)
-        now = current.get(entry.name)
+        now = current.get(name)
         stale = recorded is not None and now is not None and recorded != now
         statuses.append(
             TopicStatus(
-                name=entry.name,
-                hint=entry.hint,
+                name=name,
+                hint=BaseKnowledge.extract_hint(text),
                 generated=generated,
                 source=owner or "",
                 stale=stale,
@@ -142,9 +144,12 @@ def save_topic(
     ).strip()
     trailer = f"\n\n{CLAIMED_HASH_COMMENT}{recorded} -->" if recorded else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"{cleaned}{trailer}\n")
+    # The bytes we are about to write ARE the doc; reading them back to pull
+    # one line out of them was a round trip through the filesystem for text
+    # already in hand.
+    text = f"{cleaned}{trailer}\n"
+    path.write_text(text)
 
-    text = path.read_text()
     stale = False  # just claimed against the current source (or unknowable)
     return TopicStatus(
         name=name,

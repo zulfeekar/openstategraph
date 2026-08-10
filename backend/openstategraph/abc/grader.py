@@ -94,7 +94,7 @@ class BaseGrader(ABC):
         self,
         *,
         criteria: str = "",
-        rubric: list[dict] | None = None,
+        rubric: list[dict[str, Any]] | None = None,
         replace_defaults: bool = False,
         model: Any = None,
     ) -> None:

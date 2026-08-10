@@ -33,11 +33,22 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from openstategraph.errors import InvalidPackageName, PackageNotFound
+from openstategraph.errors import InvalidPackageName, MissingProviderKey, PackageNotFound
 from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
+
+if TYPE_CHECKING:
+    # TYPE_CHECKING, not a plain import: `import openstategraph` must stay
+    # cheap — the runtime arrives on the first `load_workflow()` call, and a
+    # subprocess test plus `scripts/clean_install_proof.sh` both assert that
+    # langgraph and langchain_core are absent from `sys.modules` until then.
+    # `from __future__ import annotations` above makes every annotation a
+    # string, so these names are never evaluated at run time.
+    from langchain_core.tools import BaseTool
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.store.base import BaseStore
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +85,44 @@ class CompiledWorkflow:
     #: Set through `load_workflow(..., trace_file=...)`; see `_append_trace`
     #: for exactly what is written and — more importantly — what is not.
     trace_file: Path | None = None
+    #: What `load_workflow` opened on this object's behalf and must therefore
+    #: release: the `WorkflowServices` (checkpointer + memory store) and, when
+    #: the document asked for `settings.checkpointer: "sqlite"`, that
+    #: workflow's own saver. Underscored and excluded from `repr`/equality
+    #: because it is bookkeeping, not part of what a loaded workflow *is* —
+    #: but it is a field rather than a closure so the dataclass stays frozen
+    #: and comparable. A checkpointer the *caller* passed is never in here.
+    _owned: tuple[Any, ...] = field(default=(), repr=False, compare=False)
+
+    def close(self) -> None:
+        """Release the sqlite handles this load opened. Idempotent.
+
+        Only needed by a process that loads workflows repeatedly — a script
+        that loads one and exits has never had a problem, which is exactly why
+        the leak survived: langgraph's sqlite saver and store have no
+        `close()`, so one file descriptor per `load_workflow` accumulated
+        invisibly in the long-lived transports.
+
+        After this, `graph` and `ask()` are no longer usable. Use the context
+        manager form when the scope is obvious:
+
+            with load_workflow("workflows/billing") as billing:
+                print(billing.ask("How much did we invoice in March?"))
+        """
+        from openstategraph.memory import close_resource
+
+        for resource in self._owned:
+            closer = getattr(resource, "close", None)
+            if callable(closer):
+                closer()
+            else:
+                close_resource(resource)
+
+    def __enter__(self) -> "CompiledWorkflow":
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        self.close()
 
     def mermaid(self, *, xray: bool = True) -> str:
         """The compiled topology as Mermaid **text**, with no network call.
@@ -82,7 +131,8 @@ class CompiledWorkflow:
         compiler actually produced. Never `draw_mermaid_png()`: that posts the
         graph to a third-party API.
         """
-        return self.graph.get_graph(xray=xray).draw_mermaid()
+        diagram: str = self.graph.get_graph(xray=xray).draw_mermaid()
+        return diagram
 
     def ask(
         self,
@@ -167,7 +217,7 @@ class CompiledWorkflow:
         except OSError as exc:
             logger.warning("Could not write the run trace to %s: %s", self.trace_file, exc)
 
-    def as_tool(self, *, name: str | None = None, description: str | None = None) -> Any:
+    def as_tool(self, *, name: str | None = None, description: str | None = None) -> BaseTool:
         """This whole workflow, as one LangChain tool your existing agent can call.
 
         For the team already on `create_agent` who does not want to restructure:
@@ -238,8 +288,11 @@ def load_workflow(
     package_dir: str | Path,
     *,
     model: Any = None,
-    checkpointer: Any = None,
-    store: Any = None,
+    # Named rather than `Any`: these have one published base class each, and
+    # the failure mode of the wrong object is a stack trace inside LangGraph
+    # that mentions no code of ours.
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    store: BaseStore | None = None,
     tools: dict[str, Any] | None = None,
     functions: dict[str, Any] | None = None,
     middleware: dict[str, Any] | None = None,
@@ -326,7 +379,6 @@ def load_workflow(
     from openstategraph.api.workflow_store import slugify
     from openstategraph.compile.node_runtime import RunState
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
-    from openstategraph.memory import checkpointer_for
 
     slug = directory.name
     if slug != slugify(slug):
@@ -357,7 +409,19 @@ def load_workflow(
 
         from openstategraph._extras import provider_extra_hint
 
+        from openstategraph.providers import missing_key_diagnosis
+
         model_name = resolve_model(model or workflow_default_model(document))
+
+        # A named provider with no credential fails here, with the exact fix
+        # (ticket 03). Before this, `init_chat_model` raised the vendor SDK's
+        # own error — which names *its* environment variable and knows nothing
+        # about our `.env.example`, so the adopter had to work out that the two
+        # were the same thing.
+        diagnosis = missing_key_diagnosis(model_name)
+        if diagnosis:
+            raise MissingProviderKey(diagnosis)
+
         try:
             resolved_model = init_chat_model(model_name)
         except ImportError as exc:
@@ -388,6 +452,9 @@ def load_workflow(
         knowledge_dir=knowledge_override,
     )
 
+    # The services were built here, so their two sqlite handles are this
+    # workflow's to close (see `CompiledWorkflow.close`).
+    owned: list[Any] = [services]
     if checkpointer is None:
         # The same seam the HTTP and MCP transports use, and the same default:
         # `services.checkpointer` is durable (a sqlite file under the workflows
@@ -395,7 +462,9 @@ def load_workflow(
         # fresh `InMemorySaver` per call, which meant a `human.approval` pause
         # could not be resumed by a second process — or even by a second
         # `load_workflow` in the same one.
-        checkpointer = checkpointer_for(document.get("settings"), slug, services.checkpointer)
+        checkpointer = services.checkpointer_for(document.get("settings"), slug)
+        # A per-workflow `settings.checkpointer: "sqlite"` file is opened and
+        # owned by the services object itself, so nothing extra to track here.
 
     graph = compiler.build(
         document,
@@ -422,6 +491,7 @@ def load_workflow(
         package_dir=directory,
         document=document,
         trace_file=Path(trace_file).expanduser() if trace_file else None,
+        _owned=tuple(owned),
     )
 
 

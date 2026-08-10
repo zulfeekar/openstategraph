@@ -3,6 +3,7 @@ import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import { validateFields } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
+import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 
 /** True if a path exists from `start` back to itself, staying within `candidates`. */
 function canReachSelf(
@@ -303,14 +304,19 @@ export const singleDefaultWorkerRule: IWorkflowRule = {
       const claimants = model
         .edgesFrom({ nodeId: node.id, portId: 'workers' })
         .map((edge) => model.node(edge.target.nodeId))
-        .filter((worker) => worker != null && worker.data['default'] === true);
+        // A type predicate, not a `!` at each use: the guard and the narrowing
+        // are the same statement, so they cannot drift apart.
+        .filter(
+          (worker): worker is AbstractNodeModel =>
+            worker != null && worker.data['default'] === true
+        );
       if (claimants.length < 2) continue;
       for (const worker of claimants) {
         diagnostics.push({
           code: 'multiple-default-workers',
           severity: 'warning',
-          nodeId: worker!.id,
-          message: `${worker!.title}: more than one worker claims "Default worker" — only the first wired one takes effect`,
+          nodeId: worker.id,
+          message: `${worker.title}: more than one worker claims "Default worker" — only the first wired one takes effect`,
         });
       }
     }

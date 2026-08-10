@@ -136,7 +136,13 @@ class NodeVocabulary:
         )
         from openstategraph.prebuilt_architect import KNOWN_NODE_TYPES, KNOWN_PREFIXES
 
-        contracts = {
+        # Spelled as a union rather than left to inference: the only supertype
+        # mypy can find for four unrelated ABCs is `ABCMeta`, on which
+        # `.PREAMBLE` below is an untyped guess.
+        contracts: dict[
+            str,
+            type[BaseAgentNode] | type[BaseRouter] | type[BaseGrader] | type[BaseOrchestrator],
+        ] = {
             "agent.llm": BaseAgentNode,
             "route.classifier": BaseRouter,
             "route.grader": BaseGrader,
@@ -630,7 +636,6 @@ class WorkflowRuns:
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
         from openstategraph.compile.node_runtime import RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
-        from openstategraph.memory import checkpointer_for
 
         if slug is None and document is None:
             return {"error": "Pass either a saved `slug` or an inline `document`."}
@@ -671,8 +676,8 @@ class WorkflowRuns:
                 resolved,
                 RunState,
                 runtime.factory(resolved),
-                checkpointer=checkpointer_for(
-                    resolved.get("settings"), slug, self._services.checkpointer
+                checkpointer=self._services.checkpointer_for(
+                    resolved.get("settings"), slug
                 ),
                 store=self._services.memory_store,
             )

@@ -25,6 +25,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 #: A package's directory name is its frozen identity, and it is what scopes
 #: tool, function, skill and knowledge discovery. Same rule as `slugify`.
@@ -52,7 +53,7 @@ def _prepare(root: Path | str, slug: str, subdirectories: tuple[str, ...]) -> Pa
     return target
 
 
-def _envelope(name: str, document: dict) -> dict:
+def _envelope(name: str, document: dict[str, Any]) -> dict[str, Any]:
     return {
         "version": 1,
         "name": name,
@@ -65,7 +66,7 @@ def _envelope(name: str, document: dict) -> dict:
     }
 
 
-def starter_document(name: str) -> dict:
+def starter_document(name: str) -> dict[str, Any]:
     """input → agent → output. The smallest document that compiles and runs."""
     return {
         "version": 2,
@@ -94,7 +95,7 @@ def starter_document(name: str) -> dict:
     }
 
 
-def team_document(name: str, outcome: str) -> dict:
+def team_document(name: str, outcome: str) -> dict[str, Any]:
     """The prebuilt minimum-viable Team (ticket 52): supervisor + worker + grader.
 
     The grader's criteria ARE the team's outcome contract — the first thing a
@@ -136,7 +137,7 @@ def team_document(name: str, outcome: str) -> dict:
         {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 1720, "y": 200}},
     ]
 
-    def edge(source: str, source_port: str, target: str, target_port: str) -> dict:
+    def edge(source: str, source_port: str, target: str, target_port: str) -> dict[str, Any]:
         return {
             "source": {"nodeId": source, "portId": source_port},
             "target": {"nodeId": target, "portId": target_port},

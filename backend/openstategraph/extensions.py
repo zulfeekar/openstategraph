@@ -54,10 +54,12 @@ carries its own namespaced `node_type` (`tool.acme-ping`), which is visible in
 the document and collides loudly rather than quietly. Functions stay
 package-local; a third party who wants to ship one ships a tool.
 
-The middleware and provider groups sketched in
-`docs/decisions/framework-packaging.md` §3.5 are deliberately **not** reserved
-here: a group name is a promise, and promising two we have not implemented
-would be exactly the decorative contract this work exists to remove.
+The **middleware** group sketched in `docs/decisions/framework-packaging.md`
+§3.5 is deliberately still **not** reserved here: a group name is a promise,
+and promising one we have not implemented would be exactly the decorative
+contract this work exists to remove. The **provider** group beside it is now
+implemented (ticket 02) and therefore reserved — see `PROVIDERS_GROUP` and
+`openstategraph.providers`.
 """
 
 from __future__ import annotations
@@ -78,8 +80,13 @@ TOOLS_GROUP = "openstategraph.tools"
 #: builders stamp ownership of their topics first.
 KNOWLEDGE_BUILDERS_GROUP = "openstategraph.knowledge_builders"
 
+#: Providers: an `openstategraph.providers.ProviderSpec`, or an iterable of
+#: them. Loaded *after* the bundled three, so a plugin may replace a built-in's
+#: default model — the same built-in < third-party order tools follow.
+PROVIDERS_GROUP = "openstategraph.providers"
+
 #: Every group this framework reads. Nothing else is a supported seam.
-ENTRY_POINT_GROUPS = (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP)
+ENTRY_POINT_GROUPS = (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)
 
 #: Set to `1`/`true`/`yes` to load nothing from the environment's entry points.
 DISABLE_PLUGINS_ENV = "OPENSTATEGRAPH_DISABLE_PLUGINS"
@@ -285,13 +292,49 @@ def entry_point_knowledge_builders() -> Discovered:
     return Discovered(values=builders, warnings=warnings)
 
 
+def entry_point_providers() -> Discovered:
+    """`ProviderSpec`s contributed by installed distributions.
+
+    The same jail and the same honesty as tools, with one difference worth
+    stating: a spec is *data*, so there is nothing to construct and nothing a
+    plugin's constructor can do to us. The only failure modes left are an
+    import that raises and an object that is not a `ProviderSpec` — and both
+    are reported against the distribution that shipped them rather than
+    silently skipped.
+
+    Order is the caller's business: `providers.load_provider_catalogue`
+    registers these *after* the built-ins, so a plugin may deliberately
+    replace a bundled provider.
+    """
+    from openstategraph.providers import ProviderSpec
+
+    specs: list[Any] = []
+    loaded, warnings = _load_group(PROVIDERS_GROUP)
+    for entry_point, obj in loaded:
+        for candidate in _each(obj):
+            if not isinstance(candidate, ProviderSpec):
+                warnings.append(
+                    _skipped(
+                        entry_point,
+                        PROVIDERS_GROUP,
+                        f"{type(candidate).__name__} is not an "
+                        "openstategraph.providers.ProviderSpec",
+                    )
+                )
+                continue
+            specs.append(candidate)
+    return Discovered(values=specs, warnings=warnings)
+
+
 __all__ = [
     "DISABLE_PLUGINS_ENV",
     "ENTRY_POINT_GROUPS",
     "KNOWLEDGE_BUILDERS_GROUP",
+    "PROVIDERS_GROUP",
     "TOOLS_GROUP",
     "Discovered",
     "entry_point_knowledge_builders",
+    "entry_point_providers",
     "entry_point_tools",
     "plugins_enabled",
 ]

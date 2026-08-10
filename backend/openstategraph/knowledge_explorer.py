@@ -32,13 +32,18 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.knowledge import BaseKnowledge
-from openstategraph.knowledge_builders import BaseKnowledgeBuilder, KnowledgeTopic
+from openstategraph.knowledge_builders import (
+    BaseKnowledgeBuilder,
+    Discovery,
+    KnowledgeTopic,
+)
 from openstategraph.readable_tree import admitted_files
 
 #: Superstep budget for one exploration (a `config` key, NOT an iteration
@@ -177,9 +182,9 @@ class AgenticKnowledgeBuilder(BaseKnowledgeBuilder):
     #: The concrete's task, between the shared preamble and output contract.
     MISSION: str = ""
 
-    def discover(self, workflow_dir: Path, document: dict[str, Any], workflows_root: Path):
-        from openstategraph.knowledge_builders import Discovery
-
+    def discover(
+        self, workflow_dir: Path, document: dict[str, Any], workflows_root: Path
+    ) -> Discovery:
         return Discovery()
 
     @abstractmethod
@@ -368,7 +373,7 @@ class _JailedCodeTool(BaseTool):
                 return candidate
         return None
 
-    def _files(self):
+    def _files(self) -> Iterator[tuple[Path, Path]]:
         """Readable files under each root — see `readable_tree.admitted_files`.
 
         Two things changed here beyond sharing the walk. The traversal now

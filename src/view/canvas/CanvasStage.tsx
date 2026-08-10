@@ -66,9 +66,13 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
     setLocalPaper(instance);
     setPaper(instance);
     // Frame whatever the document already contains — usually the seeded demo.
-    requestAnimationFrame(() => instance.fitToContent());
+    // The handle is kept and cancelled below: under StrictMode's double mount
+    // the effect unmounts within the same frame, and an uncancelled callback
+    // would then call `fitToContent()` on an already-disposed paper.
+    const framing = requestAnimationFrame(() => instance.fitToContent());
 
     return () => {
+      cancelAnimationFrame(framing);
       setPaper(null);
       setLocalPaper(null);
       instance.dispose();
