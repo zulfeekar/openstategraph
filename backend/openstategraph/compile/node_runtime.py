@@ -376,16 +376,48 @@ def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
 
 
-def _wired_skill(state: RunState, node_ids: list[str]) -> str:
+def _wired_skill(
+    state: RunState, node_ids: list[str], nodes: dict[str, Any] | None = None
+) -> str:
     """The prompt contribution of whatever is wired to a node's `skill` port.
 
     Frontmatter is stripped here rather than at the reading node: a skill can
     arrive from a picked `SKILL.md`, from a pasted instruction, or from a file
     an upstream node loaded, and only one of those has ever heard of YAML.
+
+    **State first, then the document — and the document is the half that was
+    missing.** A skill source is `bound_only`: it is deliberately kept out of
+    `plan.nodes`, because it is configuration hanging off a port rather than a
+    step in the graph. It therefore never runs, never writes `outputs`, and
+    this function — reading only state — returned `""` for every wired skill on
+    every node type, always. The shipped `sql-analyst.md` never reached the
+    analyst; the whole layer was decorative at runtime.
+
+    Reading the document is not a fallback bolted on, it is the correct source
+    for this kind of node: `_static_text`'s output does not depend on state at
+    all, and the `skill` port type is produced only by `input.markdown` and
+    `input.skill`, both static. State is still consulted first, so a future
+    dynamic producer keeps working without another change here.
     """
     from openstategraph.skills import skill_text
 
-    return skill_text(_upstream_text(state, node_ids))
+    live = _upstream_text(state, node_ids)
+    if live.strip():
+        return skill_text(live)
+
+    if not nodes:
+        return ""
+    configured = "\n".join(
+        text
+        for text in (
+            _text(nodes.get(node_id, {}).get("data") or {}, "instruction")
+            or _text(nodes.get(node_id, {}).get("data") or {}, "instructions")
+            or _text(nodes.get(node_id, {}).get("data") or {}, "content")
+            for node_id in node_ids
+        )
+        if text
+    )
+    return skill_text(configured)
 
 
 def _replaces_rules(data: dict[str, Any]) -> bool:
@@ -1175,7 +1207,7 @@ class NodeRuntime:
             prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
             )
-            skill = _wired_skill(state, skills)
+            skill = _wired_skill(state, skills, self._nodes)
             decisions = state.get("decisions") or {}
             feedback = state.get("feedback", "")
             if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
@@ -1272,7 +1304,7 @@ class NodeRuntime:
             classified = (
                 _thread_question(state) if turn == state.get("question", "") else turn
             )
-            skill = _wired_skill(state, skills)
+            skill = _wired_skill(state, skills, self._nodes)
             router = router_for(skill) if skill else prebuilt
             decision = router.classify(classified)
             return {
@@ -1330,7 +1362,7 @@ class NodeRuntime:
 
         def run(state: RunState) -> dict[str, Any]:
             candidate = _upstream_text(state, upstream) or state.get("answer", "")
-            grader = grader_for(_wired_skill(state, skills))
+            grader = grader_for(_wired_skill(state, skills, self._nodes))
             verdict = grader.grade(candidate, question=state.get("question", ""))
 
             # Budget check before routing: a grader that keeps rejecting must
@@ -1499,7 +1531,7 @@ class NodeRuntime:
             ):
                 feedback = ""
             generation = state.get("attempts", 0)
-            skill = _wired_skill(state, skills)
+            skill = _wired_skill(state, skills, self._nodes)
             planner = orchestrator_for(skill) if skill else orchestrator
             subtasks = planner.plan(
                 instruction, generation=generation, archetypes=archetypes
@@ -1652,7 +1684,7 @@ class NodeRuntime:
                 model=model,
                 tools=lc_tools,
                 default_rules=default_prompt,
-                skill=_wired_skill(state, skills),
+                skill=_wired_skill(state, skills, self._nodes),
                 replace_rules=_replaces_rules(data),
                 context=self.skills_context,
             ).build()
