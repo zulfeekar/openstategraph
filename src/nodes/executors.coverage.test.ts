@@ -24,7 +24,6 @@ import {
   getTableSchemaExecutor,
   getTableSchemaNode,
 } from './tools/ChinookDatabaseNode';
-import { TABULAR_NODES } from './tools/TabularDataNode';
 import { registerChinookNodes } from './workflowScoped';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 
@@ -119,12 +118,12 @@ describe('honest backend-only refusals', () => {
   it('subgraph and team refuse, naming the slug when set', async () => {
     const workbench = makeWorkbench();
     const bare = addNode(workbench, 'workflow.subgraph');
-    const named = addNode(workbench, 'team.workflow', { data: { workflow: 'chinook-metrics-team' } });
+    const named = addNode(workbench, 'team.workflow', { data: { workflow: 'some-team-package' } });
     const bareOut = await subgraphExecutor.execute(ctxFor(workbench, bare.id));
     const namedOut = await teamExecutor.execute(ctxFor(workbench, named.id));
     expect(bareOut.ok).toBe(false);
     expect(namedOut.ok).toBe(false);
-    if (!namedOut.ok) expect(namedOut.error).toContain('chinook-metrics-team');
+    if (!namedOut.ok) expect(namedOut.error).toContain('some-team-package');
   });
 
   it('every platform/web prebuilt refuses toward Chat', async () => {
@@ -140,12 +139,8 @@ describe('honest backend-only refusals', () => {
 describe('local tool bodies', () => {
   function scopedWorkbench(): Workbench {
     const workbench = makeWorkbench();
-    // Chinook + tabular are workflow-scoped, not in the default catalogue.
+    // Chinook is workflow-scoped, not in the default catalogue.
     registerChinookNodes(workbench.registry, workbench.engine.executors);
-    for (const entry of TABULAR_NODES) {
-      workbench.registry.nodeTypes.upsert(entry.definition);
-      workbench.engine.executors.upsert(entry.executor);
-    }
     return workbench;
   }
 
@@ -155,48 +150,31 @@ describe('local tool bodies', () => {
     [executeSqlNode, executeSqlExecutor],
   ];
 
-  it('chinook tools answer from their sample data', async () => {
+  it('chinook tools all describe themselves', async () => {
     const workbench = scopedWorkbench();
     for (const [definition, executor] of chinook) {
       if (!isToolExecutor(executor)) throw new Error('not a tool');
       const node = addNode(workbench, definition.id);
       expect(executor.describeTool(node).name.length).toBeGreaterThan(0);
     }
-    const [tablesDef, tablesExec] = chinook[0]!;
-    if (!isToolExecutor(tablesExec)) throw new Error('not a tool');
-    const node = addNode(workbench, tablesDef.id);
-    const outcome = await tablesExec.invokeTool(node, {}, ctxFor(workbench, node.id));
-    expect(outcome.ok && outcome.value).toContain('Artist');
   });
 
-  it('tabular tools describe themselves and answer their stubs', async () => {
+  /**
+   * The two schema-shaped tools refuse rather than answering from a copy of
+   * the database — see `ChinookDatabaseNode.ts`'s header and its own test.
+   * The query tool still simulates *rows*, which is a different claim.
+   */
+  it('the chinook query tool still simulates rows offline', async () => {
     const workbench = scopedWorkbench();
-    for (const entry of TABULAR_NODES) {
-      if (!isToolExecutor(entry.executor)) throw new Error('not a tool');
-      const id = addNode(workbench, entry.definition.id);
-      const node = workbench.model.node(id.id)!;
-      expect(entry.executor.describeTool(node).name.length).toBeGreaterThan(0);
-      const outcome = await entry.executor.invokeTool(
-        node,
-        { query: 'SELECT 1', fileName: 'vgsales.csv', nRows: 5, maxRows: 10 },
-        ctxFor(workbench, id.id),
-      );
-      expect(typeof outcome.ok).toBe('boolean');
-    }
-  });
-
-  it('tabular query stub refuses non-SELECT statements', async () => {
-    const workbench = scopedWorkbench();
-    const query = TABULAR_NODES.find((e) => e.definition.id === 'tool.tabular-query')!;
-    if (!isToolExecutor(query.executor)) throw new Error('not a tool');
-    const id = addNode(workbench, query.definition.id);
-    const node = workbench.model.node(id.id)!;
-    const outcome = await query.executor.invokeTool(
+    const [queryDef, queryExec] = chinook[2]!;
+    if (!isToolExecutor(queryExec)) throw new Error('not a tool');
+    const node = addNode(workbench, queryDef.id);
+    const outcome = await queryExec.invokeTool(
       node,
-      { query: 'DROP TABLE vgsales' },
-      ctxFor(workbench, id.id),
+      { sqlQuery: 'SELECT * FROM Artist' },
+      ctxFor(workbench, node.id),
     );
-    expect(outcome.ok).toBe(false);
+    expect(outcome.ok && outcome.value).toContain('Artist');
   });
 
   it('reddit search falls back to labelled sample data offline', async () => {

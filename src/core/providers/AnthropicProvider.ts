@@ -43,6 +43,14 @@ export class AnthropicProvider extends AbstractLLMProvider {
   readonly requiresApiKey = true;
   override readonly credentialsHint = 'console.anthropic.com → API keys';
   override readonly runtimeCredentialKey = 'ANTHROPIC_API_KEY';
+  /**
+   * Transmitted below as `output_config.effort`, which is why this adapter can
+   * declare them at all. Declared once for the provider rather than repeated
+   * on each descriptor: every model in this catalogue is a current-generation
+   * reasoning model, so a per-model copy would be four identical lists that
+   * can drift.
+   */
+  override readonly reasoningEffortLevels = ['low', 'medium', 'high', 'max'] as const;
 
   readonly models: readonly ModelDescriptor[] = [
     {
@@ -82,6 +90,25 @@ export class AnthropicProvider extends AbstractLLMProvider {
   private client: Promise<Anthropic> | null = null;
   private clientKey: string | null = null;
 
+  /**
+   * The requested tier if this adapter declares it, else the model's default.
+   *
+   * A tier this adapter never declared is *dropped*, not forwarded: the SDK
+   * types `effort` as a closed union and the API rejects anything outside it,
+   * so forwarding a stale or foreign spelling (`minimal`, which Gemini has and
+   * Anthropic does not) would turn a configuration choice into a failed run.
+   * The editor already filters the picker to `reasoningEffortLevels`; this is
+   * the same rule enforced where the request is actually built, because a
+   * document saved before a catalogue change can still carry the old value.
+   */
+  private effortFor(request: CompletionRequest): 'low' | 'medium' | 'high' | 'max' {
+    const wanted = request.effort;
+    const declared = this.reasoningEffortLevels;
+    return wanted && (declared as readonly string[]).includes(wanted)
+      ? (wanted as 'low' | 'medium' | 'high' | 'max')
+      : 'high';
+  }
+
   async complete(request: CompletionRequest): Promise<Result<CompletionResult, string>> {
     if (!this.hasApiKey()) return Err('Add an Anthropic API key to run this model');
 
@@ -102,7 +129,7 @@ export class AnthropicProvider extends AbstractLLMProvider {
           max_tokens: request.maxTokens,
           // Sampling parameters are rejected on the current models — depth
           // is controlled through effort, not temperature.
-          output_config: { effort: request.effort ?? 'high' },
+          output_config: { effort: this.effortFor(request) },
           thinking: thinkingEnabled ? { type: 'adaptive' } : { type: 'disabled' },
           ...(systemPrompt ? { system: systemPrompt } : {}),
           ...(request.tools && request.tools.length > 0

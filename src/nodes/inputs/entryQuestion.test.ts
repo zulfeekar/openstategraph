@@ -24,9 +24,9 @@ describe('entryQuestion', () => {
   });
 
   it('ignores every node type that is not an entry input', () => {
-    expect(entryQuestion(source(node('agent.llm', 'system rules'), node('input.text', 'Ask')))).toBe(
-      'Ask',
-    );
+    expect(
+      entryQuestion(source(node('agent.llm', 'system rules'), node('input.text', 'Ask'))),
+    ).toBe('Ask');
   });
 
   it('joins several entry inputs in canvas order, skipping the blank ones', () => {

@@ -25,6 +25,12 @@ export class MockProvider extends AbstractLLMProvider {
   readonly id = 'mock';
   readonly label = 'Mock · Offline';
   readonly requiresApiKey = false;
+  /**
+   * The simulator does not reason, and says so rather than leaving it open.
+   * Empty is a *certainty* here, not an absence: this provider's replies are
+   * assembled by code in this file, so there is no depth to ask for.
+   */
+  override readonly reasoningEffortLevels = [] as const;
 
   readonly models: readonly ModelDescriptor[] = [
     {

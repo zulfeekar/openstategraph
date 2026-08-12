@@ -138,11 +138,17 @@ export function portAcceptsType(port: IPortDescriptor, sourceType: PortTypeId): 
  *
  * - **Flow** — the sequence of steps. Input `left`, output `right`, i.e.
  *   along the reading axis. This is the default and needs no declaration.
- * - **Binding** — a capability *attached* to a step rather than a step in
- *   the sequence: a tool, a skill, a worker pool. Drawn across the reading
- *   axis, so a binding never looks like a stage of the flow. Declared with
+ * - **Binding** — a *bus*: a capability port where several providers converge
+ *   on one point, such as an agent's tools or a supervisor's worker pool.
+ *   Drawn across the reading axis, so the convergence has an axis of its own
+ *   and a bus never looks like a stage of the flow. Declared with
  *   `side: BINDING_SIDE.provider` on the thing being attached, and
  *   `BINDING_SIDE.consumer` on the bus that gathers them.
+ *
+ * A single-wire capability is **not** a binding in this sense. `skill` was
+ * declared as one and moved back: one file on one wire has no convergence to
+ * draw, and taking it off the reading axis left its footer row without a dot.
+ * See `docs/decisions/edge-legibility.md`.
  *
  * Both rotate together under `resolvePortSide`, so the distinction survives
  * the flow-direction toggle instead of being a horizontal-only convention.
@@ -154,10 +160,10 @@ export function sideOf(port: IPortDescriptor): PortSide {
 /**
  * The two ends of a binding, named once.
  *
- * A tool node's `tool` output and a Markdown file's `skill` output are the
- * same kind of thing — a capability offered upward — and had drifted onto
- * different sides. Naming the convention is what stops that happening again;
- * the alternative was two node files each asserting a bare string.
+ * Every tool node's `tool` output is a capability offered upward, and they had
+ * drifted onto different sides. Naming the convention is what stops that
+ * happening again; the alternative was several node files each asserting a
+ * bare string.
  */
 export const BINDING_SIDE = {
   /** The card offering a capability: its dot is on top, pointing up at the user of it. */

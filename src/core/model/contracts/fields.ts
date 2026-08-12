@@ -59,9 +59,16 @@ export interface SelectFieldSchema extends FieldSchemaBase<string> {
   readonly kind: 'select';
   /**
    * Static options, or a provider for options that depend on runtime state
-   * (the model list depends on which providers hold credentials).
+   * (the model list depends on which providers hold credentials) **or on the
+   * node's own data** (the reasoning tiers depend on which model is chosen).
+   *
+   * Taking `data` mirrors `INodeDefinition.ports`, which is already a function
+   * of the node's data for exactly this reason, and it is what lets a select
+   * obey the house rule that a control reaching nothing is worse than no
+   * control: the alternative is a live-looking listbox whose value the chosen
+   * model will discard.
    */
-  readonly options: readonly FieldOption[] | (() => readonly FieldOption[]);
+  readonly options: readonly FieldOption[] | ((data: Readonly<NodeData>) => readonly FieldOption[]);
 }
 
 export interface FieldOption {
@@ -131,8 +138,11 @@ export type FieldSchema =
 /** Node configuration state: a flat, JSON-safe record keyed by field. */
 export type NodeData = Record<string, FieldValue>;
 
-export function resolveOptions(schema: SelectFieldSchema): readonly FieldOption[] {
-  return typeof schema.options === 'function' ? schema.options() : schema.options;
+export function resolveOptions(
+  schema: SelectFieldSchema,
+  data: Readonly<NodeData> = {},
+): readonly FieldOption[] {
+  return typeof schema.options === 'function' ? schema.options(data) : schema.options;
 }
 
 export function isOnCard(schema: FieldSchema): boolean {

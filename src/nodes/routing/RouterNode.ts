@@ -5,7 +5,10 @@ import type { FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { IPortDescriptor } from '@core/model/contracts/ports';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
+import type { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { CATEGORY, PORT } from '../vocabulary';
+import { modelField } from '../modelField';
+import { SKILL_PORT, rulesModeField } from '../skillLayer';
 
 export const ROUTER_TYPE = 'route.classifier';
 
@@ -182,115 +185,125 @@ export class RouterNodeModel extends AbstractNodeModel {
  * renames — edges reference `branch:${id}`, so renaming a branch no longer
  * drops its edge (ticket 20 fix).
  */
-export const routerNode: INodeDefinition = defineNode(
-  {
-    id: ROUTER_TYPE,
-    category: CATEGORY.agent,
-    label: 'Router',
-    description: 'Classifies the input and sends it down one branch.',
-    iconId: 'node-router',
-    accent: 'violet',
-    keywords: ['route', 'classify', 'branch', 'switch', 'intent', 'supervisor'],
-    defaultSize: { width: 268, height: 210 },
-    fields: [
-      {
-        kind: 'textarea',
-        key: FIELD_RULES,
-        label: 'Routing rules',
-        // Rules *only*. The preamble and the output contract are locked on the
-        // base and are not fields, because a developer who cleared them would
-        // get a router whose answer cannot be parsed.
-        placeholder: 'If it mentions revenue or tables → dataquery. A hello → greeting.',
-        defaultValue: '',
-        minRows: 3,
-      },
-      {
-        kind: 'repeatable-group',
-        key: FIELD_BRANCHES,
-        label: 'Branches',
-        defaultValue: DEFAULT_BRANCHES,
-        addLabel: 'Add branch',
-        maxRows: MAX_BRANCHES,
-        fields: [
-          {
-            kind: 'text',
-            key: 'name',
-            label: 'Branch name',
-            placeholder: 'e.g. dataquery',
-            defaultValue: '',
-            validate: (value) => (value.trim() ? null : 'Name required'),
-          },
-        ],
-        // Each entry becomes an output port, so this field is what shapes the node.
-        validate: (value) => {
-          if (!Array.isArray(value) || value.length === 0) return 'Add at least one branch';
-          return null;
-        },
-      },
-      {
-        kind: 'text',
-        key: FIELD_FALLBACK,
-        label: 'Fallback branch',
-        placeholder: 'Used when nothing matches',
-        defaultValue: 'off_topic',
-        onCard: false,
-      },
-      {
-        kind: 'select',
-        key: FIELD_TIER,
-        label: 'Runtime',
-        defaultValue: 'react',
-        onCard: false,
-        options: [
-          { value: 'react', label: 'Agent · create_agent' },
-          { value: 'deep', label: 'Deep agent · create_deep_agent' },
-          { value: 'custom', label: 'Custom · hand-written node' },
-        ],
-      },
-    ],
-    // Dynamic ports. No new mechanism — `ports` has always been a function of
-    // node data; this is the first node type to actually need it.
-    ports: (data: Readonly<NodeData>): IPortDescriptor[] => {
-      const fallback = typeof data[FIELD_FALLBACK] === 'string' ? data[FIELD_FALLBACK] : '';
-      const branches = branchesOf(data);
-
-      const inputs: IPortDescriptor[] = [
+export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
+  return defineNode(
+    {
+      id: ROUTER_TYPE,
+      category: CATEGORY.agent,
+      label: 'Router',
+      description: 'Classifies the input and sends it down one branch.',
+      iconId: 'node-router',
+      accent: 'violet',
+      keywords: ['route', 'classify', 'branch', 'switch', 'intent', 'supervisor'],
+      defaultSize: { width: 268, height: 210 },
+      fields: [
+        modelField(providers),
         {
-          id: 'question',
-          direction: 'in',
-          type: PORT.text,
-          label: 'question',
-          // Classifying an agent's answer is the same move as chaining it
-          // into another prompt — see `AgentNode`'s `prompt` port.
-          accepts: [PORT.text, PORT.result],
-          description: 'The text to classify.',
+          kind: 'textarea',
+          key: FIELD_RULES,
+          label: 'Routing rules',
+          // Rules *only*. The preamble and the output contract are locked on the
+          // base and are not fields, because a developer who cleared them would
+          // get a router whose answer cannot be parsed.
+          placeholder: 'If it mentions revenue or tables → dataquery. A hello → greeting.',
+          defaultValue: '',
+          minRows: 3,
         },
-      ];
+        // On the card, because the rules it modifies are on the card. The
+        // switch reaches the rules above and any wired skill — never the
+        // branch list, the preamble or the output contract.
+        rulesModeField({ onCard: true }),
+        {
+          kind: 'repeatable-group',
+          key: FIELD_BRANCHES,
+          label: 'Branches',
+          defaultValue: DEFAULT_BRANCHES,
+          addLabel: 'Add branch',
+          maxRows: MAX_BRANCHES,
+          fields: [
+            {
+              kind: 'text',
+              key: 'name',
+              label: 'Branch name',
+              placeholder: 'e.g. dataquery',
+              defaultValue: '',
+              validate: (value) => (value.trim() ? null : 'Name required'),
+            },
+          ],
+          // Each entry becomes an output port, so this field is what shapes the node.
+          validate: (value) => {
+            if (!Array.isArray(value) || value.length === 0) return 'Add at least one branch';
+            return null;
+          },
+        },
+        {
+          kind: 'text',
+          key: FIELD_FALLBACK,
+          label: 'Fallback branch',
+          placeholder: 'Used when nothing matches',
+          defaultValue: 'off_topic',
+          onCard: false,
+        },
+        {
+          kind: 'select',
+          key: FIELD_TIER,
+          label: 'Runtime',
+          defaultValue: 'react',
+          onCard: false,
+          options: [
+            { value: 'react', label: 'Agent · create_agent' },
+            { value: 'deep', label: 'Deep agent · create_deep_agent' },
+            { value: 'custom', label: 'Custom · hand-written node' },
+          ],
+        },
+      ],
+      // Dynamic ports. No new mechanism — `ports` has always been a function of
+      // node data; this is the first node type to actually need it.
+      ports: (data: Readonly<NodeData>): IPortDescriptor[] => {
+        const fallback = typeof data[FIELD_FALLBACK] === 'string' ? data[FIELD_FALLBACK] : '';
+        const branches = branchesOf(data);
 
-      // Declaration order is preserved, because the order the user typed the
-      // branches in is the order they expect to see them down the card.
-      // Port id uses the stable `id` field, not the slugified name.
-      const outputs = branches.map((entry): IPortDescriptor => {
-        const isFallback = fallback.trim() !== '' && slug(fallback) === slug(entry.name);
-        return {
-          id: `branch:${entry.id}`,
-          direction: 'out',
-          type: PORT.text,
-          label: entry.name,
-          // Exactly one of these is taken, and which one is the whole point of
-          // the node — so the canvas carries the name on the link.
-          branch: true,
-          description: isFallback
-            ? 'Fallback — taken when no other branch matches.'
-            : `Taken when the input classifies as "${entry.name}".`,
-        };
-      });
+        const inputs: IPortDescriptor[] = [
+          {
+            id: 'question',
+            direction: 'in',
+            type: PORT.text,
+            label: 'question',
+            // Classifying an agent's answer is the same move as chaining it
+            // into another prompt — see `AgentNode`'s `prompt` port.
+            accepts: [PORT.text, PORT.result],
+            description: 'The text to classify.',
+          },
+          // A router composes a prompt, so it takes a skill like every other
+          // model-driven type — one declaration, in `../skillLayer`.
+          { ...SKILL_PORT },
+        ];
 
-      return [...inputs, ...outputs];
+        // Declaration order is preserved, because the order the user typed the
+        // branches in is the order they expect to see them down the card.
+        // Port id uses the stable `id` field, not the slugified name.
+        const outputs = branches.map((entry): IPortDescriptor => {
+          const isFallback = fallback.trim() !== '' && slug(fallback) === slug(entry.name);
+          return {
+            id: `branch:${entry.id}`,
+            direction: 'out',
+            type: PORT.text,
+            label: entry.name,
+            // Exactly one of these is taken, and which one is the whole point of
+            // the node — so the canvas carries the name on the link.
+            branch: true,
+            description: isFallback
+              ? 'Fallback — taken when no other branch matches.'
+              : `Taken when the input classifies as "${entry.name}".`,
+          };
+        });
+
+        return [...inputs, ...outputs];
+      },
     },
-  },
-  RouterNodeModel,
-);
+    RouterNodeModel,
+  );
+}
 
 /**
  * Browser-preview executor — deliberately refuses to run.
@@ -311,7 +324,7 @@ export const routerNode: INodeDefinition = defineNode(
  * `core/execution` when the FastAPI runtime takes over.
  */
 export const routerExecutor: INodeExecutor = {
-  id: routerNode.id,
+  id: ROUTER_TYPE,
   execute(ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
     ctx.log('Routing is evaluated by the Python runtime, not the browser preview.');
     return Promise.resolve(

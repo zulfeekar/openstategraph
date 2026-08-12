@@ -214,7 +214,16 @@ export const acyclicGraphRule: IWorkflowRule = {
           code: 'escapable-loop',
           severity: 'warning' as const,
           nodeId: first,
-          message: `This workflow contains a revise loop (${titles.length} nodes: ${shown}) — valid for the backend; use Chat to run it, not the canvas preview`,
+          // Describes what Run will do, rather than instructing the user to
+          // do something instead (ticket 22). The old wording — "use Chat to
+          // run it, not the canvas preview" — told people to go elsewhere
+          // for a thing the button already does: pressing Run on
+          // `chinook-assistant` opens the Ask panel, streams the loop
+          // through the backend and finishes ("2 attempts before the grader
+          // passed it"). Only the in-canvas *preview* engine, a sequential
+          // DAG walk, cannot follow a cycle, and that is a fact about the
+          // preview, not an instruction to the reader.
+          message: `This workflow contains a revise loop (${titles.length} nodes: ${shown}) — Run streams it through the backend, which handles loops; only the in-canvas step preview cannot follow one`,
         },
       ];
     }
@@ -268,6 +277,43 @@ export const hasOutputRule: IWorkflowRule = {
   },
 };
 
+/**
+ * Names, on *this* workflow, every node this build cannot render.
+ *
+ * The only warning before this was a generic amber note in the palette
+ * sidebar counting tools with no editor card. It named a *class* of tools; it
+ * never said "the workflow you are looking at right now contains one", which
+ * is the only form of the fact anyone can act on.
+ *
+ * **A warning, not an error, and the distinction is now honest.** It was
+ * proposed as an error while the node was being silently deleted — at that
+ * point the document really was being damaged. The serializer now preserves
+ * it (`serialization/UnknownNode.ts`) and the backend compiles it to a
+ * passthrough, so the workflow still loads, still saves byte-identically and
+ * still runs. Marking it an error would make `isRunnable` false and block Run
+ * on a workflow that works, which is a different bug wearing this one's
+ * clothes. The node cannot be *edited* here, and that is exactly what this
+ * says.
+ */
+export const unknownNodeTypeRule: IWorkflowRule = {
+  id: 'unknown-node-type',
+  check({ model, registry }) {
+    const diagnostics: Diagnostic[] = [];
+    for (const node of model.nodes()) {
+      if (registry.nodeTypes.get(node.type) != null) continue;
+      diagnostics.push({
+        code: 'unknown-node-type',
+        severity: 'warning',
+        nodeId: node.id,
+        message:
+          `"${node.id}" has no editor card for its type "${node.type}" — ` +
+          'it is preserved exactly as saved and still runs, but it cannot be edited here.',
+      });
+    }
+    return diagnostics;
+  },
+};
+
 /** Nodes wired to nothing at all will never run. */
 export const orphanNodeRule: IWorkflowRule = {
   id: 'orphan-nodes',
@@ -308,7 +354,7 @@ export const singleDefaultWorkerRule: IWorkflowRule = {
         // are the same statement, so they cannot drift apart.
         .filter(
           (worker): worker is AbstractNodeModel =>
-            worker != null && worker.data['default'] === true
+            worker != null && worker.data['default'] === true,
         );
       if (claimants.length < 2) continue;
       for (const worker of claimants) {
@@ -324,11 +370,127 @@ export const singleDefaultWorkerRule: IWorkflowRule = {
   },
 };
 
+/**
+ * The node type whose template ships with blanks, and the key its body lives
+ * under.
+ *
+ * Two literals rather than an import: `core/` depends on no node module — the
+ * dependency runs the other way, and `singleDefaultWorkerRule` above already
+ * names `orchestrate.supervisor` the same way. `port_specs.json` is what pins
+ * the spelling against the catalogue, in both languages.
+ */
+const SKILL_TYPE = 'input.skill';
+const SKILL_BODY_KEY = 'instruction';
+
+/** The marker a Skill's template leaves where a developer must write. */
+const PLACEHOLDER = /\{\{([^}]+)\}\}/g;
+
+/** Every `{{blank}}` still unfilled in `text`, in the order they appear. */
+export function unfilledPlaceholders(text: string): string[] {
+  return [...text.matchAll(PLACEHOLDER)].map((match) => match[1]?.trim() ?? '');
+}
+
+/**
+ * A Skill still carrying the blanks its template shipped with.
+ *
+ * Passing one through means `{{the first rule}}` reaches a model as an
+ * instruction; deleting it means a half-written skill runs as if it were
+ * finished. Neither failure announces itself, so it is an error — but a
+ * *diagnostic* error, raised here rather than inside `skillExecutor` where it
+ * only ever surfaced once a run had already started. A half-written document
+ * is exactly what this registry exists to show before the run button.
+ */
+export const skillBlanksRule: IWorkflowRule = {
+  id: 'skill-blanks',
+  check({ model }) {
+    const diagnostics: Diagnostic[] = [];
+    for (const node of model.nodes()) {
+      if (node.type !== SKILL_TYPE) continue;
+      const body = node.data[SKILL_BODY_KEY];
+      const blanks = unfilledPlaceholders(typeof body === 'string' ? body : '');
+      if (blanks.length === 0) continue;
+      diagnostics.push({
+        code: 'skill-unfilled-blank',
+        severity: 'error',
+        nodeId: node.id,
+        fieldKey: SKILL_BODY_KEY,
+        message: `${node.title} still has ${blanks.length} blank(s) to fill: ${blanks.join('; ')}`,
+      });
+    }
+    return diagnostics;
+  },
+};
+
+/**
+ * The entry node type, and the field its prompt lives in.
+ *
+ * Literals, like `SKILL_TYPE` and `singleDefaultWorkerRule`'s
+ * `orchestrate.supervisor` above: `core/` depends on no node module, the
+ * dependency runs the other way, and `port_specs.json` pins the spelling
+ * against the catalogue in both languages.
+ */
+const ENTRY_TYPE = 'input.text';
+const ENTRY_PROMPT = 'prompt';
+
+/**
+ * An entry prompt left blank is where the question comes in, not a defect.
+ *
+ * Ticket 22, found on the shipped examples. `concierge` and
+ * `workflow-architect` both opened with a red Diagnostics error —
+ * `Text Input: Enter a prompt for the agent` — on documents that answer
+ * correctly through Chat, refuse unanswerable questions honestly and carry
+ * conversation memory across turns. The rule was simply wrong: these are
+ * chat-driven workflows, the field is *supposed* to be empty, and the
+ * backend's `_input` node reads `state["question"] or configured` exactly so
+ * that a saved workflow answers **this** run rather than replaying whatever
+ * was typed when it was saved.
+ *
+ * The cost of getting this wrong is not cosmetic. A red error on a working
+ * flagship example trains a first-time developer to ignore the one panel
+ * that exists to be believed — and `isRunnable` is computed from `error`
+ * severity, so a false error is one refactor away from blocking a run on a
+ * workflow that works.
+ *
+ * So this replaces the field validator rather than downgrading it, and says
+ * the true thing instead: the question will arrive at run time. `info`,
+ * because the Diagnostics badge counts errors — a document in a normal state
+ * must not raise the count.
+ *
+ * **It is deliberately not silent.** A blank field with no explanation is
+ * the other failure: a developer who meant to type a prompt and did not gets
+ * told where the text is expected to come from, and a developer who meant it
+ * gets a sentence confirming they are right.
+ */
+export const entryQuestionRule: IWorkflowRule = {
+  id: 'entry-question',
+  check({ model }) {
+    const diagnostics: Diagnostic[] = [];
+    for (const node of model.nodes()) {
+      if (node.type !== ENTRY_TYPE) continue;
+      const prompt = node.data[ENTRY_PROMPT];
+      if (typeof prompt === 'string' && prompt.trim() !== '') continue;
+      diagnostics.push({
+        code: 'entry-supplied-at-run-time',
+        severity: 'info',
+        nodeId: node.id,
+        fieldKey: ENTRY_PROMPT,
+        message:
+          `${node.title} has no prompt, so this workflow takes its question at run time — ` +
+          'Chat and the Ask panel supply it. Type one here to give Run something to send.',
+      });
+    }
+    return diagnostics;
+  },
+};
+
 export const DEFAULT_WORKFLOW_RULES: readonly IWorkflowRule[] = [
   requiredInputsRule,
   fieldValidationRule,
+  entryQuestionRule,
   acyclicGraphRule,
   hasOutputRule,
   orphanNodeRule,
   singleDefaultWorkerRule,
+  skillBlanksRule,
+  unknownNodeTypeRule,
 ];

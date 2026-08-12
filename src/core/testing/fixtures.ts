@@ -113,6 +113,7 @@ class PassthroughNode extends AbstractNodeModelBase {}
 export const TYPE = {
   textInput: 'input.text',
   markdownFile: 'input.markdown',
+  skill: 'input.skill',
   agent: 'agent.llm',
   redditSearch: 'tool.reddit-search',
   output: 'output.formatted',

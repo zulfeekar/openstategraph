@@ -32,7 +32,7 @@ const FIELD_WORKFLOW = 'workflow';
  * spelled out.
  */
 export class SubgraphNodeModel extends AbstractNodeModel {
-  /** The referenced workflow's slug, e.g. `chinook-nl-to-sql`. */
+  /** The referenced workflow's slug, e.g. `chinook-assistant`. */
   get workflowSlug(): string {
     return this.getText(FIELD_WORKFLOW);
   }
@@ -53,7 +53,7 @@ export const subgraphNode: INodeDefinition = defineNode(
         kind: 'text',
         key: FIELD_WORKFLOW,
         label: 'Workflow slug',
-        placeholder: 'e.g. chinook-nl-to-sql',
+        placeholder: 'e.g. chinook-assistant',
         defaultValue: '',
       },
       OVERRIDES_FIELD,

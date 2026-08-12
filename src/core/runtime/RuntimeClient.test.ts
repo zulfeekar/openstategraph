@@ -84,14 +84,14 @@ describe('RuntimeClient.run', () => {
     await new RuntimeClient('http://rt', stub.fetch).run({
       workflow: {},
       question: 'q',
-      workflowSlug: 'chinook-nl-to-sql',
+      workflowSlug: 'chinook-assistant',
     });
 
     // The backend layers that workflow's own tools over its defaults; a
     // camelCase key would be silently dropped by FastAPI and the run would
     // bind no workflow tools — the agent then answers from memory.
     const sent = JSON.parse(stub.bodies[0]!) as Record<string, unknown>;
-    expect(sent['workflow_slug']).toBe('chinook-nl-to-sql');
+    expect(sent['workflow_slug']).toBe('chinook-assistant');
   });
 
   it('omits the slug when none is known — the field is optional server-side', async () => {
@@ -100,17 +100,50 @@ describe('RuntimeClient.run', () => {
     expect(JSON.parse(stub.bodies[0]!)).not.toHaveProperty('workflow_slug');
   });
 
-  it('sends the advisor flag only when the caller asks for it', async () => {
+  it('declares the audience only when the caller names one', async () => {
     const stub = stubFetch(jsonResponse(GOOD));
     const client = new RuntimeClient('http://rt', stub.fetch);
-    await client.run({ workflow: {}, question: 'q', advisor: true });
+    await client.run({ workflow: {}, question: 'q', audience: 'developer' });
     await client.run({ workflow: {}, question: 'q' });
 
-    // Editor-only capability. Omitted rather than sent as `false` so the
-    // customer `/chat` surface's requests stay byte-identical to what they
-    // were before this existed — nothing there can ever opt in by accident.
-    expect(JSON.parse(stub.bodies[0]!)).toHaveProperty('advisor', true);
-    expect(JSON.parse(stub.bodies[1]!)).not.toHaveProperty('advisor');
+    // Omitted rather than sent as `'customer'`, because the backend already
+    // defaults to `customer` and the safe value should be the one nobody has
+    // to remember to send. Nothing can opt in by accident.
+    expect(JSON.parse(stub.bodies[0]!)).toHaveProperty('audience', 'developer');
+    expect(JSON.parse(stub.bodies[1]!)).not.toHaveProperty('audience');
+  });
+
+  it('reports no developer channel when the run was a customer run', async () => {
+    const stub = stubFetch(jsonResponse(GOOD));
+    const result = await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+    });
+
+    // `null`, not an empty channel: "this run was not entitled to one" is a
+    // different fact from "there was nothing to report", and a UI that
+    // conflated them would claim an all-clear the payload never gave.
+    expect(result.ok && result.value.developer).toBeNull();
+    expect(result.ok && result.value.warnings).toEqual([]);
+  });
+
+  it('reads warnings and the suggestion off the developer channel', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        ...GOOD,
+        developer: { warnings: ['no tool'], suggestion: { nodeType: 'tool.web-search' } },
+      }),
+    );
+    const result = await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+      audience: 'developer',
+    });
+
+    expect(result.ok && result.value.warnings).toEqual(['no tool']);
+    expect(result.ok && result.value.developer?.suggestion).toEqual({
+      nodeType: 'tool.web-search',
+    });
   });
 
   it('omits the model when none is chosen, so the server decides', async () => {
@@ -334,6 +367,46 @@ describe('RuntimeClient.runStream', () => {
     expect(active).toEqual(['node:router.1', 'node:mount.music', 'node:legacy.1']);
   });
 
+  it('carries the active node on token frames, which are the ones that arrive early', async () => {
+    // Ticket 02. `update` frames are emitted when a node *finishes*, so a
+    // highlight fed by them alone shows the last node to complete. Tokens are
+    // the only frames that arrive while a node is still working — recorded
+    // live: 100+ of them streamed from inside a mounted workflow while the
+    // last update frame still named the router.
+    const text = sseBody([
+      [
+        'token',
+        {
+          node: 'model',
+          namespace: ['analyst:c1', 'agent_sql:c2'],
+          content: 'a',
+          activeNode: 'analyst',
+        },
+      ],
+      [
+        'token',
+        {
+          node: 'model',
+          namespace: ['analyst:c1', 'agent_sql:c2'],
+          content: 'b',
+          activeNode: 'analyst',
+        },
+      ],
+      // Older backend: no field, and no guess from `node` — `model` is on no
+      // canvas, so pointing the highlight at it would be worse than silence.
+      ['token', { node: 'model', namespace: [], content: 'c' }],
+      ['done', { answer: 'a', decisions: {}, outputs: {}, attempts: 0, mermaid: '', warnings: [] }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const active: string[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'token') active.push(event.activeNode);
+    });
+
+    expect(active).toEqual(['analyst', 'analyst', '']);
+  });
+
   it('a frame split exactly at the blank-line boundary still parses correctly', async () => {
     // The boundary the parser looks for is "\n\n" — splitting the byte stream
     // exactly there is the sharpest edge case for a buffering parser.
@@ -369,6 +442,97 @@ describe('RuntimeClient.runStream', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('Is the backend running?');
+  });
+});
+
+/**
+ * The conversation, both directions.
+ *
+ * A client can only ask a follow-up if it can (a) learn which thread its last
+ * question landed in and (b) name that thread on the next one. Neither half is
+ * visible from a rendered answer — a question sent into a fresh thread looks
+ * exactly like one sent into the right thread until the model is asked
+ * something that needs an antecedent — so both are pinned here.
+ */
+describe('RuntimeClient — thread continuity', () => {
+  const doneFrame = (extra: Record<string, unknown> = {}) =>
+    sseBody([
+      [
+        'done',
+        {
+          threadId: 'run-1234-abcd',
+          answer: 'Rock, $826.65',
+          decisions: {},
+          outputs: {},
+          attempts: 1,
+          mermaid: '',
+          ...extra,
+        },
+      ],
+    ]);
+
+  it('names the thread the done frame reported', async () => {
+    const text = doneFrame();
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 7)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || 'interrupted' in result.value || 'cancelled' in result.value) return;
+    expect(result.value.threadId).toBe('run-1234-abcd');
+  });
+
+  it('sends a known thread back under the key the server expects', async () => {
+    const text = doneFrame();
+    const stub = stubFetch(streamedResponse(text, 7));
+    await new RuntimeClient('http://rt', stub.fetch).runStream(
+      { workflow: {}, question: 'how did you get that?', threadId: 'run-1234-abcd' },
+      () => {},
+    );
+
+    // snake_case, like every other field on this request: FastAPI forbids
+    // unknown keys on `RunRequest`, and a camelCase `threadId` would be
+    // rejected outright rather than silently starting a new conversation.
+    const sent = JSON.parse(stub.bodies[0]!) as Record<string, unknown>;
+    expect(sent['thread_id']).toBe('run-1234-abcd');
+  });
+
+  it('omits the thread on the first question, so the server mints one', async () => {
+    const text = doneFrame();
+    const stub = stubFetch(streamedResponse(text, 7));
+    await new RuntimeClient('http://rt', stub.fetch).runStream(
+      { workflow: {}, question: 'which genre earns the most?' },
+      () => {},
+    );
+    expect(JSON.parse(stub.bodies[0]!)).not.toHaveProperty('thread_id');
+  });
+
+  it('names the thread on a failure too — a failed turn still happened in one', async () => {
+    // The failure settles as `Err(detail)`, which carries prose and no thread,
+    // so the `error` *event* is the only place a surface can learn it. Without
+    // this the send after a failed turn would silently open a second
+    // conversation.
+    const text = sseBody([['error', { threadId: 'run-1234-abcd', detail: 'KeyError: prompt' }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 3)));
+
+    const threads: string[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'error') threads.push(event.threadId);
+    });
+    expect(threads).toEqual(['run-1234-abcd']);
+  });
+
+  it('reports an empty thread rather than inventing one, against an older backend', async () => {
+    // Empty means "this frame said nothing about its thread". Consumers treat
+    // it as "keep what you have" (`thread.ts`), never as "there is none".
+    const text = sseBody([
+      ['done', { answer: 'a', decisions: {}, outputs: {}, attempts: 0, mermaid: '' }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 5)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || 'interrupted' in result.value || 'cancelled' in result.value) return;
+    expect(result.value.threadId).toBe('');
   });
 });
 
@@ -642,6 +806,105 @@ describe('RuntimeClient.runStream — how a stream ended', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(isCancelled(result.value)).toBe(true);
+  });
+});
+
+describe('RuntimeClient — past runs', () => {
+  const ROW = {
+    thread_id: 't-1',
+    workflow_slug: 'chinook-assistant',
+    session_id: 's-1',
+    user_email: 'ada@example.com',
+    updated_at: '2026-08-10T12:00:00+00:00',
+    steps: 4,
+    question: 'how many tracks?',
+    answer: 'Rock earns the most.',
+    status: 'paused',
+  };
+
+  it('lists what the backend stored, renamed into the editor’s vocabulary', async () => {
+    const stub = stubFetch(jsonResponse({ threads: [ROW] }));
+    const result = await new RuntimeClient('', stub.fetch).pastRuns();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toEqual({
+      threadId: 't-1',
+      workflowSlug: 'chinook-assistant',
+      sessionId: 's-1',
+      userEmail: 'ada@example.com',
+      updatedAt: '2026-08-10T12:00:00+00:00',
+      steps: 4,
+      question: 'how many tracks?',
+      answer: 'Rock earns the most.',
+      status: 'paused',
+    });
+  });
+
+  it('sends the filters as query parameters, not as a body', async () => {
+    const stub = stubFetch(jsonResponse({ threads: [] }));
+    await new RuntimeClient('', stub.fetch).pastRuns({
+      workflowSlug: 'demo',
+      userEmail: 'ada@example.com',
+      limit: 5,
+    });
+    expect(stub.calls[0]).toContain('/api/threads?');
+    expect(stub.calls[0]).toContain('workflow_slug=demo');
+    expect(stub.calls[0]).toContain('user_email=ada%40example.com');
+    expect(stub.calls[0]).toContain('limit=5');
+    expect(stub.bodies).toEqual([]);
+  });
+
+  it('asks for no filters when given none', async () => {
+    const stub = stubFetch(jsonResponse({ threads: [] }));
+    await new RuntimeClient('', stub.fetch).pastRuns();
+    expect(stub.calls[0]).toBe('/api/threads');
+  });
+
+  it('treats an unknown status as finished — never offering a Resume that cannot work', async () => {
+    const stub = stubFetch(jsonResponse({ threads: [{ ...ROW, status: 'something-new' }] }));
+    const result = await new RuntimeClient('', stub.fetch).pastRuns();
+    expect(result.ok && result.value[0]?.status).toBe('finished');
+  });
+
+  it('reads one run back as its steps, oldest first', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        thread: ROW,
+        steps: [
+          { checkpoint_id: 'c1', step: -1, at: 'a', source: 'input', values: {} },
+          { checkpoint_id: 'c2', step: 0, at: 'b', source: 'loop', values: { answer: 'x' } },
+        ],
+      }),
+    );
+    const result = await new RuntimeClient('', stub.fetch).pastRun('t-1');
+    expect(stub.calls[0]).toBe('/api/threads/t-1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.run.threadId).toBe('t-1');
+    expect(result.value.steps.map((step) => step.step)).toEqual([-1, 0]);
+    expect(result.value.steps[1]?.values['answer']).toBe('x');
+  });
+
+  it('escapes a thread id rather than pasting it into a URL', async () => {
+    const stub = stubFetch(jsonResponse({ thread: ROW, steps: [] }));
+    await new RuntimeClient('', stub.fetch).pastRun('a/b?c');
+    expect(stub.calls[0]).toBe('/api/threads/a%2Fb%3Fc');
+  });
+
+  it('says plainly when a thread is not stored', async () => {
+    const stub = stubFetch(jsonResponse({ detail: 'nope' }, 404));
+    const result = await new RuntimeClient('', stub.fetch).pastRun('gone');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('gone');
+  });
+
+  it('reports an unreachable backend as such, not as an empty history', async () => {
+    const client = new RuntimeClient('http://localhost:8000', () => Promise.reject(new Error('x')));
+    const result = await client.pastRuns();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Is the backend running?');
   });
 });
 

@@ -1,33 +1,41 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { formatComposition, summarizeComposition } from './compositionSummary';
+import { compositionPurpose, formatComposition, summarizeComposition } from './compositionSummary';
 
-/** The real saved team, read from disk — a hand-written fixture would drift
- * from the document the card actually receives. */
+/** A real saved package, read from disk — a hand-written fixture would drift
+ * from the document the card actually receives. `chinook-assistant` is the one
+ * visible example: a router in front of three agents, the SQL tools and web
+ * tools they hold between them, and the grader that closes the analyst's retry
+ * loop. It is what the gateway mounts, so it is exactly the document a mount
+ * card is handed. (It used to be the smaller `chinook-nl-to-sql`; ticket 10
+ * collapsed the two, which is why the counted figures below changed.) */
 const readWorkflow = (slug: string): unknown =>
   JSON.parse(
-    readFileSync(fileURLToPath(new URL(`../../../workflows/${slug}/workflow.json`, import.meta.url)), 'utf8'),
+    readFileSync(
+      fileURLToPath(new URL(`../../../workflows/${slug}/workflow.json`, import.meta.url)),
+      'utf8',
+    ),
   );
 
 describe('summarizeComposition', () => {
-  it('counts the real chinook-metrics-team into the atomic vocabulary', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-metrics-team'), 'team');
+  it('counts the real mounted example into the atomic vocabulary', () => {
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'team');
     expect(summary).not.toBeNull();
     expect(formatComposition(summary!)).toBe(
-      '1 supervisor · 1 worker · 1 grader · 1 function · 3 tools — loops until its grader passes',
+      '3 agents · 1 router · 1 grader · 5 tools — loops until its grader passes',
     );
   });
 
   it('accepts a bare document as well as a saved envelope', () => {
-    const envelope = readWorkflow('chinook-metrics-team') as { document: unknown };
+    const envelope = readWorkflow('chinook-assistant') as { document: unknown };
     expect(summarizeComposition(envelope.document, 'team')).toEqual(
       summarizeComposition(envelope, 'team'),
     );
   });
 
   it('claims no loop for a subgraph mount, even one containing a grader', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-metrics-team'), 'subgraph');
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'subgraph');
     expect(summary?.note).toBeUndefined();
     expect(formatComposition(summary!)).not.toContain('loops');
   });
@@ -75,7 +83,39 @@ describe('summarizeComposition', () => {
   it('returns null for anything without countable content', () => {
     expect(summarizeComposition(null, 'team')).toBeNull();
     expect(summarizeComposition({ nodes: [] }, 'team')).toBeNull();
-    expect(summarizeComposition({ nodes: [{ id: 'n', type: 'annotate.note' }] }, 'team')).toBeNull();
+    expect(
+      summarizeComposition({ nodes: [{ id: 'n', type: 'annotate.note' }] }, 'team'),
+    ).toBeNull();
     expect(summarizeComposition('not a document', 'subgraph')).toBeNull();
+  });
+});
+
+describe('compositionPurpose', () => {
+  it('reads the package’s own one-line purpose', () => {
+    expect(
+      compositionPurpose({
+        nodes: [],
+        settings: { purpose: 'Answers questions about the Chinook database in SQL.' },
+      }),
+    ).toBe('Answers questions about the Chinook database in SQL.');
+  });
+
+  it('is empty when the package never wrote one — no invented summary', () => {
+    // A derived sentence would have to guess, and a mount card that
+    // confidently mis-describes the thing it runs is worse than a quiet one.
+    expect(compositionPurpose({ nodes: [] })).toBe('');
+    expect(compositionPurpose({ nodes: [], settings: { purpose: '   ' } })).toBe('');
+    expect(compositionPurpose({ nodes: [], settings: { purpose: 42 } })).toBe('');
+  });
+
+  it('never throws on a malformed payload — this runs inside a card render', () => {
+    expect(compositionPurpose(null)).toBe('');
+    expect(compositionPurpose('nonsense')).toBe('');
+    expect(compositionPurpose({ settings: null })).toBe('');
+  });
+
+  it('caps a purpose that was written as a paragraph', () => {
+    const long = `${'word '.repeat(60)}end.`;
+    expect(compositionPurpose({ settings: { purpose: long } }).length).toBeLessThanOrEqual(160);
   });
 });

@@ -31,4 +31,35 @@ describe('platform tool nodes', () => {
       expect(knowledge?.definition.keywords).toContain(keyword);
     }
   });
+
+  it('allows exactly one Knowledge atom per workflow', () => {
+    // Ticket 16. One document is one package is one `knowledge/` directory,
+    // so a second atom would be a second card claiming the same single store
+    // — and two build buttons racing over the same files. `maxInstances`
+    // already counts per open document, which is exactly the right scope: a
+    // mounted child is a different document, so a root and a team may each
+    // hold one. That is the designed shape, not a collision.
+    const knowledge = PLATFORM_TOOL_NODES.find(
+      (entry) => entry.definition.id === 'tool.knowledge-lookup',
+    );
+    expect(knowledge?.definition.maxInstances).toBe(1);
+
+    const workbench = makeWorkbench();
+    const first = workbench.controller.nodes.add('tool.knowledge-lookup', { x: 0, y: 0 });
+    expect(first.ok).toBe(true);
+    const second = workbench.controller.nodes.add('tool.knowledge-lookup', { x: 200, y: 0 });
+    expect(second.ok).toBe(false);
+    expect(workbench.model.countOfType('tool.knowledge-lookup')).toBe(1);
+  });
+
+  it('states the build-time rule on the atom every developer reads', () => {
+    // Invariant 3 of the knowledge architecture, stated where the affordance
+    // lives rather than only in a decision record: the button is build-time,
+    // and nothing in a compiled graph can reach it.
+    const knowledge = PLATFORM_TOOL_NODES.find(
+      (entry) => entry.definition.id === 'tool.knowledge-lookup',
+    );
+    expect(knowledge?.definition.description).toContain('build time');
+    expect(knowledge?.definition.description).toContain('a run only ever reads them');
+  });
 });

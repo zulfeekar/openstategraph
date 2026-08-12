@@ -5,8 +5,6 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
-import { TABULAR_NODES } from './tools/TabularDataNode';
-import { WORKSHOP_NODES } from './tools/CodeWorkshopNode';
 import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
 
 /**
@@ -41,14 +39,6 @@ export function syncWorkflowScopedNodes(
   const chinookTypeIds = new Set(CHINOOK_NODES.map((n) => n.definition.id));
   const documentUsesChinook = model.nodes().some((node) => chinookTypeIds.has(node.type));
   applyChinookRegistration(documentUsesChinook, registry, executors);
-
-  const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
-  const documentUsesTabular = model.nodes().some((node) => tabularTypeIds.has(node.type));
-  applyTabularRegistration(documentUsesTabular, registry, executors);
-
-  const workshopTypeIds = new Set(WORKSHOP_NODES.map((n) => n.definition.id));
-  const documentUsesWorkshop = model.nodes().some((node) => workshopTypeIds.has(node.type));
-  applyFamilyRegistration(WORKSHOP_NODES, documentUsesWorkshop, registry, executors);
 }
 
 /**
@@ -62,7 +52,7 @@ export function syncWorkflowScopedNodes(
  * (`Skipped unknown node type "…"`, filed as a warning, not a failure). If
  * Chinook's tools are only ever registered *after* their nodes are already
  * in the model, they can never get there in the first place — importing
- * `chinook-nl-to-sql` or this session's `intent-routed-demo` would have
+ * `chinook-assistant` or this session's `intent-routed-demo` would have
  * silently dropped all three tool nodes and every edge touching them,
  * every single time either was loaded. Call this immediately before
  * `controller.document.importJSON(json)`, from every load path (an
@@ -87,37 +77,26 @@ export function registerNodeTypesForRawDocument(
       chinookTypeIds.has((node as { type?: unknown }).type as string),
   );
   applyChinookRegistration(documentUsesChinook, registry, executors);
-
-  const tabularTypeIds = new Set(TABULAR_NODES.map((n) => n.definition.id));
-  const documentUsesTabular = nodes.some(
-    (node) =>
-      typeof node === 'object' &&
-      node != null &&
-      tabularTypeIds.has((node as { type?: unknown }).type as string),
-  );
-  applyTabularRegistration(documentUsesTabular, registry, executors);
-
-  const workshopTypeIds = new Set(WORKSHOP_NODES.map((n) => n.definition.id));
-  const documentUsesWorkshop = nodes.some(
-    (node) =>
-      typeof node === 'object' &&
-      node != null &&
-      workshopTypeIds.has((node as { type?: unknown }).type as string),
-  );
-  applyFamilyRegistration(WORKSHOP_NODES, documentUsesWorkshop, registry, executors);
 }
 
 /**
  * Unconditionally registers Chinook's tools.
  *
- * For the one legitimate case that needs it stated outright rather than
- * inferred from a document: the seeded startup demo (`seedDemo.ts`) *is*
- * a Chinook showcase, built by writing nodes straight to the model before
- * any document exists for `registerNodeTypesForRawDocument` to inspect.
- * Found live: without this, `seedDemoWorkflow` crashed at startup —
+ * For a caller that needs the family stated outright rather than inferred
+ * from a document — today, tests that add a Chinook node to a bare workbench
+ * with no document behind it.
+ *
+ * **The startup seed is no longer one of them.** `seedDemo.ts` used to build
+ * a Chinook showcase by writing nodes straight to the model before any
+ * document existed for `registerNodeTypesForRawDocument` to inspect, and
+ * without this call it crashed at startup —
  * `registry.nodeTypes.require('tool.chinook-get-all-tables')` throwing
  * synchronously before React ever mounts, which an error boundary cannot
- * catch because there is no component tree yet to catch it in.
+ * catch because there is no component tree yet to catch it in. One-chinook
+ * ticket 10 removed the hand-built seed entirely: the editor now imports the
+ * shipped `workflows/chinook-assistant/workflow.json`, so it goes through
+ * `registerNodeTypesForRawDocument` like every other load path and the
+ * special case is gone rather than merely satisfied.
  */
 export function registerChinookNodes(
   registry: ModelRegistry,
@@ -157,12 +136,46 @@ export function registerDiscoveredCapabilities(
     }
   }
 
+  const minted: string[] = [];
   for (const capability of capabilities) {
+    if (isAlreadyHandAuthored(capability, registry)) continue;
     const { definition, executor } = createDiscoveredToolNode(capability);
     registry.nodeTypes.upsert(asWorkflowScoped(definition));
     executors.upsert(executor);
+    minted.push(capability.id);
   }
-  registeredDiscoveredToolIds = capabilities.map((c) => c.id);
+  // Only what was actually minted, so the teardown above cannot unregister a
+  // hand-authored card that discovery merely declined to duplicate.
+  registeredDiscoveredToolIds = minted;
+}
+
+/**
+ * Does a purpose-built card already cover this capability?
+ *
+ * A Python `BaseTool` declares the `node_type` of the card meant to represent
+ * it, and the backend has always sent that field. The frontend never read it,
+ * so once the Chinook tools moved into the visible package the palette's "This
+ * workflow" section showed **six** entries where three are correct: the
+ * hand-authored cards, plus a generic one per capability keyed by
+ * `capability.id`.
+ *
+ * That is worse than clutter. The generic card's executor refuses toward Chat
+ * rather than running in the canvas preview, and it is not the type the
+ * shipped document wires — so of two identically-named palette entries, one
+ * gives you a node that behaves differently from the one already on the canvas
+ * beside it, and nothing on either card says which.
+ *
+ * The rule is not new, only half-implemented: `api/registries.py` already
+ * records that "same-type collisions resolve workflow-wins, mirroring the
+ * frontend's local-shadows-global registry rule". This is the frontend half.
+ *
+ * **Resolution, not mere declaration.** A tool naming a `node_type` no
+ * TypeScript module ships must still reach the palette — otherwise declaring
+ * the field would *remove* a capability, which is the opposite of what it is
+ * for.
+ */
+function isAlreadyHandAuthored(capability: ToolCapability, registry: ModelRegistry): boolean {
+  return capability.nodeType !== '' && registry.nodeTypes.get(capability.nodeType) != null;
 }
 
 /**
@@ -170,8 +183,8 @@ export function registerDiscoveredCapabilities(
  * into the registry.
  *
  * The authoritative stamp now lives in each node module's spec
- * (`scope: 'workflow'` in `ChinookDatabaseNode`, `TabularDataNode`,
- * `CodeWorkshopNode`, `DiscoveredToolNode`). It has to: `defineNode` binds
+ * (`scope: 'workflow'` in `ChinookDatabaseNode` and `DiscoveredToolNode`).
+ * It has to: `defineNode` binds
  * `create` to its own local definition, so a copy made here can never
  * reach a *placed* node — `node.definition` on an instance is the one the
  * spec produced, and `NodeCard` reads `definition.scope` to badge canvas
@@ -194,10 +207,9 @@ function applyChinookRegistration(
 }
 
 /**
- * The generic form of the per-family apply helpers above: registers or
- * unregisters one workflow-scoped node family wholesale. New families
- * (Code Workshop is the first) use this directly instead of adding another
- * copy of the same loop.
+ * The generic form of the per-family apply helper above: registers or
+ * unregisters one workflow-scoped node family wholesale. A new family uses
+ * this directly instead of adding another copy of the same loop.
  */
 function applyFamilyRegistration(
   family: ReadonlyArray<{ definition: INodeDefinition; executor: INodeExecutor }>,
@@ -222,12 +234,4 @@ function applyFamilyRegistration(
       executors.unregister(executor.id);
     }
   }
-}
-
-function applyTabularRegistration(
-  shouldBeRegistered: boolean,
-  registry: ModelRegistry,
-  executors: Registry<INodeExecutor>,
-): void {
-  applyFamilyRegistration(TABULAR_NODES, shouldBeRegistered, registry, executors);
 }

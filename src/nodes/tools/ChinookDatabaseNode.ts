@@ -1,14 +1,26 @@
 /**
- * Chinook Database tool nodes.
+ * Chinook Database tool nodes — the canvas half.
  *
- * Provides tools for:
- * - Getting table schemas
- * - Getting columns by table
- * - Executing SQL queries
+ * These declare the node types (label, ports, card); the tools that actually
+ * run live in `workflows/chinook-assistant/tools/chinook.py` and read the real
+ * `Chinook_Sqlite.sqlite` over a `mode=ro` connection.
  *
- * The Chinook database is a sample music store database with tables for:
- * - Artist, Album, Track, Genre
- * - Customer, Employee, Invoice, InvoiceLine, Playlist, PlaylistTrack, MediaType
+ * **The schema is the database's, and nothing here keeps a copy of it.** This
+ * file used to carry a `CHINOOK_SCHEMA` constant restating every table's
+ * columns and types so the browser-preview executors could answer offline.
+ * That was duplicated knowledge whose source of truth is a `.sqlite` file, and
+ * duplicated knowledge with no drift guard becomes wrong quietly — the worst
+ * way for a *schema* to be wrong, because a plausible-looking column name
+ * produces SQL that parses and answers the wrong question. So the two
+ * schema-shaped tools now refuse in the browser preview and name where the
+ * answer lives, the same honest-refusal pattern a dozen other executors here
+ * already use. The reader is not left worse off: the card
+ * (`view/nodes/SqlSchemaBody`) shows the real tables and their columns, read
+ * from the file through `GET /api/workflows/{slug}/sql-schema`.
+ *
+ * `SAMPLE_DATA` below is a different thing and stays: it fabricates *rows*,
+ * not structure, for a preview that is clearly labelled a simulation, and no
+ * schema decision is taken from it.
  */
 
 import { Ok, Err, type Result } from '@core/kernel/Result';
@@ -22,178 +34,65 @@ import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './Abs
  * Get Table Schema
  * ================================================================== */
 
-const FIELD_TABLE_NAME = 'tableName';
-
-export class GetTableSchemaNodeModel extends AbstractToolNodeModel {
-  get tableName(): string {
-    return this.getText(FIELD_TABLE_NAME).trim();
-  }
-}
+export class GetTableSchemaNodeModel extends AbstractToolNodeModel {}
 
 /**
- * Returns the schema (columns and types) for a specific table.
+ * Returns the schema for whichever table the **agent** asks about.
+ *
+ * **There is deliberately no `Table` control here.** There used to be: a
+ * select of eleven hardcoded names defaulting to `Artist`. It configured
+ * nothing — the tool that actually runs
+ * (`workflows/chinook-assistant/tools/chinook.py`) takes `table` as a model
+ * argument and declares no `configure()`, so node data never reached it — and
+ * it told every reader something false, that this node fetches Artist's
+ * schema. The agent sees every table and picks; the card says so by showing
+ * the real tables (`SqlSchemaBody`), read from the database itself.
+ *
+ * A document saved before this change still carries `tableName` in its data.
+ * That is harmless and stays harmless: node data is a bag, unknown keys are
+ * ignored on load, no field renders one, and the compiler never read it even
+ * when the control existed. Nothing to migrate — removing the control changed
+ * no compiled behaviour in either direction, which is why the schema version
+ * does not move (`backend/openstategraph/schema.py` bumps for changes that
+ * alter what a document *compiles to*).
  */
 export const getTableSchemaNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.chinook-get-schema',
     scope: 'workflow',
     label: 'Get Table Schema',
-    description: 'Retrieves the schema (column names and types) for a Chinook database table.',
+    description:
+      'Retrieves the schema (columns, types and foreign keys) of whichever Chinook table the agent asks about.',
     iconId: 'node-database',
     accent: 'blue',
     keywords: ['database', 'schema', 'table', 'chinook', 'sql'],
     defaultSize: { width: 280, height: 160 },
-    fields: [
-      {
-        kind: 'select',
-        key: FIELD_TABLE_NAME,
-        label: 'Table',
-        options: () => [
-          { value: 'Artist', label: 'Artist' },
-          { value: 'Album', label: 'Album' },
-          { value: 'Track', label: 'Track' },
-          { value: 'Genre', label: 'Genre' },
-          { value: 'MediaType', label: 'MediaType' },
-          { value: 'Playlist', label: 'Playlist' },
-          { value: 'PlaylistTrack', label: 'PlaylistTrack' },
-          { value: 'Customer', label: 'Customer' },
-          { value: 'Employee', label: 'Employee' },
-          { value: 'Invoice', label: 'Invoice' },
-          { value: 'InvoiceLine', label: 'InvoiceLine' },
-        ],
-        defaultValue: 'Artist',
-      },
-    ],
+    fields: [],
   },
   GetTableSchemaNodeModel,
 );
 
-// Chinook database schema
-const CHINOOK_SCHEMA: Record<string, { columns: { name: string; type: string }[] }> = {
-  Artist: {
-    columns: [
-      { name: 'ArtistId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Name', type: 'NVARCHAR(120)' },
-    ],
-  },
-  Album: {
-    columns: [
-      { name: 'AlbumId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Title', type: 'NVARCHAR(160)' },
-      { name: 'ArtistId', type: 'INTEGER FOREIGN KEY' },
-    ],
-  },
-  Track: {
-    columns: [
-      { name: 'TrackId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Name', type: 'NVARCHAR(200)' },
-      { name: 'AlbumId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'MediaTypeId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'GenreId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'Composer', type: 'NVARCHAR(220)' },
-      { name: 'Milliseconds', type: 'INTEGER' },
-      { name: 'Bytes', type: 'INTEGER' },
-      { name: 'UnitPrice', type: 'NUMERIC(10,2)' },
-    ],
-  },
-  Genre: {
-    columns: [
-      { name: 'GenreId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Name', type: 'NVARCHAR(38)' },
-    ],
-  },
-  MediaType: {
-    columns: [
-      { name: 'MediaTypeId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Name', type: 'NVARCHAR(50)' },
-    ],
-  },
-  Playlist: {
-    columns: [
-      { name: 'PlaylistId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'Name', type: 'NVARCHAR(120)' },
-    ],
-  },
-  PlaylistTrack: {
-    columns: [
-      { name: 'PlaylistId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'TrackId', type: 'INTEGER PRIMARY KEY' },
-    ],
-  },
-  Customer: {
-    columns: [
-      { name: 'CustomerId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'FirstName', type: 'NVARCHAR(40)' },
-      { name: 'LastName', type: 'NVARCHAR(20)' },
-      { name: 'Company', type: 'NVARCHAR(80)' },
-      { name: 'Address', type: 'NVARCHAR(70)' },
-      { name: 'City', type: 'NVARCHAR(40)' },
-      { name: 'State', type: 'NVARCHAR(40)' },
-      { name: 'Country', type: 'NVARCHAR(40)' },
-      { name: 'PostalCode', type: 'NVARCHAR(10)' },
-      { name: 'Phone', type: 'NVARCHAR(24)' },
-      { name: 'Fax', type: 'NVARCHAR(24)' },
-      { name: 'Email', type: 'NVARCHAR(60)' },
-      { name: 'SupportRepId', type: 'INTEGER FOREIGN KEY' },
-    ],
-  },
-  Employee: {
-    columns: [
-      { name: 'EmployeeId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'LastName', type: 'NVARCHAR(20)' },
-      { name: 'FirstName', type: 'NVARCHAR(20)' },
-      { name: 'Title', type: 'NVARCHAR(30)' },
-      { name: 'ReportsTo', type: 'INTEGER FOREIGN KEY' },
-      { name: 'BirthDate', type: 'DATETIME' },
-      { name: 'HireDate', type: 'DATETIME' },
-      { name: 'Address', type: 'NVARCHAR(70)' },
-      { name: 'City', type: 'NVARCHAR(40)' },
-      { name: 'State', type: 'NVARCHAR(40)' },
-      { name: 'Country', type: 'NVARCHAR(40)' },
-      { name: 'PostalCode', type: 'NVARCHAR(10)' },
-      { name: 'Phone', type: 'NVARCHAR(24)' },
-      { name: 'Fax', type: 'NVARCHAR(24)' },
-      { name: 'Email', type: 'NVARCHAR(60)' },
-    ],
-  },
-  Invoice: {
-    columns: [
-      { name: 'InvoiceId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'CustomerId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'InvoiceDate', type: 'DATETIME' },
-      { name: 'BillingAddress', type: 'NVARCHAR(70)' },
-      { name: 'BillingCity', type: 'NVARCHAR(40)' },
-      { name: 'BillingState', type: 'NVARCHAR(40)' },
-      { name: 'BillingCountry', type: 'NVARCHAR(40)' },
-      { name: 'BillingPostalCode', type: 'NVARCHAR(10)' },
-      { name: 'Total', type: 'NUMERIC(10,2)' },
-    ],
-  },
-  InvoiceLine: {
-    columns: [
-      { name: 'InvoiceLineId', type: 'INTEGER PRIMARY KEY' },
-      { name: 'InvoiceId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'TrackId', type: 'INTEGER FOREIGN KEY' },
-      { name: 'UnitPrice', type: 'NUMERIC(10,2)' },
-      { name: 'Quantity', type: 'INTEGER' },
-    ],
-  },
-};
+/**
+ * The one message both schema tools give in the browser preview.
+ *
+ * Named once because saying it twice, differently, is how two answers to the
+ * same question start to disagree.
+ */
+const NO_LOCAL_DATABASE =
+  'The Chinook schema comes from the database file itself (workflows/chinook-assistant/data/Chinook_Sqlite.sqlite), which the browser cannot open. Run this workflow through the runtime — the agent gets the real schema there, and this node’s card shows the same tables.';
 
 const getTableSchemaTool: IToolExecutor = {
-  describeTool(node: AbstractNodeModel): ToolSpec {
-    const tool = node as GetTableSchemaNodeModel;
+  describeTool(): ToolSpec {
     return {
       name: 'get_table_schema',
       description:
-        'Returns the schema (column names and types) for a specific table in the Chinook database. Use this to understand the structure of a table before writing queries.',
+        'Returns the schema (column names, types and foreign keys) for a specific table in the Chinook database. Use this to understand the structure of a table before writing queries.',
       parameters: {
         type: 'object',
         properties: {
           tableName: {
             type: 'string',
             description: 'The name of the table to get schema for',
-            default: tool.tableName,
           },
         },
         required: ['tableName'],
@@ -202,33 +101,8 @@ const getTableSchemaTool: IToolExecutor = {
     };
   },
 
-  async invokeTool(
-    node: AbstractNodeModel,
-    args: Record<string, unknown>,
-    ctx: ExecutionContext,
-  ): Promise<Result<string, string>> {
-    const tool = node as GetTableSchemaNodeModel;
-    const tableName =
-      (typeof args['tableName'] === 'string' && args['tableName'].trim()) || tool.tableName;
-
-    const schema = CHINOOK_SCHEMA[tableName];
-    if (!schema) {
-      return Err(
-        `Unknown table: ${tableName}. Available tables: ${Object.keys(CHINOOK_SCHEMA).join(', ')}`,
-      );
-    }
-
-    ctx.log(`Retrieved schema for table: ${tableName}`);
-    return Ok(
-      JSON.stringify(
-        {
-          tableName,
-          columns: schema.columns,
-        },
-        null,
-        2,
-      ),
-    );
+  async invokeTool(): Promise<Result<string, string>> {
+    return Err(NO_LOCAL_DATABASE);
   },
 };
 
@@ -244,14 +118,14 @@ export const getTableSchemaExecutor: INodeExecutor = createToolExecutor(
 export class GetAllTablesNodeModel extends AbstractToolNodeModel {}
 
 /**
- * Returns a list of all tables in the Chinook database with brief descriptions.
+ * Returns a list of all tables in the Chinook database.
  */
 export const getAllTablesNode: INodeDefinition = defineToolNode(
   {
     id: 'tool.chinook-get-all-tables',
     scope: 'workflow',
     label: 'List All Tables',
-    description: 'Returns a list of all tables in the Chinook database with descriptions.',
+    description: 'Returns every table in the Chinook database, with row counts.',
     iconId: 'node-database',
     accent: 'blue',
     keywords: ['database', 'tables', 'chinook', 'sql', 'list'],
@@ -261,26 +135,12 @@ export const getAllTablesNode: INodeDefinition = defineToolNode(
   GetAllTablesNodeModel,
 );
 
-const TABLE_DESCRIPTIONS: Record<string, string> = {
-  Artist: 'Music artists (bands, singers)',
-  Album: 'Music albums, linked to artists',
-  Track: 'Individual songs/tracks with duration and pricing',
-  Genre: 'Music genres (Rock, Jazz, etc.)',
-  MediaType: 'Audio/video formats (MP3, AAC, etc.)',
-  Playlist: 'User-created playlists',
-  PlaylistTrack: 'Junction table linking playlists to tracks',
-  Customer: 'Store customers with contact info',
-  Employee: 'Store employees, some support customers',
-  Invoice: 'Customer purchase invoices',
-  InvoiceLine: 'Individual items on invoices',
-};
-
 const getAllTablesTool: IToolExecutor = {
   describeTool(): ToolSpec {
     return {
       name: 'get_all_tables',
       description:
-        'Returns a complete list of all tables in the Chinook database with their descriptions. Use this first to understand what data is available.',
+        'Returns a complete list of all tables in the Chinook database. Use this first to understand what data is available.',
       parameters: {
         type: 'object',
         properties: {},
@@ -289,25 +149,8 @@ const getAllTablesTool: IToolExecutor = {
     };
   },
 
-  async invokeTool(
-    _node: AbstractNodeModel,
-    _args: Record<string, unknown>,
-    ctx: ExecutionContext,
-  ): Promise<Result<string, string>> {
-    ctx.log('Retrieved list of all tables');
-    return Ok(
-      JSON.stringify(
-        {
-          tables: Object.entries(CHINOOK_SCHEMA).map(([name, schema]) => ({
-            name,
-            columnCount: schema.columns.length,
-            description: TABLE_DESCRIPTIONS[name] || 'No description available',
-          })),
-        },
-        null,
-        2,
-      ),
-    );
+  async invokeTool(): Promise<Result<string, string>> {
+    return Err(NO_LOCAL_DATABASE);
   },
 };
 

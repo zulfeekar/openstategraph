@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
-import { registerDiscoveredCapabilities, registerNodeTypesForRawDocument } from './workflowScoped';
+import {
+  registerChinookNodes,
+  registerDiscoveredCapabilities,
+  registerNodeTypesForRawDocument,
+} from './workflowScoped';
 
 /**
  * The gap this closes (recorded in `.scratch/fullstack-langgraph/map.md`):
@@ -109,6 +113,7 @@ describe('workflow-scoped node types announce their scope', () => {
           name: 'One',
           description: 'discovered',
           argsSchema: { type: 'object', properties: {} },
+          nodeType: '',
         },
       ],
       workbench.registry,
@@ -122,6 +127,101 @@ describe('workflow-scoped node types announce their scope', () => {
     const workbench = new Workbench();
     expect(workbench.registry.nodeTypes.get('input.text')?.scope).toBeUndefined();
   });
+
+  /**
+   * A purpose-built card shadows the generic one minted from discovery.
+   *
+   * Found in the palette: once the Chinook tools moved into
+   * `workflows/chinook-assistant/tools/`, the capabilities endpoint reported
+   * three tools for the open workflow and the palette's "This workflow"
+   * section showed **six** entries — the hand-authored cards, and a generic
+   * card per capability keyed by `capability.id`.
+   *
+   * Worse than cosmetic. The generic card's executor refuses toward Chat, and
+   * it is not the type the shipped document wires, so a developer who picked
+   * the wrong one of two identically-named entries got a node that behaved
+   * differently from the one already on the canvas beside it.
+   *
+   * The backend has always sent `node_type` naming the hand-authored card, and
+   * `registries.py` already documents the rule — "same-type collisions resolve
+   * workflow-wins, mirroring the frontend's local-shadows-global registry
+   * rule". The frontend simply never read the field.
+   */
+  describe('a discovered capability that a hand-authored card already covers', () => {
+    const capability = (patch: Partial<ToolCapability> = {}): ToolCapability => ({
+      id: 'chinook-assistant/tools.ExecuteSqlTool',
+      name: 'chinook_execute_sql',
+      description: 'discovered',
+      argsSchema: { type: 'object', properties: {} },
+      nodeType: '',
+      ...patch,
+    });
+
+    it('is not minted a second time when its node_type already resolves', () => {
+      const workbench = new Workbench();
+      // The hand-authored card, as `syncWorkflowScopedNodes` would have it.
+      registerChinookNodes(workbench.registry, workbench.engine.executors);
+      const before = workbench.registry.nodeTypes.get('tool.chinook-execute-sql');
+      expect(before).toBeDefined();
+
+      registerDiscoveredCapabilities(
+        [capability({ nodeType: 'tool.chinook-execute-sql' })],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+
+      // No generic twin…
+      expect(
+        workbench.registry.nodeTypes.get('chinook-assistant/tools.ExecuteSqlTool'),
+      ).toBeUndefined();
+      // …and the purpose-built card is untouched, not replaced by a copy.
+      expect(workbench.registry.nodeTypes.get('tool.chinook-execute-sql')).toBe(before);
+    });
+
+    it('is still minted when node_type names a card nobody has written', () => {
+      // The ordinary case, and the reason the guard checks resolution rather
+      // than merely the presence of the field: a Python tool declaring a
+      // `node_type` no TS module ships must still reach the palette.
+      const workbench = new Workbench();
+      registerDiscoveredCapabilities(
+        [capability({ nodeType: 'tool.nobody-wrote-this' })],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+      expect(
+        workbench.registry.nodeTypes.get('chinook-assistant/tools.ExecuteSqlTool'),
+      ).toBeDefined();
+    });
+
+    it('is still minted when the capability declares no node_type at all', () => {
+      const workbench = new Workbench();
+      registerDiscoveredCapabilities(
+        [capability({ nodeType: '' })],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+      expect(
+        workbench.registry.nodeTypes.get('chinook-assistant/tools.ExecuteSqlTool'),
+      ).toBeDefined();
+    });
+
+    it('does not unregister the shadowing card when the next workflow opens', () => {
+      // The teardown loop walks the ids registered last time. A shadowed
+      // capability was never registered, so its id must not be in that list —
+      // otherwise opening a second workflow would drop the hand-authored
+      // Chinook card that discovery merely declined to duplicate.
+      const workbench = new Workbench();
+      registerChinookNodes(workbench.registry, workbench.engine.executors);
+      registerDiscoveredCapabilities(
+        [capability({ nodeType: 'tool.chinook-execute-sql' })],
+        workbench.registry,
+        workbench.engine.executors,
+      );
+      registerDiscoveredCapabilities([], workbench.registry, workbench.engine.executors);
+
+      expect(workbench.registry.nodeTypes.get('tool.chinook-execute-sql')).toBeDefined();
+    });
+  });
 });
 
 describe('registerNodeTypesForRawDocument — the load-order bug', () => {
@@ -130,7 +230,7 @@ describe('registerNodeTypesForRawDocument — the load-order bug', () => {
     // any node whose type is not yet registered. Without calling
     // `registerNodeTypesForRawDocument` first, this import would silently
     // drop the tool node and warn "Skipped unknown node type", exactly what
-    // would have happened to every real load of `chinook-nl-to-sql` or
+    // would have happened to every real load of `chinook-assistant` or
     // `intent-routed-demo` once Chinook stopped being globally registered.
     const workbench = new Workbench();
     const toolType = CHINOOK_NODES[0]!.definition.id;
@@ -208,6 +308,7 @@ describe('registerDiscoveredCapabilities', () => {
     name: id,
     description: `discovered tool ${id}`,
     argsSchema: { type: 'object', properties: {} },
+    nodeType: '',
   });
 
   it('registers one node type per discovered capability', () => {

@@ -7,7 +7,16 @@ import {
   registerLoopableType,
   TYPE,
 } from '@core/testing/fixtures';
-import { acyclicGraphRule, hasOutputRule, singleDefaultWorkerRule } from './WorkflowValidator';
+import {
+  acyclicGraphRule,
+  DEFAULT_WORKFLOW_RULES,
+  entryQuestionRule,
+  hasOutputRule,
+  singleDefaultWorkerRule,
+  skillBlanksRule,
+  unfilledPlaceholders,
+  unknownNodeTypeRule,
+} from './WorkflowValidator';
 
 /**
  * Found live, not hypothetically: a real chat run answered a question and
@@ -167,5 +176,211 @@ describe('singleDefaultWorkerRule', () => {
       expect(d.severity).toBe('warning');
       expect(d.code).toBe('multiple-default-workers');
     }
+  });
+});
+
+/**
+ * Ticket 28. The unfilled-`{{blank}}` check used to live inside
+ * `skillExecutor`, so a half-written skill was invisible until the run died on
+ * it. It is a whole-document check like every other one, and belongs in the
+ * rule registry that drives the diagnostics panel and the card status dots.
+ */
+describe('skillBlanksRule', () => {
+  it('flags every blank a skill still carries, before anything runs', () => {
+    const workbench = makeWorkbench();
+    const skill = addNode(workbench, TYPE.skill, {
+      data: { skillName: 'drafty', instruction: '## Rules\n\n- {{the first rule}}' },
+    });
+
+    const diagnostics = skillBlanksRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe('skill-unfilled-blank');
+    expect(diagnostics[0]?.severity).toBe('error');
+    expect(diagnostics[0]?.nodeId).toBe(skill.id);
+    expect(diagnostics[0]?.message).toContain('the first rule');
+  });
+
+  it('says nothing once the blanks are filled', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.skill, {
+      data: { skillName: 'terse', instruction: '## Rules\n\n- Answer in one sentence.' },
+    });
+
+    expect(skillBlanksRule.check({ model: workbench.model, registry: workbench.registry })).toEqual(
+      [],
+    );
+  });
+
+  it('is registered by default, so the panel shows it with no extra wiring', () => {
+    expect(DEFAULT_WORKFLOW_RULES).toContain(skillBlanksRule);
+  });
+});
+
+describe('unfilledPlaceholders', () => {
+  it('finds every remaining placeholder in order', () => {
+    expect(unfilledPlaceholders('{{first}} then {{second}}')).toEqual(['first', 'second']);
+  });
+
+  it('reports none once they are filled', () => {
+    expect(unfilledPlaceholders('## Rules\n\n- Answer in one sentence.')).toEqual([]);
+  });
+});
+
+describe('unknownNodeTypeRule', () => {
+  const documentWithUnknownNode = () => {
+    const authored = makeWorkbench();
+    addNode(authored, TYPE.agent, { at: { x: 0, y: 0 } });
+    const document = JSON.parse(authored.controller.document.exportJSON()) as {
+      nodes: Record<string, unknown>[];
+    };
+    document.nodes.push({
+      id: 't-validate',
+      type: 'tool.validate-workflow',
+      position: { x: 400, y: 600 },
+      size: { width: 240, height: 96 },
+      parentId: null,
+      data: {},
+    });
+    return JSON.stringify(document);
+  };
+
+  it('names the node and its type, on the workflow that actually contains it', () => {
+    // The only warning before this counted tools with no card, in the palette,
+    // for every workflow alike — it never said which document was affected.
+    const workbench = makeWorkbench();
+    workbench.controller.document.importJSON(documentWithUnknownNode());
+
+    const diagnostics = unknownNodeTypeRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.nodeId).toBe('t-validate');
+    expect(diagnostics[0]?.message).toContain('tool.validate-workflow');
+  });
+
+  it('is a warning, so a workflow the runtime can still run is not blocked', () => {
+    const workbench = makeWorkbench();
+    workbench.controller.document.importJSON(documentWithUnknownNode());
+
+    expect(
+      unknownNodeTypeRule.check({ model: workbench.model, registry: workbench.registry })[0]
+        ?.severity,
+    ).toBe('warning');
+  });
+
+  it('says nothing about a document whose types are all registered', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.agent, { at: { x: 0, y: 0 } });
+
+    expect(
+      unknownNodeTypeRule.check({ model: workbench.model, registry: workbench.registry }),
+    ).toEqual([]);
+  });
+
+  it('is registered by default, so the Diagnostics panel shows it with no extra wiring', () => {
+    expect(DEFAULT_WORKFLOW_RULES).toContain(unknownNodeTypeRule);
+  });
+});
+
+/**
+ * Ticket 22: two of the three shipped workflows greeted a first-time
+ * developer with a red Diagnostics error — `Text Input: Enter a prompt for
+ * the agent` — on documents that demonstrably work. `concierge` and
+ * `workflow-architect` are chat-driven: their Text Input is deliberately
+ * empty because the question arrives at run time from the composer, and the
+ * backend's `_input` node reads `state["question"] or configured` precisely
+ * so that it can.
+ *
+ * A blocking-looking diagnostic on a working document teaches people to
+ * ignore the panel, which is the one place this product gets to be honest.
+ * So the *rule* was wrong, not the severity: an empty run-time entry is a
+ * normal state of the document. What replaces it says what is true — where
+ * the question will come from — at `info`, which the panel counts as zero
+ * errors.
+ */
+describe('entryQuestionRule', () => {
+  it('does not make an empty entry prompt an error', () => {
+    // Through every default rule, not just the new one: the point is that
+    // NOTHING in the panel calls this document broken.
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.textInput);
+    const context = { model: workbench.model, registry: workbench.registry };
+
+    const diagnostics = DEFAULT_WORKFLOW_RULES.flatMap((rule) => rule.check(context));
+    expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+
+  it('still says where the question will come from, so the blank is explained', () => {
+    const workbench = makeWorkbench();
+    const input = addNode(workbench, TYPE.textInput);
+
+    const diagnostics = entryQuestionRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.severity).toBe('info');
+    expect(diagnostics[0]?.code).toBe('entry-supplied-at-run-time');
+    expect(diagnostics[0]?.nodeId).toBe(input.id);
+  });
+
+  it('says nothing when the prompt is filled in', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.textInput, { data: { prompt: 'Who are you?' } });
+
+    expect(
+      entryQuestionRule.check({ model: workbench.model, registry: workbench.registry }),
+    ).toEqual([]);
+  });
+
+  it('leaves a workflow with no entry node alone', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.agent);
+
+    expect(
+      entryQuestionRule.check({ model: workbench.model, registry: workbench.registry }),
+    ).toEqual([]);
+  });
+
+  it('is registered by default', () => {
+    expect(DEFAULT_WORKFLOW_RULES).toContain(entryQuestionRule);
+  });
+});
+
+/**
+ * Ticket 22, second half. The amber loop notice told the user to do
+ * something the product does not require — "use Chat to run it, not the
+ * canvas preview" — while pressing **Run** on `chinook-assistant` opens the
+ * Ask panel and runs the loop against the backend, successfully. A
+ * diagnostic that instructs is a diagnostic that can be wrong about the
+ * product; this one describes what will happen instead.
+ */
+describe('the escapable-loop notice describes Run rather than instructing the user', () => {
+  const loopMessage = (): string => {
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    const c = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+    connect(workbench, a, 'out', c, 'in');
+    return (
+      acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry })[0]
+        ?.message ?? ''
+    );
+  };
+
+  it('no longer tells the user to go and use Chat', () => {
+    expect(loopMessage()).not.toContain('use Chat');
+  });
+
+  it('says Run handles it, which is what actually happens', () => {
+    expect(loopMessage()).toContain('Run');
   });
 });

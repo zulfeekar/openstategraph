@@ -16,20 +16,16 @@ import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
  * a developer can act on rather than a raw status code.
  */
 
-/** A stable, filesystem-safe identity, derived once from a name and never
- * recomputed on a later rename — see `workflow_store.py`'s own docstring on
- * why the slug is frozen. Kept in lockstep with the backend's `slugify()`;
- * the backend is the enforcement point (a mismatched slug is a 422), this is
- * only what lets the frontend compute the *same* one client-side.
+/*
+ * There used to be a `slugify()` here, "kept in lockstep with the backend's",
+ * and `WorkflowManager` minted a new workflow's slug with it. Ticket 20
+ * removed it, because a slug is not a transform of a name — it is an identity
+ * nobody else holds, and only the process that can see `workflows/` knows
+ * which ones are taken. Two workflows named "My Workflow" both minted
+ * `my-workflow` here and the second `PUT` silently overwrote the first.
+ * `create()` below asks the backend to mint instead, and the response says
+ * which slug it got. Nothing in the editor derives a slug from a name.
  */
-export function slugify(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'workflow';
-}
 
 export interface WorkflowSummary {
   readonly slug: string;
@@ -41,6 +37,13 @@ export interface WorkflowSummary {
    * the customer /chat surface. A backend row without the field counts as
    * published — the same back-compat default the backend applies. */
   readonly published: boolean;
+  /**
+   * Ticket 21: whether this package is advertised on any surface. Always
+   * `false` on a row from `list()` — that endpoint omits hidden packages
+   * outright — and meaningful only on `summary()`, which asks whether a
+   * package *exists* rather than whether a surface shows it.
+   */
+  readonly hidden: boolean;
 }
 
 /** Ticket 18: one `BaseTool` subclass discovered in a workflow's `tools/` folder. */
@@ -49,6 +52,20 @@ export interface ToolCapability {
   readonly name: string;
   readonly description: string;
   readonly argsSchema: Record<string, unknown>;
+  /**
+   * The hand-authored editor card meant to represent this tool, or `''`.
+   *
+   * A Python `BaseTool` declares it (`node_type`) and the backend has always
+   * sent it; `workflowScoped.isAlreadyHandAuthored` is the consumer, and its
+   * whole job is to stop discovery minting a generic twin of a card that
+   * already exists. Declaring it here is not decoration — the field was read
+   * before it was declared or parsed, so at runtime it was `undefined`, the
+   * guard could never fire, and the palette listed every Chinook tool twice
+   * (ticket 32). The repository's `tsc --noEmit` gate resolves a solution-style
+   * config with `files: []`, so the type error that would have said so was
+   * never reported.
+   */
+  readonly nodeType: string;
 }
 
 /** One control a plugin's tool asks the editor to put on its card. */
@@ -136,8 +153,11 @@ export interface IWorkflowTemplates {
 
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
+  summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
   load(slug: string): Promise<Result<unknown, string>>;
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
+  /** Create a workflow and receive the slug the backend minted for it. */
+  create(name: string, document: unknown): Promise<Result<string, string>>;
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
   setPublished(slug: string, published: boolean): Promise<Result<void, string>>;
@@ -185,7 +205,9 @@ export interface EventSourceLike {
 }
 export type EventSourceFactory = (url: string) => EventSourceLike;
 
-export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates {
+export class WorkflowFileClient
+  implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates
+{
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
@@ -254,19 +276,42 @@ export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents
 
     try {
       const payload = (await response.json()) as unknown[];
-      return Ok(
-        payload.map((entry) => {
-          const record = entry as Record<string, unknown>;
-          return {
-            slug: asString(record['slug']),
-            name: asString(record['name']),
-            savedAt: asString(record['saved_at']),
-            nodeCount: typeof record['node_count'] === 'number' ? record['node_count'] : 0,
-            edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
-            published: record['published'] !== false,
-          };
-        }),
+      return Ok(payload.map((entry) => asSummary(entry as Record<string, unknown>)));
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * Does **this one** workflow exist, and when was it last saved?
+   *
+   * Ticket 21's seam. `list()` is a *surface* — it answers what the editor
+   * picker should offer, and deliberately omits hidden packages (`concierge`,
+   * `workflow-architect`) and unreadable ones. Scanning that list for your own
+   * slug and concluding "deleted" on a miss reads a visibility answer as an
+   * existence answer, which is precisely how the file watch came to announce
+   * "This workflow was deleted on disk" over a file the backend was serving
+   * 200.
+   *
+   * So this asks the backend about the slug directly, and **`Ok(null)` — a 404
+   * — is the only "it is gone"**. An unreachable backend or a 500 stays an
+   * `Err`, because "I could not ask" must never be mistaken for "the answer is
+   * no": that would turn every network blip into a deletion warning.
+   */
+  async summary(slug: string): Promise<Result<WorkflowSummary | null, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/summary`,
       );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (response.status === 404) return Ok(null);
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      return Ok(asSummary((await response.json()) as Record<string, unknown>));
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
     }
@@ -346,6 +391,39 @@ export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents
     try {
       const payload = (await response.json()) as { document?: unknown };
       return Ok(payload.document ?? null);
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * Create a new workflow; the backend mints its slug and tells us which.
+   *
+   * The one call that must **not** address a slug, because there isn't one
+   * yet. Deriving it here from the name is what destroyed work (ticket 20):
+   * `slugify` cannot see `workflows/`, so it happily proposed a directory
+   * another workflow was already living in and the `PUT` overwrote it. The
+   * returned slug is the identity — frozen from here on, never recomputed
+   * when the workflow is renamed.
+   */
+  async create(name: string, document: unknown): Promise<Result<string, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/workflows`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, document }),
+      });
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as { slug?: unknown };
+      return typeof payload.slug === 'string' && payload.slug !== ''
+        ? Ok(payload.slug)
+        : Err('The runtime created the workflow but did not say under which slug.');
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
     }
@@ -462,6 +540,11 @@ export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents
             name: asString(record['name']),
             description: asString(record['description']),
             argsSchema: (record['args_schema'] as Record<string, unknown>) ?? {},
+            // Dropping this was ticket 32: the field the duplicate-card guard
+            // reads never made it off the wire. `asString` gives `''` for a
+            // backend that predates it, which the guard treats as "no card
+            // declared" — the correct reading of silence.
+            nodeType: asString(record['node_type']),
           };
         }),
         pluginTools: pluginTools.map((entry) => asPluginTool(entry as Record<string, unknown>)),
@@ -471,6 +554,62 @@ export class WorkflowFileClient implements IWorkflowFileClient, ICatalogueEvents
       return Err('The runtime returned a response that was not valid JSON');
     }
   }
+
+  /**
+   * The tables this workflow's SQL tools can actually reach.
+   *
+   * Read from the database the tool opens, never from a list typed into this
+   * repository — the whole point of the endpoint. The schema tools take their
+   * table as a *model* argument, so this is the agent's field of view, not a
+   * per-node selection.
+   */
+  async sqlSchema(slug: string): Promise<Result<readonly SqlSource[], string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/sql-schema`,
+      );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as { sources?: unknown[] };
+      const sources = Array.isArray(payload.sources) ? payload.sources : [];
+      return Ok(sources.map((entry) => asSqlSource(entry as Record<string, unknown>)));
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+}
+
+/** One table of one wired database, with the Markdown an agent would get. */
+export interface SqlTable {
+  readonly name: string;
+  readonly detail: string;
+}
+
+/** One database this workflow's SQL tool nodes are wired to. */
+export interface SqlSource {
+  readonly database: string;
+  readonly engine: string;
+  readonly tables: readonly SqlTable[];
+  /** Recognized but not fully readable, or a truncated list. Never silent. */
+  readonly warning: string;
+}
+
+function asSqlSource(record: Record<string, unknown>): SqlSource {
+  const tables = Array.isArray(record['tables']) ? record['tables'] : [];
+  return {
+    database: asString(record['database']),
+    engine: asString(record['engine']),
+    tables: tables.map((entry) => {
+      const table = entry as Record<string, unknown>;
+      return { name: asString(table['name']), detail: asString(table['detail']) };
+    }),
+    warning: asString(record['warning']),
+  };
 }
 
 async function describeFailure(response: Response): Promise<string> {
@@ -485,6 +624,20 @@ async function describeFailure(response: Response): Promise<string> {
 }
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** One catalogue row, snake_case on the wire — shared by the list and the
+ * per-slug summary so the two can never disagree about the same package. */
+function asSummary(record: Record<string, unknown>): WorkflowSummary {
+  return {
+    slug: asString(record['slug']),
+    name: asString(record['name']),
+    savedAt: asString(record['saved_at']),
+    nodeCount: typeof record['node_count'] === 'number' ? record['node_count'] : 0,
+    edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
+    published: record['published'] !== false,
+    hidden: record['hidden'] === true,
+  };
+}
 
 /** One `plugin_tools` row, snake_case on the wire, camelCase in the editor. */
 function asPluginTool(record: Record<string, unknown>): PluginToolCapability {

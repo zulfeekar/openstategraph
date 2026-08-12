@@ -3,8 +3,6 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
-import { TABULAR_NODES } from './tools/TabularDataNode';
-import { WORKSHOP_NODES } from './tools/CodeWorkshopNode';
 import {
   PORT_SPEC_ARTIFACT_PATH,
   PORT_SPEC_GENERATE_COMMAND,
@@ -86,9 +84,9 @@ describe('generated node/port catalogue', () => {
       expect(generated.has(definition.id), `missing ${definition.id}`).toBe(true);
     }
     // The workflow-scoped families are reached through an explicit list rather
-    // than the registry, so name each one: a fourth family added without
+    // than the registry, so name each one: a second family added without
     // touching `allNodeDefinitions` must fail here, not vanish quietly.
-    for (const family of [CHINOOK_NODES, TABULAR_NODES, WORKSHOP_NODES]) {
+    for (const family of [CHINOOK_NODES]) {
       for (const entry of family) {
         expect(generated.has(entry.definition.id), `missing ${entry.definition.id}`).toBe(true);
       }
@@ -120,7 +118,9 @@ describe('generated node/port catalogue', () => {
     const router = byType.get('route.classifier');
     // The default five branches must NOT appear as static ports — they are one
     // document's configuration, not the node type's contract.
-    expect(router?.ports.map((port) => port.id)).toEqual(['question']);
+    // `skill` is static and declared once for all five prompted types; only
+    // the branch outputs vary with the document.
+    expect(router?.ports.map((port) => port.id)).toEqual(['question', 'skill']);
     expect(router?.dynamic_ports).toEqual([
       {
         prefix: 'branch:',
@@ -139,6 +139,36 @@ describe('generated node/port catalogue', () => {
     // Port-level widening is resolved into the artifact, so Python never has to
     // re-implement `ModelRegistry.canConnectTypes`.
     expect(agentPrompt?.accepts).toEqual(['result', 'text']);
+  });
+
+  it('emits every data key a node type can write, defaults included', () => {
+    // The editor half of `backend/tests/test_data_key_contract.py`: a factory
+    // reading a key absent from this list is reading something no card, no
+    // inspector and no document can write, which raises nothing and yields ""
+    // forever. Three of those shipped before the contract existed.
+    const supervisor = byType.get('orchestrate.supervisor');
+    expect(supervisor?.field_keys).toContain('rules');
+    expect(supervisor?.field_keys).toContain('rulesMode');
+    // Sorted, and derived from `defaultsFrom` — so a `file` field's content
+    // key is included, which is a key the backend legitimately reads.
+    const markdown = byType.get('input.markdown');
+    expect(markdown?.field_keys).toContain('content');
+    expect(markdown?.field_keys).toEqual([...(markdown?.field_keys ?? [])].sort());
+  });
+
+  it('names the legacy keys a document may carry that no field declares', () => {
+    // Two entries, and each is a migration fallback rather than a second
+    // control: `criteriaMode` is the Grader's older spelling of `rulesMode`
+    // (`docs/decisions/skill-layer.md`), `instructions` the Skill node's
+    // first spelling of its body key (ticket 28). This list is the only
+    // sanctioned way to exempt a key from the data-key contract, so it being
+    // short is the point.
+    expect(artifact.legacy_data_keys).toEqual(['criteriaMode', 'instructions']);
+    for (const node of artifact.node_types) {
+      for (const legacy of artifact.legacy_data_keys) {
+        expect(node.field_keys, `${node.type} re-declares a legacy key`).not.toContain(legacy);
+      }
+    }
   });
 
   it('gives the mountable composition nodes the ports MCP was reporting as empty', () => {

@@ -80,6 +80,30 @@ export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal' | 'error';
 
+/**
+ * How hard a model should think before answering. A provider's own spelling.
+ *
+ * A string rather than a union — see `CompletionRequest.effort`. The set of
+ * valid values for any given call comes from `reasoningEffortLevels`, which is
+ * declared by the provider that will receive it.
+ */
+export type ReasoningEffort = string;
+
+/**
+ * Tiers a model or a provider accepts, in the three states that actually
+ * exist.
+ *
+ * The three-way distinction is the feature, not a nicety. Collapsing it to a
+ * boolean forces one of two lies: an unknown model is either promised a
+ * control that will be dropped, or refused one that would have worked.
+ *
+ * - a non-empty array — these tiers, and only these.
+ * - `[]` — this model does not reason. Certain.
+ * - `undefined` — **not known here.** The runtime decides, and says what it
+ *   decided (`openstategraph/reasoning.py`).
+ */
+export type ReasoningEffortLevels = readonly ReasoningEffort[] | undefined;
+
 export interface CompletionRequest {
   readonly model: string;
   readonly messages: readonly LLMMessage[];
@@ -91,8 +115,15 @@ export interface CompletionRequest {
    * Reasoning depth, mapped per provider. Deliberately not `temperature`:
    * the current Claude models reject sampling parameters outright, so the
    * neutral surface exposes the control that all providers can honour.
+   *
+   * Not a closed union, because the tiers are the *provider's* vocabulary and
+   * they genuinely differ — Anthropic publishes `max` and `xhigh` that OpenAI
+   * has never had, Gemini publishes `minimal` that Anthropic rejects with a
+   * validation error. A union here would be this repo hand-mirroring a list
+   * that has a real source (`ILLMProvider.reasoningEffortLevels`), which
+   * CLAUDE.md forbids, and would go stale on the next model release.
    */
-  readonly effort?: 'low' | 'medium' | 'high';
+  readonly effort?: ReasoningEffort;
   readonly signal?: AbortSignal;
 }
 
@@ -113,6 +144,13 @@ export interface ModelDescriptor {
   readonly contextWindow: number;
   readonly maxOutputTokens: number;
   readonly supportsTools: boolean;
+  /**
+   * Reasoning tiers **this model** accepts, where the provider knows them per
+   * model. Omitted falls back to the provider's own declaration — most
+   * catalogues are discovered at runtime (`listModels`) and know nothing more
+   * about a freshly pulled id than its name.
+   */
+  readonly reasoningEffortLevels?: ReasoningEffortLevels;
 }
 
 /* ================================================================== *
@@ -160,6 +198,21 @@ export interface ILLMProvider extends IIdentifiable {
    */
   readonly configurableEndpoint?: boolean;
 
+  /**
+   * Reasoning tiers **this adapter can transmit**, for models that reason.
+   *
+   * A declared capability of the adapter, not of the vendor: it answers "if I
+   * put an effort on a request to you, will it reach the model", which is a
+   * question only the code that builds the request can answer. Anthropic's
+   * adapter sends `output_config.effort` and so declares its four; an adapter
+   * that has no place to put the value declares `[]` and the editor stops
+   * offering a control that reaches nothing.
+   *
+   * `undefined` means the adapter does not say — the tiers are offered and
+   * the *runtime* is left to decide, loudly.
+   */
+  readonly reasoningEffortLevels?: ReasoningEffortLevels;
+
   /** True when the provider can actually be called right now. */
   isConfigured(): boolean;
 
@@ -195,6 +248,7 @@ export abstract class AbstractLLMProvider implements ILLMProvider {
   readonly allowsCustomModel?: boolean;
   readonly configurableEndpoint?: boolean;
   readonly runtimeCredentialKey?: string;
+  readonly reasoningEffortLevels?: ReasoningEffortLevels;
 
   protected apiKey: string | null = null;
   /** Overridable endpoint — lets Ollama point at a non-default host. */

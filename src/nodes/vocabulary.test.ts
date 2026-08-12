@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { CATEGORIES, CATEGORY } from './vocabulary';
 import { teamNode } from './compose/TeamNode';
 import { subgraphNode } from './compose/SubgraphNode';
-import { orchestratorNode } from './orchestrate/OrchestratorNode';
+import { createOrchestratorNode } from './orchestrate/OrchestratorNode';
 import { formattedOutputNode } from './output/FormattedOutputNode';
+import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
+
+/**
+ * Materialised once per file. The definition is now built from the
+ * `ProviderRegistry` — every model-driven family carries the shared model
+ * picker (`../modelField`) — so the tests build one the same way the
+ * catalogue does rather than asserting against a shape nothing registers.
+ */
+const orchestratorNode = createOrchestratorNode(new ProviderRegistry(new CredentialStore(false)));
 
 /**
  * The palette's tiering is a claim about the catalogue, so it is a claim

@@ -12,6 +12,17 @@ export interface IEdgeModel {
   readonly target: PortRef;
   /** Optional label rendered mid-link. */
   readonly label: string | null;
+  /**
+   * Points the run is required to pass through, in document coordinates.
+   *
+   * Empty for almost every link: the router works out the whole run from the
+   * two ports. A waypoint is what a user adds when they disagree with it, and
+   * what `AutoLayout` seeds to give a back-edge its own lane.
+   *
+   * Data, never code — a serialisable list of numbers, so it costs the
+   * portability rule nothing.
+   */
+  readonly vertices: readonly Point[];
   toJSON(): SerializedEdge;
 }
 
@@ -28,6 +39,17 @@ export interface SerializedEdge {
   readonly source: PortRef;
   readonly target: PortRef;
   readonly label?: string | null;
+  /**
+   * Hand-placed (or layout-placed) waypoints, omitted when there are none.
+   *
+   * **Additive, so the schema version does not move.** `backend/.../schema.py`
+   * states the rule in as many words — *"Do not bump: adding an optional field
+   * with a safe default … anything additive that an older build ignores
+   * harmlessly"* — and an older build ignoring `vertices` gets the router's own
+   * run, which is what it drew before. Bumping would push every user's
+   * document through a two-sided migration to gain nothing.
+   */
+  readonly vertices?: readonly Point[];
 }
 
 export interface SerializedWorkflow {
@@ -65,6 +87,7 @@ export interface WorkflowEvents extends Record<string, unknown> {
   'edge:added': { edge: IEdgeModel };
   'edge:removed': { edgeId: EdgeId; edge: IEdgeModel };
   'edge:label': { edgeId: EdgeId; label: string | null };
+  'edge:vertices': { edgeId: EdgeId; vertices: readonly Point[] };
   'workflow:name': { name: string };
   'workflow:settings': { settings: Readonly<Record<string, unknown>> };
   /** Wholesale replacement (import, new document) — listeners resync fully. */
@@ -119,6 +142,7 @@ export interface IWorkflowModel {
   addEdge(edge: IEdgeModel): void;
   removeEdge(id: EdgeId): IEdgeModel | undefined;
   setEdgeLabel(id: EdgeId, label: string | null): void;
+  setEdgeVertices(id: EdgeId, vertices: readonly Point[]): void;
   setName(name: string): void;
 
   /* ---- document lifecycle ---- */

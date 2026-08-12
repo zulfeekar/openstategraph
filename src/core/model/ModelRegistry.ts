@@ -193,8 +193,34 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
     ...(spec.bodyId ? { bodyId: spec.bodyId } : {}),
     ...(spec.keywords ? { keywords: spec.keywords } : {}),
     ...(spec.scope ? { scope: spec.scope } : {}),
+    // Self-referencing on purpose — every instance reports the definition it
+    // was built from. `extendFields` below exists because of this line.
     create: (init) => new Model(definition, init),
   };
+  return definition;
+}
+
+/**
+ * Adds fields to a definition **in place**, and returns the same object.
+ *
+ * In place, not a copy, and the reason is one line up: `create` closes over the
+ * definition `defineNode` built, so `{ ...definition, fields }` produces an
+ * object whose palette entry has the new field and whose *node instances* do
+ * not. That failure is silent in every test that inspects a definition and
+ * visible only in the running editor — found exactly that way, with the
+ * reasoning-effort picker present in the registered definition's fields and
+ * absent from the inspector of a node created from it.
+ *
+ * So a definition is one object, and extending it means extending that object.
+ * Callers stay honest by going through here rather than spreading, and this
+ * comment is why.
+ */
+export function extendFields(
+  definition: INodeDefinition,
+  extend: (fields: readonly FieldSchema[]) => readonly FieldSchema[],
+): INodeDefinition {
+  const mutable = definition as { fields: readonly FieldSchema[] };
+  mutable.fields = extend(definition.fields);
   return definition;
 }
 

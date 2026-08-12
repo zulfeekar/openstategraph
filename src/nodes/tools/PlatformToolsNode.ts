@@ -33,6 +33,7 @@ function backendTool(spec: {
   description: string;
   keywords: readonly string[];
   fields?: readonly FieldSchema[];
+  maxInstances?: number;
 }): { definition: INodeDefinition; executor: INodeExecutor } {
   return {
     definition: defineToolNode(
@@ -45,6 +46,7 @@ function backendTool(spec: {
         keywords: [...spec.keywords, 'read-only', 'prebuilt'],
         defaultSize: { width: 252, height: 120 },
         fields: spec.fields ?? [],
+        ...(spec.maxInstances != null ? { maxInstances: spec.maxInstances } : {}),
       },
       PlatformToolNodeModel,
     ),
@@ -99,8 +101,17 @@ export const PLATFORM_TOOL_NODES = [
     id: 'tool.knowledge-lookup',
     label: 'Knowledge',
     description:
-      'The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. Build it from the card’s “Build second brain” button.',
+      'The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them.',
     keywords: ['knowledge', 'brain', 'wiki', 'procedural', 'second brain', 'lookup', 'memory'],
+    // One per workflow, and `maxInstances` already counts the right thing:
+    // `model.countOfType` is over the open document, one document is one
+    // package, one package has one `knowledge/` directory. A second atom
+    // would be a second card claiming the same single store — a lie about
+    // cardinality, and two "Build second brain" buttons racing one another
+    // over the same files. A mounted child is a *different* document with a
+    // different model, so a root and a team may each hold one; that is the
+    // designed shape, not a collision (docs/decisions/knowledge-architecture.md).
+    maxInstances: 1,
   }),
   backendTool({
     id: 'tool.email-send',

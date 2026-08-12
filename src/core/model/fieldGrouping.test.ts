@@ -62,9 +62,17 @@ describe('the agent node’s config surface', () => {
     expect(keys).toContain('systemPrompt');
   });
 
-  it('keeps the card small: only model and budget render there', () => {
+  it('keeps the card small: the model decision, and the budget', () => {
+    // Three, not two, and the third earns its place rather than eroding the
+    // rule. `reasoningEffort` joined the card in one-chinook-honest ticket 12
+    // because of what it says when the answer is *no*: a model that cannot
+    // reason renders "Not supported by <model>" here, and a reader should get
+    // that off the canvas in the same glance that tells them which model the
+    // step runs. Folding it away would leave the card silent about a setting
+    // the inspector shows — a card lying by omission. Everything else stays
+    // off: rubric, summarization, tier, prompt and the execution overrides.
     const onCard = definition.fields.filter((f) => f.onCard ?? true).map((f) => f.key);
-    expect(onCard).toEqual(['model', 'tokenBudget']);
+    expect(onCard).toEqual(['model', 'reasoningEffort', 'tokenBudget']);
   });
 
   it('files the retry/timeout overrides as advanced Execution fields', () => {

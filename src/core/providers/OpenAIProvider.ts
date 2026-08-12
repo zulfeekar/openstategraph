@@ -13,6 +13,14 @@ import {
 } from './ILLMProvider';
 
 /**
+ * The SDK's closed tier union. Named here so the one assertion in `complete`
+ * reads as a boundary crossing rather than an escape hatch.
+ */
+type ReasoningEffortParam = NonNullable<
+  OpenAI.Chat.Completions.ChatCompletionCreateParams['reasoning_effort']
+>;
+
+/**
  * OpenAI adapter.
  *
  * The seed model list is only a starting point — `listModels` replaces it
@@ -86,6 +94,24 @@ export class OpenAIProvider extends AbstractLLMProvider {
           model: request.model,
           max_completion_tokens: request.maxTokens,
           messages: this.toOpenAIMessages(request),
+          // Sent only when a tier was actually chosen. The key is omitted
+          // entirely otherwise, rather than defaulted: a non-reasoning model
+          // rejects `reasoning_effort` outright, so the difference between
+          // "no key" and "a key holding the model's own default" is the
+          // difference between a run and a 400.
+          // The cast is the boundary between two deliberately different
+          // types. Ours is `ReasoningEffort = string`, open on purpose: the
+          // editor cannot enumerate the tiers of every model a discovered
+          // catalogue might return, and `undefined` levels mean "not known
+          // here — the runtime decides" (see `ReasoningEffortLevels`). The
+          // SDK's is a closed union of the tiers *its* models accept today.
+          // Narrowing ours to match would re-import the hardcoded capability
+          // list that the three-state design exists to avoid; widening theirs
+          // is not ours to do. So the assertion sits here, once, at the one
+          // place an open value meets a closed one — and a tier this SDK
+          // rejects comes back as a 400 the caller can read, which is the
+          // failure the comment below already describes.
+          ...(request.effort ? { reasoning_effort: request.effort as ReasoningEffortParam } : {}),
           ...(request.tools && request.tools.length > 0
             ? {
                 tools: request.tools.map((tool) => ({

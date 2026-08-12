@@ -12,8 +12,11 @@ import type {
 import type { LLMMessage } from '@core/providers/ILLMProvider';
 import { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { CATEGORY, PORT } from '../vocabulary';
+import { MODEL_FIELD_KEY, modelField, resolveModelSelection } from '../modelField';
+import { effortFrom } from '../effortField';
+import { SKILL_PORT, rulesModeField } from '../skillLayer';
 
-const FIELD_MODEL = 'model';
+const FIELD_MODEL = MODEL_FIELD_KEY;
 const FIELD_BUDGET = 'tokenBudget';
 const FIELD_TIER = 'tier';
 const FIELD_SYSTEM_PROMPT = 'systemPrompt';
@@ -67,15 +70,11 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
       defaultSize: { width: 252, height: 220 },
       maxInstances: undefined,
       fields: [
-        {
-          kind: 'select',
-          key: FIELD_MODEL,
-          label: 'Model',
-          // Resolved lazily on each render so a key added mid-session, or a
-          // freshly pulled Ollama model, shows up without a reload.
-          options: () => providers.modelOptions(),
-          defaultValue: ProviderRegistry.selectionFor('mock', 'mock-offline'),
-        },
+        // One descriptor, shared with every other family that drives a model
+        // (`../modelField`). It used to be declared here and nowhere else,
+        // which is how five other node types ended up with no picker at all
+        // while the backend read the key for all six.
+        modelField(providers),
         {
           kind: 'slider',
           key: FIELD_BUDGET,
@@ -141,6 +140,10 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           onCard: false,
           group: 'Prompt',
         },
+        // The one extend/replace switch, shared with the other four
+        // model-driven types. It governs the rules typed above *and* the
+        // skill wired to the port below — never the locked machinery.
+        rulesModeField(),
       ],
       ports: [
         {
@@ -156,13 +159,11 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           accepts: [PORT.text, PORT.result],
           description: 'The task for the agent.',
         },
-        {
-          id: 'skill',
-          direction: 'in',
-          type: PORT.skill,
-          label: 'skill',
-          description: 'System instruction that shapes the agent’s behaviour.',
-        },
+        // Declared once for every model-driven type (`../skillLayer`), with
+        // the mode that governs it in `fields` above. It used to be spelled
+        // out here and on the Worker, and nowhere else — while the backend
+        // read `plan.skill_bindings` for five node types.
+        { ...SKILL_PORT },
         {
           id: 'tools',
           direction: 'in',
@@ -214,8 +215,12 @@ export const agentExecutor: INodeExecutor = {
   async execute(ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
     const node = ctx.node as AgentNodeModel;
 
-    const resolved = ctx.providers.resolve(node.modelSelection);
-    if (!resolved) return Err(`Unknown model "${node.modelSelection}"`);
+    // An empty selection means "the workflow's model" — the same rule the
+    // backend applies — which in this offline preview resolves to the mock
+    // simulator when the document names none.
+    const selection = resolveModelSelection(node.modelSelection, ctx.workflow.settings);
+    const resolved = ctx.providers.resolve(selection);
+    if (!resolved) return Err(`Unknown model "${selection}"`);
     const { provider, modelId } = resolved;
 
     if (!provider.isConfigured()) {
@@ -246,6 +251,10 @@ export const agentExecutor: INodeExecutor = {
         messages,
         maxTokens: node.tokenBudget,
         signal: ctx.signal,
+        // Omitted when nothing was chosen — see `effortFrom`. The adapters
+        // each decide what to do with a tier their vendor may not have; none
+        // of them forwards one blindly.
+        ...(effortFrom(node.data) ? { effort: effortFrom(node.data) } : {}),
         ...(skill ? { system: skill } : {}),
         // Withhold the tool list on the final permitted turn so the model
         // is obliged to answer rather than requesting yet another call.

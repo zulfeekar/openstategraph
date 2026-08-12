@@ -5,15 +5,27 @@ import {
   DEFAULT_MAX_SUBTASKS,
   ORCHESTRATOR_TYPE,
   orchestratorExecutor,
-  orchestratorNode,
+  createOrchestratorNode,
 } from './OrchestratorNode';
-import { WORKER_TYPE, workerExecutor, workerNode } from './WorkerNode';
+import { WORKER_TYPE, createWorkerNode, workerExecutor } from './WorkerNode';
 import {
   FORMAT_REPORT_TYPE,
   formatReportExecutor,
-  formatReportNode,
+  createFormatReportNode,
   type FormatReportNodeModel,
 } from './FormatReportNode';
+import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
+
+/**
+ * Materialised once per file. The definition is now built from the
+ * `ProviderRegistry` — every model-driven family carries the shared model
+ * picker (`../modelField`) — so the tests build one the same way the
+ * catalogue does rather than asserting against a shape nothing registers.
+ */
+const providers = new ProviderRegistry(new CredentialStore(false));
+const orchestratorNode = createOrchestratorNode(providers);
+const workerNode = createWorkerNode(providers);
+const formatReportNode = createFormatReportNode(providers);
 
 const emptyData = (definition: { fields: readonly { key: string; defaultValue?: unknown }[] }) =>
   Object.fromEntries(definition.fields.map((f) => [f.key, f.defaultValue ?? null])) as never;
@@ -34,6 +46,37 @@ describe('orchestrator + worker — the fan-out declaration', () => {
   it('exposes a bounded max-subtasks field, defaulting to the backend cap', () => {
     const field = orchestratorNode.fields.find((f) => f.key === 'maxSubtasks');
     expect(field?.defaultValue).toBe(DEFAULT_MAX_SUBTASKS);
+  });
+
+  /**
+   * Ticket 07's defect, from the editor's side.
+   *
+   * The backend composed the supervisor's prompt with `rules=_text(data,
+   * "instruction")` while `instruction` was only this node's input *port* id —
+   * a port id is not a data key, so no card, inspector or document could write
+   * the rules the supervisor dispatched with. The field is asserted by key
+   * because the key is the whole contract; `backend/tests/test_data_key_contract.py`
+   * holds the other end.
+   */
+  it('declares a writable rules field, distinct from the instruction port', () => {
+    const rules = orchestratorNode.fields.find((f) => f.key === 'rules');
+    expect(rules).toMatchObject({ kind: 'textarea', defaultValue: '' });
+
+    const portIds = orchestratorNode.ports(emptyData(orchestratorNode)).map((p) => p.id);
+    const fieldKeys = orchestratorNode.fields.map((f) => f.key);
+    expect(portIds).toContain('instruction');
+    // The two namespaces stay disjoint on this node — sharing one name is
+    // what made a port look like a field for as long as the node existed.
+    expect(fieldKeys.filter((key) => portIds.includes(key))).toEqual([]);
+  });
+
+  it('rides the same rules mode as every other prompted family', () => {
+    const mode = orchestratorNode.fields.find((f) => f.key === 'rulesMode');
+    const rules = orchestratorNode.fields.find((f) => f.key === 'rules');
+    // The mode switches *this* layer, so a mode without the layer beneath it
+    // was a switch with one fewer position than it claimed.
+    expect(mode).toBeDefined();
+    expect(rules?.group).toBe('Prompt');
   });
 
   it('declares instruction, feedback and a workers fan-out bus', () => {

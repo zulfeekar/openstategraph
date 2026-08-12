@@ -3,10 +3,13 @@ import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { createDiscoveredToolNode } from './DiscoveredToolNode';
 
 const CAPABILITY: ToolCapability = {
-  id: 'chinook-nl-to-sql/tools.ListTablesTool',
+  id: 'chinook-assistant/tools.ListTablesTool',
   name: 'chinook_list_tables',
   description: 'List all tables in the Chinook database.',
   argsSchema: { type: 'object', properties: {}, title: 'NoArgs' },
+  // Empty: this capability has no hand-authored card, which is precisely why
+  // discovery mints one for it.
+  nodeType: '',
 };
 
 describe('createDiscoveredToolNode', () => {

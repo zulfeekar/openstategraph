@@ -144,6 +144,15 @@ export class OllamaProvider extends AbstractLLMProvider {
       model: request.model,
       stream: false,
       options: { num_predict: request.maxTokens },
+      // Ollama spells reasoning depth `think`, and it takes a level string on
+      // the models that have one. Omitted unless a tier was chosen — sending
+      // `think` to a model with no thinking is an error, not a no-op.
+      //
+      // Worth stating that this is the *browser preview* path. A run through
+      // the backend goes to `ChatOllama`, which has no `reasoning_effort`
+      // parameter at all and would silently drop the value; that is handled
+      // where it happens, in `openstategraph/reasoning.py`, and reported.
+      ...(request.effort ? { think: request.effort } : {}),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages.map((message) => ({

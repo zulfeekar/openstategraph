@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  slugify,
   WorkflowFileClient,
   type CatalogueChange,
   type EventSourceLike,
@@ -21,13 +20,49 @@ const stubFetch = (
   return { fetch: fetchImpl, calls };
 };
 
-describe('slugify', () => {
-  it('lowercases and hyphenates, matching the backend', () => {
-    expect(slugify('Chinook Natural Language to SQL')).toBe('chinook-natural-language-to-sql');
+/**
+ * There is no `slugify` test here any more, and no `slugify` either (ticket
+ * 20). The editor does not derive a slug from a name — it asks the backend to
+ * mint one, because only the backend can see which names are already taken.
+ */
+describe('WorkflowFileClient.create', () => {
+  it('posts the name and document and returns the slug the backend minted', async () => {
+    const stub = stubFetch(jsonResponse({ slug: 'my-workflow-k7m3qp', document: {} }, 201));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.create('My Workflow', { nodes: [] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Not `my-workflow`: the name collided, and the answer came from the only
+    // place that could know that.
+    expect(result.value).toBe('my-workflow-k7m3qp');
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows');
+    expect(stub.calls[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(String(stub.calls[0]!.init?.body))).toEqual({
+      name: 'My Workflow',
+      document: { nodes: [] },
+    });
   });
 
-  it('falls back rather than producing an empty slug', () => {
-    expect(slugify('!!!')).toBe('workflow');
+  it('fails loudly when the response names no slug', async () => {
+    const stub = stubFetch(jsonResponse({ document: {} }, 201));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.create('My Workflow', {});
+
+    // Silence here would leave the editor holding no identity for a workflow
+    // that now exists on disk — and the next save would try to create it again.
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports the backend detail rather than a bare status', async () => {
+    const stub = stubFetch(jsonResponse({ detail: 'no free directory' }, 507));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.create('My Workflow', {});
+
+    expect(result).toEqual({ ok: false, error: 'no free directory' });
   });
 });
 
@@ -45,7 +80,15 @@ describe('WorkflowFileClient.list', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toEqual([
-      { slug: 'a', name: 'A', savedAt: 't', nodeCount: 2, edgeCount: 1, published: false },
+      {
+        slug: 'a',
+        name: 'A',
+        savedAt: 't',
+        nodeCount: 2,
+        edgeCount: 1,
+        published: false,
+        hidden: false,
+      },
     ]);
     // The editor sees everything, drafts included — its surface is explicit.
     expect(stub.calls[0]!.url).toBe('http://rt/api/workflows?surface=editor');
@@ -65,6 +108,58 @@ describe('WorkflowFileClient.list', () => {
   it('is a failure, not a crash, when nothing is listening', async () => {
     const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
     const result = await client.list();
+    expect(result.ok).toBe(false);
+  });
+});
+
+/**
+ * Ticket 21: existence, asked separately from visibility. `list()` is a
+ * surface and omits hidden packages; this asks the backend about one slug, so
+ * "not advertised" and "not there" stop being the same answer.
+ */
+describe('WorkflowFileClient.summary', () => {
+  it('asks about the one slug, and reports a hidden workflow as existing', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        slug: 'concierge',
+        name: 'Concierge (gateway)',
+        saved_at: 't',
+        node_count: 15,
+        edge_count: 17,
+        published: true,
+        hidden: true,
+      }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.summary('concierge');
+
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/concierge/summary');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value?.hidden).toBe(true);
+    expect(result.value?.savedAt).toBe('t');
+  });
+
+  it('a 404 is an answer — null, not an error', async () => {
+    const client = new WorkflowFileClient('http://rt', () =>
+      Promise.resolve(new Response('{}', { status: 404 })),
+    );
+    const result = await client.summary('gone');
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
+  it('an unreachable backend stays an error, so a blip is never read as a deletion', async () => {
+    const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
+    const result = await client.summary('a');
+    expect(result.ok).toBe(false);
+  });
+
+  it('a 500 stays an error too — "I could not ask" is not "the answer is no"', async () => {
+    const client = new WorkflowFileClient('http://rt', () =>
+      Promise.resolve(new Response('{}', { status: 500 })),
+    );
+    const result = await client.summary('a');
     expect(result.ok).toBe(false);
   });
 });
@@ -177,10 +272,11 @@ describe('WorkflowFileClient.capabilities', () => {
       jsonResponse({
         tools: [
           {
-            id: 'chinook-nl-to-sql/tools.ListTablesTool',
+            id: 'chinook-assistant/tools.ListTablesTool',
             name: 'chinook_list_tables',
             description: 'Lists tables.',
             args_schema: { type: 'object', properties: {} },
+            node_type: 'tool.chinook-get-all-tables',
           },
         ],
         functions: [],
@@ -188,19 +284,39 @@ describe('WorkflowFileClient.capabilities', () => {
     );
     const client = new WorkflowFileClient('http://rt', stub.fetch);
 
-    const result = await client.capabilities('chinook-nl-to-sql');
+    const result = await client.capabilities('chinook-assistant');
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.tools).toEqual([
       {
-        id: 'chinook-nl-to-sql/tools.ListTablesTool',
+        id: 'chinook-assistant/tools.ListTablesTool',
         name: 'chinook_list_tables',
         description: 'Lists tables.',
         argsSchema: { type: 'object', properties: {} },
+        // Ticket 32: this field is what stops discovery minting a second,
+        // differently-described card for a tool that already has one. It was
+        // read by `isAlreadyHandAuthored` but never parsed here, so it was
+        // `undefined` at runtime and the guard could never fire.
+        nodeType: 'tool.chinook-get-all-tables',
       },
     ]);
-    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/chinook-nl-to-sql/capabilities');
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/chinook-assistant/capabilities');
+  });
+
+  it('reads a missing node_type as "no card declared" rather than undefined', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        tools: [{ id: 'w/tools.Solo', name: 'solo', description: '', args_schema: {} }],
+        functions: [],
+      }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.capabilities('w');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.tools[0]?.nodeType).toBe('');
   });
 
   it('is an empty list, not a crash, for a workflow with no tools folder', async () => {
@@ -373,6 +489,49 @@ describe('WorkflowFileClient.templates', () => {
     const client = new WorkflowFileClient('http://rt', stub.fetch);
 
     const result = await client.templates('x');
+
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('WorkflowFileClient.sqlSchema', () => {
+  it('reads the tables the wired database actually has', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        sources: [
+          {
+            database: 'chinook-assistant/data/Chinook_Sqlite.sqlite',
+            engine: 'sqlite',
+            tables: [{ name: 'Genre', detail: '## Columns\n- GenreId (INTEGER) PRIMARY KEY' }],
+            warning: '',
+          },
+        ],
+      }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.sqlSchema('chinook-assistant');
+
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/chinook-assistant/sql-schema');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.engine).toBe('sqlite');
+    expect(result.value[0]?.tables.map((t) => t.name)).toEqual(['Genre']);
+  });
+
+  it('is an empty list, not a crash, for a workflow with no database', async () => {
+    const stub = stubFetch(jsonResponse({ sources: [] }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.sqlSchema('dry-flow');
+
+    expect(result.ok && result.value).toEqual([]);
+  });
+
+  it('reports an unreachable runtime rather than throwing', async () => {
+    const client = new WorkflowFileClient('http://rt', () => Promise.reject(new Error('down')));
+
+    const result = await client.sqlSchema('chinook-assistant');
 
     expect(result.ok).toBe(false);
   });

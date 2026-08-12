@@ -4,7 +4,10 @@ import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import { BINDING_SIDE } from '@core/model/contracts/ports';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
+import type { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { CATEGORY, PORT } from '../vocabulary';
+import { modelField } from '../modelField';
+import { SKILL_PORT, rulesModeField } from '../skillLayer';
 
 export const WORKER_TYPE = 'orchestrate.worker';
 
@@ -30,82 +33,88 @@ export const WORKER_TYPE = 'orchestrate.worker';
  */
 export class WorkerNodeModel extends AbstractNodeModel {}
 
-export const workerNode: INodeDefinition = defineNode(
-  {
-    id: WORKER_TYPE,
-    category: CATEGORY.agent,
-    label: 'Worker',
-    description: 'Runs one subtask dispatched by an orchestrator.',
-    iconId: 'node-worker',
-    accent: 'blue',
-    keywords: ['worker', 'subagent', 'dispatch', 'task', 'send', 'fan-out'],
-    defaultSize: { width: 252, height: 200 },
-    // One Worker node per *archetype* (ticket 37): an orchestrator may wire
-    // several, each a different kind of specialist. The runtime still
-    // multiplies each into N task instances, and that multiplication is
-    // never a second node on the canvas.
-    maxInstances: undefined,
-    fields: [
-      {
-        kind: 'textarea',
-        key: 'role',
-        label: 'Role',
-        placeholder: 'What this worker archetype handles, e.g. "weather and forecast questions"',
-        defaultValue: '',
-        onCard: false,
-        // Shown to the supervisor's labelling model alongside the node's
-        // title — the description half of the archetype roster. The title
-        // itself (slugified) is the dispatch key; see
-        // `backend/openstategraph/abc/orchestrator.py`'s `archetype_key`.
-      },
-      {
-        kind: 'toggle',
-        key: 'default',
-        label: 'Default worker',
-        defaultValue: false,
-        onCard: false,
-        // Where unlabelled or unrecognised subtasks land. With no card
-        // claiming it, the first wired archetype is the default; two claims
-        // is a validator warning (`singleDefaultWorkerRule`).
-      },
-    ],
-    ports: [
-      {
-        id: 'dispatch',
-        direction: 'in',
-        type: PORT.worker,
-        label: 'dispatch',
-        required: true,
-        description: 'Subtasks dispatched by an orchestrator’s fan-out.',
-      },
-      {
-        id: 'skill',
-        direction: 'in',
-        type: PORT.skill,
-        label: 'skill',
-        description: 'System instruction that shapes how the worker approaches its task.',
-      },
-      {
-        id: 'tools',
-        direction: 'in',
-        type: PORT.tool,
-        label: 'worker tools',
-        side: BINDING_SIDE.consumer,
-        appearance: 'pill',
-        maxConnections: null,
-        description: 'Tools this worker may call.',
-      },
-      {
-        id: 'result',
-        direction: 'out',
-        type: PORT.result,
-        label: 'result',
-        description: 'This subtask’s answer, keyed by its subtask id when joined downstream.',
-      },
-    ],
-  },
-  WorkerNodeModel,
-);
+export function createWorkerNode(providers: ProviderRegistry): INodeDefinition {
+  return defineNode(
+    {
+      id: WORKER_TYPE,
+      category: CATEGORY.agent,
+      label: 'Worker',
+      description: 'Runs one subtask dispatched by an orchestrator.',
+      iconId: 'node-worker',
+      accent: 'blue',
+      keywords: ['worker', 'subagent', 'dispatch', 'task', 'send', 'fan-out'],
+      defaultSize: { width: 252, height: 200 },
+      // One Worker node per *archetype* (ticket 37): an orchestrator may wire
+      // several, each a different kind of specialist. The runtime still
+      // multiplies each into N task instances, and that multiplication is
+      // never a second node on the canvas.
+      maxInstances: undefined,
+      fields: [
+        modelField(providers),
+        {
+          kind: 'textarea',
+          key: 'role',
+          label: 'Role',
+          placeholder: 'What this worker archetype handles, e.g. "weather and forecast questions"',
+          defaultValue: '',
+          onCard: false,
+          // Shown to the supervisor's labelling model alongside the node's
+          // title — the description half of the archetype roster. The title
+          // itself (slugified) is the dispatch key; see
+          // `backend/openstategraph/abc/orchestrator.py`'s `archetype_key`.
+        },
+        {
+          kind: 'toggle',
+          key: 'default',
+          label: 'Default worker',
+          defaultValue: false,
+          onCard: false,
+          // Where unlabelled or unrecognised subtasks land. With no card
+          // claiming it, the first wired archetype is the default; two claims
+          // is a validator warning (`singleDefaultWorkerRule`).
+        },
+        // Extend, by default, rather than replace: the worker's built-in tool
+        // directive is what stopped it answering a database question from
+        // parametric memory, so a wired skill adds to it unless the developer
+        // says otherwise.
+        rulesModeField(),
+      ],
+      ports: [
+        {
+          id: 'dispatch',
+          direction: 'in',
+          type: PORT.worker,
+          label: 'dispatch',
+          required: true,
+          description: 'Subtasks dispatched by an orchestrator’s fan-out.',
+        },
+        // The same declaration the other four model-driven types use
+        // (`../skillLayer`). A worker with no skill wired shows no symptom at
+        // all, which is exactly why the gap had to be looked for rather than
+        // waited for.
+        { ...SKILL_PORT },
+        {
+          id: 'tools',
+          direction: 'in',
+          type: PORT.tool,
+          label: 'worker tools',
+          side: BINDING_SIDE.consumer,
+          appearance: 'pill',
+          maxConnections: null,
+          description: 'Tools this worker may call.',
+        },
+        {
+          id: 'result',
+          direction: 'out',
+          type: PORT.result,
+          label: 'result',
+          description: 'This subtask’s answer, keyed by its subtask id when joined downstream.',
+        },
+      ],
+    },
+    WorkerNodeModel,
+  );
+}
 
 /**
  * Browser-preview executor — refuses, like the Orchestrator's.
@@ -115,7 +124,7 @@ export const workerNode: INodeDefinition = defineNode(
  * skip a `standard` node with no executor would otherwise get.
  */
 export const workerExecutor: INodeExecutor = {
-  id: workerNode.id,
+  id: WORKER_TYPE,
   execute(ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
     ctx.log('Worker dispatch is evaluated by the Python runtime, not the browser preview.');
     return Promise.resolve(

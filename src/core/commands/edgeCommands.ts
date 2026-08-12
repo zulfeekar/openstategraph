@@ -1,6 +1,7 @@
 import { EdgeModel } from '@core/model/EdgeModel';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeDefinition, NodeInit } from '@core/model/contracts/node';
+import type { Point } from '@core/kernel/geometry';
 import type { PortRef } from '@core/model/contracts/ports';
 import type { EdgeId } from '@core/model/contracts/workflow';
 import { AddNodeCommand } from './nodeCommands';
@@ -188,6 +189,51 @@ export class SetEdgeLabelCommand implements ICommand {
 
   mergeWith(next: ICommand): ICommand | null {
     if (!(next instanceof SetEdgeLabelCommand) || next.edgeId !== this.edgeId) return null;
+    this.value = next.value;
+    return this;
+  }
+}
+
+/**
+ * Moves, adds or removes the waypoints a link's run must pass through.
+ *
+ * One command for all three gestures, because to the document they are the
+ * same edit: the whole list is replaced. `linkTools.Vertices` adds a point on
+ * click, drags it, and removes it on double-click, and each of those arrives
+ * here as "the list is now this".
+ *
+ * Coalesced per edge, so a drag — which emits a change per frame — collapses
+ * into one undo step, exactly as a node drag does. Adding a point and then
+ * dragging it inside the merge window also collapses, which is right: the user
+ * performed one placement.
+ */
+export class SetEdgeVerticesCommand implements ICommand {
+  readonly label = 'Move link point';
+  readonly coalesceKey: string;
+  private previous: readonly Point[] | undefined;
+
+  constructor(
+    private readonly edgeId: EdgeId,
+    private value: readonly Point[],
+  ) {
+    this.coalesceKey = `edge-vertices:${edgeId}`;
+  }
+
+  execute(ctx: CommandContext): void {
+    const edge = ctx.model.edge(this.edgeId);
+    if (!edge) return;
+    // Captured on the *first* execute only: a redo must restore the state the
+    // gesture started from, not the one the undo just put back.
+    this.previous ??= edge.vertices;
+    ctx.model.setEdgeVertices(this.edgeId, this.value);
+  }
+
+  undo(ctx: CommandContext): void {
+    if (this.previous !== undefined) ctx.model.setEdgeVertices(this.edgeId, this.previous);
+  }
+
+  mergeWith(next: ICommand): ICommand | null {
+    if (!(next instanceof SetEdgeVerticesCommand) || next.edgeId !== this.edgeId) return null;
     this.value = next.value;
     return this;
   }

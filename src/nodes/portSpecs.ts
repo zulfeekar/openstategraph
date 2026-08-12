@@ -10,8 +10,9 @@ import type { INodeExecutor } from '@core/execution/INodeExecutor';
 
 import { registerNodeCatalogue } from './index';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
-import { TABULAR_NODES } from './tools/TabularDataNode';
-import { WORKSHOP_NODES } from './tools/CodeWorkshopNode';
+import { MODEL_FIELD_KEY } from './modelField';
+import { LEGACY_RULES_MODE_KEY, SKILL_PORT_ID } from './skillLayer';
+import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
 
 /**
  * The node/port catalogue, serialised for the Python runtime.
@@ -37,7 +38,7 @@ import { WORKSHOP_NODES } from './tools/CodeWorkshopNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 1;
+export const PORT_SPEC_SCHEMA_VERSION = 2;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -85,6 +86,53 @@ export interface GeneratedNodeType {
   readonly description: string;
   readonly ports: readonly GeneratedPort[];
   readonly dynamic_ports: readonly GeneratedDynamicPortGroup[];
+  /**
+   * Does this node type drive a language model — i.e. does it declare the
+   * shared `model` field (`src/nodes/modelField.ts`)?
+   *
+   * Emitted because the two sides had silently disagreed about it. The
+   * backend's `NodeRuntime._resolve_model(data)` read `data["model"]` for six
+   * node types while only one of them shipped the picker, so five nodes drove
+   * a model that nobody could choose and the backend read a key nothing could
+   * write. Nothing failed — it just quietly used the wrong model, which is the
+   * worst shape a defect can take.
+   *
+   * TypeScript declares it, Python asserts against it, exactly as the ports
+   * already work. A new model-driven node type that forgets the field now
+   * fails a test instead of shipping.
+   */
+  readonly drives_model: boolean;
+
+  /**
+   * Does this node type accept a wired skill — i.e. does it declare the shared
+   * `skill` input port (`src/nodes/skillLayer.ts`)?
+   *
+   * Emitted for exactly the reason `drives_model` is, and against the same
+   * class of silence: the backend reads `plan.skill_bindings` and composes a
+   * skill layer for five node types, while the editor declared the port on
+   * two. The other three offered no way to wire the thing their compiler was
+   * ready to read, and nothing failed.
+   *
+   * `backend/tests/test_skill_layer_contract.py` asserts this set against the
+   * builders that actually read a skill binding, reading the compiler's own
+   * source rather than a hand-kept list.
+   */
+  readonly accepts_skill: boolean;
+
+  /**
+   * Every key this node type's own configuration writes into `data` —
+   * `Object.keys(defaultsFrom(fields))`, so a `file` field contributes its
+   * `contentKey` too.
+   *
+   * `drives_model` and `accepts_skill` are two instances of one defect: a
+   * compiler factory reading a `data` key the editor declares nowhere, which
+   * raises nothing and simply yields `""` forever. Three of those shipped
+   * (the model picker, the worker's rules mode, the supervisor's rules). This
+   * generalises the guard: `backend/tests/test_data_key_contract.py` extracts
+   * the literal keys each factory reads and asserts every one of them appears
+   * here, so instance four fails a test instead of shipping.
+   */
+  readonly field_keys: readonly string[];
 }
 
 export interface GeneratedPortType {
@@ -98,6 +146,19 @@ export interface NodeCatalogueArtifact {
   readonly generated_by: string;
   readonly source: string;
   readonly warning: string;
+  /**
+   * Keys a saved document may still carry that no node type declares a field
+   * for — today exactly one, the Grader's old `criteriaMode`, which
+   * `skillLayer.ts` keeps as a *migration* fallback and deliberately never
+   * re-declares as a second control.
+   *
+   * Emitted because the data-key contract has to tell a deliberate
+   * compatibility read apart from a field nobody can write, and the difference
+   * is knowledge the editor already holds. A hand-kept exclusion list on the
+   * Python side would be the third declaration these contracts exist to
+   * prevent — and worse, an easy place to silence a real defect.
+   */
+  readonly legacy_data_keys: readonly string[];
   readonly port_types: readonly GeneratedPortType[];
   readonly node_types: readonly GeneratedNodeType[];
 }
@@ -135,9 +196,7 @@ function buildCatalogue(): { registry: ModelRegistry; definitions: readonly INod
   const executors = new Registry<INodeExecutor>('executors');
   registerNodeCatalogue(registry, executors, new ProviderRegistry(new CredentialStore(false)));
 
-  const workflowScoped = [...CHINOOK_NODES, ...TABULAR_NODES, ...WORKSHOP_NODES].map(
-    (entry) => entry.definition,
-  );
+  const workflowScoped = [...CHINOOK_NODES].map((entry) => entry.definition);
   return { registry, definitions: [...registry.nodeTypes.list(), ...workflowScoped] };
 }
 
@@ -259,6 +318,17 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
         description: definition.description,
         ports,
         dynamic_ports: dynamic,
+        drives_model: definition.fields.some((field) => field.key === MODEL_FIELD_KEY),
+        // Read off the resolved port list, not off a second declaration: the
+        // port is the thing a document wires to, so the port is what the
+        // contract is about. `direction` matters — `input.markdown` declares a
+        // `skill` port too, but it is the provider half, the file being
+        // offered rather than a prompt being shaped.
+        accepts_skill: ports.some((port) => port.id === SKILL_PORT_ID && port.direction === 'in'),
+        // Through `defaultsFrom` rather than `fields.map(f => f.key)`, because
+        // the data record is what the backend reads and a `file` field writes
+        // two keys into it. Sorted so the drift diff is about the catalogue.
+        field_keys: Object.keys(defaultsFrom(definition.fields)).sort(),
       };
     })
     .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
@@ -279,6 +349,7 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
     warning:
       'GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; ' +
       `run \`${PORT_SPEC_GENERATE_COMMAND}\` after changing a node type or a port.`,
+    legacy_data_keys: [LEGACY_RULES_MODE_KEY, LEGACY_SKILL_BODY_KEY].sort(),
     port_types: portTypes,
     node_types: nodeTypes,
   };

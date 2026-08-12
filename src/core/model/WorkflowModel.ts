@@ -272,6 +272,13 @@ export class WorkflowModel implements IWorkflowModel {
     this.bus.emit('edge:label', { edgeId: id, label: edge.label });
   }
 
+  setEdgeVertices(id: EdgeId, vertices: readonly Point[]): void {
+    const edge = this.edgeMap.get(id);
+    if (!edge) return;
+    edge.applyVertices(vertices);
+    this.bus.emit('edge:vertices', { edgeId: id, vertices: edge.vertices });
+  }
+
   setName(name: string): void {
     const trimmed = name.trim() || 'Untitled workflow';
     if (trimmed === this._name) return;

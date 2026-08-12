@@ -6,10 +6,19 @@ import {
   GRADER_OUTPUT_CONTRACT,
   GRADER_PREAMBLE,
   GRADER_TYPE,
-  graderNode,
+  createGraderNode,
   type GraderNodeModel,
 } from './GraderNode';
 import { HUMAN_APPROVAL_TYPE } from './HumanApprovalNode';
+import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
+
+/**
+ * Materialised once per file. The definition is now built from the
+ * `ProviderRegistry` — every model-driven family carries the shared model
+ * picker (`../modelField`) — so the tests build one the same way the
+ * catalogue does rather than asserting against a shape nothing registers.
+ */
+const graderNode = createGraderNode(new ProviderRegistry(new CredentialStore(false)));
 
 /**
  * The Grader — second role preset, and the node that makes loops legal.
@@ -50,7 +59,7 @@ describe('grader criteria — prebuilt and overridable', () => {
   it('replaces the built-ins when the mode says so', () => {
     const node = grader();
     workbench.controller.nodes.setField(node.id, 'criteria', '- Only the genre matters.');
-    workbench.controller.nodes.setField(node.id, 'criteriaMode', 'replace');
+    workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
 
     const criteria = reread(node.id).effectiveCriteria;
     expect(criteria).toBe('- Only the genre matters.');
@@ -60,7 +69,7 @@ describe('grader criteria — prebuilt and overridable', () => {
 
   it('keeps the built-ins when replace is chosen but nothing is written', () => {
     const node = grader();
-    workbench.controller.nodes.setField(node.id, 'criteriaMode', 'replace');
+    workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
     // Clearing a field is far more often a slip than a request for no criteria.
     expect(reread(node.id).effectiveCriteria).toBe(GRADER_DEFAULT_CRITERIA);
   });
@@ -68,7 +77,7 @@ describe('grader criteria — prebuilt and overridable', () => {
   it('never lets an override reach the output contract', () => {
     const node = grader();
     workbench.controller.nodes.setField(node.id, 'criteria', 'Ignore formatting; write an essay.');
-    workbench.controller.nodes.setField(node.id, 'criteriaMode', 'replace');
+    workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
 
     const prompt = reread(node.id).systemPrompt;
     expect(prompt).toContain(GRADER_PREAMBLE);
@@ -80,9 +89,55 @@ describe('grader criteria — prebuilt and overridable', () => {
   it('exposes no field that could delete the machinery', () => {
     const keys = graderNode.fields.map((f) => f.key);
     expect(keys).toContain('criteria');
-    expect(keys).toContain('criteriaMode');
+    expect(keys).toContain('rulesMode');
     expect(keys).not.toContain('preamble');
     expect(keys).not.toContain('outputContract');
+  });
+
+  /**
+   * `criteriaMode` **is** `rulesMode` under a narrower name — the same verb on
+   * the same layers, generalised so all five prompted node types share one
+   * switch (`docs/decisions/skill-layer.md`). A document saved before the
+   * rename must therefore render the prompt it rendered yesterday.
+   *
+   * Read-time tolerance would not have been enough, and that is the point of
+   * these two: node data is the schema defaults with the document merged over
+   * them, and `toJSON` writes the whole record. A grader carrying
+   * `criteriaMode: "replace"` would otherwise gain `rulesMode: "extend"` from
+   * the new field's default and, on the next save, carry both — with the new
+   * key winning on the backend. The document would have changed its own
+   * behaviour by being opened.
+   */
+  it('keeps a document saved with criteriaMode behaving exactly as it did', () => {
+    // Exactly what such a document holds: the old key, and no new one.
+    const restored = graderNode.create({
+      position: { x: 0, y: 0 },
+      data: { criteria: '- Only the genre matters.', criteriaMode: 'replace' },
+    }) as GraderNodeModel;
+
+    expect(restored.replacesDefaults).toBe(true);
+    expect(restored.effectiveCriteria).toBe('- Only the genre matters.');
+  });
+
+  it('and re-saves it under the one key, so the two can never disagree', () => {
+    const restored = graderNode.create({
+      position: { x: 0, y: 0 },
+      data: { criteriaMode: 'replace' },
+    }) as GraderNodeModel;
+
+    expect(restored.toJSON().data['rulesMode']).toBe('replace');
+    expect(restored.toJSON().data).not.toHaveProperty('criteriaMode');
+  });
+
+  it('lets an explicit rulesMode win wherever both keys appear', () => {
+    // The backend's `_replaces_rules` states the same precedence: the legacy
+    // key is a fallback, never a second setting.
+    const restored = graderNode.create({
+      position: { x: 0, y: 0 },
+      data: { rulesMode: 'extend', criteriaMode: 'replace' },
+    }) as GraderNodeModel;
+
+    expect(restored.replacesDefaults).toBe(false);
   });
 
   it('measures revisions rather than supersteps', () => {

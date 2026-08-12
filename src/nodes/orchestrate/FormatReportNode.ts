@@ -3,6 +3,7 @@ import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
+import type { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { CATEGORY, PORT } from '../vocabulary';
 
 export const FORMAT_REPORT_TYPE = 'function.format_report';
@@ -40,49 +41,63 @@ export class FormatReportNodeModel extends AbstractNodeModel {
  * model and no LangGraph runtime, only whatever the mock provider already
  * produced upstream.
  */
-export const formatReportNode: INodeDefinition = defineNode(
-  {
-    id: FORMAT_REPORT_TYPE,
-    category: CATEGORY.agent,
-    label: 'Format Report',
-    description: 'Joins worker results into one Markdown report.',
-    iconId: 'node-format-report',
-    accent: 'green',
-    keywords: ['report', 'join', 'format', 'synthesize', 'function', 'markdown'],
-    defaultSize: { width: 260, height: 180 },
-    fields: [
-      {
-        kind: 'text',
-        key: FIELD_REPORT_TITLE,
-        label: 'Report title',
-        placeholder: DEFAULT_TITLE,
-        defaultValue: '',
-        onCard: false,
-      },
-    ],
-    ports: [
-      {
-        id: 'candidate',
-        direction: 'in',
-        type: PORT.result,
-        label: 'candidate',
-        required: true,
-        // A bus since ticket 37: every worker archetype's `result` wires in,
-        // and the join runs once after the fan-out's superstep completes.
-        maxConnections: null,
-        description: 'Worker results to join into the report.',
-      },
-      {
-        id: 'report',
-        direction: 'out',
-        type: PORT.result,
-        label: 'report',
-        description: 'The assembled Markdown report.',
-      },
-    ],
-  },
-  FormatReportNodeModel,
-);
+/**
+ * Deliberately has **no** model picker, unlike every other node in this
+ * directory. Format Report is a *function* node: it joins worker results in
+ * task-id order with no LLM call and therefore no variance, which is what
+ * makes its output assertable byte-for-byte. Offering a model here would be
+ * a control that changes nothing — the contract test
+ * `test_no_node_offers_a_picker_the_compiler_ignores` refuses exactly that,
+ * and refused this when it was added by reflex.
+ *
+ * It still takes the registry so the whole orchestrate family is built one
+ * way; that costs nothing and keeps the registration site uniform.
+ */
+export function createFormatReportNode(_providers: ProviderRegistry): INodeDefinition {
+  return defineNode(
+    {
+      id: FORMAT_REPORT_TYPE,
+      category: CATEGORY.agent,
+      label: 'Format Report',
+      description: 'Joins worker results into one Markdown report.',
+      iconId: 'node-format-report',
+      accent: 'green',
+      keywords: ['report', 'join', 'format', 'synthesize', 'function', 'markdown'],
+      defaultSize: { width: 260, height: 180 },
+      fields: [
+        {
+          kind: 'text',
+          key: FIELD_REPORT_TITLE,
+          label: 'Report title',
+          placeholder: DEFAULT_TITLE,
+          defaultValue: '',
+          onCard: false,
+        },
+      ],
+      ports: [
+        {
+          id: 'candidate',
+          direction: 'in',
+          type: PORT.result,
+          label: 'candidate',
+          required: true,
+          // A bus since ticket 37: every worker archetype's `result` wires in,
+          // and the join runs once after the fan-out's superstep completes.
+          maxConnections: null,
+          description: 'Worker results to join into the report.',
+        },
+        {
+          id: 'report',
+          direction: 'out',
+          type: PORT.result,
+          label: 'report',
+          description: 'The assembled Markdown report.',
+        },
+      ],
+    },
+    FormatReportNodeModel,
+  );
+}
 
 /**
  * Runs for real in the browser preview.
@@ -95,7 +110,7 @@ export const formatReportNode: INodeDefinition = defineNode(
  * the fan-out/join semantics that only the compiled graph has.
  */
 export const formatReportExecutor: INodeExecutor = {
-  id: formatReportNode.id,
+  id: FORMAT_REPORT_TYPE,
   execute(ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
     const node = ctx.node as FormatReportNodeModel;
     const incoming = ctx.input<unknown>('candidate');

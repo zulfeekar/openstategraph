@@ -40,7 +40,20 @@ export const textInputNode: INodeDefinition = defineNode(
         placeholder: 'What should the agent do?',
         defaultValue: '',
         minRows: 3,
-        validate: (value) => (value.trim().length === 0 ? 'Enter a prompt for the agent' : null),
+        // No `validate` (ticket 22). An empty entry prompt used to be a
+        // blocking `error`, and two of the three shipped workflows opened
+        // with one on documents that demonstrably work: `concierge` and
+        // `workflow-architect` are chat-driven, so this field is *supposed*
+        // to be blank — the backend's `_input` reads
+        // `state["question"] or configured` precisely so the question can
+        // arrive at run time. A red diagnostic on a working document teaches
+        // people to ignore the panel.
+        //
+        // The blank is still explained, by `entryQuestionRule` in
+        // `core/validation` at `info` — it says where the question will come
+        // from, which is a fact about the document, rather than "this is
+        // wrong", which was not true. What Run needs in order to run is Run's
+        // own business, and it says so itself (ticket 21).
       },
     ],
     ports: [

@@ -2,7 +2,13 @@ import { Registry } from '@core/kernel/Registry';
 import { EventBus } from '@core/kernel/EventBus';
 import type { Unsubscribe } from '@core/kernel/Disposable';
 import type { FieldOption } from '@core/model/contracts/fields';
-import { AbstractLLMProvider, type ILLMProvider, type ModelDescriptor } from './ILLMProvider';
+import {
+  AbstractLLMProvider,
+  type ILLMProvider,
+  type ModelDescriptor,
+  type ReasoningEffortLevels,
+} from './ILLMProvider';
+import { MOCK_SELECTION, workflowModelAsSelection } from './modelSelection';
 
 const STORAGE_PREFIX = 'openstategraph.credentials.';
 
@@ -97,7 +103,37 @@ export class ProviderRegistry {
   readonly providers = new Registry<ILLMProvider>('llmProviders');
   private readonly bus = new EventBus<ProviderEvents>();
 
+  /**
+   * What an **empty** selection stands for — the open document's model.
+   *
+   * A node left on "Workflow default" stores `''`, which is exactly what the
+   * backend's `_resolve_model` treats as "no override". The editor had no
+   * equivalent: `''` was translated to the offline simulator at each call
+   * site, so anything asking the registry about such a node was answered
+   * about Mock. The reasoning picker made that visible — "Not supported by
+   * Mock · Offline" on every card of a document running
+   * `ollama:gpt-oss:120b-cloud` — but the picker was only the messenger.
+   *
+   * The simulator remains the answer when no document names a model, because
+   * that is what the canvas preview would actually run.
+   */
+  private workflowDefault = MOCK_SELECTION;
+
   constructor(private readonly credentials: CredentialStore) {}
+
+  /**
+   * Tells the registry which model the open document runs.
+   *
+   * Takes the **settings** spelling (`ollama:gpt-oss:120b-cloud`) and
+   * normalises it, so the one caller — the composition root, listening to
+   * `workflow:settings` — hands over `settings.model` unchanged rather than
+   * remembering that the two formats differ. Blank restores the simulator.
+   */
+  setWorkflowDefaultModel(settingsModel: string): void {
+    const trimmed = settingsModel.trim();
+    this.workflowDefault = trimmed ? workflowModelAsSelection(trimmed) : MOCK_SELECTION;
+    this.bus.emit('changed', { providerId: '*' });
+  }
 
   /**
    * Adds a vendor. This is the **only** path in — there is no built-in list
@@ -141,18 +177,21 @@ export class ProviderRegistry {
    * nowhere to look up which vendor to call.
    */
   resolve(selection: string): { provider: ILLMProvider; modelId: string } | undefined {
-    const separator = selection.indexOf('/');
+    // An empty selection is not an unknown one: it is "whatever this
+    // document runs", and only the registry can say what that is.
+    const wanted = selection.trim() ? selection : this.workflowDefault;
+    const separator = wanted.indexOf('/');
     if (separator > 0) {
-      const providerId = selection.slice(0, separator);
-      const modelId = selection.slice(separator + 1);
+      const providerId = wanted.slice(0, separator);
+      const modelId = wanted.slice(separator + 1);
       const provider = this.providers.get(providerId);
       if (provider && modelId) return { provider, modelId };
     }
     // Tolerate a bare model id from an older document.
     const owner = this.providers
       .list()
-      .find((provider) => provider.models.some((model) => model.id === selection));
-    return owner ? { provider: owner, modelId: selection } : undefined;
+      .find((provider) => provider.models.some((model) => model.id === wanted));
+    return owner ? { provider: owner, modelId: wanted } : undefined;
   }
 
   /** Canonical selection string for a provider/model pair. */
@@ -164,6 +203,24 @@ export class ProviderRegistry {
     const resolved = this.resolve(selection);
     if (!resolved) return undefined;
     return resolved.provider.models.find((model) => model.id === resolved.modelId);
+  }
+
+  /**
+   * Reasoning tiers a selection accepts — model first, then its provider.
+   *
+   * Most specific source wins, and `undefined` propagates rather than being
+   * flattened to "none": a model that says nothing about itself inherits its
+   * adapter's answer, and an adapter that says nothing leaves the question
+   * genuinely open for the runtime to settle. An *unresolvable* selection —
+   * a custom model id typed into a provider that allows one, a document
+   * naming a vendor that is no longer registered — is also `undefined`, for
+   * the same reason: not knowing is not the same as knowing there is none.
+   */
+  reasoningEffortLevelsFor(selection: string): ReasoningEffortLevels {
+    const resolved = this.resolve(selection);
+    if (!resolved) return undefined;
+    const model = resolved.provider.models.find((entry) => entry.id === resolved.modelId);
+    return model?.reasoningEffortLevels ?? resolved.provider.reasoningEffortLevels;
   }
 
   /**

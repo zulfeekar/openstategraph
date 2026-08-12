@@ -5,12 +5,21 @@ import { makeWorkbench } from '@core/testing/fixtures';
 import type { Workbench } from '@app/Workbench';
 import {
   branchesOf,
-  routerNode,
+  createRouterNode,
   ROUTER_OUTPUT_CONTRACT,
   ROUTER_PREAMBLE,
   ROUTER_TYPE,
   type RouterNodeModel,
 } from './RouterNode';
+import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
+
+/**
+ * Materialised once per file. The definition is now built from the
+ * `ProviderRegistry` — every model-driven family carries the shared model
+ * picker (`../modelField`) — so the tests build one the same way the
+ * catalogue does rather than asserting against a shape nothing registers.
+ */
+const routerNode = createRouterNode(new ProviderRegistry(new CredentialStore(false)));
 
 /**
  * The Router — the first *role* preset (ticket 28).
@@ -129,7 +138,10 @@ describe('routerNode ports', () => {
   });
 
   it('takes exactly one input — a router classifies one thing at a time', () => {
-    const ins = portsFor({}).filter((p) => p.direction === 'in');
+    // One *flow* input. The `skill` port is a binding, not a stage: it is
+    // equipment attached to the step, drawn across the reading axis, and it
+    // carries no text to classify.
+    const ins = portsFor({}).filter((p) => p.direction === 'in' && p.id !== 'skill');
     expect(ins).toHaveLength(1);
     expect(maxConnectionsOf(ins[0]!)).toBe(1);
   });

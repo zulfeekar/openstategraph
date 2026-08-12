@@ -1,14 +1,16 @@
 import { Err, type Result } from '@core/kernel/Result';
 import { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import { defineNode } from '@core/model/ModelRegistry';
-import type { INodeDefinition } from '@core/model/contracts/node';
+import type { INodeDefinition, NodeInit } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
+import type { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { CATEGORY, PORT } from '../vocabulary';
+import { modelField } from '../modelField';
+import { SKILL_PORT, replacesRules, rulesModeField, withMigratedRulesMode } from '../skillLayer';
 
 export const GRADER_TYPE = 'route.grader';
 
 const FIELD_CRITERIA = 'criteria';
-const FIELD_MODE = 'criteriaMode';
 const FIELD_MAX_ATTEMPTS = 'maxAttempts';
 const FIELD_TIER = 'tier';
 
@@ -36,6 +38,18 @@ export const GRADER_OUTPUT_CONTRACT =
   'saying exactly what to change. Nothing else.';
 
 export class GraderNodeModel extends AbstractNodeModel {
+  /**
+   * The Grader is the one node type whose saved documents can carry the
+   * pre-generalisation `criteriaMode`, because it is the one type that ever
+   * declared it. Rewriting it here — before `AbstractNodeModel` merges the new
+   * field's `extend` default over the record — is what keeps such a document
+   * behaving exactly as it did; see `withMigratedRulesMode` for why read-time
+   * tolerance would not have been enough.
+   */
+  constructor(definition: INodeDefinition, init: NodeInit) {
+    super(definition, withMigratedRulesMode(init));
+  }
+
   /** The developer's criteria. The only authorable part of the prompt. */
   get criteria(): string {
     return this.getText(FIELD_CRITERIA);
@@ -43,7 +57,7 @@ export class GraderNodeModel extends AbstractNodeModel {
 
   /** True when the developer's criteria replace the prebuilt ones. */
   get replacesDefaults(): boolean {
-    return this.getText(FIELD_MODE) === 'replace';
+    return replacesRules(this.data);
   }
 
   /**
@@ -84,117 +98,119 @@ export class GraderNodeModel extends AbstractNodeModel {
  *
  * Compiles to a conditional edge: `pass` continues, `revise` returns upstream.
  */
-export const graderNode: INodeDefinition = defineNode(
-  {
-    id: GRADER_TYPE,
-    category: CATEGORY.agent,
-    label: 'Grader',
-    description: 'Checks an answer, and sends it back with feedback if it falls short.',
-    iconId: 'node-grader',
-    accent: 'green',
-    keywords: ['grade', 'evaluate', 'check', 'critic', 'verify', 'judge', 'quality'],
-    defaultSize: { width: 268, height: 210 },
-    fields: [
-      {
-        // Structured rubric rows (ticket 66): each is judged explicitly, a
-        // failed REQUIRED row is a revise. Composes with the criteria —
-        // the backend renders it as machinery context, so `replace` on the
-        // criteria never deletes it.
-        kind: 'repeatable-group',
-        key: 'rubric',
-        label: 'Rubric',
-        addLabel: 'Add rubric row',
-        maxRows: 10,
-        onCard: false,
-        group: 'Judgement',
-        fields: [
-          {
-            kind: 'text',
-            key: 'criterion',
-            label: 'Criterion',
-            placeholder: 'e.g. Cites a figure from the executed rows',
-            defaultValue: '',
-          },
-          { kind: 'toggle', key: 'required', label: 'Required', defaultValue: true },
-        ],
-      },
-      {
-        kind: 'textarea',
-        key: FIELD_CRITERIA,
-        label: 'Your criteria',
-        // Criteria only. The preamble and output contract are locked, because a
-        // grader whose verdict cannot be parsed is a broken node.
-        placeholder: '- Must name a specific genre, not an artist.',
-        defaultValue: '',
-        minRows: 3,
-      },
-      {
-        kind: 'select',
-        key: FIELD_MODE,
-        label: 'Criteria mode',
-        defaultValue: 'extend',
-        options: [
-          { value: 'extend', label: 'Add to the built-in criteria' },
-          { value: 'replace', label: 'Replace the built-in criteria' },
-        ],
-      },
-      {
-        kind: 'slider',
-        key: FIELD_MAX_ATTEMPTS,
-        label: 'Max revisions',
-        defaultValue: 3,
-        min: 1,
-        max: 6,
-        step: 1,
-        onCard: false,
-        // Revisions, not supersteps. `recursion_limit` counts supersteps and one
-        // lap of a loop can cost several, so it is never the number a user means
-        // here — which is why the graph keeps its own attempt counter.
-        format: (value) => `· ${value} max`,
-      },
-      {
-        kind: 'select',
-        key: FIELD_TIER,
-        label: 'Runtime',
-        defaultValue: 'react',
-        onCard: false,
-        options: [
-          { value: 'react', label: 'Agent · create_agent' },
-          { value: 'deep', label: 'Deep agent · create_deep_agent' },
-          { value: 'custom', label: 'Custom · hand-written node' },
-        ],
-      },
-    ],
-    ports: [
-      {
-        id: 'candidate',
-        direction: 'in',
-        type: PORT.result,
-        label: 'candidate',
-        description: 'The answer to judge.',
-      },
-      {
-        id: 'pass',
-        direction: 'out',
-        type: PORT.result,
-        label: 'pass',
-        branch: true,
-        description: 'Taken when the answer meets the criteria.',
-      },
-      {
-        id: 'revise',
-        direction: 'out',
-        type: PORT.feedback,
-        label: 'revise',
-        branch: true,
-        description:
-          'Feedback sent back upstream when the answer falls short. Wire this to an ' +
-          'agent’s feedback input to form a revision loop.',
-      },
-    ],
-  },
-  GraderNodeModel,
-);
+export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
+  return defineNode(
+    {
+      id: GRADER_TYPE,
+      category: CATEGORY.agent,
+      label: 'Grader',
+      description: 'Checks an answer, and sends it back with feedback if it falls short.',
+      iconId: 'node-grader',
+      accent: 'green',
+      keywords: ['grade', 'evaluate', 'check', 'critic', 'verify', 'judge', 'quality'],
+      defaultSize: { width: 268, height: 210 },
+      fields: [
+        modelField(providers),
+        {
+          // Structured rubric rows (ticket 66): each is judged explicitly, a
+          // failed REQUIRED row is a revise. Composes with the criteria —
+          // the backend renders it as machinery context, so `replace` on the
+          // criteria never deletes it.
+          kind: 'repeatable-group',
+          key: 'rubric',
+          label: 'Rubric',
+          addLabel: 'Add rubric row',
+          maxRows: 10,
+          onCard: false,
+          group: 'Judgement',
+          fields: [
+            {
+              kind: 'text',
+              key: 'criterion',
+              label: 'Criterion',
+              placeholder: 'e.g. Cites a figure from the executed rows',
+              defaultValue: '',
+            },
+            { kind: 'toggle', key: 'required', label: 'Required', defaultValue: true },
+          ],
+        },
+        {
+          kind: 'textarea',
+          key: FIELD_CRITERIA,
+          label: 'Your criteria',
+          // Criteria only. The preamble and output contract are locked, because a
+          // grader whose verdict cannot be parsed is a broken node.
+          placeholder: '- Must name a specific genre, not an artist.',
+          defaultValue: '',
+          minRows: 3,
+        },
+        // Was `criteriaMode`, declared here and nowhere else. It is the same
+        // switch over the same layers — the generalisation only adds a third
+        // layer (a wired skill) above — so it is now the shared declaration
+        // in `../skillLayer`, on the card as before because the criteria it
+        // modifies are on the card.
+        rulesModeField({ onCard: true }),
+        {
+          kind: 'slider',
+          key: FIELD_MAX_ATTEMPTS,
+          label: 'Max revisions',
+          defaultValue: 3,
+          min: 1,
+          max: 6,
+          step: 1,
+          onCard: false,
+          // Revisions, not supersteps. `recursion_limit` counts supersteps and one
+          // lap of a loop can cost several, so it is never the number a user means
+          // here — which is why the graph keeps its own attempt counter.
+          format: (value) => `· ${value} max`,
+        },
+        {
+          kind: 'select',
+          key: FIELD_TIER,
+          label: 'Runtime',
+          defaultValue: 'react',
+          onCard: false,
+          options: [
+            { value: 'react', label: 'Agent · create_agent' },
+            { value: 'deep', label: 'Deep agent · create_deep_agent' },
+            { value: 'custom', label: 'Custom · hand-written node' },
+          ],
+        },
+      ],
+      ports: [
+        {
+          id: 'candidate',
+          direction: 'in',
+          type: PORT.result,
+          label: 'candidate',
+          description: 'The answer to judge.',
+        },
+        // A grader composes a prompt, so it takes a skill like every other
+        // model-driven type — one declaration, in `../skillLayer`.
+        { ...SKILL_PORT },
+        {
+          id: 'pass',
+          direction: 'out',
+          type: PORT.result,
+          label: 'pass',
+          branch: true,
+          description: 'Taken when the answer meets the criteria.',
+        },
+        {
+          id: 'revise',
+          direction: 'out',
+          type: PORT.feedback,
+          label: 'revise',
+          branch: true,
+          description:
+            'Feedback sent back upstream when the answer falls short. Wire this to an ' +
+            'agent’s feedback input to form a revision loop.',
+        },
+      ],
+    },
+    GraderNodeModel,
+  );
+}
 
 /**
  * Browser-preview executor — refuses, like the Router's.
@@ -205,7 +221,7 @@ export const graderNode: INodeDefinition = defineNode(
  * preview engine, so the run would look successful while nothing was graded.
  */
 export const graderExecutor: INodeExecutor = {
-  id: graderNode.id,
+  id: GRADER_TYPE,
   execute(ctx: ExecutionContext): Promise<Result<PortOutputs, string>> {
     ctx.log('Grading is evaluated by the Python runtime, not the browser preview.');
     return Promise.resolve(

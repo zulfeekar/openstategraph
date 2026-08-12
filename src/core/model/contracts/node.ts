@@ -41,14 +41,7 @@ export type NodeKind = 'standard' | 'container' | 'annotation';
  * on the person reading it. It is not `success` either — the node has not
  * completed. The visual rule that follows: nothing about `paused` animates.
  */
-export type NodeStatus =
-  | 'idle'
-  | 'ready'
-  | 'running'
-  | 'paused'
-  | 'success'
-  | 'warning'
-  | 'error';
+export type NodeStatus = 'idle' | 'ready' | 'running' | 'paused' | 'success' | 'warning' | 'error';
 
 /**
  * Whether a node type is always available or belongs to the open workflow.

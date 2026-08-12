@@ -39,7 +39,7 @@ const FIELD_OUTCOME = 'outcome';
  * 56 as follow-up UX, not blocking the mechanism.
  */
 export class TeamNodeModel extends AbstractNodeModel {
-  /** The team package's slug, e.g. `chinook-metrics-team`. */
+  /** The team package's slug, e.g. `sourcing-team`. */
   get workflowSlug(): string {
     return this.getText(FIELD_WORKFLOW);
   }
@@ -66,7 +66,7 @@ export const teamNode: INodeDefinition = defineNode(
         kind: 'text',
         key: FIELD_WORKFLOW,
         label: 'Team workflow slug',
-        placeholder: 'e.g. chinook-metrics-team',
+        placeholder: 'e.g. sourcing-team',
         defaultValue: '',
       },
       {
