@@ -122,6 +122,35 @@ def cmd_run(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    """`evaluation.evaluate_package` — the harness's one seam, printed.
+
+    Exits 1 below `--threshold` so a CI job can gate on it. The gate is
+    *overall* accuracy (answerable questions graded by execution accuracy,
+    unanswerable ones by whether the system declined): gating on execution
+    accuracy alone would let a system score well by inventing an answer to
+    every question it cannot possibly know.
+
+    **This costs money and calls a model.** It is not in the default test run;
+    see `docs/evaluation.md`.
+    """
+    from openstategraph.evaluation import evaluate_package
+
+    scorecard = evaluate_package(
+        args.package,
+        dataset_path=args.dataset,
+        model=args.model,
+        limit=args.limit,
+        # Progress on stderr, so `eval --json > card.json` still pipes cleanly
+        # and a thirty-question run is not thirty minutes of silence.
+        on_item=None
+        if args.json
+        else lambda item: print(f"  {item.case_id:<6} {item.verdict}", file=sys.stderr, flush=True),
+    )
+    print(json.dumps(scorecard.to_json(), indent=2) if args.json else scorecard.render())
+    return EXIT_OK if scorecard.meets(args.threshold) else EXIT_FAILURE
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     """The compiler's own plan and findings, via the seam MCP already uses.
 
@@ -219,18 +248,149 @@ def cmd_knowledge_build(args: argparse.Namespace) -> int:
 
 
 def cmd_knowledge_list(args: argparse.Namespace) -> int:
-    """The free index tier: every topic and the hint that IS its first line."""
-    from openstategraph.knowledge import PackageKnowledge
+    """The free index tier: every topic, the hint that IS its first line, and
+    who owns it.
 
+    Two lines per store were previously invisible from a terminal: **who wrote
+    a doc** and **whether its source has moved since**. Both are recorded on
+    disk — the generated marker names the owning builder and stamps a hash of
+    the brief, and a claimed doc keeps that hash in a trailing comment — and
+    both were only ever surfaced by the editor's curation panel. A developer
+    checking their second brain is right does it from a terminal, so this
+    reads the same `knowledge_curation.list_topics` the panel does.
+
+    `--knowledge-dir` falls back to the plain index: a store outside the
+    package has no `workflow.json` to recompute briefs from, so ownership is
+    still readable but staleness is genuinely unknowable — and unknown is not
+    stale.
+
+    **An absent store is not an empty one.** Every path below that cannot
+    exist says so and fails, because the alternative — the shared "no
+    knowledge topics — build them with…" line — answers a typo'd path with
+    advice to rebuild into a directory that is not there. Three distinct
+    answers, three distinct messages: no such package, not a workflow package,
+    and a real store that happens to be empty.
+    """
     package = Path(args.package).expanduser().resolve()
-    topics = PackageKnowledge(
-        package, knowledge_dir=getattr(args, "knowledge_dir", None)
-    ).topics()
-    if not topics:
+    override = getattr(args, "knowledge_dir", None)
+    if override is not None:
+        store = Path(override).expanduser().resolve()
+        if not store.is_dir():
+            return _error(f"no such knowledge directory: {store}")
+    elif not package.is_dir():
+        return _error(f"no such package: {package}")
+    elif not (package / "workflow.json").is_file() and not (package / "knowledge").is_dir():
+        # `knowledge build`'s wording, because it is the same question.
+        return _error(f"no workflow.json in {package} — is that a workflow package?")
+    if override is not None or not (package / "workflow.json").is_file():
+        from openstategraph.knowledge import PackageKnowledge
+
+        entries = [
+            (e.name, e.hint, "")
+            for e in PackageKnowledge(package, knowledge_dir=override).topics()
+        ]
+    else:
+        from openstategraph.api import knowledge_curation
+        from openstategraph.schema import normalize_document
+
+        document = normalize_document(json.loads((package / "workflow.json").read_text()))
+        entries = [
+            (
+                s.name,
+                s.hint,
+                (f"generated: {s.source}" if s.generated else "yours")
+                + (", STALE" if s.stale else ""),
+            )
+            for s in knowledge_curation.list_topics(package, document, package.parent)
+        ]
+    if not entries:
         print("no knowledge topics — build them with: openstategraph knowledge build <package>")
         return EXIT_OK
-    for entry in topics:
-        print(f"- {entry.name} — {entry.hint}" if entry.hint else f"- {entry.name}")
+    for name, hint, badge in entries:
+        line = f"- {name} — {hint}" if hint else f"- {name}"
+        print(f"{line}  [{badge}]" if badge else line)
+    return EXIT_OK
+
+
+def _thread_savers(args: argparse.Namespace) -> tuple[Any, Any]:
+    """`(services, savers)` — the same assembly the HTTP transport uses.
+
+    No new logic here, per the rules at the top of this file: the CLI opens
+    the checkpointer the server would have opened and asks
+    `api.threads` the same two questions the endpoints ask it.
+    """
+    from openstategraph.api.services import WorkflowServices
+    from openstategraph.api import threads as thread_queries
+
+    services = WorkflowServices(getattr(args, "workflows_root", None))
+    return services, thread_queries.savers_for(services, getattr(args, "workflow", None))
+
+
+def cmd_threads_list(args: argparse.Namespace) -> int:
+    """Past runs this deployment stored — read from the checkpointer, not a log."""
+    from openstategraph.api import threads as thread_queries
+
+    services, savers = _thread_savers(args)
+    try:
+        rows = thread_queries.list_threads(
+            savers,
+            workflow_slug=args.workflow,
+            user_email=args.user,
+            session_id=args.session,
+            limit=args.limit,
+        )
+    finally:
+        services.close()
+
+    if args.json:
+        print(json.dumps([row.model_dump() for row in rows], indent=2))
+        return EXIT_OK
+    if not rows:
+        print("no stored runs — the checkpointer has no threads yet")
+        return EXIT_OK
+    for row in rows:
+        who = row.user_email or "anonymous"
+        print(
+            f"{row.thread_id}  {row.updated_at}  {row.status:8}  "
+            f"{row.workflow_slug or '-'}  {who}  {row.question[:60]}"
+        )
+    return EXIT_OK
+
+
+def cmd_threads_show(args: argparse.Namespace) -> int:
+    """One past run, read back. A **view**: nothing is executed again.
+
+    Continuing a paused run is a different act with a different name —
+    `POST /api/runs/resume`, or `run --thread-id` — and it does call models
+    and tools. Printing what already happened does not.
+    """
+    from openstategraph.api import threads as thread_queries
+
+    services, savers = _thread_savers(args)
+    try:
+        history = thread_queries.read_thread(savers, args.thread_id)
+    finally:
+        services.close()
+
+    if history is None:
+        return _error(f"no stored run for thread {args.thread_id!r}")
+    if args.json:
+        print(json.dumps(history.model_dump(), indent=2))
+        return EXIT_OK
+
+    thread = history.thread
+    print(f"thread {thread.thread_id} — {thread.status}")
+    print(f"  workflow: {thread.workflow_slug or '-'}")
+    print(f"  user:     {thread.user_email or 'anonymous'}")
+    print(f"  session:  {thread.session_id or '-'}")
+    print(f"  updated:  {thread.updated_at}")
+    print("  (a recording, not a re-run — no model or tool was called to show this)")
+    for step in history.steps:
+        print(f"\nstep {step.step} ({step.source}) {step.at}")
+        for key, value in step.values.items():
+            if not value:
+                continue
+            print(f"  {key}: {value}")
     return EXIT_OK
 
 
@@ -355,6 +515,27 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--json", action="store_true", help="print the whole result, not the answer")
     run.set_defaults(handler=cmd_run)
 
+    evaluate = subparsers.add_parser(
+        "eval", help="grade a package against its golden dataset (runs a model)"
+    )
+    evaluate.add_argument("package", help="the folder holding workflow.json")
+    evaluate.add_argument(
+        "--dataset", help="a *.eval.json file (default: the one in <package>/evals)"
+    )
+    evaluate.add_argument("--limit", type=int, help="grade only the first N cases")
+    evaluate.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
+    evaluate.add_argument(
+        "--threshold",
+        type=float,
+        default=0.0,
+        help=(
+            "exit 1 when overall accuracy is below this (0..1). Default 0, i.e. "
+            "report but do not gate; set it in CI to the number you will defend."
+        ),
+    )
+    evaluate.add_argument("--json", action="store_true", help="print the scorecard as JSON")
+    evaluate.set_defaults(handler=cmd_eval)
+
     validate = subparsers.add_parser("validate", help="compile-check a package or a document")
     validate.add_argument("target", help="a workflow package folder, or a workflow.json file")
     validate.set_defaults(handler=cmd_validate)
@@ -395,6 +576,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     new.add_argument("--root", help="where to create it (default: ./workflows)")
     new.set_defaults(handler=cmd_new)
+
+    threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
+    thread_commands = threads.add_subparsers(dest="threads_command", required=True)
+
+    thread_list = thread_commands.add_parser("list", help="list past runs, newest first")
+    thread_list.add_argument("--workflow", help="only this workflow slug")
+    thread_list.add_argument("--user", help="only this user_email (case-insensitive)")
+    thread_list.add_argument("--session", help="only this session_id")
+    thread_list.add_argument("--limit", type=int, default=25)
+    thread_list.add_argument("--workflows-root", dest="workflows_root")
+    thread_list.add_argument("--json", action="store_true")
+    thread_list.set_defaults(handler=cmd_threads_list)
+
+    thread_show = thread_commands.add_parser(
+        "show", help="print one past run, checkpoint by checkpoint (does not re-run it)"
+    )
+    thread_show.add_argument("thread_id")
+    thread_show.add_argument("--workflow", help="the slug, if it keeps its own checkpoint file")
+    thread_show.add_argument("--workflows-root", dest="workflows_root")
+    thread_show.add_argument("--json", action="store_true")
+    thread_show.set_defaults(handler=cmd_threads_show)
 
     knowledge = subparsers.add_parser("knowledge", help="the package's second brain")
     knowledge_commands = knowledge.add_subparsers(dest="knowledge_command", required=True)

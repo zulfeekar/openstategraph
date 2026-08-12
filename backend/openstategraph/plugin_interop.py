@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openstategraph.skills import SkillDocument, has_frontmatter
+
 #: Canonical schema identifiers (spec §5.2, §7.2.1). They MUST be exact — a
 #: client selects its validation rules from the literal string, and MUST NOT
 #: fetch it. We never retrieve them either.
@@ -141,9 +143,17 @@ def export_plugin(workflow_dir: Path, *, name: str | None = None) -> PluginExpor
 
 
 def _export_skills(skills_dir: Path, files: dict[str, str], notes: list[str]) -> None:
-    """`skills/<x>.md` -> `skills/<x>/SKILL.md` with synthesized frontmatter."""
+    """`skills/<x>.md` -> `skills/<x>/SKILL.md`.
+
+    The header is composed by `SkillDocument.render`, never assembled here:
+    that format has exactly one implementation (`openstategraph.skills`), and
+    this function used to be a second one. Reading before writing is what the
+    consolidation buys — a doc that already declares a `description` keeps it
+    instead of having the line `---` synthesized over the top of it.
+    """
     if not skills_dir.is_dir():
         return
+    synthesized = False
     for path in sorted(skills_dir.glob("*.md")):
         stem = path.stem
         if not _SKILL_NAME_RE.match(stem):
@@ -152,17 +162,26 @@ def _export_skills(skills_dir: Path, files: dict[str, str], notes: list[str]) ->
                 "hyphens only, and must equal its directory name"
             )
             continue
-        body = _read_text(path)
-        if body is None:
+        text = _read_text(path)
+        if text is None:
             notes.append(f"skill {stem!r} skipped: not readable as UTF-8 text")
             continue
-        description = _first_meaningful_line(body)[:_DESCRIPTION_MAX] or f"The {stem} skill."
-        frontmatter = f"---\nname: {stem}\ndescription: {description}\n---\n\n"
-        files[f"skills/{stem}/SKILL.md"] = frontmatter + body.strip() + "\n"
-    if files:
+        doc = SkillDocument.parse(text, name=stem)
+        description = doc.description
+        if not description:
+            synthesized = True
+            description = _first_meaningful_line(doc.body)[:_DESCRIPTION_MAX] or (
+                f"The {stem} skill."
+            )
+        # The directory name is the skill's name in v1 (§7.1), so `stem` wins
+        # over any name the file declares for itself.
+        files[f"skills/{stem}/SKILL.md"] = SkillDocument(
+            name=stem, description=description[:_DESCRIPTION_MAX], body=doc.body
+        ).render()
+    if synthesized:
         notes.append(
-            "Skill descriptions are synthesized from each doc's first line — our flat "
-            "skills/*.md format declares none. Review them before publishing."
+            "Some skill descriptions are synthesized from the doc's first line — a flat "
+            "skills/*.md that declares no frontmatter has none. Review them before publishing."
         )
 
 
@@ -291,10 +310,9 @@ def _import_skills(skills_dir: Path, root: Path, files: dict[str, str], notes: l
         if text is None:
             notes.append(f"skill {child.name!r} skipped: SKILL.md is not UTF-8 text")
             continue
-        body, frontmatter = _strip_frontmatter(text)
-        if frontmatter:
+        if has_frontmatter(text):
             dropped = True
-        files[f"skills/{child.name}.md"] = body.strip() + "\n"
+        files[f"skills/{child.name}.md"] = SkillDocument.parse(text).body + "\n"
         for path in sorted(child.rglob("*")):
             if not path.is_file() or path == skill_md or not _within(path, root):
                 continue
@@ -412,16 +430,6 @@ def _description_from_agents_md(path: Path) -> str:
         line for line in lines if line
     ]
     return (body[0] if body else "")[:_DESCRIPTION_MAX]
-
-
-def _strip_frontmatter(text: str) -> tuple[str, bool]:
-    if not text.startswith("---"):
-        return text, False
-    parts = text.split("\n---", 2)
-    if len(parts) < 2:
-        return text, False
-    remainder = parts[1]
-    return remainder.split("\n", 1)[1] if "\n" in remainder else "", True
 
 
 def _is_extension_namespace(name: str) -> bool:

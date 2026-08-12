@@ -18,14 +18,17 @@ class TestIntrospection:
     def test_lists_visible_workflows_and_hides_hidden_ones(self) -> None:
         result = ListWorkflowsTool().run()
         assert result.error is None
-        assert "chinook-nl-to-sql" in result.content
-        assert "page-analytics" in result.content
+        # One visible example (one-example ticket 01): the assistant. The
+        # gateway and the architect are hidden. Ticket 10 removed the third
+        # hidden package, the analyst — it is now a branch of the assistant.
+        assert "chinook-assistant" in result.content
         assert "concierge" not in result.content
+        assert "workflow-architect" not in result.content
 
     def test_describe_reads_the_packages_own_docs(self) -> None:
-        result = DescribeWorkflowTool().run(slug="page-analytics")
+        result = DescribeWorkflowTool().run(slug="chinook-assistant")
         assert result.error is None
-        assert "Store Analytics" in result.content and "Nodes:" in result.content
+        assert "Chinook Assistant" in result.content and "Nodes:" in result.content
 
     def test_describe_refuses_the_hidden_gateway(self) -> None:
         assert DescribeWorkflowTool().run(slug="concierge").error is not None
@@ -101,7 +104,7 @@ class TestPublishGate:
     real workflows/ tree, where planting a draft would be litter."""
 
     def test_hidden_and_drafts_are_invisible_absence_is_published(self) -> None:
-        from openstategraph.prebuilt_platform import _visible
+        from openstategraph.prebuilt_platform import visible_to_platform_tools as _visible
 
         assert _visible({}) is True  # pre-lifecycle envelope: published
         assert _visible({"published": True}) is True

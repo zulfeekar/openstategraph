@@ -537,13 +537,21 @@ class WorkflowLibrary:
             "error": None,
         }
 
-    def save_draft(self, slug: str, name: str, document: Any) -> dict[str, Any]:
+    def save_draft(self, slug: str | None, name: str, document: Any) -> dict[str, Any]:
         """Write a DRAFT. Never publishes, never overwrites a published one.
 
         Validate-before-save is enforced here, server-side, rather than trusted
         to the client: an invalid document comes back as findings and is not
         written at all, so the library can never accumulate documents that do
         not compile. The client iterates and calls again.
+
+        **`slug` is optional, and omitting it is the safe call** (ticket 20).
+        A slug is an identity, not a transform of a name, so an agent asked to
+        "save this as My Workflow" that invents `my-workflow` is guessing — and
+        a guess that lands on somebody's existing draft replaces it. Passing
+        `None` asks the store to mint a free slug and reports which one it got.
+        Naming a slug still means "this exact package", which is what a client
+        updating a draft it created earlier wants.
         """
         store = self._services.store
         try:
@@ -551,14 +559,33 @@ class WorkflowLibrary:
         except DocumentError as exc:
             return {"saved": False, "findings": [str(exc)], "slug": slug, "published": False}
 
-        try:
-            directory = store.directory_for(slug)
-        except Exception as exc:  # noqa: BLE001 — InvalidSlugError, as data
-            return {"saved": False, "findings": [str(exc)], "slug": slug, "published": False}
+        if slug is not None:
+            try:
+                directory = store.directory_for(slug)
+            except Exception as exc:  # noqa: BLE001 — InvalidSlugError, as data
+                return {"saved": False, "findings": [str(exc)], "slug": slug, "published": False}
 
         valid, findings = _validate(resolved)
         if not valid:
             return {"saved": False, "findings": findings, "slug": slug, "published": False}
+
+        if slug is None:
+            minted = store.create(
+                name=name,
+                document=resolved,
+                saved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            return {
+                "saved": True,
+                "slug": minted,
+                "published": False,
+                "findings": [],
+                "note": (
+                    f"Saved as a DRAFT at {minted!r} — the slug was minted here, so it "
+                    "replaced nothing. Publishing is a human action in the editor and "
+                    "is not exposed over MCP."
+                ),
+            }
 
         existing = directory / "workflow.json"
         if existing.is_file():
@@ -843,7 +870,7 @@ def build_mcp_server(
         return library.plugin_export(slug)
 
     @server.tool(name="save_workflow_draft")
-    def save_workflow_draft(slug: str, name: str, document: Any) -> dict[str, Any]:
+    def save_workflow_draft(slug: str | None, name: str, document: Any) -> dict[str, Any]:
         """Save a workflow into this deployment's library AS A DRAFT.
 
         Optional — the primary flow keeps the artifact in your own repository
@@ -852,6 +879,12 @@ def build_mcp_server(
         findings rather than written; the write is always a draft; a published
         workflow is never overwritten. Publishing is a human action in the
         editor and is not exposed here.
+
+        **Pass `slug=None` for a new workflow.** The server mints a free slug
+        from `name` and the response says which — the first "My Workflow" gets
+        `my-workflow`, a second gets its own. Naming a slug means "update this
+        exact package"; do that only for one you saved earlier, because a slug
+        you derived from a name yourself may belong to somebody else's draft.
         """
         return library.save_draft(slug, name, document)
 

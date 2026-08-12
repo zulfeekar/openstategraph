@@ -310,11 +310,101 @@ class TestKnowledge:
         assert code == cli.EXIT_OK
         assert "- invoice — One row per sale." in capsys.readouterr().out
 
+    def test_list_names_the_owner_and_badges_a_moved_source(
+        self, package: Path, capsys
+    ) -> None:
+        """Ownership and staleness are on disk; a terminal can now read them.
+
+        Both facts were recorded from the first build and surfaced only by the
+        editor's curation panel — which is the wrong place for the one
+        question a developer checking their second brain asks: *is any of this
+        out of date?*
+        """
+        from openstategraph.knowledge_builders import GENERATED_MARKER
+
+        knowledge = package / "knowledge"
+        knowledge.mkdir()
+        (knowledge / "yours.md").write_text("Hand-written wisdom.\n")
+        (knowledge / "moved.md").write_text(
+            f"{GENERATED_MARKER} source=sql hash=000000000000 -->\n\nA table.\n"
+        )
+
+        # A doc whose source no longer hashes the same is badged, not rewritten.
+        import openstategraph.api.knowledge_curation as curation
+
+        original = curation.current_source_hashes
+        curation.current_source_hashes = lambda *a, **k: {"moved": "ffffffffffff"}
+        try:
+            assert cli.main(["knowledge", "list", str(package)]) == cli.EXIT_OK
+        finally:
+            curation.current_source_hashes = original
+
+        out = capsys.readouterr().out
+        assert "- yours — Hand-written wisdom.  [yours]" in out
+        assert "[generated: sql, STALE]" in out
+
     def test_list_says_so_when_there_are_none(self, package: Path, capsys) -> None:
         code = cli.main(["knowledge", "list", str(package)])
 
         assert code == cli.EXIT_OK
         assert "no knowledge topics" in capsys.readouterr().out
+
+    def test_list_refuses_a_package_that_is_not_there(self, tmp_path: Path, capsys) -> None:
+        """An absent thing must not be reported as an empty thing.
+
+        The same defect class as the file watcher's: `knowledge list
+        /typo/path` printed "no knowledge topics — build them with…" and
+        exited 0, so the answer to "where did my knowledge go?" was a
+        suggestion to rebuild it into a directory that does not exist.
+        """
+        missing = tmp_path / "not-here"
+
+        code = cli.main(["knowledge", "list", str(missing)])
+
+        captured = capsys.readouterr()
+        assert code == cli.EXIT_FAILURE
+        assert "no such package" in captured.err
+        assert str(missing) in captured.err
+        assert "no knowledge topics" not in captured.out
+
+    def test_list_refuses_a_directory_that_is_no_workflow_package(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """A real directory that is not a package is a third answer again — and
+        the wording is `knowledge build`'s, because it is the same question."""
+        plain = tmp_path / "just-a-folder"
+        plain.mkdir()
+
+        code = cli.main(["knowledge", "list", str(plain)])
+
+        captured = capsys.readouterr()
+        assert code == cli.EXIT_FAILURE
+        assert "is that a workflow package?" in captured.err
+        assert "no knowledge topics" not in captured.out
+
+    def test_list_still_reads_a_bare_knowledge_directory(self, tmp_path: Path, capsys) -> None:
+        """A store with docs but no `workflow.json` is a real store, and stays
+        listable — being unable to compute staleness is not being absent."""
+        store = tmp_path / "loose"
+        (store / "knowledge").mkdir(parents=True)
+        (store / "knowledge" / "invoice.md").write_text("# One row per sale.\n")
+
+        code = cli.main(["knowledge", "list", str(store)])
+
+        assert code == cli.EXIT_OK
+        assert "- invoice — One row per sale." in capsys.readouterr().out
+
+    def test_list_refuses_a_knowledge_dir_that_is_not_there(
+        self, package: Path, tmp_path: Path, capsys
+    ) -> None:
+        missing = tmp_path / "elsewhere"
+
+        code = cli.main(["knowledge", "list", str(package), "--knowledge-dir", str(missing)])
+
+        captured = capsys.readouterr()
+        assert code == cli.EXIT_FAILURE
+        assert "no such knowledge directory" in captured.err
+        assert "no knowledge topics" not in captured.out
 
     def test_build_reports_the_four_counts(self, package: Path, capsys, monkeypatch) -> None:
         from openstategraph.api import knowledge_build

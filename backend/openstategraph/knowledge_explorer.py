@@ -182,6 +182,12 @@ class AgenticKnowledgeBuilder(BaseKnowledgeBuilder):
     #: The concrete's task, between the shared preamble and output contract.
     MISSION: str = ""
 
+    #: Not mechanical: an exploration has no recomputable brief, so its
+    #: topics can never be badged stale. Unknown is not stale — see
+    #: `BaseKnowledgeBuilder.mechanical`, which the curation listing filters
+    #: on rather than naming the mechanical builders one by one.
+    mechanical = False
+
     def discover(
         self, workflow_dir: Path, document: dict[str, Any], workflows_root: Path
     ) -> Discovery:

@@ -25,7 +25,7 @@ from openstategraph.abc.tool import BaseTool, ToolResult
 #: below cannot drift from `NodeRuntime._builders` silently — the test pins
 #: them against each other.
 KNOWN_NODE_TYPES = frozenset({
-    "input.text", "input.markdown", "agent.llm", "route.classifier",
+    "input.text", "input.markdown", "input.skill", "agent.llm", "route.classifier",
     "route.grader", "human.approval", "orchestrate.supervisor",
     "orchestrate.worker", "function.format_report", "output.formatted",
     "workflow.subgraph", "team.workflow",

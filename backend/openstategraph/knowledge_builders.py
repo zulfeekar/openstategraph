@@ -46,6 +46,7 @@ authors the index.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -98,11 +99,21 @@ def claimed_hash(text: str) -> str | None:
 #: the chinook-* family is hard-wired to.
 _SQL_NODE_PREFIX = "tool.sql-"
 _CHINOOK_NODE_PREFIX = "tool.chinook-"
-_CHINOOK_DATABASE = "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
+_CHINOOK_DATABASE = "chinook-assistant/data/Chinook_Sqlite.sqlite"
 
-#: The mount node types that make a workflow "root-ish" — see
-#: ``RootKnowledgeBuilder``'s discovery rule.
+#: The node types that mount another workflow as a child. Their
+#: ``data.workflow`` slugs ARE ``RootKnowledgeBuilder``'s topics — a parent
+#: writes a routing doc for what it can actually route to, and nothing else.
 _MOUNT_NODE_TYPES = ("workflow.subgraph", "team.workflow")
+
+#: The node types that make **the project** a source. A workflow wiring these
+#: can enumerate and describe every package on the platform at run time, so
+#: the project is a thing it reads — recognised from the wiring exactly as a
+#: database is recognised from a ``tool.sql-*`` node's connection field.
+_PROJECT_NODE_TYPES = (
+    "tool.platform-list-workflows",
+    "tool.platform-describe-workflow",
+)
 
 
 def marker_source(text: str) -> str | None:
@@ -160,6 +171,17 @@ class BaseKnowledgeBuilder(ABC):
     """
 
     source_kind: ClassVar[str]
+
+    #: True when this builder's topics have a **recomputable brief** — i.e.
+    #: ``discover`` can be re-run cheaply and deterministically to ask "does
+    #: the source still hash the same?". That is what the staleness badge
+    #: needs, and it is a property of the builder, not a list the curation
+    #: module keeps: `knowledge_curation` used to name `SqlKnowledgeBuilder`
+    #: and `RootKnowledgeBuilder` literally, so a *registered* mechanical
+    #: builder — a plugin's, or this module's own next one — silently got no
+    #: stale badges at all. Agentic builders set this False (no brief to
+    #: recompute; unknown is not stale).
+    mechanical: ClassVar[bool] = True
 
     #: The shared instruction. The topic's brief is context; this is the
     #: task. Concretes never restate it (they may override it wholesale when
@@ -341,20 +363,108 @@ class SqlKnowledgeBuilder(BaseKnowledgeBuilder):
 
 
 # ---------------------------------------------------------------------------
-# Root — one coarse routing doc per visible child workflow.
+# Pointer builders — one coarse doc per *other workflow*, never a copy of it.
 # ---------------------------------------------------------------------------
 
 
-class RootKnowledgeBuilder(BaseKnowledgeBuilder):
-    """Topics = the platform's visible child workflows; docs written to route.
+class AbstractWorkflowPointerBuilder(BaseKnowledgeBuilder):
+    """Shared machinery for builders whose topics are **other workflows**.
 
-    **Discovery rule (documented, deliberate):** this builder only finds
-    topics when the workflow being built is *root-ish* — concretely, when
-    its document mounts children (any ``workflow.subgraph`` or
-    ``team.workflow`` node) OR its slug is ``concierge`` (the gateway is
-    hidden and root by definition, even while its mounts are being edited).
-    Any other workflow yields no topics, so the builder never fires on a
-    leaf.
+    Two concretes live under this: ``RootKnowledgeBuilder`` (the children this
+    document *mounts*) and ``ProjectKnowledgeBuilder`` (the packages this
+    document's platform tools can *see*). They share one thing and differ in
+    one thing, and both matter:
+
+    - **Shared: what a brief about a workflow is.** Name and slug, the
+      topology the canvas itself declares, the head of its ``AGENTS.md``, and
+      whether it has a second brain of its own. That is a genuine
+      duplication-of-knowledge if written twice, and it is *within* a family
+      — the CLAUDE.md boundary rule's "abstract base" case, not its
+      "composition" case.
+    - **Different: which workflows are topics, and what genre the doc is.**
+      The subclass owns ``discover`` and ``INSTRUCTION``, and nothing else.
+
+    The standing rule both obey: **pointers, not copies.** A doc here says
+    what another workflow is and where to go for depth. It never carries that
+    workflow's table-level detail upward — that recreates context bloat one
+    level up and rots the moment the child rebuilds.
+    """
+
+    def workflow_brief(
+        self, slug: str, name: str, workflows_root: Path, document: dict[str, Any]
+    ) -> str:
+        child_dir = workflows_root / slug
+        parts = [f"Child workflow: {name} (slug: {slug})"]
+        parts.append(self._topology(document))
+        agents_md = child_dir / "AGENTS.md"
+        if agents_md.is_file():
+            head = "\n".join(agents_md.read_text().splitlines()[:30]).strip()
+            if head:
+                parts.append(f"## Description (AGENTS.md head)\n{head}")
+        if any((child_dir / "knowledge").glob("*.md")):
+            parts.append(
+                "This child HAS its own knowledge store (a second brain) — "
+                "end the doc with the drill pointer."
+            )
+        else:
+            parts.append("This child has no knowledge store of its own.")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _topology(document: dict[str, Any]) -> str:
+        """What the canvas itself says the other workflow can do — node types,
+        router branches, and mounted grandchildren, mechanically derived."""
+        nodes = document.get("nodes") or []
+        lines = ["## Topology"]
+        types = sorted({str(n.get("type") or "") for n in nodes if n.get("type")})
+        if types:
+            lines.append("Node types: " + ", ".join(types))
+        for node in nodes:
+            data = node.get("data") if isinstance(node, dict) else None
+            if not isinstance(data, dict):
+                continue
+            raw_branches = data.get("branches")
+            branches = [
+                str(b.get("name") or "")
+                for b in (raw_branches if isinstance(raw_branches, list) else [])
+                if isinstance(b, dict)
+            ]
+            if branches:
+                lines.append(f"Router branches: {', '.join(b for b in branches if b)}")
+            if str(node.get("type") or "") in _MOUNT_NODE_TYPES and data.get("workflow"):
+                lines.append(f"Mounts child workflow: {data['workflow']}")
+        return "\n".join(lines)
+
+
+class RootKnowledgeBuilder(AbstractWorkflowPointerBuilder):
+    """Topics = the children this workflow **mounts**; docs written to route.
+
+    **Discovery rule (ticket 16, corrected against live evidence).** The
+    topics are the distinct slugs named by this document's own
+    ``workflow.subgraph`` / ``team.workflow`` nodes — nothing else. A
+    workflow that mounts nothing yields no topics, so the builder never
+    fires on a leaf.
+
+    The rule it replaces enumerated *every published, non-hidden workflow on
+    the platform* and only used the mounts as a yes/no gate on whether to
+    fire at all. That was inverted in both directions, and both were found on
+    disk rather than argued: ``workflows/concierge/knowledge/`` held
+    ``chinook-assistant.md`` — a routing pointer to a workflow the concierge
+    does not mount and therefore cannot reach — while carrying **no** doc for
+    ``workflow-architect``, a child it does mount, because that child is
+    ``hidden: true`` and ``list()`` drops hidden packages. A gateway was
+    being taught to route where it has no edge, and left ignorant of where it
+    does.
+
+    So: **the mount is the routing fact.** ``published``/``hidden`` describe
+    a package's own visibility on the ``/chat`` surface; they say nothing
+    about whether a *parent* can invoke it, because a mount compiles the
+    child as a subgraph and ``document_loader`` never consults either flag.
+    Ticket 04's publish gate was right for the question it was asked — "may a
+    routing doc send a customer to a draft they cannot open?" — and does not
+    apply once the destination is reached through a mount rather than by
+    slug. A mounted slug that will not load is a **warning**, the same way an
+    unopenable SQL source is: reported, never a doc, never a crash.
 
     Hierarchy means pointers, not copies: each doc is one coarse page — what
     the child answers, its capabilities, when NOT to route there — ending
@@ -380,90 +490,206 @@ class RootKnowledgeBuilder(BaseKnowledgeBuilder):
         "Markdown, no preamble, no code fences around the whole answer."
     )
 
-    def _is_root(self, workflow_dir: Path, document: dict[str, Any]) -> bool:
-        if workflow_dir.name == "concierge":
-            return True
-        return any(
-            str(node.get("type") or "") in _MOUNT_NODE_TYPES
-            for node in document.get("nodes") or []
-        )
+    @staticmethod
+    def mounted_slugs(document: dict[str, Any]) -> list[str]:
+        """The children this document mounts, deduped, in canvas order.
+
+        The one place that reads a mount's destination. Two mounts of the
+        same child are one routing topic — the doc describes the child, not
+        the edge — and canvas order keeps the build deterministic without
+        imposing an alphabetical order the author did not choose.
+        """
+        slugs: list[str] = []
+        for node in document.get("nodes") or []:
+            if str(node.get("type") or "") not in _MOUNT_NODE_TYPES:
+                continue
+            data = node.get("data")
+            if not isinstance(data, dict):
+                continue
+            slug = str(data.get("workflow") or "").strip()
+            if slug and slug not in slugs:
+                slugs.append(slug)
+        return slugs
 
     def discover(
         self, workflow_dir: Path, document: dict[str, Any], workflows_root: Path
     ) -> Discovery:
-        if not self._is_root(workflow_dir, document):
+        slugs = self.mounted_slugs(document)
+        if not slugs:
             return Discovery()
         # Lazy import, same as the build endpoint's model resolution: the
         # domain layer must not hard-depend on the API package at import time.
         from openstategraph.api.workflow_store import WorkflowStore
 
         store = WorkflowStore(root=workflows_root)
+        # Display names only exist on the envelope, and `list()` is the one
+        # thing that parses envelopes. A mounted-but-hidden child is absent
+        # from it, so its routing doc is titled by slug — which is what the
+        # mount names anyway.
+        names = {summary.slug: summary.name for summary in store.list()}
         topics: list[KnowledgeTopic] = []
-        # Published only (ticket 04): a draft is invisible to /chat, so a
-        # routing doc pointing at it would route customers to a workflow they
-        # cannot reach. Hidden is already excluded by list() itself.
-        for summary in store.list(published_only=True):
-            if summary.slug == workflow_dir.name:
+        warnings: list[str] = []
+        for slug in slugs:
+            if slug == workflow_dir.name:
+                # A self-mount is refused at compile time; here it would just
+                # be a workflow writing a routing doc about itself.
+                continue
+            try:
+                child_document = store.load(slug)
+            except Exception as exc:
+                warnings.append(
+                    f"{slug}: mounted here, but its package could not be read "
+                    f"({type(exc).__name__}) — no routing doc written"
+                )
                 continue
             topics.append(
                 KnowledgeTopic(
-                    name=summary.slug,
-                    brief=self._child_brief(summary.slug, summary.name, workflows_root, store),
+                    name=slug,
+                    brief=self.workflow_brief(
+                        slug, names.get(slug, slug), workflows_root, child_document
+                    ),
                     provenance=(
-                        f"workflow.json topology and AGENTS.md of child '{summary.slug}'",
+                        f"workflow.json topology and AGENTS.md of mounted child '{slug}'",
                     ),
                 )
             )
-        return Discovery(topics=topics)
+        return Discovery(topics=topics, warnings=warnings)
 
-    def _child_brief(
-        self, slug: str, name: str, workflows_root: Path, store: Any
-    ) -> str:
-        child_dir = workflows_root / slug
-        try:
-            document = store.load(slug)
-        except Exception:
-            document = {}
-        parts = [f"Child workflow: {name} (slug: {slug})"]
-        parts.append(self._topology(document))
-        agents_md = child_dir / "AGENTS.md"
-        if agents_md.is_file():
-            head = "\n".join(agents_md.read_text().splitlines()[:30]).strip()
-            if head:
-                parts.append(f"## Description (AGENTS.md head)\n{head}")
-        if any((child_dir / "knowledge").glob("*.md")):
-            parts.append(
-                "This child HAS its own knowledge store (a second brain) — "
-                "end the doc with the drill pointer."
-            )
-        else:
-            parts.append("This child has no knowledge store of its own.")
-        return "\n\n".join(parts)
+
+# ---------------------------------------------------------------------------
+# Project — the platform itself as a source, for a workflow that can see it.
+# ---------------------------------------------------------------------------
+
+
+class ProjectKnowledgeBuilder(AbstractWorkflowPointerBuilder):
+    """**The project is a source, not a scope** — this is the project's second brain.
+
+    The scope question the knowledge record left open ("one root store, or
+    per-package stores with a root index?") is answered by refusing its
+    premise. There is no project-level store, no project-level directory and
+    no project-level scope concept, because a store is only worth writing
+    where an agent is bound to read it, and binding is per package — one open
+    document is one package is one ``knowledge/`` directory
+    (``build-time-affordances.md``). A store at the workflows root would be
+    Markdown no runtime reads.
+
+    So the project joins the ladder the same way every other source does:
+    **recognition from the wiring.** A ``tool.sql-*`` node's connection field
+    means "a database is a source here"; a ``tool.platform-list-workflows`` /
+    ``tool.platform-describe-workflow`` node means "**the project** is a
+    source here", because that workflow can enumerate and describe every
+    package on the platform at run time. Its topics land in its own
+    ``knowledge/`` and are reached by the ``knowledge_lookup`` it already has
+    ambiently. The project's second brain is therefore the union of the
+    per-package ones, plus a catalogue held by whichever workflows can
+    actually see the project — pointers all the way down, copies nowhere.
+
+    **Topics = the packages those tools will show, minus this one, minus the
+    ones this document mounts.** Each subtraction is read off a mechanism,
+    never chosen:
+
+    - *minus the visibility gate*: ``visible_to_platform_tools`` is imported
+      from the tools themselves, so a catalogue entry can never name a
+      package the agent's own ``platform_describe_workflow`` would then
+      refuse to describe. This is ticket 16's rule applied in the other
+      direction, and it is worth stating because the outcome inverts:
+      ``RootKnowledgeBuilder`` **drops** the publish gate (a mount compiles
+      the child as a subgraph and consults neither flag), and this builder
+      **keeps** it (a platform tool enforces both). One rule — the gate
+      belongs to the mechanism that reaches the destination — two opposite
+      answers, and reading it off the mechanism is what makes that safe.
+    - *minus the mounts*: a mounted child gets the strictly better
+      routing-shaped doc from ``RootKnowledgeBuilder``. Partitioning the two
+      topic sets by construction means the collision machinery (invariant 5)
+      stays a backstop rather than firing on every build of a gateway.
+
+    **Genre: a catalogue, not a routing table.** A routing doc says "send the
+    question there"; a catalogue doc says "this exists, here is what it is
+    for, and here is when it is the wrong answer". That last clause is the
+    whole reason this is knowledge rather than introspection — the live tools
+    already answer *what exists* and *what its topology is*, and neither can
+    answer *when not to recommend it*. The concierge's own system prompt
+    already makes that bet for its mounts: *"Look a workflow up before
+    describing or recommending it"*, on an agent that also holds
+    ``platform_describe_workflow``.
+    """
+
+    source_kind = "project"
+
+    INSTRUCTION = (
+        "Write a concise CATALOGUE knowledge document about one other "
+        "workflow in this project, for an agent that has been asked what "
+        "this platform offers or which workflow suits a task. The VERY FIRST "
+        "line of your answer must be a single-sentence index line of the "
+        "exact form '<name> — <one-sentence what it does>'. Then: what it is "
+        "for; what kinds of question it answers well (from the topology and "
+        "description below); and — most importantly — WHEN IT IS THE WRONG "
+        "ANSWER, i.e. the questions people will wrongly bring to it. If the "
+        "brief says it has its own knowledge store, END the document with "
+        "exactly this drill pointer sentence: 'This workflow has its own "
+        "second brain — open it for depth.' If it does not, do not mention a "
+        "second brain. This workflow is NOT mounted here, so never tell the "
+        "reader to route a question into it — say what it is, not how to "
+        "call it. Never copy table-level or field-level detail upward. "
+        "Markdown, no preamble, no code fences around the whole answer."
+    )
 
     @staticmethod
-    def _topology(document: dict[str, Any]) -> str:
-        """What the canvas itself says the child can do — node types, router
-        branches, and mounted grandchildren, mechanically derived."""
-        nodes = document.get("nodes") or []
-        lines = ["## Topology"]
-        types = sorted({str(n.get("type") or "") for n in nodes if n.get("type")})
-        if types:
-            lines.append("Node types: " + ", ".join(types))
-        for node in nodes:
-            data = node.get("data") if isinstance(node, dict) else None
-            if not isinstance(data, dict):
+    def reads_the_project(document: dict[str, Any]) -> bool:
+        """Does this document wire a tool that can see the whole platform?"""
+        return any(
+            str(node.get("type") or "") in _PROJECT_NODE_TYPES
+            for node in (document.get("nodes") or [])
+        )
+
+    def discover(
+        self, workflow_dir: Path, document: dict[str, Any], workflows_root: Path
+    ) -> Discovery:
+        if not self.reads_the_project(document):
+            return Discovery()
+        # Lazy, for the same reason `RootKnowledgeBuilder` is: the domain
+        # layer must not hard-depend on the API package at import time.
+        from openstategraph.api.workflow_store import WorkflowStore
+        from openstategraph.prebuilt_platform import visible_to_platform_tools
+
+        root = workflows_root.resolve()
+        store = WorkflowStore(root=workflows_root)
+        mounted = set(RootKnowledgeBuilder.mounted_slugs(document))
+        topics: list[KnowledgeTopic] = []
+        warnings: list[str] = []
+        for package in sorted(p for p in root.iterdir() if (p / "workflow.json").is_file()):
+            slug = package.name
+            if slug == workflow_dir.name or slug in mounted:
                 continue
-            raw_branches = data.get("branches")
-            branches = [
-                str(b.get("name") or "")
-                for b in (raw_branches if isinstance(raw_branches, list) else [])
-                if isinstance(b, dict)
-            ]
-            if branches:
-                lines.append(f"Router branches: {', '.join(b for b in branches if b)}")
-            if str(node.get("type") or "") in _MOUNT_NODE_TYPES and data.get("workflow"):
-                lines.append(f"Mounts child workflow: {data['workflow']}")
-        return "\n".join(lines)
+            try:
+                envelope = json.loads((package / "workflow.json").read_text())
+            except (OSError, ValueError) as exc:
+                warnings.append(
+                    f"{slug}: a package in this project whose workflow.json could "
+                    f"not be read ({type(exc).__name__}) — no catalogue doc written"
+                )
+                continue
+            if not isinstance(envelope, dict) or not visible_to_platform_tools(envelope):
+                continue
+            try:
+                other_document = store.load(slug)
+            except Exception as exc:
+                warnings.append(
+                    f"{slug}: visible in this project, but its package could not "
+                    f"be loaded ({type(exc).__name__}) — no catalogue doc written"
+                )
+                continue
+            name = str(envelope.get("name") or slug)
+            topics.append(
+                KnowledgeTopic(
+                    name=slug,
+                    brief=self.workflow_brief(slug, name, workflows_root, other_document),
+                    provenance=(
+                        f"workflow.json topology and AGENTS.md of project package '{slug}'",
+                    ),
+                )
+            )
+        return Discovery(topics=topics, warnings=warnings)
 
 
 #: The extension point: register a builder here, never edit the endpoint.
@@ -473,7 +699,15 @@ class RootKnowledgeBuilder(BaseKnowledgeBuilder):
 #: registration from their own module, because a top-level import either way
 #: would be a cycle (they subclass `BaseKnowledgeBuilder`); `run_build`, the
 #: only consumer of the agentic path, imports that module.
-BUILDERS: list[BaseKnowledgeBuilder] = [SqlKnowledgeBuilder(), RootKnowledgeBuilder()]
+#: ``RootKnowledgeBuilder`` before ``ProjectKnowledgeBuilder`` so a mounted
+#: child's routing doc is written before anything could catalogue it — the
+#: project builder subtracts the mounts anyway, so this is the backstop, not
+#: the mechanism.
+BUILDERS: list[BaseKnowledgeBuilder] = [
+    SqlKnowledgeBuilder(),
+    RootKnowledgeBuilder(),
+    ProjectKnowledgeBuilder(),
+]
 
 
 __all__ = [
@@ -483,10 +717,12 @@ __all__ = [
     "marker_hash",
     "source_hash",
     "GENERATED_MARKER",
+    "AbstractWorkflowPointerBuilder",
     "BaseKnowledgeBuilder",
     "Discovery",
     "IKnowledgeBuilder",
     "KnowledgeTopic",
+    "ProjectKnowledgeBuilder",
     "RootKnowledgeBuilder",
     "SqlKnowledgeBuilder",
     "marker_source",

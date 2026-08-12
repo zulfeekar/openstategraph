@@ -13,10 +13,12 @@ from openstategraph.api.knowledge_build import run_build
 from openstategraph.knowledge_builders import (
     BUILDERS,
     GENERATED_MARKER,
+    AbstractWorkflowPointerBuilder,
     BaseKnowledgeBuilder,
     Discovery,
     IKnowledgeBuilder,
     KnowledgeTopic,
+    ProjectKnowledgeBuilder,
     RootKnowledgeBuilder,
     SqlKnowledgeBuilder,
     marker_source,
@@ -109,13 +111,13 @@ class TestDatabaseDiscovery:
         assert found == [tmp_path / "flow/data/shop.sqlite"]
 
     def test_chinook_nodes_imply_the_bundled_database(self, tmp_path: Path) -> None:
-        _seed_db(tmp_path, "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite")
+        _seed_db(tmp_path, "chinook-assistant/data/Chinook_Sqlite.sqlite")
         document = {
             "nodes": [{"id": "a", "type": "tool.chinook-execute-sql", "data": {}}],
             "edges": [],
         }
         found = _sqlite_files(document, tmp_path)
-        assert found == [tmp_path / "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"]
+        assert found == [tmp_path / "chinook-assistant/data/Chinook_Sqlite.sqlite"]
 
     def test_missing_files_and_escaping_paths_are_ignored(self, tmp_path: Path) -> None:
         document = {
@@ -145,9 +147,9 @@ class TestLivingExample:
         from openstategraph.api.workflow_store import WorkflowStore
 
         store = WorkflowStore()
-        document = store.load("chinook-nl-to-sql")
+        document = store.load("chinook-assistant")
         discovery = SqlKnowledgeBuilder().discover(
-            store.directory_for("chinook-nl-to-sql"), document, store.root
+            store.directory_for("chinook-assistant"), document, store.root
         )
         topics = discovery.topics
         names = {t.name for t in topics}
@@ -464,7 +466,13 @@ class TestIndexLineDrafting:
 
 
 class TestRootKnowledgeBuilder:
-    """Topics = visible child workflows; docs route, never copy detail up."""
+    """Topics = the children this document MOUNTS; docs route, never copy up.
+
+    Ticket 16 corrected the rule from "every published workflow on the
+    platform" after finding both halves of the inversion on disk: the
+    concierge carried a routing doc for a workflow it does not mount, and
+    none for the hidden child it does. The mount is the routing fact.
+    """
 
     @staticmethod
     def _save_child(
@@ -497,36 +505,70 @@ class TestRootKnowledgeBuilder:
             (package / "knowledge" / "sales.md").write_text("sales — child detail.\n")
 
     @staticmethod
-    def _root_document() -> dict[str, Any]:
+    def _root_document(*slugs: str, kind: str = "workflow.subgraph") -> dict[str, Any]:
         return {
             "nodes": [
-                {"id": "m1", "type": "workflow.subgraph", "data": {"workflow": "shop-child"}}
+                {"id": f"m{i}", "type": kind, "data": {"workflow": slug}}
+                for i, slug in enumerate(slugs or ("shop-child",))
             ],
             "edges": [],
         }
 
-    def test_it_only_fires_on_root_ish_workflows(self, tmp_path: Path) -> None:
+    def test_it_only_fires_on_a_workflow_that_mounts_something(self, tmp_path: Path) -> None:
         builder = RootKnowledgeBuilder()
         leaf = {"nodes": [{"id": "a", "type": "agent.llm", "data": {}}], "edges": []}
-        assert builder.discover(tmp_path / "leaf-flow", leaf, tmp_path).topics == []
-        # slug 'concierge' is root by definition, mounts or not
         self._save_child(tmp_path, "shop-child")
-        assert builder.discover(tmp_path / "concierge", leaf, tmp_path).topics
+        assert builder.discover(tmp_path / "leaf-flow", leaf, tmp_path).topics == []
+        # The slug is not the gate: a mountless `concierge` routes nowhere, so
+        # it has nothing to write a routing doc about.
+        assert builder.discover(tmp_path / "concierge", leaf, tmp_path).topics == []
+        assert builder.discover(tmp_path / "concierge", self._root_document(), tmp_path).topics
 
-    def test_topics_are_the_visible_children_hidden_excluded(self, tmp_path: Path) -> None:
+    def test_topics_are_the_mounted_children_not_every_published_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        # The live defect: a gateway must not be taught to route somewhere it
+        # has no edge to. `quiet-child` is published and perfectly visible —
+        # and unmounted, so it is not this workflow's business.
         self._save_child(tmp_path, "shop-child", with_knowledge=True)
         self._save_child(tmp_path, "quiet-child")
-        self._save_child(tmp_path, "ghost-child", hidden=True)
         discovery = RootKnowledgeBuilder().discover(
-            tmp_path / "gateway", self._root_document(), tmp_path
+            tmp_path / "gateway", self._root_document("shop-child"), tmp_path
         )
-        assert sorted(t.name for t in discovery.topics) == ["quiet-child", "shop-child"]
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_a_mounted_child_is_a_topic_however_it_is_mounted(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "shop-child")
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway",
+            self._root_document("shop-child", kind="team.workflow"),
+            tmp_path,
+        )
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_two_mounts_of_one_child_are_one_topic(self, tmp_path: Path) -> None:
+        self._save_child(tmp_path, "shop-child")
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document("shop-child", "shop-child"), tmp_path
+        )
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_a_mount_naming_no_package_is_a_warning_not_a_doc(self, tmp_path: Path) -> None:
+        # The concierge's own dangling mount, generalised: a routing doc for a
+        # package that will not load would send the gateway into a hole.
+        self._save_child(tmp_path, "shop-child")
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway", self._root_document("shop-child", "gone-child"), tmp_path
+        )
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+        assert len(discovery.warnings) == 1
+        assert "gone-child: mounted here" in discovery.warnings[0]
 
     def test_the_root_workflow_never_lists_itself(self, tmp_path: Path) -> None:
         self._save_child(tmp_path, "gateway")  # visible and root-named
         self._save_child(tmp_path, "shop-child")
         discovery = RootKnowledgeBuilder().discover(
-            tmp_path / "gateway", self._root_document(), tmp_path
+            tmp_path / "gateway", self._root_document("gateway", "shop-child"), tmp_path
         )
         assert [t.name for t in discovery.topics] == ["shop-child"]
 
@@ -534,7 +576,7 @@ class TestRootKnowledgeBuilder:
         self._save_child(tmp_path, "shop-child", with_knowledge=True)
         self._save_child(tmp_path, "quiet-child")
         discovery = RootKnowledgeBuilder().discover(
-            tmp_path / "gateway", self._root_document(), tmp_path
+            tmp_path / "gateway", self._root_document("shop-child", "quiet-child"), tmp_path
         )
         briefs = {t.name: t.brief for t in discovery.topics}
         assert "route.classifier" in briefs["shop-child"]
@@ -562,7 +604,7 @@ class TestRootKnowledgeBuilder:
             )
         )
         discovery = RootKnowledgeBuilder().discover(
-            tmp_path / "gateway", self._root_document(), tmp_path
+            tmp_path / "gateway", self._root_document("odd-child"), tmp_path
         )
         assert [t.name for t in discovery.topics] == ["odd-child"]
 
@@ -571,7 +613,12 @@ class TestRootKnowledgeBuilder:
         self._save_child(tmp_path, "quiet-child")
         (tmp_path / "gateway").mkdir()
         model = ScriptedModel()
-        report = run_build(tmp_path / "gateway", self._root_document(), model, tmp_path)
+        report = run_build(
+            tmp_path / "gateway",
+            self._root_document("shop-child", "quiet-child"),
+            model,
+            tmp_path,
+        )
         assert sorted(report["sources"]["root"]["written"]) == ["quiet-child", "shop-child"]
         doc = (tmp_path / "gateway" / "knowledge" / "shop-child.md").read_text()
         assert marker_source(doc) == "root"
@@ -579,17 +626,19 @@ class TestRootKnowledgeBuilder:
         assert "drill pointer" in joined and "route there for depth" in joined
 
 
-class TestRootBuilderPublishGate:
-    """Ticket 04: the chat-facing brain only routes to PUBLISHED children.
+class TestRootBuilderReachability:
+    """The mount is the routing fact — not `published`, not `hidden`.
 
-    A draft is invisible to /chat, so a routing doc pointing at it would
-    route customers to a workflow they cannot reach. Hidden already excluded;
-    drafts join it. Rebuild stays build-time-only — publishing never runs
-    this builder as a side effect.
+    Ticket 04 gated routing docs on `published_only`, reasoning that "a draft
+    is invisible to /chat, so a routing doc pointing at it would route
+    customers to a workflow they cannot reach". Right question, wrong
+    destination: a mounted child is reached by *compiling it as a subgraph*,
+    and `document_loader` consults neither flag. Applying the /chat-surface
+    rule to a mount left the concierge with no routing doc for the hidden
+    `workflow-architect` it actually mounts — found on disk, not argued.
     """
 
-    def test_a_draft_child_yields_no_routing_topic(self, tmp_path: Path) -> None:
-        TestRootKnowledgeBuilder._save_child(tmp_path, "live-child")
+    def test_a_mounted_draft_child_still_gets_its_routing_doc(self, tmp_path: Path) -> None:
         TestRootKnowledgeBuilder._save_child(tmp_path, "draft-child")
         manifest = tmp_path / "draft-child" / "workflow.json"
         payload = json.loads(manifest.read_text())
@@ -597,6 +646,175 @@ class TestRootBuilderPublishGate:
         manifest.write_text(json.dumps(payload))
 
         discovery = RootKnowledgeBuilder().discover(
-            tmp_path / "gateway", TestRootKnowledgeBuilder._root_document(), tmp_path
+            tmp_path / "gateway",
+            TestRootKnowledgeBuilder._root_document("draft-child"),
+            tmp_path,
         )
-        assert [t.name for t in discovery.topics] == ["live-child"]
+        assert [t.name for t in discovery.topics] == ["draft-child"]
+
+    def test_a_mounted_hidden_child_still_gets_its_routing_doc(self, tmp_path: Path) -> None:
+        TestRootKnowledgeBuilder._save_child(tmp_path, "ghost-child", hidden=True)
+        discovery = RootKnowledgeBuilder().discover(
+            tmp_path / "gateway",
+            TestRootKnowledgeBuilder._root_document("ghost-child"),
+            tmp_path,
+        )
+        assert [t.name for t in discovery.topics] == ["ghost-child"]
+        # Titled by slug: a hidden package is absent from the envelope listing
+        # that carries display names, and the slug is what the mount names.
+        assert "slug: ghost-child" in discovery.topics[0].brief
+
+
+class TestProjectKnowledgeBuilder:
+    """The project is a **source**, not a scope — recognised from the wiring.
+
+    Ticket 14. There is no project-level store: a store is only worth writing
+    where an agent is bound to read it, and binding is per package. So a
+    workflow that wires a platform tool has *the project* as a source, its
+    catalogue docs land in its own `knowledge/`, and the project's second
+    brain is the union of the per-package ones. Pointers, not copies.
+    """
+
+    _save = staticmethod(TestRootKnowledgeBuilder._save_child)
+
+    @staticmethod
+    def _seer(*mounts: str) -> dict[str, Any]:
+        """A document that can see the project, optionally mounting children."""
+        nodes: list[dict[str, Any]] = [
+            {"id": "t-list", "type": "tool.platform-list-workflows", "data": {}},
+            {"id": "a1", "type": "agent.llm", "data": {}},
+        ]
+        nodes += [
+            {"id": f"m{i}", "type": "workflow.subgraph", "data": {"workflow": slug}}
+            for i, slug in enumerate(mounts)
+        ]
+        return {"nodes": nodes, "edges": []}
+
+    @staticmethod
+    def _set_flag(root: Path, slug: str, key: str, value: Any) -> None:
+        manifest = root / slug / "workflow.json"
+        payload = json.loads(manifest.read_text())
+        payload[key] = value
+        manifest.write_text(json.dumps(payload))
+
+    def test_it_is_a_registered_pointer_builder(self) -> None:
+        builder = ProjectKnowledgeBuilder()
+        assert isinstance(builder, IKnowledgeBuilder)
+        assert isinstance(builder, AbstractWorkflowPointerBuilder)
+        assert builder.source_kind == "project"
+        assert any(isinstance(b, ProjectKnowledgeBuilder) for b in BUILDERS)
+
+    def test_the_wiring_is_the_recognition_nothing_else(self, tmp_path: Path) -> None:
+        # No platform tool: the project is not a source here, however many
+        # packages exist beside it. Same shape as a SQL builder on a workflow
+        # with no database — recognition reads the canvas, never guesses.
+        self._save(tmp_path, "shop-child")
+        blind = {"nodes": [{"id": "a", "type": "agent.llm", "data": {}}], "edges": []}
+        assert ProjectKnowledgeBuilder().discover(tmp_path / "gw", blind, tmp_path).topics == []
+        assert ProjectKnowledgeBuilder().discover(tmp_path / "gw", self._seer(), tmp_path).topics
+
+    def test_describe_alone_also_counts_as_seeing_the_project(self, tmp_path: Path) -> None:
+        self._save(tmp_path, "shop-child")
+        document = {
+            "nodes": [{"id": "t", "type": "tool.platform-describe-workflow", "data": {}}],
+            "edges": [],
+        }
+        discovery = ProjectKnowledgeBuilder().discover(tmp_path / "gw", document, tmp_path)
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_topics_are_the_packages_the_platform_tools_would_show(self, tmp_path: Path) -> None:
+        # The gate is read off `visible_to_platform_tools`, not restated: a
+        # catalogue entry must never name a package the same agent's own
+        # `platform_describe_workflow` would then refuse to describe.
+        self._save(tmp_path, "shop-child")
+        self._save(tmp_path, "ghost-child", hidden=True)
+        self._save(tmp_path, "draft-child")
+        self._set_flag(tmp_path, "draft-child", "published", False)
+        discovery = ProjectKnowledgeBuilder().discover(tmp_path / "gw", self._seer(), tmp_path)
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_the_gate_inverts_the_root_builders_on_purpose(self, tmp_path: Path) -> None:
+        # Ticket 16's rule — the gate belongs to the mechanism that reaches
+        # the destination — with its two opposite answers side by side, on the
+        # same hidden package: a mount compiles it (doc), a platform tool
+        # refuses it (no doc).
+        self._save(tmp_path, "ghost-child", hidden=True)
+        mounting = self._seer("ghost-child")
+        assert [t.name for t in RootKnowledgeBuilder().discover(
+            tmp_path / "gw", mounting, tmp_path
+        ).topics] == ["ghost-child"]
+        assert ProjectKnowledgeBuilder().discover(tmp_path / "gw", mounting, tmp_path).topics == []
+
+    def test_a_mounted_child_is_the_root_builders_and_is_not_catalogued(
+        self, tmp_path: Path
+    ) -> None:
+        # The two topic sets are partitioned by construction, so invariant 5's
+        # collision machinery stays a backstop instead of firing on every
+        # build of a gateway. A mount earns the better, routing-shaped doc.
+        self._save(tmp_path, "shop-child")
+        self._save(tmp_path, "quiet-child")
+        document = self._seer("shop-child")
+        assert [t.name for t in ProjectKnowledgeBuilder().discover(
+            tmp_path / "gw", document, tmp_path
+        ).topics] == ["quiet-child"]
+
+    def test_a_workflow_never_catalogues_itself(self, tmp_path: Path) -> None:
+        self._save(tmp_path, "gw")
+        self._save(tmp_path, "shop-child")
+        discovery = ProjectKnowledgeBuilder().discover(tmp_path / "gw", self._seer(), tmp_path)
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+
+    def test_an_unreadable_package_is_a_warning_not_a_crash(self, tmp_path: Path) -> None:
+        self._save(tmp_path, "shop-child")
+        broken = tmp_path / "broken-child"
+        broken.mkdir()
+        (broken / "workflow.json").write_text("{not json")
+        discovery = ProjectKnowledgeBuilder().discover(tmp_path / "gw", self._seer(), tmp_path)
+        assert [t.name for t in discovery.topics] == ["shop-child"]
+        assert len(discovery.warnings) == 1
+        assert "broken-child" in discovery.warnings[0]
+
+    def test_the_brief_is_a_pointer_never_a_copy(self, tmp_path: Path) -> None:
+        self._save(tmp_path, "shop-child", with_knowledge=True)
+        discovery = ProjectKnowledgeBuilder().discover(tmp_path / "gw", self._seer(), tmp_path)
+        brief = discovery.topics[0].brief
+        assert "route.classifier" in brief and "sales" in brief
+        assert "Answers shop-child questions" in brief
+        assert "HAS its own knowledge store" in brief
+        # The child's own topic content stays in the child's store.
+        assert "child detail" not in brief
+
+    def test_a_scripted_build_writes_catalogue_docs_beside_routing_ones(
+        self, tmp_path: Path
+    ) -> None:
+        self._save(tmp_path, "shop-child", with_knowledge=True)
+        self._save(tmp_path, "quiet-child")
+        (tmp_path / "gw").mkdir()
+        model = ScriptedModel()
+        report = run_build(tmp_path / "gw", self._seer("shop-child"), model, tmp_path)
+        assert report["sources"]["root"]["written"] == ["shop-child"]
+        assert report["sources"]["project"]["written"] == ["quiet-child"]
+        assert report["collisions"] == []
+        assert marker_source((tmp_path / "gw" / "knowledge" / "quiet-child.md").read_text()) == (
+            "project"
+        )
+        catalogue = ProjectKnowledgeBuilder.INSTRUCTION
+        assert "WHEN IT IS THE WRONG ANSWER" in catalogue
+        # A catalogue doc is not a routing doc: it must not teach the reader to
+        # send a question into a workflow this document has no edge to.
+        assert "never tell the reader to route a question into it" in catalogue
+        assert "open it for depth" in "\n".join(model.prompts)
+
+    def test_project_topics_get_stale_badges_like_every_mechanical_source(
+        self, tmp_path: Path
+    ) -> None:
+        # `current_source_hashes` used to name two builders literally, so a
+        # third mechanical builder's docs could never be badged stale. It now
+        # reads the registry and filters on `mechanical`.
+        from openstategraph.api.knowledge_curation import current_source_hashes
+
+        self._save(tmp_path, "quiet-child")
+        (tmp_path / "gw").mkdir()
+        hashes = current_source_hashes(tmp_path / "gw", self._seer(), tmp_path)
+        assert "quiet-child" in hashes
+        assert ProjectKnowledgeBuilder().mechanical is True

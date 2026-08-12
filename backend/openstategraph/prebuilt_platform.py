@@ -42,11 +42,21 @@ def _envelope(package: Path) -> dict[str, Any]:
         return {}
 
 
-def _visible(payload: dict[str, Any]) -> bool:
+def visible_to_platform_tools(payload: dict[str, Any]) -> bool:
     """Customer-surface visibility (ticket 04): hidden trumps everything,
     and a draft (`"published": false`) is as invisible here as a hidden
     workflow — these tools speak to /chat users. A missing `published`
-    field counts as published (pre-lifecycle envelopes stay visible)."""
+    field counts as published (pre-lifecycle envelopes stay visible).
+
+    Public, and named for its *consumer* rather than for the concept, because
+    a second reader now depends on it: `ProjectKnowledgeBuilder` writes a
+    catalogue doc for exactly the packages these tools will show, so the two
+    must never be able to disagree. Ticket 16's lesson is that a knowledge
+    doc's topic set belongs to the mechanism that reaches the destination —
+    a mount ignores these flags, a platform tool enforces them — and the only
+    way to keep that honest is to read the gate off the tool rather than
+    restate it.
+    """
     if payload.get("hidden") is True:
         return False
     return payload.get("published") is not False
@@ -68,7 +78,7 @@ class ListWorkflowsTool(BaseTool):
         rows = []
         for package in _packages():
             payload = _envelope(package)
-            if not _visible(payload):
+            if not visible_to_platform_tools(payload):
                 continue
             document = payload.get("document", payload)
             name = str(payload.get("name") or document.get("name") or package.name)
@@ -98,7 +108,7 @@ class ListWorkflowsTool(BaseTool):
 
 class DescribeWorkflowArgs(BaseModel):
     model_config = {"extra": "forbid"}
-    slug: str = Field(description="The workflow's slug, e.g. 'chinook-nl-to-sql'.")
+    slug: str = Field(description="The workflow's slug, e.g. 'chinook-assistant'.")
 
 
 class DescribeWorkflowTool(BaseTool):
@@ -126,7 +136,7 @@ class DescribeWorkflowTool(BaseTool):
             known = ", ".join(p.name for p in _packages())
             return ToolResult.failure(f"No workflow '{slug}'. Available: {known}")
         payload = _envelope(package)
-        if not _visible(payload):
+        if not visible_to_platform_tools(payload):
             return ToolResult.failure(f"No workflow '{slug}'.")
         document = payload.get("document", payload)
         node_types = sorted({str(n.get("type", "")) for n in document.get("nodes") or []})

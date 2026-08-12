@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from openstategraph.prebuilt_sql import SqlGetSchemaTool, SqlListTablesTool, SqlQueryTool
 
-CHINOOK = "chinook-nl-to-sql/data/Chinook_Sqlite.sqlite"
+CHINOOK = "chinook-assistant/data/Chinook_Sqlite.sqlite"
 
 
 class TestJail:

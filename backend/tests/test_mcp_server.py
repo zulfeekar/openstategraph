@@ -288,6 +288,24 @@ class TestDraftsOnlyWrites:
         assert payload["published"] is False
         assert payload["document"]["nodes"][0]["id"] == "in1"
 
+    def test_omitting_the_slug_mints_one_rather_than_replacing_a_draft(
+        self, services: WorkflowServices
+    ) -> None:
+        """Ticket 20. An agent asked to "save this as My Workflow" that
+        invents `my-workflow` is guessing, and a guess landing on somebody's
+        existing draft replaces it. `slug=None` asks the store instead."""
+        library = WorkflowLibrary(services)
+
+        first = library.save_draft(None, "My Workflow", _linear_document())
+        second = library.save_draft(None, "My Workflow", _linear_document())
+
+        assert first["slug"] == "my-workflow"
+        assert second["saved"] is True
+        assert second["slug"] != first["slug"]
+        assert second["slug"].startswith("my-workflow-")
+        assert (services.store.root / first["slug"] / "workflow.json").is_file()
+        assert (services.store.root / second["slug"] / "workflow.json").is_file()
+
     def test_it_refuses_to_overwrite_a_published_workflow(
         self, services: WorkflowServices
     ) -> None:
