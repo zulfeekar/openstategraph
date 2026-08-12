@@ -130,15 +130,15 @@ class TestMemoryScopes:
         _run_in_graph(
             lambda s: {"out": save.invoke({"fact": "chinook revenue sums InvoiceLine amounts", "scope": "workflow"})},
             store=store,
-            config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-nl-to-sql"}},
+            config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-assistant"}},
         )
-        assert store.search(("workflow-memory", "chinook-nl-to-sql"))
+        assert store.search(("workflow-memory", "chinook-assistant"))
 
     def test_search_reads_all_scopes_and_labels_provenance(self) -> None:
         store = InMemoryStore()
         save, search = memory_tools()
         config = {"configurable": {"thread_id": "t", "user_email": "a@x.com",
-                                   "workflow_slug": "chinook-nl-to-sql"}}
+                                   "workflow_slug": "chinook-assistant"}}
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes concise answers"})},
                       store=store, config=config)
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "Global_Sales is authoritative", "scope": "workflow"})},
@@ -150,7 +150,7 @@ class TestMemoryScopes:
         out = result["out"]
         # App hits carry their originating slug — the spine stays auditable.
         assert "[user]" in out and "[workflow]" in out
-        assert "[app via chinook-nl-to-sql]" in out
+        assert "[app via chinook-assistant]" in out
 
     def test_app_scope_writes_are_stamped_with_the_originating_slug(self) -> None:
         """The spine is auditable: any workflow may contribute app-wide
@@ -159,13 +159,13 @@ class TestMemoryScopes:
         save, search = memory_tools()
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "billing runs Mondays", "scope": "app"})},
                       store=store,
-                      config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-nl-to-sql"}})
+                      config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-assistant"}})
         items = store.search(("app-memory",))
-        assert [i.value.get("workflow") for i in items] == ["chinook-nl-to-sql"]
+        assert [i.value.get("workflow") for i in items] == ["chinook-assistant"]
         result = _run_in_graph(lambda s: {"out": search.invoke({"query": "billing"})},
                                store=store,
                                config={"configurable": {"thread_id": "t2", "workflow_slug": "concierge"}})
-        assert "[app via chinook-nl-to-sql]" in result["out"]
+        assert "[app via chinook-assistant]" in result["out"]
 
     def test_the_tools_offer_no_way_to_name_another_workflows_namespace(self) -> None:
         """A child cannot write another workflow's workflow-scope: the slug is
@@ -193,7 +193,7 @@ class TestMemoryScopes:
                       config={"configurable": {"thread_id": "t1", "workflow_slug": "concierge"}})
         result = _run_in_graph(lambda s: {"out": search.invoke({"query": "shared"})},
                                store=store,
-                               config={"configurable": {"thread_id": "t2", "workflow_slug": "chinook-nl-to-sql"}})
+                               config={"configurable": {"thread_id": "t2", "workflow_slug": "chinook-assistant"}})
         assert "shared finding" in result["out"]
 
 

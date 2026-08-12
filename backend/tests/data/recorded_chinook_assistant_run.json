@@ -1,0 +1,1229 @@
+{
+ "workflow": "chinook-assistant",
+ "question": "Which genre earns the most revenue?",
+ "nodeIdsByName": {
+  "agent_chat": "agent-chat",
+  "agent_web": "agent-web",
+  "analyst": "analyst",
+  "in1": "in1",
+  "out1": "out1",
+  "router1": "router1"
+ },
+ "chunks": [
+  {
+   "ns": [],
+   "mode": "messages",
+   "node": "in1",
+   "chars": 35
+  },
+  {
+   "ns": [],
+   "mode": "updates",
+   "nodes": [
+    "in1"
+   ]
+  },
+  {
+   "ns": [],
+   "mode": "messages",
+   "node": "router1",
+   "chars": 4
+  },
+  {
+   "ns": [],
+   "mode": "messages",
+   "node": "router1",
+   "chars": 6
+  },
+  {
+   "ns": [],
+   "mode": "updates",
+   "nodes": [
+    "router1"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "in1"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 232
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 108
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 321
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 457
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 447
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "tools",
+   "chars": 51
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "tools"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 10
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 8
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 8
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 7
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 9
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 8
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 8
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 6
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 8
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 5
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 1
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 2
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "messages",
+   "node": "model",
+   "chars": 3
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1",
+    "agent_sql:8b5d13ba-ae2b-d139-d056-6eb47adf82ba"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "model"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "agent_sql"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "messages",
+   "node": "grader_sql",
+   "chars": 4
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "grader_sql"
+   ]
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "messages",
+   "node": "out1",
+   "chars": 361
+  },
+  {
+   "ns": [
+    "analyst:3e505cb1-0a45-d66b-cae3-fe508378bfd1"
+   ],
+   "mode": "updates",
+   "nodes": [
+    "out1"
+   ]
+  },
+  {
+   "ns": [],
+   "mode": "updates",
+   "nodes": [
+    "analyst"
+   ]
+  },
+  {
+   "ns": [],
+   "mode": "messages",
+   "node": "out1",
+   "chars": 361
+  },
+  {
+   "ns": [],
+   "mode": "updates",
+   "nodes": [
+    "out1"
+   ]
+  }
+ ]
+}

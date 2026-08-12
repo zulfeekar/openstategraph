@@ -120,3 +120,186 @@ def test_every_update_frame_carries_the_resolved_active_canvas_node() -> None:
     # Additive only — nothing the old clients read has changed shape.
     assert updates[1]["node"] == "inner_answer"
     assert updates[1]["internal"] is True
+
+
+# --- replayed from a real run ----------------------------------------------
+#
+# Ticket 02's own lesson, and the reason the tests above did not catch it: they
+# are written from namespaces someone invented, and the invented ones were the
+# ones LangGraph produces with NO checkpointer. The live path has one, and the
+# shape differed. Everything below is driven by
+# `data/recorded_chinook_assistant_run.json` — the namespaces, node names and
+# frame ORDER of one real run of `chinook-assistant` against a real model,
+# recorded off `graph.stream` and replayed verbatim.
+
+
+def _recorded() -> dict:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent / "data" / "recorded_chinook_assistant_run.json"
+    return json.loads(path.read_text())
+
+
+def _replay_recorded() -> list[tuple[str, dict]]:
+    """The recorded run, pushed back through the real stream fold."""
+    recorded = _recorded()
+    chunks: list[tuple[tuple[str, ...], str, object]] = []
+    for chunk in recorded["chunks"]:
+        namespace = tuple(chunk["ns"])
+        if chunk["mode"] == "updates":
+            chunks.append((namespace, "updates", {name: {} for name in chunk["nodes"]}))
+        else:
+            # The fold only reads `.content` and `langgraph_node`; the recording
+            # kept the length rather than megabytes of model prose.
+            message = SimpleNamespace(content="x" * chunk["chars"])
+            chunks.append(
+                (namespace, "messages", (message, {"langgraph_node": chunk["node"]}))
+            )
+    return _frames(chunks, recorded["nodeIdsByName"])
+
+
+def _highlight_track(events: list[tuple[str, dict]]) -> list[str]:
+    """What a client that reads `activeNode` would light up, in order.
+
+    Deduplicated exactly as both clients deduplicate it — which is also the
+    assertion that the coalescing works: one entry per *change*, not per frame.
+    """
+    track: list[str] = []
+    for _name, data in events:
+        active = str(data.get("activeNode") or "")
+        if active and (not track or track[-1] != active):
+            track.append(active)
+    return track
+
+
+def test_the_recorded_run_highlights_the_four_canvas_nodes_in_order() -> None:
+    """`in1 -> router1 -> analyst -> out1`, and nothing else ever glows.
+
+    `agent_sql`, `grader_sql`, `model` and `tools` are all real frames in this
+    recording. None of them is a node of the canvas being watched — three
+    belong to the mounted `chinook-nl-to-sql` document and two to an agent's
+    own compiled loop — so the box that must glow for every one of them is the
+    mount, `analyst`.
+
+    **The recording predates ticket 10 deliberately.** That mount no longer
+    exists — the analyst is an inline branch now — and this file is the reason
+    the recording is kept anyway: it is the only *real* stream this repository
+    holds in which a child document's `in1` collides with a parent's, which is
+    the whole subject below. Re-recording it against the collapsed document
+    would delete the evidence and leave the collision logic untested.
+    """
+    assert _highlight_track(_replay_recorded()) == ["in1", "router1", "analyst", "out1"]
+
+
+def test_the_mount_starts_glowing_when_its_work_starts_not_when_it_ends() -> None:
+    """The reported bug, measured on the recording that showed it.
+
+    `updates` frames arrive on completion, so the mount's own update frame is
+    the LAST thing the run says about it. If the highlight waited for that, the
+    router would hold the glow for every frame in between — 130-odd of them in
+    this recording, about twenty seconds of wall clock.
+    """
+    events = _replay_recorded()
+    first_active = next(
+        i for i, (_n, d) in enumerate(events) if d.get("activeNode") == "analyst"
+    )
+    completed = next(
+        i
+        for i, (name, d) in enumerate(events)
+        if name == "update" and d.get("node") == "analyst"
+    )
+
+    assert first_active < completed
+    # Not "one frame early" — the whole of the mount's work happens in between.
+    assert completed - first_active > 100
+    # Including the mount's longest single stretch of work: a 100+ frame model
+    # turn from inside the child's agent, every frame of which now names the
+    # mount. Before the fix these were the frames that said `router1`.
+    inner_tokens = [
+        d
+        for name, d in events[first_active:completed]
+        if name == "token" and d["node"] in {"model", "tools", "grader_sql"}
+    ]
+    assert len(inner_tokens) > 100
+    assert {d["activeNode"] for d in inner_tokens} == {"analyst"}
+
+
+def test_a_node_lights_up_on_its_first_token_not_on_its_completion() -> None:
+    """Tokens are the only frames that arrive while a node is still working.
+
+    In the recording, `in1` and `router1` each stream text before their own
+    `update` frame lands. Those token frames are what make the glow mean "is
+    working" rather than "has finished".
+    """
+    events = _replay_recorded()
+
+    for node in ("in1", "router1"):
+        first = next(i for i, (_n, d) in enumerate(events) if d.get("activeNode") == node)
+        completed = next(
+            i
+            for i, (name, d) in enumerate(events)
+            if name == "update" and d.get("node") == node
+        )
+        assert events[first][0] == "token", f"{node} lit up on an {events[first][0]} frame"
+        assert first < completed
+
+
+def test_nothing_is_attributed_to_the_router_once_the_mount_is_working() -> None:
+    """The literal symptom: "the router glows while the analyst works"."""
+    events = _replay_recorded()
+    started = next(i for i, (_n, d) in enumerate(events) if d.get("activeNode") == "analyst")
+
+    assert not [
+        d for _n, d in events[started:] if d.get("activeNode") == "router1"
+    ]
+
+
+def test_a_chatty_model_turn_is_one_highlight_change_not_a_hundred() -> None:
+    """Coalescing, checked against the run that produced the flicker risk.
+
+    Every token frame carries `activeNode` (its meaning must not vary by
+    frame), so the coalescing lives in the clients — `_highlight_track` is that
+    rule. The recording contains a single model turn of 100+ consecutive token
+    frames; it must contribute exactly one entry.
+    """
+    events = _replay_recorded()
+    token_frames = [d for name, d in events if name == "token"]
+
+    assert len(token_frames) > 100
+    assert len(_highlight_track(events)) == 4
+
+
+def test_a_child_step_that_shares_a_parents_name_is_still_internal() -> None:
+    """In the recording, `chinook-assistant` mounts `chinook-nl-to-sql`; both
+    have `in1`/`out1`.
+
+    The recording contains the child's own input and output steps, and their
+    graph-node names are identical to the parent's. Only the namespace tells
+    them apart — so `internal` is decided by that, not by the name. Otherwise
+    a second `in1` row lands in the activity feed halfway through the run, as
+    though the canvas's input node had run twice.
+    """
+    events = _replay_recorded()
+    updates = [d for name, d in events if name == "update"]
+
+    inside_the_mount = [d for d in updates if d["namespace"]]
+    assert {d["node"] for d in inside_the_mount} >= {"in1", "out1"}
+    assert all(d["internal"] for d in inside_the_mount)
+    assert all(d["activeNode"] == "analyst" for d in inside_the_mount)
+
+    # The canvas's OWN input and output steps are still flat-feed rows.
+    top_level = [d for d in updates if not d["namespace"]]
+    assert [d["node"] for d in top_level] == ["in1", "router1", "analyst", "out1"]
+    assert not any(d["internal"] for d in top_level)
+
+
+def test_every_token_frame_still_carries_what_it_always_carried() -> None:
+    """Additive: `activeNode` was added beside `node`, never instead of it."""
+    events = _replay_recorded()
+    tokens = [d for name, d in events if name == "token"]
+
+    assert all({"node", "namespace", "content", "activeNode"} <= set(d) for d in tokens)
+    # `node` is still the reporting graph step, which is exactly what makes it
+    # useless as a highlight: these are inner names of the mounted document.
+    assert {"grader_sql", "model", "tools"} & {d["node"] for d in tokens}

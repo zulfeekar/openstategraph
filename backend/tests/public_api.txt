@@ -11,18 +11,18 @@ openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.Workflows = class(object)(root: 'str | Path | None' = None, *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'None'
 openstategraph.__version__ = str
 openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
-openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), rules: 'str' = '', context: 'str' = '', middleware: 'dict[str, Any] | None' = None) -> 'None'
+openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', middleware: 'dict[str, Any] | None' = None) -> 'None'
 openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
 openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(**kwargs: 'Any') -> 'None'
-openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
-openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, model: 'Any' = None) -> 'None'
-openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
+openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.BaseTool = class(ABC)()
 openstategraph.abc.Classification = class(BaseModel)(*, branch: str, fell_back: bool = False, reason: str = '') -> None
 openstategraph.abc.CustomGraphNode = class(AbstractAgentNode)(*, name: 'str', runnable: 'Any') -> 'None'
 openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, **kwargs: 'Any') -> 'None'
 openstategraph.abc.Field = re-export of pydantic.fields.Field
-openstategraph.abc.Grader = class(BaseGrader)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
+openstategraph.abc.Grader = class(BaseGrader)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.IAgent = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IGrader = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IOrchestrator = class(Protocol)(*args, **kwargs)
@@ -30,11 +30,11 @@ openstategraph.abc.IRouter = class(Protocol)(*args, **kwargs)
 openstategraph.abc.ITool = class(Protocol)(*args, **kwargs)
 openstategraph.abc.MiddlewareSlotTable = class(object)(order: 'Sequence[str]' = ()) -> 'None'
 openstategraph.abc.NoArgs = class(BaseModel)() -> None
-openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, model: 'Any' = None) -> 'None'
+openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'None'
-openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', model: 'Any' = None, destinations: 'dict[str, str] | None' = None) -> 'None'
+openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, destinations: 'dict[str, str] | None' = None) -> 'None'
 openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
-openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults)
+openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults,skill)
 openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
 openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None

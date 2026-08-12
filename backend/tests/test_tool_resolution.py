@@ -23,7 +23,7 @@ from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 REPO = Path(__file__).resolve().parent.parent.parent
-CHINOOK = REPO / "workflows" / "chinook-nl-to-sql"
+CHINOOK = REPO / "workflows" / "chinook-assistant"
 
 
 class ARecordingTool(BaseTool):
@@ -75,7 +75,7 @@ class TestBoundToolConfiguration:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "openstategraph_test_chinook_tools",
-            REPO / "workflows" / "chinook-nl-to-sql" / "tools" / "chinook.py",
+            REPO / "workflows" / "chinook-assistant" / "tools" / "chinook.py",
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -88,7 +88,7 @@ class TestBoundToolConfiguration:
 
 class TestWorkflowToolDiscovery:
     def test_registry_is_keyed_by_canvas_node_type(self) -> None:
-        registry = discover_tool_registry(CHINOOK, slug="chinook-nl-to-sql")
+        registry = discover_tool_registry(CHINOOK, slug="chinook-assistant")
         assert set(registry) == {
             "tool.chinook-get-all-tables",
             "tool.chinook-get-schema",
@@ -99,12 +99,14 @@ class TestWorkflowToolDiscovery:
             assert tool.node_type == node_type
 
     def test_capabilities_expose_the_node_type_too(self) -> None:
-        capabilities = discover_tools(CHINOOK, slug="chinook-nl-to-sql")
+        capabilities = discover_tools(CHINOOK, slug="chinook-assistant")
         by_name = {c.name: c for c in capabilities}
         assert by_name["chinook_execute_sql"].node_type == "tool.chinook-execute-sql"
 
     def test_a_workflow_without_tools_discovers_an_empty_registry(self) -> None:
-        registry = discover_tool_registry(
-            REPO / "workflows" / "page-analytics", slug="page-analytics"
-        )
+        """`concierge`, not the assistant: ticket 10 moved `tools/` into the
+        assistant's package, so it is no longer a tool-less one. The gateway
+        binds only platform tools from the global catalogue and ships no
+        `tools/` directory of its own."""
+        registry = discover_tool_registry(REPO / "workflows" / "concierge", slug="concierge")
         assert registry == {}

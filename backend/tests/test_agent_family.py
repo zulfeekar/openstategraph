@@ -97,10 +97,33 @@ class TestAbstractAgentNode:
         prompt = node.resolve_prompt()
         assert prompt is not None and "Answer in French." in prompt
 
-    def test_resolve_prompt_is_none_when_nothing_is_configured(self) -> None:
-        """No prompt means create_agent gets no system_prompt at all —
-        an empty string would still override the library's default."""
-        assert ReactAgentNode(name="a1", model=object()).resolve_prompt() is None
+    def test_an_unconfigured_agent_inherits_the_base_default_rules(self) -> None:
+        """**Reversed by one-chinook ticket 10, deliberately.** This used to
+        assert `resolve_prompt() is None` — "no prompt means create_agent gets
+        no system_prompt at all, and an empty string would still override the
+        library's default".
+
+        That reading lost to the owner's bar: an Agent dropped on a blank
+        canvas, nothing typed and nothing wired, must still behave. An agent
+        with no rules is the exact state that let a tool-holding agent answer
+        a database question out of parametric memory. So the bottom layer is
+        now never empty, and "nothing configured" means "inherit this node
+        type's own minimum" rather than "defer to the library".
+
+        The `None` path still exists for a tier that blanks `DEFAULT_RULES`,
+        which the test below pins."""
+        prompt = ReactAgentNode(name="a1", model=object()).resolve_prompt()
+        assert prompt is not None
+        assert "never state a figure you did not obtain" in prompt
+
+    def test_a_tier_that_blanks_the_defaults_still_gets_no_prompt(self) -> None:
+        """The escape hatch, so the `None` branch is not dead code: a harness
+        that owns its own prompt entirely opts out by emptying the ClassVar."""
+
+        class BareAgentNode(ReactAgentNode):
+            DEFAULT_RULES = ""
+
+        assert BareAgentNode(name="a1", model=object()).resolve_prompt() is None
 
     def test_context_rides_above_the_rules(self) -> None:
         node = ReactAgentNode(
@@ -128,12 +151,28 @@ class TestConcreteTiers:
         assert "Be terse." in call["system_prompt"]
         assert call["name"] == "a1"
 
-    def test_react_omits_system_prompt_when_unconfigured(self, monkeypatch) -> None:
+    def test_react_omits_system_prompt_only_when_there_are_no_rules_at_all(
+        self, monkeypatch
+    ) -> None:
+        """A stock agent now always passes a `system_prompt`, because
+        `DEFAULT_RULES` is a layer it inherits (ticket 10). The omission
+        survives for a tier that blanks that layer — which is what this pins,
+        so the "no key at all" path does not rot."""
+
+        class BareAgentNode(ReactAgentNode):
+            DEFAULT_RULES = ""
+
         recorder = Recorder()
         node = ReactAgentNode(name="a1", model="MODEL")
         monkeypatch.setattr(node, "_constructor", recorder)
         node.build()
-        assert "system_prompt" not in recorder.calls[0]
+        assert "system_prompt" in recorder.calls[0]
+
+        bare_recorder = Recorder()
+        bare = BareAgentNode(name="a2", model="MODEL")
+        monkeypatch.setattr(bare, "_constructor", bare_recorder)
+        bare.build()
+        assert "system_prompt" not in bare_recorder.calls[0]
 
     def test_deep_passes_subagents_through(self, monkeypatch) -> None:
         recorder = Recorder()

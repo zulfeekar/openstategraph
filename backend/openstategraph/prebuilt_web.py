@@ -11,6 +11,28 @@ Guard rails, structural as always:
 - ``web_search`` uses DuckDuckGo's HTML endpoint (no key, no tracking
   params); results are titles + URLs + snippets, and the model follows up
   with ``web_fetch`` on what looks right.
+
+## The search transport, and why it is not a plain GET (ticket 26)
+
+Web Search shipped returning nothing on every query while Web Fetch worked,
+and the offline tests stayed green the whole time: they inject a hand-written
+SERP fragment, so they prove the regex and never the request.
+
+Measured against the live endpoint: ``html.duckduckgo.com/html/`` now answers
+**every GET with HTTP 202 and an anti-bot challenge page** — real HTML,
+`result__a` nowhere in it — regardless of User-Agent. It answers a **form
+POST** (`q=...`, `application/x-www-form-urlencoded`) with a real 200 SERP
+that the existing parser reads perfectly. That is the request the endpoint's
+own `<form>` makes, so this is using the page as published rather than
+working around anything; nothing here solves or evades a challenge, and a
+challenge that is served anyway is reported as the failure it is.
+
+Which is the second half, and the more important one. `_get` returned only a
+body, so a hard block and an empty result were the same value by the time
+`_execute` saw them, and the tool told the agent `No results for '...'` — an
+empty result presented as an answer, the defect class this project keeps
+closing. The search transport returns `(status, body)` and the two failures
+are now spelled differently.
 """
 
 from __future__ import annotations
@@ -32,6 +54,24 @@ USER_AGENT = "openstategraph/0.1 (+local dev tool)"
 FETCH_TIMEOUT = 15
 MAX_FETCH_CHARS = 8_000
 MAX_RESULTS = 6
+
+#: DuckDuckGo's HTML endpoint and the method its own form uses. Named here
+#: rather than built inline so the tool's transport is one readable fact.
+SEARCH_URL = "https://html.duckduckgo.com/html/"
+
+#: Sent only to `SEARCH_URL`. The honest UA above is what every ordinary
+#: fetch still carries; this endpoint declines to serve its form results to
+#: it, so a keyless search is either this or no keyless search at all.
+SEARCH_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+
+#: Words that only appear on the challenge page, never on a SERP. The status
+#: code is the primary signal; this is the backstop for the day the block
+#: arrives with a 200, which is the next shape this endpoint can take without
+#: telling anyone.
+_CHALLENGE_MARKERS = ("confirm this search was made by a human", "anomaly.js")
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -83,15 +123,44 @@ def _validate_url(url: str) -> None:
         raise ValueError("That host is not reachable from here.")
 
 
-def _get(url: str) -> str:
+def _request(
+    url: str, *, data: bytes | None = None, user_agent: str = USER_AGENT
+) -> tuple[int, str]:
+    """One read of one URL, as `(status, body)`.
+
+    The status is returned rather than discarded because a caller that cannot
+    see it cannot tell a refusal from an empty answer — which is exactly what
+    made a 202 challenge page read as "no results" for the whole of ticket 26.
+    """
     _validate_url(url)
     opener = urllib.request.build_opener(
         _GuardedRedirects(), urllib.request.HTTPSHandler(context=_ssl_context())
     )
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    headers = {"User-Agent": user_agent}
+    if data is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    request = urllib.request.Request(url, data=data, headers=headers)
     with opener.open(request, timeout=FETCH_TIMEOUT) as resp:
         body: str = resp.read(600_000).decode("utf-8", errors="replace")
-    return body
+        return int(getattr(resp, "status", 200) or 200), body
+
+
+def _get(url: str) -> str:
+    """A page's text. `web_fetch`'s transport, unchanged — an ordinary GET."""
+    return _request(url)[1]
+
+
+def _search(url: str, query: str) -> tuple[int, str]:
+    """`web_search`'s transport: the form POST the endpoint's own page makes.
+
+    A GET to the same URL is answered with a 202 challenge whatever the
+    User-Agent — measured, not assumed. See the module docstring.
+    """
+    return _request(
+        url,
+        data=urllib.parse.urlencode({"q": query}).encode(),
+        user_agent=SEARCH_USER_AGENT,
+    )
 
 
 def _strip_html(raw: str) -> str:
@@ -117,20 +186,37 @@ class WebSearchTool(BaseTool):
     )
     Args = SearchArgs
 
-    #: Injectable for offline tests.
-    def __init__(self, fetcher: Callable[[str], str] | None = None) -> None:
-        self._fetch = fetcher or _get
+    #: Injectable for offline tests. `(url, query) -> (status, body)`: the
+    #: query is a parameter rather than baked into the url because it rides
+    #: the form body now, and the status is returned because without it the
+    #: tool cannot tell a block from a silence (ticket 26).
+    def __init__(
+        self, searcher: Callable[[str, str], tuple[int, str]] | None = None
+    ) -> None:
+        self._search = searcher or _search
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, SearchArgs)
         query = args.query.strip()
         if not query:
             return ToolResult.failure("Give a non-empty query.")
-        url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query)
         try:
-            page = self._fetch(url)
+            status, page = self._search(SEARCH_URL, query)
         except Exception as exc:
             return ToolResult.failure(f"Search failed: {exc}")
+        # Before the parser, deliberately. A challenge page parses to zero
+        # results and is not a search that found nothing — it is a search that
+        # never happened, and the agent has to be able to act on the
+        # difference (it can retry, or say the web is unavailable, instead of
+        # concluding the web is empty).
+        if status != 200 or any(marker in page for marker in _CHALLENGE_MARKERS):
+            return ToolResult.failure(
+                f"The search endpoint refused this request (HTTP {status}) — it is "
+                "rate-limiting or challenging automated searches, so the web could "
+                "not be searched at all. This is not an empty result: do not "
+                "conclude anything about what is on the web. Say the search is "
+                "unavailable, or fetch a URL directly with web_fetch."
+            )
         results = []
         for match in re.finditer(
             r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>(?:.*?'

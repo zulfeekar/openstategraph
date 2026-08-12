@@ -46,7 +46,7 @@ class TestResumeAcceptsTheSlug:
                 "thread_id": "no-such-thread",
                 "workflow": MINIMAL_DOCUMENT,
                 "decision": "approve",
-                "workflow_slug": "chinook-nl-to-sql",
+                "workflow_slug": "chinook-assistant",
             },
         )
         assert response.status_code != 422, response.text
@@ -98,7 +98,7 @@ class TestSlugToolBinding:
     def test_the_chinook_slug_layers_its_tools_over_the_defaults(self) -> None:
         from openstategraph.api.main import build_tool_registry
 
-        registry = build_tool_registry(self._store(), "chinook-nl-to-sql")
+        registry = build_tool_registry(self._store(), "chinook-assistant")
         # Workflow tools present…
         assert "tool.chinook-execute-sql" in registry
         assert "tool.chinook-get-schema" in registry
@@ -126,7 +126,7 @@ class TestSlugToolBinding:
         from openstategraph.api.main import build_tool_registry
         from openstategraph.compile.node_runtime import NodeRuntime
 
-        runtime = NodeRuntime(tools=build_tool_registry(self._store(), "chinook-nl-to-sql"))
+        runtime = NodeRuntime(tools=build_tool_registry(self._store(), "chinook-assistant"))
         runtime._types["t1"] = "tool.chinook-execute-sql"
         runtime._nodes["t1"] = {"id": "t1", "type": "tool.chinook-execute-sql", "data": {"maxRows": 5}}
         tool = runtime._bound_tool("t1")

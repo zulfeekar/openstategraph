@@ -303,11 +303,11 @@ class TestTheHappyPathStaysQuiet:
     def test_the_bundled_chinook_package_discovers_clean(self) -> None:
         """The repo's own example package is the regression canary: if the
         audit ever starts warning about legitimate code, this fails first."""
-        package = Path(__file__).resolve().parents[2] / "workflows" / "chinook-nl-to-sql"
+        package = Path(__file__).resolve().parents[2] / "workflows" / "chinook-assistant"
         if not (package / "tools").is_dir():  # pragma: no cover - checkout shape
             pytest.skip("bundled example package not present")
 
-        found, warnings = discover(package, slug="chinook-nl-to-sql")
+        found, warnings = discover(package, slug="chinook-assistant")
 
         assert found
         assert warnings == []

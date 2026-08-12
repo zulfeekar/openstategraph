@@ -153,7 +153,11 @@ class TestWorkerIsAnAgentToo:
         )
         captured = self._captured(monkeypatch, runtime)
         assert captured["context"] == "House JOIN rules."
-        assert "House JOIN rules." not in captured["rules"]
+        # The worker's own directive is now the `default_rules` layer, so a
+        # wired skill adds to it instead of deleting it (ticket 05). Either
+        # way the ambient package skills stay context.
+        assert "House JOIN rules." not in captured["default_rules"]
+        assert "House JOIN rules." not in captured.get("rules", "")
 
 
 class TestQuestionChannelIsSingleWriter:

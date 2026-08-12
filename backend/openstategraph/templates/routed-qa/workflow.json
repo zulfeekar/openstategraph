@@ -33,7 +33,7 @@
       "title": "Quality gate",
       "data": {
         "criteria": "- The answer must address the question that was actually asked.\n- Every factual claim must come from a tool result or be marked as uncertain — never invented.",
-        "criteriaMode": "extend",
+        "rulesMode": "extend",
         "maxAttempts": 2
       },
       "position": { "x": 1060, "y": 140 }

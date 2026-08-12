@@ -79,6 +79,24 @@ def test_export_puts_each_skill_in_its_own_directory_with_frontmatter(tmp_path: 
     assert skill.rstrip().endswith("Escalate exceptions to finance.")
 
 
+def test_export_keeps_a_description_the_skill_file_already_declares(tmp_path: Path) -> None:
+    """Ticket 28: one writer for the format, and it reads before it writes.
+
+    The header used to be pasted together here, so a `skills/*.md` that already
+    carried frontmatter was exported with a second header stacked on the first
+    and a description synthesized from the line `---`.
+    """
+    root = _package(tmp_path)
+    (root / "skills" / "refunds.md").write_text(
+        "---\nname: refunds\ndescription: The refund policy.\n---\n\nEscalate to finance.\n"
+    )
+    export = export_plugin(root)
+    skill = export.files["skills/refunds/SKILL.md"]
+    assert skill.count("---") == 2
+    assert "description: The refund policy." in skill
+    assert skill.rstrip().endswith("Escalate to finance.")
+
+
 def test_export_carries_non_portable_parts_into_the_extension_directory(tmp_path: Path) -> None:
     export = export_plugin(_package(tmp_path))
     assert f"{EXTENSION_NAMESPACE}/knowledge/invoice.md" in export.files

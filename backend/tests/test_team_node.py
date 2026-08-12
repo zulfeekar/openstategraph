@@ -38,7 +38,7 @@ def parent_doc(slug: str) -> dict:
 
 class TestTeamCompilesAsSubgraph:
     def test_a_team_node_is_an_ordinary_graph_node(self) -> None:
-        plan = WorkflowCompiler().plan(parent_doc("chinook-metrics-team"))
+        plan = WorkflowCompiler().plan(parent_doc("some-team"))
         assert "team1" in plan.nodes
         assert plan.entry == ["in1"] and plan.exits == ["out1"]
 
@@ -46,7 +46,7 @@ class TestTeamCompilesAsSubgraph:
         """`team.workflow` must hit the same loader as `workflow.subgraph` —
         a missing loader is the readable error, not a passthrough."""
         runtime = NodeRuntime(model=None)
-        doc = parent_doc("chinook-metrics-team")
+        doc = parent_doc("some-team")
         factory = runtime.factory(doc)
         run = factory("team1", {"id": "team1", "type": "team.workflow", "data": {"workflow": "nope"}},
                       WorkflowCompiler().plan(doc))
@@ -57,8 +57,18 @@ class TestTeamCompilesAsSubgraph:
 
 
 class TestScaffoldedTeamPackage:
-    def test_the_shipped_chinook_metrics_team_is_a_valid_loop(self) -> None:
-        doc = json.loads((REPO / "workflows/chinook-metrics-team/workflow.json").read_text())["document"]
+    def test_the_scaffolded_team_is_a_valid_loop(self, tmp_path: Path) -> None:
+        """Pinned against the *scaffold*, not against a shipped package.
+
+        It used to read `workflows/chinook-metrics-team` — a supervisor and a
+        single worker, deleted by the one-example ticket because one worker
+        role does not earn a planner. The contract worth protecting was never
+        that example's existence but the shape `new_team` emits, which is what
+        every developer actually gets."""
+        from openstategraph.scaffold import new_team
+
+        target = new_team(tmp_path, "sourcing-team", "Deliver a sourced summary.")
+        doc = json.loads((target / "workflow.json").read_text())["document"]
         plan = WorkflowCompiler().plan(doc)
         assert plan.fan_out == {"lead1": ["member1"]}
         assert ("grader1", {"pass": "out1", "revise": "lead1"}) in [
@@ -68,7 +78,7 @@ class TestScaffoldedTeamPackage:
 
     def test_the_scaffold_refuses_an_existing_slug(self, tmp_path: Path) -> None:
         proc = subprocess.run(
-            [sys.executable, str(REPO / "scripts/new_team.py"), "chinook-metrics-team"],
+            [sys.executable, str(REPO / "scripts/new_team.py"), "chinook-assistant"],
             capture_output=True, text=True,
         )
         assert proc.returncode != 0

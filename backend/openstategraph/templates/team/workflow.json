@@ -30,7 +30,7 @@
     {
       "id": "grader1",
       "type": "route.grader",
-      "data": { "criteria": "{{outcome}}", "criteriaMode": "extend", "maxAttempts": 2 },
+      "data": { "criteria": "{{outcome}}", "rulesMode": "extend", "maxAttempts": 2 },
       "position": { "x": 1380, "y": 200 }
     },
     { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1720, "y": 200 } }

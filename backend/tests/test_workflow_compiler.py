@@ -294,6 +294,38 @@ class TestPortResolution:
         assert calls, "the compiler must go through the injected resolver"
 
 
+class TestPresentationKeysAreIgnored:
+    """A link's `vertices` are the editor's business, and only the editor's.
+
+    Waypoints — the points a user drags a run through — are stored on the edge
+    in `workflow.json`. The compiler must neither read them nor trip over them:
+    where a line is drawn has no bearing on what graph it compiles to, and an
+    older build that has never heard of the key must compile the same document
+    to the same graph. That is precisely the "additive, so do not bump the
+    schema version" rule in `openstategraph/schema.py`, asserted rather than
+    assumed.
+    """
+
+    def test_a_link_carrying_waypoints_compiles_to_the_same_graph(self, compiler) -> None:
+        routed = doc(
+            [
+                node("in1", "input.text"),
+                node("ag1", "agent.llm"),
+                node("out1", "output.formatted"),
+            ],
+            [
+                {**edge("in1", "text", "ag1", "prompt"), "vertices": [{"x": 220, "y": 40}]},
+                {**edge("ag1", "result", "out1", "result"), "vertices": []},
+            ],
+        )
+        assert compiler.plan(routed).edges == compiler.plan(LINEAR).edges
+
+    def test_the_document_version_did_not_move_for_it(self) -> None:
+        from openstategraph.schema import SCHEMA_VERSION
+
+        assert SCHEMA_VERSION == 2
+
+
 class TestPlanIsInspectable:
     def test_the_plan_is_data_the_generator_can_reuse(self, compiler) -> None:
         # The interpreter and the future code generator must agree. Sharing this

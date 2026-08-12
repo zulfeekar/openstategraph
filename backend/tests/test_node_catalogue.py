@@ -120,7 +120,9 @@ class TestTheResolverReadsGeneratedSemantics:
     def test_the_default_branch_configuration_is_not_baked_in_as_ports(self) -> None:
         # A router's five seeded branches are one document's config, not the
         # node type's contract, so they must not appear as static ports.
-        assert set(DEFAULT_PORT_SPECS["route.classifier"]) == {"question"}
+        # `skill` is static — every prompted node type declares it (ticket 05)
+        # — so only the branch outputs are absent here.
+        assert set(DEFAULT_PORT_SPECS["route.classifier"]) == {"question", "skill"}
 
     def test_an_unknown_node_type_still_defaults_to_control_flow(self) -> None:
         assert default_port_resolver("some.future.node", "in").type == "text"

@@ -322,10 +322,45 @@ class TestArchetypeDescriptionsAreNeverBlind:
         assert role_desc is not None
 
     def test_an_explicit_role_wins_over_the_derived_description(self) -> None:
-        # Pinned via the document contract: page-analytics ships roles set.
-        import json
-        from pathlib import Path
-        doc = json.loads((Path(__file__).resolve().parent.parent.parent /
-                          "workflows/page-analytics/workflow.json").read_text())["document"]
-        workers = [n for n in doc["nodes"] if n["type"] == "orchestrate.worker"]
-        assert workers and all((n["data"].get("role") or "").strip() for n in workers)
+        """Previously pinned by asserting `page-analytics` shipped a `role` on
+        every worker — a document convention, not the precedence itself, and
+        it died with that example (one-example ticket 01). This asserts the
+        rule through the real roster instead: a worker that states its role
+        keeps it *even while holding a tool*, and only a silent worker is
+        described by what it holds."""
+        import openstategraph.compile.node_runtime as runtime_module
+
+        document = two_archetype_document(
+            weather={"role": "Forecasts only — never country facts."},
+            countries={},
+        )
+
+        class FakeTool:
+            description = "Country facts for any nation."
+
+        captured: list[Any] = []
+        real = runtime_module.Orchestrator
+
+        class SpyOrchestrator(real):  # type: ignore[misc, valid-type]
+            def plan(self, instruction, generation=0, archetypes=None):  # type: ignore[no-untyped-def]
+                captured.extend(archetypes or [])
+                return []
+
+        document["nodes"].append(node("t-api", "tool.api"))
+        document["edges"].append(edge("t-api", "tool", "w-countries", "tools"))
+        runtime_module.Orchestrator = SpyOrchestrator
+        try:
+            # Only the supervisor step is run: the roster is assembled in its
+            # factory closure, and invoking the whole graph would drag in the
+            # workers this test says nothing about.
+            runtime = NodeRuntime(model=None, tools={"tool.api": FakeTool()})
+            plan = WorkflowCompiler().plan(document)
+            supervisor = next(n for n in document["nodes"] if n["id"] == "orch1")
+            step = runtime.factory(document)("orch1", supervisor, plan)
+            step(RunState(question="anything"))  # type: ignore[typeddict-item]
+        finally:
+            runtime_module.Orchestrator = real
+
+        described = {a.key: a.description for a in captured}
+        assert described["weather-worker"] == "Forecasts only — never country facts."
+        assert described["countries-worker"] == "handles: Country facts for any nation."
