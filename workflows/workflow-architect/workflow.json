@@ -6,37 +6,153 @@
   "document": {
     "version": 2,
     "name": "Workflow Architect",
-    "settings": { "model": "ollama:gpt-oss:120b-cloud" },
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "Interviews you about a workflow you want, then drafts one you can open on the canvas."
+    },
     "nodes": [
-      { "id": "in1", "type": "input.text", "data": {}, "position": { "x": 40, "y": 200 } },
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        }
+      },
       {
         "id": "architect1",
         "type": "agent.llm",
         "title": "Architect",
         "data": {
-          "systemPrompt": "You are the Workflow Architect: you turn a plain-language request into a complete, valid OpenStateGraph workflow document. Follow the document grammar from your skills exactly. Compose the document, call validate_workflow on it, fix every reported problem, and only then answer. Your answer MUST contain: one sentence on what the workflow does, the complete document in a ```json fence, and the line 'Validation: VALID'. Prefer the Team template for multi-step requests; give workers meaningful roles; write grader criteria that state the user's expected outcome."
+          "systemPrompt": "You are the Workflow Architect: you turn a plain-language request into a complete, valid OpenStateGraph workflow document. Follow the document grammar from your skills exactly. Before composing anything that reuses an existing workflow, call platform_list_workflows to see what this platform already has, and platform_describe_workflow to check one before you mount it — a workflow.subgraph or team.workflow slug you did not read from those tools does not exist. Compose the document, call validate_workflow on it, fix every reported problem, and only then answer. Your answer MUST contain: one sentence on what the workflow does, the complete document in a ```json fence, and the line 'Validation: VALID'. Prefer the Team template for multi-step requests; give workers meaningful roles; write grader criteria that state the user's expected outcome."
         },
-        "position": { "x": 400, "y": 180 }
+        "position": {
+          "x": 400,
+          "y": 180
+        }
       },
-      { "id": "t-validate", "type": "tool.validate-workflow", "data": {}, "position": { "x": 400, "y": 460 } },
+      {
+        "id": "t-validate",
+        "type": "tool.validate-workflow",
+        "data": {},
+        "position": {
+          "x": 400,
+          "y": 460
+        }
+      },
+      {
+        "id": "t-list-workflows",
+        "type": "tool.platform-list-workflows",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 460
+        }
+      },
+      {
+        "id": "t-describe-workflow",
+        "type": "tool.platform-describe-workflow",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 600
+        }
+      },
       {
         "id": "grader1",
         "type": "route.grader",
         "data": {
           "criteria": "- The answer must contain a complete workflow document in a ```json fence.\n- The answer must state 'Validation: VALID'.\n- The document must have an input.text entry and an output.formatted exit.",
-          "criteriaMode": "replace",
+          "rulesMode": "replace",
           "maxAttempts": 2
         },
-        "position": { "x": 760, "y": 180 }
+        "position": {
+          "x": 760,
+          "y": 180
+        }
       },
-      { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1100, "y": 200 } }
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 1100,
+          "y": 200
+        }
+      }
     ],
     "edges": [
-      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "architect1", "portId": "prompt" } },
-      { "source": { "nodeId": "t-validate", "portId": "tool" }, "target": { "nodeId": "architect1", "portId": "tools" } },
-      { "source": { "nodeId": "architect1", "portId": "result" }, "target": { "nodeId": "grader1", "portId": "candidate" } },
-      { "source": { "nodeId": "grader1", "portId": "pass" }, "target": { "nodeId": "out1", "portId": "result" } },
-      { "source": { "nodeId": "grader1", "portId": "revise" }, "target": { "nodeId": "architect1", "portId": "feedback" } }
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "architect1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-validate",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "architect1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-list-workflows",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "architect1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-describe-workflow",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "architect1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "architect1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "architect1",
+          "portId": "feedback"
+        }
+      }
     ]
   }
 }
