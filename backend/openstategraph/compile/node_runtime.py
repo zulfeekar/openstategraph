@@ -766,6 +766,39 @@ class NodeRuntime:
         #: the stream fold could resolve, and node ids legally carry colons
         #: that LangGraph node names may not.
         self.machinery_nodes: set[str] = set()
+        #: Graph-node name -> canvas node id, for **this document and every
+        #: document mounted under it** (tickets 33/34).
+        #:
+        #: The API already builds this map for the document being run, from
+        #: its own plan. What it could not build is the same map for a *child*:
+        #: a mount compiles a second document whose ids the parent has never
+        #: heard of, so a frame from inside it reached the browser carrying
+        #: `agent_sql` — `safe_name` of the child's `agent-sql` — which no
+        #: document on the canvas contains. Opening the mount mid-run therefore
+        #: showed a static diagram: every frame named a node that document did
+        #: not have, and lighting nothing was the only honest answer left.
+        #:
+        #: Unioned upward in `_subgraph` for exactly the reason
+        #: `machinery_nodes` is: the child's frames ride the PARENT's one SSE
+        #: stream, so the parent's stream fold is the only place that can
+        #: resolve them. The parent's own entries win a collision — `in1` and
+        #: `router1` are shared by `concierge` and `chinook-assistant` today —
+        #: though both spellings agree wherever `safe_name` is the identity.
+        self.node_ids_by_name: dict[str, str] = {}
+        #: Mount canvas node id -> the workflow slug it descends into, for
+        #: this document and every document mounted under it.
+        #:
+        #: `node_ids_by_name` alone cannot say *which document* a resolved id
+        #: belongs to, and that is not a theoretical gap: the shipped
+        #: `concierge` mounts `chinook-assistant`, and both documents have an
+        #: `in1`, a `router1` and an `out1`. Without this, a client with the
+        #: child open would light its `router1` when the PARENT's router ran —
+        #: a second, quieter version of the lie tickets 33/34 are about.
+        #:
+        #: With it, every level of a run's path can name the document it
+        #: happened in, and a client matches on the slug it has open rather
+        #: than on an id that two documents may share.
+        self.mount_slugs: dict[str, str] = {}
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             # NOT `_input`. A skill source is a *static text source*, not the
@@ -804,6 +837,10 @@ class NodeRuntime:
         for node_id, node_type in self._types.items():
             if node_type in MACHINERY_NODE_TYPES:
                 self.machinery_nodes.update({node_id, safe_name(node_id)})
+            # Recorded for every node, not only the machinery ones: this map
+            # answers "which card is this frame about", and that question is
+            # asked of every step a mounted document runs.
+            self.node_ids_by_name.setdefault(safe_name(node_id), node_id)
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
             return self.builder_for(str(node.get("type", "")))(node_id, node, plan)
@@ -1864,18 +1901,50 @@ class NodeRuntime:
                     _ancestry=(*self._ancestry, slug),
                 )
                 child_factory = child_runtime.factory(child_document)
-                # Inherited *upwards*, unlike everything else about a child
-                # runtime, and deliberately: the child's frames ride the
-                # PARENT's one SSE stream, so the parent's stream fold is the
-                # only place that can withhold them. Taken after `factory()`,
-                # which is what populates the set.
-                self.machinery_nodes |= child_runtime.machinery_nodes
                 child_graph = WorkflowCompiler().build(
                     child_document,
                     RunState,
                     child_factory,
                     store=self.store,
                 )
+                # Inherited *upwards*, unlike everything else about a child
+                # runtime, and deliberately: the child's frames ride the
+                # PARENT's one SSE stream, so the parent's stream fold is the
+                # only place that can withhold them.
+                #
+                # Taken after `build()`, not after `factory()`, and the
+                # difference is a whole level of nesting. `factory()` populates
+                # the set for the child's *own* document; a mount inside the
+                # child is resolved during `build()`, so a grandchild's names
+                # land on `child_runtime` only once that call has returned.
+                # Reading the set before it — which this line used to do,
+                # under a comment naming `factory()` as what populated it —
+                # left ticket 25's leak open at exactly two levels down: for A
+                # mounts B mounts C, C's router and grader names never reached
+                # the fold, so C's raw branch name could still surface in a
+                # customer's answer. The comment was the bug's best disguise,
+                # since it described a true thing about the first level and
+                # nothing about the rest.
+                self.machinery_nodes |= child_runtime.machinery_nodes
+                # Same direction and the same reason as `machinery_nodes`,
+                # different question: the child's name->id map is what lets a
+                # frame from inside this mount say which card of the CHILD's
+                # canvas it is about. Without it the only ids on the wire
+                # belong to documents the viewer may not have open (tickets
+                # 33/34). `setdefault` keeps this document's own answer
+                # authoritative where two documents share an id — `concierge`
+                # and `chinook-assistant` both have `in1` and `router1`.
+                #
+                # Taken after `build()`, not after `factory()`: a mount inside
+                # the child is resolved by that build, so a grandchild's ids
+                # only exist on `child_runtime` once it has run.
+                for name, canvas_id in child_runtime.node_ids_by_name.items():
+                    self.node_ids_by_name.setdefault(name, canvas_id)
+                # Which document each level of a run's path happened in. Set
+                # for this mount, then inherited for the mounts inside it.
+                self.mount_slugs[node_id] = slug
+                for mount_id, mounted_slug in child_runtime.mount_slugs.items():
+                    self.mount_slugs.setdefault(mount_id, mounted_slug)
 
         if child_graph is None:
             label = slug or "(no workflow selected)"
