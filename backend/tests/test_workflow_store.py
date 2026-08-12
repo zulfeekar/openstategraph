@@ -13,6 +13,7 @@ import pytest
 
 from openstategraph.api.workflow_store import (
     InvalidSlugError,
+    SlugMintingError,
     WorkflowNotFoundError,
     WorkflowStore,
     slugify,
@@ -87,6 +88,97 @@ class TestSaveAndLoad:
         (directory / "workflow.json").write_text('{"version": 1, "nodes": [], "edges": []}')
 
         assert store.load("hand-authored") == {"version": 1, "nodes": [], "edges": []}
+
+
+class TestCreateMintsAUniqueSlug:
+    """Ticket 20 — the collision that silently destroyed work.
+
+    The reproduction, run before anything was changed: `slugify("My
+    Workflow")` twice gives `my-workflow` twice, `save` did
+    `mkdir(exist_ok=True)` and wrote, and the second workflow's document came
+    back for *both* slugs — one directory on disk, the first workflow gone
+    with no error. Everything below is that path, closed.
+    """
+
+    def test_the_first_workflow_of_a_name_keeps_the_clean_slug(
+        self, store: WorkflowStore
+    ) -> None:
+        assert store.create(name="My Workflow", document={}, saved_at="t") == "my-workflow"
+
+    def test_a_second_workflow_of_the_same_name_cannot_overwrite_the_first(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        first = store.create(
+            name="My Workflow", document={"nodes": [{"id": "alice"}]}, saved_at="t1"
+        )
+        second = store.create(
+            name="My Workflow", document={"nodes": [{"id": "bob"}]}, saved_at="t2"
+        )
+
+        assert second != first
+        assert store.load(first) == {"nodes": [{"id": "alice"}]}
+        assert store.load(second) == {"nodes": [{"id": "bob"}]}
+        assert sorted(p.name for p in tmp_path.iterdir()) == sorted([first, second])
+
+    def test_the_disambiguator_is_the_name_plus_a_short_suffix(
+        self, store: WorkflowStore
+    ) -> None:
+        store.create(name="My Workflow", document={}, saved_at="t")
+        second = store.create(name="My Workflow", document={}, saved_at="t")
+        # Readable prefix preserved — the URL still says what it is.
+        assert second.startswith("my-workflow-")
+        assert len(second) == len("my-workflow-") + 6
+        # Round-trips through the store's own slug validation, so it is a
+        # legal directory name and a legal URL segment.
+        assert second == slugify(second)
+
+    def test_a_hidden_package_still_counts_as_taken(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        # Ticket 21's trap: `list()` omits hidden packages, so minting against
+        # a listing would hand out `concierge` on top of the live gateway.
+        store.save("concierge", name="Concierge", document={}, saved_at="t")
+        (tmp_path / "concierge" / "workflow.json").write_text(
+            '{"version": 1, "name": "Concierge", "hidden": true, "document": {}}'
+        )
+        assert store.list() == []
+
+        assert store.create(name="Concierge", document={"nodes": []}, saved_at="t2") != "concierge"
+
+    def test_a_directory_holding_no_workflow_json_is_still_taken(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        # Somebody's half-written package, or a `tools/` folder made by hand.
+        (tmp_path / "my-workflow").mkdir()
+        assert store.create(name="My Workflow", document={}, saved_at="t") != "my-workflow"
+
+    def test_a_created_workflow_is_a_draft_with_its_agents_md(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        slug = store.create(name="My Workflow", document={"nodes": []}, saved_at="t")
+        assert (tmp_path / slug / "AGENTS.md").is_file()
+        summary = store.describe(slug)
+        assert summary is not None and summary.published is False
+
+    def test_a_name_longer_than_the_filesystem_allows_is_still_creatable(
+        self, store: WorkflowStore
+    ) -> None:
+        slug = store.create(name="X" * 300, document={}, saved_at="t")
+        assert len(slug) <= 60
+        assert store.describe(slug) is not None
+
+    def test_it_raises_rather_than_overwriting_when_no_slug_can_be_claimed(
+        self, store: WorkflowStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import openstategraph.api.workflow_store as module
+
+        monkeypatch.setattr(module, "_candidate_slugs", lambda name: iter(["taken"]))
+        store.save("taken", name="Taken", document={"nodes": [{"id": "keep"}]}, saved_at="t")
+
+        with pytest.raises(SlugMintingError):
+            store.create(name="Taken", document={"nodes": []}, saved_at="t2")
+        # The point of the exception: the existing workflow is untouched.
+        assert store.load("taken") == {"nodes": [{"id": "keep"}]}
 
 
 class TestList:
@@ -258,3 +350,83 @@ class TestPublishLifecycle:
         self._write_envelope(tmp_path, "infra", hidden=True, published=True)
         assert store.list() == []
         assert store.list(published_only=True) == []
+
+
+class TestDescribeIsExistenceNotVisibility:
+    """Ticket 21: `list` answers what a surface advertises; `describe` answers
+    whether a package is there.
+
+    The two were one question, and the editor paid for it: `concierge` and
+    `workflow-architect` are `hidden: true`, so they are absent from
+    `GET /api/workflows` and present on disk — and the file watch, scanning
+    that listing for its own slug, announced "This workflow was deleted on
+    disk" over a file the backend was serving 200. These tests pin both
+    directions, because deleting the warning would trade a false positive for
+    a false negative: a stale copy of a genuinely deleted workflow is real.
+    """
+
+    def _write_envelope(self, root: Path, slug: str, **extra: object) -> None:
+        import json
+
+        directory = root / slug
+        directory.mkdir(parents=True)
+        (directory / "workflow.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "name": slug,
+                    "savedAt": "2026-01-01T00:00:00",
+                    "document": {"nodes": [], "edges": []},
+                    **extra,
+                }
+            )
+        )
+
+    def test_a_hidden_package_is_absent_from_the_listing_and_present_to_describe(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        self._write_envelope(tmp_path, "gateway", hidden=True)
+
+        assert store.list() == []
+
+        summary = store.describe("gateway")
+        assert summary is not None
+        assert summary.hidden is True
+        assert summary.saved_at == "2026-01-01T00:00:00"
+
+    def test_a_deleted_package_is_none_the_one_answer_that_means_gone(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        self._write_envelope(tmp_path, "gone", hidden=True)
+        store.delete("gone")
+        assert store.describe("gone") is None
+
+    def test_a_slug_that_never_existed_is_none(self, store: WorkflowStore) -> None:
+        assert store.describe("never-was") is None
+
+    def test_a_visible_package_reports_hidden_false(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        self._write_envelope(tmp_path, "visible")
+        summary = store.describe("visible")
+        assert summary is not None and summary.hidden is False
+
+    def test_an_unreadable_package_is_damaged_not_gone(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        # A file caught mid-write must not read as a deletion — it exists, it
+        # is simply not parseable this instant. The row carries `error` and an
+        # empty `saved_at`, which is "I cannot tell you when", not "gone".
+        (tmp_path / "damaged").mkdir()
+        (tmp_path / "damaged" / "workflow.json").write_text("{ not json")
+        summary = store.describe("damaged")
+        assert summary is not None
+        assert summary.error and summary.saved_at == ""
+
+    def test_a_malformed_slug_raises_rather_than_answering_gone(
+        self, store: WorkflowStore
+    ) -> None:
+        # "You asked a malformed question" and "the package is gone" are the
+        # two answers this method exists to keep apart.
+        with pytest.raises(InvalidSlugError):
+            store.describe("../etc")

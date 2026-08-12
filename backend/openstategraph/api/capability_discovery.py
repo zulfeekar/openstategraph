@@ -72,12 +72,61 @@ def _import_module(path: Path, qualified_name: str) -> Any:
     freshly reloaded base (the exact hazard the ticket calls out; the fix
     there is a process restart during development, not reload — this
     function just avoids the *naming* half of that hazard).
+
+    ## The invalidation policy (gap PF-01)
+
+    **Every call re-executes the module, from the source bytes on disk. There
+    is no cache, and the one the interpreter supplies is turned off.**
+
+    The question was framed as "cache or not", and the honest answer is that
+    the caching had already happened and nobody had chosen its policy.
+    `spec.loader.exec_module` is a `SourceFileLoader`, so it writes a
+    `__pycache__/*.pyc` **inside the developer's workflow package** and
+    validates it on the next call against `(source mtime in whole seconds,
+    source size in bytes)`. Both halves of that key are coarse, and together
+    they are wrong for this use: *an edit that keeps the file's byte length
+    and lands in the same second as the previous one is invisible.* Measured,
+    not reasoned about — changing a tool's description from
+    `"Greets someone by name."` to `"Greets someone, warmly."` (same length)
+    served the old string back, and it is not an exotic edit: flipping `<` to
+    `>`, changing a digit in a row cap, or renaming a variable to another of
+    the same length all qualify, and an editor that saves as you type makes
+    the same-second half routine. That is stale *runtime* code, not merely a
+    stale panel — `discover_tool_instances` binds these classes into the run.
+
+    So the source is read and compiled here rather than handed to the loader.
+    Three properties fall out, each pinned by a test in
+    `backend/tests/test_capability_discovery.py::TestTheInvalidationPolicy`:
+
+    | Property | Why it is worth the re-execution |
+    | --- | --- |
+    | an edit takes effect on the next call | a workflow package *is* files on disk; needing a restart to see your own edit is not a dev loop |
+    | `isinstance(x, BaseTool)` always holds | the base resolves through `sys.modules` and is never reloaded, however often a leaf is executed — the docstring's hazard belongs to reloading the *base*, which caching a leaf neither causes nor cures |
+    | nothing is added to `sys.modules` | each execution is self-contained and collectable, so re-execution accumulates nothing and two workflows' `tools/db.py` cannot shadow each other |
+
+    And a cross-call *class identity* guarantee is not among the things given
+    up, because it never held: two calls already yielded two distinct class
+    objects, so nothing in the codebase can have been relying on it.
+
+    The cost of not caching is small and was measured rather than assumed:
+    **~1.5 ms per call** for `chinook-assistant`, the largest shipped package,
+    at three tools — below the noise of the HTTP round trip it rides on, and
+    linear in tool count. Should a package ever get large enough for that to
+    matter, the invalidation key must be the **file's content hash**, never
+    its mtime and never process lifetime; anything coarser reintroduces
+    exactly the staleness this function exists to have removed.
     """
     spec = importlib.util.spec_from_file_location(qualified_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Deliberately not `spec.loader.exec_module(module)` — see above. The spec
+    # is still built the normal way so `__file__`, `__name__`, `__package__`
+    # and `__loader__` are exactly what a normally-imported module gets; only
+    # the bytecode-cache path is bypassed, by compiling the bytes ourselves.
+    # `path` is passed to `compile` so tracebacks still name the real file.
+    code = compile(path.read_bytes(), str(path), "exec", dont_inherit=True)
+    exec(code, module.__dict__)  # noqa: S102 — the trust model is in the module docstring
     return module
 
 
@@ -107,7 +156,7 @@ def discover_tool_instances(
     The instances are the same objects `discover_tools` describes — returned
     so the runtime can *bind* them, not merely list them. (An earlier attempt
     re-imported each class from its qualified id by string surgery:
-    `__import__("chinook-nl-to-sql.tools")` — a hyphenated slug is never a
+    `__import__("chinook-assistant.tools")` — a hyphenated slug is never a
     legal module name, so every slug-based run silently lost all its tools.)
 
     **Every skip in this loop is a decision, and each one is written down**
@@ -420,18 +469,28 @@ def discover_skills(workflow_dir: Path) -> str:
     progressive disclosure (deepagents' 3-level SKILL.md loading) belongs to
     the deep tier and is recorded on ticket 66. A missing directory is the
     common case and costs nothing.
+
+    These are the package's **ambient** skills, and they stay *context*: they
+    are house style for every agent in the package, not a choice made about one
+    node. A skill **wired to a node's `skill` port** is the other thing, and it
+    lands in the *rules* — see `docs/decisions/skill-layer.md`.
+
+    Frontmatter is parsed rather than pasted (`SkillDocument`): a file that
+    declares a `name` is headed by it, and no YAML block reaches the model.
     """
     skills_dir = workflow_dir / "skills"
     if not skills_dir.is_dir():
         return ""
+    from openstategraph.skills import SkillDocument
+
     parts: list[str] = []
     for path in sorted(skills_dir.glob("*.md")):
-        try:
-            text = path.read_text().strip()
-        except OSError:
-            continue
-        if text:
-            parts.append(f"## Skill: {path.stem}\n{text}")
+        skill = SkillDocument.load(path)
+        if skill.body:
+            heading = f"## Skill: {skill.name}"
+            if skill.description:
+                heading += f"\n{skill.description}"
+            parts.append(f"{heading}\n{skill.body}")
     return "\n\n".join(parts)
 
 

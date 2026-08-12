@@ -89,12 +89,17 @@ class RunRequest(BaseModel):
     #: so a document can bind the tools that live beside it. Optional and
     #: additive — omitting it runs with the default registry, never a crash.
     workflow_slug: str | None = None
-    #: Editor-only (never `/chat`): give every agent one extra context block
-    #: telling it to name a missing capability and emit a ```suggestion fence
-    #: the editor can turn into a real node. Off by default, so the customer
-    #: chat surface — which simply never sets it — can never be told to
-    #: propose edits to a workflow its user cannot edit.
-    advisor: bool = False
+    #: Who this run is for. `developer` additionally gets the `developer`
+    #: channel on the `done` frame (authoring warnings, capability
+    #: suggestions) and gives every agent the advisor context block that lets
+    #: it name a missing capability. `customer` — the default, and what
+    #: `/chat` sends by never setting this — gets the answer and the run.
+    #:
+    #: One field rather than the `advisor` boolean it replaces: the boolean
+    #: was the same fact spelled a second way, and a flag and an audience can
+    #: disagree. See `api/audience.py` for the raw payload that proved they
+    #: did.
+    audience: Literal["customer", "developer"] = "customer"
     #: Per-request provider credentials, e.g. `{"ANTHROPIC_API_KEY": "..."}`.
     #: The editor's "Models and credentials" dialog stores keys in the
     #: browser; without this field they would only ever reach the in-browser
@@ -131,12 +136,13 @@ class ResumeRequest(BaseModel):
     #: would die at validation. A resumed run must also bind the *same*
     #: tool set as the run it resumes.
     workflow_slug: str | None = None
-    #: Same as `RunRequest.advisor`, and it must exist on BOTH models for the
+    #: Same as `RunRequest.audience`, and it must exist on BOTH models for the
     #: same reason `workflow_slug` does: this model forbids extras, so the
-    #: editor — which sets the flag on every send — would 422 on every
-    #: approval resume if only `RunRequest` carried it. A resumed run must
-    #: also compose the *same* agent context as the run it resumes.
-    advisor: bool = False
+    #: editor — which declares its audience on every send — would 422 on every
+    #: approval resume if only `RunRequest` carried it. A resumed run must also
+    #: compose the *same* agent context, and be entitled to the same channel,
+    #: as the run it resumes.
+    audience: Literal["customer", "developer"] = "customer"
     #: Same as `RunRequest.credentials`, and for the same "must exist on
     #: BOTH models" reason as `workflow_slug` above: this model forbids
     #: extras, so a client that sends credentials on the run must be able to
@@ -144,15 +150,44 @@ class ResumeRequest(BaseModel):
     credentials: dict[str, str] | None = None
 
 
+class DeveloperChannelResponse(BaseModel):
+    """What only a workflow editor may see — see `api/audience.py`.
+
+    One object rather than loose fields, because "developer-only" is the
+    property they share and it should be visible in the contract: a reader of
+    this schema can tell at a glance which half of a run is guidance about the
+    workflow and which half is the answer to the question.
+    """
+
+    #: Plan findings plus `runtime_warnings()`: unbound tools, unresolved
+    #: functions and subgraphs, mount overrides, discovery failures.
+    warnings: list[str] = []
+    #: The capability-gap suggestion the run produced, if any. Free-form here
+    #: on purpose — the editor validates it against its *live* registry and
+    #: canvas (`src/view/ask/suggestion.ts`), which is a question no schema on
+    #: this side can answer.
+    suggestion: dict[str, Any] | None = None
+
+
 class RunResponse(BaseModel):
     answer: str
+    #: The thread this run happened in. Send it back as `thread_id` on the
+    #: next question and that question is the next *turn* — the same contract
+    #: every terminal SSE frame carries. Top level, not in `developer`: a
+    #: customer surface needs continuity as much as an editor does, and the
+    #: streaming side already discloses it to both.
+    thread_id: str = ""
     #: node id -> branch taken, so the editor can highlight the path that ran.
     decisions: dict[str, str] = {}
     #: node id -> that node's output, for per-node inspection in the sidebar.
     outputs: dict[str, str] = {}
     attempts: int = 0
     mermaid: str = ""
-    warnings: list[str] = []
+    #: Present only for `audience: "developer"`. Absent — not empty — for a
+    #: customer, so nothing can read "there were no warnings" out of a
+    #: response that was never entitled to carry any. `warnings` used to sit
+    #: at the top level and reach every caller; see `docs/api.md`.
+    developer: DeveloperChannelResponse | None = None
 
 
 class SaveWorkflowRequest(BaseModel):
@@ -192,6 +227,14 @@ class WorkflowSummaryResponse(BaseModel):
     #: Draft→publish lifecycle (launch-readiness ticket 04). Drafts stay off
     #: the customer /chat surface until published.
     published: bool = True
+    #: Whether this package is advertised on any surface (ticket 21).
+    #: `GET /api/workflows?surface=editor` (the default) returns hidden
+    #: packages too, so this flag carries real information there — the editor
+    #: uses it to mark a row as hidden. It is always ``False`` on
+    #: `surface=chat`, which omits hidden packages outright, and it carries
+    #: real information on `GET /api/workflows/{slug}/summary`, the endpoint
+    #: that answers existence rather than visibility.
+    hidden: bool = False
 
 
 class PublishWorkflowRequest(BaseModel):
@@ -367,7 +410,98 @@ class KnowledgeTopicDocResponse(BaseModel):
     stale: bool
 
 
+class SqlTableResponse(BaseModel):
+    """One table a workflow's SQL tools can reach."""
+
+    name: str
+    #: Columns, types, primary key and foreign keys both directions, Markdown.
+    detail: str
+
+
+class SqlSourceResponse(BaseModel):
+    """One database the document's SQL tool nodes are wired to."""
+
+    #: Workflows-root-relative path (SQLite) or the connection URL.
+    database: str
+    engine: str
+    tables: list[SqlTableResponse] = []
+    #: Recognized but not fully readable, or a truncated table list. Reported
+    #: rather than served as an empty list that reads as "no tables".
+    warning: str = ""
+
+
+class SqlSchemaResponse(BaseModel):
+    """`GET /api/workflows/{slug}/sql-schema` — the agent's field of view.
+
+    The schema tools take their table as a *model* argument: the agent sees
+    every table and picks. This is that same set, read from the same file, so
+    the editor can show it instead of implying a per-node table choice that
+    the runtime never had.
+    """
+
+    sources: list[SqlSourceResponse] = []
+
+
 class KnowledgeTopicSaveRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     body: str
+
+
+class ThreadStep(BaseModel):
+    """One checkpoint of a past run — the state as it stood at that moment.
+
+    A *view*, never a re-execution: these values were recorded while the run
+    happened and are read straight back out of the checkpointer. Nothing is
+    called again, so no tool sends a second email and no model is billed
+    twice.
+    """
+
+    checkpoint_id: str
+    #: LangGraph's own superstep counter. `-1` is the input that started it.
+    step: int
+    at: str = Field(description="ISO-8601 timestamp the checkpoint was written.")
+    #: LangGraph's `metadata.source`: `input`, `loop`, `update` or `fork`.
+    source: str
+    #: The run's state at this checkpoint, every value rendered as text.
+    #: Internal channels (`__*`, `branch:to:*`) are left out — they are the
+    #: scheduler's bookkeeping, not the run's story.
+    values: dict[str, str]
+
+
+class ThreadSummary(BaseModel):
+    """One past run, identified by the thread the checkpointer stored it under.
+
+    `session_id` and `user_email` are read back from the checkpoint metadata,
+    where LangGraph persists every non-private `configurable` key. They are
+    therefore exactly what the *transport* supplied on the run — never
+    anything the model claimed about itself.
+    """
+
+    thread_id: str
+    workflow_slug: str
+    session_id: str
+    user_email: str
+    updated_at: str
+    #: How many checkpoints this thread holds; a rough sense of how far it got.
+    steps: int
+    question: str
+    answer: str
+    #: `paused` means the run stopped at an `interrupt()` and can be continued
+    #: with `POST /api/runs/resume` — which *does* execute. `finished` means
+    #: there is nothing pending; reading it back is all that is on offer.
+    status: Literal["paused", "finished"]
+
+
+class ThreadListResponse(BaseModel):
+    """`GET /api/threads` — past runs, newest first."""
+
+    threads: list[ThreadSummary]
+
+
+class ThreadHistoryResponse(BaseModel):
+    """`GET /api/threads/{thread_id}` — one past run, checkpoint by checkpoint."""
+
+    thread: ThreadSummary
+    #: Oldest first, so reading top to bottom is watching the run happen.
+    steps: list[ThreadStep]

@@ -238,6 +238,9 @@
     max-width: 88%; margin: 0 0 var(--space-2-5) auto; width: fit-content;
     padding: var(--space-2) var(--space-3); background: var(--accent-soft);
     border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl); font-size: var(--font-size-14);
+    /* Same containment as `.answer` below, found in the same screenshot: a
+       question with a URL in it ran off the right edge of its own bubble. */
+    overflow-wrap: anywhere; word-break: break-word;
   }
 
   /* The steps are an activity strip, not a log: one quiet line per step, on a
@@ -281,18 +284,34 @@
 
   /* Capped, like the editor's: a peek at the reasoning, not a transcript that
      pushes the answer off the screen. */
-  .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+  .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
   .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+  /* Containment (ticket 27). A URL is a normal thing for the Web Researcher
+     branch to answer with, and one arrived 400px wider than the card: the
+     prose around it wrapped, the link ran off the right edge and stopped
+     mid-word, and the card did not scroll to reach the rest. `overflow-x`
+     alone was never going to cover it — a long token has no break
+     opportunity, so it needs permission to break rather than somewhere to
+     scroll. Both are declared: `overflow-wrap: anywhere` is the specified
+     behaviour and also lets the token shrink its line box, `word-break` is
+     the legacy alias `.ask__answer` already carries. The scroll stays for
+     what genuinely cannot break — a wide table. */
   .answer {
     background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-xl);
     padding: var(--space-3-5) var(--space-4); margin-top: var(--space-2); overflow-x: auto; font-size: var(--font-size-14);
+    max-width: 100%; overflow-wrap: anywhere; word-break: break-word;
   }
   .answer > :first-child { margin-top: 0; } .answer > :last-child { margin-bottom: 0; }
   .answer h3, .answer h4, .answer h5 { margin: var(--space-3-5) 0 var(--space-1-5); font-size: var(--font-size-16); }
   .answer table { border-collapse: collapse; margin: var(--space-2) 0; }
   .answer td, .answer th { border: 1px solid var(--line); padding: var(--space-1) var(--space-2-5); }
   .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: var(--space-px) var(--space-1-5); font-size: var(--font-size-13); }
-  .answer pre { display: block; padding: var(--space-2-5) var(--space-3); overflow-x: auto; }
+  /* Wrapped, not scrolled. The Chinook answers' fenced SQL was wider than
+     the card and scrolled sideways with no visible scrollbar — so nothing
+     told the reader the rest of the query existed, which is the same outcome
+     as clipping it. A wrapped SELECT is uglier than a scrolled one and is
+     the only one of the two a customer can finish reading. */
+  .answer pre { display: block; padding: var(--space-2-5) var(--space-3); overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
   .error { color: var(--danger); }
   .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
 
@@ -1046,6 +1065,27 @@ async function stream(path, body, el, signal) {
             if (d.namespace && d.namespace[0]) tlNames["ns:" + d.namespace[0]] = d.label;
             el.scrollIntoView({ block: "end" });
           } else if (event === "token") {
+            // A token frame moves the marker too (ticket 02) — and it is the
+            // only frame that can move it *early*. `update` frames are emitted
+            // when a node finishes, so a diagram driven by updates alone shows
+            // the last node to COMPLETE: on a real run the mounted analyst
+            // streamed 100+ tokens over ~20s while the ring still sat on the
+            // router, which is the bug as it was reported.
+            //
+            // Not throttled here, and it does not need to be: `highlightFlow`
+            // returns immediately when the node is already the active one
+            // (`activeFlowName === name`), so a whole model turn costs one DOM
+            // change. That guard exists precisely because this path is hot.
+            // No step row and no timeline bar — a token is not a step.
+            //
+            // `d.activeNode` only, with no fallback to `d.node`: a token
+            // frame's own node is usually an inner step (`model`, `tools`, a
+            // node of a mounted document) that this diagram has no box for,
+            // and highlightFlow answers an unmatched name by clearing the ring
+            // entirely. An older backend that omits the field leaves the
+            // marker exactly where update frames put it — the behaviour that
+            // existed before this line.
+            highlightFlow(d.activeNode);
             tokens += d.content; thinking.textContent = tokens.slice(-600);
           } else if (event === "error") {
             // Terminal. The run is over, so the diagram stops claiming to be
@@ -1068,7 +1108,13 @@ async function stream(path, body, el, signal) {
             thinking.textContent = "";
             answer.hidden = false;
             answer.innerHTML = md(d.answer || "_no answer_");
-            if (d.warnings && d.warnings.length) answer.innerHTML += `<p class="error">${esc2(d.warnings.join("; "))}</p>`;
+            // No warnings rendered here any more, and the frame no longer
+            // carries any. `warnings` is authoring diagnostics — unbound tool
+            // types, unresolved functions, mount overrides, all naming node
+            // ids — and this page used to print them to the customer in red.
+            // They now ride the `developer` channel, which a run only gets by
+            // declaring `audience: "developer"`; this page never does. See
+            // `backend/openstategraph/api/audience.py` and `docs/api.md`.
             offerSave(el, d.answer || "");
           }
         }

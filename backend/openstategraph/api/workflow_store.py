@@ -17,19 +17,30 @@ argued out rather than assumed): renaming a workflow must not move its
 directory, or every reference to it — and its git history — breaks. The slug
 is derived once, from the name, at creation, and never changes; the display
 name inside `workflow.json` can change freely.
+
+**Minting a slug is the store's job, never a caller's** (ticket 20). A name is
+not unique and never was, so `slugify` alone is a *proposal*; only something
+holding the workflows directory can say whether that proposal is free. When a
+caller minted its own slug and handed it to :meth:`save`, two workflows named
+"My Workflow" both resolved to `my-workflow` and the second silently
+overwrote the first — destroyed work, reproduced before it was fixed. So
+creation is :meth:`create`, which mints and claims in one atomic step; `save`
+now only ever addresses a slug the caller already holds.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import secrets
 import shutil
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 # `workflows/<slug>/` sits at the repo root, the same as the seeded
-# `chinook-nl-to-sql` workflow — not inside the `backend/` package (ticket 12:
+# `chinook-assistant` workflow — not inside the `backend/` package (ticket 12:
 # Python-package code and authored-workflow content are different things with
 # different owners and different lifecycles). *Which* root that is, for a
 # process that may be an installed wheel rather than this checkout, is
@@ -39,6 +50,23 @@ from openstategraph.workflows_root import workflows_root
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
+#: The longest slug this store will *mint*. Not a validation rule — an existing
+#: directory of any length stays loadable — but a name pasted from a document
+#: title can exceed the filesystem's own 255-byte component limit, and a
+#: `mkdir` that fails with `OSError: File name too long` is a 500 where a
+#: shorter directory would have been fine.
+_MAX_MINTED_SLUG = 60
+
+#: The disambiguator's alphabet: digits and lowercase letters with `0`, `1`,
+#: `l` and `o` removed, so a slug read aloud or copied out of a chat message
+#: cannot be mistyped into a different workflow.
+_SUFFIX_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz"
+_SUFFIX_LENGTH = 6
+#: How many disambiguated candidates to try before giving up. With 32**6 ≈ 1.07
+#: billion suffixes, reaching the end means something is wrong with the disk,
+#: not that the space is full — and an unbounded loop would hide that.
+_MINT_ATTEMPTS = 8
+
 
 def slugify(name: str) -> str:
     """A stable, filesystem- and URL-safe identity, derived once from a name.
@@ -47,9 +75,38 @@ def slugify(name: str) -> str:
     why the slug is frozen. Falls back to a generic name rather than an empty
     string, since an empty slug would either collide with every other empty
     name or, worse, resolve to the workflows root itself.
+
+    **A proposal, not an identity.** This is a pure name→slug transform and
+    knows nothing about what is already on disk, so two workflows named the
+    same get the same answer from it. :meth:`WorkflowStore.create` is what
+    turns a proposal into an identity nobody else holds.
     """
     slug = _SLUG_RE.sub("-", name.strip().lower()).strip("-")
     return slug or "workflow"
+
+
+def _candidate_slugs(name: str) -> Iterator[str]:
+    """The bare slug first, then disambiguated variants of it.
+
+    **The first workflow of a given name keeps the clean slug.** A scheme that
+    suffixed every workflow would charge every user for a collision most never
+    have, and `my-workflow-k7m3qp` is a worse URL than `my-workflow` for no
+    gain. The suffix is the exception, not the rule.
+
+    The suffix is *random*, not a `-2`/`-3` counter, for two reasons. A counter
+    has to be derived from what already exists, so two clients creating the
+    same name at the same moment both compute `-2` and one of them still loses
+    — the very failure being fixed. And a counter states how many workflows of
+    that name a workspace holds, which is nobody's business in a URL. Six
+    characters rather than a full uuid4: `my-workflow-k7m3qp` is short enough
+    to read out and paste, where `my-workflow-3f2b9c1e-...` is a machine's
+    string in a human's address bar.
+    """
+    base = slugify(name)[:_MAX_MINTED_SLUG].strip("-") or "workflow"
+    yield base
+    for _ in range(_MINT_ATTEMPTS):
+        suffix = "".join(secrets.choice(_SUFFIX_ALPHABET) for _ in range(_SUFFIX_LENGTH))
+        yield f"{base[: _MAX_MINTED_SLUG - _SUFFIX_LENGTH - 1].strip('-')}-{suffix}"
 
 
 def _broken(slug: str, reason: str) -> WorkflowSummary:
@@ -67,8 +124,53 @@ def _broken(slug: str, reason: str) -> WorkflowSummary:
     )
 
 
+def _summarize(slug: str, path: Path) -> WorkflowSummary | None:
+    """One package's envelope, read and nothing else — the single place a
+    `workflow.json` becomes a `WorkflowSummary`.
+
+    Shared by `list` and `describe` on purpose: those two differ only in
+    *which* packages they are willing to report, and duplicating how a row is
+    built is how the two answers drift into disagreeing about the same file.
+
+    ``None`` means there is no `workflow.json` here — the only "does not
+    exist". Anything present but unreadable comes back as a `_broken` row, so
+    a caller can tell "gone" from "damaged"; a file caught mid-write is
+    damaged, not deleted.
+    """
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError(f"top level is a {type(payload).__name__}, not an object")
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        return _broken(slug, f"workflow.json is unreadable: {exc}")
+    document = payload.get("document", payload)
+    if not isinstance(document, dict):
+        return _broken(slug, "workflow.json holds no document object")
+    return WorkflowSummary(
+        slug=slug,
+        name=str(payload.get("name") or document.get("name") or slug),
+        saved_at=str(payload.get("savedAt") or ""),
+        node_count=len(document.get("nodes") or []),
+        edge_count=len(document.get("edges") or []),
+        published=payload.get("published") is not False,
+        hidden=payload.get("hidden") is True,
+    )
+
+
 class WorkflowNotFoundError(Exception):
     pass
+
+
+class SlugMintingError(Exception):
+    """Raised when :meth:`WorkflowStore.create` cannot claim any candidate.
+
+    Never expected in practice — the disambiguator has a billion values — so
+    it means the workflows root is unwritable or something is racing the
+    process. Its own exception rather than a silent overwrite: this is exactly
+    the condition the old code resolved by writing over somebody's workflow.
+    """
 
 
 class InvalidSlugError(Exception):
@@ -95,6 +197,11 @@ class WorkflowSummary:
     #: (`list(include_broken=True)`). Empty on every healthy row, which is what
     #: lets `if summary.error:` be the whole check.
     error: str = ""
+    #: The concierge-gateway flag (ticket 67): loadable by slug, never
+    #: advertised. Always ``False`` on a row that came out of :meth:`list`,
+    #: because that method filters hidden packages out — it is meaningful only
+    #: on :meth:`describe`, which answers *existence* rather than visibility.
+    hidden: bool = False
 
 
 class WorkflowStore:
@@ -129,7 +236,11 @@ class WorkflowStore:
         return candidate
 
     def list(
-        self, *, published_only: bool = False, include_broken: bool = False
+        self,
+        *,
+        published_only: bool = False,
+        include_broken: bool = False,
+        include_hidden: bool = False,
     ) -> list[WorkflowSummary]:
         """Every listable package. **Reads `workflow.json` and nothing else.**
 
@@ -150,49 +261,61 @@ class WorkflowStore:
             return []
         summaries: list[WorkflowSummary] = []
         for entry in sorted(self.root.iterdir()):
-            path = entry / "workflow.json"
-            if not path.is_file():
+            summary = _summarize(entry.name, entry / "workflow.json")
+            if summary is None:
                 continue
-            try:
-                payload = json.loads(path.read_text())
-                if not isinstance(payload, dict):
-                    raise ValueError(f"top level is a {type(payload).__name__}, not an object")
-            except (json.JSONDecodeError, OSError, ValueError) as exc:
+            if summary.error:
                 # One unreadable workflow must not blank the whole list —
                 # the same reasoning `workflowStore.ts`'s `listWorkflows`
                 # already applies on the frontend's own (soon to be former)
                 # localStorage store.
                 if include_broken:
-                    summaries.append(_broken(entry.name, f"workflow.json is unreadable: {exc}"))
-                continue
-            document = payload.get("document", payload)
-            if not isinstance(document, dict):
-                if include_broken:
-                    summaries.append(
-                        _broken(entry.name, "workflow.json holds no document object")
-                    )
+                    summaries.append(summary)
                 continue
             # A hidden workflow (the concierge gateway, ticket 67) is loadable
-            # by slug but never advertised — the list is the customer surface.
-            if payload.get("hidden") is True:
+            # by slug but never advertised to a **customer**.
+            #
+            # `hidden` is a customer-surface rule, and it was being applied to
+            # the developer's own catalogue too — so a developer who owns
+            # `concierge` and `workflow-architect` could not see that they
+            # exist, from the editor that edits them. That is ticket 21's
+            # "visibility is not existence" one level up: the flag answers
+            # *should a customer be offered this*, and the editor was reading
+            # it as *is there anything here*.
+            if summary.hidden and not include_hidden:
                 continue
             # Draft → publish lifecycle (ticket 04): `published` is a sibling
             # of `hidden` on the envelope. A missing field means published —
             # the back-compat default — and `hidden` above trumps it.
-            published = payload.get("published") is not False
-            if published_only and not published:
+            if published_only and not summary.published:
                 continue
-            summaries.append(
-                WorkflowSummary(
-                    slug=entry.name,
-                    name=str(payload.get("name") or document.get("name") or entry.name),
-                    saved_at=str(payload.get("savedAt") or ""),
-                    node_count=len(document.get("nodes") or []),
-                    edge_count=len(document.get("edges") or []),
-                    published=published,
-                )
-            )
+            summaries.append(summary)
         return sorted(summaries, key=lambda s: s.saved_at, reverse=True)
+
+    def describe(self, slug: str) -> WorkflowSummary | None:
+        """What this **one** package is — or ``None`` when there is no such
+        package on disk.
+
+        The existence question, kept apart from :meth:`list`'s visibility
+        question (ticket 21). `list` answers *what a surface advertises*, and
+        it is right to omit hidden packages and rubble from that answer; but
+        absence from a surface is not absence from the disk, and a caller that
+        reads it as such reports a live file as deleted. `concierge` and
+        `workflow-architect` are `hidden: true`, served 200 by
+        ``GET /api/workflows/{slug}``, and were exactly what the editor's file
+        watch kept declaring "deleted on disk".
+
+        So this reports every package the store can name: hidden ones with
+        ``hidden=True``, unreadable ones as a `_broken` row carrying `error`.
+        Only "there is no `workflow.json` under this slug" is ``None``, and
+        that is the one condition a caller may treat as deletion.
+
+        Raises `InvalidSlugError` rather than answering ``None`` for a slug
+        that cannot name a directory at all: "you asked a malformed question"
+        and "the package is gone" are the two answers this method exists to
+        keep apart, so it must not collapse them either.
+        """
+        return _summarize(slug, self.directory_for(slug) / "workflow.json")
 
     def load(self, slug: str) -> dict[str, Any]:
         path = self.directory_for(slug) / "workflow.json"
@@ -204,11 +327,76 @@ class WorkflowStore:
         document: dict[str, Any] = payload.get("document", payload)
         return document
 
-    def save(self, slug: str, *, name: str, document: dict[str, Any], saved_at: str) -> None:
-        directory = self.directory_for(slug)
-        is_new = not directory.exists()
-        directory.mkdir(parents=True, exist_ok=True)
+    def create(self, *, name: str, document: dict[str, Any], saved_at: str) -> str:
+        """Mint an unused slug for `name`, write the package, return the slug.
 
+        **This is the only way to bring a workflow into existence**, and it
+        exists because the alternative was silent data loss (ticket 20): the
+        editor used to `slugify` a name client-side and PUT to it, so a second
+        workflow named "My Workflow" landed on the first one's `my-workflow`
+        directory and overwrote it with no error, no prompt and no trace.
+
+        The claim is `mkdir(exist_ok=False)`, and that choice is the whole
+        safety argument. Asking first and writing second — `describe(slug) is
+        None`, then write — is a check-then-act race: two requests can both
+        find the slug free. `mkdir` *is* the check, performed by the
+        filesystem, atomically. It also answers the question a listing cannot:
+        `list()` omits hidden packages by design (ticket 21), so scanning it
+        for a free name would happily mint `concierge` on top of the live
+        gateway; a directory has no opinion about visibility.
+
+        Rubble counts as taken. A directory holding no readable
+        `workflow.json` is still somebody's half-written package or a `tools/`
+        folder created by hand, and quietly moving in on top of it is the
+        behaviour this method exists to remove.
+        """
+        for slug in _candidate_slugs(name):
+            directory = self.directory_for(slug)
+            try:
+                directory.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                continue
+            self._write(directory, name=name, document=document, saved_at=saved_at, is_new=True)
+            return slug
+        raise SlugMintingError(
+            f"could not find a free directory for {slugify(name)!r} "
+            f"after {_MINT_ATTEMPTS + 1} attempts"
+        )
+
+    def save(self, slug: str, *, name: str, document: dict[str, Any], saved_at: str) -> None:
+        """Overwrite the package at `slug` — a slug the caller already holds.
+
+        Deliberately still create-or-overwrite, because the slug is in the
+        path: naming a directory explicitly is how a script, the CLI or a test
+        writes a package it intends to own. What must never mint a slug by
+        guessing is the editor, and it no longer does — it calls
+        :meth:`create` and is told which slug it got.
+        """
+        directory = self.directory_for(slug)
+        # The *package*, not the directory, is what already exists: ticket 20's
+        # `create` claims the directory before anything is written into it, and
+        # a directory somebody made by hand for `tools/` is not a workflow
+        # either. Both used to count as "not new", so neither got its
+        # `AGENTS.md` or its draft flag.
+        is_new = not (directory / "workflow.json").is_file()
+        directory.mkdir(parents=True, exist_ok=True)
+        self._write(directory, name=name, document=document, saved_at=saved_at, is_new=is_new)
+
+    def _write(
+        self,
+        directory: Path,
+        *,
+        name: str,
+        document: dict[str, Any],
+        saved_at: str,
+        is_new: bool,
+    ) -> None:
+        """The bytes, once — shared by :meth:`create` and :meth:`save`.
+
+        The two differ only in how the directory came to be claimed; what a
+        `workflow.json` looks like is one piece of knowledge and lives here.
+        """
+        slug = directory.name
         payload = {"version": 1, "name": name, "savedAt": saved_at, "document": document}
         if is_new:
             # Ticket 04: a workflow born in the editor is a DRAFT. Publishing

@@ -76,6 +76,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
     from openstategraph.prebuilt_email import EMAIL_TOOLS
     from openstategraph.prebuilt_platform import PLATFORM_TOOLS
+    from openstategraph.prebuilt_session import SESSION_TOOLS
     from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
     from openstategraph.prebuilt_web import WEB_TOOLS
 
@@ -83,7 +84,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     try:
         builtin.update(chinook_tool_registry())
     except Exception:
-        # The bundled Chinook tools live in `workflows/chinook-nl-to-sql/tools`,
+        # The bundled Chinook tools live in `workflows/chinook-assistant/tools`,
         # which is only importable inside *this* checkout (pytest.ini puts that
         # directory on the path). Outside it — a consumer running their own
         # package through `load_workflow` — the import raises, and it used to
@@ -108,6 +109,12 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
         # Report delivery (full-sweep capability test): SMTP when configured,
         # loud .eml dry-run otherwise. Recipient is node config, never a model arg.
         EMAIL_TOOLS,
+        # Who is asking and which conversation this is (ticket 03). Identity
+        # already rode in `configurable` and already namespaced memory; this
+        # is the one seam that lets a prompt read it — and, like the email
+        # recipient, it takes no arguments, so the model can ask but never
+        # claim.
+        SESSION_TOOLS,
     ):
         builtin.update({tool.node_type: tool for tool in family})
 
@@ -142,8 +149,8 @@ def build_tool_registry(
     """Default tools, with installed plugins and then the workflow's own over.
 
     The defaults (Chinook) stay so documents that bind them — e.g. the
-    chinook-nl-to-sql example mounted as a subgraph elsewhere — keep working
-    from any workflow context. A slug adds
+    chinook-assistant example mounted as a subgraph by the gateway — keep
+    working from any workflow context. A slug adds
     that workflow's `tools/`, keyed by each tool's own `node_type`
     declaration (ticket 33); same-type collisions resolve workflow-wins,
     mirroring the frontend's local-shadows-global registry rule. A failed

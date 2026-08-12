@@ -45,7 +45,7 @@ def client() -> TestClient:
 class TestAsk:
     def test_a_question_returns_an_answer(self, client: TestClient) -> None:
         response = client.post(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             json={"question": "Which genre earns the most?", "model": "anthropic:x"},
         )
         assert response.status_code == 200, response.text
@@ -59,7 +59,7 @@ class TestAsk:
         # An answer a developer cannot check is not much use; the SQL is how they
         # tell a right answer from a plausible one.
         body = client.post(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             json={"question": "q", "model": "anthropic:x"},
         ).json()
         assert "InvoiceLine" in body["sql"]
@@ -69,7 +69,7 @@ class TestAsk:
         graph = StubGraph(GOOD_FINAL)
         c = TestClient(create_app(graph_factory=lambda _m: graph))
         c.post(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             json={"question": "q", "model": "anthropic:x", "recursion_limit": 42},
         )
         # Inside `configurable` it silently does nothing — the common mistake.
@@ -78,13 +78,13 @@ class TestAsk:
 
     def test_an_empty_question_is_rejected(self, client: TestClient) -> None:
         response = client.post(
-            "/api/workflows/chinook-nl-to-sql/ask", json={"question": "", "model": "x"}
+            "/api/workflows/chinook-assistant/ask", json={"question": "", "model": "x"}
         )
         assert response.status_code == 422
 
     def test_unknown_fields_are_rejected(self, client: TestClient) -> None:
         response = client.post(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             json={"question": "q", "model": "x", "surprise": 1},
         )
         assert response.status_code == 422
@@ -96,7 +96,7 @@ class TestAsk:
 
         c = TestClient(create_app(graph_factory=lambda _m: Exploding()))
         response = c.post(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             json={"question": "q", "model": "anthropic:x"},
         )
         assert response.status_code == 502
@@ -165,7 +165,7 @@ class TestModelResolution:
 
 class TestGraphPreview:
     def test_the_preview_needs_no_model(self, client: TestClient) -> None:
-        response = client.get("/api/workflows/chinook-nl-to-sql/graph")
+        response = client.get("/api/workflows/chinook-assistant/graph")
         assert response.status_code == 200
         diagram = response.json()["mermaid"]
         # The generic {slug} endpoint compiles the CANVAS document (ticket
@@ -175,14 +175,14 @@ class TestGraphPreview:
             assert node in diagram
 
     def test_the_preview_never_calls_a_third_party(self, client: TestClient) -> None:
-        diagram = client.get("/api/workflows/chinook-nl-to-sql/graph").json()["mermaid"]
+        diagram = client.get("/api/workflows/chinook-assistant/graph").json()["mermaid"]
         assert "mermaid.ink" not in diagram
 
 
 class TestCors:
     def test_the_editor_origin_is_allowed_and_not_a_wildcard(self, client: TestClient) -> None:
         response = client.options(
-            "/api/workflows/chinook-nl-to-sql/ask",
+            "/api/workflows/chinook-assistant/ask",
             headers={
                 "Origin": "http://localhost:5273",
                 "Access-Control-Request-Method": "POST",
@@ -572,6 +572,43 @@ class TestWorkflowPersistence:
         loaded = client.get("/api/workflows/my-flow").json()
         assert loaded["document"] == document
 
+    def test_creating_two_workflows_of_one_name_returns_two_slugs(self, tmp_path: Path) -> None:
+        """Ticket 20, over HTTP: the shape the editor now uses.
+
+        The old path was `PUT /api/workflows/{slugify(name)}` from the
+        browser, which answered 200 twice and left one directory holding the
+        second document.
+        """
+        client = self._client(tmp_path)
+
+        first = client.post(
+            "/api/workflows", json={"name": "My Workflow", "document": {"nodes": [{"id": "a"}]}}
+        )
+        second = client.post(
+            "/api/workflows", json={"name": "My Workflow", "document": {"nodes": [{"id": "b"}]}}
+        )
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+
+        first_slug, second_slug = first.json()["slug"], second.json()["slug"]
+        assert first_slug == "my-workflow"
+        assert second_slug != first_slug and second_slug.startswith("my-workflow-")
+
+        assert client.get(f"/api/workflows/{first_slug}").json()["document"] == {
+            "nodes": [{"id": "a"}]
+        }
+        assert client.get(f"/api/workflows/{second_slug}").json()["document"] == {
+            "nodes": [{"id": "b"}]
+        }
+        assert len(client.get("/api/workflows").json()) == 2
+
+    def test_a_created_workflow_is_a_draft(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        slug = client.post("/api/workflows", json={"name": "Draft Me", "document": {}}).json()[
+            "slug"
+        ]
+        assert client.get(f"/api/workflows/{slug}/summary").json()["published"] is False
+
     def test_loading_an_unknown_workflow_is_a_404(self, tmp_path: Path) -> None:
         client = self._client(tmp_path)
         response = client.get("/api/workflows/does-not-exist")
@@ -716,14 +753,69 @@ class TestPublishLifecycle:
         chat = client.get("/api/workflows", params={"surface": "chat"}).json()
         assert [r["slug"] for r in chat] == ["live"]
 
-    def test_hidden_trumps_published_on_every_surface(self, tmp_path: Path) -> None:
+    def test_hidden_trumps_published_on_the_customer_surface(self, tmp_path: Path) -> None:
+        """`published: true` does not buy a hidden package a customer listing.
+
+        The rule is per-audience, not global. A hidden package is absolute for
+        the customer and *marked* for the developer — hiding a developer's own
+        packages from their own editor was never what this flag meant.
+        """
         self._seed(tmp_path, "infra", hidden=True, published=True)
         client = self._client(tmp_path)
-        assert client.get("/api/workflows").json() == []
         assert client.get("/api/workflows", params={"surface": "chat"}).json() == []
+        assert [r["slug"] for r in client.get("/api/workflows").json()] == ["infra"]
 
     def test_an_unknown_surface_is_rejected(self, tmp_path: Path) -> None:
         response = self._client(tmp_path).get("/api/workflows", params={"surface": "nope"})
+        assert response.status_code == 422
+
+    def test_the_summary_endpoint_answers_existence_where_the_listing_answers_visibility(
+        self, tmp_path: Path
+    ) -> None:
+        """Ticket 21, sharpened. `infra` is hidden, so the **customer**
+        surface does not list it — and every existence question still says
+        yes. The editor's file watch used to read the first answer as the
+        second and report a live file as deleted on disk.
+
+        The editor now lists it, marked. `hidden` answers *should a customer
+        be offered this*, and applying that to the developer's own catalogue
+        was the same mistake one level up: a developer who owns `concierge`
+        and `workflow-architect` could not see they exist, from the editor
+        that edits them."""
+        self._seed(tmp_path, "infra", hidden=True, published=True)
+        client = self._client(tmp_path)
+
+        assert client.get("/api/workflows", params={"surface": "chat"}).json() == []
+        editor = client.get("/api/workflows").json()
+        assert [row["slug"] for row in editor] == ["infra"]
+        assert editor[0]["hidden"] is True, "listed, but never disguised as ordinary"
+        assert client.get("/api/workflows/infra").status_code == 200
+
+        summary = client.get("/api/workflows/infra/summary")
+        assert summary.status_code == 200, summary.text
+        assert summary.json()["hidden"] is True
+        assert summary.json()["saved_at"] == "t"
+
+    def test_a_deleted_workflow_is_a_404_from_the_summary_endpoint(self, tmp_path: Path) -> None:
+        """The other half, and the reason the warning must not just be
+        deleted: a genuinely gone package is still reported gone."""
+        self._seed(tmp_path, "doomed", hidden=True)
+        client = self._client(tmp_path)
+        assert client.get("/api/workflows/doomed/summary").status_code == 200
+
+        assert client.delete("/api/workflows/doomed").status_code == 204
+        assert client.get("/api/workflows/doomed/summary").status_code == 404
+
+    def test_a_listed_workflow_reports_hidden_false(self, tmp_path: Path) -> None:
+        self._seed(tmp_path, "visible", published=True)
+        client = self._client(tmp_path)
+        assert client.get("/api/workflows").json()[0]["hidden"] is False
+        assert client.get("/api/workflows/visible/summary").json()["hidden"] is False
+
+    def test_a_malformed_slug_is_a_422_not_a_404(self, tmp_path: Path) -> None:
+        # "That is not a slug" must not be answerable as "it is gone" — a
+        # client that treats 404 as deletion would act on a typo.
+        response = self._client(tmp_path).get("/api/workflows/Not A Slug/summary")
         assert response.status_code == 422
 
     def test_publish_round_trip(self, tmp_path: Path) -> None:

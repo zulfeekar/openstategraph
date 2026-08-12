@@ -225,18 +225,25 @@ class WorkflowServices:
         document: dict[str, Any],
         model: Any,
         *,
-        advisor: bool = False,
+        audience: Any = None,
         knowledge_dir: Any = None,
         warnings: list[str] | None = None,
     ) -> Any:
         """One NodeRuntime construction shared by run/stream/resume — and now
         by MCP — so the call sites can never disagree about capabilities again.
 
-        `advisor` is the editor-only capability-gap flag: it turns the tool
-        catalogue into an extra agent context block (see `advisor_context`).
+        `audience` is the **generation** half of the audience boundary (see
+        `api/audience.py`): only a `DEVELOPER` run gets the tool catalogue as
+        an extra agent context block, so a customer run's agents are never
+        told to propose an edit in the first place. The transport half lives
+        in `streaming._stream_run`, which splits the fence out of the answer
+        whatever the audience — two gates because they fail differently, one
+        stopping us asking for it and one stopping it arriving anyway.
+
         Passed per call rather than baked in, because the same process serves
         the editor, `/chat` and MCP, and only one of them may ever propose
-        edits to the canvas.
+        edits to the canvas. Defaults to `CUSTOMER`: a caller that forgets
+        gets the safe run, not the loud one.
 
         `knowledge_dir` is `load_workflow`'s explicit second-brain override.
         None — every transport but the artifact loader — keeps the convention
@@ -244,6 +251,7 @@ class WorkflowServices:
         child still seeks its own package's knowledge, the same isolation
         ticket 67 established for skills.
         """
+        from openstategraph.api.audience import Audience, resolve as resolve_audience
         from openstategraph.api.capability_discovery import discover_skills
         from openstategraph.compile.node_runtime import (
             NodeRuntime,
@@ -252,9 +260,11 @@ class WorkflowServices:
         )
         from openstategraph.api.registries import suggestible_tool_catalog
 
+        for_audience = resolve_audience(audience)
+
         # Built once. `build_tool_registry` globs `tools/*.py` and
         # `exec_module`s every one of them (it deliberately bypasses
-        # `sys.modules`), so calling it twice — as the `advisor=True` path did,
+        # `sys.modules`), so calling it twice — as the developer path did,
         # once for `tools` and again for `advisor_catalog` — re-executed every
         # tool module of the open package on every editor run.
         # Every capability that failed to LOAD lands here — a half-installed
@@ -296,7 +306,11 @@ class WorkflowServices:
                 # open package auto-binds the lookup tool to every agent.
                 knowledge_package_dir=(store.directory_for(slug) if slug else None),
                 knowledge_dir_override=knowledge_dir,
-                advisor_catalog=(suggestible_tool_catalog(tools) if advisor else ""),
+                advisor_catalog=(
+                    suggestible_tool_catalog(tools)
+                    if for_audience is Audience.DEVELOPER
+                    else ""
+                ),
             )
         )
         runtime.capability_warnings.extend(capability_warnings)

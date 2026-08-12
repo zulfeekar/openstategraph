@@ -27,9 +27,8 @@ from typing import Any
 
 from openstategraph.knowledge import BaseKnowledge, PackageKnowledge
 from openstategraph.knowledge_builders import (
+    BUILDERS,
     CLAIMED_HASH_COMMENT,
-    RootKnowledgeBuilder,
-    SqlKnowledgeBuilder,
     claimed_hash,
     marker_hash,
     marker_source,
@@ -66,9 +65,18 @@ def current_source_hashes(
 ) -> dict[str, str]:
     """topic → hash of its *current* brief, recomputed through the mechanical
     builders' adapters. Failures yield an empty map (no badge) — a staleness
-    hint must never break the listing."""
+    hint must never break the listing.
+
+    Which builders is read off the **registry**, filtered by the builder's own
+    ``mechanical`` flag. It used to be the literal pair
+    ``(SqlKnowledgeBuilder(), RootKnowledgeBuilder())``, which meant a
+    mechanical builder added anywhere else — a plugin's, or this project's own
+    ``ProjectKnowledgeBuilder`` — wrote docs that could never be badged stale,
+    silently. A second list of the builders is the duplication-of-knowledge
+    defect; `BUILDERS` is the one list.
+    """
     hashes: dict[str, str] = {}
-    for builder in (SqlKnowledgeBuilder(), RootKnowledgeBuilder()):
+    for builder in [b for b in BUILDERS if b.mechanical]:
         try:
             discovery = builder.discover(workflow_dir, document, workflows_root)
         except Exception:

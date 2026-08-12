@@ -9,6 +9,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from openstategraph.api.audience import (  # noqa: E402
+    AnswerChannel,
+    Audience,
+    DeveloperChannel,
+    clean_output as _clean_output,
+    split_suggestion,
+)
+from openstategraph.developer_channel import ProseGuard  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 
 
@@ -51,6 +59,17 @@ def _tool_calls_of(message: Any) -> list[dict[str, Any]]:
     if calls is None and isinstance(message, dict):
         calls = message.get("tool_calls")
     return [c for c in (calls or []) if isinstance(c, dict)]
+
+
+def _is_tool_message(message: Any) -> bool:
+    """Whether a streamed message is a tool's *result* rather than model text.
+
+    Duck-typed on LangChain's own `type` discriminator rather than
+    `isinstance(message, ToolMessage)`: the `messages` stream yields chunk
+    classes (`ToolMessageChunk`) as well as settled messages, and both answer
+    `"tool"` here, so one test covers the family without importing it.
+    """
+    return str(getattr(message, "type", "")) == "tool"
 
 
 class SpawnWatcher:
@@ -202,6 +221,14 @@ class ActiveNodeResolver:
     fact about the run and two implementations of it is two chances to drift
     (`AskPanel`'s canvas highlight and `chat.html`'s `highlightFlow` had
     already drifted from each other).
+
+    **Applied to `token` frames as well as `update` frames** (ticket 02).
+    Resolving correctly is only half the answer: `updates` fires when a node
+    *completes*, so a highlight fed by update frames alone shows who last
+    finished and never who is now working. Tokens are the only frames that
+    arrive mid-node, so they are what makes the glow move at the START of a
+    step. One resolver instance sees both streams, so the two cannot disagree
+    about where the run is.
 
     One instance per run, like `SpawnWatcher` — the stickiness is the state.
     """
@@ -387,6 +414,7 @@ def _stream_run(
     node_ids_by_name: dict[str, str],
     runtime: Any,
     thread_id: str,
+    audience: Audience = Audience.CUSTOMER,
 ) -> Any:
     """The stream, with its ending guaranteed (UX-02).
 
@@ -396,6 +424,17 @@ def _stream_run(
     > **Every stream ends with a frame that says how it ended.** A client must
     > never have to tell "still working", "finished" and "died" apart by
     > waiting and guessing.
+
+    …and **every terminal frame names the thread it ran in** (ticket 11).
+    `interrupt` always did, because resuming an approval obviously needs it;
+    `done` and `error` did not, and the omission read as "a thread is an
+    approval handle". It is not — a thread is the *conversation*, the channel
+    `messages` accumulates in. The server invents a `thread_id` for a request
+    that omits one, so a client with no way to read it back could never send a
+    second turn into the same conversation, and every follow-up arrived with
+    no antecedent. Disclosing it on all three is what makes continuity
+    something a client can *choose*, rather than something it has to have
+    guessed in advance.
 
     | Exit path | Terminal frame |
     | --- | --- |
@@ -420,7 +459,7 @@ def _stream_run(
     the client having seen updates and no ending at all.
     """
     frames = _run_frames(
-        graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id
+        graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id, audience
     )
     ended = False
     try:
@@ -452,7 +491,13 @@ def _stream_run(
         # One place turns an exception into a frame, so there is one spelling
         # of a failed run no matter where in the pipeline it failed.
         if not ended:
-            yield _sse("error", {"detail": f"{type(exc).__name__}: {exc}"})
+            # `threadId` on the failure path too (ticket 11): the turn that
+            # died is still checkpointed, and a client that wants to try again
+            # in the *same* conversation needs to name the thread it was in.
+            yield _sse(
+                "error",
+                {"threadId": thread_id, "detail": f"{type(exc).__name__}: {exc}"},
+            )
         return
     finally:
         # Not left to refcounting: under a stop the checkpointer/DB handles
@@ -469,7 +514,13 @@ def _stream_run(
         logger.error(
             "run stream for thread_id=%s ended without a terminal frame", thread_id
         )
-        yield _sse("error", {"detail": "The run ended without reporting a result."})
+        yield _sse(
+            "error",
+            {
+                "threadId": thread_id,
+                "detail": "The run ended without reporting a result.",
+            },
+        )
 
 
 def _run_frames(
@@ -480,8 +531,15 @@ def _run_frames(
     node_ids_by_name: dict[str, str],
     runtime: Any,
     thread_id: str,
+    audience: Audience = Audience.CUSTOMER,
 ) -> Any:
     """Drives one `graph.stream()` call and yields SSE frames.
+
+    `audience` decides only what the **terminal** `done` frame carries beyond
+    the answer — see `api/audience.py`. It deliberately does not branch the
+    fold: the suggestion fence is split out of the answer on every run,
+    whatever the audience, so there is no code path that could put developer
+    guidance in a customer's `answer` and none to keep audited.
 
     Shared by `/api/runs/stream` (a fresh run) and `/api/runs/resume` (a
     run a `human.approval` node paused) — from the frontend's point of
@@ -514,6 +572,26 @@ def _run_frames(
     decisions: dict[str, str] = {}
     outputs: dict[str, str] = {}
     attempts = 0
+    # One guard per streamed text — per node, per message kind — because each
+    # is its own sequence of chunks and a shared tail would splice two
+    # unrelated streams together. See `ProseGuard`: the settled answer is
+    # cleaned at the end, but `token` frames reach a client while the model is
+    # still typing, and that is the half a `done`-frame fix cannot reach.
+    guards: dict[tuple[str, str], ProseGuard] = {}
+    # The streaming half of the audience boundary that `ProseGuard` could not
+    # reach (ticket 25). `ProseGuard` polices a marker *inside* model prose;
+    # this decides whether the text is prose at all — a tool's raw payload, a
+    # classifier's branch name and a grader's verdict are none of them the
+    # reply, and a customer watched all three appear in the answer area.
+    #
+    # Built from what the runtime declared rather than from a list here:
+    # `NodeRuntime.machinery_nodes` is computed from node types and unioned up
+    # from every mounted child. `getattr` because the fold is also driven by
+    # scripted stubs, and a stub that declares nothing must degrade to the
+    # `kind` test rather than crash.
+    answer_channel = AnswerChannel(
+        machinery=frozenset(getattr(runtime, "machinery_nodes", None) or ())
+    )
 
     stream = None
     try:
@@ -556,7 +634,12 @@ def _run_frames(
                     )
                     outputs.update(
                         {
-                            k: str(v)
+                            # Cleaned as it is accumulated, not as it is sent:
+                            # this dict reaches the `done` frame *and* every
+                            # surface's per-node inspector, and a value that
+                            # is clean on one path and not the other is the
+                            # shape of leak this whole seam exists to remove.
+                            k: str(_clean_output(str(v)))
                             for k, v in (update.get("outputs") or {}).items()
                             if k != RESET
                         }
@@ -572,7 +655,21 @@ def _run_frames(
                     # (ticket 63) nests them under their owning canvas node —
                     # which is exactly where a LangSmith-style view wants
                     # them.
-                    is_internal = node_id not in canvas_node_ids
+                    #
+                    # A namespace is itself proof of internality, and the name
+                    # alone is not enough (ticket 02). A namespaced frame comes
+                    # from a nested graph — an agent's compiled loop or a
+                    # mounted child document — so it is never a step of THIS
+                    # canvas, whatever it happens to be called. Names collide
+                    # across documents freely: `chinook-assistant` mounts
+                    # `chinook-assistant`, and both have an `in1` and an `out1`.
+                    # On the name test alone the child's own input and output
+                    # steps came back `internal: false` and posted a second
+                    # `in1` row to the activity feed halfway through the run,
+                    # as though the parent's input node had run twice. (Latent
+                    # until now only because the child's frames were not
+                    # reaching this stream at all — see `NodeRuntime._subgraph`.)
+                    is_internal = bool(namespace) or node_id not in canvas_node_ids
                     # The spawn moment is emitted *before* the frame that
                     # revealed it, so a child's own steps read as arriving
                     # after the row that announced it.
@@ -596,9 +693,14 @@ def _run_frames(
                             # surfaces read it instead of guessing; an older
                             # client that ignores it behaves exactly as before.
                             "activeNode": active.resolve(node_id, namespace),
-                            "output": (update.get("outputs") or {}).get(node_id)
-                            or (update.get("worker_results") or {}).get(
-                                task_ids[0] if task_ids else "", None
+                            # Split like the final answer, and for the same
+                            # reason: this is a node's own settled output and
+                            # both surfaces render it in their trace.
+                            "output": _clean_output(
+                                (update.get("outputs") or {}).get(node_id)
+                                or (update.get("worker_results") or {}).get(
+                                    task_ids[0] if task_ids else "", None
+                                )
                             ),
                         },
                     )
@@ -607,12 +709,123 @@ def _run_frames(
                 content = getattr(message, "content", "")
                 if isinstance(content, str) and content:
                     raw_name = metadata.get("langgraph_node", "")
+                    token_node = node_ids_by_name.get(raw_name, raw_name)
+                    kind = "tool" if _is_tool_message(message) else "ai"
+                    # Resolved for EVERY frame, above the gate, and only then
+                    # is the frame's fate decided. The resolver's whole value
+                    # is its stickiness (`ActiveNodeResolver`), so feeding it a
+                    # customer-shaped subset of the run would make the two
+                    # audiences disagree about where the run is — and the
+                    # audience boundary is about what is *shown*, never about
+                    # what is *known* server-side.
+                    active_node = active.resolve(token_node, namespace)
+                    # The rest of the streaming boundary (ticket 25). A
+                    # customer's token stream carries the reply and nothing
+                    # that produced it: no tool payload, no branch name, no
+                    # verdict, no echo of their own question. A developer's
+                    # carries everything — `AskPanel` folds tool frames into
+                    # its per-call result cards, so gating them for both
+                    # audiences would delete a feature rather than move it.
+                    withheld = (
+                        audience is not Audience.DEVELOPER
+                        and not answer_channel.carries(token_node, kind, namespace)
+                    )
+                    if withheld:
+                        # Emptied, **not dropped**, and the difference was
+                        # measured rather than reasoned about. Dropping the
+                        # frame drops its `activeNode` with it, and `token` is
+                        # the only frame that arrives mid-node (ticket 02) — a
+                        # customer watching the live flow diagram then saw the
+                        # ring sit on `router1` for the eleven seconds the
+                        # mounted analyst was working, which is precisely the
+                        # bug ticket 02 fixed, reintroduced for the one
+                        # audience that cannot open a trace to work it out.
+                        #
+                        # So the frame keeps saying *where* the run is and
+                        # stops saying what was said. That is not the "empty
+                        # token is a lie" case below: this frame states its own
+                        # emptiness (`withheld`), rather than implying a model
+                        # produced nothing. A client that has never heard of
+                        # the field concatenates `""` and is correct anyway,
+                        # which is the property that makes this a boundary —
+                        # the bytes do not reach the browser at all.
+                        content = ""
+                    else:
+                        # A frame whose whole content was fence is dropped
+                        # rather than sent empty: an empty `token` there says
+                        # "the model produced nothing just then", a lie.
+                        guard = guards.setdefault((token_node, kind), ProseGuard())
+                        content = guard.feed(content)
+                        if not content:
+                            continue
                     yield _sse(
                         "token",
                         {
-                            "node": node_ids_by_name.get(raw_name, raw_name),
+                            "node": token_node,
                             "namespace": list(namespace),
                             "content": content,
+                            # Present and true only when the text was the
+                            # machinery rather than the reply. Absent on every
+                            # frame a developer receives, so "did I get the
+                            # whole stream" stays answerable.
+                            **({"withheld": True} if withheld else {}),
+                            # Ticket 02, and the whole point of it: `activeNode`
+                            # means exactly what it means on an `update` frame —
+                            # the canvas node to show as running — but a `token`
+                            # frame is the only one that arrives while a node is
+                            # STILL WORKING. `updates` fires on completion, so a
+                            # highlight fed by update frames alone can only ever
+                            # show who last finished. Measured on a real run: 135
+                            # consecutive token frames streamed out of the mounted
+                            # analyst over ~20s while the last update frame still
+                            # said `router1`.
+                            #
+                            # Same resolver instance as the update branch, so the
+                            # stickiness is shared and one honest sequence comes
+                            # off the wire rather than two that can disagree.
+                            #
+                            # NOT coalesced here. The field is attached to every
+                            # frame because its meaning must not vary by frame
+                            # ("present = changed" would be a second, implicit
+                            # field), and because an SSE consumer may join late or
+                            # drop frames. Coalescing is the clients' job and is
+                            # cheap there — both compare against the node they
+                            # last highlighted and do nothing when it is unchanged,
+                            # so a 135-token model turn is one state write.
+                            "activeNode": active_node,
+                            # WHAT produced this text, so a client can stop
+                            # treating a tool's result as the model's prose.
+                            #
+                            # LangGraph's `messages` mode carries every message
+                            # a node emits, not only model tokens — a
+                            # `ToolMessage` rides the same stream (documented,
+                            # and observed: `list_all_tables` streamed its
+                            # eleven-row Markdown table through here). Untagged,
+                            # the client concatenated tool output and model
+                            # reasoning into one blob and rendered the result as
+                            # Markdown, which collapsed the table onto a single
+                            # line — a tool result made unreadable precisely
+                            # because it was long.
+                            #
+                            # Additive: a client that ignores these two fields
+                            # behaves exactly as before.
+                            "kind": kind,
+                            # A tool result's identity for the client's fold.
+                            # `name` alone cannot separate two consecutive calls
+                            # to the same tool (`get_table_schema` on Invoice,
+                            # then on InvoiceLine); `tool_call_id` can.
+                            #
+                            # Withheld with the content, because the ticket
+                            # names the tool NAME as its own leak: QA read
+                            # `music_store` on the customer surface, and
+                            # `chinook_execute_sql` says as much about the
+                            # machinery as the table it returned.
+                            "tool": {"name": "", "callId": ""}
+                            if withheld
+                            else {
+                                "name": str(getattr(message, "name", "") or ""),
+                                "callId": str(getattr(message, "tool_call_id", "") or ""),
+                            },
                         },
                     )
     finally:
@@ -643,22 +856,51 @@ def _run_frames(
                 "threadId": thread_id,
                 "node": paused[0] if paused else "",
                 "message": (payload_value or {}).get("message", "Approval needed"),
-                "candidate": (payload_value or {}).get("candidate", ""),
+                # Cleaned too: a `human.approval` node shows the customer
+                # the candidate text a model produced, so it is prose on a
+                # customer surface exactly like `answer` is.
+                "candidate": _clean_output((payload_value or {}).get("candidate", "")) or "",
             },
         )
         return
 
-    warnings = list(plan.warnings) + runtime_warnings(runtime)
+    # Unconditional, and above the audience check on purpose: this is what
+    # makes "a developer-only payload cannot appear in a customer answer" a
+    # property of the code rather than of the client that reads it.
+    prose, suggestion = split_suggestion(answer)
+    channel = DeveloperChannel(
+        warnings=list(plan.warnings) + runtime_warnings(runtime),
+        suggestion=suggestion,
+    )
 
     yield _sse(
         "done",
         {
-            "answer": answer,
+            # The thread this run happened in — on every terminal frame, not
+            # only on `interrupt` (ticket 11). A thread IS the conversation:
+            # `messages` accumulates in it, and every conversation-aware node
+            # this runtime has (`_thread_question`'s history block, the
+            # agent's `state["messages"]` payload, the mounted child's
+            # dialogue hand-off) reads it from there. A client that omits
+            # `thread_id` gets an invented one — and, until this line, had no
+            # way to learn what it was, so it could never send a second turn
+            # into the same conversation. That is not a theoretical gap: the
+            # editor's Ask panel omits it, and the recorded four-turn run in
+            # `tests/data/recorded_chinook_followup_thread.json` shows
+            # "How did you get that?" reaching the router as that bare
+            # sentence, with no antecedent, and being answered as if it were
+            # a fresh question. The server mints the id, so the server owes
+            # it back.
+            "threadId": thread_id,
+            "answer": prose,
             "decisions": decisions,
             "outputs": outputs,
             "attempts": attempts,
+            # Topology, not guidance, and `/chat` draws its live flow diagram
+            # from it — `GET /api/workflows/{slug}/graph` already serves the
+            # same text to that page. See the table in `api/audience.py`.
             "mermaid": graph.get_graph().draw_mermaid(),
-            "warnings": warnings,
+            **channel.payload(audience),
         },
     )
 

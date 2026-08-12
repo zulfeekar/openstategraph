@@ -97,12 +97,19 @@ from openstategraph.api.model_resolution import (  # noqa: E402, F401  (re-expor
     workflow_default_model,
 )
 from openstategraph.api import auth  # noqa: E402
+from openstategraph.api.audience import (  # noqa: E402
+    DeveloperChannel,
+    clean_output,
+    resolve as resolve_audience,
+    split_suggestion,
+)
 from openstategraph.api.editor_assets import mount_editor  # noqa: E402
 from openstategraph.api.registries import (  # noqa: E402, F401  (re-exported for tests)
     build_tool_registry,
     runtime_warnings,
 )
 from openstategraph.schema import normalize_document  # noqa: E402
+from openstategraph.sql_reach import reachable_schema  # noqa: E402
 from openstategraph.api.schemas import (  # noqa: E402
     AskRequest,
     AskResponse,
@@ -121,9 +128,15 @@ from openstategraph.api.schemas import (  # noqa: E402
     PublishWorkflowResponse,
     ResumeRequest,
     RunRequest,
+    DeveloperChannelResponse,
     RunResponse,
     SaveWorkflowRequest,
+    SqlSchemaResponse,
+    SqlSourceResponse,
+    SqlTableResponse,
     TemplateResponse,
+    ThreadHistoryResponse,
+    ThreadListResponse,
     PluginToolCapabilityResponse,
     ToolCapabilityResponse,
     ToolFieldResponse,
@@ -135,6 +148,10 @@ from openstategraph.api.catalogue_events import (  # noqa: E402
     KEEPALIVE_SECONDS,
     CatalogueEvent,
     ChangeReason,
+)
+from openstategraph.api.workflow_store import (  # noqa: E402
+    WorkflowSummary,
+    validate_package,
 )
 from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored names re-exported for tests)
     RUN_EVENTS,
@@ -524,22 +541,69 @@ def create_app(
     def list_workflows(surface: Literal["editor", "chat"] = "editor") -> list[WorkflowSummaryResponse]:
         """Ticket 04 (launch-readiness): the listing is surface-aware.
 
-        - ``surface=editor`` (default): everything non-hidden, drafts
-          included, each row carrying its ``published`` flag.
+        - ``surface=editor`` (default): everything the developer owns —
+          drafts AND hidden packages included, each row carrying its
+          ``published`` and ``hidden`` flags so the editor can mark a hidden
+          package rather than pretend it does not exist.
         - ``surface=chat``: the customer surface — published AND not hidden
           only (hidden trumps published, enforced in the store).
+
+        **This answers visibility, never existence** (ticket 21). A slug's
+        absence here means "no surface advertises it" — it may be hidden, or
+        unreadable, and either way the file is still on disk and still served
+        200 by `GET /api/workflows/{slug}`. Ask
+        `GET /api/workflows/{slug}/summary` when the question is whether a
+        package exists.
         """
-        from openstategraph.api.workflow_store import WorkflowSummary, validate_package
-
-        def to_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
-            return WorkflowSummaryResponse(
-                slug=s.slug, name=s.name, saved_at=s.saved_at,
-                node_count=s.node_count, edge_count=s.edge_count,
-                findings=validate_package(workflow_store.directory_for(s.slug)),
-                published=s.published,
+        # The editor is the *developer's* surface, so it sees everything it
+        # owns — hidden packages included, each row carrying `hidden` so the
+        # UI can mark them rather than pretend they are not there. `hidden`
+        # remains absolute for `surface="chat"`, which is the customer's.
+        return [
+            _summary_response(s)
+            for s in workflow_store.list(
+                published_only=surface == "chat",
+                include_hidden=surface == "editor",
             )
+        ]
 
-        return [to_response(s) for s in workflow_store.list(published_only=surface == "chat")]
+    def _summary_response(s: WorkflowSummary) -> WorkflowSummaryResponse:
+        return WorkflowSummaryResponse(
+            slug=s.slug, name=s.name, saved_at=s.saved_at,
+            node_count=s.node_count, edge_count=s.edge_count,
+            findings=validate_package(workflow_store.directory_for(s.slug)),
+            published=s.published, hidden=s.hidden,
+        )
+
+    @app.get(
+        "/api/workflows/{slug}/summary",
+        response_model=WorkflowSummaryResponse,
+        summary="Does this workflow exist, and when was it last saved?",
+        tags=["Catalogue"],
+    )
+    def get_workflow_summary(slug: str) -> WorkflowSummaryResponse:
+        """One package's row — **the existence question** (ticket 21).
+
+        `GET /api/workflows` is a *surface*: it omits hidden packages and
+        unreadable ones by design, so a client that scans it for its own slug
+        and concludes "deleted" on a miss is reading a visibility answer as an
+        existence answer. That is exactly what the editor's file watch did, and
+        why opening `concierge` (`hidden: true`, served 200) raised "This
+        workflow was deleted on disk" while the file sat right there.
+
+        This reports every package the store can name, hidden included, with
+        `hidden` saying which. **404 is the only "it is gone"** — and it is
+        real, so a stale open copy still gets its warning.
+        """
+        from openstategraph.api.workflow_store import InvalidSlugError
+
+        try:
+            summary = workflow_store.describe(slug)
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if summary is None:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}")
+        return _summary_response(summary)
 
     @app.post(
         "/api/workflows/{slug}/publish",
@@ -598,10 +662,47 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return WorkflowDocumentResponse(slug=slug, document=document)
 
+    @app.post(
+        "/api/workflows",
+        response_model=WorkflowDocumentResponse,
+        status_code=201,
+        summary="Create a workflow — the backend mints its slug",
+        tags=["Catalogue"],
+    )
+    def create_workflow(request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
+        """Bring a new workflow into existence and be **told which slug it got**.
+
+        Ticket 20. A name is not unique, so a client that slugifies one and
+        PUTs to the result is guessing: two workflows named "My Workflow" both
+        guessed `my-workflow`, and the second overwrote the first with a 200.
+        Only the process holding the workflows directory can mint an identity,
+        so it does — the first of a name keeps the clean slug, a colliding one
+        gets a short random disambiguator (`my-workflow-k7m3qp`), and the
+        response's `slug` is the answer, never something to recompute.
+
+        Use `PUT /api/workflows/{slug}` afterwards to save changes: that
+        endpoint addresses a slug you already hold, and this one is how you
+        come to hold it.
+        """
+        from datetime import datetime, timezone
+
+        from openstategraph.api.workflow_store import SlugMintingError
+
+        try:
+            slug = workflow_store.create(
+                name=request.name,
+                document=request.document,
+                saved_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except SlugMintingError as exc:
+            raise HTTPException(status_code=507, detail=str(exc)) from exc
+        announce("saved", slug)
+        return WorkflowDocumentResponse(slug=slug, document=request.document)
+
     @app.put(
         "/api/workflows/{slug}",
         response_model=WorkflowDocumentResponse,
-        summary="Create or overwrite a workflow document",
+        summary="Overwrite the workflow document at a slug you already hold",
         tags=["Catalogue"],
     )
     def save_workflow(slug: str, request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
@@ -610,6 +711,13 @@ def create_app(
         The slug is the path parameter and is frozen at creation; the body
         carries the display name and the document, never the slug. Announces
         the change on `/api/events` **after** the write succeeded.
+
+        **Addresses an existing package.** It still creates one if the slug is
+        free — naming a directory explicitly is how the CLI and a test write a
+        package they intend to own — but a client that does not yet have a
+        slug must `POST /api/workflows` and be given one, because a slug it
+        invented from a name may already belong to somebody else's workflow
+        (ticket 20).
         """
         from datetime import datetime, timezone
 
@@ -813,7 +921,8 @@ def create_app(
                 status_code=422,
                 detail=(
                     "No knowledge source found in this workflow — no SQL tool "
-                    "node names a database, and it mounts no child workflows."
+                    "node names a database, it mounts no child workflows, and "
+                    "it wires no platform tool that can see the project."
                 ),
             )
         return KnowledgeBuildResponse(**report)
@@ -920,6 +1029,40 @@ def create_app(
         )
 
     @app.get(
+        "/api/workflows/{slug}/sql-schema",
+        response_model=SqlSchemaResponse,
+        summary="The tables this workflow's SQL tools can actually reach",
+        tags=["Workflows"],
+    )
+    def sql_schema(slug: str) -> SqlSchemaResponse:
+        """The agent's field of view over the wired databases.
+
+        The schema tools take their table as a *model* argument — the agent
+        sees every table and picks one — so the editor shows the whole set,
+        read from the same file the tool opens, instead of a per-node table
+        control that never reached the runtime.
+
+        A read, and a total one: a database that is missing, unreadable or
+        whose driver is absent comes back as a warning on its source (or, for
+        a path that does not resolve inside `workflows/`, as no source at
+        all). Never a 500 — a card must not break because a file moved.
+        """
+        _, document = _knowledge_context(slug)
+        return SqlSchemaResponse(
+            sources=[
+                SqlSourceResponse(
+                    database=source.database,
+                    engine=source.engine,
+                    tables=[
+                        SqlTableResponse(name=t.name, detail=t.detail) for t in source.tables
+                    ],
+                    warning=source.warning,
+                )
+                for source in reachable_schema(document, workflow_store.root)
+            ]
+        )
+
+    @app.get(
         "/api/workflows/{slug}/graph",
         response_model=CompiledGraphResponse,
         summary="The compiled topology, as Mermaid text",
@@ -991,26 +1134,100 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
+        audience = resolve_audience(request.audience)
+        runtime = runtime_for(request.workflow_slug, document, model, audience=audience)
+
+        # The same thread this endpoint's request has always declared, and
+        # until now dropped on the floor. `RunRequest` carried `thread_id`,
+        # `session_id`, `user_email` and `workflow_slug`; the invoke below
+        # built no `configurable` at all, so a caller sending the same
+        # `thread_id` three times got three unrelated first turns — ticket
+        # 11's defect surviving on a second endpoint. A declared field that
+        # reaches nothing is worse than an absent one: it looks supported.
+        # `os.urandom`, not the streaming side's `id(graph)` prefix: the id is
+        # minted *before* the graph exists here, and a CPython object address
+        # is reusable after a collection anyway.
+        thread_id = request.thread_id or f"run-{os.urandom(8).hex()}"
 
         try:
-            graph = compiler.build(document, RunState, runtime.factory(document), store=memory_store)
+            graph = compiler.build(
+                document,
+                RunState,
+                runtime.factory(document),
+                # Without a saver the block above would still reach nothing:
+                # no persisted `messages`, no antecedent, the same defect with
+                # a config attached. The streaming endpoint already compiles
+                # this way, from the same per-workflow cache.
+                checkpointer=services.checkpointer_for(
+                    document.get("settings"), request.workflow_slug
+                ),
+                store=memory_store,
+            )
             final = graph.invoke(
                 {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
-                {"recursion_limit": request.recursion_limit},
+                {
+                    "recursion_limit": request.recursion_limit,
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "session_id": request.session_id or "",
+                        "user_email": request.user_email or "",
+                        "workflow_slug": request.workflow_slug or "",
+                    },
+                },
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
-        warnings = list(plan.warnings) + runtime_warnings(runtime)
+        # A paused run is not a finished one, and this endpoint cannot resume.
+        #
+        # Before the checkpointer above, an interrupting document returned
+        # **200 with an empty answer** — silently, so a caller could not tell
+        # "finished with nothing to say" from "stopped halfway waiting for a
+        # human". The saver is what makes `__interrupt__` visible, so the
+        # honest report became possible in the same change that caused it to
+        # be needed. 409: the request is fine, the *state* refuses it.
+        if final.get("__interrupt__"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This workflow paused for a human decision, which this endpoint "
+                    "cannot carry. Run it through POST /api/runs/stream, which reports "
+                    f"the pause and resumes through POST /api/runs/resume. Thread: {thread_id}"
+                ),
+            )
+
+        # Same seam as the streaming endpoints, applied in the same order:
+        # the fence leaves the answer before anyone asks who is listening, so
+        # `/api/runs` cannot become the way around `/api/runs/stream`.
+        #
+        # `answer` alone was not the whole seam, which ticket 15 found by
+        # asking the same question over both doors: the streaming endpoint
+        # cleans its `outputs` map as it accumulates it and this one returned
+        # the raw values, so a fence a customer talked the model into arrived
+        # in `outputs["agent-sql"]` while `answer` was spotless. Every surface
+        # renders `outputs` per node, so that is the same leak one field along.
+        prose, suggestion = split_suggestion(str(final.get("answer") or ""))
+        channel = DeveloperChannel(
+            warnings=list(plan.warnings) + runtime_warnings(runtime),
+            suggestion=suggestion,
+        )
+        developer = channel.payload(audience).get("developer")
 
         return RunResponse(
-            answer=str(final.get("answer") or ""),
+            answer=prose,
+            # The thread this run happened in — minted here when the caller
+            # named none, so the next question can continue the conversation.
+            # Exactly what ticket 11 added to every terminal SSE frame, for
+            # exactly the same reason: the client that most needs continuity
+            # is the one that did not name a thread.
+            thread_id=thread_id,
             decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
-            outputs={k: str(v) for k, v in (final.get("outputs") or {}).items()},
+            outputs={
+                k: str(clean_output(str(v))) for k, v in (final.get("outputs") or {}).items()
+            },
             attempts=int(final.get("attempts") or 0),
             mermaid=graph.get_graph().draw_mermaid(),
-            warnings=warnings,
+            developer=DeveloperChannelResponse(**developer) if developer else None,
         )
 
     @app.post(
@@ -1072,7 +1289,8 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
+        audience = resolve_audience(request.audience)
+        runtime = runtime_for(request.workflow_slug, document, model, audience=audience)
 
         try:
             graph = compiler.build(
@@ -1114,7 +1332,14 @@ def create_app(
             # merely stop watching it.
             stop_when_client_leaves(
                 _stream_run(
-                    graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id
+                    graph,
+                    graph_input,
+                    config,
+                    plan,
+                    node_ids_by_name,
+                    runtime,
+                    thread_id,
+                    audience,
                 ),
                 http.receive,
             ),
@@ -1163,7 +1388,8 @@ def create_app(
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        runtime = runtime_for(request.workflow_slug, document, model, advisor=request.advisor)
+        audience = resolve_audience(request.audience)
+        runtime = runtime_for(request.workflow_slug, document, model, audience=audience)
 
         try:
             graph = compiler.build(
@@ -1202,22 +1428,90 @@ def create_app(
                     node_ids_by_name,
                     runtime,
                     request.thread_id,
+                    audience,
                 ),
                 http.receive,
             ),
             media_type="text/event-stream",
         )
 
+    @app.get(
+        "/api/threads",
+        response_model=ThreadListResponse,
+        summary="Past runs — the threads this deployment has stored",
+        tags=["Runs"],
+    )
+    def list_threads_endpoint(
+        workflow_slug: str | None = None,
+        user_email: str | None = None,
+        session_id: str | None = None,
+        limit: int = 25,
+    ) -> ThreadListResponse:
+        """Which runs happened, under whose identity, and which are still paused.
+
+        Read straight out of the checkpointer that stored them — there is no
+        second index of runs to drift from the checkpoints it would describe.
+        `session_id` and `user_email` come back from checkpoint metadata,
+        where LangGraph persists the `configurable` block the *transport*
+        supplied; nothing a model said about itself can appear here.
+
+        The filters narrow a list, they do not authorize one: this deployment
+        authenticates a single shared token, so anyone who can call this can
+        call it without `user_email` too. Per-user history needs per-user
+        auth, and this endpoint does not pretend to be it.
+        """
+        from openstategraph.api import threads as thread_queries
+
+        rows = thread_queries.list_threads(
+            thread_queries.savers_for(services, workflow_slug),
+            workflow_slug=workflow_slug,
+            user_email=user_email,
+            session_id=session_id,
+            limit=max(1, min(limit, 200)),
+        )
+        return ThreadListResponse(threads=rows)
+
+    @app.get(
+        "/api/threads/{thread_id}",
+        response_model=ThreadHistoryResponse,
+        summary="View one past run, checkpoint by checkpoint",
+        tags=["Runs"],
+    )
+    def read_thread_endpoint(
+        thread_id: str, workflow_slug: str | None = None
+    ) -> ThreadHistoryResponse:
+        """A recorded run played back as text. **Nothing is re-executed.**
+
+        Every value here was written while the run happened; reading it calls
+        no model and no tool, so viewing a run that sent an email does not
+        send it again. The endpoint that *does* execute is
+        `POST /api/runs/resume`, which continues a `paused` thread from its
+        interrupt — a different verb on purpose.
+        """
+        from openstategraph.api import threads as thread_queries
+
+        history = thread_queries.read_thread(
+            thread_queries.savers_for(services, workflow_slug), thread_id
+        )
+        if history is None:
+            raise HTTPException(
+                status_code=404, detail=f"No stored run for thread {thread_id!r}."
+            )
+        return history
+
     @app.post(
-        "/api/workflows/chinook-nl-to-sql/ask",
+        "/api/workflows/chinook-assistant/ask",
         response_model=AskResponse,
         summary="The Chinook demo's own endpoint (not a general API)",
         tags=["Demo"],
         description=(
-            "A fixed, hand-built demo graph — the NL-to-SQL example — kept as "
-            "its own endpoint because it predates the canvas and returns the "
-            "SQL and rows alongside the prose so an answer can be audited. It "
-            "does not generalise: a client of your own wants `/api/runs/stream`."
+            "A fixed, hand-built demo graph — the NL-to-SQL loop that is now "
+            "the assistant's `data_query` branch — kept as its own endpoint "
+            "because it predates the canvas and returns the SQL and rows "
+            "alongside the prose so an answer can be audited. It answers "
+            "database questions only, and has no router in front of it: the "
+            "path shares this workflow's slug, not its document. It does not "
+            "generalise: a client of your own wants `/api/runs/stream`."
         ),
     )
     def ask(request: AskRequest) -> AskResponse:

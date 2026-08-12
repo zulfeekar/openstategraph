@@ -3,15 +3,19 @@
 The product rule this pins: when a run in the *editor's* Ask panel cannot
 answer because the workflow lacks a tool, the agent says so and emits a
 ``suggestion`` fence the editor turns into a real, wired node. Three things
-have to hold for that to be safe, and each has a test below:
+have to hold for that to be safe:
 
-1. the flag round-trips on **both** run schemas (they forbid extras, so a
-   client that sets it on a run must be able to set it on the resume);
-2. the extra context actually reaches the agent — and carries *that* agent's
+1. the extra context actually reaches the agent — and carries *that* agent's
    own node id, since a wrong ``attachTo`` is the one error the editor cannot
    recover from;
-3. it is **off** unless asked for, which is what keeps the customer `/chat`
-   surface — which never sets it — from proposing edits.
+2. it is **off** unless asked for, which is what keeps the customer `/chat`
+   surface from ever being told to propose edits.
+
+Those two are below. The third — that developer guidance cannot *reach* a
+customer even when a model emits it anyway — moved to
+``tests/test_audience_boundary.py`` with the boundary itself, because it is a
+claim about the transport rather than about the prompt, and proving it needs
+the real endpoint rather than a schema.
 """
 
 from __future__ import annotations
@@ -19,30 +23,8 @@ from __future__ import annotations
 import openstategraph.abc.agent as agent_module
 from openstategraph.abc.agent import ReactAgentNode
 from openstategraph.api.registries import suggestible_tool_catalog
-from openstategraph.api.schemas import ResumeRequest, RunRequest
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan
-
-
-class TestTheFlagRoundTrips:
-    def test_a_run_request_defaults_to_no_advisor(self) -> None:
-        request = RunRequest(workflow={}, question="q")
-        assert request.advisor is False
-
-    def test_a_run_request_accepts_the_flag(self) -> None:
-        assert RunRequest(workflow={}, question="q", advisor=True).advisor is True
-
-    def test_a_resume_request_defaults_to_no_advisor(self) -> None:
-        request = ResumeRequest(thread_id="t", workflow={}, decision="approve")
-        assert request.advisor is False
-
-    def test_a_resume_request_accepts_the_flag(self) -> None:
-        """Both models forbid extras — the editor sets it on every send, so a
-        resume without this field would 422 on every approval."""
-        request = ResumeRequest(
-            thread_id="t", workflow={}, decision="approve", advisor=True
-        )
-        assert request.advisor is True
 
 
 class TestTheCatalogue:
@@ -103,6 +85,20 @@ class TestTheContextReachesTheAgent:
         monkeypatch.setattr(agent_module, "agent_node_for_tier", lambda tier: _RecordingNode)
         prompt = _prompt_for(advisor_catalog="- tool.web-search — searches the web")
         assert '"attachTo": "agent-analyst"' in prompt
+
+    def test_the_sentence_before_the_block_is_stated_as_required(self, monkeypatch) -> None:
+        """Ticket 22: *"say so briefly, then emit exactly one fenced block"*
+        read as one instruction with an optional first half, and a model that
+        emitted only the block left a run whose answer was the empty string
+        once the fence was split out of it.
+
+        The prompt layer is where a reply's *shape* is asked for, so this is
+        where "the prose is not optional" belongs — `split_suggestion`'s floor
+        is the guarantee, and this is what makes it almost never needed."""
+        monkeypatch.setattr(agent_module, "agent_node_for_tier", lambda tier: _RecordingNode)
+        prompt = _prompt_for(advisor_catalog="- tool.web-search — searches the web")
+        instruction = prompt.split("```suggestion")[0]
+        assert "never the block alone" in instruction
 
     def test_it_lands_in_context_above_the_developers_rules(self, monkeypatch) -> None:
         """The fence is *context*, not rules and not a contract change.
