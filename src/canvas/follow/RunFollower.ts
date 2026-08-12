@@ -34,7 +34,7 @@ export class RunFollower implements IDisposable {
   private readonly bus = new EventBus<FollowerEvents>();
   private readonly active = new Map<NodeId, Rect>();
 
-  private wanted = false;
+  private wanted: boolean;
   private latchedOff = false;
   /** The warning is worth saying once per run, and then it is nagging. */
   private explained = false;
@@ -43,7 +43,14 @@ export class RunFollower implements IDisposable {
     private readonly viewport: Viewport,
     private readonly graph: dia.Graph,
     container: HTMLElement,
+    /**
+     * On unless the person turned it off. Injected rather than read from
+     * storage here: `canvas/` owns JointJS, not preferences, and a follower
+     * that reached for `localStorage` could not be unit tested without one.
+     */
+    initiallyEnabled = true,
   ) {
+    this.wanted = initiallyEnabled;
     const surrender = (reason: string) => {
       if (!this.wanted || this.latchedOff) return;
       this.latchedOff = true;
@@ -137,12 +144,11 @@ export class RunFollower implements IDisposable {
       padding: CANVAS.fitPadding,
       minZoom: CANVAS.zoom.min,
       maxZoom: CANVAS.zoom.max,
+      focusFill: CANVAS.follow.fill,
+      focusMaxZoom: CANVAS.follow.maxZoom,
     });
     if (decision.kind === 'stay') return;
-    this.viewport.glideTo(
-      decision.center,
-      decision.kind === 'fit' ? decision.zoom : this.viewport.zoom,
-    );
+    this.viewport.glideTo(decision.center, decision.zoom);
   }
 }
 

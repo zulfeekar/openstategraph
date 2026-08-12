@@ -17,6 +17,19 @@ import { addNode, connect, makeWorkbench, TYPE } from '@core/testing/fixtures';
  * The determinism tests below start RED. They document a confirmed defect:
  * `toJSON()` serialises `nodes()`, which returns Map *insertion* order.
  */
+/**
+ * A node of a type no build registers — modelled on the real one, the
+ * `tool.validate-workflow` node `workflow-architect` was losing.
+ */
+const unknownNodeEntry = (): Record<string, unknown> => ({
+  id: 't-validate',
+  type: 'tool.validate-workflow',
+  position: { x: 400, y: 600 },
+  size: { width: 240, height: 96 },
+  parentId: null,
+  data: { note: 'kept' },
+});
+
 describe('WorkflowSerializer', () => {
   let workbench: Workbench;
 
@@ -118,6 +131,77 @@ describe('WorkflowSerializer', () => {
       const second = reloaded.controller.document.exportJSON();
 
       expect(second).toBe(first);
+    });
+  });
+
+  describe('waypoints', () => {
+    it('round-trips the points a user placed on a link', () => {
+      const { input, agent } = seed();
+      const edge = workbench.model.edgesFrom({ nodeId: input.id, portId: 'text' })[0]!;
+      workbench.controller.edges.setVertices(edge.id, [
+        { x: 220, y: 40 },
+        { x: 220, y: 300 },
+      ]);
+
+      const reloaded = makeWorkbench();
+      reloaded.controller.document.importJSON(workbench.controller.document.exportJSON());
+
+      const restored = reloaded.model
+        .edgesOf(agent.id)
+        .find((candidate) => candidate.source.nodeId === input.id);
+      expect(restored?.vertices).toEqual([
+        { x: 220, y: 40 },
+        { x: 220, y: 300 },
+      ]);
+    });
+
+    it('writes nothing for a link with no points, so old documents keep their bytes', () => {
+      seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        edges: Record<string, unknown>[];
+      };
+      for (const edge of document.edges) expect('vertices' in edge).toBe(false);
+    });
+
+    it('loads a document written before waypoints existed', () => {
+      // `vertices` is additive, which is exactly why the schema version does
+      // not move: an older file simply has none, and the router draws the whole
+      // run as it always did.
+      seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        edges: Record<string, unknown>[];
+      };
+      const reloaded = makeWorkbench();
+      const outcome = reloaded.controller.document.importJSON(JSON.stringify(document));
+      expect(outcome.ok).toBe(true);
+      expect(reloaded.model.edges().every((edge) => edge.vertices.length === 0)).toBe(true);
+    });
+
+    it('drops a hand-edited point that is not a finite pair of numbers', () => {
+      // `Infinity` and `NaN` cannot be written to JSON, so one of them in a
+      // link would make the whole document unwritable. The rule is enforced at
+      // the one door they can come through.
+      const { input, agent } = seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        edges: { source: { nodeId: string }; vertices?: unknown[] }[];
+      };
+      const edge = document.edges.find((candidate) => candidate.source.nodeId === input.id)!;
+      edge.vertices = [
+        { x: 10, y: 20 },
+        { x: 'nope', y: 5 },
+        { x: 30, y: 40 },
+      ];
+
+      const reloaded = makeWorkbench();
+      reloaded.controller.document.importJSON(JSON.stringify(document));
+
+      const restored = reloaded.model
+        .edgesOf(agent.id)
+        .find((candidate) => candidate.source.nodeId === input.id);
+      expect(restored?.vertices).toEqual([
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ]);
     });
   });
 
@@ -236,21 +320,92 @@ describe('WorkflowSerializer', () => {
       expect(outcome.message).toMatch(/newer version/i);
     });
 
-    it('skips an unknown node type with a warning rather than failing the load', () => {
+    it('keeps a node of an unknown type, with a warning, rather than dropping it', () => {
       seed();
       const document = JSON.parse(workbench.controller.document.exportJSON()) as {
-        nodes: { type: string }[];
+        nodes: Record<string, unknown>[];
       };
-      document.nodes.push({ type: 'does.not.exist' } as never);
+      document.nodes.push(unknownNodeEntry());
 
       const reloaded = makeWorkbench();
       const outcome = reloaded.controller.document.importJSON(JSON.stringify(document));
 
-      // Throwing away a user's whole file over one unknown node would be
-      // far worse than dropping the node and saying so.
+      // Skipping it was silent data loss with a one-click trigger: open, edit
+      // anything, save, and the node is written out of the file.
       expect(outcome.ok).toBe(true);
       expect(outcome.message).toMatch(/unknown node type/i);
-      expect(reloaded.model.nodeCount).toBe(3);
+      expect(reloaded.model.nodeCount).toBe(4);
+      expect(reloaded.model.node('t-validate')?.type).toBe('tool.validate-workflow');
+    });
+
+    it('keeps the links that touch an unknown node', () => {
+      // Preserving the node and losing its edges is half a fix, and the
+      // harder half to notice — the serializer drops any link whose endpoint
+      // port does not exist, so the placeholder has to declare the ports the
+      // document's own edges name.
+      const { agent } = seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        nodes: Record<string, unknown>[];
+        edges: Record<string, unknown>[];
+      };
+      document.nodes.push(unknownNodeEntry());
+      document.edges.push({
+        source: { nodeId: 't-validate', portId: 'tool' },
+        target: { nodeId: agent.id, portId: 'tools' },
+      });
+
+      const reloaded = makeWorkbench();
+      reloaded.controller.document.importJSON(JSON.stringify(document));
+
+      expect(reloaded.model.edgeCount).toBe(3);
+      expect(reloaded.model.edgesOf('t-validate')).toHaveLength(1);
+    });
+
+    it('round-trips a document with an unknown node byte-identically', () => {
+      // The invariant, stated as a test: load then save loses nothing. This is
+      // the property `workflow-architect` failed — it serves 7 nodes and 7
+      // edges, and the editor wrote back 6 and 6.
+      const { agent } = seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        nodes: Record<string, unknown>[];
+        edges: Record<string, unknown>[];
+      };
+      document.nodes.push(unknownNodeEntry());
+      document.edges.push({
+        source: { nodeId: 't-validate', portId: 'tool' },
+        target: { nodeId: agent.id, portId: 'tools' },
+      });
+
+      // Canonicalise once through a build that *does* nothing special, so the
+      // comparison is about preservation and not about key order.
+      const canonical = (() => {
+        const first = makeWorkbench();
+        first.controller.document.importJSON(JSON.stringify(document));
+        return first.controller.document.exportJSON();
+      })();
+
+      const reloaded = makeWorkbench();
+      reloaded.controller.document.importJSON(canonical);
+
+      expect(reloaded.controller.document.exportJSON()).toBe(canonical);
+    });
+
+    it('does not inject execution-override defaults into an unknown node', () => {
+      // `defineNode` appends `maxRetries`/`timeoutSeconds` to every standard
+      // node type, and `AbstractNodeModel` seeds schema defaults into `data`.
+      // Building the placeholder definition through it would add two keys the
+      // document never had, and the first save would be a diff nobody asked
+      // for — a quieter version of the same loss.
+      seed();
+      const document = JSON.parse(workbench.controller.document.exportJSON()) as {
+        nodes: Record<string, unknown>[];
+      };
+      document.nodes.push(unknownNodeEntry());
+
+      const reloaded = makeWorkbench();
+      reloaded.controller.document.importJSON(JSON.stringify(document));
+
+      expect(reloaded.model.node('t-validate')?.data).toEqual({ note: 'kept' });
     });
 
     it('drops a link whose endpoint is missing', () => {

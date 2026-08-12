@@ -12,7 +12,14 @@ import {
 } from '@core/model/contracts/ports';
 import type { EdgeId, IEdgeModel } from '@core/model/contracts/workflow';
 import { HtmlNode, FlowLink, PORT_GROUP, type NodeGeometry } from './shapes/HtmlNode';
-import { branchRank, edgeLabelText, labelPlacement, linkConnector } from './links/edgeDecoration';
+import {
+  ROUTER_PADDING,
+  branchRank,
+  edgeLabelText,
+  labelPlacement,
+  linkRouter,
+} from './links/edgeDecoration';
+import { obstacleTest } from './links/flowObstacles';
 
 /**
  * Projects the workflow model onto a JointJS graph.
@@ -154,6 +161,19 @@ export class JointGraphAdapter implements IDisposable {
    * ================================================================ */
 
   private listen(): void {
+    // Geometry is watched on the *graph*, not the model, because the model is
+    // not told about all of it: a card measures itself after React lays it out
+    // and reports its height through `applyGeometry`, which writes to the cell.
+    // A stale obstacle map is not a cosmetic problem — it routes runs round a
+    // rectangle a card has since left.
+    const invalidate = (): void => {
+      this.obstacles = null;
+    };
+    this.graph.on('change:position change:size add remove reset', invalidate);
+    this.disposables.addFn(() =>
+      this.graph.off('change:position change:size add remove reset', invalidate),
+    );
+
     const on = <K extends Parameters<WorkflowModel['on']>[0]>(
       type: K,
       handler: Parameters<WorkflowModel['on']>[1],
@@ -232,6 +252,11 @@ export class JointGraphAdapter implements IDisposable {
     on('edge:label', ((payload: { edgeId: EdgeId }) => {
       const edge = this.model.edge(payload.edgeId);
       if (edge) this.transaction(() => this.applyLabel(edge));
+    }) as never);
+
+    on('edge:vertices', ((payload: { edgeId: EdgeId }) => {
+      const edge = this.model.edge(payload.edgeId);
+      if (edge) this.transaction(() => this.applyVertices(edge));
     }) as never);
 
     on('workflow:reset', (() => this.rebuild()) as never);
@@ -349,16 +374,43 @@ export class JointGraphAdapter implements IDisposable {
       link.attr(['root', 'data-port-type'], targetPort.type);
     }
     this.applyGeometryHints(edge, link);
+    this.applyVertices(edge, link);
     this.applyLabel(edge, link);
     return link;
   }
 
   /**
-   * Pins the curve's two tangents to the sides the ports sit on.
+   * Projects an edge's waypoints onto its link.
+   *
+   * The router treats them as points the run must pass through, in order, so
+   * writing them is the whole of what a stored waypoint does. Skipped when
+   * both sides already agree, because `linkTools.Vertices` writes to the cell
+   * as the user drags and the echo back would fight the pointer.
+   */
+  private applyVertices(edge: IEdgeModel, existing?: dia.Link): void {
+    const link = existing ?? this.link(edge.id);
+    if (!link) return;
+    const current = link.vertices();
+    if (
+      current.length === edge.vertices.length &&
+      current.every((point, index) => {
+        const wanted = edge.vertices[index];
+        return wanted != null && point.x === wanted.x && point.y === wanted.y;
+      })
+    ) {
+      return;
+    }
+    link.vertices(edge.vertices.map((point) => ({ ...point })));
+  }
+
+  /**
+   * Pins the run's two ends to the sides the ports sit on.
    *
    * Re-applied whenever the reading direction changes, because that is what
-   * moves the ports: `resolvePortSide` rotates every side 90°, and a tangent
-   * left pointing right would draw a link that leaves a bottom port sideways.
+   * moves the ports: `resolvePortSide` rotates every side 90°, and a start
+   * direction left pointing right would draw a run that leaves a bottom port
+   * sideways before turning — the orthogonal spelling of the doubling-back
+   * curve the pinned tangents were introduced to stop.
    */
   private applyGeometryHints(edge: IEdgeModel, existing?: dia.Link): void {
     const link = existing ?? this.link(edge.id);
@@ -367,8 +419,40 @@ export class JointGraphAdapter implements IDisposable {
       const port = this.model.node(ref.nodeId)?.ports.find((item) => item.id === ref.portId);
       return port ? resolvePortSide(port, this.flow) : undefined;
     };
-    link.connector(linkConnector(side(edge.source), side(edge.target)));
+    link.router(linkRouter(side(edge.source), side(edge.target), this.isObstacle));
   }
+
+  /**
+   * Is this point inside a card?
+   *
+   * A bound method, not a fresh closure per link: it is stored in every link's
+   * router arguments, and a new function identity on each call would make
+   * `link.router(...)` look like a change on every re-projection.
+   *
+   * Rebuilt from the *graph* rather than the model, so a card that has grown
+   * with its content blocks the space it actually occupies; the model is
+   * consulted only for the one thing the graph does not know, which is whether
+   * a cell is a card or a frame.
+   */
+  private readonly isObstacle = (point: dia.Point): boolean => {
+    if (!this.obstacles) {
+      this.obstacles = obstacleTest(
+        this.graph
+          .getElements()
+          .filter((element) => this.model.node(String(element.id))?.kind === 'standard')
+          .map((element) => {
+            const { x, y } = element.position();
+            const { width, height } = element.size();
+            return { x, y, width, height };
+          }),
+        ROUTER_PADDING,
+      );
+    }
+    return this.obstacles(point);
+  };
+
+  /** Invalidated by any geometry change; rebuilt on the next route. */
+  private obstacles: ((point: dia.Point) => boolean) | null = null;
 
   /**
    * Projects an edge's label — authored or derived — onto its link.
@@ -386,7 +470,9 @@ export class JointGraphAdapter implements IDisposable {
     const text = edgeLabelText(edge.label, sourcePort);
 
     link.labels(
-      text ? [buildLabel(text, labelPlacement(this.flow, branchRank(ports, edge.source.portId)))] : [],
+      text
+        ? [buildLabel(text, labelPlacement(this.flow, branchRank(ports, edge.source.portId)))]
+        : [],
     );
   }
 

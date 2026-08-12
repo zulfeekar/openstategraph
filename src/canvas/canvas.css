@@ -126,28 +126,52 @@
   fill: var(--color-port-hover);
 }
 
-/* `markAvailable` adds this class to every magnet a dragged link may land on
- * — the affordance that turns "guess and drop" into "aim at a target". */
+/* `ConnectionFeature` adds three classes while a link is being drawn:
+ * `is-connecting` on the paper, `is-available` on every port the link may
+ * legally land on, `is-dragging` on the one it left. Together they are the
+ * affordance that turns "guess and drop" into "aim at a target".
+ *
+ * They are ours, not JointJS's, and that is a correction rather than a
+ * preference: `markAvailable` was measured on the running editor and reaches
+ * no element in the document, and `.joint-temporary-link` is not a class
+ * JointJS 4.3.1 ever writes. `portAffordance.ts` records both measurements.
+ * Every selector below names a class the feature puts on the `.joint-port`
+ * group, where it can reach the visible dot *and* its halo — the previous
+ * rules addressed a class that, where it fired at all, landed on the hit
+ * circle, which cannot style its sibling. */
 .joint-port.is-available [joint-selector='portDot'] {
   r: 6.5;
   fill: var(--color-port-valid);
 }
 
-.joint-port.is-available [joint-selector='portHit'] {
-  fill: color-mix(in srgb, var(--color-port-valid) 18%, transparent);
+/* Motion, not just a colour: a static tint on twenty dots is a state, a ripple
+ * is an invitation. Only the halo breathes — pulsing the dot itself would move
+ * the thing the pointer is trying to hit. The origin ripples too, in the hover
+ * blue rather than the valid green, so the gesture reads end to end: here is
+ * where the wire comes from, there is where it may go. */
+.joint-port.is-available [joint-selector='portHit'],
+.joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
   animation: port-pulse 1.15s var(--ease-out) infinite;
   transform-box: fill-box;
   transform-origin: center;
+  stroke-width: 1.5;
 }
 
-/* Motion, not just a colour: a static tint on twenty dots is a state, a pulse
- * is an invitation. Only the halo breathes — pulsing the dot itself would
- * move the thing the pointer is trying to hit. */
+.joint-port.is-available [joint-selector='portHit'] {
+  fill: color-mix(in srgb, var(--color-port-valid) 30%, transparent);
+  stroke: var(--color-port-valid);
+}
+
+.joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
+  fill: color-mix(in srgb, var(--color-port-hover) 26%, transparent);
+  stroke: var(--color-port-hover);
+}
+
 @keyframes port-pulse {
   0%,
   100% {
-    transform: scale(0.62);
-    opacity: 0.55;
+    transform: scale(0.55);
+    opacity: 0.45;
   }
   50% {
     transform: scale(1);
@@ -155,12 +179,13 @@
   }
 }
 
-/* The other half of "aim at a target": say what is *not* one. `markAvailable`
- * only ever adds a class to the legal magnets, so the illegal ones have to be
- * addressed by their absence — `:has()` on the paper detects that a link is
- * mid-drag, and every port that did not light up recedes. Without this a user
- * reads the dim majority as "nothing is happening" rather than "not there". */
-.joint-paper:has(.joint-temporary-link) .joint-port:not(.is-available) {
+/* The other half of "aim at a target": say what is *not* one. Only the legal
+ * magnets carry a class, so the illegal ones are addressed by their absence,
+ * and every port that did not light up recedes — the origin excepted, since it
+ * is the other half of what the user is being asked to look at. Without this a
+ * user reads the dim majority as "nothing is happening" rather than "not
+ * there". */
+.joint-paper.is-connecting .joint-port:not(.is-available):not(.is-dragging) {
   opacity: 0.3;
   cursor: not-allowed;
 }
@@ -494,10 +519,12 @@
     animation: none;
   }
 
-  /* The valid-target pulse loses its motion and keeps its meaning: the halo
-     stays at full size and the dot keeps its grown radius and valid colour,
-     so the affordance survives intact. */
-  .joint-port.is-available [joint-selector='portHit'] {
+  /* The connection ripple loses its motion and keeps its meaning: the halos
+     stay at full size and tinted, and the dot keeps its grown radius and valid
+     colour, so the affordance — including the dimming of every illegal port —
+     survives intact. */
+  .joint-port.is-available [joint-selector='portHit'],
+  .joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
     animation: none;
   }
 

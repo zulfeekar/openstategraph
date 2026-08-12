@@ -1,20 +1,35 @@
 import type { dia } from '@joint/core';
 import type { PortRef } from '@core/model/contracts/ports';
 import { PaperFeature, type PaperFeatureContext } from './IPaperFeature';
+import {
+  availableTargets,
+  DomPortMarker,
+  PORT_AFFORDANCE,
+  type IPortMarker,
+} from './portAffordance';
 
 /**
- * Link creation, live validation and the invalid-drop hint.
+ * Link creation, live validation, the connection affordance and the
+ * invalid-drop hint.
  *
  * Validation is asked of the controller on every pointer move while a link
  * is being dragged, so the feedback is the *same rule set* that will accept
  * or reject the final drop. Duplicating the rules here — a common shortcut —
  * is how a canvas ends up highlighting a target green and then refusing it.
+ * The affordance below asks that same `canConnect`, for the same reason.
  *
  * A completed drop is converted into a command rather than kept as the
  * temporary link JointJS drew: the throwaway link is removed and the
  * controller creates a real edge, which the adapter projects back. That keeps
  * the "graph is only ever a projection" invariant intact even for the one
  * gesture that creates cells directly.
+ *
+ * **The temporary link is also the affordance's clock.** A link appearing in
+ * the graph that the adapter did not put there *is* a drag in flight, and its
+ * removal — whether it landed, was refused, or was dropped on blank canvas —
+ * *is* the end of one. JointJS publishes no event for either moment and marks
+ * no class on the link, so the graph's own `add`/`remove` is the only honest
+ * signal; see `portAffordance.ts` for what was measured.
  */
 export class ConnectionFeature extends PaperFeature {
   readonly id = 'connection';
@@ -23,8 +38,23 @@ export class ConnectionFeature extends PaperFeature {
   private rejection: string | null = null;
   private onRejectionChange: ((reason: string | null) => void) | null = null;
 
+  private marker: IPortMarker | null = null;
+  private connecting = false;
+
+  /**
+   * @param createMarker how the affordance reaches the canvas. Injected so the
+   *   feature's decisions can be exercised without a DOM.
+   */
+  constructor(
+    private readonly createMarker: (paperEl: HTMLElement) => IPortMarker = (paperEl) =>
+      new DomPortMarker(paperEl),
+  ) {
+    super();
+  }
+
   protected onInstall(ctx: PaperFeatureContext): void {
     const { paper, controller, adapter } = ctx;
+    this.marker = this.createMarker(paper.el as HTMLElement);
 
     this.onPaper('link:connect', ((view: dia.LinkView) => {
       if (adapter.isApplying) return;
@@ -48,28 +78,61 @@ export class ConnectionFeature extends PaperFeature {
     this.onPaper('link:pointerup', (() => this.setRejection(null)) as never);
     this.onPaper('blank:pointerup', (() => this.setRejection(null)) as never);
 
-    /* ---------- hover affordance on ports ---------- */
+    /* ---------- the connection affordance ---------- */
 
+    // Pressing a port is not yet a drag (`magnetThreshold: 'onleave'`), but it
+    // is already a statement of intent, so the origin grows straight away.
     this.onPaper('element:magnet:pointerdown', ((
       _view: dia.ElementView,
       _event: dia.Event,
       magnet: SVGElement,
     ) => {
-      magnet.closest('.joint-port')?.classList.add('is-dragging');
+      magnet.closest('.joint-port')?.classList.add(PORT_AFFORDANCE.origin);
+      // A gesture is under way from here, so the pointer-up below always has
+      // something to undo — a press that never becomes a drag included.
+      this.connecting = true;
     }) as never);
 
-    this.onPaper('link:pointerdown', (() => {
-      this.ctx.container
-        .querySelectorAll('.joint-port.is-dragging')
-        .forEach((node) => node.classList.remove('is-dragging'));
+    this.onGraph('add', ((cell: dia.Cell) => {
+      if (adapter.isApplying || !cell.isLink()) return;
+      const origin = endpointOf(cell as dia.Link, 'source');
+      if (origin) this.beginConnecting(origin);
     }) as never);
 
-    void paper;
+    this.onGraph('remove', ((cell: dia.Cell) => {
+      if (cell.isLink()) this.endConnecting();
+    }) as never);
+
+    // Belt and braces: a pointer released anywhere ends the gesture, so a
+    // dropped event can never leave the canvas frozen mid-invitation.
+    this.onPaper('link:pointerup', (() => this.endConnecting()) as never);
+    this.onPaper('blank:pointerup', (() => this.endConnecting()) as never);
+    this.onDom(document, 'pointerup', () => this.endConnecting());
+
+    this.addTeardown(() => this.endConnecting());
   }
 
   /** Lets the shell subscribe to validation failures for a toast. */
   observeRejections(handler: (reason: string | null) => void): void {
     this.onRejectionChange = handler;
+  }
+
+  private beginConnecting(origin: PortRef): void {
+    const marker = this.marker;
+    if (!marker) return;
+    this.connecting = true;
+    marker.apply(
+      origin,
+      availableTargets(origin, marker.listPorts(), (source, target) =>
+        this.ctx.controller.edges.canConnect(source, target),
+      ),
+    );
+  }
+
+  private endConnecting(): void {
+    if (!this.connecting) return;
+    this.connecting = false;
+    this.marker?.clear();
   }
 
   private setRejection(reason: string | null): void {

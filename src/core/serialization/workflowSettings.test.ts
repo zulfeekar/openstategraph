@@ -72,6 +72,18 @@ describe('workflow settings', () => {
     expect(workbench.model.settings).toEqual({ recursionLimit: 100 });
   });
 
+  it('tells the provider registry what an empty model selection means', () => {
+    // Otherwise every card on "Workflow default" describes the offline
+    // simulator while the run uses the document's model.
+    workbench.model.setSettings({ model: 'ollama:gpt-oss:120b-cloud' });
+    expect(workbench.providers.resolve('')?.provider.id).toBe('ollama');
+
+    workbench.controller.document.importJSON(
+      JSON.stringify({ version: 2, name: 'plain', nodes: [], edges: [] }),
+    );
+    expect(workbench.providers.resolve('')?.provider.id).toBe('mock');
+  });
+
   it('announces the change so panels can react', () => {
     const events: string[] = [];
     workbench.model.onAny((type) => events.push(type));

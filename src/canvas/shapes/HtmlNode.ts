@@ -1,7 +1,7 @@
 import { dia } from '@joint/core';
 import { NODE } from '@design/tokens';
 import type { Point } from '@core/kernel/geometry';
-import { LINK_CONNECTOR } from '../links/edgeDecoration';
+import { LINK_CONNECTOR, LINK_ROUTER } from '../links/edgeDecoration';
 
 export const HTML_NODE_TYPE = 'openstategraph.HtmlNode';
 export const LINK_TYPE = 'openstategraph.Link';
@@ -146,11 +146,13 @@ export const FlowLink = dia.Link.define(
       // later breaks the one drawn earlier, so a crossing reads as an
       // over/under rather than as a junction where two flows merge.
       //
-      // This is the cartographer's answer, and it is the only one available
-      // here: JointJS's `jumpover` connector works on straight polyline
-      // segments (`IGNORED_CONNECTORS = ['smooth']`, and its intersection
-      // maths is line-based), so adopting it would mean giving up curves for
-      // orthogonal geometry. Casing costs one path and keeps the curves.
+      // This is the cartographer's answer. It was originally the *only* one
+      // available — JointJS's `jumpover` connector needs straight polyline
+      // segments, which curves are not. Runs are orthogonal now, so jumpover
+      // has become possible; casing is kept anyway. A hop is a mark the reader
+      // has to decode, a break is not, and jumpover recomputes every
+      // intersection on every render where casing is one extra path and the
+      // graph's own z-order.
       casing: {
         connection: true,
         strokeWidth: 5,
@@ -158,10 +160,11 @@ export const FlowLink = dia.Link.define(
         fill: 'none',
       },
     },
-    // Curves read as dataflow; right-angled routing reads as circuitry and
-    // fights the soft card language. `curve` rather than `smooth` because its
-    // tangents come from the side the port sits on — see `LINK_CONNECTOR`.
+    // A rigid orthogonal run, asked for by name: *"instead of spline would it
+    // be possible to have rigid flow line"*. The route is the router's (see
+    // `linkRouter`); the connector only decides what a corner looks like.
     connector: LINK_CONNECTOR,
+    router: LINK_ROUTER,
     z: -1,
   },
   {

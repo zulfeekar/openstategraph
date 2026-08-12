@@ -10,14 +10,22 @@ import { JointGraphAdapter } from './JointGraphAdapter';
 import { Viewport } from './Viewport';
 import { AutoLayout } from './AutoLayout';
 import { CELL_NAMESPACE, NodeMountRegistry, defineHtmlNodeView, FlowLink } from './shapes/HtmlNode';
-import { LINK_CONNECTOR } from './links/edgeDecoration';
+import { LINK_CONNECTOR, LINK_ROUTER } from './links/edgeDecoration';
+import {
+  CLICK_THRESHOLD,
+  MAGNET_THRESHOLD,
+  MOVE_THRESHOLD,
+  snapRadiusAtZoom,
+} from './interactionThresholds';
 import { RunFollower } from './follow/RunFollower';
 import type { IPaperFeature, PaperFeatureContext } from './features/IPaperFeature';
 import { PanZoomFeature } from './features/PanZoomFeature';
+import { FrameOnLoadFeature } from './features/FrameOnLoadFeature';
 import { SelectionFeature } from './features/SelectionFeature';
 import { DragCommitFeature } from './features/DragCommitFeature';
 import { SnaplinesFeature } from './features/SnaplinesFeature';
 import { LinkToolsFeature } from './features/LinkToolsFeature';
+import { WaypointCommitFeature } from './features/WaypointCommitFeature';
 import { KeyboardFeature, createDefaultShortcuts, type Shortcut } from './features/KeyboardFeature';
 import {
   ConnectionFeature,
@@ -42,6 +50,13 @@ export interface PaperControllerOptions {
   readonly showGrid?: boolean;
   /** Which way the canvas reads when the paper is built. */
   readonly flowDirection?: FlowDirection;
+  /**
+   * Whether the camera follows a run from the moment the paper exists.
+   * The person's preference (`PreferencesStore.followRun`), passed in the
+   * same way `flowDirection` is — the canvas layer reads no storage of its
+   * own.
+   */
+  readonly followRun?: boolean;
 }
 
 /**
@@ -110,10 +125,17 @@ export class PaperController implements IDisposable {
       // Async rendering keeps a large graph from blocking the first paint.
       async: true,
       sorting: dia.Paper.sorting.APPROX,
-      // Clicks land as clicks rather than 1px drags on a trackpad.
-      clickThreshold: 4,
-      moveThreshold: 2,
-      magnetThreshold: 'onleave',
+      // Clicks land as clicks rather than 1px drags on a trackpad. The units
+      // are not the same for all three — see `interactionThresholds.ts`, which
+      // is where that cost a working connection gesture.
+      clickThreshold: CLICK_THRESHOLD,
+      moveThreshold: MOVE_THRESHOLD,
+      magnetThreshold: MAGNET_THRESHOLD,
+      // A dropped link lands on the nearest *legal* port rather than only on
+      // the one under the pointer. See `interactionThresholds.ts` for why a
+      // bigger hit circle is not the same fix, and why the radius is kept in
+      // step with the zoom below.
+      snapLinks: { radius: snapRadiusAtZoom(1) },
       preventDefaultViewAction: false,
       // Selection needs the native pointer sequence on blank canvas.
       preventDefaultBlankAction: false,
@@ -122,11 +144,18 @@ export class PaperController implements IDisposable {
       // ---- links ----
       defaultLink: () => new FlowLink(),
       defaultConnector: LINK_CONNECTOR,
+      defaultRouter: LINK_ROUTER,
       defaultAnchor: { name: 'center' },
       defaultConnectionPoint: { name: 'boundary', args: { offset: 2 } },
       // A half-finished link is never a valid document state.
       linkPinning: false,
-      markAvailable: true,
+      // `markAvailable` is deliberately *not* set. It was, with a
+      // `magnetAvailability: { name: 'addClass', … }` highlighter, and it put
+      // no class on any element in the document — `dia.HighlighterView` is an
+      // mvc view, so `options.className` became the class of the highlighter's
+      // own detached `<g>`. `ConnectionFeature` marks the legal targets itself,
+      // from the same `canConnect` that governs the drop; the measurement is
+      // recorded in `features/portAffordance.ts`.
       validateMagnet,
       validateConnection: createConnectionValidator((source, target) =>
         controller.edges.canConnect(source, target),
@@ -138,11 +167,11 @@ export class PaperController implements IDisposable {
       embeddingMode: false,
 
       // ---- highlighting ----
+      // Every built-in highlight is off: the canvas expresses selection,
+      // availability and the run through its own classes and stylesheet, so a
+      // second, JointJS-shaped visual vocabulary would only compete with it.
       highlighting: {
-        magnetAvailability: {
-          name: 'addClass',
-          options: { className: 'is-available' },
-        },
+        magnetAvailability: false,
         elementAvailability: false,
         default: false,
       },
@@ -162,7 +191,21 @@ export class PaperController implements IDisposable {
     );
     this.viewport = new Viewport(this.paper, container);
     this.autoLayout = new AutoLayout(this.graph, controller);
-    this.follower = new RunFollower(this.viewport, this.graph, container);
+    this.follower = new RunFollower(
+      this.viewport,
+      this.graph,
+      container,
+      options.followRun ?? true,
+    );
+
+    // The snap radius is a distance for the *hand*, so it is held constant in
+    // screen pixels rather than in the local units JointJS stores it in.
+    const syncSnapRadius = (zoom: number) => {
+      const options = this.paper.options as { snapLinks?: { radius: number } };
+      if (options.snapLinks) options.snapLinks.radius = snapRadiusAtZoom(zoom);
+    };
+    syncSnapRadius(this.viewport.zoom);
+    this.disposables.addFn(this.viewport.onChange(({ zoom }) => syncSnapRadius(zoom)));
 
     const panZoom = new PanZoomFeature();
     this.keyboard = new KeyboardFeature(createDefaultShortcuts(options.shortcuts ?? []));
@@ -172,8 +215,10 @@ export class PaperController implements IDisposable {
       new SelectionFeature(panZoom),
       new DragCommitFeature(),
       new SnaplinesFeature(),
+      new FrameOnLoadFeature(),
       this.connection,
       new LinkToolsFeature(),
+      new WaypointCommitFeature(),
       this.keyboard,
       ...(options.features ?? []),
     ]);

@@ -6,6 +6,7 @@ import { WORKFLOW_SCHEMA_VERSION, WorkflowModel } from '@core/model/WorkflowMode
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { SerializedNode } from '@core/model/contracts/node';
 import type { SerializedEdge, SerializedWorkflow } from '@core/model/contracts/workflow';
+import { portsReferencedBy, unknownNodeDefinition } from './UnknownNode';
 
 export interface LoadReport {
   /** Non-fatal problems: unknown node types, dropped edges, coerced fields. */
@@ -29,9 +30,14 @@ export interface IMigration {
  * opens after the model has moved on, instead of failing to parse.
  *
  * **Lenient on load, strict on save.** A document referencing a node type
- * this build doesn't have loads with that node skipped and a warning,
- * rather than throwing away the user's whole file. Export always writes
- * the current version.
+ * this build doesn't have loads with that node *preserved* as an unknown-node
+ * placeholder and a warning, rather than throwing away the user's whole file.
+ * Export always writes the current version.
+ *
+ * **Round-trip fidelity is the invariant, and it has no exceptions.** Loading
+ * and re-saving must never lose a node, a link or a field — including for a
+ * type this build cannot render. Skipping the node instead was silent data
+ * loss with a one-click trigger; `UnknownNode.ts` records the whole story.
  */
 export class WorkflowSerializer {
   private readonly migrations: IMigration[] = [];
@@ -140,10 +146,19 @@ export class WorkflowSerializer {
       const created = new Map<string, AbstractNodeModel>();
 
       for (const serialized of document.nodes) {
-        const definition = this.registry.nodeTypes.get(serialized.type);
-        if (!definition) {
-          warnings.push(`Skipped unknown node type "${serialized.type}"`);
-          continue;
+        // An unregistered type is *preserved*, never skipped. See
+        // `UnknownNode.ts` for the invariant and for why the ports have to be
+        // recovered from the edges rather than left empty.
+        const registered = this.registry.nodeTypes.get(serialized.type);
+        const definition =
+          registered ??
+          unknownNodeDefinition(serialized.type, portsReferencedBy(serialized.id, document.edges));
+        if (!registered) {
+          warnings.push(
+            `Kept "${serialized.id}" as an unknown node type "${serialized.type}" — ` +
+              'this build has no editor card for it, so it cannot be edited here. ' +
+              'It is preserved exactly as saved.',
+          );
         }
         const node = definition.create({
           id: serialized.id,
@@ -190,6 +205,11 @@ export class WorkflowSerializer {
             source: serialized.source,
             target: serialized.target,
             label: serialized.label ?? null,
+            // Tolerated, not required: `vertices` is additive, so a document
+            // written before waypoints existed simply has none and the router
+            // draws the whole run. `EdgeModel` filters anything that is not a
+            // finite pair, so a hand-edited file cannot inject a NaN.
+            vertices: Array.isArray(serialized.vertices) ? serialized.vertices : [],
           }),
         );
       }

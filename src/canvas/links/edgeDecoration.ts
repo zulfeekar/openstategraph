@@ -1,4 +1,4 @@
-import type { connectors, dia } from '@joint/core';
+import type { connectors, dia, routers } from '@joint/core';
 import type { FlowDirection, IPortDescriptor, PortSide } from '@core/model/contracts/ports';
 
 /**
@@ -24,74 +24,119 @@ import type { FlowDirection, IPortDescriptor, PortSide } from '@core/model/contr
  */
 
 /**
+ * How sharp a corner is.
+ *
+ * The owner asked for a *rigid* line, so the run is orthogonal and the corner
+ * is only eased, not rounded away: at 8px a bend still reads as a right angle
+ * at fit-zoom, while the join stops being the one-pixel spike that a hairline
+ * stroke turns a true 90° into.
+ */
+const CORNER_RADIUS = 8;
+
+/**
  * The connector for every link.
  *
- * `curve` with `direction: 'auto'` takes each end's tangent from the side of
- * the card the port actually sits on. Since `resolvePortSide` already rotates
- * port sides with the flow direction, one connector is correct in both
- * readings with no mode flag.
+ * The route is a list of orthogonal points — the router's job, below — so the
+ * connector's only remaining decision is what a corner looks like. `rounded`
+ * draws the segments verbatim and eases each bend by `radius`.
  *
- * It replaces `smooth`, whose no-vertices branch picks its control points from
- * whichever of |dx| and |dy| is larger. That is a *bounding box* guess, not a
- * port fact: a link leaving a bottom port towards a card offset sideways got
- * horizontal control points, so it left the dot sideways and doubled back —
- * the visual tell that a horizontal layout had been reused rotated.
+ * It replaces `curve`, and with it the whole tangent apparatus: a spline's
+ * tangent existed to make a line *leave a port in the port's own direction*,
+ * which an orthogonal router expresses directly as a start direction. The
+ * knowledge is not discarded, it moved — see `linkRouter`.
  */
-export const LINK_CONNECTOR: connectors.GenericConnectorJSON<'curve'> = {
-  name: 'curve',
-  args: {
-    // The string is the enum's own value; spelling it out keeps this module a
-    // type-only importer of `@joint/core`, which is what lets it be unit
-    // tested in the node environment the rest of the suite runs in.
-    direction: 'auto' as connectors.CurveDirections,
-    // Shorter tangents than the 0.6 default: with cards this close together a
-    // long tangent overshoots and the curve bulges back across its neighbour.
-    distanceCoefficient: 0.45,
-  },
-};
-
-/** Which way a curve leaves a card, per side of the card. */
-const TANGENT_OUT: Record<PortSide, connectors.CurveTangentDirections> = {
-  left: 'left' as connectors.CurveTangentDirections,
-  right: 'right' as connectors.CurveTangentDirections,
-  top: 'up' as connectors.CurveTangentDirections,
-  bottom: 'down' as connectors.CurveTangentDirections,
+export const LINK_CONNECTOR: connectors.GenericConnectorJSON<'rounded'> = {
+  name: 'rounded',
+  args: { radius: CORNER_RADIUS },
 };
 
 /**
- * The connector for one link, with both tangents pinned to the sides its two
- * ports actually sit on.
+ * Which way a run leaves a card, per side of the card.
  *
- * `direction: 'auto'` is not enough once links attach to **magnets**:
- * `LinkView.sourceBBox` is then the *port's* 10px hit circle, not the card, so
- * "which side of the box is this point nearest" degenerates to "whichever way
- * the target lies". A branch leaving the bottom edge towards a card up and to
- * the right got a horizontal tangent and ran along the card's own bottom
- * border — measured on Store Analytics, where the path came back
- * `M 400 1106 C 911 1106 1586 1263 2097 1263`: a flat S, from a port pointing
- * straight down.
- *
- * So the sides are supplied rather than guessed. They come from
- * `resolvePortSide`, which is where the flow direction lives — which makes
- * this the one place the reading direction reaches link geometry, and the
- * reason nothing here needs a `flow` parameter of its own.
+ * This is `TANGENT_OUT` from the curve era, restated in the router's
+ * vocabulary: JointJS names a curve's tangents `up`/`down` and a router's
+ * directions `top`/`bottom`, for the same four facts.
  */
-export function linkConnector(
+const RUN_OUT: Record<PortSide, dia.OrthogonalDirection> = {
+  left: 'left' as dia.OrthogonalDirection,
+  right: 'right' as dia.OrthogonalDirection,
+  top: 'top' as dia.OrthogonalDirection,
+  bottom: 'bottom' as dia.OrthogonalDirection,
+};
+
+/**
+ * The routing grid, and how far a run stays off a card it passes.
+ *
+ * `step` is the pathfinder's grid. It is a divisor of `NODE.portRowHeight`
+ * (24) on purpose: two runs leaving adjacent ports are 24 apart, so a grid of
+ * 12 can hold them apart instead of snapping them onto one line.
+ *
+ * `padding` is the clearance the search keeps around every obstacle. It is
+ * half the cross-flow node gap, so a run diverted between two cards has room
+ * for itself and still leaves a visible gap on both sides.
+ */
+const ROUTER_STEP = 12;
+export const ROUTER_PADDING = 24;
+
+/**
+ * The router for one link, with both ends pinned to the sides its ports sit
+ * on, and obstacle avoidance in between.
+ *
+ * **`manhattan`, and it is not a paid feature.** The decision record for the
+ * previous edge work stated that the fix for the one remaining card crossing
+ * was "an obstacle-avoiding router (paid)". That was false and it is corrected
+ * in `docs/decisions/edge-legibility.md`: the free package ships
+ * `manhattan`, `metro`, `normal`, `oneSide`, `orthogonal` and `rightAngle`,
+ * and `manhattan` is the obstacle-avoiding one. The claim is load-bearing
+ * because it is why a real defect — the grader's `revise` back-edge crossing
+ * two cards — was written off instead of fixed.
+ *
+ * **Why the directions are supplied rather than guessed.** Exactly the reason
+ * the curve connector's tangents were: once links attach to **magnets**,
+ * `LinkView.sourceBBox` is the *port's* 10px hit circle rather than the card,
+ * so any "which side of the box is this nearest" rule degenerates to
+ * "whichever way the target lies", and a run leaving a bottom port sets off
+ * sideways along the card's own border. `startDirections`/`endDirections`
+ * take the answer from `resolvePortSide`, which is where the flow direction
+ * lives — so this stays the one place the reading direction reaches link
+ * geometry, and nothing here needs a `flow` parameter of its own.
+ *
+ * A single direction, never a list: the port is on one side of the card, and
+ * offering the router alternatives is how a run ends up leaving a dot
+ * backwards to save four pixels of path length.
+ */
+export function linkRouter(
   sourceSide: PortSide | undefined,
   targetSide: PortSide | undefined,
-): connectors.GenericConnectorJSON<'curve'> {
+  obstacles?: (point: dia.Point) => boolean,
+): routers.GenericRouterJSON<'manhattan'> {
   return {
-    name: 'curve',
+    name: 'manhattan',
     args: {
-      ...LINK_CONNECTOR.args,
-      ...(sourceSide ? { sourceDirection: TANGENT_OUT[sourceSide] } : {}),
-      // The target tangent is *outward* too — JointJS measures it away from
-      // the card, so a link arriving at a top port has an 'up' tangent and
-      // therefore comes down into it.
-      ...(targetSide ? { targetDirection: TANGENT_OUT[targetSide] } : {}),
-    },
+      step: ROUTER_STEP,
+      padding: ROUTER_PADDING,
+      // 90, not the 45 the pathfinder defaults to: a 45° change is how
+      // `metro` earns its diagonals, and a diagonal is the one thing the
+      // owner's sketch rules out.
+      maxAllowedDirectionChange: 90,
+      ...(sourceSide ? { startDirections: [RUN_OUT[sourceSide]] } : {}),
+      // Outward at both ends, like the tangents were: a run arriving at a top
+      // port has direction `top`, and therefore comes *down* into it.
+      ...(targetSide ? { endDirections: [RUN_OUT[targetSide]] } : {}),
+      ...(obstacles ? { isPointObstacle: obstacles } : {}),
+    } as routers.ManhattanRouterArguments,
   };
 }
+
+/**
+ * The router before anything is known about the ports.
+ *
+ * The shape default and the paper default, so a link being *dragged* — which
+ * has no target port yet, and therefore no side to pin to — is orthogonal from
+ * the first frame rather than snapping from a diagonal to a run on drop. The
+ * adapter re-pins both ends the moment the edge exists.
+ */
+export const LINK_ROUTER = linkRouter(undefined, undefined);
 
 /**
  * Label rhythm per reading direction.
