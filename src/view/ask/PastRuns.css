@@ -1,0 +1,119 @@
+/* Past runs — a read-only history inside the chat panel.
+ *
+ * Deliberately quieter than a turn: history is reference material, not the
+ * conversation. Same token scale as `AskPanel.css` (`--space-2` inside a
+ * block, `--space-3` between blocks) so the two read as one surface. */
+
+.past-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: var(--space-1);
+}
+
+.past-runs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.past-runs__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__bar-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.past-runs__run {
+  /* Never shrink. The list is a flex column in a bounded panel, so the
+     default `flex-shrink: 1` squeezed every row to a uniform height once
+     there were more runs than fit — clipping each row's meta line under the
+     next row's border. The container scrolls; the rows keep their size. */
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  overflow: hidden;
+}
+
+/* A run still waiting on a human is the one row worth finding at a glance. */
+.past-runs__run[data-status='paused'] {
+  border-color: var(--color-status-warning);
+}
+
+.past-runs__run-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.past-runs__run-head:hover {
+  background: var(--color-bg-hover);
+}
+
+.past-runs__run-title {
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+}
+
+.past-runs__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.past-runs__note {
+  margin: var(--space-2) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+}
+
+.past-runs__step-head {
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__line {
+  display: grid;
+  grid-template-columns: minmax(4rem, 6rem) 1fr;
+  gap: var(--space-2);
+  font: var(--type-caption);
+}
+
+.past-runs__line-key {
+  color: var(--color-text-secondary);
+}
+
+.past-runs__line-value {
+  color: var(--color-text-primary);
+  /* Checkpoint values are capped by the backend but can still be a paragraph;
+     wrapping beats a horizontal scrollbar inside a side panel. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -125,8 +125,12 @@ export function exportSVG(paper: PaperController): Result<string, string> {
   clone.querySelectorAll('.joint-layers').forEach((layer) => {
     layer.removeAttribute('transform');
   });
-  // Interaction-only artefacts have no meaning in a static image.
-  clone.querySelectorAll('.joint-tools, .joint-temporary-link').forEach((node) => node.remove());
+  // Interaction-only artefacts have no meaning in a static image. This used to
+  // name `.joint-temporary-link` alongside them; no such class exists in
+  // JointJS 4.3.1, so it removed nothing. A link mid-drag cannot reach an
+  // export anyway — the gesture holds the pointer — so the selector is simply
+  // dropped rather than replaced with a guess.
+  clone.querySelectorAll('.joint-tools').forEach((node) => node.remove());
 
   const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   style.textContent = `${resolveRootVariables()}\n${collectStyles()}`;

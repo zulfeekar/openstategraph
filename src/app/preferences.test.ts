@@ -33,6 +33,32 @@ describe('PreferencesStore', () => {
     expect(new PreferencesStore(storage).flowDirection).toBe('horizontal');
   });
 
+  it('follows the run by default — the camera does its job unasked', () => {
+    expect(new PreferencesStore(memoryStorage()).followRun).toBe(true);
+  });
+
+  it('remembers being turned off, which is the only reason to store it', () => {
+    const storage = memoryStorage();
+    new PreferencesStore(storage).setFollowRun(false);
+    expect(new PreferencesStore(storage).followRun).toBe(false);
+  });
+
+  it('treats a corrupt follow value as the default', () => {
+    const storage = memoryStorage();
+    storage.setItem('openstategraph.follow-run', 'maybe');
+    expect(new PreferencesStore(storage).followRun).toBe(true);
+  });
+
+  it('notifies subscribers when following changes', () => {
+    const store = new PreferencesStore(memoryStorage());
+    const seen: boolean[] = [];
+    store.onChange(() => seen.push(store.followRun));
+    store.setFollowRun(false);
+    store.setFollowRun(false); // no-op — same value
+    store.setFollowRun(true);
+    expect(seen).toEqual([false, true]);
+  });
+
   it('notifies subscribers exactly on change', () => {
     const store = new PreferencesStore(memoryStorage());
     const seen: string[] = [];

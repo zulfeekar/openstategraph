@@ -1,0 +1,69 @@
+/* The schema card: the tables the agent can actually reach, from the real
+ * database. Derived information stays subordinate to authored content — the
+ * same rule the composition line follows. Existing tokens only. */
+
+.sql-schema {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sql-schema__summary {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.sql-schema__source {
+  font: var(--type-label);
+  color: var(--color-text-quaternary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-schema__tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sql-schema__table {
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  cursor: pointer;
+}
+
+.sql-schema__table:hover {
+  border-color: var(--color-border-default);
+  color: var(--color-text-primary);
+}
+
+.sql-schema__table[aria-pressed='true'] {
+  border-color: var(--color-border-default);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+}
+
+.sql-schema__detail {
+  font: var(--type-mono-sm);
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.sql-schema__note {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}

@@ -121,27 +121,27 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
             {step.taskId ? <span className="ask__activity-task">{step.taskId}</span> : null}
           </div>
         ) : (
-        <details
-          key={`${step.node}-${step.taskId ?? index}`}
-          className="ask__trace-step"
-          open={false}
-        >
-          <summary className="ask__activity-row">
-            <span className="ask__activity-node">{step.node.replace(/^node:/, '')}</span>
-            {step.taskId ? <span className="ask__activity-task">{step.taskId}</span> : null}
-            <span className="ask__activity-ms">{step.durationMs} ms</span>
-            {step.children.length > 0 ? (
-              <span className="ask__activity-count">{step.children.length} steps</span>
-            ) : null}
-          </summary>
-          {step.children.map((child, childIndex) => (
-            <div key={childIndex} className="ask__activity-row ask__activity-row--child">
-              <span className="ask__activity-node">{child.node}</span>
-              <span className="ask__activity-ms">{child.durationMs} ms</span>
-            </div>
-          ))}
-          {step.output ? <RichText className="ask__trace-output" text={step.output} /> : null}
-        </details>
+          <details
+            key={`${step.node}-${step.taskId ?? index}`}
+            className="ask__trace-step"
+            open={false}
+          >
+            <summary className="ask__activity-row">
+              <span className="ask__activity-node">{step.node.replace(/^node:/, '')}</span>
+              {step.taskId ? <span className="ask__activity-task">{step.taskId}</span> : null}
+              <span className="ask__activity-ms">{step.durationMs} ms</span>
+              {step.children.length > 0 ? (
+                <span className="ask__activity-count">{step.children.length} steps</span>
+              ) : null}
+            </summary>
+            {step.children.map((child, childIndex) => (
+              <div key={childIndex} className="ask__activity-row ask__activity-row--child">
+                <span className="ask__activity-node">{child.node}</span>
+                <span className="ask__activity-ms">{child.durationMs} ms</span>
+              </div>
+            ))}
+            {step.output ? <RichText className="ask__trace-output" text={step.output} /> : null}
+          </details>
         ),
       )}
     </div>

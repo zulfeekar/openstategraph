@@ -6,8 +6,11 @@ import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import { MARKDOWN_COMPONENTS, MARKDOWN_PLUGINS } from '@view/common/RichText';
 import { FieldRenderer } from './FieldRenderer';
-import { SubgraphCompositionBody, TeamCompositionBody } from './CompositionBody';
+import { compositionBody } from './CompositionBody';
+import { MOUNT_KINDS } from './mountKind';
 import { KnowledgeBody } from './KnowledgeBody';
+import { SqlSchemaBody } from './SqlSchemaBody';
+import { intentBody } from './IntentBody';
 
 export interface NodeBodyProps {
   node: AbstractNodeModel;
@@ -69,7 +72,9 @@ function FormattedOutputBody({ node }: NodeBodyProps) {
         />
       </span>
       <div className="prose">
-        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{text}</Markdown>
+        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
+          {text}
+        </Markdown>
       </div>
     </div>
   );
@@ -90,7 +95,9 @@ function GroupBody({ node }: NodeBodyProps) {
       {title ? <div className="node__group-title">{title}</div> : null}
       {notes ? (
         <div className="prose">
-          <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{notes}</Markdown>
+          <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
+            {notes}
+          </Markdown>
         </div>
       ) : null}
     </>
@@ -139,7 +146,9 @@ function NoteBody({ node }: NodeBodyProps) {
       title="Double-click to edit"
     >
       {body ? (
-        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>{body}</Markdown>
+        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
+          {body}
+        </Markdown>
       ) : (
         <span className="node__note-placeholder">Double-click to write a note…</span>
       )}
@@ -149,8 +158,22 @@ function NoteBody({ node }: NodeBodyProps) {
 
 /** Registered here so the map is populated before the first card renders. */
 registerNodeBody('output.formatted', FormattedOutputBody);
-registerNodeBody('team.workflow', TeamCompositionBody);
-registerNodeBody('workflow.subgraph', SubgraphCompositionBody);
+// The mounts, driven from the one declaration of which types are mounts —
+// the same map `NodeCard` badges from, so a card can never be badged as
+// holding a graph while showing no composition (or the reverse).
+for (const [typeId, kind] of Object.entries(MOUNT_KINDS)) {
+  registerNodeBody(typeId, compositionBody(kind));
+}
 registerNodeBody('annotate.group', GroupBody);
 registerNodeBody('annotate.note', NoteBody);
 registerNodeBody('tool.knowledge-lookup', KnowledgeBody);
+// The schema tool's card shows what it can reach instead of a table control
+// that never reached the runtime — see `SqlSchemaBody`.
+registerNodeBody('tool.chinook-get-schema', SqlSchemaBody);
+// The two node types whose instruction was invisible. A Router shows its
+// `rules` and a Grader its `criteria` on the card already; an Agent's
+// `systemPrompt` and a Worker's `role` are `onCard: false` — right for a
+// paragraph of rules, wrong for "what is this node" — so they get a derived
+// one-line intent instead. See `IntentBody`.
+registerNodeBody('agent.llm', intentBody('systemPrompt'));
+registerNodeBody('orchestrate.worker', intentBody('role'));

@@ -54,6 +54,14 @@ export class Workbench {
       .register(new OpenAIProvider())
       .register(new OllamaProvider());
 
+    // What "Workflow default" means, kept current from the open document.
+    // One wiring point, here, because this is where the document and the
+    // provider set meet — every card, inspector and preview executor then
+    // asks the registry rather than each inventing its own answer.
+    this.model.on('workflow:settings', ({ settings }) =>
+      this.providers.setWorkflowDefaultModel(String(settings['model'] ?? '')),
+    );
+
     this.connectionValidator = new ConnectionValidator(this.model, this.registry);
     this.connectionValidator.rules.registerAll(DEFAULT_CONNECTION_RULES);
 

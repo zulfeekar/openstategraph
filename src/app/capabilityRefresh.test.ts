@@ -16,6 +16,9 @@ const capability = (id: string): ToolCapability => ({
   name: id,
   description: `discovered tool ${id}`,
   argsSchema: {},
+  // No hand-authored card claims these fixtures — `''` is what the backend
+  // sends for a tool that declares no `node_type`.
+  nodeType: '',
 });
 
 const clientReturning = (tools: readonly ToolCapability[]) => ({
@@ -88,11 +91,11 @@ describe('refreshWorkflowCapabilities', () => {
   });
 
   it('registers a newly discovered tool as a workflow-scoped node type', async () => {
-    recordKnownCapabilities('chinook-nl-to-sql', []);
+    recordKnownCapabilities('chinook-assistant', []);
     const { registry, executors } = stand();
 
     const outcome = await refreshWorkflowCapabilities(
-      'chinook-nl-to-sql',
+      'chinook-assistant',
       registry,
       executors,
       clientReturning([capability('scratch_probe')]),
@@ -106,11 +109,11 @@ describe('refreshWorkflowCapabilities', () => {
   });
 
   it('reports honestly when nothing changed since the load baselined it', async () => {
-    recordKnownCapabilities('chinook-nl-to-sql', [capability('a')]);
+    recordKnownCapabilities('chinook-assistant', [capability('a')]);
     const { registry, executors } = stand();
 
     const outcome = await refreshWorkflowCapabilities(
-      'chinook-nl-to-sql',
+      'chinook-assistant',
       registry,
       executors,
       clientReturning([capability('a')]),

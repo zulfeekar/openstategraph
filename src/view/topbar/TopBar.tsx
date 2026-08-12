@@ -50,6 +50,7 @@ import { GraphPreview } from '@view/overlays/GraphPreview';
 import { OnboardingHint } from '@view/overlays/OnboardingHint';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import { useEntryQuestion } from './useEntryQuestion';
+import { runIntent } from './runIntent';
 import './TopBar.css';
 
 interface TopBarProps {
@@ -162,19 +163,29 @@ export function TopBar({
 
   /**
    * What Run would actually ask. Live — it re-reads on every field edit, so
-   * the button's disabled state follows the developer's typing.
+   * the button's tooltip follows the developer's typing.
    */
   const question = useEntryQuestion();
-  const canRun = question !== '' && !runInFlight;
 
   // Ticket 03: **Run means run.** It no longer starts the in-browser preview
   // engine; it streams a real backend run of the Input node's text, through
   // the same `RuntimeClient` the Ask panel uses, and shows it in that panel.
   // The preview engine is untouched and still drives the internal tests — it
   // is simply no longer what this button means.
+  //
+  // Ticket 21: and a press of it always *means* something. It used to be
+  // `disabled` whenever the entry question was empty, which on the shipped
+  // `concierge` — whose Input node is blank on purpose — made the primary
+  // action of the editor do nothing at all, with no panel, no toast and no
+  // console line. The tooltip that explained it could not appear either: a
+  // disabled button dispatches no mouse events, so the click and the hover
+  // died together. The decision itself lives in `runIntent`, where it can be
+  // tested; this handler is only the gesture.
   const run = () => {
-    if (!canRun) return;
-    onRun(question);
+    const intent = runIntent(question, runInFlight);
+    if (intent.kind === 'stop') return onStop();
+    if (intent.kind === 'explain') return onNotify(intent.reason);
+    onRun(intent.question);
   };
 
   const exportEntries: MenuEntry[] = [
@@ -222,9 +233,11 @@ export function TopBar({
       label: 'Import JSON…',
       icon: Upload,
       onSelect: () =>
+        // No fit here: replacing the document is framed by the canvas's own
+        // `FrameOnLoadFeature`, which is why drilling into a mount — a path
+        // that had no such hand-written call — used to lose the view.
         importJSON(controller, (outcome) => {
           if (outcome.message) onNotify(outcome.message);
-          requestAnimationFrame(() => paper?.fitToContent());
         }),
     },
   ];
@@ -339,7 +352,15 @@ export function TopBar({
               label="Follow run"
               active={following}
               icon={<Icon glyph={Crosshair} size="md" />}
-              onClick={() => paper?.follower.setEnabled(!following)}
+              onClick={() => {
+                const next = !following;
+                paper?.follower.setEnabled(next);
+                // Only a *click* writes the preference. The follower also
+                // turns itself off when a gesture takes the camera, and that
+                // is a pause for this run — not a decision about every run
+                // after it, which is what persisting it would make it.
+                workbench.preferences.setFollowRun(next);
+              }}
             />
           </Tooltip>
         </div>
@@ -378,7 +399,12 @@ export function TopBar({
                   // flight finishes and is thrown away.
                   'Stop this run — nothing further is scheduled; steps already dispatched finish and are discarded'
                 : question === ''
-                  ? 'Type a question in the Input node first'
+                  ? // Still the first explanation offered, for anyone whose
+                    // pointer arrives before their click. It is no longer the
+                    // ONLY one — see `runIntent`: this tooltip was
+                    // unreachable for as long as the button was disabled,
+                    // which is the whole of ticket 21.
+                    'This workflow takes its question at run time — type one in the Input node to run it from here'
                   : `Run: ${truncate(question)}`
             }
             multiline
@@ -399,8 +425,14 @@ export function TopBar({
                     <Icon glyph={Play} size="sm" strokeWidth={2.25} />
                   )
                 }
-                onClick={runInFlight ? onStop : run}
-                disabled={runInFlight ? false : !canRun}
+                // One handler for both states (ticket 21): `runIntent`
+                // already answers "stop or run or explain", and having the
+                // JSX decide it a second way is two places to disagree.
+                onClick={run}
+                // Never disabled. A refusal has to be audible, and a
+                // disabled button cannot make a sound — not even the
+                // tooltip above it.
+                disabled={false}
               >
                 {runInFlight ? 'Stop' : 'Run'}
               </Button>

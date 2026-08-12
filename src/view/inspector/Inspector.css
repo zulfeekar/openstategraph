@@ -32,6 +32,24 @@
   white-space: nowrap;
 }
 
+/* The link mode's two endpoint rows (ticket 24). Same shape as a port row —
+   a name that truncates, a badge that never does — because they are the same
+   idea read from the link's side rather than the node's. */
+.inspector__link-end {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.inspector__link-node {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
 .inspector__status {
   display: flex;
   align-items: center;

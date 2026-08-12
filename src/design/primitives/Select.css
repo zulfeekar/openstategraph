@@ -74,8 +74,7 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: var(--select-padding-y) var(--space-7) var(--select-padding-y)
-    var(--select-padding-x);
+  padding: var(--select-padding-y) var(--space-7) var(--select-padding-y) var(--select-padding-x);
   font: var(--type-body-md);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-tight);

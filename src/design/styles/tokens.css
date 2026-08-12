@@ -207,13 +207,21 @@
   --focus-ring-width: 3px;
   --focus-ring-offset: 0px;
   --focus-ring-alpha: 45%;
-  --focus-ring-soft: color-mix(in srgb, var(--color-focus-ring) var(--focus-ring-alpha), transparent);
+  --focus-ring-soft: color-mix(
+    in srgb,
+    var(--color-focus-ring) var(--focus-ring-alpha),
+    transparent
+  );
 
   /* An errored control focuses to a danger-tinted ring rather than the
    * ordinary blue one, so "focused" never paints over "wrong". Weaker
    * than the focus ring, matching the invalid convention. */
   --invalid-ring-alpha: 30%;
-  --invalid-ring-soft: color-mix(in srgb, var(--color-danger) var(--invalid-ring-alpha), transparent);
+  --invalid-ring-soft: color-mix(
+    in srgb,
+    var(--color-danger) var(--invalid-ring-alpha),
+    transparent
+  );
 
   /* ---------- Disabled ----------
    * One value, everywhere. Four different opacities across four controls

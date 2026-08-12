@@ -47,11 +47,11 @@ describe('drillStack', () => {
   });
 
   it('round-trips through sessionStorage', () => {
-    pushDrillFrame({ slug: 'page-analytics', name: 'Page Analytics' });
+    pushDrillFrame({ slug: 'chinook-assistant', name: 'Chinook Data Analyst' });
     expect(JSON.parse(sessionStorage.getItem(DRILL_STACK_KEY) ?? 'null')).toEqual([
-      { slug: 'page-analytics', name: 'Page Analytics' },
+      { slug: 'chinook-assistant', name: 'Chinook Data Analyst' },
     ]);
-    expect(readDrillStack()).toEqual([{ slug: 'page-analytics', name: 'Page Analytics' }]);
+    expect(readDrillStack()).toEqual([{ slug: 'chinook-assistant', name: 'Chinook Data Analyst' }]);
   });
 
   it('nests, and pops one level at a time', () => {

@@ -122,7 +122,9 @@
    * out top-down to suit it. */
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-sunken, transparent);
+  /* The real token is `--color-bg-surface-sunken`; the earlier spelling had no
+     such custom property, so the fallback (transparent) always won. */
+  background: var(--color-bg-surface-sunken);
   pointer-events: none;
   opacity: 0.85;
 }
@@ -140,4 +142,21 @@
   font-style: italic;
   padding: var(--space-1) var(--space-1-5);
   border-style: dashed;
+}
+
+/* The package's own one-line purpose, above the census.
+ *
+ * Slightly stronger than the counts beneath it: what a mount achieves is the
+ * headline and what it contains is the detail, so the type ramp has to agree
+ * with that order rather than leave two identical-looking lines. */
+.node__composition-purpose {
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-snug);
+  margin-bottom: var(--space-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

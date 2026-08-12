@@ -12,14 +12,7 @@ import './Indicators.css';
  * `paused` is deliberately the one non-terminal tone that does not animate:
  * it means "waiting for a person", and a pulse there would say "working".
  */
-export type StatusTone =
-  | 'idle'
-  | 'ready'
-  | 'running'
-  | 'paused'
-  | 'success'
-  | 'warning'
-  | 'error';
+export type StatusTone = 'idle' | 'ready' | 'running' | 'paused' | 'success' | 'warning' | 'error';
 
 export function StatusDot({ tone = 'idle', label }: { tone?: StatusTone; label?: string }) {
   return (
@@ -112,8 +105,9 @@ const KEY_GLYPHS: Record<string, string> = {
   minus: '−',
 };
 
-/** "Mod+Shift+Z" → ["⌘", "⇧", "Z"] */
-export function formatShortcut(spec: string): string[] {
+/** "Mod+Shift+Z" → ["⌘", "⇧", "Z"]. Module-local: `Kbd` renders the caps and
+ *  `shortcutText` the compact form, so nothing outside needs the array. */
+function formatShortcut(spec: string): string[] {
   return spec
     .split('+')
     .map((part) => part.trim())
@@ -136,38 +130,6 @@ export function Kbd({ keys }: { keys: string }) {
         </kbd>
       ))}
     </span>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Spinner / Progress
- * ------------------------------------------------------------------ */
-
-export function Spinner({ className }: { className?: string }) {
-  return <span className={clsx('spinner', className)} role="status" aria-label="Loading" />;
-}
-
-export function Progress({
-  value,
-  indeterminate,
-  className,
-}: {
-  /** 0–1. Ignored when `indeterminate`. */
-  value?: number;
-  indeterminate?: boolean;
-  className?: string;
-}) {
-  const pct = Math.min(100, Math.max(0, (value ?? 0) * 100));
-  return (
-    <div
-      className={clsx('progress', indeterminate && 'progress--indeterminate', className)}
-      role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={indeterminate ? undefined : Math.round(pct)}
-    >
-      <div className="progress__fill" style={indeterminate ? undefined : { width: `${pct}%` }} />
-    </div>
   );
 }
 

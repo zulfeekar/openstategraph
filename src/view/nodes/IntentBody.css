@@ -1,0 +1,18 @@
+/* The one-line intent on a model-driven card.
+ *
+ * Same type ramp and colour as `.node__composition`, deliberately: a Team's
+ * census line and an agent's intent line are the same kind of remark about a
+ * card, and giving them two looks would make the canvas read as two designs. */
+
+.node__intent {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-snug);
+  /* Two lines, then ellipsis. One line is often a word short of a whole
+     thought; three starts competing with the fields below it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

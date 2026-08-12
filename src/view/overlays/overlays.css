@@ -80,27 +80,15 @@
 }
 
 .legend__swatch[data-port-type='tool'] {
-  background: repeating-linear-gradient(
-    to right,
-    var(--accent-solid) 0 2px,
-    transparent 2px 5px
-  );
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 2px, transparent 2px 5px);
 }
 
 .legend__swatch[data-port-type='skill'] {
-  background: repeating-linear-gradient(
-    to right,
-    var(--accent-solid) 0 9px,
-    transparent 9px 13px
-  );
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 9px, transparent 9px 13px);
 }
 
 .legend__swatch[data-port-type='feedback'] {
-  background: repeating-linear-gradient(
-    to right,
-    var(--accent-solid) 0 4px,
-    transparent 4px 8px
-  );
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 4px, transparent 4px 8px);
 }
 
 .legend__swatch[data-port-type='worker'] {

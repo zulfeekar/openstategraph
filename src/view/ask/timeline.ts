@@ -124,12 +124,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     const namespace = row.namespace?.[0] ?? null;
     const last = mutable();
 
-    if (
-      namespace !== null &&
-      last &&
-      last.namespace === namespace &&
-      last.taskId === row.taskId
-    ) {
+    if (namespace !== null && last && last.namespace === namespace && last.taskId === row.taskId) {
       last.count += 1;
       last.durationMs += duration;
       clock += duration;
@@ -139,8 +134,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     const spawned =
       (row.taskId ? spawnNames.get(`task:${row.taskId}`) : undefined) ??
       (namespace ? spawnNames.get(`ns:${namespace}`) : undefined);
-    const label =
-      spawned ?? (namespace !== null ? namespace : undefined) ?? stepLabel(row.node);
+    const label = spawned ?? (namespace !== null ? namespace : undefined) ?? stepLabel(row.node);
     const visit = (visits.get(label) ?? 0) + 1;
     visits.set(label, visit);
 

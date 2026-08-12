@@ -52,12 +52,7 @@ export function OnboardingHint({ onOpenCredentials }: { onOpenCredentials: () =>
 
   return (
     <div className="onboarding-hint" role="status">
-      <button
-        type="button"
-        className="onboarding-hint__close"
-        aria-label="Dismiss"
-        onClick={close}
-      >
+      <button type="button" className="onboarding-hint__close" aria-label="Dismiss" onClick={close}>
         <Icon glyph={X} size="sm" />
       </button>
       <p className="onboarding-hint__text">

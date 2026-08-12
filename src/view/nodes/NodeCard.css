@@ -109,7 +109,15 @@
 /* ---------- Port footer ----------
  * A two-column grid: inputs left, outputs right. One row can hold both,
  * which is what puts "prompt" and "result" on the same line the way the
- * reference layout does. */
+ * reference layout does.
+ *
+ * The *row* each port occupies is set inline from `planPortLayout`, never left
+ * to auto-placement. Sparse auto-placement advances one cursor for the whole
+ * grid and never moves it backwards, so with the column declared and the row
+ * implicit the first output landed on the row of the *last* input — an agent's
+ * `result` sat three rows down beside `feedback`, with row one's right-hand
+ * cell empty. Since the dot's `y` is measured from its row's rect, that was a
+ * misplaced dot and not merely a misplaced label. */
 
 .node__ports {
   display: grid;
@@ -142,6 +150,16 @@
 .node__port--out {
   grid-column: 2;
   justify-content: flex-end;
+}
+
+/* A binding — a tool's `tool`, an agent's `skill` — keeps its line in the
+ * footer, because the footer is the card's legend and names every port. Its
+ * dot, though, is on a card edge rather than on the flank beside this row, so
+ * it is drawn back a little: the flank stack above it is the part a reader can
+ * trace a wire to. `planPortLayout` also sinks these to the foot of their own
+ * column, so the dotted rows stay contiguous. */
+.node__port--offside {
+  opacity: 0.65;
 }
 
 .node__port-icon {
@@ -410,10 +428,14 @@
   color: var(--color-text-primary);
 }
 
-/* Scope badge: marks a workflow-scoped type on the placed card, so a node
-   that will not exist in other workflows is visibly different from the
-   app-wide prebuilts. */
-.node__scope {
+/* Subtitle chips — ONE badge vocabulary, not two.
+ *
+ * `workflow` (scope) marks a node type that will not exist in other
+ * workflows; `graph` (mount) marks a card that stands for a whole workflow
+ * rather than one step. They sit in the same line, at the same size, in the
+ * same lowercase-uppercased voice, because a second badge system on one card
+ * would be worse than no badge at all. */
+.node__chip {
   display: inline-block;
   margin-right: var(--space-1);
   padding: 0 var(--space-1);
@@ -425,4 +447,28 @@
   letter-spacing: 0.04em;
   color: var(--color-text-tertiary);
   vertical-align: middle;
+}
+
+/* The mount chip carries the card's own accent, so it reads as a statement
+   about *what this card is* rather than as another muted annotation. Both
+   slots are theme-aware by construction (`theme.css` rebuilds the tints from
+   alpha on dark), so no colour is invented here. */
+.node__chip--mount {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent-on-tint);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The wordless half of the signal.
+ *
+ * A chip is only legible up close; the canvas is read at zoom levels where no
+ * caption survives. A tinted header band does survive, and it costs no space
+ * at all — so at a glance a mount is a differently-shaped card, and up close
+ * it says which kind. */
+.node--mount .node__header {
+  background: var(--accent-tint);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-bottom: var(--space-2);
 }

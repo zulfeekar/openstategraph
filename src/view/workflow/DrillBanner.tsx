@@ -3,7 +3,12 @@ import { ArrowLeft, Share2 } from 'lucide-react';
 import { Icon } from '@design/primitives';
 import { useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
-import { peekDrillFrame, popDrillFrame, subscribeDrillStack, type DrillFrame } from '@app/drillStack';
+import {
+  peekDrillFrame,
+  popDrillFrame,
+  subscribeDrillStack,
+  type DrillFrame,
+} from '@app/drillStack';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import './DrillBanner.css';
 
@@ -53,7 +58,10 @@ export function DrillBanner() {
       <span className="drill-banner__where">
         Editing <strong>{workbench.model.name}</strong>
       </span>
-      <span className="drill-banner__shared" title="Every mount of this package uses this definition — an edit here changes all of them.">
+      <span
+        className="drill-banner__shared"
+        title="Every mount of this package uses this definition — an edit here changes all of them."
+      >
         shared definition
       </span>
       <button

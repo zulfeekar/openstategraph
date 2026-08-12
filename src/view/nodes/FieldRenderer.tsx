@@ -100,7 +100,7 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     }
 
     case 'select': {
-      const options = resolveOptions(schema).map<SelectOption>((option) => ({
+      const options = resolveOptions(schema, data).map<SelectOption>((option) => ({
         value: option.value,
         label: option.label,
         ...(option.group ? { group: option.group } : {}),
@@ -317,7 +317,7 @@ function RepeatableGroupField({
                   )}
                   {field.kind === 'select' && (
                     <Select
-                      options={resolveOptions(field).map((opt) => ({
+                      options={resolveOptions(field, row).map((opt) => ({
                         value: opt.value,
                         label: opt.label,
                         group: opt.group,

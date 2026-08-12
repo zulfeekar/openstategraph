@@ -5,6 +5,7 @@ import {
   ConnectCommand,
   DisconnectCommand,
   SetEdgeLabelCommand,
+  SetEdgeVerticesCommand,
   SpliceInsertCommand,
 } from '@core/commands/edgeCommands';
 import type { NodeTypeId } from '@core/model/contracts/node';
@@ -60,6 +61,10 @@ export class EdgeEditor implements IEdgeEditor {
 
   setLabel(edgeId: EdgeId, label: string | null): void {
     this.commands.execute(new SetEdgeLabelCommand(edgeId, label));
+  }
+
+  setVertices(edgeId: EdgeId, vertices: readonly Point[]): void {
+    this.commands.execute(new SetEdgeVerticesCommand(edgeId, vertices));
   }
 
   /**

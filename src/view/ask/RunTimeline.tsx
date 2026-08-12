@@ -1,10 +1,5 @@
 import { useMemo } from 'react';
-import {
-  barOffsetPercent,
-  barWidthPercent,
-  buildTimeline,
-  type TimelineRow,
-} from './timeline';
+import { barOffsetPercent, barWidthPercent, buildTimeline, type TimelineRow } from './timeline';
 
 /**
  * The run timeline.
@@ -83,7 +78,9 @@ export function RunTimeline({
       {/* Said plainly, once, rather than implied by a precise-looking number:
           the backend reports a node only after it finishes, so these are gaps
           between frames, not measured spans. */}
-      <p className="timeline__caveat">Durations are gaps between stream frames, not measured spans.</p>
+      <p className="timeline__caveat">
+        Durations are gaps between stream frames, not measured spans.
+      </p>
     </div>
   );
 }

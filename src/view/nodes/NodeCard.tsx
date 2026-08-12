@@ -12,7 +12,7 @@ import {
   type StatusTone,
 } from '@design/primitives';
 import { isOnCard, validateFields } from '@core/model/contracts/fields';
-import { resolvePortSide, type IPortDescriptor } from '@core/model/contracts/ports';
+import type { IPortDescriptor } from '@core/model/contracts/ports';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { NodeGeometry } from '@canvas/shapes/HtmlNode';
 import type { NodeId } from '@core/model/contracts/node';
@@ -25,7 +25,9 @@ import {
 } from '@app/WorkbenchContext';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { FieldRenderer } from './FieldRenderer';
+import { MOUNT_BADGE, mountKindOf } from './mountKind';
 import { resolveNodeBody } from './nodeBodyRegistry';
+import { planPortLayout, portPositions, type PlannedPortRow } from './portLayout';
 import './NodeCard.css';
 
 interface NodeCardProps {
@@ -104,51 +106,43 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
     const width = Math.round(cardRect.width / zoom);
     if (height <= 0) return;
 
-    const ports: Record<string, { x: number; y: number }> = {};
+    // The card measures; `portLayout` decides. Everything below is DOM
+    // reading — which row is where, how wide the bus capsule came out — and
+    // the arithmetic that turns those into coordinates is a pure function, so
+    // "every port has a dot, none of them share a point" is asserted over the
+    // whole catalogue instead of eyeballed on one card.
+    const plan = planPortLayout(node.ports, flow);
 
-    // Direction-aware: each port's side comes from the one rotation rule in
-    // `resolvePortSide` (ticket 45). Several ports can now share the top or
-    // bottom edge (all flow inputs, in vertical mode), so those spread
-    // evenly along the width instead of stacking on one point.
-    const resolved = node.ports.map((port) => ({ port, side: resolvePortSide(port, flow) }));
-    const topPorts = resolved.filter((entry) => entry.side === 'top');
-    const bottomPorts = resolved.filter((entry) => entry.side === 'bottom');
-    const spread = (index: number, count: number) =>
-      Math.round((width * (index + 1)) / (count + 1));
-
-    for (const { port, side } of resolved) {
-      if (side === 'top') {
-        const index = topPorts.findIndex((entry) => entry.port.id === port.id);
-        ports[port.id] = { x: spread(index, topPorts.length), y: 0 };
-        continue;
-      }
-      if (side === 'bottom') {
-        // The tool-bus pill straddles the card's bottom edge, so the port
-        // goes on the pill's *lower* rim — dead centre would put the dot on
-        // top of the pill's own label.
-        const pill =
-          port.appearance === 'pill'
-            ? card.querySelector<HTMLElement>(`[data-port-row="${port.id}"]`)
-            : null;
-        const overhang = pill ? pill.getBoundingClientRect().height / zoom / 2 : 0;
-        const index = bottomPorts.findIndex((entry) => entry.port.id === port.id);
-        ports[port.id] = {
-          x: spread(index, bottomPorts.length),
-          y: height + Math.round(overhang),
-        };
-        continue;
-      }
+    const rowCentres = new Map<string, number>();
+    for (const { port } of plan.rows) {
       const row = card.querySelector<HTMLElement>(`[data-port-row="${port.id}"]`);
-      if (row) {
-        const rowRect = row.getBoundingClientRect();
-        const y = Math.round((rowRect.top + rowRect.height / 2 - cardRect.top) / zoom);
-        ports[port.id] = { x: side === 'left' ? 0 : width, y };
-        continue;
-      }
-      // A bus port rotated onto a flank has no matching footer row; centre
-      // it vertically on the edge instead.
-      ports[port.id] = { x: side === 'left' ? 0 : width, y: Math.round(height / 2) };
+      if (!row) continue;
+      const rowRect = row.getBoundingClientRect();
+      rowCentres.set(port.id, Math.round((rowRect.top + rowRect.height / 2 - cardRect.top) / zoom));
     }
+
+    // The bus capsule is drawn by CSS, so its dot is measured from the element
+    // rather than re-derived from a number that would have to track a
+    // stylesheet. Absent before the first paint puts it in the DOM.
+    const pillElement = plan.pill
+      ? card.querySelector<HTMLElement>(`[data-port-row="${plan.pill.id}"]`)
+      : null;
+    const pillRect = pillElement?.getBoundingClientRect();
+
+    const ports = Object.fromEntries(
+      portPositions(plan, {
+        width,
+        height,
+        rowCentres,
+        pill: pillRect
+          ? {
+              centre: (pillRect.left + pillRect.width / 2 - cardRect.left) / zoom,
+              left: (pillRect.left - cardRect.left) / zoom,
+            }
+          : null,
+        pillOverhang: pillRect ? pillRect.height / zoom / 2 : 0,
+      }),
+    );
 
     const geometry: NodeGeometry = { height, ports };
     const fingerprint = JSON.stringify(geometry);
@@ -262,15 +256,23 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
     );
   }
 
-  const inputs = node.ports.filter((port) => port.direction === 'in');
-  const outputs = node.ports.filter((port) => port.direction === 'out');
-  const rowPorts = [...inputs, ...outputs].filter((port) => (port.appearance ?? 'row') === 'row');
-  const pill = node.ports.find((port) => port.appearance === 'pill');
+  const plan = planPortLayout(node.ports, flow);
+  const pill = plan.pill;
+  // A mount stands for a whole graph, not for one step. That has to be legible
+  // before a word is read, hence both a chip and a card treatment: the chip
+  // says which kind of thing this is up close, the tinted header band survives
+  // the zoom level at which no caption is readable at all.
+  const mount = mountKindOf(definition.id);
 
   return (
     <div
       ref={cardRef}
-      className={clsx('node', pill && 'node--has-pill', `node--${nodeFamily(definition.id)}`)}
+      className={clsx(
+        'node',
+        pill && 'node--has-pill',
+        mount && 'node--mount',
+        `node--${nodeFamily(definition.id)}`,
+      )}
       data-accent={definition.accent}
       data-status={status}
       data-node-id={node.id}
@@ -285,9 +287,14 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
             <span className="node__title">{node.title}</span>
           </div>
           <span className="node__subtitle">
+            {mount ? (
+              <span className="node__chip node__chip--mount" title={MOUNT_BADGE.title}>
+                {MOUNT_BADGE.label}
+              </span>
+            ) : null}
             {definition.scope === 'workflow' ? (
               <span
-                className="node__scope"
+                className="node__chip"
                 title="Workflow-scoped: this node type travels with this workflow and is unavailable elsewhere"
               >
                 workflow
@@ -342,8 +349,8 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
       ) : null}
 
       <footer className="node__ports">
-        {rowPorts.map((port) => (
-          <PortRow key={port.id} port={port} />
+        {plan.rows.map((entry) => (
+          <PortRow key={entry.port.id} entry={entry} />
         ))}
       </footer>
 
@@ -359,8 +366,16 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
   );
 }
 
-/** One labelled port row. `data-port-row` is what the measurement pass finds. */
-function PortRow({ port }: { port: IPortDescriptor }) {
+/**
+ * One labelled port row. `data-port-row` is what the measurement pass finds.
+ *
+ * The grid row is stated rather than left to CSS auto-placement, which
+ * numbers per *cursor* and not per column: with the columns declared and the
+ * row implicit, the first output landed beside the last input instead of the
+ * first. `planPortLayout` owns the numbering.
+ */
+function PortRow({ entry }: { entry: PlannedPortRow }) {
+  const { port, anchor, row } = entry;
   const workbench = useWorkbench();
   const portType = workbench.registry.portType(port.type);
   const glyph = resolveIcon(portType.iconId);
@@ -371,7 +386,11 @@ function PortRow({ port }: { port: IPortDescriptor }) {
         'node__port',
         `node__port--${port.direction}`,
         port.required && 'node__port--required',
+        // A binding's dot is on a card edge, not on the flank beside this
+        // row, so the row reads as a legend entry rather than as an anchor.
+        (anchor === 'top' || anchor === 'bottom' || anchor === 'pill') && 'node__port--offside',
       )}
+      style={{ gridRow: row }}
       data-port-row={port.id}
       data-accent={portType.accent}
       title={

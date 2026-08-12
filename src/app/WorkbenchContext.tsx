@@ -28,6 +28,13 @@ import {
   type WriteGuard,
 } from './workflowStore';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
+import {
+  getOpenSlug,
+  readSlugFromSearch,
+  resolveOpenRequest,
+  subscribeOpenSlug,
+} from './openWorkflow';
+import { draftIdForSlug, draftSavedAt } from './workflowDrafts';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -269,14 +276,48 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     done.current = true;
     const writer = (writerRef.current ??= newWriteGuard());
 
-    const session = resolveSession({
-      sessionId: sessionStorage.getItem(SESSION_KEY),
-      mostRecentId: mostRecentWorkflowId(localStorage),
-      mintId: () => `wf-${Date.now()}`,
-      // The clobber gate: a workflow another live tab is editing is not
-      // adopted at all, so two tabs never share one autosave key.
-      isClaimed: (id) => isClaimedByAnother(localStorage, id, writer),
+    // A deep link (`?w=<slug>`, ticket 20) names the document, so browser
+    // storage supplies neither its content nor its id: restoring an autosave
+    // over a workflow fetched from the backend would show a link's recipient
+    // their own last canvas, and *adopting* the most recent autosave id would
+    // then overwrite that stored graph with the fetched one. Minting is the
+    // whole answer to both. `resolveOpenRequest` is what decides this is a
+    // genuine arrival rather than a reload of the workflow already open here.
+    const request = resolveOpenRequest({
+      urlSlug: readSlugFromSearch(window.location.search),
+      openSlug: getOpenSlug(),
     });
+
+    // A deep link (`?w=<slug>`, ticket 20) names the document, so browser
+    // storage supplies neither its content nor its id here: the load path owns
+    // the content, and it decides between the file and this browser's draft of
+    // that same slug (`workflowDrafts.restoreDraftFor`).
+    //
+    // The id, though, is now the *slug's* (ticket 23), not a fresh mint. A
+    // minted id tied the draft to the tab rather than to the document, so
+    // opening a second workflow pointed the one key at a different graph and
+    // the first draft became unreachable — silent, unrecoverable, and with no
+    // prompt. Keying on the slug is what makes coming back to a workflow come
+    // back to your edits to *it*.
+    if (request.action === 'fetch') {
+      // Baseline the write guard against the draft this tab is about to be
+      // handed by the load path. Without it the first autosave compares
+      // itself against the previous page load's write, finds it newer, and
+      // reports a conflict with a tab that does not exist — then stops saving.
+      writer.lastSeenAt = draftSavedAt(request.slug, localStorage);
+    }
+
+    const session =
+      request.action === 'fetch'
+        ? { id: draftIdForSlug(request.slug), shouldRestore: false, notice: undefined }
+        : resolveSession({
+            sessionId: sessionStorage.getItem(SESSION_KEY),
+            mostRecentId: mostRecentWorkflowId(localStorage),
+            mintId: () => `wf-${Date.now()}`,
+            // The clobber gate: a workflow another live tab is editing is not
+            // adopted at all, so two tabs never share one autosave key.
+            isClaimed: (id) => isClaimedByAnother(localStorage, id, writer),
+          });
     if (session.notice != null) reportRef.current(session.notice);
 
     if (session.shouldRestore) {
@@ -316,6 +357,35 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     claimSession(localStorage, session.id, writer);
     setState({ restored: session.shouldRestore, workflowId: session.id });
   }, [controller, workbench]);
+
+  // The autosave key follows the open workflow for the rest of the session.
+  //
+  // Without this, ticket 23's other half stays open: an in-app Load replaces
+  // the document but leaves the key pointing at the workflow the user just
+  // left, so the very next debounced save writes the *new* graph over the
+  // *old* one's draft. Re-keying is what keeps one draft per workflow rather
+  // than one per tab.
+  useEffect(
+    () =>
+      subscribeOpenSlug((slug) => {
+        if (slug == null) return;
+        const id = draftIdForSlug(slug);
+        // Re-baseline for the same reason as the mount path above: the tab is
+        // adopting a key whose stored version it has just been shown.
+        const writer = (writerRef.current ??= newWriteGuard());
+        writer.lastSeenAt = draftSavedAt(slug, localStorage);
+        try {
+          sessionStorage.setItem(SESSION_KEY, id);
+        } catch {
+          // Storage unavailable; the in-memory id below is still correct for
+          // this session, which is what autosave actually writes under.
+        }
+        setState((previous) =>
+          previous.workflowId === id ? previous : { ...previous, workflowId: id },
+        );
+      }),
+    [],
+  );
 
   // Saving starts only once identity is settled, so nothing is ever written
   // under a placeholder id.

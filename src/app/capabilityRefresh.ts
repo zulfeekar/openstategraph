@@ -115,7 +115,10 @@ export async function refreshWorkflowCapabilities(
  * after opening a workflow reports honestly ("nothing new") instead of
  * announcing every tool the load had just put there.
  */
-export function recordKnownCapabilities(slug: string, capabilities: readonly ToolCapability[]): void {
+export function recordKnownCapabilities(
+  slug: string,
+  capabilities: readonly ToolCapability[],
+): void {
   knownCapabilityIds.set(
     slug,
     capabilities.map((c) => c.id),

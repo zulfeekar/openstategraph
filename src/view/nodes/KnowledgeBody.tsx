@@ -230,12 +230,15 @@ export function KnowledgeBody(_props: NodeBodyProps) {
         type="button"
         className="node__composition-open"
         disabled={state.status === 'busy'}
-        title="Introspects this workflow’s data sources and writes one knowledge doc per topic to its knowledge/ folder. Hand-authored docs are never overwritten."
+        title="Build time, not run time: this introspects the workflow’s own sources now and writes one knowledge doc per topic to its knowledge/ folder. A run only ever reads them. Hand-authored docs are never overwritten."
         onClick={() => void build()}
       >
         <Icon glyph={BrainCircuit} size="xs" />
         {state.status === 'busy' ? 'Building…' : 'Build second brain'}
       </button>
+      <p className="knowledge__build-time-note">
+        Build time, not run time — a run reads these docs, never writes them.
+      </p>
       {state.status === 'done' ? (
         <div className="node__composition">
           {state.written} doc{state.written === 1 ? '' : 's'} written

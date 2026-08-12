@@ -58,6 +58,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
       shortcuts,
       showGrid,
       flowDirection: workbench.preferences.flowDirection,
+      followRun: workbench.preferences.followRun,
     });
 
     instance.observeConnectionRejections((reason) => {

@@ -19,6 +19,7 @@ import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
+import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
 import { FileText, MessageSquareText } from 'lucide-react';
@@ -56,6 +57,12 @@ export function AppShell() {
   // hand-edit) — independent of whether "Manage Workflows" happens to be
   // open, since an external change can land at any time.
   useWorkflowFileWatch(notify);
+
+  // Ticket 20: `?w=<slug>` in the address bar opens that workflow. After
+  // `useWorkflowSession`, and never fighting it — the two agree in advance
+  // through `resolveOpenRequest`, so exactly one of "restore this tab's
+  // autosave" and "fetch the linked workflow" happens.
+  useDeepLinkedWorkflow(notify);
 
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);
@@ -202,7 +209,6 @@ export function AppShell() {
   }, [workbench, notify]);
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
-
 
   return (
     <div className="app-shell">

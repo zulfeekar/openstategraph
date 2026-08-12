@@ -66,10 +66,10 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
       <p className="dialog__warning">
         <Icon glyph={TriangleAlert} size="sm" />
         <span>
-          Keys belong in <code>.env</code> on the server, which is gitignored and never reaches
-          this page; keys held in this browser exist only for the local canvas preview, and cannot
-          be typed in here any more. Copy <code>.env.example</code> to <code>.env</code>, fill in
-          the variable for your provider, and restart the backend.
+          Keys belong in <code>.env</code> on the server, which is gitignored and never reaches this
+          page; keys held in this browser exist only for the local canvas preview, and cannot be
+          typed in here any more. Copy <code>.env.example</code> to <code>.env</code>, fill in the
+          variable for your provider, and restart the backend.
         </span>
       </p>
 

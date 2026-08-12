@@ -3,6 +3,15 @@
  * subordinate to authored content — same rule as the composition line.
  * Existing tokens only (theme.css / tokens.css); nothing new is minted. */
 
+/* Invariant 3 of the knowledge architecture, stated where the affordance
+ * lives: the button is a build-time action hosted on a run-time node, and
+ * nothing in the compiled graph can reach it. */
+.knowledge__build-time-note {
+  font: var(--type-label);
+  color: var(--color-text-quaternary);
+  margin: 0;
+}
+
 .knowledge__topics {
   display: flex;
   flex-direction: column;

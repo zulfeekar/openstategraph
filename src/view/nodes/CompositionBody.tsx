@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import {
+  compositionPurpose,
   formatComposition,
   summarizeComposition,
   type CompositionKind,
@@ -11,7 +12,7 @@ import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { Pencil } from 'lucide-react';
 import { Icon } from '@design/primitives';
 import { loadWorkflowIntoEditor } from '@view/workflow/loadWorkflowIntoEditor';
-import type { NodeBodyProps } from './nodeBodyRegistry';
+import type { NodeBody, NodeBodyProps } from './nodeBodyRegistry';
 import './CompositionBody.css';
 
 /**
@@ -22,7 +23,7 @@ import './CompositionBody.css';
  * document, they are not nodes of this canvas, and nothing here can edit them.
  * That boundary is what the original one-line census protected, and it still
  * holds — but opacity for the model is not the same as opacity for the reader.
- * A card reading `chinook-metrics-team · 1 supervisor · 2 workers` still leaves
+ * A card reading `sourcing-team · 1 supervisor · 2 workers` still leaves
  * "what actually happens in there" a question answerable only by loading
  * another document and losing your place.
  *
@@ -62,7 +63,9 @@ function overriddenCount(node: NodeBodyProps['node']): number {
 
 function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: CompositionKind }) {
   const slug = (node.getField<string>('workflow') ?? '').trim();
-  const [state, setState] = useState<SlugState>(() => CACHE.get(slug)?.settled ?? { status: 'loading' });
+  const [state, setState] = useState<SlugState>(
+    () => CACHE.get(slug)?.settled ?? { status: 'loading' },
+  );
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -80,15 +83,22 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
   // and a placeholder there would read as a failure rather than an empty field.
   if (!slug) return null;
   if (state.status === 'missing') {
-    return <div className="node__composition node__composition--missing">unknown workflow: {slug}</div>;
+    return (
+      <div className="node__composition node__composition--missing">unknown workflow: {slug}</div>
+    );
   }
   if (state.status !== 'ready') return null;
 
   const summary = summarizeComposition(state.document, kind);
   if (!summary) return null;
 
+  // What the box achieves, above what is in it. The census is machinery; a
+  // reader looking at a mount wants the meaning first and the parts second.
+  const purpose = compositionPurpose(state.document);
+
   return (
     <div className="node__composition">
+      {purpose ? <div className="node__composition-purpose">{purpose}</div> : null}
       <div className="node__composition-row" data-no-drag>
         <button
           type="button"
@@ -126,7 +136,9 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
  * opens one.
  */
 function GraphPeek({ slug }: { slug: string }) {
-  const [state, setState] = useState<PeekState>(() => PEEKS.get(slug)?.settled ?? { status: 'loading' });
+  const [state, setState] = useState<PeekState>(
+    () => PEEKS.get(slug)?.settled ?? { status: 'loading' },
+  );
 
   useEffect(() => {
     let live = true;
@@ -221,14 +233,18 @@ function OpenMount({ slug, kind }: { slug: string; kind: CompositionKind }) {
   );
 }
 
-/** Ticket vocabulary: a Team claims its loop, a Workflow mount does not. */
-export const TeamCompositionBody = (props: NodeBodyProps) => (
-  <CompositionAnnotation {...props} kind="team" />
-);
-
-export const SubgraphCompositionBody = (props: NodeBodyProps) => (
-  <CompositionAnnotation {...props} kind="subgraph" />
-);
+/**
+ * The body for one mount kind.
+ *
+ * Ticket vocabulary: a Team claims its loop, a Workflow mount does not — the
+ * claim is derived by `summarizeComposition`, never asserted by the card.
+ * Which type ids get which kind is declared once, in `mountKind.ts`.
+ */
+export function compositionBody(kind: CompositionKind): NodeBody {
+  const Body = (props: NodeBodyProps) => <CompositionAnnotation {...props} kind={kind} />;
+  Body.displayName = `CompositionBody(${kind})`;
+  return Body;
+}
 
 /* ================================================================== *
  * Per-slug cache
@@ -267,7 +283,9 @@ function resolveSlug(slug: string): Promise<SlugState> {
       CACHE.delete(slug);
       return { status: 'unreachable' };
     }
-    return result.value == null ? { status: 'missing' } : { status: 'ready', document: result.value };
+    return result.value == null
+      ? { status: 'missing' }
+      : { status: 'ready', document: result.value };
   });
 
   const entry: CacheEntry = { inFlight };
@@ -283,9 +301,7 @@ function resolveSlug(slug: string): Promise<SlugState> {
  * ================================================================== */
 
 type PeekState =
-  | { status: 'loading' }
-  | { status: 'ready'; svg: string }
-  | { status: 'failed'; message: string };
+  { status: 'loading' } | { status: 'ready'; svg: string } | { status: 'failed'; message: string };
 
 interface PeekEntry {
   readonly inFlight: Promise<PeekState>;

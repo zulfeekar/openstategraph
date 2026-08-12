@@ -13,9 +13,9 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
-import { CURRENT_SLUG_KEY, forgetKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import { forgetKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import { clearOpenSlug, getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import {
-  slugify,
   WorkflowFileClient,
   type WorkflowSummary,
   type WorkflowTemplate,
@@ -50,11 +50,17 @@ interface WorkflowManagerProps {
  * cannot write to disk itself, so every save/load/delete here is a request to
  * the backend, same shape as `RuntimeClient`.
  *
- * The slug is frozen at first save and kept for the rest of this browser
- * session (`sessionStorage`, not the model): renaming the workflow afterwards
- * changes its display name, never its directory — the identity ticket 14
- * settled on, because a slug that moves on rename breaks every reference to
- * it and its git history.
+ * The slug is **minted by the backend** at first save and frozen from then on
+ * (`@app/openWorkflow`, which keeps it in `sessionStorage` and in the address
+ * bar): renaming the workflow afterwards changes its display name, never its
+ * directory — the identity ticket 14 settled on, because a slug that moves on
+ * rename breaks every reference to it and its git history.
+ *
+ * Minting used to happen here, with a client-side `slugify(name)`, and that
+ * was silent data loss (ticket 20): a second workflow named "My Workflow" was
+ * PUT straight onto the first one's `my-workflow` directory. A name is not an
+ * identity, and only the process that can see `workflows/` knows which
+ * identities are free.
  */
 export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProps) {
   const workbench = useWorkbench();
@@ -150,9 +156,10 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       controller.document.importJSON(JSON.stringify(starting));
     }
     controller.document.setName(name);
-    // A fresh workflow has no slug yet — the next save mints one from
-    // whatever name it has at that moment.
-    sessionStorage.removeItem(CURRENT_SLUG_KEY);
+    // A fresh workflow has no slug yet — the next save asks the backend to
+    // mint one. The URL loses its `w=` with it: an unsaved document is not on
+    // the backend, so there is nothing a link could open.
+    clearOpenSlug();
     // Same reasoning as a manual load: a brand-new document is not "inside"
     // anything, so there is nothing to go back to.
     clearDrillStack();
@@ -165,22 +172,47 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     onClose();
   }, [client, controller, newName, template, onNotify, onClose]);
 
+  // Two different acts wearing one button (ticket 20). Saving a workflow this
+  // tab already holds a slug for overwrites that package. Saving one it does
+  // not is a *creation*, and the slug for it comes back from the backend —
+  // never from `slugify(name)` here, which could not see that another
+  // workflow already lived at `my-workflow` and so overwrote it.
   const handleSave = useCallback(async () => {
-    const slug = sessionStorage.getItem(CURRENT_SLUG_KEY) || slugify(workbench.model.name);
+    const open = getOpenSlug();
     setBusy(true);
     const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;
-    const outcome = await client.save(slug, workbench.model.name, document);
-    setBusy(false);
-    if (outcome.ok) {
-      sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
-      onNotify(`Saved: ${workbench.model.name}`);
-      const list = await refreshList();
-      // This tab's own write — record it as known-good so the file watch
-      // never mistakes this save for an external change.
-      recordKnownSavedAt(slug, list.find((wf) => wf.slug === slug)?.savedAt);
+    let slug = open;
+    let failure: string | null = null;
+    if (open) {
+      const outcome = await client.save(open, workbench.model.name, document);
+      if (!outcome.ok) failure = outcome.error;
     } else {
-      onNotify(`Could not save: ${outcome.error}`);
+      const outcome = await client.create(workbench.model.name, document);
+      if (outcome.ok) slug = outcome.value;
+      else failure = outcome.error;
     }
+    setBusy(false);
+    if (failure !== null || slug === null) {
+      onNotify(`Could not save: ${failure ?? 'the runtime did not name the new workflow'}`);
+      return;
+    }
+    // Storage *and* the address bar — a workflow that has just become real on
+    // the backend is linkable from this moment on.
+    setOpenSlug(slug);
+    // The minted slug is said out loud on a create, because it is the one
+    // thing the user could not have predicted: a second "My Workflow" lands
+    // at `my-workflow-k7m3qp`, and silently is how you later wonder which of
+    // two rows is yours.
+    onNotify(
+      open ? `Saved: ${workbench.model.name}` : `Created: ${workbench.model.name} (${slug})`,
+    );
+    await refreshList();
+    // This tab's own write — record it as known-good so the file watch never
+    // mistakes this save for an external change. Read back by slug, not looked
+    // up in the refreshed listing: a hidden package is not in that listing, so
+    // saving one used to record no baseline at all (ticket 21).
+    const row = await client.summary(slug);
+    recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
   }, [client, workbench, onNotify, refreshList]);
 
   const handleLoad = useCallback(
@@ -199,7 +231,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       // the drill trail goes with it — offering "Back to …" afterwards would
       // point at a parent the user deliberately left.
       clearDrillStack();
-      onNotify(`Loaded: ${outcome.value}`);
+      onNotify(
+        outcome.value.restoredDraft
+          ? `Loaded: ${outcome.value.name} — with your unsaved edits from this browser, not the saved file.`
+          : `Loaded: ${outcome.value.name}`,
+      );
       onClose();
     },
     [client, workbench, onNotify, onClose],
@@ -233,9 +269,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
       const outcome = await client.remove(slug);
       if (outcome.ok) {
-        if (sessionStorage.getItem(CURRENT_SLUG_KEY) === slug) {
-          sessionStorage.removeItem(CURRENT_SLUG_KEY);
-        }
+        // Deleting the workflow this tab has open also takes it out of the
+        // URL: leaving `?w=` pointing at a package that no longer exists would
+        // turn the next reload into a 404 toast about work the user deleted
+        // deliberately.
+        if (getOpenSlug() === slug) clearOpenSlug();
         forgetKnownSavedAt(slug);
         onNotify(`Deleted: ${name}`);
         void refreshList();
@@ -306,10 +344,13 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
               limit by losing work. Stated here, next to the button that makes
               it durable, rather than in a doc nobody reads mid-edit. */}
           <p className="workflow-manager__hint">
-            Edits autosave to <strong>this browser only</strong> — they are not on the backend and
-            will not follow you to another browser, another machine, or survive clearing site data.
-            Saving here writes <code>workflows/&lt;name&gt;/workflow.json</code>, which is the copy
-            that lasts.
+            Edits autosave to <strong>this browser only</strong>, one draft per workflow — opening
+            another workflow keeps yours, and coming back restores it. They are not on the backend,
+            so they will not follow you to another browser, another machine, or survive clearing
+            site data. Saving here writes <code>workflows/&lt;slug&gt;/workflow.json</code>, which
+            is the copy that lasts — and puts that slug in the address bar, so the URL is a link you
+            can send. The slug is chosen once, from the name; a second workflow of the same name
+            gets its own.
           </p>
         </PanelSection>
 

@@ -63,7 +63,30 @@
 
 /* No rule between turns: the question bubble's own alignment already reads as
    a boundary, and a divider every few lines makes a short thread look like a
-   table. */
+   table.
+
+   The one exception is a *conversation* break, which is not a boundary between
+   two questions but between two contexts — the turn below it cannot see
+   anything above it. Rare by construction (a New press, or opening a different
+   workflow), so it costs the thread nothing to be emphatic where it appears. */
+
+.ask__break {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ask__break::before,
+.ask__break::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-border-subtle);
+}
 
 .ask__question {
   align-self: flex-end;
@@ -191,6 +214,57 @@
 
 .ask__thinking--settled {
   white-space: normal;
+}
+
+/* ---------- Tool results ---------- */
+
+/* One result, one bounded region — see `toolResults.tsx` for why every tool
+   shares this renderer rather than each getting its own. */
+.ask__tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ask__tool {
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  overflow: hidden;
+}
+
+.ask__tool-name {
+  padding: var(--space-1-5) var(--space-3);
+  color: var(--color-text-secondary);
+  font: var(--type-mono-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.ask__tool-name::-webkit-details-marker {
+  display: none;
+}
+
+.ask__tool-name::before {
+  content: '▾ ';
+  color: var(--color-text-quaternary);
+}
+
+.ask__tool:not([open]) .ask__tool-name::before {
+  content: '▸ ';
+}
+
+/* The whole point of the ticket: however much a tool returns, it is bounded
+   and scrollable rather than clipped or unbounded — and `pre` keeps the line
+   breaks, because a schema listing or a Markdown table IS its line breaks. */
+.ask__tool-body {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+  white-space: pre;
+  max-height: 220px;
+  overflow: auto;
 }
 
 /* ---------- The answer ---------- */
@@ -650,4 +724,15 @@
   .ask__activity-row {
     animation: none;
   }
+}
+
+/* ---------- Hidden while history is showing ---------- */
+
+/* `hidden` is an attribute the browser honours only until a `display` rule
+   overrides it — and both of these declare `display: flex`. Restating it is
+   what makes the History toggle able to hide the live thread without
+   unmounting it (see the comment on the toggle). */
+.ask__thread[hidden],
+.ask__composer[hidden] {
+  display: none;
 }

@@ -37,18 +37,30 @@ export type FileWatchAction =
 
 /**
  * The pure decision behind one poll: given what the backend currently
- * reports for `slug` and what this tab last knew, what should happen.
+ * reports for the open slug and what this tab last knew, what should happen.
  * Pulled out of the hook below so it is testable without a timer, a
  * network stub, or React — the same reasoning `ExecutionEngine`'s
  * `rejectBeforeStart` split applies to its own side effect.
+ *
+ * **`entry` is the answer to an existence question, not a visibility one**
+ * (ticket 21). It used to be `entries.find(...)` over
+ * `GET /api/workflows?surface=editor`, which is a *surface*: it omits hidden
+ * packages by design, so drilling into `concierge` or `workflow-architect`
+ * made this function announce a deletion over a file the backend was happily
+ * serving 200. It now takes what `WorkflowFileClient.summary(slug)` returned,
+ * where `null` means a 404 and nothing else does — so a genuinely deleted
+ * workflow still warns, and only that.
  */
 export function decideFileWatchAction(
-  entries: readonly WorkflowSummary[],
-  slug: string,
+  entry: WorkflowSummary | null,
   known: string | undefined,
 ): FileWatchAction {
-  const entry = entries.find((wf) => wf.slug === slug);
   if (!entry) return { kind: 'notify-deleted' };
+  // A package caught mid-write, or otherwise unreadable, reports an empty
+  // `savedAt`. That is "I cannot tell you when", which is neither a deletion
+  // nor a change — wait for the next poll rather than raise an alarm about a
+  // file that is being saved right now.
+  if (!entry.savedAt) return { kind: 'none' };
   if (known === undefined) return { kind: 'baseline', savedAt: entry.savedAt };
   if (entry.savedAt !== known) return { kind: 'notify-changed' };
   return { kind: 'none' };
@@ -60,8 +72,8 @@ const POLL_INTERVAL_MS = 5000;
  * Ticket 16's other half: `WorkflowManager` already writes
  * files; nothing noticed when a file changed *underneath* an open editor —
  * another tab saving the same slug, a teammate's pull, a hand-edit. Compares
- * the workflow list's `savedAt` against the value this tab itself last
- * recorded (`recordKnownSavedAt`, called by `WorkflowManager` after every
+ * the backend's `savedAt` **for this tab's own slug** against the value this
+ * tab itself last recorded (`recordKnownSavedAt`, called by `WorkflowManager` after every
  * successful save or load) — so this tab's own writes never self-trigger
  * the notice, only a change this tab did not make. Deliberately
  * notify-only, never auto-reload or merge — silently discarding unsaved
@@ -89,9 +101,12 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
       const slug = sessionStorage.getItem(CURRENT_SLUG_KEY);
       if (!slug) return;
 
-      const outcome = await client.list();
+      // The open slug is asked about by name. Not `list()` — see
+      // `decideFileWatchAction` and `WorkflowFileClient.summary` on why a
+      // surface listing cannot answer "does my file still exist".
+      const outcome = await client.summary(slug);
       if (!cancelled && outcome.ok) {
-        const action = decideFileWatchAction(outcome.value, slug, knownSavedAt.get(slug));
+        const action = decideFileWatchAction(outcome.value, knownSavedAt.get(slug));
         switch (action.kind) {
           case 'baseline':
             knownSavedAt.set(slug, action.savedAt);

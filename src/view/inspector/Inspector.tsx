@@ -15,6 +15,7 @@ import {
   type StatusTone,
 } from '@design/primitives';
 import { groupFieldsForInspector, validateFields } from '@core/model/contracts/fields';
+import { describeEdge } from '@core/model/edgeDescription';
 import { LockedPromptSections } from './LockedPromptSections';
 import { useDraftValue } from '@view/hooks/useDraftValue';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
@@ -32,26 +33,112 @@ import './Inspector.css';
 /**
  * The property panel.
  *
- * Two modes, chosen by what is selected: a node's full configuration, or —
- * with nothing selected — the document's health. That second mode is the
- * useful one most of the time, and a panel that only says "nothing selected"
- * wastes a third of the window.
+ * Three modes, chosen by what is selected: a node's full configuration, a
+ * link, or — with nothing selected — the document's health. That last one is
+ * the useful one most of the time, and a panel that only says "nothing
+ * selected" wastes a third of the window.
+ *
+ * **Link is the third mode, and its absence was ticket 24.** Clicking a link
+ * always did select it — the gesture reached `SelectionModel` and the canvas
+ * put `is-selected` on the link. But the panel had only two modes, so a
+ * selected link fell through to *"Nothing selected · Click a node to edit
+ * it"*: the one channel that could confirm the selection denied it, while the
+ * shortcuts drawer advertised "Delete selection ⌫" for a selection nobody
+ * could believe they had made. The reported symptom was "an edge can be drawn
+ * but never removed"; the cause was a missing panel mode, not a missing
+ * gesture.
  *
  * Fields are rendered from the same schema the card uses. The card shows the
  * few marked `onCard`; this shows everything.
  */
 export function Inspector() {
   const { nodes, edges } = useSelection();
-  const single = nodes.length === 1 && edges.length === 0 ? nodes[0] : null;
+  const singleNode = nodes.length === 1 && edges.length === 0 ? nodes[0] : null;
+  const singleEdge = edges.length === 1 && nodes.length === 0 ? edges[0] : null;
 
   return (
     <Panel side="right" className="inspector" style={{ width: 'var(--layout-inspector-width)' }}>
-      {single ? (
-        <NodeInspector nodeId={single} />
+      {singleNode ? (
+        <NodeInspector nodeId={singleNode} />
+      ) : singleEdge ? (
+        <EdgeInspector edgeId={singleEdge} />
       ) : (
         <WorkflowInspector count={nodes.length + edges.length} />
       )}
     </Panel>
+  );
+}
+
+/**
+ * The link mode.
+ *
+ * Deliberately small: a link has no configuration to edit, so the panel's
+ * whole job is to *confirm what is selected* and to offer the one action the
+ * canvas could not discover — removal, routed through the controller so it is
+ * undoable like every other edit.
+ */
+function EdgeInspector({ edgeId }: { edgeId: string }) {
+  const workbench = useWorkbench();
+  const controller = useController();
+  // A link's description depends on its endpoints' titles and ports, so any
+  // document change can move it.
+  const version = useWorkflowVersion();
+  const described = useMemo(
+    () => describeEdge(workbench.model, edgeId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workbench, edgeId, version],
+  );
+
+  if (!described) {
+    return (
+      <>
+        <PanelHeader bordered title="Link" />
+        <PanelBody>
+          <PanelEmpty
+            glyph={MousePointer2}
+            title="Link removed"
+            body="That link is no longer in the workflow."
+          />
+        </PanelBody>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PanelHeader bordered title="Link" />
+      <PanelBody>
+        <PanelSection heading="Connection">
+          <div className="inspector__link-end">
+            <span className="inspector__link-node">{described.sourceNode}</span>
+            <Badge tone="neutral">{described.sourcePort}</Badge>
+          </div>
+          <p className="inspector__description" aria-hidden="true">
+            ↓
+          </p>
+          <div className="inspector__link-end">
+            <span className="inspector__link-node">{described.targetNode}</span>
+            <Badge tone="neutral">{described.targetPort}</Badge>
+          </div>
+          <p className="inspector__description">
+            Carries <strong>{described.type}</strong>.
+          </p>
+        </PanelSection>
+
+        <PanelSection>
+          <Button
+            variant="danger"
+            icon={<Icon glyph={Trash2} size="sm" />}
+            onClick={() => controller.edges.disconnect([edgeId])}
+          >
+            Remove link
+          </Button>
+          <p className="inspector__description">
+            Or press ⌫. Removing a link is undoable, and both nodes stay where they are.
+          </p>
+        </PanelSection>
+      </PanelBody>
+    </>
   );
 }
 
@@ -243,7 +330,8 @@ function WorkflowInspector({ count }: { count: number }) {
         {count > 1 ? (
           <PanelSection heading="Selection">
             <p className="inspector__description">
-              {count} items selected. Select a single node to edit its settings.
+              {count} items selected. Select a single node to edit its settings, or a single link to
+              inspect and remove it.
             </p>
           </PanelSection>
         ) : (
@@ -251,7 +339,7 @@ function WorkflowInspector({ count }: { count: number }) {
             <PanelEmpty
               glyph={MousePointer2}
               title="Nothing selected"
-              body="Click a node to edit it, or drag on empty canvas to select several."
+              body="Click a node to edit it, click a link to inspect or remove it, or drag on empty canvas to select several."
             />
           </PanelSection>
         )}

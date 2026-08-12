@@ -1,86 +1,70 @@
 import { describe, expect, it } from 'vitest';
-import { parseSuggestion, type EditorFacts } from './suggestion';
+import { applicableSuggestion, type EditorFacts } from './suggestion';
+
+/**
+ * The fence-parsing half of these tests moved to the backend with the
+ * boundary — `backend/tests/test_audience_boundary.py` proves over the real
+ * `/api/runs/stream` that a suggestion never rides the answer text for any
+ * audience. What is left here is the half only the browser can answer: is
+ * this suggestion applicable to the canvas that is actually open?
+ */
 
 const facts: EditorFacts = {
   nodeTypes: new Set(['tool.web-search', 'tool.web-fetch']),
   nodeIds: new Set(['agent-analyst', 'input-1']),
 };
 
-const fence = (body: string) => `Sorry, I cannot.\n\n\`\`\`suggestion\n${body}\n\`\`\`\n`;
-
-const valid = JSON.stringify({
+const valid = {
   nodeType: 'tool.web-search',
   attachTo: 'agent-analyst',
   port: 'tools',
   label: 'Web Search',
   reason: 'This workflow has no web access.',
-});
+};
 
-describe('parseSuggestion', () => {
-  it('returns the answer untouched when there is no fence', () => {
-    const parsed = parseSuggestion('Rock earned the most.', facts);
-    expect(parsed.suggestion).toBeNull();
-    expect(parsed.text).toBe('Rock earned the most.');
+describe('applicableSuggestion', () => {
+  it('is null when the run carried no developer channel at all', () => {
+    // The customer case — and the one this must never mistake for "an empty
+    // suggestion", because the run was not entitled to one.
+    expect(applicableSuggestion(null, facts)).toBeNull();
+    expect(applicableSuggestion(undefined, facts)).toBeNull();
   });
 
   it('reads a well-formed suggestion', () => {
-    const parsed = parseSuggestion(fence(valid), facts);
-    expect(parsed.suggestion).toEqual({
-      nodeType: 'tool.web-search',
-      attachTo: 'agent-analyst',
-      port: 'tools',
-      label: 'Web Search',
-      reason: 'This workflow has no web access.',
-    });
-  });
-
-  it('strips the fence from the rendered prose', () => {
-    const parsed = parseSuggestion(fence(valid), facts);
-    expect(parsed.text).toBe('Sorry, I cannot.');
+    expect(applicableSuggestion(valid, facts)).toEqual(valid);
   });
 
   it('defaults the port to the agent tool bus', () => {
-    const parsed = parseSuggestion(
-      fence(JSON.stringify({ nodeType: 'tool.web-search', attachTo: 'agent-analyst' })),
+    const suggestion = applicableSuggestion(
+      { nodeType: 'tool.web-search', attachTo: 'agent-analyst' },
       facts,
     );
-    expect(parsed.suggestion?.port).toBe('tools');
+    expect(suggestion?.port).toBe('tools');
   });
 
   it('rejects a node type this editor does not know', () => {
-    const parsed = parseSuggestion(
-      fence(JSON.stringify({ nodeType: 'tool.telepathy', attachTo: 'agent-analyst' })),
+    const suggestion = applicableSuggestion(
+      { nodeType: 'tool.telepathy', attachTo: 'agent-analyst' },
       facts,
     );
-    expect(parsed.suggestion).toBeNull();
+    expect(suggestion).toBeNull();
   });
 
   it('rejects an attachTo that is not in the document', () => {
-    const parsed = parseSuggestion(
-      fence(JSON.stringify({ nodeType: 'tool.web-search', attachTo: 'agent-ghost' })),
+    const suggestion = applicableSuggestion(
+      { nodeType: 'tool.web-search', attachTo: 'agent-ghost' },
       facts,
     );
-    expect(parsed.suggestion).toBeNull();
+    expect(suggestion).toBeNull();
   });
 
-  it('leaves an unusable fence visible rather than swallowing it', () => {
-    const answer = fence(JSON.stringify({ nodeType: 'tool.telepathy', attachTo: 'nope' }));
-    expect(parseSuggestion(answer, facts).text).toBe(answer);
+  it('rejects non-string fields rather than coercing them', () => {
+    // A model that answers with a number where a node type belongs has not
+    // named a node type, and pretending otherwise offers a button that fails.
+    expect(applicableSuggestion({ nodeType: 42, attachTo: 'agent-analyst' }, facts)).toBeNull();
   });
 
-  it('rejects malformed JSON without throwing', () => {
-    const parsed = parseSuggestion(fence('{not json'), facts);
-    expect(parsed.suggestion).toBeNull();
-  });
-
-  it('rejects a JSON array — a suggestion is one object', () => {
-    const parsed = parseSuggestion(fence('[]'), facts);
-    expect(parsed.suggestion).toBeNull();
-  });
-
-  it('honours only the first fence when a model emits several', () => {
-    const second = JSON.stringify({ nodeType: 'tool.web-fetch', attachTo: 'agent-analyst' });
-    const parsed = parseSuggestion(`${fence(valid)}\n${fence(second)}`, facts);
-    expect(parsed.suggestion?.nodeType).toBe('tool.web-search');
+  it('rejects an array — a suggestion is one object', () => {
+    expect(applicableSuggestion([] as unknown as Record<string, unknown>, facts)).toBeNull();
   });
 });

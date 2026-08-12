@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Info, Lightbulb, Send, Square, TriangleAlert } from 'lucide-react';
+import {
+  History,
+  Info,
+  Lightbulb,
+  MessageSquarePlus,
+  Send,
+  Square,
+  TriangleAlert,
+} from 'lucide-react';
 import { Button, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
 import {
   RuntimeClient,
@@ -10,12 +18,16 @@ import {
 } from '@core/runtime/RuntimeClient';
 import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
+import { frameTarget } from '@core/runtime/frameTarget';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
 import { Activity, exportTrace, type ActivityRow } from './traceTree';
+import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
 import { RunTimeline } from './RunTimeline';
-import { parseSuggestion, type CapabilitySuggestion } from './suggestion';
+import { PastRuns } from './PastRuns';
+import { applicableSuggestion, type CapabilitySuggestion } from './suggestion';
+import { continuingThread, rememberThread, type ThreadBinding } from './thread';
 import './AskPanel.css';
 
 /**
@@ -39,9 +51,9 @@ function currentWorkflowSlug(): string | undefined {
  * to work, without reloading the editor. Omitted entirely when nothing is
  * stored, so a deployment with server-side keys sends no field at all.
  */
-function credentialsPatch(
-  providers: Parameters<typeof collectRuntimeCredentials>[0],
-): { credentials?: Readonly<Record<string, string>> } {
+function credentialsPatch(providers: Parameters<typeof collectRuntimeCredentials>[0]): {
+  credentials?: Readonly<Record<string, string>>;
+} {
   const credentials = collectRuntimeCredentials(providers);
   return credentials ? { credentials } : {};
 }
@@ -59,10 +71,32 @@ interface PendingApproval {
 interface ChatTurn {
   readonly id: string;
   readonly question: string;
+  /**
+   * True when this turn opened a new conversation rather than continuing the
+   * one above it — the developer pressed "New conversation", or they switched
+   * the open workflow, which starts one for them.
+   *
+   * Recorded on the turn instead of erasing the thread above it, for the same
+   * reason a declined suggestion collapses rather than disappears: what
+   * happened in this panel is a record, and a record that rewrites itself
+   * cannot be read. It renders as a rule across the thread, so the boundary
+   * between "this had context" and "this did not" is visible at the moment it
+   * matters — reading back an answer and wondering what it knew.
+   */
+  readonly freshThread: boolean;
   readonly running: boolean;
   readonly activity: readonly ActivityRow[];
-  /** Streamed message content, concatenated live — "how the agent thinks". */
+  /**
+   * Streamed *model* text, concatenated live — "how the agent thinks".
+   *
+   * Model text only, since ticket 02: tool results arrive on the same stream
+   * and used to land here too, which both mixed two voices into one paragraph
+   * and destroyed the tools' formatting when the settled blob was rendered as
+   * Markdown. They now have their own record below.
+   */
   readonly thinking: string;
+  /** What each tool returned this turn, in the order the tools were called. */
+  readonly toolResults: readonly ToolResult[];
   readonly result: RunResult | null;
   readonly error: string | null;
   /** Set while this turn's run is paused waiting for a human decision. */
@@ -100,8 +134,6 @@ interface ChatTurn {
    * failure mode this whole feature is trying to avoid.
    */
   readonly notice: string | null;
-  /** The answer with the suggestion fence stripped, when one was honoured. */
-  readonly answerText: string | null;
 }
 
 let nextTurnId = 0;
@@ -198,6 +230,42 @@ export function AskPanel({
   const workbench = useWorkbench();
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<readonly ChatTurn[]>([]);
+  /**
+   * Whether the panel is showing history instead of the live thread.
+   *
+   * A swap, not a second panel: the two are the same subject at different
+   * times, and a side-by-side would halve the width of both. The live thread's
+   * state is untouched while history is up, so closing it returns to exactly
+   * the conversation that was there — a run streaming in the background keeps
+   * streaming into a thread that is merely not on screen.
+   */
+  const [historyOpen, setHistoryOpen] = useState(false);
+  /**
+   * The conversation in progress, or `null` before the first answer comes back
+   * and after an explicit reset.
+   *
+   * **React state, deliberately not `localStorage`** — and that is the one
+   * place this panel diverges from `/chat`, which persists its own thread per
+   * slug. Three reasons, in the order they bite:
+   *
+   * 1. *The transcript above is not persisted either.* A reloaded panel says
+   *    "Ask anything" with an empty thread. Restoring the id alone would give
+   *    a conversation whose first four turns exist on the server and nowhere
+   *    on screen — an answer with an antecedent the developer cannot see,
+   *    which is the same class of defect this ticket exists to remove, only
+   *    harder to spot. The thread lives exactly as long as the record of it.
+   * 2. *This is an editor.* A reload here usually follows an edit — to the
+   *    document, to a workflow's `tools/`, to the backend. The checkpointed
+   *    `messages` belong to the graph as it was, and replaying them into the
+   *    graph as it now is answers questions about a workflow that no longer
+   *    exists. `/chat` runs a published workflow nobody is editing, so its
+   *    persistence is right *there* and would be wrong here.
+   * 3. *The costs are asymmetric.* Losing continuity across a reload costs one
+   *    re-asked question, and the panel says so plainly. An invisible
+   *    antecedent costs a debugging session, because the symptom is "the model
+   *    said something strange" with no visible cause.
+   */
+  const [thread, setThread] = useState<ThreadBinding | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLInputElement | null>(null);
 
@@ -274,10 +342,21 @@ export function AskPanel({
    * into a result, an error, or — new for `human.approval` — a paused
    * `pendingApproval` state instead of either. Same shape for both callers
    * because a resumed run can itself pause again at a later approval node.
+   *
+   * It is also the single place the panel learns **which thread it is in**.
+   * Every one of the three terminal frames names the same thread (`done`,
+   * `interrupt`, `error` — ticket 11 put it on all of them, where before only
+   * `interrupt` disclosed it), so remembering it here rather than at each
+   * caller means no ending can forget it. A failed turn matters as much as a
+   * finished one: the question still reached the graph, so the next send must
+   * continue that conversation rather than quietly opening a second.
    */
   const streamAndSettle = useCallback(
     async (
       id: string,
+      /** The workflow this stream is running against, bound to the thread it
+       * reports back — see `ThreadBinding`. */
+      slug: string | undefined,
       call: (
         onEvent: (event: RunStreamEvent) => void,
         signal: AbortSignal,
@@ -291,8 +370,18 @@ export function AskPanel({
       // opens is stoppable by construction and none can be forgotten.
       const aborter = new AbortController();
       aborters.current.set(id, aborter);
+      // The rules — an empty id leaves what is held alone, a different one
+      // rebinds — live in `thread.ts` where they are unit-tested; a thread is
+      // a server object, so getting them wrong changes nothing on screen.
+      const remember = (threadId: string) => {
+        setThread((held) => rememberThread(held, slug, threadId));
+      };
       const seen = new Set<string>();
       let activeNode: string | null = null;
+      // Read at call time, never captured: "Edit team" swaps the whole
+      // document under a run that is still streaming, and the projection must
+      // follow the developer rather than the document it started on.
+      const hasNode = (id: string) => controller.model.node(id) != null;
 
       // For the per-node duration readout the Inspector already shows (built
       // for the local preview path, which measures a real start/end) — a
@@ -370,7 +459,12 @@ export function AskPanel({
           // Internal frames are still not *rows* in the flat feed; they only
           // move the glow, and only when the owner actually changes, so a
           // chatty agent loop cannot flood the paced highlight queue.
-          const target = event.activeNode || event.node;
+          // Resolved against the *open* document, so opening a mounted Team
+          // or Workflow mid-run shows that run inside it rather than a static
+          // diagram — see `frameTarget`. On the parent canvas this still
+          // answers with the mount, because a parent never holds its child's
+          // node ids.
+          const target = frameTarget(event, hasNode);
           if (target && (!event.internal || target !== queuedActive)) {
             seen.add(target);
             // The output belongs to the frame's own node; a frame reporting
@@ -433,12 +527,44 @@ export function AskPanel({
           );
           scrollToEnd();
         } else if (event.type === 'token') {
+          // Tokens move the glow too (ticket 02). This is what makes the
+          // highlight say "is working" instead of "has finished": an `update`
+          // frame is only emitted once a node completes, so on a real run the
+          // mounted analyst streamed 100+ tokens over ~20s while the last
+          // update frame — and therefore the glow — still said `router1`.
+          //
+          // Coalesced against `queuedActive`, which is the whole reason that
+          // variable is the *queued* node rather than the glowing one: the
+          // server repeats `activeNode` on every frame (its meaning must not
+          // vary by frame type), so without this compare one model turn would
+          // push 100+ identical entries onto a highlight chain that sleeps
+          // `MIN_HIGHLIGHT_MS` between each — a queue minutes long, and a
+          // canvas still animating after the answer arrived.
+          //
+          // No output is written: a token frame carries a fragment of text,
+          // never the node's finished result, and the `update` frame that
+          // follows is what fills the card.
+          const tokenTarget = frameTarget(event, hasNode);
+          if (tokenTarget && tokenTarget !== queuedActive) {
+            seen.add(tokenTarget);
+            activate(tokenTarget, null);
+            queuedActive = tokenTarget;
+          }
           setTurns((all) =>
             all.map((turn) =>
-              turn.id === id ? { ...turn, thinking: turn.thinking + event.content } : turn,
+              turn.id === id
+                ? event.kind === 'tool'
+                  ? { ...turn, toolResults: appendToolChunk(turn.toolResults, event) }
+                  : { ...turn, thinking: turn.thinking + event.content }
+                : turn,
             ),
           );
           scrollToEnd();
+        } else if (event.type === 'error') {
+          // The one terminal frame that does not arrive as an outcome — the
+          // client settles it into `Err(detail)`, which carries prose and not
+          // a thread. Taken here instead.
+          remember(event.threadId);
         }
       };
 
@@ -476,6 +602,7 @@ export function AskPanel({
         // appears in an `update` frame, having never completed), falling back
         // to the last node that acted — which is one box early, but is what
         // the frame alone can support.
+        remember(outcome.value.threadId);
         const waiting = outcome.value.node || activeNode;
         // The node still glowing did finish; only the approval is waiting. If
         // it were left `running` the sweep would simply move one box and the
@@ -505,10 +632,14 @@ export function AskPanel({
         // last node the stream happened to touch.
         controller.selectionActions.selectNodes([...seen]);
         const result = outcome.value as RunResult;
-        // Validated against the *live* editor here, not in the renderer: a
-        // suggestion naming an unregistered type or a node that is not on
-        // this canvas comes back as `null`, and its fence stays in the prose.
-        const parsed = parseSuggestion(result.answer, {
+        remember(result.threadId);
+        // The suggestion arrives structured, on the run's developer channel —
+        // it was never in `result.answer`, because the backend splits it out
+        // on every run whatever the audience (`api/audience.py`). All that is
+        // left to decide here is whether *this* canvas can honour it: a type
+        // the registry does not know or an `attachTo` the document does not
+        // contain comes back `null` and no card is offered.
+        const suggestion = applicableSuggestion(result.developer?.suggestion, {
           nodeTypes: new Set(workbench.registry.nodeTypes.list().map((type) => type.id)),
           nodeIds: new Set(controller.model.nodes().map((node) => node.id)),
         });
@@ -516,8 +647,7 @@ export function AskPanel({
           running: false,
           result,
           pendingApproval: null,
-          suggestion: parsed.suggestion,
-          answerText: parsed.suggestion ? parsed.text : null,
+          suggestion,
         });
       } else {
         updateTurn(id, {
@@ -543,14 +673,18 @@ export function AskPanel({
       clearPausedNodes('running');
       updateTurn(turnId, { running: true, pendingApproval: null, stopped: null });
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
+      const slug = currentWorkflowSlug();
 
-      await streamAndSettle(turnId, (onEvent, signal) =>
+      await streamAndSettle(turnId, slug, (onEvent, signal) =>
         client.resume(
           {
             threadId,
             workflow: document,
             decision,
-            workflowSlug: currentWorkflowSlug(),
+            workflowSlug: slug,
+            // A resume must be entitled to what the run it continues was, or
+            // approving a run silently downgrades it to a customer's.
+            audience: 'developer',
             ...credentialsPatch(workbench.providers),
           },
           onEvent,
@@ -577,15 +711,29 @@ export function AskPanel({
       const entry = controller.model.nodes().find((node) => node.type === TEXT_INPUT_TYPE);
       if (entry) controller.nodes.setField(entry.id, 'prompt', trimmed);
 
+      // Read here, at the moment it decides something, rather than watched:
+      // whether this question continues the conversation is a question only a
+      // send can ask, so there is nothing to subscribe to and no window in
+      // which the two can disagree. A slug that has changed since the last
+      // answer means the developer opened a different workflow, and this is a
+      // different conversation — the checkpointer being keyed by thread id
+      // alone, continuing would replay the other document's history in here.
+      const slug = currentWorkflowSlug();
+      const continuing = continuingThread(thread, slug);
+
       const id = `turn-${nextTurnId++}`;
       setTurns((all) => [
         ...all,
         {
           id,
           question: trimmed,
+          // Only worth drawing when there is something above to be separated
+          // from; the first turn of an empty panel begins nothing.
+          freshThread: continuing === undefined && all.length > 0,
           running: true,
           activity: [],
           thinking: '',
+          toolResults: [],
           result: null,
           error: null,
           pendingApproval: null,
@@ -593,7 +741,6 @@ export function AskPanel({
           suggestion: null,
           suggestionDecision: null,
           notice: null,
-          answerText: null,
         },
       ]);
       scrollToEnd();
@@ -604,15 +751,26 @@ export function AskPanel({
       // post the canvas as it now is, with the new tool wired in.
       const document = JSON.parse(controller.document.exportJSON()) as unknown;
 
-      await streamAndSettle(id, (onEvent, signal) =>
+      await streamAndSettle(id, slug, (onEvent, signal) =>
         client.runStream(
           {
             workflow: document,
             question: trimmed,
-            workflowSlug: currentWorkflowSlug(),
-            // Editor only — this is what lets an agent name a capability gap
-            // and offer the fix. The customer `/chat` page never sets it.
-            advisor: true,
+            workflowSlug: slug,
+            // The conversation this question belongs to. Omitted on the first
+            // turn only — the server mints one and names it back on the
+            // terminal frame, which is what `streamAndSettle` remembers. Until
+            // this line existed every send was turn one, `messages` was always
+            // empty, and "how did you get that?" was answered as if it were a
+            // fresh question (ticket 17; the recorded contrast is
+            // `backend/tests/data/recorded_chinook_followup_thread.json`).
+            ...(continuing ? { threadId: continuing } : {}),
+            // This panel IS the workflow editor, so its runs are a
+            // developer's: that is what entitles them to the developer
+            // channel and what lets an agent name a capability gap and offer
+            // the fix. The customer `/chat` page never sets it, and the
+            // backend defaults to `customer`.
+            audience: 'developer',
             ...credentialsPatch(workbench.providers),
           },
           onEvent,
@@ -620,8 +778,19 @@ export function AskPanel({
         ),
       );
     },
-    [client, controller, scrollToEnd, streamAndSettle, workbench],
+    [client, controller, scrollToEnd, streamAndSettle, thread, workbench],
   );
+
+  /**
+   * Start over: the next question opens a new conversation.
+   *
+   * Forgetting the thread is the whole of it — the transcript stays. A run's
+   * trace is evidence (it is exportable, and the History panel is built on the
+   * same premise), and a button that silently deleted it would make "start a
+   * new conversation" and "throw away what the last one showed me" the same
+   * gesture. The next turn draws its own boundary instead.
+   */
+  const newConversation = useCallback(() => setThread(null), []);
 
   /**
    * Stop, from either the composer or the toolbar.
@@ -766,8 +935,7 @@ export function AskPanel({
         if (!controller.nodes.add(suggestion.nodeType, at, { centre: false, select: false }).ok) {
           return;
         }
-        created =
-          controller.model.nodes().find((node) => !before.has(node.id))?.id ?? null;
+        created = controller.model.nodes().find((node) => !before.has(node.id))?.id ?? null;
         if (created) {
           controller.edges.connect(
             { nodeId: created, portId: 'tool' },
@@ -801,21 +969,66 @@ export function AskPanel({
 
   return (
     <Panel side="right" className="ask" style={{ width: 'var(--layout-inspector-width)' }}>
-      <PanelHeader bordered title="Chat" />
+      <PanelHeader
+        bordered
+        title="Chat"
+        actions={
+          <>
+            {/* Beside History rather than in the composer: it acts on the
+                conversation as a whole, which is what this header is about,
+                and the composer is for the next message. Disabled when there
+                is no conversation to end — pressing it would do nothing, and a
+                control that does nothing teaches nothing. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Icon glyph={MessageSquarePlus} size="xs" />}
+              disabled={thread === null || running}
+              title={
+                thread === null
+                  ? 'The next question already starts a new conversation'
+                  : 'Forget what was said so far — the next question starts fresh. The transcript stays.'
+              }
+              onClick={newConversation}
+            >
+              New
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Icon glyph={History} size="xs" />}
+              active={historyOpen}
+              aria-pressed={historyOpen}
+              title="Past runs of this workflow — read only, nothing re-executes"
+              onClick={() => setHistoryOpen((open) => !open)}
+            >
+              History
+            </Button>
+          </>
+        }
+      />
       <PanelBody>
-        {notice ? (
+        {historyOpen ? (
+          <PastRuns slug={currentWorkflowSlug()} onClose={() => setHistoryOpen(false)} />
+        ) : null}
+        {historyOpen ? null : notice ? (
           <p className="ask__notice">
             <Icon glyph={Info} size="sm" />
             <span>{notice}</span>
           </p>
         ) : null}
-        <div className="ask__thread" ref={threadRef}>
+        {/* Hidden, never unmounted, while history is up: a turn streaming in
+            the background must keep streaming into its thread, and unmounting
+            would throw away the scroll position and the live activity feed of
+            a run the developer only stepped away from. */}
+        <div className="ask__thread" ref={threadRef} hidden={historyOpen}>
           {turns.length === 0 ? (
             <div className="ask__empty">
               <p className="ask__empty-title">Ask anything</p>
               <p className="ask__meta">
-                Your question runs against the workflow on the canvas, live — the cards light up
-                as each step takes its turn.
+                Your question runs against the workflow on the canvas, live — the cards light up as
+                each step takes its turn. Follow-ups continue the same conversation, which lasts
+                until you press New, open a different workflow, or reload the editor.
               </p>
             </div>
           ) : null}
@@ -835,7 +1048,7 @@ export function AskPanel({
             single place to type and send, the way every chat does. The label
             is carried by the placeholder and `aria-label`, so nothing is lost
             to a screen reader. */}
-        <div className="ask__composer" data-running={running || undefined}>
+        <div className="ask__composer" data-running={running || undefined} hidden={historyOpen}>
           <TextInput
             ref={composerRef}
             className="ask__composer-input"
@@ -886,6 +1099,13 @@ function Turn({
 
   return (
     <div className="ask__turn">
+      {/* The one place the thread's shape is visible: everything above this
+          rule is a conversation this question knows nothing about. */}
+      {turn.freshThread ? (
+        <p className="ask__break">
+          <span>New conversation</span>
+        </p>
+      ) : null}
       <div className="ask__question">{turn.question}</div>
 
       {turn.running || turn.activity.length > 0 ? (
@@ -926,6 +1146,12 @@ function Turn({
         </button>
       ) : null}
 
+      {/* Above the reasoning, because the tools are what the reasoning is
+          reasoning about — and in their own blocks, so a long result scrolls
+          on its own instead of pushing the model's prose out of one shared
+          region (ticket 02). */}
+      <ToolResults results={turn.toolResults} />
+
       {turn.thinking ? (
         // Raw tokens while streaming (legible mid-arrival), markdown once
         // settled — the "improperly formatted chat" fix (ticket 62).
@@ -962,7 +1188,7 @@ function Turn({
         </p>
       ) : null}
 
-      {turn.result ? <Answer result={turn.result} text={turn.answerText} /> : null}
+      {turn.result ? <Answer result={turn.result} /> : null}
 
       {turn.suggestion ? (
         <SuggestionCard
@@ -1073,7 +1299,7 @@ function ApprovalPrompt({
  * than a single spinner that gives no sense a fan-out happened at all.
  */
 
-function Answer({ result, text }: { result: RunResult; text?: string | null }) {
+function Answer({ result }: { result: RunResult }) {
   const decisions = Object.entries(result.decisions);
 
   return (
@@ -1089,12 +1315,10 @@ function Answer({ result, text }: { result: RunResult; text?: string | null }) {
         </p>
       ))}
 
-      {/* `text` is the answer with an honoured suggestion's fence removed —
-          the card below says the same thing, and better. */}
-      <RichText
-        className="ask__answer"
-        text={(text ?? result.answer) || '_No answer was produced._'}
-      />
+      {/* `result.answer` is already prose: the backend split any suggestion
+          fence out of it before the frame left the runtime, so there is no
+          second, fence-free copy of the answer to keep in sync here. */}
+      <RichText className="ask__answer" text={result.answer || '_No answer was produced._'} />
 
       {result.attempts > 1 ? (
         // Surfaced because a silent retry hides real cost and real quality

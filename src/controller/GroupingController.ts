@@ -1,5 +1,6 @@
 import { GROUP } from '@design/tokens';
 import { unionRects } from '@core/kernel/geometry';
+import { fitAround } from '@core/model/containerFit';
 import { CompositeCommand, type ICommand } from '@core/commands/ICommand';
 import { AddNodeCommand, SetParentCommand } from '@core/commands/nodeCommands';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
@@ -89,13 +90,16 @@ export class GroupingController implements IGroupingController {
     );
     if (!box) return failed('Select nodes to group');
 
-    const { padding } = GROUP;
+    // One definition of "a frame wrapping these children", shared with the
+    // re-fit `AutoLayout` performs after it moves them. A second copy here
+    // would drift from that one the first time the padding changed.
+    const fitted = fitAround(box, GROUP.padding, {
+      width: GROUP.minWidth,
+      height: GROUP.minHeight,
+    });
     const add = new AddNodeCommand(definition, {
-      position: { x: box.x - padding.left, y: box.y - padding.top },
-      size: {
-        width: Math.max(GROUP.minWidth, box.width + padding.left + padding.right),
-        height: Math.max(GROUP.minHeight, box.height + padding.top + padding.bottom),
-      },
+      position: { x: fitted.x, y: fitted.y },
+      size: { width: fitted.width, height: fitted.height },
     });
 
     // One step: creating the container and embedding the nodes is a single
