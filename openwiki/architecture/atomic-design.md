@@ -14,7 +14,7 @@ predates the vocabulary):
 | **Atoms** | One middleware, one tool, one reducer, one skill file | `SummarizationMiddleware`, `save_memory`, `tool.sql-get-schema`, `skills/join-rules.md` |
 | **Molecules** | A tier's curated preset — atoms in a fixed, meaningful order | the ReAct agent stack, the deep-agent 12-slot preset, the Grader (+rubric), the Router |
 | **Organisms** | Node patterns wired on the canvas | the Team node, supervisor→workers→grader, the evaluator-optimizer loop |
-| **Templates** | Workflow packages | `workflows/tabular-analytics/`, `workflows/code-workshop/` |
+| **Templates** | Workflow packages | `workflows/chinook-assistant/`, and the three that ship inside the wheel (`minimal`, `routed-qa`, `team` — `openstategraph new --list-templates`) |
 | **Pages** | The running surfaces | `/chat`, the concierge gateway, the editor |
 
 Two rules make it hold:

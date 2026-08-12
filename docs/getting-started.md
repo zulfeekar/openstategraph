@@ -105,18 +105,93 @@ capability gap look identical.
 straight from the page to the vendor. That is an acceptable trade for a
 local-first editor and the dialog says so — use a scoped, revocable key.
 
-## 4. Run Store Analytics
+### Reasoning effort
 
-`page-analytics` ("Store Analytics") is the comprehensive example. It uses
-every generic node type at once over the shared Chinook database: intent
-routing with a conversation fallback, a supervisor with three worker
-archetypes, report formatting, a grader revise loop, human approval, an email
-dispatcher (dry-run without SMTP), a quick-metric agent, a mounted Team, and
-the focused `chinook-nl-to-sql` example mounted as a subgraph.
+Every node that drives a model — Agent, Router, Grader, Supervisor, Worker —
+carries a **Reasoning** picker directly beneath its model picker, under
+*Model* in the inspector. It is one field, declared once and given to those
+node types by the fact that they have a model picker at all, so a new
+model-driven node type gets it without asking.
+
+It defaults to **Model's default**, which does not send the parameter. That is
+not a display default: providers disagree about what their own default is
+(`claude-sonnet-4-6` defaults to `high`), so seeding a tier would change how
+existing workflows run while looking cosmetic.
+
+**Nothing breaks on a model that cannot reason**, and the two ways that could
+go wrong are handled separately because they are different failures:
+
+| | What would happen | What happens |
+| --- | --- | --- |
+| Provider **rejects** the parameter (OpenAI, on a non-reasoning model) | the run dies for a setting nobody meant to be load-bearing | the parameter is not sent, and the run carries a warning saying so |
+| Provider **ignores** it (`ChatOllama` has no `reasoning_effort` field at all) | the card reads "high" over a model that never heard it | same: not sent, and said out loud |
+
+The warning arrives on the run's `warnings` — the same channel that reports an
+unresolved tool — so it reaches the run response, the CLI and the MCP preview
+without being looked for.
+
+**Capability is discovered, not listed.** A hardcoded set of reasoning-capable
+model ids is wrong within a month, so the runtime asks two questions that have
+real answers:
+
+- **Can this integration carry the value?** `reasoning_effort` is a standard
+  LangChain parameter (`langchain-core>=1.5.2`), declared by each partner
+  package as a field whose type enumerates the spellings it accepts.
+  `ChatAnthropic` accepts `low`/`medium`/`high`/`xhigh`/`max`; `ChatOllama`
+  has no such field.
+- **Does this model reason, and at which tiers?**
+  `model.profile["reasoning_effort_levels"]`, from the models.dev dataset
+  shipped inside each partner package.
+
+Both move when you update your provider packages, not when this repo is
+edited. A model whose profile is silent is treated as *unknown*, not as a
+refusal — `claude-haiku-4-5` reasons and publishes no tiers, and refusing it
+would deny a setting that works.
+
+The editor mirrors the same three states in the picker: the model's declared
+tiers where a provider knows them, the common `low`/`medium`/`high` where it
+cannot know (a model discovered from `/api/tags` at run time), and — for a
+model known not to reason, such as the offline simulator — **no tiers at all**,
+just a line naming the model. A control that reaches nothing is worse than no
+control.
+
+## 4. Run the Chinook Assistant
+
+`chinook-assistant` is the one visible example, and it is deliberately small
+enough to read in a glance. Left to right: a question, a **Router** with five
+intents, three destinations, one answer.
+
+| Branch | Goes to | Because |
+| --- | --- | --- |
+| `data_query` | **Data Analyst** — an agent with the three Chinook tools, behind a grader | it needs the database, and the grader sends a bad answer back until it holds up |
+| `greeting` / `off_topic` / `general_knowledge` | **Front Desk** — one agent, no tools | none of the three needs a tool, a database or a second model call |
+| `web_lookup` | **Web Researcher** — web search + web fetch | only the live web has the answer |
+
+The analyst is **inline**, not a mount. It used to be a second package
+(`chinook-nl-to-sql`) behind a `workflow.subgraph` — and that second package
+was what the editor seeded, so a first-time reader opened a graph with no
+router in it. One document now, and the loop that matters is on it: agent →
+grader → (`revise`) → agent, bounded at three attempts, then the Markdown
+output node.
+
+There is no Team here either: a Team brings a supervisor, which costs a
+planning model call and a fan-out, and there is exactly one worker role to
+plan for.
+
+Two things on this canvas are worth a second look, because they are the
+answer to "how do I customise a prebuilt node without editing it":
+
+- The Data Analyst's own **prompt field is empty**. Its rules arrive over the
+  `skill` port from the **SQL Analyst skill** card beside it — a Markdown
+  file, wired in like any other input.
+- Unwire it and the agent still works. Every model-driven node type ships
+  built-in rules underneath whatever you write; see
+  [the skill layer](decisions/skill-layer.md) for the three layers and how
+  `rulesMode` chooses between them.
 
 1. In the editor, open **Manage workflows** (the document icon in the top bar,
    or `Mod+Shift+F`).
-2. Under **Saved Workflows**, open *Store Analytics*.
+2. Under **Saved Workflows**, open *Chinook Assistant*.
 3. Press **Run** (`Mod+Enter`), or ask through Chat — see below.
 4. Watch the node cards. Status flows along the links as each node runs.
 
@@ -163,6 +238,41 @@ composer's Send). Stop is honest about where it can and cannot reach:
 - **Stopping a run paused at an approval discards only the local prompt.** The
   thread is checkpointed, so it is still resumable.
 
+### The Chat panel is a conversation, not a series of questions
+
+A follow-up continues the last question. "How did you get that?" gets the join
+explained; "remind me what the top genre was" answers from what was already
+found rather than querying again. That is a real LangGraph thread underneath —
+the graph's `messages` channel accumulates in it — not a transcript the panel
+re-sends.
+
+A conversation lasts until one of three things ends it, and **New** in the
+panel header is the one you press on purpose:
+
+- **New** — the next question starts fresh. The transcript stays where it is,
+  with a `New conversation` rule drawn across the thread, because a run's trace
+  is evidence: starting over should not also delete what the last conversation
+  showed you.
+- **Opening a different workflow** starts one for you. LangGraph's checkpointer
+  is keyed by thread id alone, so carrying one across documents would replay the
+  previous workflow's history into a different graph.
+- **Reloading the editor** starts one. The panel deliberately does *not* persist
+  its thread, and this is where it differs from `/chat`, which does. The
+  transcript is not persisted either — so restoring the id alone would leave you
+  in a conversation whose earlier turns exist on the server and nowhere on
+  screen, which is an answer with an invisible antecedent. In an editor a reload
+  usually follows an *edit*, and the checkpointed history belongs to the graph as
+  it was. `/chat` runs a published workflow nobody is editing, so persisting is
+  right there and would be wrong here.
+
+**History** in the Chat panel header shows what those checkpoints hold: past
+runs of this workflow, newest first, each expanding to the run superstep by
+superstep — the question, the answer, and how the state looked at every step in
+between. It reads only. Opening a past run calls no model and spends nothing;
+a run still parked at an approval is marked and points back at the chat, which
+stays the single way to continue one. Runs appear here whenever the backend has
+a checkpointer, which the dev stack configures by default.
+
 ## 5. Ask it something — `/chat`
 
 <http://localhost:8000/chat> is the customer-facing side: no canvas, just a
@@ -180,8 +290,8 @@ Try:
 
 Every figure in the answer is checkable: there is exactly **one** sample
 database in this repository —
-`workflows/chinook-nl-to-sql/data/Chinook_Sqlite.sqlite`, the standard Chinook
-music store — and both examples evaluate against it. One database, one source
+`workflows/chinook-assistant/data/Chinook_Sqlite.sqlite`, the standard Chinook
+music store — and the example evaluates against it. One database, one source
 of truth, no invented numbers.
 
 ## 5b. Ask it something without the stack — the CLI
@@ -192,9 +302,9 @@ backend once and the `openstategraph` command is on your `PATH`:
 ```bash
 pip install -e "backend[ollama]"
 
-openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
-openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
-openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network
+openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
+openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not compile
+openstategraph graph ./workflows/chinook-assistant      # Mermaid text, no network
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new --list-templates                     # what you can start from
 ```
@@ -237,10 +347,27 @@ The three directions from here:
   definition plus a Python `BaseTool`, and adding one touches no engine code.
 
 A workflow is a package under `workflows/<slug>/`: `workflow.json` and
-`AGENTS.md` are required; `tools/`, `functions/`, `middlewares/`, `tests/` and
-`data/` are discovered by convention. `openstategraph new <slug> [--template
+`AGENTS.md` are required; `tools/`, `functions/`, `middlewares/`, `skills/`,
+`knowledge/`, `evals/`, `tests/` and `data/` are discovered by convention. `openstategraph new <slug> [--template
 NAME]` scaffolds one (as do `scripts/new_workflow.py` and
 `scripts/new_team.py`, which call the same code).
+
+**Each one has a URL you can send.** The editor's address bar carries the open
+workflow's slug — <http://localhost:5273/?w=chinook-assistant> — so a
+workflow can be bookmarked, linked to a colleague, and reopened by reload. The
+slug is minted once, by the backend, when the workflow is first saved: the
+first "My Workflow" gets `my-workflow`, and a second one of the same name gets
+its own `my-workflow-<six characters>` rather than overwriting the first. It
+never changes afterwards, so renaming a workflow keeps every link, mount and
+line of git history pointing at it.
+
+Two things the URL deliberately leaves out. **A chat thread** — the Chat
+panel's transcript is not persisted, so restoring a thread id alone would drop
+you into a conversation whose earlier turns exist on the server and nowhere on
+screen. And **your unsaved edits**: reloading a link to the workflow you
+already have open restores this browser's autosave rather than refetching the
+file, so a reload never discards work. Opening a link in a second tab gives
+that tab its own autosaved copy and leaves the first alone.
 
 That is the value: your flow is **a file in git** — reviewable in a pull
 request, diffable — and the compiled output is an ordinary Python

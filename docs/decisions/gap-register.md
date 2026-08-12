@@ -22,19 +22,22 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**43 gaps · 4 blocks-1.0 · 11 should-precede-launch · 28 fine-to-carry.**
+**38 gaps · 4 blocks-1.0 · 10 should-precede-launch · 24 fine-to-carry.**
 (RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
 `.scratch/docs-and-gaps/`; PK-06, UX-01 and UX-02 closed 2026-08-10 — the
-last two together, since they were one ticket: the terminal-frame contract.)
+last two together, since they were one ticket: the terminal-frame contract.
+UX-03 closed 2026-08-11 by ticket 08, PF-01 by ticket 10, and UX-06, PK-09 and
+PF-02 by ticket 12 — the last three together, since they were one ticket: the
+dead-surface sweep.)
 
 | Theme | Total | blocks 1.0 | precede launch | carry |
 | --- | --- | --- | --- | --- |
 | A. Runtime correctness & capability | 14 | 0 | 4 | 10 |
-| B. Packaging & release | 9 | 4 | 1 | 4 |
-| C. UX | 8 | 0 | 2 | 6 |
+| B. Packaging & release | 8 | 4 | 1 | 3 |
+| C. UX | 6 | 0 | 1 | 5 |
 | D. Docs | 4 | 0 | 2 | 2 |
 | E. Security & ops | 4 | 0 | 2 | 2 |
-| F. Performance | 4 | 0 | 0 | 4 |
+| F. Performance | 2 | 0 | 0 | 2 |
 
 Six items on the intake list for this register were checked and found
 **already done** — they are listed at the bottom under "Verified closed", not
@@ -85,7 +88,23 @@ scope: a *hand-written node type* (not a tool) reaching the palette, and the
 SSE push that would make either appear without asking. **Verdict: should
 precede public launch**, at reduced risk.
 
-**RC-06 — No MCP or OpenAPI knowledge adapters.** The trainer recognises SQL
+**RC-06 — No MCP or OpenAPI knowledge adapters.** *Design settled
+2026-08-11* by ticket 11 of `.scratch/docs-and-gaps/`; still open as
+implementation, and re-sized. `docs/decisions/knowledge-architecture.md`,
+"Which of those two, for MCP and OpenAPI", records the answer to the ticket's
+actual question: **neither belongs under `IEngineAdapter`**, whose three
+abstract members (`list_tables`, `table_schema`, `sample`) are a SQL contract
+rather than a generic source one. The rung that is already generic is
+`BaseKnowledgeBuilder`; each source family gets its own sibling adapter ladder
+in its own vocabulary and is composed by its own builder concrete, meeting the
+others only at `BUILDERS`. Re-sized against the gaps rather than around them:
+**MCP is blocked** on there being no MCP client at all
+(`docs/decisions/agent-plugins.md` §7, whose own re-open trigger is "we gain
+an MCP client") and must not smuggle the product's first MCP integration in
+under the knowledge feature; **OpenAPI is unblocked but is not an adapter
+drop-in** — recognition-from-wiring needs a spec path *declared on the canvas*
+and no node type declares one, so it starts as a new TypeScript node type.
+Original entry: The trainer recognises SQL
 sources (sqlite/postgres/mssql —
 `backend/openstategraph/knowledge_engines.py:112,247,291`) and has the agentic
 explorer and codebase builder
@@ -176,7 +195,7 @@ launch example needs it."* **Size S.** **Verdict: fine to carry.**
 
 **RC-14 — `chinook_tool_registry()` reads a path that exists only in this
 checkout.** `backend/openstategraph/api/registries.py:61` reaches into
-`workflows/chinook-nl-to-sql/tools`, wrapped in `try/except` with a debug log.
+`workflows/chinook-assistant/tools`, wrapped in `try/except` with a debug log.
 Evidence: `docs/decisions/framework-packaging.md` §2.5 — *"the default tool
 registry outside the repo is therefore quietly different from the one inside
 it. Any adopter whose document binds a `chinook.*` node type inherits a warning
@@ -184,7 +203,7 @@ instead of a tool."* **Size S** (the honest fix is to stop shipping a
 repo-relative default). **Risk:** small and warned. **Verdict: fine to carry.**
 
 **RC-15 — Chinook's `graph.py` sets `retry_policy` per node instead of once.**
-Evidence: `workflows/chinook-nl-to-sql/graph.py:300` — *"Collapse this into one
+Evidence: `workflows/chinook-assistant/graph.py:300` — *"Collapse this into one
 call when the dependency moves to >= 1.2."* (`set_node_defaults` is absent in
 langgraph 1.0.3.) **Size S.** **Verdict: fine to carry** — pairs with RC-08 as
 "things that unlock on the 1.2 bump".
@@ -272,8 +291,9 @@ policy, is not in this ticket's scope, and touches the store and the MCP write
 path."* Also the framework-packaging map's "Not yet specified" item 3. **Size
 S.** **Verdict: fine to carry.**
 
-**PK-09 — `openstategraph/middleware/` is an empty leftover directory.**
-Verified: contains only `__pycache__`, tracked by nothing, correctly absent
+**PK-09 — ~~`openstategraph/middleware/` is an empty leftover directory.~~
+Closed 2026-08-11** by ticket 12 of `.scratch/docs-and-gaps/` — deleted.
+Original entry: verified: contains only `__pycache__`, tracked by nothing, correctly absent
 from the wheel. Evidence:
 `.scratch/framework-packaging/tickets/06-publish-pipeline.md` — *"it is an
 empty leftover directory holding only `__pycache__`, tracked by nothing."*
@@ -292,11 +312,20 @@ is what makes it additive rather than breaking.
 
 ### Should precede public launch
 
-**UX-03 — Tabular / CodeWorkshop node stubs are orphaned.**
+**UX-03 — ~~Tabular / CodeWorkshop node stubs are orphaned.~~ Closed
+2026-08-11** by ticket 08 of `.scratch/docs-and-gaps/`: **deleted**, both
+families, with their tests and their `port_specs.json` entries. The deciding
+evidence was the backend, not the palette — a `tool.*` node resolves through
+`NodeRuntime._bound_tool`, which looks the type up in the shared registry and,
+finding nothing, appends it to `unresolved_tools` and binds no capability at
+all. So every one of these eight palette entries produced a node that an agent
+could be wired to and would silently gain nothing from. Neither family had a
+backend tool, a workflow, or (for Tabular) even the DuckDB dependency its own
+docstring named. Original entry:
 `src/nodes/tools/TabularDataNode.ts` and `CodeWorkshopNode.ts` (plus their
 tests) define palette entries with no backend tools and no workflow that uses
-them — `workflows/` holds only chinook×2, concierge, page-analytics and
-workflow-architect. Evidence: commit `0d1b2d7` — *"Follow-up recorded:
+them — `workflows/` holds only `chinook-assistant`, `concierge` and
+`workflow-architect`. Evidence: commit `0d1b2d7` — *"Follow-up recorded:
 Tabular/CodeWorkshop TS stubs are orphaned once the scope-badge session lands
 its protected files."* That scope-badge work is currently uncommitted in the
 working tree (`src/nodes/workflowScoped.ts`, `NodeCard.tsx`). **Size S**
@@ -391,7 +420,12 @@ work"*; commit `1adbfa1` — *"Inspector field + inherited-vs-overridden display
 follow with the composition-peek frontend work."* **Size M.** **Risk:** you can
 see *that* something is overridden, not *what*. **Verdict: fine to carry.**
 
-**UX-06 — Three design-barrel exports have no consumer.** Verified by grep
+**UX-06 — ~~Three design-barrel exports have no consumer.~~ Closed
+2026-08-11** by ticket 12 of `.scratch/docs-and-gaps/`. `Spinner` and
+`Progress` are gone — component, styles and barrel line; `formatShortcut` is
+now module-local to `Indicators.tsx`, where `Kbd` and `shortcutText` are its
+only two callers, so the promise is kept inside the module instead of
+advertised out of it. Original entry: verified by grep
 across `src/` excluding `src/design/primitives/`: `Progress` (0), `Spinner`
 (0), `formatShortcut` (0). Evidence for the handoff: commit `5238549` —
 *"Handoffs recorded in the report for compile/abc/design territory
@@ -532,8 +566,23 @@ marked, which is the whole cost of keeping the option.
 
 ### Fine to carry
 
-**PF-01 — `capability_discovery` re-imports every workflow module on every
-call, with no cache and no invalidation policy.** `_import_module` runs
+**PF-01 — ~~`capability_discovery` re-imports every workflow module on every
+call, with no cache and no invalidation policy.~~ Closed 2026-08-11** by
+ticket 10 of `.scratch/docs-and-gaps/`, and it turned out not to be a
+performance gap at all. The policy is now written down in `_import_module`'s
+docstring — **no cache, re-execute from the source bytes** — with the measured
+cost that justifies it (~1.5 ms/call for `chinook-assistant`, the largest
+shipped package). Asking "what invalidates?" found a live bug: the caching had
+already happened and nobody had chosen its policy. `spec.loader.exec_module`
+is a `SourceFileLoader`, so it wrote a `__pycache__/*.pyc` **into the
+developer's own workflow package** and validated it against `(source mtime in
+whole seconds, source size)` — so an edit that keeps the byte length and lands
+in the same second as the previous one was invisible, serving stale code to
+the *runtime*, not merely to the capabilities panel. Fixed by compiling the
+source here rather than handing it to the loader. Three tests pin the policy
+(`TestTheInvalidationPolicy`), and the recorded rule for a future cache is
+that its key must be the file's **content hash** — never mtime, never process
+lifetime. Original entry: `_import_module` runs
 `spec.loader.exec_module` per call
 (`backend/openstategraph/api/capability_discovery.py:66-81`), and every
 `/api/workflows/{slug}/capabilities` request and every runtime assembly pays
@@ -548,7 +597,9 @@ request, and latency proportional to tool count. **Verdict: fine to carry** —
 but it needs the decision written down before someone "optimises" it into the
 `isinstance` hazard.
 
-**PF-02 — `save_topic` reads back the file it just wrote.**
+**PF-02 — ~~`save_topic` reads back the file it just wrote.~~ Closed** —
+`save_topic` now names the bytes it wrote (`text`) and passes those to
+`extract_hint`. Original entry:
 `backend/openstategraph/api/knowledge_curation.py:146-147` writes
 `f"{cleaned}{trailer}\n"` and then does `text = path.read_text()` to extract
 the hint from content it already holds. **Size S.** **Risk:** none measurable

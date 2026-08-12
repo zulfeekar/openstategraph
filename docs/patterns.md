@@ -161,6 +161,12 @@ LangGraph `Send`, never to a `workflow.json` graph edge. A `Max subtasks`
 field bounds the split, because a 500-item numbered list must not become 500
 workers.
 
+The split itself is deterministic (numbered lists, semicolons, "and"), so the
+supervisor's one model call is the **dispatch** decision: which archetype each
+subtask goes to. That is what its `Dispatch rules` field and any wired skill
+shape — "anything needing SQL goes to the analyst" — and what `Rules mode`
+switches between. No rule there can change *how many* subtasks there are.
+
 ```mermaid
 graph LR
   q([question]) --> s(orchestrate.supervisor)
@@ -267,11 +273,23 @@ reach is a thing it may decide to do.
 Two things this list does not cover, because they compose *patterns* rather
 than sit among them — the palette's only two **organisms**:
 
-- **`workflow.subgraph`** mounts another workflow as one node. Store Analytics
-  mounts `chinook-nl-to-sql` this way for deep SQL questions — real reuse, not
-  a demo prop.
+- **`workflow.subgraph`** mounts another workflow as one node. The hidden
+  `concierge` gateway mounts both `chinook-assistant` and
+  `workflow-architect` this way, one per branch.
+
+  **Called out because it changed:** the Chinook Assistant used to mount a
+  second Chinook package on its `data_query` branch, and this page described
+  that as the demonstration. It no longer does — the two Chinook documents
+  were collapsed into one, so the analyst is an inline branch. The atom is
+  unchanged and still exercised by a shipped document, but no *visible*
+  example demonstrates it any more. That cost was accepted deliberately: the
+  second document was hidden, and it was the one the editor opened.
 - **`team.workflow`** mounts a whole supervisor-plus-workers package behind a
-  single card.
+  single card. Reach for it when the child genuinely has several worker
+  *roles*; with one role the supervisor is a planning model call and a
+  fan-out you pay for and do not use, and a plain subgraph mount around an
+  agent → grader loop gives the same retry semantics for one call less. That
+  is why no shipped example uses a Team.
 
 A subagent invoked as a tool is **isolated**: it receives a task and reports a
 result as a `ToolMessage`. It never sees the parent's message history or graph

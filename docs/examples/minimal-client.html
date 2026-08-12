@@ -7,7 +7,8 @@
   // Where your server is. `?api=http://host:port` overrides it.
   const API = new URLSearchParams(location.search).get("api") ?? "http://127.0.0.1:8000";
   const out = document.getElementById("out");
-  let doc = null, slug = null;
+  // `thread` is the conversation — held across asks; null it to start a new one.
+  let doc = null, slug = null, thread = null;
 
   async function load() { // 1 + 2: what is published, and its document
     const [first] = await (await fetch(`${API}/api/workflows?surface=chat`)).json();
@@ -36,6 +37,9 @@
         // Every text-producing node emits tokens — the input node echoes your
         // question, the output node re-renders the answer. Key on data.node.
         if (name === "token") out.textContent += data.content;
+        // Every terminal frame names its thread. Remember it, or the next ask
+        // opens a fresh conversation and every follow-up loses its antecedent.
+        if (data.threadId) thread = data.threadId;
         if (name === "done") return void (out.textContent += `\n\n${data.answer}\n`);
         if (name === "error") return void (out.textContent += `\n[error] ${data.detail}\n`);
         if (name === "interrupt") {
@@ -50,7 +54,7 @@
   document.getElementById("go").onclick = () => {
     out.textContent = "";
     stream("/api/runs/stream", { workflow: doc, workflow_slug: slug,
-      question: document.getElementById("q").value, thread_id: `chat-${Date.now()}` });
+      question: document.getElementById("q").value, thread_id: thread ?? undefined });
   };
   load();
 </script>

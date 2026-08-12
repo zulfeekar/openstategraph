@@ -56,14 +56,14 @@ the font unmodified.
 
 ### Chinook sample database — MIT
 
-The file `workflows/chinook-nl-to-sql/data/Chinook_Sqlite.sqlite` is
+The file `workflows/chinook-assistant/data/Chinook_Sqlite.sqlite` is
 **redistributed in this repository**, not merely referenced. It is the Chinook
 sample database, v1.4.5:
 
 > Copyright (c) 2008-2017 Luis Rocha — <https://github.com/lerocha/chinook-database>
 > Licensed under the MIT License.
 
-It is sample data used by the `chinook-nl-to-sql` workflow and its tests. The
+It is sample data used by the `chinook-assistant` workflow and its tests. The
 fetch script that refreshes it is [`scripts/fetch_chinook.sh`](scripts/fetch_chinook.sh).
 This entry exists because a committed binary artefact carries its licence with
 it — a comment inside a fetch script is not adequate attribution for a file

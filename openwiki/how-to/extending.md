@@ -25,11 +25,16 @@ builder the compiler can run.
    [`workflowScoped.ts`](../../src/nodes/workflowScoped.ts) instead.
 3. **Backend** — add a `_builder` entry keyed by the type in
    [`NodeRuntime._builders`](../../backend/openstategraph/compile/node_runtime.py).
-4. Declare its ports in `DEFAULT_PORT_SPECS`
-   ([`workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py))
-   — this is what decides whether an incoming edge is control flow or a
-   binding. Omitting it does not crash; the node compiles as opaque with
-   control-flow edges only.
+4. Regenerate the port table — `npm run generate:ports`. The ports you declared
+   in step 1 are what decides whether an incoming edge is control flow or a
+   binding, and the compiler reads them from the **generated**
+   [`compile/port_specs.json`](../../backend/openstategraph/compile/port_specs.json)
+   (`DEFAULT_PORT_SPECS` in
+   [`workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py)
+   is just `CATALOGUE.port_specs`). There is nothing to hand-write on the Python
+   side, and two gates fail a stale copy — `src/nodes/portSpecs.test.ts` and
+   CI's `generated-port-specs` job. Ports missing from the catalogue do not
+   crash; the node compiles as opaque, with control-flow edges only.
 5. If the type should be composable by the Workflow Architect, add it to
    `KNOWN_NODE_TYPES` in
    [`prebuilt_architect.py`](../../backend/openstategraph/prebuilt_architect.py) — a
@@ -75,7 +80,8 @@ expose an ordering number to a user.
 ## Add a workflow
 
 ```bash
-python3 scripts/new_workflow.py my-flow "My Flow"
+openstategraph new my-flow "My Flow"              # or --template routed-qa|team
+python3 scripts/new_workflow.py my-flow "My Flow" # the same code, from a checkout
 ```
 
 Creates the contract's required files plus the conventional directories. Then
@@ -86,7 +92,7 @@ know the canonical serialization rules. See
 ## Add a Team
 
 ```bash
-python3 scripts/new_team.py research-team "Deliver a sourced summary"
+openstategraph new research-team --template team    # or scripts/new_team.py
 ```
 
 Scaffolds the prebuilt minimum-viable Team: supervisor + one default worker +

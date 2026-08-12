@@ -7,6 +7,14 @@ because three separate concerns must agree about it: whether a connection is
 valid, what glyph and colour appear beside the port, and how the engine
 coerces the value flowing across the link.
 
+**A port id is not a data key.** They are separate namespaces on the same node:
+a port id names a socket a wire lands in, a data key names a field somebody
+types into. `orchestrate.supervisor` had both spellings collide — its factory
+read `data["instruction"]` while `instruction` was only ever its input port —
+so its rules were read from something no card could write, silently, for as
+long as the node existed. Reusing one name for both is now a test failure
+(`backend/tests/test_data_key_contract.py`), not a style note.
+
 ---
 
 ## Port types
@@ -17,11 +25,29 @@ can register more without touching the editor.
 | Type | Accent | Carries | Produced by | Consumed by |
 | --- | --- | --- | --- | --- |
 | `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
-| `skill` | orange | a system instruction that shapes behaviour | `input.markdown` | `agent.llm.skill`, `orchestrate.worker.skill` |
+| `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
 | `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
-| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `function.format_report.report` | `route.grader.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `output.formatted.result` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `function.format_report.report`, `human.approval.approved`, `team.workflow.result`, `workflow.subgraph.result` | `route.grader.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `output.formatted.result`, `team.workflow.input`, `workflow.subgraph.input` |
 | `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback` |
 | `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
+
+### Two node types produce `skill`, and the difference is not cosmetic
+
+- **`input.skill`** ("Skill") is a *named* rules layer. It carries a name, a
+  description and a body written from a three-section template, and it lands on
+  the canvas already filled in. Use it when the rules are the point — the thing
+  you would otherwise paste into five agents' prompt fields.
+- **`input.markdown`** stays exactly what its name says: an arbitrary Markdown
+  file. Use it when you happen to have a document and want an agent to read it.
+
+Both compile through one backend builder, and what travels down the wire is the
+body in both cases. They are two node types rather than one node with a mode
+because a skill has an identity a picker and an exporter can use, and a
+Markdown file does not — argued in
+[`decisions/skill-layer.md`](decisions/skill-layer.md), which also covers where
+a skill lands in the composed prompt (it extends or replaces the **rules**,
+never the preamble and never the output contract) and the five model-driven
+node types that carry a `skill` port at all.
 
 ### Compatibility, at two granularities
 
@@ -171,6 +197,30 @@ type on hover would hide the one thing the colour is carrying.
 Two appearances for the port itself: `row` (a labelled row in the card footer
 with its dot on the card edge) and `pill` (a detached capsule below the card,
 used for the tool bus where several links converge on one point).
+
+### While you are drawing a link
+
+The moment a link leaves a port, the canvas answers the only question you can
+have: *where may this land?*
+
+- the port you left **ripples** in the hover blue,
+- every port the link may legally land on **ripples** in the valid green and
+  grows its dot,
+- **every other port recedes** to 30% and takes a `not-allowed` cursor.
+
+The legal set is `IEdgeEditor.canConnect` — the same predicate the drop itself
+asks — so the canvas can never invite you onto a target it is about to refuse.
+`ConnectionFeature` marks the ports and `canvas.css` paints them, through
+`is-connecting` on the paper, `is-available` on a legal target's `.joint-port`
+group and `is-dragging` on the origin. Under `prefers-reduced-motion` the
+ripple stops and the colours stay, so the affordance survives without motion.
+
+**This is deliberately a drag-time affordance, not a drop-time one.** Placing a
+node does not light anything up: at that moment you have not said *which* of
+its ports you want to wire, so a drop-time hint would have to light every
+compatible port on the canvas, on every drop — and a canvas that pulses at you
+unprompted teaches people to ignore pulses. The invitation is worth something
+precisely because you asked for it by grabbing a port.
 
 ### Flow direction
 

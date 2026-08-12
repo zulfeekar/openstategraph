@@ -9,7 +9,7 @@ runtime (`backend/`). Architecture rules live in `CLAUDE.md` — read the
 ```bash
 npm install && npm run dev                 # editor → http://localhost:5273
 pip install -e "backend[all,dev]"          # runtime deps — see below
-PYTHONPATH=backend:workflows/chinook-nl-to-sql \
+PYTHONPATH=backend:workflows/chinook-assistant \
   uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 ```
 
@@ -23,13 +23,63 @@ their workflow actually uses (`[anthropic]`, `[openai]`, `[ollama]`, `[deep]`,
 without the accompanying case for it fails
 `backend/tests/test_distribution_metadata.py`, which is the point.
 
+## The non-negotiables your pull request is judged against
+
+These are the rules a maintainer will block on. They are argued in
+[`CLAUDE.md`](CLAUDE.md); this table is the short form plus **the gate that
+actually catches a violation** — and, where there is none, that fact stated
+rather than implied. A principle with no gate is not a weaker principle; it is
+one where review is the only thing between the rule and the tree, so the
+argument in your pull-request description carries the weight the test would.
+
+| Non-negotiable | What fails you |
+| --- | --- |
+| **Interface → Abstract → Base → Concrete.** Every entity family declares the ladder, and consumers import the `I*` interface, never the class. Inheritance must earn itself. | **Gate**, for the agent family: `backend/tests/test_agent_family.py` pins `IAgent → AbstractAgentNode → Base/React/Deep/Custom`, including that `DeepAgentNode` is a *sibling* of `ReactAgentNode`. `backend/tests/test_agent_node_wiring.py` refuses inline construction. Other families are held by the API snapshot and by review. |
+| **No god classes** — ~10 public members, one reason to change. `WorkflowController` is at its ceiling; extend it with a collaborator, never a method. `WorkflowModel` is a *recorded exception*, not an open invitation. | **No gate.** Nothing counts members. `src/controller/WorkflowController.ts` states the rule in a comment and a reviewer enforces it; "this adds a public member to `WorkflowController`" is a blocking comment however good the code is. |
+| **Extend by registering, never by editing the engine.** Every extension point is a `Registry<T>`; a new capability must not require touching `core/`. | **Partial.** The mechanism is tested (`src/core/kernel/kernel.coverage.test.ts`; `backend/tests/test_extensions.py`, `test_plugin_capabilities.py`) but nothing detects a capability added *by editing `core/`* instead of registering. Review catches that. |
+| **`core/` imports neither React nor JointJS.** It is plain TypeScript that could run in Node or a worker. | **Gate**, as of ship-it ticket 02: `eslint.config.js` carries a `no-restricted-imports` block scoped to `src/core/**` that **errors** on `react`, `react-dom`, `@joint/*`, and relative escapes into `canvas/`, `view/`, `app/` or `controller/`. It fires in your editor, and in `npm run verify`. The tree was clean when the rule landed. |
+| **Pydantic is the single source of truth for the run/stream seam**, published as the generated `docs/openapi.json`. | **No gate on the TypeScript side yet, and the rule has been narrowed to say so.** There is no pydantic → TypeScript generator and there will not be one — `src/core/runtime/RuntimeClient.ts` is a deliberate hand-written client, and the decision (plus the three reasons codegen was rejected, and the drift test that should replace it) is [`docs/decisions/typescript-runtime-types.md`](docs/decisions/typescript-runtime-types.md). Until that test lands, a hand-mirror is review-only: expect a reviewer to ask which schema it mirrors. The Python half of the seam *is* gated — see the `docs/openapi.json` row below. |
+| **`port_specs.json` is generated from the TypeScript node catalogue** (the one place TypeScript is authoritative). | **Gate, both sides.** `src/nodes/portSpecs.test.ts` compares the committed bytes inside `npm run verify`; CI's `generated-port-specs` job regenerates and diffs. Fix with `npm run generate:ports`. |
+| **`docs/openapi.json` is generated from the FastAPI app.** | **Gate, both sides.** `backend/tests/test_openapi_contract.py` plus CI's `generated-openapi` job. Fix with `python3 scripts/generate_openapi.py`. |
+| **Expressions are a JSON AST, never host-language code.** A router predicate is serialisable data, never a Python or JavaScript lambda. | **No gate.** No schema rejects a code-shaped value in `workflow.json`. Review only. |
+| **Reducers are a named enum**, and a state key more than one node type can write needs one. | **Gate, per channel**: `backend/tests/test_answer_channel_concurrency.py`, `test_attempts_channel_concurrency.py`, `test_feedback_channel_concurrency.py` assert the named reducer on `RunState.__annotations__`; `test_turn_reset.py` pins that every named reducer understands `RESET`; `test_architecture_audit_2026_08.py` fails the day a second node writes `question`. A **brand-new** channel with an inline lambda matches no test — add the assertion with the channel. |
+| **The compile seam is one-directional**: `workflow.json` → runtime, never back. Nothing reads runtime objects into the model. | **No gate.** Stated in `backend/openstategraph/compile/workflow_compiler.py` and probed indirectly by `backend/tests/test_mount_overrides.py` (overrides apply to the child *document*). A new read-back that avoids those behaviours passes. |
+| **Our own runtime vocabulary** — LangGraph type names never leak into `workflow.json` or `core/`. | **Weak.** `backend/tests/test_plugin_interop.py` checks a fixed token list on *plugin* import only. Nothing scans the shipped documents or `src/core/`. |
+| **Middleware order is a named slot table**, never a list position or a priority integer. | **Gate.** `backend/tests/test_agent_family.py` — replacement by slot name, unknown slots appended in insertion order, removal empties a slot. |
+| **The output contract is composed last and is not editable.** A developer supplies rules; the base keeps the shape of the answer. Never ship the contract as a pre-filled editable field. | **Gate — the strongest one here.** `backend/tests/test_skill_layer.py` drives the real `SystemPrompt` across agent, grader, router and orchestrator and asserts the contract is last whatever a skill says. Structurally, `backend/openstategraph/abc/prompt.py` gives the editable layer no reach into preamble or contract. |
+| **Cardinality belongs to the port**, not the node: `maxConnections` on the port descriptor, enforced by `capacityRule`. No node-level "multiple edges" flag. | **Gate.** `src/core/model/contracts/ports.test.ts` pins the resolved defaults; `ConnectionValidator.test.ts` (`describe('capacity rule')`) pins replacement, fan-out and the tool bus. |
+| **Never put a non-finite number in a serialisable field.** `int \| None`, with `None` meaning unbounded. | **Gate, three layers.** `src/core/model/contracts/ports.test.ts` sweeps every registered node's ports; `src/nodes/portSpecs.test.ts` requires a finite number or an explicit null; `backend/tests/test_node_catalogue.py` pins `None`-means-unbounded. |
+| **The published Python surface does not change by accident.** | **Gate.** `backend/tests/test_public_api.py` diffs a *signature*-level snapshot (`backend/tests/public_api.txt`) — a renamed parameter or a flipped default fails it. Failing it is a decision to make deliberately, not a bug to paper over. |
+| **We are a compiler, not a runtime.** Any proposal to interpret the graph ourselves is a proposal to reimplement checkpointing, `Send`, reducers and streaming. | **No gate, and none is possible.** Rejected in review, on the argument in `CLAUDE.md` § *We are a compiler, not a runtime*. |
+
+Two more that are policy rather than architecture: **LangGraph and LangChain
+facts come from the `docs-langchain` MCP server, never from memory**, and
+**Ollama means Ollama cloud** — never benchmark, demo or debug against a local
+model and report the result as representative.
+
 ## Tests — the gate for every PR
 
 ```bash
 npm run verify              # tsc + eslint + prettier + vitest
-python -m pytest -q         # live-API tests are opt-in: pytest -m live
+python -m pytest -q         # FROM THE REPO ROOT. live-API tests: pytest -m live
 cd backend && python -m ruff check . && python -m mypy
 ```
+
+**Typecheck with `npm run typecheck` (`tsc -b`), never with `npx tsc
+--noEmit`.** The root `tsconfig.json` is a *solution* config — `files: []` and
+nothing but `references` — so a bare `tsc --noEmit` resolves it, finds no input
+files, checks nothing and exits 0. It is not a weaker gate, it is not a gate:
+it reported success over 29 broken test files and one real production bug (a
+dedup guard reading a field its type never declared, so it could never fire).
+Only `tsc -b` follows the project references to `tsconfig.app.json` and
+`tsconfig.node.json`, which is where the code actually is.
+
+**pytest runs from the repo root, and only the root.** The root `pytest.ini`
+is what declares `testpaths = workflows backend` and puts the example
+workflow's `tools`/`functions` on `sys.path`. `cd backend && pytest` never
+reads it, so it silently runs 49 fewer tests — the entire `workflows/` half,
+which CI does run. `ruff` and `mypy` are the opposite: both read
+`backend/pyproject.toml` and want to be run from `backend/`.
 
 `mypy` is the backend's counterpart to `tsc`: its settings live in
 `backend/pyproject.toml` and it is clean today, so any error it reports is
@@ -63,12 +113,34 @@ catalogue to the committed bytes inside `npm run verify`, and CI's
 `generated-port-specs` job regenerates and diffs the working tree. Both name
 the command in the failure. Do not edit the JSON by hand.
 
+`docs/openapi.json` is the same arrangement in the other language: it is
+generated from the FastAPI app, committed because it is the *published*
+contract (`docs/api.md` is written against it), and guarded by
+`backend/tests/test_openapi_contract.py` plus CI's `generated-openapi` job.
+Change a route, a response model or a docstring on an endpoint, and run:
+
+```bash
+python3 scripts/generate_openapi.py
+```
+
+The docstring matters as much as the signature — it becomes the endpoint's
+`description` in the published document, so a docstring that has drifted from
+the code ships as a wrong contract, not as a stale comment.
+
+`openwiki/**` is generated too, by a scheduled GitHub Actions workflow. Do not
+hand-edit it to *add* documentation — fix the source and let the refresh pick
+it up. Correcting a page that names a file or a directory which no longer
+exists is the one exception, because a dead link is the failure the page is
+there to prevent.
+
 ## Adding things
 
 Everything is a registry; extending never edits `core/`. See README's
 "Extension points" table. A new workflow is a package under
 `workflows/<slug>/` — `workflow.json` + `AGENTS.md` required; `tools/`,
-`functions/`, `middlewares/`, `tests/`, `data/` discovered by convention.
+`functions/`, `middlewares/`, `skills/`, `knowledge/`, `evals/`, `tests/` and
+`data/` discovered by convention. The full contract is
+[`openwiki/workflows/package-contract.md`](openwiki/workflows/package-contract.md).
 
 ## What happens to your pull request
 
@@ -79,13 +151,14 @@ would on ours, and no check can be "unblocked" by a maintainer's credentials.
 The only workflow that holds a secret is the release train, and it never runs
 on a pull request.
 
-Six checks run, and one aggregate:
+Seven checks run, and one aggregate:
 
 | Check | What fails it |
 | --- | --- |
 | `frontend` | `npm run verify` — tsc, ESLint, Prettier, Vitest |
 | `backend` | ruff, mypy, and pytest under a coverage floor |
-| `generated-port-specs` | `port_specs.json` was not regenerated after a node or port change |
+| `generated-port-specs` | `port_specs.json` was not regenerated after a node or port change (`npm run generate:ports`) |
+| `generated-openapi` | `docs/openapi.json` was not regenerated after an API change (`python3 scripts/generate_openapi.py`) |
 | `clean-install` | the built wheel fails in an empty venv outside the checkout |
 | `docs-freshness` | `src/` or `backend/` changed and no documentation did |
 | `e2e` | the Playwright suite |

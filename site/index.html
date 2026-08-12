@@ -600,7 +600,7 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
 <pre><code><span class="c"># No editor. No platform. No runtime of ours.</span>
 <span class="k">from</span> openstategraph <span class="k">import</span> <span class="f">load_workflow</span>
 
-workflow = <span class="f">load_workflow</span>(<span class="s">"workflows/chinook-nl-to-sql"</span>)
+workflow = <span class="f">load_workflow</span>(<span class="s">"workflows/chinook-assistant"</span>)
 <span class="k">if</span> workflow.warnings:          <span class="c"># what did not wire, never silence</span>
     <span class="k">print</span>(<span class="s">"degraded:"</span>, workflow.warnings)
 
@@ -615,9 +615,10 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
       </div>
 
       <p class="muted" style="margin-top:1rem; font-size:.8125rem">
-        The same document drives the editor's canvas and the Python compiler, because Pydantic is
-        the single source of truth and the TypeScript types are generated from it — never
-        hand-mirrored across the boundary.
+        The same document drives the editor's canvas and the Python compiler, and the two agree
+        because the contract between them is a generated, committed artifact rather than a
+        convention: the port table comes from the TypeScript node catalogue, the OpenAPI document
+        comes from the Python app, and CI regenerates both and fails on a diff.
       </p>
     </div>
   </section>
@@ -698,51 +699,52 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
   <section id="examples">
     <div class="wrap">
       <div class="head">
-        <span class="eyebrow">Examples in the repo</span>
-        <h2>One focused, one comprehensive — over the same database</h2>
+        <span class="eyebrow">The example in the repo</span>
+        <h2>One example, small enough to read in a glance</h2>
         <p>
-          Both ship as real packages under <code>workflows/</code>, with their own tools, tests
-          and data. Start with the first; read the second when you want to see every node type at
-          once.
+          It ships as a real package under <code>workflows/</code>, with its own tools, tests,
+          evals and data. Five intents, three destinations, one answer — all in one document.
         </p>
       </div>
       <div class="grid cols-2">
         <div class="card">
-          <span class="eyebrow">Focused</span>
-          <h3 style="margin-top:.5rem; font-size:1.0625rem">chinook-nl-to-sql</h3>
+          <span class="eyebrow">The one you see first</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">Chinook Assistant <span class="muted" style="font-weight:400">· <code>chinook-assistant</code></span></h3>
           <p>
-            Natural language to SQL over the Chinook music store. One agent behind a grader, bound
-            to three read-only tools (list tables → table schema → run query), and a per-table
-            second brain — eleven knowledge docs, one per entity — so the
-            model learns what <code>InvoiceLine</code> means before it writes a join instead of
-            guessing from a schema dump.
+            A question, a <b>Router</b> that sorts it into five intents, and three places it can
+            land: a <b>Data Analyst</b> for anything the Chinook database can answer, a
+            tool-less <b>Front Desk</b> for greetings, off-topic asks and general knowledge, and a
+            <b>Web Researcher</b> holding web search and web fetch. Thirteen nodes, left to right,
+            nothing to untangle and nothing hidden in another file.
           </p>
           <div class="ex-tags">
-            <span class="tag">agent.llm</span><span class="tag">sql tool</span>
-            <span class="tag">knowledge/</span><span class="tag">pytest</span>
+            <span class="tag">route.classifier</span><span class="tag">route.grader</span>
+            <span class="tag">agent.llm</span><span class="tag">web tools</span>
           </div>
         </div>
         <div class="card">
-          <span class="eyebrow">Comprehensive</span>
-          <h3 style="margin-top:.5rem; font-size:1.0625rem">Store Analytics <span class="muted" style="font-weight:400">· <code>page-analytics</code></span></h3>
+          <span class="eyebrow">The data branch, in the same file</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">Data Analyst <span class="muted" style="font-weight:400">· the <code>data_query</code> branch</span></h3>
           <p>
-            Revenue by genre and country, top customers and invoice trends over the same Chinook
-            database — routed by intent, researched by a supervisor and three workers sharing a SQL
-            bus, joined into a report, graded with a revise loop, approved by a human, then
-            dispatched. The platform's own end-to-end test: it uses every generic node type
-            deliberately, against the one database both examples share.
+            Natural language to SQL over the Chinook music store. One agent bound to three
+            read-only tools (list tables → table schema → run query), behind a <b>grader</b> that
+            sends a bad answer back for another attempt — up to three — and a per-table second
+            brain of eleven knowledge docs, so the model learns what <code>InvoiceLine</code>
+            means before it writes a join instead of guessing from a schema dump. Its prompt field
+            is empty: its rules arrive over the <code>skill</code> port from a Markdown file wired
+            in beside it, which is how you customise a prebuilt node without editing it.
           </p>
           <div class="ex-tags">
-            <span class="tag">route.classifier</span><span class="tag">orchestrate.supervisor</span>
-            <span class="tag">route.grader</span><span class="tag">human.approval</span>
-            <span class="tag">team.workflow</span><span class="tag">workflow.subgraph</span>
+            <span class="tag">agent.llm</span><span class="tag">sql tool</span>
+            <span class="tag">route.grader</span><span class="tag">input.markdown</span>
           </div>
         </div>
       </div>
       <p class="muted" style="margin-top:1.25rem; font-size:.8125rem">
-        There is exactly <b>one</b> sample database, redistributed with the repo, and both examples
-        evaluate against it — so every figure either one produces is checkable against the same
-        file. The backend defaults to a hosted model, so neither needs an API key to try.
+        There is exactly <b>one</b> sample database, redistributed with the repo, and exactly
+        <b>one</b> visible example evaluated against it — so every figure it produces is checkable
+        against the same file. The backend defaults to a hosted model, so it needs no API key to
+        try.
       </p>
     </div>
   </section>
@@ -766,7 +768,7 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
         </a>
         <a href="#examples">
           <h3>Read a real one</h3>
-          <p>Open Store Analytics, follow an intent from router to grader, then change a rule and re-run.</p>
+          <p>Open the Chinook Assistant, follow an intent from router to grader, then change a rule and re-run.</p>
           <span class="go">Examples →</span>
         </a>
         <a href="#docs">
@@ -884,26 +886,27 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
         </li>
 
         <li>
-          <h3>Run the Store Analytics example</h3>
+          <h3>Run the Chinook Assistant</h3>
           <p>
-            Open <b>Store Analytics</b> from the workflow picker (the package is
-            <code>workflows/page-analytics</code>) and press Run. It routes the
-            question by intent, fans a supervisor out to three workers on a shared SQL bus, formats
-            a report, grades it with a revise loop and pauses at a human approval node. Tokens and
-            active nodes stream back onto the canvas as it goes.
+            Open <b>Chinook Assistant</b> from the workflow picker (the package is
+            <code>workflows/chinook-assistant</code>) and press Run. It sorts the question into one
+            of five intents and takes exactly one of three branches: the Data Analyst, the
+            tool-less Front Desk, or the Web Researcher. Tokens and active nodes stream back onto
+            the canvas as it goes.
           </p>
           <div class="codeblock">
             <div class="pane-bar">terminal · or run the same graph without the editor</div>
-<pre><code><span class="p">$</span> python -m pytest workflows/page-analytics
-<span class="p">$</span> openstategraph graph ./workflows/page-analytics   <span class="c"># Mermaid text, no network call</span>
-<span class="p">$</span> openstategraph run ./workflows/page-analytics <span class="s">"Revenue by genre?"</span></code></pre>
+<pre><code><span class="p">$</span> python -m pytest workflows/chinook-assistant
+<span class="p">$</span> openstategraph graph ./workflows/chinook-assistant   <span class="c"># Mermaid text, no network call</span>
+<span class="p">$</span> openstategraph run ./workflows/chinook-assistant <span class="s">"Revenue by genre?"</span></code></pre>
           </div>
           <div class="callout callout-tip">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
             <span>
-              <b>Try the focused one first.</b> <code>chinook-nl-to-sql</code> is a single agent with
-              three read-only Chinook tools — small enough to hold in your head, and the same
-              database Store Analytics reports on, so every number is checkable.
+              <b>Then follow the data branch.</b> <code>data_query</code> leads to the analyst —
+              one agent, three read-only Chinook tools and a grader that makes it try again. Small
+              enough to hold in your head, and every number it produces is checkable against the
+              one sample database.
             </span>
           </div>
         </li>
@@ -1049,7 +1052,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
         <div class="card">
           <h3>How to start</h3>
           <p>
-            Clone, <code>./start dev</code>, open Store Analytics, ask it something in
+            Clone, <code>./start dev</code>, open the Chinook Assistant, ask it something in
             <code>/chat</code>. Prerequisites, the two model paths, and why no API key is needed for
             a first answer.
           </p>
@@ -1321,7 +1324,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
             <p>
               It is generated, then owned by you — the first keystroke claims a document, and a
               stale badge tells you when the source behind it moved. In
-              <code>chinook-nl-to-sql</code> it is eleven docs, one per table, so the model knows
+              <code>chinook-assistant</code> it is eleven docs, one per table, so the model knows
               what <code>InvoiceLine</code> means before it writes a join.
             </p>
           </div>

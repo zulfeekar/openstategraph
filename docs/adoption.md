@@ -86,13 +86,21 @@ serves a page at `/` that says so and gives you the two ways out — `npm run
 build`, or `./start dev` for the hot-reloading stack. It is never a bare 404,
 because a 404 at `/` is indistinguishable from a broken install.
 
+**That guarantee is `serve`'s, not every backend's.** The two-process dev
+setup in README's "Terminal 2" — a bare `uvicorn openstategraph.api.main:app`,
+which `scripts/dev.sh` also runs — deliberately does not mount the editor at
+all: `OPENSTATEGRAPH_SERVE_STATIC` is unset there, Vite owns the editor on
+:5273, and `GET /` on :8000 is a plain `{"detail":"Not Found"}`. That is the
+expected shape of the dev backend, not a broken install.
+
 ---
 
 ## (a) Fork / checkout — the primary mode today
 
 **The repository is the workspace.** There is no "install OpenStateGraph into
 your app" step, because your workflows live inside the checkout, next to the
-two shipped examples.
+shipped example (`chinook-assistant` — one visible package; `concierge` and
+`workflow-architect` ship hidden).
 
 ```bash
 git clone <your-fork-of-openstategraph> openstategraph
@@ -205,8 +213,8 @@ git merge upstream/main
 The friction is real and worth stating before you commit to this mode:
 
 - **Your workflows sit in a tracked directory of the upstream tree.** They are
-  *your* files with *their* siblings (`chinook-nl-to-sql`, `page-analytics`,
-  `concierge`, `workflow-architect`) around them. Adding files rarely
+  *your* files with *their* siblings (`chinook-assistant`, `concierge`,
+  `workflow-architect`) around them. Adding files rarely
   conflicts; deleting the shipped examples to tidy up guarantees a conflict on
   every upgrade. Leave them, or delete them once in a commit you are willing to
   re-resolve.
@@ -238,7 +246,7 @@ What you commit is exactly the package layout above — most importantly
 You do not have to write a Python file to find out whether a package works.
 
 ```bash
-openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
+openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
 ```
 
 That is the whole first five minutes. The rest of the commands each wrap a
@@ -252,7 +260,11 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
 | `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
 | `openstategraph new --list-templates` | the templates and one line on what each is for |
-| `openstategraph knowledge list <package>` | the second brain's topics and their one-line hints (`--knowledge-dir` to look elsewhere) |
+| `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
+| `openstategraph threads list\|show` | past runs the checkpointer stored, newest first; `show` replays one checkpoint by checkpoint without re-running it |
+| `openstategraph providers` | which model providers are registered, whether each is configured, its default model, the environment variable it reads and the extra it needs. The first thing to run when a model call fails |
+| `openstategraph env-example` | print the provider block of `.env.example` — names only, never values — to redirect into your own `.env` |
+| `openstategraph knowledge list <package>` | the second brain's topics, their one-line hints, and each doc's owner and stale badge (`--knowledge-dir` to look elsewhere, which drops the badges — a store outside the package has no source to recompute) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
 | `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server]` |
 | `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
@@ -631,10 +643,33 @@ Two properties worth naming, because they are what "you own it" means:
 The second brain is the one artifact that starts machine-written, so it has an
 explicit hand-over rather than a convention:
 
+- **One per workflow.** A package has one `knowledge/` directory, so the canvas
+  allows one Knowledge atom — the store's visible declaration and the build
+  button's home. A workflow you *mount* is a different package with its own
+  store, so a root and a mounted team each hold one and they never collide;
+  the child seeks its own knowledge, never the parent's.
 - **Build it** with `openstategraph knowledge build <package>`, or the
-  Knowledge card's rebuild in the editor. Generated files carry a marker
-  comment; `openstategraph knowledge list <package>` prints each topic with its
-  one-line index hint.
+  Knowledge card's **Build second brain** button in the editor. Generated files
+  carry a marker comment; `openstategraph knowledge list <package>` prints each
+  topic with its one-line index hint.
+- **Building is build time, never run time.** A run only ever *reads* these
+  docs — no node compiles to a builder, nothing in a graph can reach one, and
+  publishing does not rebuild as a side effect. The knowledge an answer relies
+  on predates the question.
+- **A root workflow's docs are pointers, not copies.** For each child it
+  mounts, the root gets one coarse page — what that child answers, when not to
+  route there, and a drill pointer when the child has a store of its own.
+  Never the child's table-level detail. Children it does not mount are not its
+  business and get no doc.
+- **A project has no store of its own — it is a *source*.** There is no
+  `workflows/knowledge/`; a project's second brain is the union of its
+  packages' stores. A workflow that wires a platform tool
+  (`tool.platform-list-workflows`, `tool.platform-describe-workflow`) can see
+  the whole project, so the project counts as one of its sources and it gets a
+  *catalogue* page per package those tools show — what each is for and when it
+  is the wrong answer — minus the ones it mounts, which get the better routing
+  page instead. A draft or hidden package gets no catalogue page, because the
+  platform tools would refuse to describe it either.
 - **Claim it by editing it.** The first save through the editor strips the
   generated marker, and a claimed doc is never regenerated over. There is no
   autosave — editing a topic is a dialog with an explicit Save, and the result
@@ -644,7 +679,12 @@ explicit hand-over rather than a convention:
   hash stops matching and the topic is badged stale — including topics you have
   claimed, because a claimed doc can go out of date too. Topics written by the
   agentic explorer have no recomputable brief and are never badged: unknown is
-  not stale.
+  not stale. `openstategraph knowledge list` prints both the owner and the
+  stale badge, so this is checkable without opening the editor.
+
+**Checking that a store is right** — coverage, index quality, stale versus
+wrong, and whether the store earns its place at all — is
+[Testing a second brain](second-brain.md).
 
 ---
 

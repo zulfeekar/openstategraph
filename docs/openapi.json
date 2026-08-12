@@ -128,6 +128,33 @@
         "title": "CompiledGraphResponse",
         "type": "object"
       },
+      "DeveloperChannelResponse": {
+        "description": "What only a workflow editor may see \u2014 see `api/audience.py`.\n\nOne object rather than loose fields, because \"developer-only\" is the\nproperty they share and it should be visible in the contract: a reader of\nthis schema can tell at a glance which half of a run is guidance about the\nworkflow and which half is the answer to the question.",
+        "properties": {
+          "suggestion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "DeveloperChannelResponse",
+        "type": "object"
+      },
       "FunctionCapabilityResponse": {
         "properties": {
           "docstring": {
@@ -526,10 +553,14 @@
         "additionalProperties": false,
         "description": "Continues a run a `human.approval` node paused.\n\nCarries the whole workflow again (not just the thread id) for the same\nreason `RunRequest` does \u2014 the compile seam is one-directional and\nstateless per call; nothing server-side remembers *which* document a\nthread belongs to between requests, only the checkpointed graph state\nLangGraph itself owns.",
         "properties": {
-          "advisor": {
-            "default": false,
-            "title": "Advisor",
-            "type": "boolean"
+          "audience": {
+            "default": "customer",
+            "enum": [
+              "customer",
+              "developer"
+            ],
+            "title": "Audience",
+            "type": "string"
           },
           "credentials": {
             "anyOf": [
@@ -638,10 +669,14 @@
         "additionalProperties": false,
         "description": "Run **the posted document**, not a server-side graph.\n\nThis is what makes the editor's Run button honest: the workflow the developer\ncan see on the canvas is the workflow that executes. The document is\nvendor-neutral `workflow.json`, so the compile seam stays one-directional.",
         "properties": {
-          "advisor": {
-            "default": false,
-            "title": "Advisor",
-            "type": "boolean"
+          "audience": {
+            "default": "customer",
+            "enum": [
+              "customer",
+              "developer"
+            ],
+            "title": "Audience",
+            "type": "string"
           },
           "credentials": {
             "anyOf": [
@@ -757,6 +792,16 @@
             "title": "Decisions",
             "type": "object"
           },
+          "developer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeveloperChannelResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "mermaid": {
             "default": "",
             "title": "Mermaid",
@@ -770,13 +815,10 @@
             "title": "Outputs",
             "type": "object"
           },
-          "warnings": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
+          "thread_id": {
+            "default": "",
+            "title": "Thread Id",
+            "type": "string"
           }
         },
         "required": [
@@ -807,6 +849,72 @@
         "title": "SaveWorkflowRequest",
         "type": "object"
       },
+      "SqlSchemaResponse": {
+        "description": "`GET /api/workflows/{slug}/sql-schema` \u2014 the agent's field of view.\n\nThe schema tools take their table as a *model* argument: the agent sees\nevery table and picks. This is that same set, read from the same file, so\nthe editor can show it instead of implying a per-node table choice that\nthe runtime never had.",
+        "properties": {
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SqlSourceResponse"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "title": "SqlSchemaResponse",
+        "type": "object"
+      },
+      "SqlSourceResponse": {
+        "description": "One database the document's SQL tool nodes are wired to.",
+        "properties": {
+          "database": {
+            "title": "Database",
+            "type": "string"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "tables": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SqlTableResponse"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "warning": {
+            "default": "",
+            "title": "Warning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "engine"
+        ],
+        "title": "SqlSourceResponse",
+        "type": "object"
+      },
+      "SqlTableResponse": {
+        "description": "One table a workflow's SQL tools can reach.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "detail"
+        ],
+        "title": "SqlTableResponse",
+        "type": "object"
+      },
       "TemplateResponse": {
         "description": "One entry of `GET /api/templates` \u2014 scale-and-adopt ticket 04.\n\nThe editor's New Workflow picker and `openstategraph new --list-templates`\nread the **same** catalogue (`openstategraph.templates`); this endpoint is\nthe seam, not a second list. It carries the rendered `document` so picking\na template is one call: the canvas imports what it is given rather than\nre-deriving a starting point the CLI would have built differently.",
         "properties": {
@@ -830,6 +938,140 @@
           "document"
         ],
         "title": "TemplateResponse",
+        "type": "object"
+      },
+      "ThreadHistoryResponse": {
+        "description": "`GET /api/threads/{thread_id}` \u2014 one past run, checkpoint by checkpoint.",
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "thread",
+          "steps"
+        ],
+        "title": "ThreadHistoryResponse",
+        "type": "object"
+      },
+      "ThreadListResponse": {
+        "description": "`GET /api/threads` \u2014 past runs, newest first.",
+        "properties": {
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadSummary"
+            },
+            "title": "Threads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "threads"
+        ],
+        "title": "ThreadListResponse",
+        "type": "object"
+      },
+      "ThreadStep": {
+        "description": "One checkpoint of a past run \u2014 the state as it stood at that moment.\n\nA *view*, never a re-execution: these values were recorded while the run\nhappened and are read straight back out of the checkpointer. Nothing is\ncalled again, so no tool sends a second email and no model is billed\ntwice.",
+        "properties": {
+          "at": {
+            "description": "ISO-8601 timestamp the checkpoint was written.",
+            "title": "At",
+            "type": "string"
+          },
+          "checkpoint_id": {
+            "title": "Checkpoint Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "checkpoint_id",
+          "step",
+          "at",
+          "source",
+          "values"
+        ],
+        "title": "ThreadStep",
+        "type": "object"
+      },
+      "ThreadSummary": {
+        "description": "One past run, identified by the thread the checkpointer stored it under.\n\n`session_id` and `user_email` are read back from the checkpoint metadata,\nwhere LangGraph persists every non-private `configurable` key. They are\ntherefore exactly what the *transport* supplied on the run \u2014 never\nanything the model claimed about itself.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "paused",
+              "finished"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_email": {
+            "title": "User Email",
+            "type": "string"
+          },
+          "workflow_slug": {
+            "title": "Workflow Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "workflow_slug",
+          "session_id",
+          "user_email",
+          "updated_at",
+          "steps",
+          "question",
+          "answer",
+          "status"
+        ],
+        "title": "ThreadSummary",
         "type": "object"
       },
       "ToolCapabilityResponse": {
@@ -980,6 +1222,11 @@
             },
             "title": "Findings",
             "type": "array"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -1273,9 +1520,160 @@
         ]
       }
     },
+    "/api/threads": {
+      "get": {
+        "description": "Which runs happened, under whose identity, and which are still paused.\n\nRead straight out of the checkpointer that stored them \u2014 there is no\nsecond index of runs to drift from the checkpoints it would describe.\n`session_id` and `user_email` come back from checkpoint metadata,\nwhere LangGraph persists the `configurable` block the *transport*\nsupplied; nothing a model said about itself can appear here.\n\nThe filters narrow a list, they do not authorize one: this deployment\nauthenticates a single shared token, so anyone who can call this can\ncall it without `user_email` too. Per-user history needs per-user\nauth, and this endpoint does not pretend to be it.",
+        "operationId": "list_threads_endpoint_api_threads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow_slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_email",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Email"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Past runs \u2014 the threads this deployment has stored",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/threads/{thread_id}": {
+      "get": {
+        "description": "A recorded run played back as text. **Nothing is re-executed.**\n\nEvery value here was written while the run happened; reading it calls\nno model and no tool, so viewing a run that sent an email does not\nsend it again. The endpoint that *does* execute is\n`POST /api/runs/resume`, which continues a `paused` thread from its\ninterrupt \u2014 a different verb on purpose.",
+        "operationId": "read_thread_endpoint_api_threads__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow_slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "View one past run, checkpoint by checkpoint",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
     "/api/workflows": {
       "get": {
-        "description": "Ticket 04 (launch-readiness): the listing is surface-aware.\n\n- ``surface=editor`` (default): everything non-hidden, drafts\n  included, each row carrying its ``published`` flag.\n- ``surface=chat``: the customer surface \u2014 published AND not hidden\n  only (hidden trumps published, enforced in the store).",
+        "description": "Ticket 04 (launch-readiness): the listing is surface-aware.\n\n- ``surface=editor`` (default): everything the developer owns \u2014\n  drafts AND hidden packages included, each row carrying its\n  ``published`` and ``hidden`` flags so the editor can mark a hidden\n  package rather than pretend it does not exist.\n- ``surface=chat``: the customer surface \u2014 published AND not hidden\n  only (hidden trumps published, enforced in the store).\n\n**This answers visibility, never existence** (ticket 21). A slug's\nabsence here means \"no surface advertises it\" \u2014 it may be hidden, or\nunreadable, and either way the file is still on disk and still served\n200 by `GET /api/workflows/{slug}`. Ask\n`GET /api/workflows/{slug}/summary` when the question is whether a\npackage exists.",
         "operationId": "list_workflows_api_workflows_get",
         "parameters": [
           {
@@ -1323,12 +1721,52 @@
         "tags": [
           "Catalogue"
         ]
+      },
+      "post": {
+        "description": "Bring a new workflow into existence and be **told which slug it got**.\n\nTicket 20. A name is not unique, so a client that slugifies one and\nPUTs to the result is guessing: two workflows named \"My Workflow\" both\nguessed `my-workflow`, and the second overwrote the first with a 200.\nOnly the process holding the workflows directory can mint an identity,\nso it does \u2014 the first of a name keeps the clean slug, a colliding one\ngets a short random disambiguator (`my-workflow-k7m3qp`), and the\nresponse's `slug` is the answer, never something to recompute.\n\nUse `PUT /api/workflows/{slug}` afterwards to save changes: that\nendpoint addresses a slug you already hold, and this one is how you\ncome to hold it.",
+        "operationId": "create_workflow_api_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a workflow \u2014 the backend mints its slug",
+        "tags": [
+          "Catalogue"
+        ]
       }
     },
-    "/api/workflows/chinook-nl-to-sql/ask": {
+    "/api/workflows/chinook-assistant/ask": {
       "post": {
-        "description": "A fixed, hand-built demo graph \u2014 the NL-to-SQL example \u2014 kept as its own endpoint because it predates the canvas and returns the SQL and rows alongside the prose so an answer can be audited. It does not generalise: a client of your own wants `/api/runs/stream`.",
-        "operationId": "ask_api_workflows_chinook_nl_to_sql_ask_post",
+        "description": "A fixed, hand-built demo graph \u2014 the NL-to-SQL loop that is now the assistant's `data_query` branch \u2014 kept as its own endpoint because it predates the canvas and returns the SQL and rows alongside the prose so an answer can be audited. It answers database questions only, and has no router in front of it: the path shares this workflow's slug, not its document. It does not generalise: a client of your own wants `/api/runs/stream`.",
+        "operationId": "ask_api_workflows_chinook_assistant_ask_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1444,7 +1882,7 @@
         ]
       },
       "put": {
-        "description": "Writes the package's `workflow.json` and stamps `saved_at`.\n\nThe slug is the path parameter and is frozen at creation; the body\ncarries the display name and the document, never the slug. Announces\nthe change on `/api/events` **after** the write succeeded.",
+        "description": "Writes the package's `workflow.json` and stamps `saved_at`.\n\nThe slug is the path parameter and is frozen at creation; the body\ncarries the display name and the document, never the slug. Announces\nthe change on `/api/events` **after** the write succeeded.\n\n**Addresses an existing package.** It still creates one if the slug is\nfree \u2014 naming a directory explicitly is how the CLI and a test write a\npackage they intend to own \u2014 but a client that does not yet have a\nslug must `POST /api/workflows` and be given one, because a slug it\ninvented from a name may already belong to somebody else's workflow\n(ticket 20).",
         "operationId": "save_workflow_api_workflows__slug__put",
         "parameters": [
           {
@@ -1489,7 +1927,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create or overwrite a workflow document",
+        "summary": "Overwrite the workflow document at a slug you already hold",
         "tags": [
           "Catalogue"
         ]
@@ -1884,6 +2322,92 @@
           }
         },
         "summary": "Publish or unpublish a workflow",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/sql-schema": {
+      "get": {
+        "description": "The agent's field of view over the wired databases.\n\nThe schema tools take their table as a *model* argument \u2014 the agent\nsees every table and picks one \u2014 so the editor shows the whole set,\nread from the same file the tool opens, instead of a per-node table\ncontrol that never reached the runtime.\n\nA read, and a total one: a database that is missing, unreadable or\nwhose driver is absent comes back as a warning on its source (or, for\na path that does not resolve inside `workflows/`, as no source at\nall). Never a 500 \u2014 a card must not break because a file moved.",
+        "operationId": "sql_schema_api_workflows__slug__sql_schema_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SqlSchemaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The tables this workflow's SQL tools can actually reach",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/summary": {
+      "get": {
+        "description": "One package's row \u2014 **the existence question** (ticket 21).\n\n`GET /api/workflows` is a *surface*: it omits hidden packages and\nunreadable ones by design, so a client that scans it for its own slug\nand concludes \"deleted\" on a miss is reading a visibility answer as an\nexistence answer. That is exactly what the editor's file watch did, and\nwhy opening `concierge` (`hidden: true`, served 200) raised \"This\nworkflow was deleted on disk\" while the file sat right there.\n\nThis reports every package the store can name, hidden included, with\n`hidden` saying which. **404 is the only \"it is gone\"** \u2014 and it is\nreal, so a stale open copy still gets its warning.",
+        "operationId": "get_workflow_summary_api_workflows__slug__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Does this workflow exist, and when was it last saved?",
         "tags": [
           "Catalogue"
         ]

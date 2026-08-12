@@ -102,7 +102,7 @@ Duplication of *knowledge* is the defect; duplication of *shape* is often fine. 
 
 Hard rules:
 - Node configuration is declared **once** as a field schema; card, inspector, defaults and validation all derive from it.
-- Pydantic is the **single source of truth**; TypeScript types are **generated**. Never hand-mirror a type across the boundary.
+- Pydantic is the **single source of truth** for the run/stream seam, and `docs/openapi.json` is its generated, committed publication. TypeScript is **not** generated from it: `src/core/runtime/RuntimeClient.ts` is a hand-written client, to be pinned to the published contract by a drift test rather than by codegen — the argument, and why a generator was rejected, is `docs/decisions/typescript-runtime-types.md`. A new hand-mirror **without** that pin is what this rule forbids. (Until 2026-08-12 this line claimed the types were generated. No generator has ever existed and `RuntimeClient.ts` mirrors twelve types by hand, so the claim was unciteable in review; it was narrowed to what is true rather than left aspirational.)
 - One binding table drives both the keyboard dispatcher and the shortcuts drawer.
 
 ### Cardinality belongs to the port, not the node

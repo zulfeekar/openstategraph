@@ -6,20 +6,20 @@ type: page
 
 # Shipped workflows
 
+> **This page is generated, and the table below was corrected by hand.**
+> OpenWiki last refreshed it while eight more packages existed; `workflows/`
+> now holds exactly three. Rows naming deleted directories were removed rather
+> than left to the next refresh, because a link to a directory that is not
+> there is the failure this table exists to prevent. If a refresh reintroduces
+> them, the tree is right and the page is wrong.
+
 All live under [`workflows/`](../../workflows). Run any of them by opening the
 slug in the editor and using Chat, or by POSTing its `workflow.json` document
 to `/api/runs/stream` with `workflow_slug: <slug>`.
 
 | Slug | Demonstrates |
 | --- | --- |
-| [`chinook-nl-to-sql`](../../workflows/chinook-nl-to-sql) | the original NL→SQL loop: agent + three Chinook tools + grader. Also ships `graph.py`/`agents.py` — hand-written code beside a compiled document |
-| [`intent-routed-demo`](../../workflows/intent-routed-demo) | router → orchestrator → workers → `format_report`, with a per-intent grader and a `human.approval` gate |
-| [`tabular-analytics`](../../workflows/tabular-analytics) | prebuilt tabular tools over a CSV dataset + `skills/join-rules.md` as procedural memory |
-| [`open-api-explorer`](../../workflows/open-api-explorer) | supervisor labelling subtasks with **worker archetypes** (Weather / Countries / Knowledge / Quakes) over keyless public APIs |
-| [`code-workshop`](../../workflows/code-workshop) | a `tier: "deep"` agent with jailed filesystem tools, a grader loop, a subgraph review, `human.approval`, and a dry-run PR |
-| [`code-workshop-review`](../../workflows/code-workshop-review) | the review stage as its own package, mounted above as a `workflow.subgraph` node |
-| [`research-team`](../../workflows/research-team) | the minimum-viable **Team** package: supervisor + worker + outcome grader |
-| [`data-analyst-team`](../../workflows/data-analyst-team) | a Team plus prebuilt SQL tools and `skills/sql-conventions.md` |
+| [`chinook-assistant`](../../workflows/chinook-assistant) | the one visible example: a five-intent router in front of a SQL analyst (three Chinook tools + a grader loop, rules from a wired skill file), a tool-less front desk, and a web researcher. Also ships `graph.py`/`agents.py` — hand-written code beside a compiled document |
 | [`concierge`](../../workflows/concierge) | **hidden** gateway: routes every /chat message to a specialist workflow, with read-only platform + web tools on its own branch |
 | [`workflow-architect`](../../workflows/workflow-architect) | **hidden**: composes a new workflow document from a description, grading each draft with `tool.validate-workflow` |
 

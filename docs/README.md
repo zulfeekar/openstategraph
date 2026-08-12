@@ -11,9 +11,11 @@ Start with what you came here to do.
 | I want to… | Read | Then |
 | --- | --- | --- |
 | **decide whether this is for me** | [What this is](what-is-this.md) — the framework sentence, the atomic-design tiers, how the shape compares to other Lang\*-layered frameworks, the measured 36-distribution footprint, and when *not* to use it | [The stability contract](stability.md) |
-| **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run Store Analytics, ask it something in `/chat`. Or skip the clone: `openstategraph run ./workflows/chinook-nl-to-sql "…"` | [Patterns](patterns.md) |
+| **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run the Chinook Assistant, ask it something in `/chat`. Or skip the clone: `openstategraph run ./workflows/chinook-assistant "…"` | [Patterns](patterns.md) |
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
+| **measure whether my workflow is any good** | [Evaluation](evaluation.md) — `openstategraph eval`, execution accuracy (the metric Spider and BIRD report) and why it is not string comparison, how to add a case to a golden dataset, and how to read a regression | [Testing a second brain](second-brain.md) |
+| **check that my workflow's knowledge is right** | [Testing a second brain](second-brain.md) — what a project-level second brain is, what to build and read, how to tell a *stale* doc from a *wrong* one, the ablation that says whether the store earns its place, and the three checks worth pinning in a test | [`decisions/knowledge-architecture.md`](decisions/knowledge-architecture.md) |
 | **add a capability that does not exist yet** | [Building an atom](building-an-atom.md) — a node definition, its Python half, the palette tiers, registration (including publishing your own distribution), and a worked example in ~60 lines | [Ports and edges](ports-and-edges.md) |
 | **build my own UI on top of it** | [The HTTP API](api.md) — the committed OpenAPI document, the three SSE streams OpenAPI cannot express (with their event vocabulary and the terminal-frame guarantee), the five calls a custom chat needs with real captured examples, a forty-line working client, and the CORS rules | [`openapi.json`](openapi.json) |
 | **have my own LLM compose the graph** | [The MCP layer](mcp.md) — client config, a worked transcript, the `compile_workflow` response shape, and the trust boundary | [`decisions/mcp-layer.md`](decisions/mcp-layer.md) |
@@ -25,7 +27,10 @@ Start with what you came here to do.
 Each page has exactly one job, and nothing here restates another page:
 [Ports and edges](ports-and-edges.md) is the only reference for the type
 system; [adoption](adoption.md) is the only place the CLI's flags and exit
-codes are enumerated for a consumer; [stability](stability.md) is the only
+codes are enumerated for a consumer; [evaluation](evaluation.md) is the only
+place the scoring metric is defined; [testing a second brain](second-brain.md)
+is the only place the knowledge store's verification procedure is written down;
+[stability](stability.md) is the only
 place a promise is made about them; [the HTTP API](api.md) is the only place
 the SSE event vocabulary is written down; [deploying](deploying.md) is the only
 place authentication, the worker ceiling and the reverse proxy are explained.

@@ -4,6 +4,50 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0%20unreleased-informational.svg)](CHANGELOG.md)
 
+**Draw an agent workflow on a canvas. Get a plain LangGraph `StateGraph` you
+can import, test and deploy without this project.**
+
+That second half is the whole pitch. OpenStateGraph is a **compiler with a
+single target**, not a runtime: a canvas is a `workflow.json` file, and
+`workflow.json` compiles to an ordinary Python object that LangGraph runs.
+
+```python
+from openstategraph import load_workflow
+
+workflow = load_workflow("./workflows/chinook-assistant")
+workflow.graph          # a langgraph CompiledStateGraph. Yours now.
+```
+
+### Why not the four visual tools
+
+Langflow, Flowise, n8n and Dify each own their execution engine: a flow runs
+inside their platform, through their runtime, or it does not run at all. Here
+the output leaves:
+
+- **A flow is a file in git.** `workflow.json`, plus the package's own `tools/`,
+  `functions/` and `tests/` — reviewable in a pull request, diffable, not a blob
+  in someone's database.
+- **The output runs without the editor.** Import it from a script, exercise it
+  with `pytest`, deploy it wherever Python runs. Delete this repository and your
+  workflow still runs.
+
+### Why not LangGraph directly
+
+Because you already can, and nothing here takes that away — this is the
+scaffolding around `StateGraph`, not a wrapper hiding it. You get a canvas and a
+document format, a node vocabulary with the prompt machinery already composed
+(preamble and output contract locked, your rules in the middle), package
+conventions that discover a workflow's `tools/`, `functions/`, `middlewares/`,
+`skills/` and `knowledge/`, a validating compiler, a chat surface, an HTTP API
+and an MCP server. When that scaffolding stops fitting, you keep the compiled
+graph and drop the rest.
+
+We inherit rather than reimplement: checkpointing, time travel, `interrupt()`
+for human-in-the-loop, `Send` fan-out, reducer merging and token streaming are
+LangGraph's, not ours. **The compiler is not portable; the output is.**
+
+### The rest of the shape
+
 **OpenStateGraph is a framework built on top of LangGraph and LangChain.** It
 adds a document format (`workflow.json`), a compiler from that document to a
 plain LangGraph `StateGraph`, and the node semantics the compiler emits. Its
@@ -14,27 +58,6 @@ through the code as Interface → Abstract → Base → Concrete. The visual edi
 the HTTP API and the MCP layer are *optional surfaces* over those three; the
 canvas is built on the **open-source** JointJS core (`@joint/core`, MPL-2.0),
 with no commercial packages.
-
-### We compile; we do not interpret
-
-The closest-looking tools — Langflow, Flowise, n8n, Dify — own their execution
-engine: a flow runs inside their platform, through their runtime, or it does not
-run at all. OpenStateGraph is a **compiler with a single target**. A canvas is
-`workflow.json`, and `workflow.json` compiles to a plain LangGraph `StateGraph`.
-
-Two consequences follow, and they are the whole point:
-
-- **A flow is a file in git.** `workflow.json`, plus the package's own `tools/`,
-  `functions/` and `tests/` — reviewable in a pull request, diffable, not a blob
-  in someone's database.
-- **The output runs without the editor.** The compiled graph is an ordinary
-  Python object: import it from a script, exercise it with `pytest`, deploy it
-  wherever Python runs. Delete this repository and your workflow still runs.
-
-We also inherit rather than reimplement: checkpointing, time travel,
-`interrupt()` for human-in-the-loop, `Send` fan-out, reducer merging and token
-streaming are LangGraph's, not ours. **The compiler is not portable; the output
-is.**
 
 ### Two ways in, and the checkout is only one of them
 
@@ -93,31 +116,58 @@ scripts/dev.sh     # supervised backend + editor; scripts/dev.sh stop; scripts/s
 npm run dev        # http://localhost:5273
 
 # Terminal 2 — the runtime (optional: the editor works read-only without it,
-# but Chat and saving workflows both need it)
-cd backend
-pip install -e .
-PYTHONPATH=backend:workflows/chinook-nl-to-sql uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
+# but Chat and saving workflows both need it).
+#
+# Both lines run from the REPO ROOT. `pip install -e .` inside backend/ gives
+# you the lean core, which has no fastapi and no uvicorn; and after a
+# `cd backend` both PYTHONPATH entries below resolve to nothing — silently,
+# not with an error, so the workflow's tools/ and functions/ just never import.
+pip install -e "backend[all,dev]"   # fastapi + uvicorn are in the [server] extra
+PYTHONPATH=backend:workflows/chinook-assistant \
+  uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 
 npm run build      # tsc -b && vite build
 npm run typecheck
 ```
+
+This backend serves `/chat`, `/docs`, `/openapi.json` and everything under
+`/api`. **`GET /` is a 404 here, on purpose**: in the two-process dev setup
+Vite owns the editor, on :5273. Only the single-origin modes —
+`openstategraph serve` and the Docker image, which set
+`OPENSTATEGRAPH_SERVE_STATIC=1` — mount the built editor at `/`, and there a
+checkout with no `npm run build` gets a page explaining that rather than a
+bare 404.
 
 ### Or skip the editor entirely — the CLI
 
 A workflow package is a folder. Running one needs neither the canvas nor the
 server:
 
+The `openstategraph` console script arrives with the install — there is no
+such command in a bare checkout. Without installing at all, every command
+below is also `PYTHONPATH=backend python3 -m openstategraph.cli …`.
+
 ```bash
 pip install -e "backend[ollama]"      # or the built wheel, from anywhere
 
-openstategraph run ./workflows/chinook-nl-to-sql "How many invoices are there?"
-openstategraph validate ./workflows/chinook-nl-to-sql   # exit 1 if it will not compile
-openstategraph graph ./workflows/chinook-nl-to-sql      # Mermaid text, no network call
+openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
+openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not compile
+openstategraph graph ./workflows/chinook-assistant      # Mermaid text, no network call
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new my-qa --template routed-qa           # or: --list-templates
 ```
 
-Also `knowledge build|list`, `serve` and `mcp`. `--json` on `run` prints the
+The lean core is deliberately four packages, so every one of those commands
+prints one warning: the checkpointer fell back to memory because
+`langgraph-checkpoint-sqlite` is not installed. That is honest rather than
+broken — a run still works, an approval or a follow-up question just will not
+survive the process. Add `[sqlite]` (or `[server]`, which includes it) when you
+want durable threads. `openstategraph providers` says which model providers the
+install can actually reach.
+
+Also `eval` (grade a package against its golden dataset — see
+[Evaluation](docs/evaluation.md)), `knowledge build|list`, `threads list|show`,
+`providers`, `env-example`, `serve` and `mcp`. `--json` on `run` prints the
 whole result rather than the answer alone, and the exit codes are fixed (`0`
 ok, `1` failure, `2` usage, `3` a missing extra) so `validate` works as a CI
 gate. The same thing from Python is `load_workflow("./workflows/my-thing")` —
@@ -131,28 +181,43 @@ see `resolve_model` in `backend/openstategraph/api/main.py`).
 
 ### Example workflows
 
-The repository ships exactly **two** visible examples, both evaluated against
-**one** sample database — `workflows/chinook-nl-to-sql/data/Chinook_Sqlite.sqlite`,
+The repository ships exactly **one** visible example, evaluated against
+**one** sample database — `workflows/chinook-assistant/data/Chinook_Sqlite.sqlite`,
 the standard Chinook music store. One database is the single source of truth:
-every figure any example produces can be checked against the same file.
+every figure the example produces can be checked against the same file.
 
-- **`chinook-nl-to-sql`** — the focused example. Natural language in, one
-  SQL answer out: an agent bound to three Chinook-specific tools
-  (list tables → schema → read-only query).
-- **`page-analytics`** ("Store Analytics") — the comprehensive example. It
-  exercises every generic node type at once: intent routing with a
-  conversation fallback, a supervisor with three worker archetypes on the
-  generic SQL Explorer bus (one also holding web search), report formatting,
-  a grader revise loop, human approval, an email dispatcher (dry-run without
-  SMTP), a quick-metric agent, a conversational branch for follow-ups, a
-  mounted Team (`chinook-metrics-team`) on the `database_deep_dive` branch,
-  and the focused example itself mounted as a subgraph on `sql_specialist`.
+- **`chinook-assistant`** ("Chinook Assistant") — a router with five intents
+  in front of three destinations. A **data question** goes to a SQL analyst;
+  a **greeting**, an **off-topic** request or a **general-knowledge**
+  question is answered directly by a tool-less Front Desk agent; a **web
+  lookup** goes to an agent holding web search and web fetch. Thirteen
+  nodes, one document, nothing mounted.
+
+The analyst is the `data_query` branch, not a separate package: an agent
+bound to three Chinook tools (list tables → schema → read-only query), taking
+its rules from a wired Markdown skill file, behind a grader that sends a bad
+answer back for another attempt, up to three times. It is inline rather than a
+mount because **there was a second Chinook document and it was the one the
+editor opened** — so a reader met a graph with no router in it. There is also
+no Team here: a Team buys a supervisor's planning call and a fan-out, and
+there is exactly one worker role to plan for. The retry loop is what the
+branch needs; the planner is what it would pay for and not use.
+
+The recorded cost: no *visible* example demonstrates composition any more.
+The hidden `concierge` still mounts this workflow and `workflow-architect` as
+subgraphs, and `docs/patterns.md` documents the atom, but nothing a first-time
+reader opens does.
 
 Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
 the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>
 [--template minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
 `scripts/new_team.py`, which call the same code) scaffolds your own packages
 from templates that ship inside the wheel.
+
+> Previously this section listed three examples. `page-analytics` ("Store
+> Analytics") and `chinook-metrics-team` were deleted: a diagram nobody can
+> read has failed regardless of what it does, and one example that is read is
+> worth more than three that are skipped.
 
 ### Environment variables
 
@@ -175,10 +240,23 @@ this table is the quick reference.
 ### Tests
 
 ```bash
-npm test                                  # Vitest — frontend unit tests
-npx tsc -b --noEmit                       # typecheck only, no build output
-cd backend && pip install -e . && pytest  # backend unit tests
+npm test                            # Vitest — frontend unit tests
+npm run typecheck                   # typecheck only, no build output
+
+pip install -e "backend[all,dev]"   # [dev] is what brings pytest
+python3 -m pytest -q                # backend + workflow tests — from the REPO ROOT
 ```
+
+**Not `npx tsc --noEmit`.** The root `tsconfig.json` is a solution config
+(`files: []`), so that command checks nothing and exits 0 — see
+[CONTRIBUTING.md](CONTRIBUTING.md#tests--the-gate-for-every-pr).
+
+**Run pytest from the repo root, not from `backend/`.** The root `pytest.ini`
+is what declares `testpaths = workflows backend` and puts the example
+workflow's `tools`/`functions` on `sys.path`; `cd backend && pytest` never
+reads it and quietly runs 49 fewer tests (1637 against 1686 today) — the whole
+`workflows/` half, which is exactly the code CI covers and you would then be
+red on. Live-API tests are opt-in either way: `pytest -m live`.
 
 Architecture is documented in depth in [`CLAUDE.md`](CLAUDE.md); this README
 covers running the app, not the design rules.
@@ -426,7 +504,9 @@ pure TypeScript with no excuse for untested logic.
   taken away), [the HTTP API](docs/api.md) (build your own UI: the OpenAPI
   document, the SSE streams, five calls), [the MCP
   layer](docs/mcp.md) (your own LLM composes the graph),
-  the seven [patterns](docs/patterns.md), [building an
+  [evaluation](docs/evaluation.md) (`openstategraph eval`, and the metric it
+  scores with), [testing a second brain](docs/second-brain.md) (is the
+  workflow's knowledge right?), the seven [patterns](docs/patterns.md), [building an
   atom](docs/building-an-atom.md) (a node, both halves, end to end) and the
   [ports and edges](docs/ports-and-edges.md) reference
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — setup, the test gate, and how to add

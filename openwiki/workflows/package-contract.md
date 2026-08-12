@@ -6,10 +6,10 @@ type: page
 
 # The workflow package contract
 
-A workflow is a **directory**, not a database row:
-`workflows/<slug>/`. Scaffold one with
-[`scripts/new_workflow.py`](../../scripts/new_workflow.py) (or
-[`scripts/new_team.py`](../../scripts/new_team.py) for a prebuilt Team loop).
+A workflow is a **directory**, not a database row: `workflows/<slug>/`.
+Scaffold one with `openstategraph new <slug> [--template minimal|routed-qa|team]`
+— or, from a checkout, [`scripts/new_workflow.py`](../../scripts/new_workflow.py)
+and [`scripts/new_team.py`](../../scripts/new_team.py), which call the same code.
 
 | Path | Required | Bound by |
 | --- | --- | --- |
@@ -18,7 +18,9 @@ A workflow is a **directory**, not a database row:
 | `tools/*.py` | optional | `discover_tool_registry` — keyed by each tool's own `node_type` |
 | `functions/*.py` | optional | `discover_function_callables` — `function.<name>` |
 | `middlewares/<slot>.py` | optional | `discover_middlewares` — file stem **is** the slot name, module must export `MIDDLEWARE` |
-| `skills/*.md` | optional | `discover_skills` — concatenated into every agent's prompt context |
+| `skills/*.md` | optional | `discover_skills` — the package's **ambient** skills, concatenated as prompt *context* for every agent in it. A skill wired to a node's `skill` port is the other mechanism and lands in the *rules*: [`docs/decisions/skill-layer.md`](../../docs/decisions/skill-layer.md) |
+| `knowledge/` | optional | the package's second brain — built by `openstategraph knowledge build`, read by the ambient knowledge tool ([`docs/second-brain.md`](../../docs/second-brain.md)) |
+| `evals/*.eval.json` | optional | the golden dataset `openstategraph eval` grades against ([`docs/evaluation.md`](../../docs/evaluation.md)) |
 | `tests/` | expected when `tools/` exists | pytest (see [testing](../testing.md)) |
 | `data/` | optional | the workflow's own fixtures/databases |
 

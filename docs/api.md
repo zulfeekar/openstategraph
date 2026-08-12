@@ -88,11 +88,57 @@ endpoints emit the identical vocabulary and one parser handles both.
 | Event | Meaning | Payload |
 | --- | --- | --- |
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `output` |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content` |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
-| `done` | **terminal** — the run finished | `answer`, `decisions`, `outputs`, `attempts`, `mermaid`, `warnings` |
-| `error` | **terminal** — the run failed | `detail` |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
+| `error` | **terminal** — the run failed | `threadId`, `detail` |
+
+#### Audience: what a customer's run cannot carry
+
+**Changed.** `done` used to carry `warnings` unconditionally, and every
+client got them. It no longer does, and the reason is a boundary rather than
+a tidy-up.
+
+A run declares who it is for:
+
+```json
+{ "workflow": {}, "question": "…", "audience": "customer" }
+```
+
+`audience` is `"customer"` (the default — omit it and you have it) or
+`"developer"`. Only a developer run gets a `developer` object on the `done`
+frame, and that object is where everything an editor may see now lives:
+
+| Field | What |
+| --- | --- |
+| `developer.warnings` | authoring diagnostics — unbound tool types, unresolved functions and subgraphs, mount overrides, capability-discovery failures |
+| `developer.suggestion` | the one capability-gap suggestion an agent may offer when it is blocked for want of a tool, as an object (`nodeType`, `attachTo`, `port`, `label`, `reason`) |
+
+The key is **absent**, not empty, on a customer run — so a client cannot read
+"there were no findings" out of a frame that was never entitled to carry any.
+
+Two things follow that a client should not try to work around:
+
+- **`answer` never contains a suggestion fence, for any audience.** The
+  runtime splits it out before the frame is built, so the suggestion is
+  either an object on the developer channel or nowhere. The same applies to
+  every `token` frame and to `update.output`. This is also why a model cannot
+  smuggle developer guidance out by writing something fence-shaped into its
+  own prose: the channel is the boundary, not the text.
+- **A deployment can cap the audience.** `OPENSTATEGRAPH_AUDIENCE=customer`
+  in the environment makes every run a customer run whatever the request
+  says — the setting for a process that serves only the chat surface. Unset
+  (the default) leaves the request in charge. Note what this is not: there is
+  no per-user authorization here, for the same reason `docs/deploying.md`
+  gives about the shared token — it answers "is this stranger allowed in",
+  never "who is this".
+
+`mermaid` deliberately stays on both audiences: it is the compiled topology
+that a chat page draws its live flow diagram from, and
+`GET /api/workflows/{slug}/graph` already serves the same text. `decisions`,
+`outputs` and `attempts` stay too — they are facts about the customer's own
+turn.
 
 #### The terminal-frame guarantee
 
@@ -123,19 +169,85 @@ guessed wrong the same way: while a mounted team ran, every frame was
 internal, so the highlight stayed on the router and the UI claimed the router
 was working while a team was.
 
+**`token` frames carry it too, and they are the ones that arrive on time.** An
+`update` frame is emitted when a node *completes*, so a highlight fed by
+update frames alone can only ever show who last finished. A token frame is the
+only frame that arrives while a node is still working. Measured on a real run:
+a mounted workflow streamed 100+ token frames over about twenty seconds while
+the most recent `update` — and therefore the highlight — still named the
+router. Drive your highlight from `activeNode` on **both** frame types.
+
+The field is repeated on every frame rather than sent only when it changes,
+because a field whose meaning depends on its presence is two fields. **Compare
+it against the node you last highlighted and do nothing when it is unchanged**
+— one model turn is a hundred frames that all name the same node.
+
+An older backend omits `activeNode` on `token` frames. Treat a missing value
+as "this frame says nothing about where the run is" and leave the highlight
+where it was; do **not** fall back to the frame's own `node`, which for a
+token is usually an inner step (`model`, `tools`, or a node belonging to a
+mounted document) that exists on no canvas.
+
 #### Tokens come from every text-producing node
 
 `token` frames are not only the agent's. The input node echoes the question and
 the output node re-renders the final answer, each as its own `token` frame.
 Key on `data.node` if you want one node's stream.
 
+#### A thread is the conversation
+
+> **`POST /api/runs` obeys this too, and did not used to.** It declared
+> `thread_id` and built no config at all, so three calls on one thread were
+> three unrelated first turns — measured: the follow-up "how did you work that
+> out?" classified `general_knowledge` there while the identical conversation
+> over `/api/runs/stream` classified it `data_query`. It now passes the same
+> block and returns `thread_id` on the response, so the non-streaming endpoint
+> can hold a conversation like the streaming one. A workflow that *pauses*
+> still cannot run there — it now answers **409** naming this endpoint, where
+> before it returned `200` with an empty answer.
+
+**Every terminal frame carries `threadId`** — the thread the run happened in.
+Send it back as `thread_id` on the next question and that question is the next
+*turn* of the same conversation: the graph's `messages` channel accumulates
+there, and it is what a router classifies a follow-up against, what an agent
+answers into, and what a mounted child workflow is handed. Omit it and the
+server invents a fresh thread, so every send is turn one — "how did you get
+that?" arrives with no antecedent for *that*, and is answered as if it were a
+new question.
+
+> **This page used to say something narrower**, and the difference caused a
+> real defect rather than a documentation nit. It described `thread_id` as the
+> thing "a client that wants to answer an approval should choose", and only
+> `interrupt` disclosed one. A reader building a chat surface reasonably
+> concluded a thread was an approval handle and skipped it — which is exactly
+> what the editor's own Ask panel did, and why a follow-up there returned an
+> unrelated answer. `done` and `error` now carry `threadId` too, so continuity
+> is something a client can take rather than something it had to know to ask
+> for in advance.
+
+Nothing about a thread is client-side state you must persist: keep it for as
+long as the conversation lasts, drop it to start a new one.
+
+**How long that is, is a product decision, and the two surfaces here answer it
+differently on purpose.** `/chat` persists a thread per workflow in
+`localStorage`, so a customer's conversation survives a reload. The editor's Ask
+panel holds one in memory only, and drops it on a reload or when a different
+workflow is opened. The deciding difference is that neither surface persists its
+*transcript*: restoring the id alone gives a conversation whose earlier turns
+exist on the server and nowhere on screen. A customer asking a published
+workflow will usually still recognise the thread they left; a developer who
+reloaded after *editing the graph* would be continuing a conversation about a
+workflow that no longer exists. See "The Chat panel is a conversation" in
+`getting-started.md`.
+
 #### Approvals
 
-An `interrupt` frame carries the `threadId` to resume with. That thread is
-**persistent** — the checkpointer is durable by default, so it survives a
-restart. Reusing one fixed `thread_id` across conversations will resume the old
-one instead of starting a new one; generate a fresh one per conversation, and
-pass the one from `interrupt` back verbatim on resume.
+An `interrupt` frame carries the same `threadId`, and that is what a resume
+targets. The thread is **persistent** — the checkpointer is durable by
+default, so it survives a restart. Reusing one fixed `thread_id` across
+*separate* conversations will resume the old one instead of starting a new
+one; generate a fresh one per conversation, and pass the one from `interrupt`
+back verbatim on resume.
 
 Resume posts the **whole workflow document again**, not just the thread id:
 the compile seam is one-directional and stateless per call. Nothing
@@ -187,18 +299,60 @@ and the interrupt/resume round trip are real.
     "node_count": 4,
     "edge_count": 3,
     "findings": [],
-    "published": true
+    "published": true,
+    "hidden": false
   }
 ]
 ```
 
-`surface=chat` is the customer surface: published **and** not hidden. The
-default, `surface=editor`, also returns drafts, each carrying its `published`
-flag. `findings` are package-contract complaints (`"error: ..."` /
-`"warning: ..."`); a package too broken to read is omitted rather than shown as
-rubble.
+`surface=chat` is the customer surface: published **and** not hidden — so
+`hidden` is always `false` on a `surface=chat` row, and every row is a workflow
+a customer may pick.
 
-### 2 — The document: `GET /api/workflows/{slug}`
+The default, `surface=editor`, is the *author's* surface and answers a
+different question: it returns drafts as well, **and hidden packages, each
+carrying `hidden: true`**, so the editor can mark them rather than pretend they
+are not there. That is why opening `concierge` in the editor works — a package
+the listing omitted but `GET /api/workflows/{slug}` served 200 is what made the
+editor announce `This workflow was deleted on disk` over a live file.
+
+`findings` are package-contract complaints (`"error: ..."` / `"warning: ..."`);
+a package too broken to read is omitted from `surface=chat` rather than shown
+as rubble.
+
+**Neither surface answers existence.** A slug's absence from `surface=chat`
+means no customer surface advertises it — it may be `hidden` (the concierge
+gateway and the workflow architect both are), or unreadable this instant — and
+either way the package is still on disk. Only the endpoint below answers "is it
+still there".
+
+### 2 — Does it exist: `GET /api/workflows/{slug}/summary`
+
+```json
+{
+  "slug": "concierge",
+  "name": "Concierge (gateway)",
+  "saved_at": "2026-08-08T12:00:00.000000+00:00",
+  "node_count": 15,
+  "edge_count": 17,
+  "findings": [],
+  "published": true,
+  "hidden": true
+}
+```
+
+The same row, asked about **one** slug, and the endpoint to use when the
+question is whether a workflow is still there: it reports every package the
+store can name, hidden ones included, and **404 is the only answer that means
+gone**. A package present but unreadable comes back with `findings` and an
+empty `saved_at` — damaged, not deleted, which is what a file caught mid-write
+looks like. A malformed slug is a 422, never a 404, so a typo cannot be
+mistaken for a deletion.
+
+The editor's file watch polls exactly this, for its own slug. Any client that
+tracks an open document should do the same rather than scanning the listing.
+
+### 3 — The document: `GET /api/workflows/{slug}`
 
 ```json
 {
@@ -226,7 +380,7 @@ You need this because a run takes the document as **input**. The workflow that
 executes is the one you can read — which is what makes the compile seam
 one-directional and a run reproducible outside this editor.
 
-### 3 — Run it: `POST /api/runs/stream`
+### 4 — Run it: `POST /api/runs/stream`
 
 ```json
 {
@@ -237,10 +391,16 @@ one-directional and a run reproducible outside this editor.
 }
 ```
 
+No `audience` here, and that is the point: a chat client omits it and gets
+`"customer"`, which is the surface that may not be shown authoring guidance.
+See "Audience" above for what a `"developer"` run additionally receives.
+
 `workflow_slug` is optional and additive: it layers the tools that live in that
 workflow's own `tools/` folder over the defaults. `thread_id` is optional too —
-the server invents one — but a client that wants to answer an approval should
-choose it, or read it back off the `interrupt` frame.
+the server invents one and reports it back on the terminal frame — but a
+client that sends a *second* question should pass the first one's `threadId`,
+or the second question opens its own conversation and cannot refer back to the
+first. See "A thread is the conversation" above.
 
 The response, with the twenty token frames elided:
 
@@ -270,7 +430,7 @@ data: {"threadId": "chat-8f2a1c", "node": "approve1", "message": "Send this brie
 The stream ended on `interrupt`, so the run is paused and waiting — not
 finished, and not broken.
 
-### 4 — Answer the approval: `POST /api/runs/resume`
+### 5 — Answer the approval: `POST /api/runs/resume`
 
 ```json
 {
@@ -293,10 +453,10 @@ event: token
 data: {"node": "out1", "namespace": [], "content": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
 
 event: done
-data: {"answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"approve1": "…", "out1": "…"}, "attempts": 0, "mermaid": "graph TD;…", "warnings": []}
+data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"approve1": "…", "out1": "…"}, "attempts": 0, "mermaid": "graph TD;…"}
 ```
 
-### 5 — The compiled diagram: `GET /api/workflows/{slug}/graph`
+### 6 — The compiled diagram: `GET /api/workflows/{slug}/graph`
 
 ```json
 {
@@ -312,6 +472,70 @@ it client-side.
 
 A sixth call is optional and worth it: `GET /api/events`, above, so a picker
 built from call 1 does not go stale the moment somebody publishes.
+
+### Writing — `POST /api/workflows` mints the slug, `PUT` overwrites one
+
+A chat client never writes; an editor does, and the two calls are deliberately
+different questions.
+
+```
+POST /api/workflows            {"name": "My Workflow", "document": {...}}
+  → 201 {"slug": "my-workflow", "document": {...}}
+
+POST /api/workflows            {"name": "My Workflow", "document": {...}}
+  → 201 {"slug": "my-workflow-k7m3qp", "document": {...}}
+```
+
+**A name is not an identity, so a client must not derive a slug from one.** The
+first workflow of a name keeps the clean slug; a colliding one gets a short
+random disambiguator, and the response's `slug` is the answer — never something
+to recompute. Suffixing only on collision keeps the common URL clean, and the
+suffix is random rather than a `-2` counter because two clients creating the
+same name at the same moment would both compute `-2` and one would still lose.
+
+`PUT /api/workflows/{slug}` **addresses a package you already hold a slug for**
+and overwrites its document. It still creates one at a free slug — that is how
+the CLI and a test write a package they intend to own — but a client with no
+slug yet must `POST`. This is not a style preference: until ticket 20 the
+editor slugified the name in the browser and PUT to the result, so a second
+"My Workflow" landed on the first one's directory and overwrote it, 200 OK,
+no prompt, no trace.
+
+The slug is **frozen at creation**. Renaming a workflow changes the display
+name inside `workflow.json` and never the directory, so every link, mount and
+line of git history keeps resolving.
+
+### Optional — past runs: `GET /api/threads` and `GET /api/threads/{id}`
+
+What the checkpointer already stored, read back. `GET /api/threads` lists runs
+newest first, filterable by `workflow_slug`, `user_email` (case-folded, like
+the memory namespace) and `session_id`; `GET /api/threads/{id}` returns one run
+checkpoint by checkpoint.
+
+```json
+{
+  "threads": [
+    {
+      "thread_id": "chat-8f2a1c", "workflow_slug": "chinook-assistant",
+      "session_id": "", "user_email": "", "updated_at": "2026-08-11T09:12:04Z",
+      "steps": 6, "question": "Which genre earns the most revenue?",
+      "answer": "Rock, $826.65.", "status": "finished"
+    }
+  ]
+}
+```
+
+Both are **reads**. Nothing re-executes, no model is called, and neither
+endpoint can start or change a run — a `paused` thread is continued through
+`POST /api/runs/resume` (call 4) and nowhere else. Values are capped
+server-side and private channels are omitted, so a thread carrying a long
+message history does not become a multi-megabyte response.
+
+They are honest about their limits: a deployment with no checkpointer, or a
+custom saver that cannot enumerate, returns an empty list rather than an
+error — the truthful answer from a store that cannot say is silence. The
+editor's own **History** toggle in the Chat panel is built on exactly these two
+calls and nothing else.
 
 ---
 
@@ -341,7 +565,8 @@ open http://localhost:8765/minimal-client.html
   // Where your server is. `?api=http://host:port` overrides it.
   const API = new URLSearchParams(location.search).get("api") ?? "http://127.0.0.1:8000";
   const out = document.getElementById("out");
-  let doc = null, slug = null;
+  // `thread` is the conversation — held across asks; null it to start a new one.
+  let doc = null, slug = null, thread = null;
 
   async function load() { // 1 + 2: what is published, and its document
     const [first] = await (await fetch(`${API}/api/workflows?surface=chat`)).json();
@@ -370,6 +595,9 @@ open http://localhost:8765/minimal-client.html
         // Every text-producing node emits tokens — the input node echoes your
         // question, the output node re-renders the answer. Key on data.node.
         if (name === "token") out.textContent += data.content;
+        // Every terminal frame names its thread. Remember it, or the next ask
+        // opens a fresh conversation and every follow-up loses its antecedent.
+        if (data.threadId) thread = data.threadId;
         if (name === "done") return void (out.textContent += `\n\n${data.answer}\n`);
         if (name === "error") return void (out.textContent += `\n[error] ${data.detail}\n`);
         if (name === "interrupt") {
@@ -384,7 +612,7 @@ open http://localhost:8765/minimal-client.html
   document.getElementById("go").onclick = () => {
     out.textContent = "";
     stream("/api/runs/stream", { workflow: doc, workflow_slug: slug,
-      question: document.getElementById("q").value, thread_id: `chat-${Date.now()}` });
+      question: document.getElementById("q").value, thread_id: thread ?? undefined });
   };
   load();
 </script>

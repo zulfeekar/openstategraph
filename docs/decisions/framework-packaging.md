@@ -189,7 +189,7 @@ looks like it works.
   So **`settings.checkpointer: "sqlite"` silently degrades to in-memory in
   every install that exists today.** A user asked for durability, got a log
   line, and will discover it when a restart eats a conversation.
-- **`chinook_tool_registry()` reaches into `workflows/chinook-nl-to-sql/tools`,
+- **`chinook_tool_registry()` reaches into `workflows/chinook-assistant/tools`,
   which only exists inside this checkout.** It is already wrapped in a
   `try/except` with a debug log (a good fix), but the *default* tool registry
   outside the repo is therefore quietly different from the one inside it. Any
@@ -657,13 +657,13 @@ python -m venv /tmp/osg-clean && cd /tmp      # OUTSIDE the repo
 /tmp/osg-clean/bin/pip install <wheel>[ollama]        # no extras beyond one provider
 /tmp/osg-clean/bin/python -c "import openstategraph, sys;
   assert 'fastapi' not in sys.modules and 'deepagents' not in sys.modules"
-cp -r <repo>/workflows/page-analytics /tmp/pkg && cd /tmp
+cp -r <repo>/workflows/chinook-assistant /tmp/pkg && cd /tmp
 /tmp/osg-clean/bin/openstategraph validate /tmp/pkg      # exit 0
 /tmp/osg-clean/bin/openstategraph graph /tmp/pkg         # mermaid, no network
 ```
 
 Run it with `PYTHONPATH` empty and `cwd` outside the checkout. Both are
-essential: `pytest.ini` puts `workflows/chinook-nl-to-sql/tools` on the path
+essential: `pytest.ini` puts `workflows/chinook-assistant/tools` on the path
 inside the repo, so a test that passes in-tree proves nothing about a wheel.
 Pick a package with **no** chinook binding for the proof, then add a second
 case that *does* bind one and assert the warning is present and legible —

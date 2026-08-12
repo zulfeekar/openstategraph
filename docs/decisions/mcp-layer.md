@@ -70,7 +70,7 @@ stating plainly:
 | `describe_workflow` | `WorkflowStore.load` + `validate_package` | no |
 | `get_knowledge` | `PackageKnowledge.topics()` / `.lookup()` | no |
 | `export_plugin` | `plugin_interop.export_plugin` | no |
-| `save_workflow_draft` | `WorkflowStore.save` | **draft only** |
+| `save_workflow_draft` | `WorkflowStore.create` (no slug) / `.save` (named slug) | **draft only** |
 | `run_workflow` | the `/api/runs` path | no |
 
 Every one is a **thin wrapper over an existing seam**. No business logic was

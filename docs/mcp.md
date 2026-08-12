@@ -40,8 +40,11 @@ local MCP client spawns.
 
 `PYTHONPATH` is how you point at a checkout without installing anything (there
 is no PyPI wheel yet — see [Using OpenStateGraph in your project](adoption.md)).
-If you ran `pip install -e /path/to/openstategraph/backend`, drop the `env`
-block entirely.
+If you ran `pip install -e /path/to/openstategraph/backend`, drop the
+`PYTHONPATH` line — but keep the rest of the `env` block. Only `PYTHONPATH` is
+install-dependent; dropping the whole block also drops
+`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0` and silently re-enables the one tool that
+spends money.
 
 `OPENSTATEGRAPH_MCP_ALLOW_RUNS=0` removes `run_workflow` from the registry —
 the only tool that reaches a model. The other eight stay fully functional,
@@ -50,12 +53,20 @@ which is the whole point of keeping validate and compile deterministic.
 For a shared server deployment:
 
 ```bash
+OPENSTATEGRAPH_API_TOKEN=$(openssl rand -hex 32) \
 OPENSTATEGRAPH_MCP_TRANSPORT=streamable-http python -m openstategraph.mcp_server
 ```
 
-**This layer authenticates nobody.** Put it behind mTLS, an OAuth proxy, or a
-private network. That is the known gap, recorded rather than faked with a
-shared secret.
+**Set `OPENSTATEGRAPH_API_TOKEN`.** With it, `streamable-http` is wrapped in
+the same `TokenGate` the HTTP API uses, and every request needs the bearer
+token. Without it the server starts anyway and **logs a warning that it is
+listening with no authentication** — a deliberate choice, so a local
+experiment costs nothing and a shared deployment cannot be unauthenticated by
+accident *and* by silence.
+
+A token is not a substitute for a network boundary. `deploy/Caddyfile` and
+`deploy/nginx.conf` are committed for terminating TLS in front of it; see
+`docs/deploying.md`.
 
 ---
 
@@ -95,9 +106,23 @@ The gist of what comes back:
         "editable": "Only your own rules are editable. The preamble and the output contract are supplied by the runtime and must NOT be restated in the node's config — the contract is appended last and later instructions win. An EMPTY preamble/contract means this node type locks nothing: its prompt is entirely yours."
       }
     }
-    // …and: function.format_report, human.approval, input.markdown, input.text,
-    //  orchestrate.supervisor, orchestrate.worker, output.formatted,
-    //  route.classifier, route.grader, team.workflow, workflow.subgraph
+    // …and 27 more. The grammar: annotate.group, annotate.note,
+    //  function.format_report, human.approval, input.markdown, input.skill,
+    //  input.text, orchestrate.supervisor, orchestrate.worker,
+    //  output.formatted, route.classifier, route.grader, team.workflow,
+    //  workflow.subgraph.
+    //
+    //  Then every bindable tool, which is the half that matters when you are
+    //  composing a document an agent can actually run: tool.chinook-execute-sql,
+    //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
+    //  tool.knowledge-lookup, tool.platform-describe-workflow, tool.platform-grep,
+    //  tool.platform-list-workflows, tool.platform-ls, tool.platform-read-file,
+    //  tool.reddit-search, tool.web-fetch, tool.web-search.
+    //
+    //  28 in total, and the list is read from the same registry the runtime
+    //  binds from — which is what §7 means by "cannot drift". Enumerating the
+    //  tools here rather than eliding them is the point: a tool absent from
+    //  this payload is a tool no agent can be wired to.
   ],
   "dynamic_type_prefixes": {
     "tool.": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",
@@ -385,6 +410,12 @@ client's honour: the document is validated first and an invalid one is refused
 with findings rather than written (there is no `force`), the write is always a
 draft, and a published workflow is never overwritten.
 
+**Pass `slug=None` for a new workflow.** The server mints a free slug from
+`name` and the response says which one it got — the first "My Workflow" gets
+`my-workflow`, a second gets `my-workflow-<six characters>`. A slug you derive
+from a name yourself is a guess, and a guess that lands on an existing draft
+replaces it; name a slug only to update a package you saved earlier.
+
 ---
 
 ## 6. The trust boundary, in one list
@@ -413,8 +444,13 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
 
 ## 7. Limits worth knowing before you deploy it
 
-- **No authentication layer.** Every connected client has the same
-  capabilities. Your reverse proxy is the boundary for v1.
+- **Authentication is one shared token, and it is off by default.**
+  `OPENSTATEGRAPH_API_TOKEN` gates the `streamable-http` transport through the
+  same `TokenGate` as the HTTP API; unset, the server warns and serves anyone.
+  One token means every connected client has the *same* capabilities — there
+  are no per-client scopes — so the reverse proxy is still where you draw a
+  boundary between different callers. `docs/decisions/mcp-layer.md` records why
+  a token earns its place rather than deferring entirely to the deployer.
 - **Compile is stateless**, so a `workflow.subgraph` or `team.workflow` naming
   a hosted child, or an agent bound to a package-local tool, resolves to
   nothing. Valid topology, real capability gap — it comes back as a `warning`,

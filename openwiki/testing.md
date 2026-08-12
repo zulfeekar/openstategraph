@@ -22,14 +22,16 @@ backend.
 
 ## pytest conventions ([`pytest.ini`](../pytest.ini))
 
-- Two roots: `backend` and `workflows/chinook-nl-to-sql` on `pythonpath`;
+- Two roots: `backend` and `workflows/chinook-assistant` on `pythonpath`;
   `testpaths = workflows backend`.
 - **Live-network tests are opt-in.** Mark them `@pytest.mark.live`; the default
   run is `-m "not live"` and must pass offline.
 - Test directories deliberately have **no `__init__.py`** — two roots would
   otherwise collide on a package named `tests`.
-- `norecursedirs` excludes `data`, `scratch` and `output`, so the code-workshop
-  fixture repo's *deliberately failing* test is never collected.
+- `norecursedirs` excludes `data`, `scratch` and `output` — generic
+  jail/generated-output conventions for workflow packages, and what keeps a
+  package's own fixtures (the Chinook SQLite lives in
+  `workflows/chinook-assistant/data/`) out of collection.
 
 ## Isolation seams
 

@@ -5,7 +5,7 @@
 ## Problem
 
 A Team (`team.workflow`) or Subgraph (`workflow.subgraph`) node references one
-shared package. Two mounts of `chinook-metrics-team` share one definition — which
+shared package. Two mounts of one analyst package share one definition — which
 is correct OOP (class vs instance) — but a user legitimately wants *this*
 mount to differ: a stricter grader outcome, a different `maxAttempts`, another
 model. Today the only option is forking the package, which destroys the single

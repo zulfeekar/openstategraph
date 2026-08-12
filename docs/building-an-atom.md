@@ -8,7 +8,7 @@ atomic-design tier, declared once in
 
 | Section | Holds |
 | --- | --- |
-| `Inputs · atoms` | `input.text`, `input.markdown` |
+| `Inputs · atoms` | `input.text`, `input.skill`, `input.markdown` |
 | `Tools · atoms` | every tool node — the built-ins, the platform family, and anything a workflow or a plugin adds |
 | `Output · atoms` | `output.formatted` |
 | `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
@@ -74,6 +74,34 @@ new instance is created with. That is the DRY rule in its most load-bearing
 form: *node configuration is declared once as a field schema; card, inspector,
 defaults and validation all derive from it.*
 
+#### A key your Python factory reads must be a key some field declares
+
+The field schema is the **only** way a value gets into a node's `data`. So a
+factory in `node_runtime.py` that reads `data["x"]` when no field is keyed `x`
+is reading a value nothing can ever write — and it does not fail, it reads `""`
+forever. That defect shipped three times: the model picker (declared on
+`agent.llm` only, read for six types), the Worker's rules mode (read nowhere,
+so `replace` was hardcoded), and the supervisor's rules (read from
+`"instruction"`, which is that node's input **port** id — a port id is not a
+data key).
+
+`backend/tests/test_data_key_contract.py` now makes the fourth instance
+impossible: `port_specs.json` carries each node type's `field_keys`, and the
+test extracts the literal keys every factory reads — following `_text(data,
+"k")`, `data.get("k")` and any helper handed the data dict — and fails on any
+key no field declares. Two consequences when you write a factory:
+
+- **keep the key a string literal, or a module constant**, at the point of use.
+  A key assembled at run time fails the contract's own honesty check, because
+  an extractor that shrugs at what it cannot parse stops guarding anything.
+- **a port id and a field key are different namespaces.** They may not be given
+  the same name on one node: it reads as one thing and behaves as two.
+
+The reverse direction is deliberately not asserted — a declared field the
+factory ignores is often correct, since `maxRetries` and `timeoutSeconds` are
+read by the compiler's graph assembly and a worker's `role` is read by the
+*supervisor's* factory.
+
 ### Ports carry types and cardinality
 
 A port descriptor declares its `direction`, its `type`, and — when it differs
@@ -85,7 +113,7 @@ from the default — its capacity:
   direction: 'in',
   type: PORT.tool,
   label: 'agent tools',
-  side: 'bottom',
+  side: BINDING_SIDE.consumer, // 'bottom' — the constant, never the literal
   appearance: 'pill',
   // Unlimited. `null`, not `Infinity`, so the descriptor survives JSON.
   maxConnections: null,
@@ -157,7 +185,7 @@ class GetTableSchemaTool(BaseTool):
     Args = GetTableSchemaArgs
 ```
 
-*(from [`workflows/chinook-nl-to-sql/tools/chinook.py`](../workflows/chinook-nl-to-sql/tools/chinook.py))*
+*(from [`workflows/chinook-assistant/tools/chinook.py`](../workflows/chinook-assistant/tools/chinook.py))*
 
 - `name` — what the model calls.
 - `node_type` — the canvas node this tool answers to. Empty means "not
@@ -165,9 +193,12 @@ class GetTableSchemaTool(BaseTool):
   an agent programmatically.
 - `description` — the model reads this to decide *whether* to call you. It is
   prompt engineering, not a docstring.
-- `Args` — a Pydantic model. **Pydantic is the single source of truth**; the
-  TypeScript types are generated from it. Never hand-mirror an argument schema
-  across the boundary.
+- `Args` — a Pydantic model, and **the single source of truth for the tool's
+  arguments**. It is what the model sees, what validates a call, and what the
+  MCP layer publishes. Do not restate it in TypeScript: the card declares the
+  node's *configuration* fields, which is a different thing from the arguments
+  the model passes at call time. If you find yourself writing the same shape
+  twice in two languages, the design has gone wrong.
 
 `BaseTool.run()` validates the arguments, calls your `_execute`, and converts
 any raised exception into a result. That is declared once on the base, so no
@@ -247,15 +278,26 @@ to this repository.
 
 **App-wide (in every workflow's palette).** Add the definition and executor to
 [`src/nodes/index.ts`](../src/nodes/index.ts) — the only file that knows the
-full catalogue — and register the Python tool in `build_tool_registry`
+full catalogue — and add the Python tool to `_process_tool_layer`
 ([`backend/openstategraph/api/registries.py`](../backend/openstategraph/api/registries.py)),
-which keys every tool by its own `node_type`.
+which is where the built-in layers are actually listed. `build_tool_registry`
+is the function that *assembles* them and holds no list of its own; it keys
+every tool by its `node_type`.
 
-**Workflow-scoped (only while a workflow using it is open).** Add the family
-to [`src/nodes/workflowScoped.ts`](../src/nodes/workflowScoped.ts), and set
+**Workflow-scoped (only while a workflow using it is open).** Set
 `scope: 'workflow'` on each definition so the palette says where it came from.
 This exists because the alternative is real: put one workflow's tools in the
 shared catalogue and every future palette carries every past workflow's tools.
+
+> **This path cannot be followed literally today, and that is a defect in the
+> code rather than in this sentence.**
+> [`workflowScoped.ts`](../src/nodes/workflowScoped.ts) hardcodes
+> `CHINOOK_NODES` in three places and offers no registry to add a second
+> family to — so a new workflow-scoped family means editing the engine, which
+> is the one thing `Registry<T>` exists to prevent. Tracked as ship-it ticket
+> 03. Until it is fixed, adding a family means editing
+> `syncWorkflowScopedNodes` **and** `registerNodeTypesForRawDocument`; miss the
+> second and your nodes are dropped on every load, per the warning below.
 
 > **Load order matters.** `WorkflowSerializer.fromJSON` silently skips nodes
 > whose type is not registered yet. Workflow-scoped types must be registered
@@ -263,8 +305,12 @@ shared catalogue and every future palette carries every past workflow's tools.
 > `registerNodeTypesForRawDocument` does this, and every load path calls it.
 
 **Discovered (no TypeScript at all).** Drop the tool in
-`workflows/<slug>/tools/`, export it in a `TOOLS` list, and the backend finds
-it by importing the package and collecting `BaseTool` subclasses.
+`workflows/<slug>/tools/` and the backend finds it by importing the package and
+collecting `BaseTool` subclasses — `inspect.getmembers`, no list to maintain.
+Two conditions it does not announce: a file whose stem starts with `_` is
+skipped, and the class must be constructible with **no arguments**. (A `TOOLS`
+list is a different mechanism — it belongs to the *entry-point* path in
+`extensions.py`, for a tool shipped as an installable distribution.)
 `GET /api/workflows/{slug}/capabilities` is the wire contract, and the
 frontend turns each capability into a connectable card generically. A
 discovered tool cannot run in the canvas preview — see honest refusal, above.
@@ -520,6 +566,14 @@ TOOLS = [DiceRollTool()]
 ```
 
 ### Its test — `workflows/<slug>/tests/test_dice.py`
+
+> **`from tools.…` resolves for exactly one workflow today.** `pytest.ini`
+> pins `pythonpath = backend workflows/chinook-assistant`, so the top-level
+> `tools` package *is* Chinook's. In any other slug this import raises
+> `ModuleNotFoundError: No module named 'tools.dice'`. Add your slug to that
+> `pythonpath` line — and note `pytest.ini` says so itself: two workflows both
+> shipping `tools/` will collide on the name. The package-local import path is
+> a known rough edge, not a finished story.
 
 ```python
 from tools.dice import DiceRollTool

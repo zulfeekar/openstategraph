@@ -53,5 +53,11 @@ to touch.
 ```bash
 npm run verify   # tsc -b + eslint + prettier --check + vitest
 npx playwright test
-cd backend && pip install -e . && pytest
+
+pip install -e "backend[all,dev]"   # from the repo root; [dev] brings pytest
+python3 -m pytest -q                # from the repo root — backend AND workflows
 ```
+
+Run pytest from the repo root. Only there does pytest read the root
+`pytest.ini` (`testpaths = workflows backend`); `cd backend && pytest` skips
+the whole `workflows/` half of the suite, which CI runs.
