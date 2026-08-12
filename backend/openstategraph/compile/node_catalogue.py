@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 #: Bumped in lockstep with `PORT_SPEC_SCHEMA_VERSION` in `src/nodes/portSpecs.ts`.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.
@@ -99,10 +99,64 @@ class NodeCatalogue:
     #: Full records, for surfaces that describe rather than compile (MCP).
     nodes: tuple[dict[str, Any], ...]
     port_types: tuple[dict[str, Any], ...]
+    #: Data keys a saved document may still carry that no field declares —
+    #: today only the Grader's superseded `criteriaMode`, kept as a migration
+    #: fallback. Declared in `src/nodes/skillLayer.ts`, emitted here so the
+    #: data-key contract can tell a deliberate compatibility read from a field
+    #: nobody can write.
+    legacy_data_keys: frozenset[str] = frozenset()
 
     @property
     def node_types(self) -> frozenset[str]:
         return frozenset(self.port_specs)
+
+    @property
+    def model_driven(self) -> frozenset[str]:
+        """The node types that declare the editor's shared model picker.
+
+        The editor is authoritative, as it is for ports. This exists because
+        the two sides had disagreed without anything failing:
+        `NodeRuntime._resolve_model(data)` read `data["model"]` for six node
+        types while only `agent.llm` shipped the field, so five of them ran
+        whichever model the request happened to resolve and no one could say
+        otherwise. A wrong model is not a crash — it is a quietly worse answer,
+        which is why this needed a test rather than a comment.
+        """
+        return frozenset(
+            str(node["type"]) for node in self.nodes if node.get("drives_model")
+        )
+
+    @property
+    def accepts_skill(self) -> frozenset[str]:
+        """The node types that declare the editor's shared `skill` input port.
+
+        The same guard as `model_driven`, for the same silence: this runtime
+        reads `plan.skill_bindings` and composes a wired skill into the prompt
+        for five node types, and the editor declared the port on two of them.
+        The other three had a compiler ready to read something no canvas could
+        wire. `backend/tests/test_skill_layer_contract.py` asserts the two sets
+        are equal.
+        """
+        return frozenset(
+            str(node["type"]) for node in self.nodes if node.get("accepts_skill")
+        )
+
+    @property
+    def field_keys(self) -> dict[str, frozenset[str]]:
+        """node type -> every `data` key its editor configuration can write.
+
+        The generalisation of `model_driven` and `accepts_skill`. Both of those
+        pin one shared field each, and each exists because that field was read
+        by a factory and declared by nobody — a defect that raises nothing,
+        because a missing key simply reads as `""` forever. Three shipped
+        before this was generalised (the model picker, the worker's rules mode,
+        the supervisor's rules). `backend/tests/test_data_key_contract.py`
+        asserts every literal key a factory reads appears here.
+        """
+        return {
+            str(node["type"]): frozenset(node.get("field_keys") or ())
+            for node in self.nodes
+        }
 
 
 def load_catalogue(path: Path | None = None) -> NodeCatalogue:
@@ -167,6 +221,7 @@ def load_catalogue(path: Path | None = None) -> NodeCatalogue:
         dynamic_ports=dynamic,
         nodes=nodes,
         port_types=tuple(payload.get("port_types") or ()),
+        legacy_data_keys=frozenset(payload.get("legacy_data_keys") or ()),
     )
 
 

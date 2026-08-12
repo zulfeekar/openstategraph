@@ -113,8 +113,23 @@ class BaseOrchestrator(ABC):
         "instruction. No numbering, no preamble, no explanation."
     )
 
-    def __init__(self, *, max_subtasks: int = MAX_SUBTASKS, model: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        max_subtasks: int = MAX_SUBTASKS,
+        rules: str = "",
+        skill: str = "",
+        replace_rules: bool = False,
+        model: Any = None,
+    ) -> None:
         self.max_subtasks = max_subtasks
+        #: The developer's inline rules and the wired skill file's body. The
+        #: split itself is deterministic, so these shape the one call a
+        #: supervisor actually makes to a model — assigning each subtask to a
+        #: worker archetype. See `docs/decisions/skill-layer.md`.
+        self.rules = rules
+        self.skill = skill
+        self.replace_rules = replace_rules
         self.model = model
 
     @abstractmethod
@@ -136,7 +151,11 @@ class BaseOrchestrator(ABC):
     )
 
     def system_prompt(self) -> SystemPrompt:
-        return SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
+        return (
+            SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
+            .with_rules(self.rules, replace_defaults=self.replace_rules)
+            .with_skill(self.skill)
+        )
 
     def label(self, subtasks: list[Subtask], archetypes: list[Archetype]) -> list[str]:
         """One archetype key per subtask — hybrid routing (ticket 37).
@@ -185,10 +204,15 @@ class BaseOrchestrator(ABC):
             for a in archetypes
         )
         listing = "\n".join(f"{i + 1}. {t.instruction}" for i, t in enumerate(subtasks))
-        prompt = SystemPrompt(
-            preamble=self.LABEL_PREAMBLE,
-            output_contract=self.LABEL_CONTRACT,
-        ).with_context(f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}")
+        prompt = (
+            SystemPrompt(
+                preamble=self.LABEL_PREAMBLE,
+                output_contract=self.LABEL_CONTRACT,
+            )
+            .with_context(f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}")
+            .with_rules(self.rules, replace_defaults=self.replace_rules)
+            .with_skill(self.skill)
+        )
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
 

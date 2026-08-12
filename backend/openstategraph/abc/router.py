@@ -117,12 +117,34 @@ class BaseRouter(ABC):
         "No punctuation, no explanation, no quotes — the branch name alone."
     )
 
+    #: The bottom rules layer, so a router with an empty `rules` field and no
+    #: wired skill still classifies on something better than the branch names.
+    #:
+    #: This layer was **described but not built**. `docs/decisions/skill-layer.md`
+    #: names three rules layers — `default_rules` → `rules` → `skill` — for all
+    #: five model-driven families, and `system_prompt()` below never called
+    #: `.with_defaults()`, so a router had two. The gap was invisible while
+    #: every shipped router carried a long inline `rules` string; it stops being
+    #: invisible the moment a developer drops a bare Router on a canvas, which
+    #: is exactly what "works out of the box" has to survive.
+    #:
+    #: Generic on purpose — how to *decide*, never what the branches mean. The
+    #: branch list is `context`, and the branch semantics are the developer's
+    #: `rules`.
+    DEFAULT_RULES: ClassVar[str] = (
+        "- Decide from what the message NEEDS, not from how it is phrased.\n"
+        "- Exactly one branch. If two fit, take the more specific one.\n"
+        "- Never answer the message, and never invent a branch name."
+    )
+
     def __init__(
         self,
         branches: "list[str | dict[str, Any] | Branch]",
         *,
         fallback: str | None = None,
         rules: str = "",
+        skill: str = "",
+        replace_rules: bool = False,
         model: Any = None,
     ) -> None:
         if not branches:
@@ -140,6 +162,10 @@ class BaseRouter(ABC):
         resolved = names_by_id.get(fallback or "", fallback)
         self.fallback = resolved if resolved in self.branches else self.branches[-1]
         self.rules = rules
+        #: The wired skill file's body, and the one extend/replace switch that
+        #: governs every rules layer (`docs/decisions/skill-layer.md`).
+        self.skill = skill
+        self.replace_rules = replace_rules
         self.model = model
 
     def route_key(self, name: str) -> str:
@@ -189,7 +215,9 @@ class BaseRouter(ABC):
         return (
             SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
             .with_context(self.describe_branches())
-            .with_rules(self.describe_rules())
+            .with_defaults(self.DEFAULT_RULES)
+            .with_rules(self.describe_rules(), replace_defaults=self.replace_rules)
+            .with_skill(self.skill)
         )
 
     def resolve_system_prompt(self) -> str:
@@ -278,10 +306,19 @@ class Router(BaseRouter):
         *,
         fallback: str | None = None,
         rules: str = "",
+        skill: str = "",
+        replace_rules: bool = False,
         model: Any = None,
         destinations: dict[str, str] | None = None,
     ) -> None:
-        super().__init__(branches, fallback=fallback, rules=rules, model=model)
+        super().__init__(
+            branches,
+            fallback=fallback,
+            rules=rules,
+            skill=skill,
+            replace_rules=replace_rules,
+            model=model,
+        )
         #: branch name -> graph node name, taken from the canvas wiring.
         self.destinations = destinations or {}
 

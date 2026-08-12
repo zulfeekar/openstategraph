@@ -27,6 +27,8 @@ from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
 from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
+from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
+from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
 
 #: Turn-start reset marker. A checkpointed thread carries the whole state
@@ -139,6 +141,38 @@ class RunState(TypedDict, total=False):
     #: only what the orchestrator explicitly packed into its Send (see below).
     task_id: str
     task_instruction: str
+
+
+#: Node types whose streamed text is machinery, not the reply.
+#:
+#: The compiler is what knows a node's type, so it is what answers this; who
+#: is entitled to *see* machinery is `api/audience.AnswerChannel`'s question
+#: and stays there. Two layers, one fact each — the same split
+#: `developer_channel` already makes for the suggestion fence.
+#:
+#: Each entry earns its place from a frame QA read on screen (ticket 25):
+#:
+#: - `route.classifier` streams the branch NAME it chose — `music_store`,
+#:   `data_query`, `general`, arriving glued to the sentence beside it.
+#: - `route.grader` streams its verdict and rubric complaint — `FAIL Include
+#:   the SQL SELECT statement...` on the end of a finished answer.
+#: - `input.text` writes the turn's `HumanMessage` (see `_input`), so the
+#:   question rides this stream and reads as the beginning of the reply.
+#: - `input.markdown` / `input.skill` are static text sources: an instruction
+#:   file or a skill, addressed to a model and to nobody else.
+#:
+#: `agent.llm`, `orchestrate.*` and `output.formatted` are deliberately
+#: absent. Their prose IS the reply being written, and watching it appear is
+#: the only thing that makes a 70-second run bearable.
+MACHINERY_NODE_TYPES: frozenset[str] = frozenset(
+    {
+        "input.text",
+        "input.markdown",
+        "input.skill",
+        "route.classifier",
+        "route.grader",
+    }
+)
 
 
 #: Maps a tool node type to the Python tool that implements it.
@@ -342,6 +376,30 @@ def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
 
 
+def _wired_skill(state: RunState, node_ids: list[str]) -> str:
+    """The prompt contribution of whatever is wired to a node's `skill` port.
+
+    Frontmatter is stripped here rather than at the reading node: a skill can
+    arrive from a picked `SKILL.md`, from a pasted instruction, or from a file
+    an upstream node loaded, and only one of those has ever heard of YAML.
+    """
+    from openstategraph.skills import skill_text
+
+    return skill_text(_upstream_text(state, node_ids))
+
+
+def _replaces_rules(data: dict[str, Any]) -> bool:
+    """`rulesMode` — the one extend/replace switch every prompted node has.
+
+    `criteriaMode` is the grader's older spelling of the same field and is
+    still read, so documents saved before the skill layer keep their behaviour
+    exactly (`docs/decisions/skill-layer.md` records the generalisation and
+    the condition for dropping this fallback). It is a *fallback*, never a
+    second setting: `rulesMode` wins wherever both appear.
+    """
+    return (_text(data, "rulesMode") or _text(data, "criteriaMode")) == "replace"
+
+
 @dataclass(frozen=True)
 class PackageAssets:
     """Everything one workflow package contributes to a runtime.
@@ -414,19 +472,29 @@ def advisor_context(node_id: str, catalog: str) -> str:
     the model, because a hallucinated id is the one failure the editor cannot
     recover from: it would either wire the tool to the wrong agent or reject a
     genuinely correct suggestion.
+
+    **The sentence before the block is required, and says so** (ticket 22).
+    *"Say so briefly, then emit exactly one fenced block"* read as a single
+    instruction with an optional first half: models sometimes emitted the block
+    alone, and since the fence is split out of the answer for every audience,
+    the reply a client rendered was the empty string. Asking for the shape of a
+    reply is what a prompt is for, so the requirement belongs here —
+    `developer_channel.NO_PROSE` is the guarantee, and this is what keeps it
+    from ever being needed.
     """
     if not catalog:
         return ""
     return (
         "You are running inside the workflow editor. If you cannot properly "
-        "answer because this workflow lacks a capability, say so briefly, then "
-        "emit exactly one fenced block:\n"
-        "```suggestion\n"
+        "answer because this workflow lacks a capability, first tell the user "
+        "in plain words what you cannot do and why — always that sentence, "
+        "never the block alone — and then emit exactly one fenced block:\n"
+        f"{FENCE_OPEN}\n"
         '{"nodeType": "<one from the catalogue below>", '
         f'"attachTo": "{node_id}", '
         '"port": "tools", "label": "<short human label>", '
         '"reason": "<one sentence>"}\n'
-        "```\n"
+        f"{FENCE_CLOSE}\n"
         "Only suggest when genuinely blocked — never when you can already "
         "answer, and never more than one block.\n"
         "Tools that could be added to you:\n"
@@ -500,6 +568,25 @@ def branch_context(node_id: str, plan: CompiledPlan, nodes: dict[str, Any]) -> s
             "classifier sends to the wrong branch is a suggestion the user "
             "cannot get answered."
         )
+        # ...and the other half of that instruction, which was missing (ticket
+        # 23). The branch names are routing vocabulary, and an agent handed a
+        # list it is told to phrase things by will read the list aloud: live
+        # refusals offered to help with "off-topic questions" and to "let you
+        # know the types of requests I can't handle" — the branch table recited
+        # to the person asking. That is the very failure this block exists to
+        # prevent, in the opposite direction, so the correction belongs in the
+        # block that hands the names over rather than in each workflow's
+        # prompt, where it would be one sentence copied into every document
+        # that can disagree with the next.
+        lines.append(
+            "These branch names are this workflow's internal routing "
+            "vocabulary: never name a branch to the user, and never read the "
+            "list back as a menu. Describe what you can help with in the "
+            "user's own words, as questions they could ask. When you cannot "
+            "help, say what is missing — the fact, the data or the capability "
+            "this workflow does not have — never merely that the request is "
+            "one you do not handle."
+        )
         return "\n".join(lines)
     return ""
 
@@ -542,8 +629,10 @@ class NodeRuntime:
             knowledge_dir_override = services.knowledge_dir_override
             max_attempts = services.max_attempts
             advisor_catalog = services.advisor_catalog
-        #: Non-empty only for an editor run that asked for it (`advisor: true`
-        #: on the request). See `advisor_context`.
+        #: Non-empty only for a run whose audience is `developer`
+        #: (`audience: "developer"` on the request — see `api/audience.py`,
+        #: which is the generation half of that boundary). See
+        #: `advisor_context`.
         self.advisor_catalog = advisor_catalog
         self.model = model
         self.tools = tools or {}
@@ -629,9 +718,28 @@ class NodeRuntime:
         #: and answering half of it in a server log they never open is how the
         #: original bug survived. Populated by `WorkflowServices.runtime_for`.
         self.capability_warnings: list[str] = []
+        #: Graph node names whose streamed text is machinery rather than the
+        #: reply — the compile half of the streaming audience boundary
+        #: (ticket 25; `api/audience.AnswerChannel` is the other half).
+        #:
+        #: Populated by `factory()` from `MACHINERY_NODE_TYPES`, and unioned
+        #: with every mounted child's set in `_subgraph`. The union is the
+        #: part that was actually missing in the wild: a mount compiles a
+        #: second document whose node names the parent has never heard of,
+        #: and `data_query` — the loudest leak QA read — came from the
+        #: *child's* router streaming through the parent's one stream.
+        #:
+        #: Both spellings of every name are recorded (the canvas id and its
+        #: `safe_name`), because a `token` frame is reported under whichever
+        #: the stream fold could resolve, and node ids legally carry colons
+        #: that LangGraph node names may not.
+        self.machinery_nodes: set[str] = set()
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
-            "input.markdown": self._input,
+            # NOT `_input`. A skill source is a *static text source*, not the
+            # run's entry point — see `_static_text`.
+            "input.markdown": self._static_text,
+            "input.skill": self._static_text,
             "agent.llm": self._agent,
             "route.classifier": self._router,
             "route.grader": self._grader,
@@ -655,22 +763,41 @@ class NodeRuntime:
             n["id"]: str(n.get("type", "")) for n in document.get("nodes", [])
         }
         self._nodes = {n["id"]: n for n in document.get("nodes", [])}
+        # Declared here rather than in each `_router`/`_grader`/`_input`
+        # builder: a bound-only or unreachable control node never reaches a
+        # builder, and it would still be able to stream if the graph later
+        # scheduled it. The document is the honest source.
+        from openstategraph.compile.workflow_compiler import safe_name
+
+        for node_id, node_type in self._types.items():
+            if node_type in MACHINERY_NODE_TYPES:
+                self.machinery_nodes.update({node_id, safe_name(node_id)})
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-            node_type = str(node.get("type", ""))
-            builder = self._builders.get(node_type)
-            if builder is not None:
-                return builder(node_id, node, plan)
-            # Discovered capabilities resolve by convention, after the
-            # explicitly-registered builders so a built-in like
-            # `function.format_report` can never be shadowed by accident.
-            if node_type in ("workflow.subgraph", "team.workflow"):
-                return self._subgraph(node_id, node, plan)
-            if node_type.startswith("function."):
-                return self._discovered_function(node_id, node, plan)
-            return self._passthrough(node_id, node, plan)
+            return self.builder_for(str(node.get("type", "")))(node_id, node, plan)
 
         return build
+
+    def builder_for(self, node_type: str) -> Callable[..., Any]:
+        """The factory that will build this node type. Total, never `None`.
+
+        Public and separate from `factory` so the dispatch is one readable
+        table rather than an if-chain inside a closure — and so a test can ask
+        "which factory runs for this node type?" for every type in the
+        catalogue without a hand-kept second list.
+        `backend/tests/test_data_key_contract.py` does exactly that.
+        """
+        builder = self._builders.get(node_type)
+        if builder is not None:
+            return builder
+        # Discovered capabilities resolve by convention, after the
+        # explicitly-registered builders so a built-in like
+        # `function.format_report` can never be shadowed by accident.
+        if node_type in ("workflow.subgraph", "team.workflow"):
+            return self._subgraph
+        if node_type.startswith("function."):
+            return self._discovered_function
+        return self._passthrough
 
     def _resolve_model(self, data: dict[str, Any]) -> Any:
         """This node's own model, falling back to the graph's shared default.
@@ -693,7 +820,18 @@ class NodeRuntime:
         simulator for the local canvas preview, not a real chat model), so a
         node configured for it falls back to the shared default exactly like
         a node with no override at all, rather than erroring.
+
+        **Reasoning effort rides the same path**, and deliberately so: it is a
+        property of *this call to this model*, not of a node family, so it is
+        resolved in the one place a model becomes a model. `openstategraph.
+        reasoning` decides whether the value can actually be carried; anything
+        it refuses to send is reported through `capability_warnings` rather
+        than swallowed — see `_apply_effort`.
         """
+        return self._apply_effort(self._base_model(data), _text(data, REASONING_EFFORT_KEY))
+
+    def _base_model(self, data: dict[str, Any]) -> Any:
+        """The model itself, before any per-call parameter is applied."""
         selection = _text(data, "model")
         if not selection:
             return self.model
@@ -715,17 +853,82 @@ class NodeRuntime:
                 self._model_cache[key] = self.model
         return self._model_cache[key]
 
+    def _apply_effort(self, model: Any, effort: str) -> Any:
+        """Sets reasoning effort where it is carried; says so where it is not.
+
+        The whole feature is this method's second line. Passing an unsupported
+        reasoning parameter has two failure shapes and they need opposite
+        treatments: the provider that *rejects* it kills a run for a setting
+        nobody meant to be load-bearing, and the provider that *ignores* it —
+        `ChatOllama` has no such field, and Ollama is the zero-configuration
+        default here — leaves a card reading "high" over a model that never
+        heard it. `openstategraph.reasoning` refuses to send what cannot be
+        carried, which fixes the first; this reports every refusal, which
+        fixes the second.
+
+        The channel is `capability_warnings` because that is precisely what
+        this is: a capability the developer configured that did not reach the
+        step. `runtime_warnings()` passes those through verbatim, so the
+        sentence lands in the run response, the CLI and the MCP preview with
+        no per-surface plumbing. Deduplicated — ten agents on one unsupporting
+        model is one fact, not ten.
+        """
+        resolved, warning = apply_reasoning_effort(model, effort)
+        if warning and warning not in self.capability_warnings:
+            self.capability_warnings.append(warning)
+        return resolved
+
     # -- node kinds ------------------------------------------------------- #
 
+    def _static_text(self, node_id: str, node: dict[str, Any], _plan: CompiledPlan) -> Any:
+        """A node whose text **is** its configuration: a skill, an instruction file.
+
+        Split out of `_input`, which does two jobs that turn out to be one job
+        too many. `_input` seeds `state["question"] or configured` — right for
+        the node that *starts* a run, and catastrophic for one that does not:
+        a Skill wired to an agent's `skill` port emitted **the user's question
+        as the skill**, so the instructions never reached the model at all.
+        Reported live: a skill reading "when the user asks something, first
+        greet HELLO ZULU then continue" had no effect, because what arrived on
+        the wire was the question itself.
+
+        Two further consequences of sharing a builder, both silent:
+
+        - **It reset the turn.** `_input` clears `answer`, `attempts`,
+          `decisions` and the fan-out channels — the turn boundary, which is
+          exactly right *once*, at the entry. A document with a Skill node ran
+          that reset a second time, mid-graph.
+        - **It logged a second user message.** Every skill source appended its
+          text to `messages` as a `HumanMessage`, putting the question into the
+          conversation twice.
+
+        None of that is configuration a developer could get wrong; it followed
+        from a static source being asked to behave like an entry point. So the
+        two roles are two builders, and this one holds still: no question, no
+        reset, no message, just the text it was configured with.
+        """
+        configured = (
+            _text(node.get("data") or {}, "instruction")
+            or _text(node.get("data") or {}, "instructions")
+            or _text(node.get("data") or {}, "content")
+        )
+
+        def run(_state: RunState) -> dict[str, Any]:
+            return {"outputs": {node_id: configured}}
+
+        return run
+
     def _input(self, node_id: str, node: dict[str, Any], _plan: CompiledPlan) -> Any:
-        """Seeds its configured text, or the caller's question if it has none.
+        """The run's entry: the caller's question, or its configured prompt.
 
         Preferring the question means a saved workflow answers *this* run rather
         than replaying whatever prompt was typed when it was saved.
+
+        Only the entry does this. A node that merely *holds* text — a skill, an
+        instruction file — is `_static_text`, and the difference is not
+        cosmetic: see that method for what sharing one builder cost.
         """
-        configured = _text(node.get("data") or {}, "prompt") or _text(
-            node.get("data") or {}, "instruction"
-        )
+        configured = _text(node.get("data") or {}, "prompt")
 
         def run(state: RunState) -> dict[str, Any]:
             from langchain_core.messages import HumanMessage
@@ -938,11 +1141,22 @@ class NodeRuntime:
                     model=model,
                     tools=lc_tools,
                     rules=_text(data, "systemPrompt"),
+                    # The wired skill is a RULES layer, above the inline
+                    # `systemPrompt` and below the locked output contract
+                    # (`docs/decisions/skill-layer.md`). It used to ride in
+                    # `context` with the ambient package skills, which put the
+                    # deliberate customisation *underneath* the prompt it was
+                    # wired to customise — and later text wins ties, so the
+                    # inline prompt quietly beat it every time.
+                    skill=skill,
+                    replace_rules=_replaces_rules(data),
                     context="\n\n".join(
                         part
                         for part in (
+                            # Ambient, package-wide `skills/*.md`: house style
+                            # for every agent here, not a choice about this
+                            # node. Context, and it stays context.
                             self.skills_context,
-                            skill,
                             # The branches this agent's own classifier can
                             # reach (ticket 11) — generated context, so an
                             # agent's suggestions are grounded in the graph
@@ -961,7 +1175,7 @@ class NodeRuntime:
             prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
             )
-            skill = _upstream_text(state, skills)
+            skill = _wired_skill(state, skills)
             decisions = state.get("decisions") or {}
             feedback = state.get("feedback", "")
             if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
@@ -1021,26 +1235,53 @@ class NodeRuntime:
         classifying_model = base_model
         if _text(data, "tier") == "deep" and base_model is not None:
             classifying_model = _DeepAgentAsChatModel(base_model, name=f"router_{node_id}")
-        router = Router(
-            branches,
-            fallback=_text(data, "fallback") or None,
-            rules=_text(data, "rules"),
-            model=classifying_model,
-        )
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        skills = plan.skill_bindings.get(node_id, [])
+
+        def router_for(skill: str) -> Router:
+            """Built per skill value, for the same reason `_agent` is: the
+            wired text arrives through state, not through the document.
+
+            The branch validation `Router.__init__` performs still happens at
+            compile time via the construction below, so a router with no
+            branches is rejected when the graph is built, not on first run.
+            """
+            return Router(
+                branches,
+                fallback=_text(data, "fallback") or None,
+                rules=_text(data, "rules"),
+                skill=skill,
+                replace_rules=_replaces_rules(data),
+                model=classifying_model,
+            )
+
+        prebuilt = router_for("")
 
         def run(state: RunState) -> dict[str, Any]:
-            question = _upstream_text(state, upstream) or state.get("question", "")
-            if question == state.get("question", ""):
-                question = _thread_question(state)
-            decision = router.classify(question)
+            turn = _upstream_text(state, upstream) or state.get("question", "")
+            # The conversation is what the classification needs (ticket 11) —
+            # and *only* the classification. What this node produced is a
+            # decision about `turn`; the history it read is not its work, and
+            # publishing it made every earlier turn look like this turn's
+            # evidence. Ticket 24, traced in-process: a turn that ran no SQL
+            # at all had a previous turn's query recovered from this field,
+            # which on an `expects: "refusal"` case scores
+            # `should_have_refused` for a run that never touched the database.
+            # The branch downstream reads `messages` for its history anyway,
+            # so it loses nothing and stops being handed the transcript twice.
+            classified = (
+                _thread_question(state) if turn == state.get("question", "") else turn
+            )
+            skill = _wired_skill(state, skills)
+            router = router_for(skill) if skill else prebuilt
+            decision = router.classify(classified)
             return {
                 # The conditional edge dispatches on the *stable id* — the
                 # `branch:<id>` port the canvas edge actually leaves from —
                 # while the model classified by human-readable *name*.
                 # `route_key` is the one place that mapping lives.
                 "decisions": {node_id: router.route_key(decision.branch)},
-                "outputs": {node_id: question},
+                "outputs": {node_id: turn},
             }
 
         return run
@@ -1066,27 +1307,63 @@ class NodeRuntime:
              "required": bool(row.get("required", True))}
             for row in raw_rubric
         ] if isinstance(raw_rubric, list) else []
-        grader = Grader(
-            criteria=_text(data, "criteria"),
-            rubric=rubric_rows,
-            replace_defaults=_text(data, "criteriaMode") == "replace",
-            model=grading_model,
-        )
         cap = int(data.get("maxAttempts") or self.max_attempts)
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        skills = plan.skill_bindings.get(node_id, [])
+
+        def grader_for(skill: str) -> Grader:
+            """A grader is cheap to build, so it is built per skill value.
+
+            The skill text arrives through *state* (the port's upstream node
+            writes it), so it cannot be known at compile time — the same
+            reason `_agent` rebuilds. With nothing wired this is one
+            construction per invocation of a plain dataclass-ish object, and
+            with something wired it is the only correct order of events.
+            """
+            return Grader(
+                criteria=_text(data, "criteria"),
+                rubric=rubric_rows,
+                skill=skill,
+                replace_defaults=_replaces_rules(data),
+                model=grading_model,
+            )
 
         def run(state: RunState) -> dict[str, Any]:
             candidate = _upstream_text(state, upstream) or state.get("answer", "")
+            grader = grader_for(_wired_skill(state, skills))
             verdict = grader.grade(candidate, question=state.get("question", ""))
 
             # Budget check before routing: a grader that keeps rejecting must
             # still let the run finish with an honest answer rather than spin.
             exhausted = state.get("attempts", 0) >= cap
             branch = "pass" if verdict.passed or exhausted else "revise"
+
+            # The ceiling reports itself when it has nothing to hand on.
+            #
+            # Forcing `pass` at the cap is right — a loop that cannot finish is
+            # worse than a mediocre answer — but when the last attempt produced
+            # *nothing*, passing an empty string makes every surface downstream
+            # claim success and show a blank. Found live in the editor: a
+            # mounted analyst exhausted three attempts and the chat panel said
+            # "No answer was produced" directly above "3 attempts before the
+            # grader passed it", which is two contradictory sentences and no way
+            # to act on either.
+            #
+            # Only when the candidate is empty. A candidate the grader merely
+            # disliked is still the answer the workflow produced, and replacing
+            # it with our commentary would be worse than passing it on.
+            outcome = candidate
+            if branch == "pass" and not candidate.strip() and not verdict.passed:
+                outcome = (
+                    f"I could not produce an answer after {cap} "
+                    f"{'attempt' if cap == 1 else 'attempts'}. "
+                    f"The last review said: {verdict.feedback or 'no reason given'}"
+                )
+
             return {
                 "decisions": {node_id: branch},
                 "feedback": "" if branch == "pass" else verdict.feedback,
-                "outputs": {node_id: candidate},
+                "outputs": {node_id: outcome},
             }
 
         return run
@@ -1145,7 +1422,29 @@ class NodeRuntime:
         # decomposition itself stays deterministic. With one wired archetype
         # no labelling call is ever made, so the pre-archetype shape costs
         # nothing extra.
-        orchestrator = Orchestrator(max_subtasks=cap, model=self._resolve_model(data))
+        supervisor_model = self._resolve_model(data)
+        # The supervisor's rules and its wired skill shape the one model call
+        # it makes — assigning each subtask to a worker archetype. The split
+        # itself stays deterministic, so a skill here cannot change *how many*
+        # subtasks there are, only *who* gets them.
+        def orchestrator_for(skill: str) -> Orchestrator:
+            return Orchestrator(
+                max_subtasks=cap,
+                # `"rules"`, not `"instruction"`. `instruction` is this node's
+                # input *port* id (`src/nodes/orchestrate/OrchestratorNode.ts`),
+                # and a port id is not a data key — no card, inspector or
+                # document could write it, so this argument was `""` for every
+                # supervisor ever built and a developer had no way to shape
+                # dispatch at all. `backend/tests/test_data_key_contract.py` is
+                # the general guard that now makes the whole class of this
+                # mistake fail a test.
+                rules=_text(data, "rules"),
+                skill=skill,
+                replace_rules=_replaces_rules(data),
+                model=supervisor_model,
+            )
+
+        orchestrator = orchestrator_for("")
         # The wired worker archetypes, in edge order — the same roster the
         # compiler's dispatch map is built from, keyed by the same
         # `archetype_key`, so a label the planning prompt offered is exactly
@@ -1187,6 +1486,7 @@ class NodeRuntime:
             for src, dests in plan.conditional.items()
             if node_id in (dests.get("revise"), dests.get("rejected"))
         ]
+        skills = plan.skill_bindings.get(node_id, [])
 
         def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
@@ -1199,7 +1499,9 @@ class NodeRuntime:
             ):
                 feedback = ""
             generation = state.get("attempts", 0)
-            subtasks = orchestrator.plan(
+            skill = _wired_skill(state, skills)
+            planner = orchestrator_for(skill) if skill else orchestrator
+            subtasks = planner.plan(
                 instruction, generation=generation, archetypes=archetypes
             )
             if feedback:
@@ -1263,15 +1565,15 @@ class NodeRuntime:
         entertainment industry rather than querying the database — the tools
         were resolved and available, the model simply had no reason to reach
         for them over its own training data. `_agent` has the same exposure
-        whenever no skill is wired to it; a worker has no equivalent skill
-        input at all, so it needs a floor. The skill binding, when present,
-        still wins — this default only fills the gap when nobody supplied one.
+        whenever no skill is wired to it, so a worker needs a floor. The
+        directive is the `default_rules` layer: a wired skill is added to it,
+        and only `rulesMode: "replace"` drops it.
 
         **The prompt is passed as `create_agent(system_prompt=...)`, not
         prepended as a message.** The first version of this fix kept the
         prompt text but delivered it as a `SystemMessage` stitched into the
         per-invocation `messages` list, on an agent built once with no
-        `system_prompt` at all — unlike `workflows/chinook-nl-to-sql/agents.py`'s
+        `system_prompt` at all — unlike `workflows/chinook-assistant/agents.py`'s
         `build_sql_agent`, the one place this exact directive style was
         already proven to work, which passes its prompt as `create_agent`'s
         own `system_prompt` parameter. Matching that shape (agent built fresh
@@ -1296,7 +1598,8 @@ class NodeRuntime:
         # as every model-driven node, and `_resolve_model`'s docstring records
         # exactly this class of bug — a visible per-node choice silently
         # ignored for the graph-wide default (audit 2026-08).
-        model = self._resolve_model(node.get("data") or {})
+        data = node.get("data") or {}
+        model = self._resolve_model(data)
         # Directive, not a nudge. A weaker version of this ("use tools if
         # available") was tried live first and the model answered a database
         # question from general industry knowledge anyway — a vague
@@ -1326,20 +1629,31 @@ class NodeRuntime:
             if model is None:
                 return {"worker_results": {task_id: ""}}
 
-            system_prompt = _upstream_text(state, skills) or default_prompt
             # Same ladder as `_agent`: the family owns construction, this
-            # factory owns state plumbing. The worker's directive is its
-            # *rules*; the workflow's skills text is generated *context*, and
-            # SystemPrompt owns the ordering (context above rules, contract
-            # last) — concatenating it into `rules` bypassed that composition
-            # (audit 2026-08).
+            # factory owns state plumbing. The workflow's skills text is
+            # generated *context*, and SystemPrompt owns the ordering (context
+            # above rules, contract last) — concatenating it into `rules`
+            # bypassed that composition (audit 2026-08).
+            #
+            # The tool directive is the **default_rules** layer and the wired
+            # file is the **skill** layer, exactly as
+            # `docs/decisions/skill-layer.md` names them — that document cites
+            # this worker's directive as the archetypal `default_rules`, and
+            # cites extending it as the safe direction, because the directive
+            # is what stopped a worker answering a database question from
+            # parametric memory. This used to be `wired or default`, i.e.
+            # `replace` hardcoded: a skill silently deleted the directive, and
+            # `rulesMode` was the one prompted node's switch that reached
+            # nothing (ticket 05).
             from openstategraph.abc import agent as agent_family
 
             agent = agent_family.ReactAgentNode(
                 name=f"worker_{node_id}",
                 model=model,
                 tools=lc_tools,
-                rules=system_prompt,
+                default_rules=default_prompt,
+                skill=_wired_skill(state, skills),
+                replace_rules=_replaces_rules(data),
                 context=self.skills_context,
             ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
@@ -1517,10 +1831,17 @@ class NodeRuntime:
                     ),
                     _ancestry=(*self._ancestry, slug),
                 )
+                child_factory = child_runtime.factory(child_document)
+                # Inherited *upwards*, unlike everything else about a child
+                # runtime, and deliberately: the child's frames ride the
+                # PARENT's one SSE stream, so the parent's stream fold is the
+                # only place that can withhold them. Taken after `factory()`,
+                # which is what populates the set.
+                self.machinery_nodes |= child_runtime.machinery_nodes
                 child_graph = WorkflowCompiler().build(
                     child_document,
                     RunState,
-                    child_runtime.factory(child_document),
+                    child_factory,
                     store=self.store,
                 )
 
@@ -1565,25 +1886,31 @@ class NodeRuntime:
             # rest of `configurable` (user_email, thread_id, session_id)
             # crosses untouched: the person and the thread are the same on
             # both sides of the mount.
-            child_config = None
-            if slug:
-                try:
-                    from langgraph.config import get_config
-
-                    parent_configurable = {
-                        k: v
-                        for k, v in (get_config().get("configurable") or {}).items()
-                        # LangGraph rides its own runtime plumbing (dunder
-                        # keys, checkpoint coordinates) in `configurable`;
-                        # forwarding those into a fresh compiled child would
-                        # hand it the parent's internals. Only the app-level
-                        # keys cross the mount.
-                        if not k.startswith("__") and not k.startswith("checkpoint")
-                    }
-                except Exception:
-                    parent_configurable = {}
-                parent_configurable["workflow_slug"] = slug
-                child_config = {"configurable": parent_configurable}
+            #
+            # **Override exactly one key, and rebuild nothing** (ticket 02).
+            # This used to read the ambient config, drop every `__*` and
+            # `checkpoint*` key, and pass the remainder as the child's whole
+            # `configurable`. That reasoning was backwards on both counts:
+            #
+            # 1. A config passed to `invoke` is MERGED over the ambient one,
+            #    never substituted for it — so listing the keys that may cross
+            #    bought no isolation, while *omitting* one was the only way to
+            #    say anything at all. The single key we actually mean to change
+            #    is `workflow_slug`.
+            # 2. `checkpoint_ns` is not "the parent's internals": it is the
+            #    child's ADDRESS. LangGraph derives a nested graph's namespace
+            #    from it (`"node_name:uuid"`, joined with `|` when nested —
+            #    docs: Checkpointers > Checkpoint namespace), and that is what
+            #    `stream(subgraphs=True)` reports as each frame's `ns`.
+            #    Replacing `configurable` wholesale with a checkpoint-free copy
+            #    made the child invoke look like a fresh ROOT graph, so every
+            #    frame it emitted lost the `<mount>:<task-id>` head — measured
+            #    live, and reproduced in `test_mounted_subgraph_namespace.py`.
+            #    With a checkpointer present (the live path, never the unit
+            #    tests) the child's frames stopped being attributable to the
+            #    mount at all, which is precisely why the highlight sat on the
+            #    router for the twenty seconds the mounted analyst worked.
+            child_config = {"configurable": {"workflow_slug": slug}} if slug else None
             final = captured.invoke(
                 {
                     "question": question,
@@ -1623,11 +1950,57 @@ class NodeRuntime:
 
             text = _upstream_text(state, upstream + conditional_upstream)
             answer = text or state.get("answer", "")
+
+            # This node is where "the run's answer" is *defined*, so it is the
+            # one place that can promise the answer is never blank.
+            #
+            # A run that reaches here with nothing has already failed, and
+            # every surface downstream — the chat panel, `RunResponse.answer`,
+            # the terminal SSE frame — reports it as a success that happens to
+            # say nothing. Observed live (exported trace, 2026-08-11): an
+            # agent whose SQL tool had been detached refused honestly on
+            # attempt one, the revise loop returned empty strings, and the run
+            # delivered `answer: ""` alongside `decisions.grader-sql: "pass"`.
+            #
+            # The grader has its own guard for the exhaustion case and it
+            # works — verified directly. This is not that guard moved or
+            # duplicated: it is the floor beneath *every* route to this node,
+            # including the ones with no grader in them at all (ticket 22's
+            # fence-only reply reaches here the same way). A defect that can
+            # arrive by several paths is fixed at the confluence, not at each
+            # source.
+            #
+            # Deliberately not a *diagnosis*. Saying "no answer was produced"
+            # is the honest floor; guessing *why* from here would invent a
+            # cause this node cannot see, and a confident wrong reason is
+            # worse than a plain one.
+            if not answer.strip():
+                answer = (
+                    "The workflow finished without producing an answer. "
+                    "Check the run trace to see which step returned nothing."
+                )
+
             update: dict[str, Any] = {"answer": answer, "outputs": {node_id: text}}
             if answer:
                 # The thread record's other half (ticket 73): the answer is
                 # logged where every path converges, agent or not.
-                update["messages"] = [AIMessage(content=answer)]
+                #
+                # And the *only* place a turn enters the conversation, which
+                # is why the developer channel is filtered out of it here
+                # (ticket 27). An exported trace showed a ```suggestion fence
+                # stored in `messages` and replayed into the router's prompt
+                # the next turn: prompt budget spent on JSON the router cannot
+                # act on, and a transcript that reads as a conversation about
+                # a missing tool rather than about the user's question.
+                #
+                # Write-time, not read-time, and deliberately: there is one
+                # writer and an open-ended set of readers (`_thread_question`,
+                # an agent's payload, whatever composes context next), so a
+                # read-time filter is a rule each future reader has to
+                # remember — the condition that produced this ticket and 24.
+                # `answer` keeps the fence, because the transport still owes
+                # it to the developer channel; only the record is filtered.
+                update["messages"] = [AIMessage(content=transcript_text(answer))]
             return update
 
         return run

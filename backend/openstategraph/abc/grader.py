@@ -87,7 +87,27 @@ class BaseGrader(ABC):
     DEFAULT_CRITERIA: ClassVar[str] = (
         "- The answer must address the question that was asked.\n"
         "- Figures must come from the supplied data, never invented.\n"
-        "- An answer that is empty, truncated or an error is a FAIL."
+        "- An answer that is empty, truncated or an error is a FAIL.\n"
+        # The refusal clause. A grader whose criteria demand evidence — "show
+        # the SQL you ran", "cite the source" — measures an honest *decline*
+        # against a rule it cannot satisfy, and fails it: a refusal has no
+        # query to show. Observed live, exported trace 2026-08-11: an agent
+        # with no SQL tool wired answered "I'm unable to determine the
+        # top-earning genre without a way to query the database", which is the
+        # correct answer; the grader rejected it, the retries returned empty
+        # strings, and the run delivered nothing. The *right* answer was in
+        # hand on attempt one and the loop destroyed it.
+        #
+        # It belongs here, in the base's default criteria, for two reasons.
+        # It is not domain knowledge — nothing about SQL, sources or figures —
+        # so every grader wants it. And criteria are the grader's own language,
+        # so this needs no new verdict state, no string matching against
+        # "I cannot", and nothing upstream self-reporting a refusal it has
+        # every incentive to misreport. Retrying a refusal cannot fix it: the
+        # capability is missing, and asking again just spends the budget.
+        "- An answer that honestly declines — stating it cannot be produced, "
+        "and why — is a PASS. It is a correct answer, not a failed one, and "
+        "retrying it cannot make the missing capability appear."
     )
 
     def __init__(
@@ -95,10 +115,15 @@ class BaseGrader(ABC):
         *,
         criteria: str = "",
         rubric: list[dict[str, Any]] | None = None,
+        skill: str = "",
         replace_defaults: bool = False,
         model: Any = None,
     ) -> None:
         self.criteria = criteria
+        #: The wired skill file's body — a criteria layer above `criteria`,
+        #: governed by the same `replace_defaults` switch. See
+        #: `docs/decisions/skill-layer.md`.
+        self.skill = skill
         #: Structured rubric rows: {"criterion": str, "required": bool}.
         #: Rendered as a numbered checklist the model must judge row by row —
         #: a failed required row is a revise, with that row as the feedback.
@@ -148,6 +173,7 @@ class BaseGrader(ABC):
             SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
             .with_defaults(self.DEFAULT_CRITERIA)
             .with_rules(self.describe_criteria(), replace_defaults=self.replace_defaults)
+            .with_skill(self.skill)
         )
         rubric = self.describe_rubric()
         if rubric:
