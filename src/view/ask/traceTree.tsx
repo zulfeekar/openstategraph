@@ -24,6 +24,20 @@ export interface ActivityRow {
    * approximation the Inspector's duration badge uses. */
   readonly durationMs: number;
   readonly output: string | null;
+  /**
+   * Where this frame was, on every canvas it touched (ticket 34) — see the
+   * stream's `path` field and `frameTarget`.
+   *
+   * Kept on the row, not only consumed as the frame arrives, because the
+   * document under the run can *change*: opening a mount mid-run swaps the
+   * canvas for one that has seen none of this run. Replaying these rows is
+   * what lets the newly-opened document catch up to where the run already is,
+   * rather than starting from a blank diagram.
+   */
+  readonly path?: readonly string[];
+  /** The top-level owner the stream resolved for this frame — the fallback
+   * `frameTarget` uses when `path` says nothing about the open document. */
+  readonly activeNode?: string;
   /** Set when this row is a *spawn* rather than a completed step: the run
    * announced a child worker or subagent. A first-class row, not an
    * anonymous internal-step tick — seeing the spawn moment is the point. */

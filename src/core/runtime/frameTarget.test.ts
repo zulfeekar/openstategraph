@@ -48,6 +48,94 @@ describe('frameTarget — project onto the document that is open', () => {
     });
   });
 
+  // The fields above are what a frame could say before tickets 33/34. They
+  // were not enough, and the browser is where that showed: a real mounted run
+  // reports `node: "tools"` and `activeNode: "wf-music"`, so opening the child
+  // matched neither and lit nothing at all. `path` is the frame saying where
+  // it is on *every* canvas, outermost document first.
+  describe('with a resolved path', () => {
+    const parent = documentWith('in1', 'wf-music', 'out1');
+    const child = documentWith('in1', 'agent-sql', 'out1');
+    // What the wire actually carries for a tool step inside the mount.
+    const insideTheMount = {
+      node: 'tools',
+      activeNode: 'wf-music',
+      path: ['wf-music', 'agent-sql'],
+    } as const;
+
+    it('lights the mount on the parent canvas', () => {
+      expect(frameTarget(insideTheMount, parent)).toBe('wf-music');
+    });
+
+    it('lights the real step once the mount is open', () => {
+      // Neither `node` nor `activeNode` could ever answer this: `tools` is a
+      // LangGraph loop step and `wf-music` belongs to the parent.
+      expect(frameTarget(insideTheMount, child)).toBe('agent-sql');
+    });
+
+    it('is walked outermost-first, so a shared id cannot pull the parent in', () => {
+      // Both documents have `in1`. Walking inward-first would light the
+      // parent's own input node while the CHILD's input step ran.
+      const childInput = { node: 'in1', activeNode: 'wf-music', path: ['wf-music', 'in1'] };
+      expect(frameTarget(childInput, parent)).toBe('wf-music');
+      expect(frameTarget(childInput, child)).toBe('in1');
+    });
+
+    it('falls back to the old rule when the path resolves to nothing here', () => {
+      // A frame from a sibling document. The path names no card of ours, so
+      // the pre-existing node/owner rule decides — and also finds nothing.
+      expect(frameTarget({ node: 'x', activeNode: 'y', path: ['p', 'q'] }, child)).toBeNull();
+    });
+
+    it('ignores an empty path rather than treating it as an answer', () => {
+      expect(frameTarget({ node: 'in1', activeNode: 'in1', path: [] }, child)).toBe('in1');
+    });
+  });
+
+  // Ids are unique only within a document. `concierge` and `chinook-assistant`
+  // — the pair the ticket was reported against — share `in1`, `router1` and
+  // `out1`, so the id walk alone cannot tell whose step a frame is about.
+  describe('when the caller knows which document it is showing', () => {
+    const child = documentWith('in1', 'router1', 'agent-sql');
+    const topLevelInput = {
+      node: 'in1',
+      activeNode: 'in1',
+      path: ['in1'],
+      pathSlugs: ['concierge'],
+    };
+
+    it('claims nothing for a step that happened in another document', () => {
+      // Without the slug this lights the child's own `in1` — the parent's
+      // input step painted onto the child's card.
+      expect(frameTarget(topLevelInput, child, 'chinook-assistant')).toBeNull();
+      expect(frameTarget(topLevelInput, child)).toBe('in1');
+    });
+
+    it('takes the level whose document this is', () => {
+      const inside = {
+        node: 'in1',
+        activeNode: 'wf-music',
+        path: ['wf-music', 'in1'],
+        pathSlugs: ['concierge', 'chinook-assistant'],
+      };
+      expect(frameTarget(inside, child, 'chinook-assistant')).toBe('in1');
+      expect(frameTarget(inside, documentWith('in1', 'wf-music'), 'concierge')).toBe('wf-music');
+    });
+
+    it('falls back to the id walk when a level could not be named', () => {
+      // An empty slug means "unknown", never "not you" — refusing on
+      // incomplete evidence would blank a canvas that the id walk can still
+      // light correctly.
+      const partial = {
+        node: 'agent-sql',
+        activeNode: 'wf-music',
+        path: ['wf-music', 'agent-sql'],
+        pathSlugs: ['concierge', ''],
+      };
+      expect(frameTarget(partial, child, 'chinook-assistant')).toBe('agent-sql');
+    });
+  });
+
   describe('degenerate frames', () => {
     const doc = documentWith('a', 'b');
 

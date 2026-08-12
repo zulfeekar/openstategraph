@@ -719,6 +719,76 @@ finally read by code. Wayfinder tickets 02–04;
   plainly why the other command must not be trusted, so nobody rediscovers
   this the hard way.
 
+- **The editor rendered what was saved, not what was happening** (ship-it
+  tickets 33 and 34). Two reports, one defect. Opening a mounted workflow
+  while it ran showed a static diagram; stopping a run and pressing Run again
+  felt like nothing started. Both were the canvas describing a document
+  instead of a run.
+
+  *A frame named no card the child canvas contained.* `frameTarget` was built
+  for exactly this and shipped unit-tested but unverified, and a browser
+  showed why that was not enough: both facts it relied on were false on the
+  wire. A frame from inside a mount reports `node` as the *runtime's* name for
+  the step — literally `model` or `tools` inside an agent's loop, and
+  otherwise the compiler's `safe_name`, which rewrites every non-alphanumeric
+  character, so the child's `agent-sql` arrived as `agent_sql` — while
+  `activeNode` named the mount, a card belonging to the parent. Neither
+  existed in the open document, so `frameTarget` correctly returned `null` and
+  correctly lit nothing. Captured live: every one of the child's fifteen nodes
+  sat `idle` while its analyst was mid-query.
+
+  The evidence was on the frame all along, unresolved. A checkpoint namespace
+  reads `wf_music:<id> / agent_sql:<id>` — one segment per level of nesting —
+  and `NodeRuntime` now carries a name→id map spanning every mounted document
+  (unioned upward exactly as `machinery_nodes` already was), so `update` and
+  `token` frames carry **`path`**: canvas node ids from the outermost document
+  inward. Clients walk it outermost-first. `activeNode` is unchanged and is
+  now simply `path[0]`.
+
+  *Ids are unique only within a document.* The shipped pair proves it —
+  `concierge` mounts `chinook-assistant` and both have `in1`, `router1` and
+  `out1` — so an id-only rule lights the wrong canvas, and preferring the
+  frame's own node had already been doing so on the parent. Each level now
+  also names the document it happened in (`pathSlugs`), and a client that
+  knows which workflow it is showing matches on that; "no level is me" is an
+  answer rather than a gap. A level whose slug cannot be determined is `''`,
+  which means "no claim", and the id walk decides instead.
+
+  *A document opened mid-run had missed the stream.* Per-frame projection
+  cannot fix that: the earlier steps were projected onto the parent and are
+  not recoverable from the canvas. The frames are not lost, though — the panel
+  keeps them, because the trace and timeline views are built from that record
+  — so `replayRun` re-projects them through the same `frameTarget` when the
+  open document changes. Opening the mount mid-run now shows `in1`,
+  `router1` and `grader-sql` settled and `agent-sql` glowing, against fifteen
+  idle cards before.
+
+  *An Input card showed its saved prompt while a different question was in
+  flight.* The purest form of the defect, and the sharpest: the child's Text
+  Input read "Which genre earns the most revenue?…" through every run,
+  whatever had been asked. The chat writes the question onto the *open*
+  document's entry node, which is why the parent looked right and hid this.
+  The card now shows the run's own question above the field when the two
+  disagree — two facts, shown as two things, rather than one editable slot
+  quietly standing in for both. Writing the value into the field instead was
+  rejected: that edits a saved document to display a fact about a run.
+
+  *Stop, then Run, appeared to do nothing.* Stop was already honest at the
+  server — `stop_when_client_leaves` ends the run rather than merely stopping
+  the reader, re-confirmed here by watching model calls cease — but two things
+  made a restart invisible. The canvas kept the stopped run's greens, its
+  outputs and its timings, so a new run changed nothing on screen for
+  several seconds; every run now clears node runtime before its first frame.
+  And the paced highlight queue was drained before the turn was marked
+  finished, so the toolbar went on showing **Stop** for as long as the backlog
+  took — and a press in that window resolved to a stop of an already-stopped
+  run, aborting a controller that had already been dropped. Silently. A
+  stopped run now abandons its backlog instead of draining it, since the
+  pacing exists to keep the last node visible and a run the developer stopped
+  has no such node. Verified across three consecutive stop/run cycles in the
+  browser: the button returns immediately and each press starts a genuinely
+  new run.
+
 ### Changed
 
 - **The one example's SQL rules moved out of the agent and onto a wire.**

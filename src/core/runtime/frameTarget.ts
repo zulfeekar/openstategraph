@@ -16,24 +16,95 @@
  * static diagram.
  *
  * So the rule is not "am I inside a mount" — nothing needs to know that.
- * **Project onto whatever document is open**: prefer the frame's own node when
- * this document has it, since that is the precise answer, and fall back to the
- * owner when it does not. One expression, and the parent's behaviour is
- * unchanged because a parent never contains its child's node ids.
+ * **Project onto whatever document is open.**
+ *
+ * ## What the first version got wrong, and how the browser said so
+ *
+ * That rule was right; the evidence it was given was not, and it took a real
+ * streamed run to show it — this module shipped unit-tested and unverified,
+ * and both of its assumptions turned out to be false on the wire:
+ *
+ * 1. *"`node` is the child's own step."* It is whatever **LangGraph** called
+ *    the step. Inside an agent's compiled loop that is literally `model` or
+ *    `tools`; inside a mounted document it is the compiler's `safe_name`, so
+ *    the child's `agent-sql` arrives as `agent_sql` — a string with no hyphen,
+ *    which the child document therefore does not contain either. Opening the
+ *    mount matched neither end and lit nothing at all: the static diagram the
+ *    ticket describes, produced by this function returning `null` correctly.
+ * 2. *"A parent never contains its child's node ids."* The two shipped
+ *    documents, `concierge` and `chinook-assistant`, share `in1`, `router1`
+ *    and `out1`. Preferring the frame's own node meant the parent canvas lit
+ *    its own input node while the child's input step ran.
+ *
+ * Both are fixed by the frame carrying a **path** — the chain of canvas node
+ * ids from the outermost document inward, resolved server-side where the
+ * mounted documents' ids are actually known (`RunPathResolver`). Walk it
+ * **outermost-first** and stop at the first id this document has: the parent
+ * stops at the mount, the child (which has no mount) walks on to the real
+ * step, and the shared `in1` can no longer pull the parent inward.
+ *
+ * The older node/owner rule stays underneath as the fallback, so a frame with
+ * no usable path — or a server that predates the field — behaves as before.
  */
 export interface RunFrameEnds {
-  /** The step that actually ran. Belongs to the innermost graph. */
+  /** The step that actually ran, as the *runtime* named it. */
   readonly node: string;
   /** The top-level node that owns it — the mount, for anything nested. */
   readonly activeNode?: string;
+  /**
+   * Canvas node ids from the outermost document inward, one per level of
+   * nesting the frame passed through. Optional: absent on a terminal frame
+   * and on any server that predates it.
+   */
+  readonly path?: readonly string[];
+  /**
+   * Which document each entry of `path` belongs to — same length, same order.
+   *
+   * Ids are unique only *within* a document, and the shipped pair is the
+   * counterexample: `concierge` mounts `chinook-assistant` and both have
+   * `in1`, `router1` and `out1`. Matching on id alone would light the child's
+   * router when the parent's router ran. An entry is `''` when the slug could
+   * not be determined, which means "no claim" rather than "no match".
+   */
+  readonly pathSlugs?: readonly string[];
 }
 
 /**
  * @param hasNode whether the open document contains an id. Injected rather
  *   than taking a model, so the decision is a pure function over two strings
  *   and a predicate — `core/` owes nothing to the canvas here.
+ * @param openSlug the workflow the caller is displaying, when it knows. This
+ *   is the exact answer and it is tried first: an id can belong to two
+ *   documents, a slug names one.
  */
-export function frameTarget(frame: RunFrameEnds, hasNode: (id: string) => boolean): string | null {
+export function frameTarget(
+  frame: RunFrameEnds,
+  hasNode: (id: string) => boolean,
+  openSlug?: string,
+): string | null {
+  const path = frame.path ?? [];
+  const slugs = frame.pathSlugs ?? [];
+
+  // The exact rule, when both sides can name the document.
+  if (openSlug && slugs.length > 0) {
+    const level = slugs.indexOf(openSlug);
+    if (level >= 0 && level < path.length) return path[level] ?? null;
+    // Every level was nameable and none was us: this frame is genuinely about
+    // some other document, and saying so is an answer rather than a gap. If
+    // any level could *not* be named, the evidence is incomplete and the id
+    // walk below decides instead.
+    if (slugs.every((slug) => slug !== '')) return null;
+  }
+
+  // Outermost-first, and that ordering is the substance rather than a
+  // detail — see the header. The first hit is the level this document sits
+  // at, because every id shallower than it belongs to a document that
+  // mounts this one and cannot be a card here.
+  for (const step of path) {
+    const id = step?.trim();
+    if (id && hasNode(id)) return id;
+  }
+
   const own = frame.node?.trim();
   if (own && hasNode(own)) return own;
 

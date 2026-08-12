@@ -17,8 +17,10 @@ import {
   type RunStreamEvent,
 } from '@core/runtime/RuntimeClient';
 import { useController, useWorkbench } from '@app/WorkbenchContext';
+import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameTarget } from '@core/runtime/frameTarget';
+import { replayRun } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
@@ -337,6 +339,34 @@ export function AskPanel({
   );
 
   /**
+   * Returns every card to "nothing has run yet", at the moment a run starts.
+   *
+   * Ticket 33, and the half of it that made Run *feel* dead. Stop leaves the
+   * canvas exactly as the interrupted run painted it — the nodes that
+   * completed stay green, the output card keeps the last answer — and nothing
+   * used to clear that. So pressing Run again changed nothing visible for the
+   * several seconds before the first frame arrived: the same greens, the same
+   * stale answer, the same numbers. "It feels like it's not starting again" is
+   * a precise description of a canvas that looks identical to the one you were
+   * just looking at.
+   *
+   * The deeper reason it belongs here rather than in a Stop handler: a canvas
+   * showing a *finished* run while a *different* run streams is the same
+   * defect as a card showing a saved prompt while a live question is in
+   * flight. What is on screen must be this run, and at the start of a run this
+   * run has produced nothing.
+   *
+   * `IDLE_RUNTIME` rather than `{ status: 'idle' }`: the status is not the
+   * only stale thing on the card. `output` is the previous answer, `durationMs`
+   * the previous timing, `error` a failure that has been superseded.
+   */
+  const resetRunState = useCallback(() => {
+    for (const node of controller.model.nodes()) {
+      controller.model.setNodeRuntime(node.id, IDLE_RUNTIME);
+    }
+  }, [controller]);
+
+  /**
    * Runs the shared tail of both a fresh send and a resumed approval: wires
    * `onEvent` to the canvas highlight/activity feed, then settles the turn
    * into a result, an error, or — new for `human.approval` — a paused
@@ -382,6 +412,12 @@ export function AskPanel({
       // document under a run that is still streaming, and the projection must
       // follow the developer rather than the document it started on.
       const hasNode = (id: string) => controller.model.node(id) != null;
+      // Read at call time for the same reason `hasNode` is: a drill-in
+      // changes which workflow is on screen while this stream is still open,
+      // and the projection must follow the developer. This is what lets a
+      // frame be matched to the *document* it happened in rather than to an
+      // id two documents may share — see `frameTarget`.
+      const openSlug = () => currentWorkflowSlug();
 
       // For the per-node duration readout the Inspector already shows (built
       // for the local preview path, which measures a real start/end) — a
@@ -401,12 +437,32 @@ export function AskPanel({
       // `MIN_HIGHLIGHT_MS`, regardless of how fast the SSE frames themselves
       // arrive — see the constant's own comment for why this exists.
       let highlightChain: Promise<void> = Promise.resolve();
+      /**
+       * Set the moment a stop is known, and read by every queued highlight.
+       *
+       * Ticket 33's lag, and the thing that made a second Run press vanish.
+       * The queue below sleeps `MIN_HIGHLIGHT_MS` per node, and the turn is
+       * only marked `running: false` after the whole of it has drained — so
+       * after a stop the toolbar went on showing **Stop** for as long as the
+       * backlog took. A press in that window resolves through `runIntent` to
+       * `stop`, and stopping an already-stopped run aborts a controller that
+       * has already been dropped: the press did nothing, silently, which is
+       * exactly what the repo's own "no gesture that silently does nothing"
+       * standard forbids.
+       *
+       * A stopped run has no last node to hold visible, because the developer
+       * asked for it to end. So the queue is abandoned rather than drained:
+       * the pending entries neither paint nor sleep, `await highlightChain`
+       * returns on the next tick, and the button is a Run again immediately.
+       */
+      let abandoned = false;
       const activate = (nodeId: string, output: string | null) => {
         const now = performance.now();
         const durationMs = Math.round(now - lastEventAt);
         lastEventAt = now;
 
         highlightChain = highlightChain.then(async () => {
+          if (abandoned) return;
           // One node glows at a time, in the order the stream reports — the
           // previous node's card returns to its resting state exactly as it
           // would after a local preview run finishes with it.
@@ -464,7 +520,7 @@ export function AskPanel({
           // diagram — see `frameTarget`. On the parent canvas this still
           // answers with the mount, because a parent never holds its child's
           // node ids.
-          const target = frameTarget(event, hasNode);
+          const target = frameTarget(event, hasNode, openSlug());
           if (target && (!event.internal || target !== queuedActive)) {
             seen.add(target);
             // The output belongs to the frame's own node; a frame reporting
@@ -486,6 +542,11 @@ export function AskPanel({
                         taskId: event.taskId,
                         internal: event.internal,
                         namespace: event.namespace,
+                        // Carried onto the row so this frame can be projected
+                        // again later, onto a document that was not open when
+                        // it arrived — see `ActivityRow.path` and `replayOnto`.
+                        path: event.path,
+                        activeNode: event.activeNode,
                         durationMs,
                         output: event.output,
                       },
@@ -544,7 +605,7 @@ export function AskPanel({
           // No output is written: a token frame carries a fragment of text,
           // never the node's finished result, and the `update` frame that
           // follows is what fills the card.
-          const tokenTarget = frameTarget(event, hasNode);
+          const tokenTarget = frameTarget(event, hasNode, openSlug());
           if (tokenTarget && tokenTarget !== queuedActive) {
             seen.add(tokenTarget);
             activate(tokenTarget, null);
@@ -573,12 +634,14 @@ export function AskPanel({
       // before any of the branches below so no path can leak the entry.
       aborters.current.delete(id);
 
-      // Waits for the last queued highlight's minimum-visible window before
-      // finalising, so the very last node to act does not flash and vanish
-      // the instant the run's own answer arrives.
+      const stopped = outcome.ok && outcome.value != null && isCancelled(outcome.value);
+      // A stop abandons the backlog; a natural ending drains it. See
+      // `abandoned` — the pacing exists so the last node to act does not
+      // flash and vanish, and a run the developer stopped has no such node.
+      if (stopped) abandoned = true;
       await highlightChain;
 
-      if (outcome.ok && outcome.value && isCancelled(outcome.value)) {
+      if (stopped) {
         // Stopped. Not `success` (nothing completed) and not `error` (nothing
         // failed) — the node returns to rest, which is the same state a
         // canvas that never ran is in.
@@ -705,6 +768,11 @@ export function AskPanel({
    */
   const ask = useCallback(
     async (trimmed: string) => {
+      // Before anything else: the canvas must stop showing the *last* run the
+      // instant this one begins. See `resetRunState` — an unchanged canvas is
+      // what made a second Run look like it had not started.
+      resetRunState();
+
       // The entry Text Input is the workflow's own "first contact" — writing
       // the message there means the chat and the canvas agree about what was
       // asked, rather than the question living only inside this panel.
@@ -778,7 +846,7 @@ export function AskPanel({
         ),
       );
     },
-    [client, controller, scrollToEnd, streamAndSettle, thread, workbench],
+    [client, controller, resetRunState, scrollToEnd, streamAndSettle, thread, workbench],
   );
 
   /**
@@ -823,6 +891,52 @@ export function AskPanel({
       updateTurn(paused.id, { pendingApproval: null, stopped: 'paused' });
     }
   }, [clearPausedNodes, turns, updateTurn]);
+
+  /**
+   * Repaints the canvas for a document that was opened **during** a run.
+   *
+   * The last piece of ticket 34, and the one no amount of per-frame projection
+   * can cover. Clicking "Edit workflow" on a mount loads the child into this
+   * same editor, and everything that already streamed was projected onto the
+   * parent — correctly, as the mount's one glowing card. The child arrives
+   * with a fresh import and therefore a blank runtime: live from that instant
+   * forward, and grey behind. The entry Input card was the loudest symptom,
+   * still showing its saved prompt because the frame carrying the real
+   * question had gone by before anyone opened it.
+   *
+   * The frames are not lost — the turn keeps every one of them, because the
+   * trace and timeline views are built from that record. Replaying it through
+   * the same `frameTarget` gives the newly opened document the state it would
+   * have had if it had been open all along. The decision is `replayRun`, in
+   * `core/`, where it is a pure function and unit-testable; this is only the
+   * subscription and the writes.
+   */
+  const turnsRef = useRef(turns);
+  useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
+  useEffect(
+    () =>
+      controller.model.on('workflow:reset', () => {
+        // The run in progress, if any. A finished run leaves nothing to catch
+        // up to: the developer is opening a document to read it, not to watch.
+        const live = turnsRef.current.find((turn) => turn.running);
+        if (!live) return;
+        const writes = replayRun(
+          live.activity,
+          (id) => controller.model.node(id) != null,
+          true,
+          currentWorkflowSlug(),
+        );
+        for (const write of writes) {
+          controller.model.setNodeRuntime(write.nodeId, {
+            status: write.status,
+            ...(write.output !== undefined ? { output: write.output } : {}),
+          });
+        }
+      }),
+    [controller],
+  );
 
   // Stop, pressed in the toolbar. Same nonce discipline as Run above, and the
   // same reason: the press is the event, not the value.

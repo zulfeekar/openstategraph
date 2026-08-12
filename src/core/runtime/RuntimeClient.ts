@@ -230,6 +230,35 @@ export type RunStreamEvent =
        * Falls back to `node` when the backend predates the field.
        */
       readonly activeNode: string;
+      /**
+       * Where this frame is on **every** canvas it touches — canvas node ids
+       * from the outermost document inward, one per level of nesting
+       * (tickets 33/34).
+       *
+       * `activeNode` answers the question for the document that was *run*, and
+       * that is all a top-level canvas needs. It is not enough for an editor,
+       * because an editor lets you open a mount while it works — and that
+       * child document contains neither `activeNode` (the mount, which is the
+       * parent's card) nor `node` (which inside a mount is the compiler's
+       * mangled `safe_name`, hyphens replaced, matching nothing).
+       *
+       * Consumed by `frameTarget`, which walks it outermost-first. Empty
+       * against a backend that predates the field, and `frameTarget` then
+       * falls back to the older node/owner rule.
+       */
+      readonly path: readonly string[];
+      /**
+       * Which document each `path` entry belongs to — same length, same
+       * order, read by index.
+       *
+       * Ids are unique only within a document, and the shipped pair is the
+       * counterexample: `concierge` mounts `chinook-assistant` and both have
+       * `in1`, `router1` and `out1`. A consumer that knows which workflow it
+       * is showing should match on this and treat "no level is me" as an
+       * answer rather than a gap. An entry is `''` when the slug could not be
+       * determined — "no claim", never "not you".
+       */
+      readonly pathSlugs: readonly string[];
     }
   | {
       readonly type: 'token';
@@ -259,6 +288,20 @@ export type RunStreamEvent =
        * highlight alone.
        */
       readonly activeNode: string;
+      /**
+       * The same path the `update` variant carries — see its comment.
+       *
+       * Present here for the reason `activeNode` is: a `token` frame is the
+       * only one that arrives while a node is *still working*, so a canvas fed
+       * by `update` frames alone can only ever light who last finished. Inside
+       * an open mount that is the whole difference between watching the run
+       * and watching a static diagram, because the child's steps are exactly
+       * the long ones.
+       */
+      readonly path: readonly string[];
+      /** The documents behind `path`, read by index — see the `update`
+       * variant, where the ambiguity this removes is spelled out. */
+      readonly pathSlugs: readonly string[];
       /**
        * What produced this text (ticket 02).
        *
@@ -571,6 +614,8 @@ export class RuntimeClient implements IRuntimeClient {
           internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
           activeNode: asString(payload['activeNode']) || asString(payload['node']),
+          path: asPath(payload['path']),
+          pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
         });
       } else if (eventName === 'spawn') {
         const kind = asString(payload['kind']);
@@ -591,6 +636,8 @@ export class RuntimeClient implements IRuntimeClient {
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
           content: asString(payload['content']),
           activeNode: asString(payload['activeNode']),
+          path: asPath(payload['path']),
+          pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
           kind: payload['kind'] === 'tool' ? 'tool' : 'ai',
           toolName: asString(tool['name']),
           toolCallId: asString(tool['callId']),
@@ -805,6 +852,24 @@ async function readDetail(response: Response): Promise<string> {
 }
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/**
+ * A frame's `path` or `pathSlugs`, defensively: strings only.
+ *
+ * Empty for a server that predates the fields, which is exactly what
+ * `frameTarget` treats as "no answer here" before falling back to the older
+ * node/owner rule — so an old runtime and a new editor still agree.
+ *
+ * `keepBlanks` is for `pathSlugs`, and it is load-bearing rather than lenient:
+ * the two arrays are read **by index**, so dropping an unnameable level would
+ * silently shift every slug onto the wrong node. A blank there means "this
+ * level could not be named", which `frameTarget` handles explicitly.
+ */
+const asPath = (value: unknown, options?: { keepBlanks?: boolean }): readonly string[] => {
+  if (!Array.isArray(value)) return [];
+  const strings = value.filter((step): step is string => typeof step === 'string');
+  return options?.keepBlanks === true ? strings : strings.filter((step) => step.trim() !== '');
+};
 
 const asRecord = (value: unknown): Record<string, string> => {
   if (typeof value !== 'object' || value === null) return {};

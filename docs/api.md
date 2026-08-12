@@ -87,8 +87,8 @@ endpoints emit the identical vocabulary and one parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
-| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `output` |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode` |
+| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `output` |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
@@ -187,6 +187,39 @@ as "this frame says nothing about where the run is" and leave the highlight
 where it was; do **not** fall back to the frame's own `node`, which for a
 token is usually an inner step (`model`, `tools`, or a node belonging to a
 mounted document) that exists on no canvas.
+
+#### `path` — where the frame is on *every* canvas
+
+`activeNode` answers "where is the run" for **the document you submitted**, and
+for most clients that is the whole question. It is not enough if your client
+can display a *mounted* document while it runs, because that document contains
+neither of the two ids a frame used to offer:
+
+- `activeNode` is the mount's card, which belongs to the **parent**;
+- `node` is the runtime's own name for the step — literally `model` or `tools`
+  inside an agent's loop, and inside a mounted document the compiler's
+  `safe_name`, which replaces every non-alphanumeric character with `_`. A
+  child node saved as `agent-sql` therefore arrives as `agent_sql`, matching
+  nothing on any canvas.
+
+So `update` and `token` frames also carry **`path`**: an array of canvas node
+ids running from the outermost document inward, one entry per level of nesting.
+
+```
+"node": "tools", "activeNode": "wf-music", "path": ["wf-music", "agent-sql"]
+```
+
+Walk it **outermost-first** and take the first id the document *you* have open
+contains. Every entry shallower than your document belongs to something that
+mounts you and cannot be one of your cards, so the first hit is your level. The
+ordering is load-bearing rather than incidental: documents share ids freely —
+the shipped `concierge` and `chinook-assistant` both have `in1`, `router1` and
+`out1` — so walking inward-first would light the *parent's* input node while
+the child's input step ran.
+
+`path` is empty when nothing on the frame resolves to a card, and absent on
+terminal frames and on any backend that predates it; fall back to `activeNode`
+in that case. When both are non-empty, `activeNode` equals `path[0]`.
 
 #### Tokens come from every text-producing node
 

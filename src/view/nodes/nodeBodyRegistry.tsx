@@ -11,6 +11,7 @@ import { MOUNT_KINDS } from './mountKind';
 import { KnowledgeBody } from './KnowledgeBody';
 import { SqlSchemaBody } from './SqlSchemaBody';
 import { intentBody } from './IntentBody';
+import { liveInputValue } from './liveInputValue';
 
 export interface NodeBodyProps {
   node: AbstractNodeModel;
@@ -156,8 +157,31 @@ function NoteBody({ node }: NodeBodyProps) {
   );
 }
 
+/**
+ * The entry Input's body: the question the **run** is carrying, when that is
+ * not the question the file holds (ticket 34).
+ *
+ * Above the editable field rather than replacing it, deliberately. The two are
+ * different facts — what this document says, and what is happening right now —
+ * and a card that showed only one of them is how the bug read as correct for
+ * so long. Read-only, because a run is a record; the field below stays the
+ * only editable thing on the card.
+ */
+function LiveInputBody({ node }: NodeBodyProps) {
+  const live = liveInputValue(node.runtime.output, String(node.data['prompt'] ?? ''));
+  if (live === null) return null;
+
+  return (
+    <div className="node__live-input">
+      <span className="node__live-input-label">This run is asking</span>
+      <span className="node__live-input-value">{live}</span>
+    </div>
+  );
+}
+
 /** Registered here so the map is populated before the first card renders. */
 registerNodeBody('output.formatted', FormattedOutputBody);
+registerNodeBody('input.text', LiveInputBody);
 // The mounts, driven from the one declaration of which types are mounts —
 // the same map `NodeCard` badges from, so a card can never be badged as
 // holding a graph while showing no composition (or the reverse).

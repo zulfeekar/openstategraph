@@ -260,6 +260,96 @@ class ActiveNodeResolver:
         return self._active
 
 
+class RunPathResolver:
+    """Where a frame is happening, on **every** canvas at once (tickets 33/34).
+
+    `activeNode` answers the question for one document — the one that was
+    submitted — and that is all a top-level canvas needs. It is not enough for
+    an editor, because an editor lets you *open the mount while it works*, and
+    that child document contains neither the mount's id nor, in general, the
+    id the frame reports for itself:
+
+    - inside an agent's compiled loop, `node` is literally `model` or `tools`;
+    - inside a mounted document, `node` is `safe_name(id)`, so the child's
+      `agent-sql` arrives as `agent_sql`, which no canvas contains.
+
+    The evidence was always on the frame, unresolved: a checkpoint namespace
+    reads `wf_music:<id> / agent_sql:<id>`, one segment per level of nesting,
+    each named after the graph node that owns it. Given a name->id map that
+    spans the mounted documents too (`NodeRuntime.node_ids_by_name`), that is a
+    **path**: the chain of canvas nodes from the outermost document inward.
+
+    The client walks it **outermost-first** and takes the first id the document
+    it has open contains. That ordering is the substance, not a detail: the
+    innermost end collides — `concierge` and `chinook-assistant` both have
+    `in1`, `router1` and `out1` — so an inward-first walk would light the
+    parent's own input node while the *child's* input step ran, which is the
+    same lie this exists to remove. Outermost-first, the parent stops at the
+    mount and the child, which has no mount, walks on to the real step.
+
+    Each level also names **the document it happened in** (`pathSlugs`), and
+    that is not decoration. Ids are unique only within a document, and the
+    shipped pair proves it: `concierge` mounts `chinook-assistant`, and both
+    have an `in1`, a `router1` and an `out1`. A client matching on id alone
+    would light the child's `router1` when the *parent's* router ran — a
+    second, quieter version of the lie this exists to remove. Matching on the
+    slug it has open is exact; the id-only walk above stays as the fallback
+    for a client that does not know which document it is showing.
+
+    Stateless: a path is a pure function of one frame plus two maps fixed for
+    the life of the run. (`ActiveNodeResolver` is stateful because its answer
+    is *sticky* across frames that resolve to nothing; `path` reports only what
+    this frame can support and leaves the smoothing to the client.)
+    """
+
+    def __init__(
+        self,
+        node_ids_by_name: dict[str, str] | None = None,
+        mount_slugs: dict[str, str] | None = None,
+        root_slug: str = "",
+    ) -> None:
+        self._known = dict(node_ids_by_name or {})
+        #: Mount canvas node id -> the slug it descends into.
+        self._mounts = dict(mount_slugs or {})
+        #: The document the run was launched against — the owner of level 0.
+        self._root = root_slug
+
+    def resolve(
+        self, raw_name: str, namespace: tuple[str, ...] | list[str]
+    ) -> tuple[list[str], list[str]]:
+        """`(path, slugs)` — canvas ids and their documents, outermost first."""
+        path: list[str] = []
+        slugs: list[str] = []
+
+        def append(name: str) -> None:
+            canvas_id = self._known.get(name)
+            # Consecutive duplicates dropped rather than all duplicates: a
+            # frame whose own node *is* the namespace segment it sits in
+            # (an agent's loop reporting under its own name) would otherwise
+            # name the same card twice in a row, while a genuine A -> B -> A
+            # nesting stays expressible.
+            if not canvas_id or (path and path[-1] == canvas_id):
+                return
+            # The document this level lives in: the run's own for the first
+            # entry, and thereafter whatever the mount above it descended
+            # into. Empty when a mount's slug is unknown, which a client must
+            # read as "no claim" rather than as a match.
+            owner = self._root if not path else self._mounts.get(path[-1], "")
+            path.append(canvas_id)
+            slugs.append(owner)
+
+        for segment in namespace:
+            head = str(segment).split(":")[0]
+            if head:
+                append(head)
+        # The frame's own step last, so the path always ends at the deepest
+        # thing that is a card somewhere. Unresolvable names — `model`,
+        # `tools`, a middleware step — simply do not extend it, which is
+        # correct: they are not cards on anyone's canvas.
+        append(str(raw_name))
+        return path, slugs
+
+
 async def _client_left(receive: Any) -> None:
     """Resolves the moment the ASGI server reports the client is gone."""
     while True:
@@ -564,6 +654,19 @@ def _run_frames(
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
     active = ActiveNodeResolver(node_ids_by_name)
+    # Deliberately a **second, wider** map, never a replacement for the one
+    # above. `ActiveNodeResolver` and the `internal` flag both mean "is this a
+    # node of the document that was submitted", so widening their map with the
+    # mounted children's ids would make the parent canvas glow on a card it
+    # does not contain — the exact behaviour ticket 01 fixed. `path` asks a
+    # different question ("which card, on whichever canvas") and needs the
+    # wider answer. `getattr` because the fold is also driven by scripted
+    # stubs, which declare no runtime map and degrade to the parent's.
+    run_path = RunPathResolver(
+        {**(getattr(runtime, "node_ids_by_name", None) or {}), **node_ids_by_name},
+        getattr(runtime, "mount_slugs", None) or {},
+        str((config.get("configurable") or {}).get("workflow_slug") or ""),
+    )
     # `dict.values()` is a *view*, so `x in view` is a linear scan. Asking it
     # once per update frame made "is this an internal step" O(canvas nodes)
     # per frame; the mapping never changes during a run, so the set is built
@@ -679,6 +782,7 @@ def _run_frames(
                     # before yielding, turning fire-and-run into ask-first.
                     # Default behaviour stays fire-and-run; nothing below
                     # blocks.
+                    update_path, update_slugs = run_path.resolve(raw_name, namespace)
                     for spawn in spawns.inspect(node_id, namespace, update, is_internal):
                         yield _sse("spawn", spawn)
                     yield _sse(
@@ -693,6 +797,16 @@ def _run_frames(
                             # surfaces read it instead of guessing; an older
                             # client that ignores it behaves exactly as before.
                             "activeNode": active.resolve(node_id, namespace),
+                            # Where this frame is on *every* canvas it touches,
+                            # outermost document first — see `RunPathResolver`.
+                            # `activeNode` is this list's first entry whenever
+                            # both are non-empty; the rest is what an editor
+                            # showing a mounted child needs and could not get.
+                            "path": update_path,
+                            # Which document each of those ids belongs to.
+                            # Same length as `path`; ids alone are ambiguous
+                            # across documents that share them.
+                            "pathSlugs": update_slugs,
                             # Split like the final answer, and for the same
                             # reason: this is a node's own settled output and
                             # both surfaces render it in their trace.
@@ -719,6 +833,7 @@ def _run_frames(
                     # audience boundary is about what is *shown*, never about
                     # what is *known* server-side.
                     active_node = active.resolve(token_node, namespace)
+                    token_path, token_slugs = run_path.resolve(raw_name, namespace)
                     # The rest of the streaming boundary (ticket 25). A
                     # customer's token stream carries the reply and nothing
                     # that produced it: no tool payload, no branch name, no
@@ -793,6 +908,15 @@ def _run_frames(
                             # last highlighted and do nothing when it is unchanged,
                             # so a 135-token model turn is one state write.
                             "activeNode": active_node,
+                            # Carried here too, and for the reason `activeNode`
+                            # is: a `token` frame is the only one that arrives
+                            # while a node is STILL WORKING, so a canvas fed by
+                            # `update` frames alone can only ever light who
+                            # last finished. A child canvas opened mid-run sees
+                            # nothing at all without this — its steps are
+                            # exactly the long ones.
+                            "path": token_path,
+                            "pathSlugs": token_slugs,
                             # WHAT produced this text, so a client can stop
                             # treating a tool's result as the model's prose.
                             #

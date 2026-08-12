@@ -271,6 +271,39 @@
   border: 1px dashed var(--color-border-strong);
 }
 
+/* The question the run is carrying, when the saved field says something else
+   (ticket 34). Accented rather than styled like a field, because it is the one
+   thing on this card that is not editable and not saved — see `LiveInputBody`. */
+.node__live-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-surface-sunken);
+}
+
+.node__live-input-label {
+  font: var(--type-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* The card's own accent, so "this came from the run" reads as part of this
+     node rather than as a warning about it. */
+  color: var(--accent-solid);
+}
+
+.node__live-input-value {
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+  /* Clamped, not scrolled: the card is a summary and a long question must not
+     push the editable field off it. The Inspector holds the full value. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .node__expand {
   position: absolute;
   top: var(--space-1-5);
