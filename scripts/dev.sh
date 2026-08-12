@@ -179,7 +179,7 @@ cd "$ROOT"
 # and cap the graceful wait so a genuine source edit restarts the server
 # instead of wedging it. A killed stream is a visible, recoverable failure;
 # a server that accepts connections and never answers is not.
-PYTHONPATH="backend:workflows/chinook-nl-to-sql" SSL_CERT_FILE="${CERT_FILE}" \
+PYTHONPATH="backend:workflows/chinook-assistant" SSL_CERT_FILE="${CERT_FILE}" \
   supervise backend python3 -m uvicorn openstategraph.api.main:app --port 8000 --app-dir backend \
     --reload --reload-dir backend --reload-dir workflows \
     --reload-exclude '*/.openstategraph/*' --reload-exclude '*.eml' \

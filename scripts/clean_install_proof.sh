@@ -7,7 +7,7 @@
 # OUTSIDE this checkout, and drives it with `cwd` outside the repository and
 # `PYTHONPATH` empty. Both of those are the whole point:
 #
-#   * `pytest.ini` puts `workflows/chinook-nl-to-sql/tools` on `sys.path`
+#   * `pytest.ini` puts `workflows/chinook-assistant/tools` on `sys.path`
 #     in-tree, so a green test suite proves nothing about a wheel;
 #   * every module that computed a path from `__file__` "worked" in the
 #     checkout and pointed inside site-packages once installed. That is how
@@ -198,18 +198,24 @@ for template in $(run openstategraph new --list-templates | awk '{print $1}'); d
   echo "    $template  ok"
 done
 
-echo "==> a real package that binds NO chinook tool"
-cp -R "$REPO/workflows/page-analytics" "$PROJECT/"
-rm -rf "$PROJECT/page-analytics/tests/__pycache__"
-run openstategraph validate page-analytics
-run openstategraph graph page-analytics | head -3
+echo "==> a real package, copied whole, resolving its own tools"
+# The one visible example. It used to bind no Chinook tool at all — it mounted
+# a second package that owned them — so this step proved a wheel could compile
+# it with the chinook tool package absent. One-chinook ticket 10 collapsed the
+# two, and the claim is now the stronger one: the package carries its own
+# `tools/`, `data/` and `knowledge/`, so copying the directory is the whole
+# transfer and discovery resolves the three SQL tools from inside the copy —
+# no path into this checkout, and nothing bundled in the wheel.
+cp -R "$REPO/workflows/chinook-assistant" "$PROJECT/"
+run openstategraph validate chinook-assistant
+run openstategraph graph chinook-assistant | head -3
 
 echo "==> load_workflow, and the runtime imports it did NOT take"
 run python -c "
 import sys
 from openstategraph import load_workflow
-workflow = load_workflow('page-analytics')
-assert workflow.slug == 'page-analytics'
+workflow = load_workflow('chinook-assistant')
+assert workflow.slug == 'chinook-assistant'
 assert 'fastapi' not in sys.modules and 'deepagents' not in sys.modules and 'mcp' not in sys.modules
 print('loaded', workflow.slug, 'with', len(workflow.warnings), 'capability warning(s)')
 print(workflow.mermaid().splitlines()[4])
