@@ -258,6 +258,38 @@ class WorkflowDocumentResponse(BaseModel):
     document: dict[str, Any]
 
 
+class MountDocumentResponse(BaseModel):
+    """One **instance** of a mounted workflow, as that instance actually runs.
+
+    A package is a class and a mount node is an instance of it: the mount
+    carries `data.overrides`, which are merged onto a copy of the package at
+    compile time and never written back. Two mounts of one package therefore
+    run two different documents, and this is how a client asks for one of them
+    rather than for the shared definition.
+
+    `slug` is the **class** — the package the instance is of — because
+    capabilities, knowledge, the SQL schema and the palette all belong to the
+    package and a client still asks about those by slug. `mount_path` is the
+    chain of mount node ids that identifies *which* instance, and the two
+    together are what the editor's address bar spells `root/mount-id`.
+
+    `warnings` carries the merge's own loud-but-not-fatal reports — an
+    override naming a child node id that does not exist runs the package
+    default and says so, rather than refusing to open.
+    """
+
+    #: The workflow the root document is; the first segment of the address.
+    root: str
+    #: The class this instance is of — what to ask about capabilities with.
+    slug: str
+    #: Mount node ids from the root inward. Never empty: an empty path is the
+    #: root document, which has its own endpoint.
+    mount_path: list[str]
+    #: The package document with this instance's overrides applied.
+    document: dict[str, Any]
+    warnings: list[str] = []
+
+
 class ToolCapabilityResponse(BaseModel):
     id: str
     name: str

@@ -408,6 +408,47 @@
         "title": "KnowledgeTopicStatusResponse",
         "type": "object"
       },
+      "MountDocumentResponse": {
+        "description": "One **instance** of a mounted workflow, as that instance actually runs.\n\nA package is a class and a mount node is an instance of it: the mount\ncarries `data.overrides`, which are merged onto a copy of the package at\ncompile time and never written back. Two mounts of one package therefore\nrun two different documents, and this is how a client asks for one of them\nrather than for the shared definition.\n\n`slug` is the **class** \u2014 the package the instance is of \u2014 because\ncapabilities, knowledge, the SQL schema and the palette all belong to the\npackage and a client still asks about those by slug. `mount_path` is the\nchain of mount node ids that identifies *which* instance, and the two\ntogether are what the editor's address bar spells `root/mount-id`.\n\n`warnings` carries the merge's own loud-but-not-fatal reports \u2014 an\noverride naming a child node id that does not exist runs the package\ndefault and says so, rather than refusing to open.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "mount_path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mount Path",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "root",
+          "slug",
+          "mount_path",
+          "document"
+        ],
+        "title": "MountDocumentResponse",
+        "type": "object"
+      },
       "NodeContractResponse": {
         "description": "The two LOCKED prompt sections of one model-driven node type.\n\nServed from the Python ladder classes, which are the single source of\ntruth. An editor shows these read-only beside the developer's editable\nrules; a custom editor should do the same rather than restate them.",
         "properties": {
@@ -1802,6 +1843,58 @@
         "summary": "The Chinook demo's own endpoint (not a general API)",
         "tags": [
           "Demo"
+        ]
+      }
+    },
+    "/api/workflows/{root}/mounts/{path}": {
+      "get": {
+        "description": "The effective document for one **instance** of a mounted workflow.\n\nA package is a class and a mount node is an instance of it, carrying\nits own `data.overrides`. `GET /api/workflows/concierge` returns the\nshared definition; this returns what the mount at `wf-music` runs,\nwith that mount's overrides merged in \u2014 and `.../mounts/wf-music/wf-inner`\nwalks on to a grandchild, applying each level in turn.\n\nServed rather than merged client-side on purpose: the merge has one\nowner (`apply_mount_overrides`), and a second implementation of it\nwould be duplicated knowledge buying only a round trip.\n\nThe package on disk is never written \u2014 the merge exists only in the\ncopy returned here, so the compile seam stays one-directional.",
+        "operationId": "get_mount_document_api_workflows__root__mounts__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root",
+            "required": true,
+            "schema": {
+              "title": "Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MountDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch the document one mounted instance actually runs",
+        "tags": [
+          "Catalogue"
         ]
       }
     },

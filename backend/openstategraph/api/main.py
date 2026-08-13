@@ -123,6 +123,7 @@ from openstategraph.api.schemas import (  # noqa: E402
     KnowledgeTopicDocResponse,
     KnowledgeTopicSaveRequest,
     KnowledgeTopicStatusResponse,
+    MountDocumentResponse,
     PluginExportResponse,
     PublishWorkflowRequest,
     PublishWorkflowResponse,
@@ -661,6 +662,54 @@ def create_app(
         except InvalidSlugError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return WorkflowDocumentResponse(slug=slug, document=document)
+
+    @app.get(
+        "/api/workflows/{root}/mounts/{path:path}",
+        response_model=MountDocumentResponse,
+        summary="Fetch the document one mounted instance actually runs",
+        tags=["Catalogue"],
+    )
+    def get_mount_document(root: str, path: str) -> MountDocumentResponse:
+        """The effective document for one **instance** of a mounted workflow.
+
+        A package is a class and a mount node is an instance of it, carrying
+        its own `data.overrides`. `GET /api/workflows/concierge` returns the
+        shared definition; this returns what the mount at `wf-music` runs,
+        with that mount's overrides merged in — and `.../mounts/wf-music/wf-inner`
+        walks on to a grandchild, applying each level in turn.
+
+        Served rather than merged client-side on purpose: the merge has one
+        owner (`apply_mount_overrides`), and a second implementation of it
+        would be duplicated knowledge buying only a round trip.
+
+        The package on disk is never written — the merge exists only in the
+        copy returned here, so the compile seam stays one-directional.
+        """
+        from openstategraph.api.mount_resolution import (
+            MountResolutionError,
+            resolve_mount_document,
+        )
+        from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+
+        segments = [segment for segment in path.split("/") if segment]
+        try:
+            resolved = resolve_mount_document(workflow_store, root, segments)
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {exc}") from exc
+        except MountResolutionError as exc:
+            # 404, not 422: the address is well-formed and simply names an
+            # instance that is not there — the same answer a deleted workflow
+            # gets, because a client renders both as "this link is stale".
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return MountDocumentResponse(
+            root=root,
+            slug=resolved.slug,
+            mount_path=resolved.mount_path,
+            document=resolved.document,
+            warnings=resolved.warnings,
+        )
 
     @app.post(
         "/api/workflows",
