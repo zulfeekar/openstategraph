@@ -165,8 +165,36 @@ reads, so the user-facing words are fixed:
 | **Revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the step budget runs out | the agent's internal tool-calling |
 | **Step budget** | `recursion_limit` — **supersteps** | "iterations" or "max turns"; one lap with fan-out costs several supersteps |
 | **Workflow node** | another workflow run as one isolated step — task in, answer out | inline expansion, shared state |
-| **Template** | a starting document; it produces a workflow and stops existing | a node type |
+| **Template** | a starting document; it produces a workflow and stops existing | a node type; a reusable definition |
+| **Package** | the reusable definition — `workflows/<slug>/`, the thing a mount points at | a PyPI distribution, in user-facing copy |
+| **Instance** | one mount of a package, carrying its own `data.overrides` | a copy of the package |
 | *(internal only)* the loop | `create_agent` / ReAct | anything in UI copy |
+
+#### "Template" also meant two things, and this settles it
+
+The same collision as *loop*, found the same way — a reader used "template" for
+the **reusable definition** a mount points at, while `templates/index.json` uses
+it for the **scaffold**. Both senses were live in this repository's own
+documents, so this was a naming decision rather than a tidy-up.
+
+**Settled: "template" is the scaffold sense only.** It is already the CLI flag
+(`--template`) and the editor's *Start from* picker, so the word is spent. The
+reusable-definition sense is **package**, which is what the filesystem, the
+docs and `mount-overrides.md` already call it.
+
+That gives three words and three jobs, with no overlap:
+
+> **A package is a definition. A template creates one. A mount instantiates one.**
+
+The test that separates them, and the one a user actually cares about — *if I
+change the original later, does this change too?*
+
+| | Mechanism | Change the original later |
+| --- | --- | --- |
+| Mount a package | by **reference** | every instance changes |
+| Start from a template | by **copy** | nothing changes; the link was severed |
+
+`docs/on-the-canvas.md` is written to this lexicon and is where a user meets it.
 
 **A loop is a cycle in the graph, not a wrapper around one.** That is the
 substantive difference from the popular framing, which treats loop and graph as
