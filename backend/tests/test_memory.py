@@ -64,7 +64,9 @@ class TestMemoryTools:
         save, _ = memory_tools()
         said = _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
                              store=store, config={"configurable": {"thread_id": "t2"}})["out"]
-        assert "no identified user" in said
+        # "NOT SAVED" leads, because a refusal a model can gloss is a
+        # refusal a user hears as success — observed live, see the ticket.
+        assert said.startswith("NOT SAVED.") and "no identified user" in said
         assert not store.search((USER_MEMORY_NAMESPACE, "anonymous"))
 
     def test_the_refusal_names_a_scope_that_would_have_worked(self) -> None:

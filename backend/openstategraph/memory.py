@@ -355,7 +355,7 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
 
         store = get_store()
         if store is None:
-            return "No memory store is configured."
+            return "NOT SAVED. No memory store is configured."
         # Validated by `save_args` before arriving; parsing here is what makes
         # a direct Python call obey the same rule as a model call.
         resolved = MemoryScope.parse(scope)
@@ -366,9 +366,10 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
             # Ticket 01. The alternative is the merge this refusal replaced:
             # writing one stranger's fact where the next stranger reads it.
             return (
-                "This run has no identified user, so there is nowhere to keep a "
-                "fact about them. Try scope='workflow' for a finding about this "
-                "workflow's domain."
+                "NOT SAVED. This run has no identified user, so there is nowhere "
+                "to keep a fact about a person. Do not tell the user it was "
+                "remembered. Retry with scope='workflow' if this is a finding "
+                "about the workflow's domain rather than about a person."
             )
         value: MemoryRecord = {"fact": fact.strip()}
         if resolved is MemoryScope.APP:
