@@ -80,7 +80,8 @@ export const CATEGORIES: readonly INodeCategory[] = [
     id: CATEGORY.compose,
     label: 'Composition · organisms',
     order: 50,
-    description: 'A whole workflow — its own nodes, state and loop — mounted as one step.',
+    description:
+      'A whole workflow — its own nodes, state and revision loop — mounted as one step.',
   },
   {
     id: CATEGORY.annotate,

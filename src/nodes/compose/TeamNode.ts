@@ -56,7 +56,8 @@ export const teamNode: INodeDefinition = defineNode(
     id: TEAM_TYPE,
     category: CATEGORY.compose,
     label: 'Team',
-    description: 'A workflow that loops until it meets its outcome, run as one step.',
+    description:
+      'A workflow that revises until it meets its outcome, run as one step.',
     iconId: 'node-subgraph',
     accent: 'violet',
     keywords: ['team', 'crew', 'group', 'subgraph', 'workflow', 'loop', 'outcome'],

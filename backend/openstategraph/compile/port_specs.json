@@ -649,7 +649,7 @@
       "category": "compose",
       "scope": "app",
       "label": "Team",
-      "description": "A workflow that loops until it meets its outcome, run as one step.",
+      "description": "A workflow that revises until it meets its outcome, run as one step.",
       "ports": [
         {
           "id": "input",

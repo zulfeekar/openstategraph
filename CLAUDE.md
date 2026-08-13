@@ -148,6 +148,32 @@ Settled vocabulary:
 - **Loop** = `create_agent` (ReAct). It returns a compiled LangGraph, so it drops into a `StateGraph` as a node.
 - Therefore **canvas = StateGraph, Agent node = the loop, workflow composition = subgraphs.**
 
+#### "Loop" means two things, and only one of them may reach a user
+
+The vocabulary above is **internal**. `Loop` there is the ReAct tool-calling
+loop *inside one agent*. A user arriving from the "loop engineering vs graph
+engineering" discourse means something else entirely: the **feedback cycle
+across nodes** — run a step, check it, run it again with the errors included.
+
+Both are real and both exist here. The collision lands exactly where a user
+reads, so the user-facing words are fixed:
+
+| User-facing word | Means | Must never mean |
+| --- | --- | --- |
+| **Revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the step budget runs out | the agent's internal tool-calling |
+| **Step budget** | `recursion_limit` — **supersteps** | "iterations" or "max turns"; one lap with fan-out costs several supersteps |
+| **Workflow node** | another workflow run as one isolated step — task in, answer out | inline expansion, shared state |
+| **Template** | a starting document; it produces a workflow and stops existing | a node type |
+| *(internal only)* the loop | `create_agent` / ReAct | anything in UI copy |
+
+**A loop is a cycle in the graph, not a wrapper around one.** That is the
+substantive difference from the popular framing, which treats loop and graph as
+two techniques you compose. Here they are one substrate — which is why the
+answer to "how do I add a feedback loop" is two edges rather than a different
+tool. The genuine *outer* loop of that framing — retry and stopping policy
+around the whole thing — is `retry_policy` / `timeout` / `set_node_defaults`,
+graph-assembly parameters that live on the workflow (see below), never a node.
+
 ### Agent type is a developer choice, and it mirrors the library's own layering
 
 LangChain publishes three tiers — *framework, runtime, harness*. A developer picks which one an Agent node is:
