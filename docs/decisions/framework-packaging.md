@@ -1,11 +1,28 @@
 # Packaging OpenStateGraph as an installable framework
 
-**Status: proposed (research + design, 2026-08-10). Resolves wayfinder ticket 01.**
+**Status: accepted and largely implemented. Research + design 2026-08-10;
+re-statused 2026-08-13. Resolves wayfinder ticket 01.**
 **Verdict: one distribution named `openstategraph`, a lean core of four
-dependencies, seven named extras, a two-tier public API enforced by a snapshot
+dependencies, named extras, a two-tier public API enforced by a snapshot
 test, an executed `document.version` migration chain, `entry_points` extension,
 and a console script — because the adoption interface, not the compiler, is
 what is missing.**
+
+> **Read §2 as history, not as current state.** It is an audit of the gap as it
+> stood on 2026-08-10, written in the present tense, and **every finding in it
+> has since shipped.** A reader arriving cold — a packaging reviewer, most
+> likely — would otherwise conclude this project has no CLI, no license file,
+> no classifiers, a decorative schema version and a live silent-degradation
+> bug. None of that is true. The section is kept rather than deleted because it
+> is the argument for why the work was done; the header of §2 says what is true
+> now.
+>
+> The count "seven extras" appears throughout and is now **eight** —
+> `[postgres]` was added later.
+>
+> **§3 is a design, and parts of it were never built.** Those are marked
+> inline at §3.5 and §3.6 so nothing here reads as a description of shipped
+> behaviour.
 
 Every external claim below was fetched today. Anything I could not verify is
 labelled **unverified**. Everything about *our* state was measured, not
@@ -82,7 +99,26 @@ Three lessons a maintainer should take:
 
 ---
 
-## 2. Our current state, audited as an adopter would
+## 2. Our state on 2026-08-10, audited as an adopter would
+
+> **Every item below is fixed.** Verified 2026-08-13 against
+> `backend/pyproject.toml` and the tree:
+>
+> | §2 said | Now |
+> | --- | --- |
+> | no `[build-system]` | hatchling, `pyproject.toml:1-3` |
+> | no `LICENSE` in `dist-info` | `license = "MIT"`, `license-files` declared |
+> | no `py.typed` | present, plus the `Typing :: Typed` classifier |
+> | no README / long description | `readme = "README.md"` |
+> | no classifiers | nine |
+> | no `project.urls` / `authors` | both present *(URLs still `PLACEHOLDER` — see `gap-register.md` PK-02)* |
+> | distribution named `openstategraph-backend` | renamed to `openstategraph` |
+> | `abc/__init__.py` is empty | 93 lines with an explicit `__all__` |
+> | "No test guards any of it" | `backend/tests/test_public_api.py` + `public_api.txt` |
+> | the schema version is decorative | `schema.py` — `SCHEMA_VERSION`, `MIN_SUPPORTED_VERSION`, `MIGRATIONS`, `SchemaVersionError`, and `test_schema_versioning.py` |
+> | `settings.checkpointer: "sqlite"` silently degrades everywhere | the `[sqlite]` extra is declared and `[server]` depends on it |
+>
+> Kept for the argument, not for the facts.
 
 Measured, 2026-08-10, against `backend/pyproject.toml` at `a38df15`.
 
@@ -591,6 +627,15 @@ the guard has a hole.
 
 ### 3.5 Extension without forking — `entry_points`
 
+> **Three groups shipped, not five** (2026-08-13). `extensions.py` declares
+> `ENTRY_POINT_GROUPS = (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)`
+> and argues against one of this section's proposals **by name**:
+> *"Two groups, deliberately — and `openstategraph.functions` is not one of…"*.
+> `openstategraph.functions` and `openstategraph.middlewares` do not exist.
+>
+> The opt-out shipped **half**: `OPENSTATEGRAPH_DISABLE_PLUGINS` is real; the
+> proposed `load_workflow(..., plugins=False)` keyword is not.
+
 None of the three comparables use entry points, and we should anyway. Their
 users can send a PR to the org that owns the layer beneath; ours cannot, and
 `docs/adoption.md` currently tells adopters the honest truth — "any edit you
@@ -641,6 +686,21 @@ namespace packages are what `langgraph` uses, and it costs them a top-level
 The TypeScript counterpart stays fog, as the ticket says.
 
 ### 3.6 Release pipeline
+
+> **What shipped, and what did not** (2026-08-13). The clean-venv gate is real:
+> `scripts/clean_install_proof.sh`, run by CI's `clean-install` job and by the
+> release train.
+>
+> Not built: **PyPI Trusted Publishing (OIDC)** — `release.yml` uses a
+> long-lived `TWINE_PASSWORD` secret and no `id-token: write`; and
+> **`release-please`**, which `sdk-practice.md` later deferred to 1.0 in favour
+> of the hand-written `scripts/prepare_release.py` that is actually used. Where
+> these two documents disagree, `sdk-practice.md` is the one describing
+> reality.
+>
+> Also never built, from earlier in §3: the `document.compiledBy` stamp (§3.4)
+> and `--strict` / exit code 4 (§3.2) — the latter recorded as deliberately
+> dropped in `gap-register.md` PK-10, which this document never conceded.
 
 **Build.** `hatchling`. `backend/` keeps its own `LICENSE`, `README.md` and
 `openstategraph/py.typed`. Version single-sourced from
