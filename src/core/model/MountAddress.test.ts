@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addressEquals,
+  childAddress,
   formatMountAddress,
   isInstance,
   parentAddress,
@@ -117,6 +118,32 @@ describe('MountAddress — naming one instance of a reusable workflow', () => {
       const a = parentAddress(parseMountAddress('concierge/wf-music')!)!;
       const b = parentAddress(parseMountAddress('concierge/wf-other')!)!;
       expect(addressEquals(a, b)).toBe(true);
+    });
+  });
+
+  describe('childAddress — drilling in by one level', () => {
+    it('appends a mount id to a class address', () => {
+      const child = childAddress(parseMountAddress('concierge')!, 'wf-music')!;
+      expect(formatMountAddress(child)).toBe('concierge/wf-music');
+    });
+
+    it('appends to an instance address, for a grandchild', () => {
+      const child = childAddress(parseMountAddress('concierge/wf-music')!, 'wf-inner')!;
+      expect(formatMountAddress(child)).toBe('concierge/wf-music/wf-inner');
+    });
+
+    it('accepts a minted id with its colon and dot', () => {
+      const child = childAddress(parseMountAddress('concierge')!, 'node:workflow.subgraph-1')!;
+      expect(child.mountPath).toEqual(['node:workflow.subgraph-1']);
+    });
+
+    it('refuses an id that could not be a segment', () => {
+      // Fails at the click rather than producing a link that resolves
+      // somewhere else — the same stance as parsing.
+      const root = parseMountAddress('concierge')!;
+      expect(childAddress(root, '')).toBeNull();
+      expect(childAddress(root, '..')).toBeNull();
+      expect(childAddress(root, 'a/b')).toBeNull();
     });
   });
 

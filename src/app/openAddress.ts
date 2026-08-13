@@ -6,7 +6,7 @@ import {
   type MountAddress,
 } from '@core/model/MountAddress';
 import { CURRENT_SLUG_KEY } from './workflowFileWatch';
-import { WORKFLOW_URL_PARAM } from './openWorkflow';
+import { WORKFLOW_URL_PARAM, announceOpenSubject, subscribeOpenSlug } from './openWorkflow';
 
 /**
  * Which *instance* this tab has open, in storage and in the address bar.
@@ -87,6 +87,13 @@ export function setOpenAddress(address: MountAddress, classSlug: string): void {
     // the more durable half of the two anyway.
   }
   syncUrl(address);
+  // The autosave key follows the **address**, not the class slug. For a
+  // package the two are the same string, so no existing draft moves; for an
+  // instance it is what stops a merged document being written under
+  // `slug-chinook-assistant` and restored, silently, the next time anyone
+  // opens the class. That contamination is ticket 23's shape, and it would
+  // have been found months later as a corrupted package.
+  announceOpenSubject(formatMountAddress(address));
 }
 
 /** Forget the open instance: a new, never-saved document has no address. */
@@ -118,6 +125,18 @@ export function resolveAddressRequest(input: {
     return { action: 'fetch', address: urlAddress };
   }
   return { action: 'restore' };
+}
+
+/**
+ * Subscribe to "this tab is now displaying a different address".
+ *
+ * A thin projection of `subscribeOpenSlug`'s channel: the subject announced is
+ * the address string, so a listener that cares about the *address* rereads it
+ * from storage rather than parsing the announcement. One channel, one ordering
+ * guarantee — storage and the URL are both settled before anyone is told.
+ */
+export function subscribeOpenAddress(listener: () => void): () => void {
+  return subscribeOpenSlug(() => listener());
 }
 
 /** Whether the tab is displaying a mount rather than a document. */

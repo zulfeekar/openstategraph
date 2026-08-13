@@ -121,6 +121,18 @@ export function parentAddress(address: MountAddress): MountAddress | null {
   return { root: address.root, mountPath: address.mountPath.slice(0, -1) };
 }
 
+/**
+ * The address of the mount `mountId` *inside* this one — drilling in by one
+ * level. `null` when the id could not be a segment, so a document with an
+ * unaddressable node id fails loudly at the click rather than producing a
+ * link that resolves somewhere else.
+ */
+export function childAddress(address: MountAddress, mountId: string): MountAddress | null {
+  const id = mountId.trim();
+  if (!id || !SEGMENT.test(id) || TRAVERSAL.has(id)) return null;
+  return { root: address.root, mountPath: [...address.mountPath, id] };
+}
+
 export function addressEquals(a: MountAddress, b: MountAddress): boolean {
   return (
     a.root === b.root &&

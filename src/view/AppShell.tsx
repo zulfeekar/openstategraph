@@ -64,6 +64,15 @@ export function AppShell() {
   // autosave" and "fetch the linked workflow" happens.
   useDeepLinkedWorkflow(notify);
 
+  // Ticket 42: a gesture refused because it cannot differ per mount. Said out
+  // loud, because the alternative is the silent no-op this codebase has a
+  // standing rule against — the card would simply not move and nothing would
+  // explain why.
+  useEffect(
+    () => workbench.controller.history.onRefused(({ reason }) => notify(reason)),
+    [workbench, notify],
+  );
+
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);

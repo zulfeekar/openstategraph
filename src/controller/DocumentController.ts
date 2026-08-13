@@ -3,6 +3,7 @@ import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
 import type { Diagnostic, WorkflowValidator } from '@core/validation/WorkflowValidator';
 import { RenameWorkflowCommand } from '@core/commands/edgeCommands';
+import type { MountEditScope } from '@core/commands/editScope';
 import { failed, OK, type ActionOutcome, type IDocumentController } from './contracts';
 import type { SelectionModel } from './SelectionModel';
 
@@ -21,6 +22,7 @@ export class DocumentController implements IDocumentController {
     private readonly selection: SelectionModel,
     private readonly serializer: WorkflowSerializer,
     private readonly validator: WorkflowValidator,
+    private readonly scope?: MountEditScope,
   ) {}
 
   diagnostics(): readonly Diagnostic[] {
@@ -56,5 +58,13 @@ export class DocumentController implements IDocumentController {
     // Undoable, unlike the rest of this class — renaming is an edit to the
     // document's content, not a replacement of it.
     this.commands.execute(new RenameWorkflowCommand(name));
+  }
+
+  enterInstance(mountId: string): void {
+    this.scope?.enterInstance(mountId);
+  }
+
+  leaveInstance(): void {
+    this.scope?.leaveInstance();
   }
 }

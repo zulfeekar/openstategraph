@@ -9,9 +9,11 @@ import {
 import { peekDiagramId, peekMermaid } from '@core/runtime/mermaidPeek';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
+import { getOpenAddress } from '@app/openAddress';
+import { childAddress, parseMountAddress } from '@core/model/MountAddress';
 import { Pencil } from 'lucide-react';
 import { Icon } from '@design/primitives';
-import { loadWorkflowIntoEditor } from '@view/workflow/loadWorkflowIntoEditor';
+import { loadMountIntoEditor } from '@view/workflow/loadWorkflowIntoEditor';
 import type { NodeBody, NodeBodyProps } from './nodeBodyRegistry';
 import './CompositionBody.css';
 
@@ -35,11 +37,12 @@ import './CompositionBody.css';
  * document and the compile seam stays one-directional (we render text the
  * compiler emitted; we never read a runtime object back into the model).
  *
- * **Edit team** / **Edit workflow** is the honest way in: it runs the ordinary
- * load path, the very same `loadWorkflowIntoEditor` the Workflows panel uses.
- * Drilling in remains a navigation, not a zoom — ticket 56's recorded
- * follow-up, now with an affordance that says what it does and leaves a trail
- * (`drillStack`) so `DrillBanner` can say where you landed and get you back.
+ * **Open this mount** is the honest way in, and since ticket 42 it opens *this
+ * instance* rather than the shared package: the address it navigates to is
+ * `<here>/<this node's id>`, so two mounts of one workflow are two documents
+ * with their own overrides. Drilling in remains a navigation, not a zoom — but
+ * the address now says which mount you are inside, so a reload comes back to
+ * the same one and the trail is derivable from it rather than remembered.
  */
 /**
  * How many child nodes this mount overrides (docs/decisions/mount-overrides.md).
@@ -121,7 +124,7 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
             </span>
           ) : null}
         </button>
-        <OpenMount slug={slug} kind={kind} />
+        <OpenMount slug={slug} mountId={node.id} kind={kind} />
       </div>
       {expanded ? <GraphPeek slug={slug} /> : null}
     </div>
@@ -192,25 +195,38 @@ function GraphPeek({ slug }: { slug: string }) {
  * invented plumbing to the shell's `Toaster`. Success needs no message: the
  * canvas becomes the other workflow, which is the loudest feedback available.
  */
-function OpenMount({ slug, kind }: { slug: string; kind: CompositionKind }) {
+function OpenMount({
+  slug,
+  mountId,
+  kind,
+}: {
+  slug: string;
+  mountId: string;
+  kind: CompositionKind;
+}) {
   const workbench = useWorkbench();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const label = kind === 'team' ? 'Edit team' : 'Edit workflow';
+  const label = kind === 'team' ? 'Open this mount' : 'Open this mount';
 
   const open = useCallback(async () => {
     setBusy(true);
-    // Provenance is read *before* the load, since the import replaces both
-    // the current slug and the model's name with the child's.
-    const fromSlug = sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '';
-    const fromName = workbench.model.name;
-    const outcome = await loadWorkflowIntoEditor(slug, new WorkflowFileClient(), workbench, {
-      fromSlug,
-      fromName,
-    });
+    // The address of *this* mount, not the child's slug — ticket 42. Two
+    // mounts of one package are two instances with their own overrides, and
+    // the slug alone could not tell the editor which one was opened.
+    //
+    // Read before the load, since the import replaces the open document.
+    const here = getOpenAddress() ?? parseMountAddress(sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '');
+    const target = here ? childAddress(here, mountId) : null;
+    if (!target) {
+      setBusy(false);
+      setError('This workflow has no address yet — save it before opening a mount.');
+      return;
+    }
+    const outcome = await loadMountIntoEditor(target, new WorkflowFileClient(), workbench);
     setBusy(false);
     setError(outcome.ok ? null : outcome.error);
-  }, [slug, workbench]);
+  }, [mountId, workbench]);
 
   return (
     <>
@@ -218,7 +234,7 @@ function OpenMount({ slug, kind }: { slug: string; kind: CompositionKind }) {
         type="button"
         className="node__composition-open"
         disabled={busy}
-        title={`Opens ${slug} for editing — this is the shared definition, every mount of it is affected.`}
+        title={`Opens this mount of ${slug} — its own overrides, not the shared definition. Other mounts are unaffected.`}
         onClick={() => void open()}
       >
         <Icon glyph={Pencil} size="xs" />

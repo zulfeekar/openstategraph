@@ -99,6 +99,12 @@ export interface IHistoryController {
   readonly canRedo: boolean;
   transact(label: string, fn: () => void): void;
   /**
+   * A change the current edit scope would not allow — see
+   * `core/commands/editScope`. Nothing ran and nothing was pushed; the
+   * subscriber's job is to say so.
+   */
+  onRefused(handler: (state: { label: string; reason: string }) => void): Unsubscribe;
+  /**
    * Fires when availability changes, for toolbar enablement.
    *
    * Narrower than `WorkflowController.onChange`, which fires for *any* model or
@@ -115,6 +121,19 @@ export interface IDocumentController {
   importJSON(text: string): ActionOutcome;
   clear(): void;
   setName(name: string): void;
+  /**
+   * The document now on screen is the **instance** mounted at `mountId`, not a
+   * package — ticket 42. Structural changes are refused while it is, because a
+   * mount's own state (`data.overrides`) can carry a field's value and not the
+   * workflow's shape; see `core/commands/editScope`.
+   *
+   * It lives here rather than as an eleventh member on `WorkflowController`
+   * because "which document is this, and where did it come from" is already
+   * this collaborator's question — `importJSON` is next to it.
+   */
+  enterInstance(mountId: string): void;
+  /** Back to a package, where every change is expressible. */
+  leaveInstance(): void;
 }
 
 /**

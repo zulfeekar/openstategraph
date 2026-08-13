@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { parseMountAddress } from '@core/model/MountAddress';
 import {
   WorkflowFileClient,
   type CatalogueChange,
@@ -225,6 +226,79 @@ describe('WorkflowFileClient.load', () => {
     const result = await client.load('x');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("No workflow named 'x'");
+  });
+});
+
+describe('WorkflowFileClient.loadMount', () => {
+  const address = (raw: string) => parseMountAddress(raw)!;
+
+  it('asks the mounts endpoint, one path segment per mount', async () => {
+    const stub = stubFetch(
+      jsonResponse({ root: 'concierge', slug: 'chinook-assistant', document: {}, warnings: [] }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    await client.loadMount(address('concierge/wf-music/wf-inner'));
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/concierge/mounts/wf-music/wf-inner');
+  });
+
+  it('encodes each segment without eating the separator', async () => {
+    // A minted id is `node:workflow.subgraph-1` — a colon survives a path
+    // segment, but encoding the whole path in one go would turn the separator
+    // into `%2F` and the route would stop matching.
+    const stub = stubFetch(jsonResponse({ root: 'a', slug: 'b', document: {}, warnings: [] }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    await client.loadMount(address('concierge/node:workflow.subgraph-1'));
+    expect(stub.calls[0]!.url).toBe(
+      'http://rt/api/workflows/concierge/mounts/node%3Aworkflow.subgraph-1',
+    );
+  });
+
+  it('returns the class slug beside the document', async () => {
+    // The instance is named by the address; the *class* is what capabilities,
+    // knowledge and the palette are still asked about.
+    const stub = stubFetch(
+      jsonResponse({
+        root: 'concierge',
+        slug: 'chinook-assistant',
+        mount_path: ['wf-music'],
+        document: { nodes: [1] },
+        warnings: ['wf-music: override targets unknown child node "typo"'],
+      }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.loadMount(address('concierge/wf-music'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.slug).toBe('chinook-assistant');
+      expect(result.value.document).toEqual({ nodes: [1] });
+      expect(result.value.warnings).toHaveLength(1);
+    }
+  });
+
+  it('reports a stale address plainly', async () => {
+    // A deleted mount, a renamed node, a bookmark from last week — all 404,
+    // and all render the same way: this link no longer points at anything.
+    const stub = stubFetch(jsonResponse({ detail: "'concierge' has no node 'wf-gone'" }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.loadMount(address('concierge/wf-gone'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('wf-gone');
+  });
+
+  it('refuses a class address rather than silently fetching the package', async () => {
+    // `loadMount` answers about an instance. Handed an address with no mount
+    // path it must say so, not quietly become `load` — two spellings of one
+    // call is how they drift.
+    const stub = stubFetch(jsonResponse({}));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.loadMount(address('concierge'));
+    expect(result.ok).toBe(false);
+    expect(stub.calls).toHaveLength(0);
   });
 });
 

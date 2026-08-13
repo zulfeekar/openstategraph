@@ -15,6 +15,7 @@ import {
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { forgetKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
 import { clearOpenSlug, getOpenSlug, setOpenSlug } from '@app/openWorkflow';
+import { isInstanceOpen } from '@app/openAddress';
 import {
   WorkflowFileClient,
   type WorkflowSummary,
@@ -178,6 +179,19 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   // never from `slugify(name)` here, which could not see that another
   // workflow already lived at `my-workflow` and so overwrote it.
   const handleSave = useCallback(async () => {
+    // Ticket 42. What is on screen while an instance is open is a *derived*
+    // document — the package plus this mount's overrides — and saving it back
+    // to the package would burn those overrides into the shared definition,
+    // hitting every other mount. That is fork-on-configure by accident, which
+    // `docs/decisions/mount-overrides.md` rejects outright, so the door is
+    // shut until the write path lands as an override on the parent.
+    if (isInstanceOpen()) {
+      onNotify(
+        'This is one mount, not the workflow itself. Saving an instance writes an ' +
+          'override on its parent — not built yet. Open the shared definition to save changes to the package.',
+      );
+      return;
+    }
     const open = getOpenSlug();
     setBusy(true);
     const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;

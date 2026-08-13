@@ -38,4 +38,19 @@ export class HistoryController implements IHistoryController {
   onChange(handler: (state: { canUndo: boolean; canRedo: boolean }) => void): Unsubscribe {
     return this.commands.on('changed', ({ canUndo, canRedo }) => handler({ canUndo, canRedo }));
   }
+
+  /**
+   * Fires when a change was **not** allowed — a structural edit inside a
+   * mounted instance, today (ticket 42, `core/commands/editScope`).
+   *
+   * On this collaborator because a refusal is a fact about the history: the
+   * command did not run and nothing was pushed, so "what just happened to my
+   * undo stack" is the question it answers. The shell renders the sentence;
+   * nothing in `core/` or here knows what a toast is.
+   */
+  onRefused(handler: (state: { label: string; reason: string }) => void): Unsubscribe {
+    return this.commands.on('refused', ({ command, reason }) =>
+      handler({ label: command.label, reason }),
+    );
+  }
 }

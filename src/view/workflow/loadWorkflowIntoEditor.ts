@@ -3,6 +3,8 @@ import type { Workbench } from '@app/Workbench';
 import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { setOpenSlug } from '@app/openWorkflow';
+import { clearOpenAddress, setOpenAddress } from '@app/openAddress';
+import type { MountAddress } from '@core/model/MountAddress';
 import {
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
@@ -55,6 +57,69 @@ export interface DrillProvenance {
  * name the way back. Only a drill-in passes it — a Back click is a *pop*, and
  * a manual load from the Workflows panel clears the trail at its own call site.
  */
+/**
+ * Load one **instance** of a mounted workflow — ticket 42.
+ *
+ * The address names the mount (`concierge/wf-music`); the backend answers with
+ * that mount's *effective* document and with the class the instance is of. The
+ * split matters at every step below: what is imported is the instance, and
+ * what capabilities, knowledge and the file watch are asked about is the
+ * class, because none of those differ per mount.
+ *
+ * Deliberately a sibling of `loadWorkflowIntoEditor` rather than a branch
+ * inside it. The two share the registration order and differ in four places —
+ * the fetch, the draft, the scope, and what gets recorded as open — and a
+ * function with four `if (isInstance)` branches would be one function pretending
+ * to be two.
+ */
+export async function loadMountIntoEditor(
+  address: MountAddress,
+  client: IWorkflowFileClient,
+  workbench: Workbench,
+): Promise<Result<LoadedWorkflow, string>> {
+  const outcome = await client.loadMount(address);
+  if (!outcome.ok) return Err(outcome.error);
+  const { slug, document } = outcome.value;
+
+  try {
+    registerNodeTypesForRawDocument(document, workbench.registry, workbench.engine.executors);
+    const capabilities = await client.capabilities(slug);
+    const tools = capabilities.ok ? capabilities.value.tools : [];
+    registerDiscoveredCapabilities(tools, workbench.registry, workbench.engine.executors);
+    registerPluginCapabilities(
+      capabilities.ok ? capabilities.value.pluginTools : [],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+    setCapabilityWarnings([
+      ...(capabilities.ok ? capabilities.value.warnings : []),
+      // The merge's own reports ride the same surface: an override naming a
+      // child node that no longer exists ran the package default, and the
+      // person looking at the instance is the one who can fix it.
+      ...outcome.value.warnings,
+    ]);
+    recordKnownCapabilities(slug, tools);
+    workbench.controller.document.importJSON(JSON.stringify(document));
+    // **No draft restore.** A draft belongs to a document someone can save,
+    // and this one is derived — the package plus this mount's overrides. There
+    // is nothing here that a later Save could write back as itself.
+    //
+    // The autosave *key* still moves, to the address rather than the class
+    // slug (`setOpenAddress`), so whatever this tab writes cannot land on the
+    // package's own draft and be restored over it later.
+    const mountId = address.mountPath[address.mountPath.length - 1] ?? '';
+    workbench.controller.document.enterInstance(mountId);
+    setOpenAddress(address, slug);
+    // Baselined on the **class**: the file that actually backs this instance
+    // is the package, so that is the one whose changes matter to it.
+    const row = await client.summary(slug);
+    recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+    return Ok({ name: workbench.model.name, restoredDraft: false });
+  } catch (error) {
+    return Err(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 export async function loadWorkflowIntoEditor(
   slug: string,
   client: IWorkflowFileClient,
@@ -106,6 +171,11 @@ export async function loadWorkflowIntoEditor(
     // and the address bar says which one, so the developer who just opened it
     // can copy the link (ticket 20). Set after the import succeeded: a URL
     // naming a workflow that failed to open is a link that lies.
+    // Back to a package: every change is expressible again, and the tab is no
+    // longer displaying an instance (ticket 42). Both are cleared here rather
+    // than at each caller, because this is the one path that opens a document.
+    workbench.controller.document.leaveInstance();
+    clearOpenAddress();
     setOpenSlug(slug);
     // Establishes the file watch's baseline for this slug — otherwise its
     // first poll after a load would have nothing to compare against and could

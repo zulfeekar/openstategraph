@@ -1,6 +1,7 @@
 import { DisposableStore, type Unsubscribe } from '@core/kernel/Disposable';
 import { CommandStack } from '@core/commands/CommandStack';
 import type { CommandContext } from '@core/commands/ICommand';
+import { MountEditScope } from '@core/commands/editScope';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ConnectionValidator } from '@core/validation/ConnectionValidator';
@@ -75,7 +76,12 @@ export class WorkflowController {
   constructor(deps: WorkflowControllerDeps) {
     this.model = deps.model;
 
-    const ctx: CommandContext = { model: deps.model, registry: deps.registry };
+    // Constructed here and handed to two collaborators: the stack asks it
+    // before running anything, and `document` is what moves it in and out of
+    // an instance (ticket 42). Not an eleventh public member — the scope is
+    // machinery, and "which document is this" already belongs to `document`.
+    const editScope = new MountEditScope();
+    const ctx: CommandContext = { model: deps.model, registry: deps.registry, editScope };
     this.commands = new CommandStack(ctx);
 
     const editing: EditingContext = {
@@ -104,6 +110,7 @@ export class WorkflowController {
       this.selection,
       deps.serializer,
       deps.workflowValidator,
+      editScope,
     );
 
     // Selection outlives the things it points at — a delete, an undo of an add,

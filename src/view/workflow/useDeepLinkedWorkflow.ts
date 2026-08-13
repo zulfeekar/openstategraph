@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import {
-  getOpenSlug,
-  readSlugFromSearch,
-  resolveOpenRequest,
-  setOpenSlug,
-} from '@app/openWorkflow';
+  getOpenAddress,
+  readAddressFromSearch,
+  resolveAddressRequest,
+  setOpenAddress,
+} from '@app/openAddress';
+import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
 import { clearDrillStack } from '@app/drillStack';
-import { loadWorkflowIntoEditor, type LoadedWorkflow } from './loadWorkflowIntoEditor';
+import { loadMountIntoEditor, loadWorkflowIntoEditor, type LoadedWorkflow } from './loadWorkflowIntoEditor';
 
 /**
  * What the toast says — and it must say when the canvas is *not* the file.
@@ -55,27 +57,47 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
     if (done.current) return;
     done.current = true;
 
-    const request = resolveOpenRequest({
-      urlSlug: readSlugFromSearch(window.location.search),
-      openSlug: getOpenSlug(),
+    // Addresses, not slugs (ticket 42): `concierge/wf-music` and
+    // `concierge/wf-other` are both `chinook-assistant`, so comparing slugs
+    // would call a link to the second a reload of the first and leave the
+    // wrong instance's overrides on screen.
+    const request = resolveAddressRequest({
+      urlAddress: readAddressFromSearch(window.location.search),
+      openAddress: getOpenAddress() ?? parseMountAddress(getOpenSlug() ?? ''),
     });
     if (request.action === 'restore') {
-      // Nothing to fetch — but if this tab has a workflow open and the URL
+      // Nothing to fetch — but if this tab has something open and the URL
       // does not say so, put it there. That is what makes "copy the address
       // bar" work after a plain reload, without anyone pressing anything.
+      const openAddress = getOpenAddress();
+      if (openAddress !== null) {
+        setOpenAddress(openAddress, getOpenSlug() ?? openAddress.root);
+        // A restored instance is still an instance. The scope is normally
+        // entered by `loadMountIntoEditor`, and this branch deliberately does
+        // not load — so without this line a reload of an instance address came
+        // back with the mount's document on screen and the gate *off*, and a
+        // delete went through. Found in the browser; no unit test could have
+        // seen it, because the gap is between two code paths rather than
+        // inside either.
+        if (isInstance(openAddress)) {
+          const mountId = openAddress.mountPath[openAddress.mountPath.length - 1] ?? '';
+          workbench.controller.document.enterInstance(mountId);
+        }
+        return;
+      }
       const open = getOpenSlug();
       if (open !== null) setOpenSlug(open);
       return;
     }
 
+    const asked = formatMountAddress(request.address);
     void (async () => {
-      const outcome = await loadWorkflowIntoEditor(
-        request.slug,
-        new WorkflowFileClient(),
-        workbench,
-      );
+      const client = new WorkflowFileClient();
+      const outcome = isInstance(request.address)
+        ? await loadMountIntoEditor(request.address, client, workbench)
+        : await loadWorkflowIntoEditor(request.address.root, client, workbench);
       if (!outcome.ok) {
-        notifyRef.current(`Could not open "${request.slug}" from the link: ${outcome.error}`);
+        notifyRef.current(`Could not open "${asked}" from the link: ${outcome.error}`);
         return;
       }
       // Arriving by link is a navigation, not a return: there is no parent

@@ -139,6 +139,23 @@ export function clearOpenSlug(): void {
  * autosave must not act on a slug this module has not finished adopting. One
  * listener throwing must not stop the others being told.
  */
+/**
+ * Tell the subscribers what this tab's draft is now keyed on — ticket 42.
+ *
+ * The subject is the **address**, not the slug, and the two coincide for a
+ * package: `formatMountAddress` of a class address is the bare slug, so every
+ * existing autosave key is byte-identical and nothing needs migrating. An
+ * instance gets its own key (`concierge/wf-music`), which is what keeps a
+ * merged instance document from being autosaved over the package's own draft
+ * and restored, silently, the next time anyone opens the class.
+ *
+ * Exported so `openAddress` can announce through the same channel rather than
+ * standing up a second one — one listener set, one ordering guarantee.
+ */
+export function announceOpenSubject(subject: string | null): void {
+  announce(subject);
+}
+
 function announce(slug: string | null): void {
   for (const listener of [...slugListeners]) {
     try {

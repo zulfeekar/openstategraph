@@ -1,4 +1,9 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import {
+  formatMountAddress,
+  isInstance,
+  type MountAddress,
+} from '@core/model/MountAddress';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
@@ -151,10 +156,32 @@ export interface IWorkflowTemplates {
   templates(name: string): Promise<Result<readonly WorkflowTemplate[], string>>;
 }
 
+/**
+ * One mounted **instance**, as it actually runs — ticket 42.
+ *
+ * `document` is the child package with this mount's `data.overrides` already
+ * merged in, done on the backend because the merge has exactly one owner
+ * (`apply_mount_overrides`) and a second implementation here would be
+ * duplicated knowledge buying only a round trip.
+ *
+ * `slug` is the **class** the instance is of, and it is not redundant: the
+ * address names the instance, but capabilities, knowledge, the SQL schema and
+ * the palette are all questions about the package, and only the backend can
+ * say which package sits at the end of a chain of mount ids.
+ */
+export interface LoadedMount {
+  readonly slug: string;
+  readonly document: unknown;
+  /** Loud-but-not-fatal merge reports — an override naming a node that is gone. */
+  readonly warnings: readonly string[];
+}
+
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
   load(slug: string): Promise<Result<unknown, string>>;
+  /** The effective document for one mount — see `LoadedMount`. */
+  loadMount(address: MountAddress): Promise<Result<LoadedMount, string>>;
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   /** Create a workflow and receive the slug the backend minted for it. */
   create(name: string, document: unknown): Promise<Result<string, string>>;
@@ -364,6 +391,44 @@ export class WorkflowFileClient
     try {
       const payload = (await response.json()) as { document?: unknown };
       return Ok(payload.document);
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  async loadMount(address: MountAddress): Promise<Result<LoadedMount, string>> {
+    if (!isInstance(address)) {
+      // Not a fallback to `load`: this method answers about an instance, and
+      // quietly becoming the class call would give one question two spellings
+      // that can drift. The caller decides which it wants.
+      return Err(`${formatMountAddress(address)} names a workflow, not a mount inside one`);
+    }
+    // Each segment encoded separately — encoding the whole path in one go
+    // would turn the separator into `%2F` and the route would stop matching,
+    // while leaving segments raw would let a colon in a minted id through
+    // unescaped.
+    const path = address.mountPath.map((segment) => encodeURIComponent(segment)).join('/');
+    const url = `${this.baseUrl}/api/workflows/${encodeURIComponent(address.root)}/mounts/${path}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url);
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as {
+        slug?: unknown;
+        document?: unknown;
+        warnings?: unknown;
+      };
+      return Ok({
+        slug: asString(payload.slug),
+        document: payload.document,
+        warnings: Array.isArray(payload.warnings) ? payload.warnings.map(asString) : [],
+      });
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
     }
