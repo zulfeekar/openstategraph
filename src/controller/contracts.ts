@@ -10,6 +10,7 @@ import type { EdgeId } from '@core/model/contracts/workflow';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
 import type { MountContext } from '@core/model/MountContext';
 import type { SelectionMode } from './SelectionModel';
+import type { ClipboardFragment } from './ClipboardService';
 
 /**
  * The editing collaborators' public contracts.
@@ -86,12 +87,25 @@ export interface IGroupingController {
   ungroup(containerId: NodeId): ActionOutcome;
 }
 
-/** Copy, cut, paste, duplicate. */
+/** Copy, cut, paste, duplicate, and insert a canned fragment. */
 export interface IClipboardController {
   copy(): ActionOutcome;
   cut(): ActionOutcome;
   paste(at: Point): ActionOutcome;
   duplicate(nodeIds: readonly NodeId[]): ActionOutcome;
+  /**
+   * Drop a fragment nobody copied — a palette assembly (ticket 21).
+   *
+   * Lives here rather than on node editing because inserting an assembly *is*
+   * a paste: the same id remapping, edge rewiring, instance caps, selection
+   * and single undoable command, differing only in where the fragment came
+   * from. `ClipboardService.pasteCommand` already took an explicit fragment,
+   * so the seam existed before there was a second caller for it.
+   *
+   * Leaves the real clipboard untouched — dropping a loop must not overwrite
+   * whatever the developer had copied.
+   */
+  insertFragment(fragment: ClipboardFragment, at: Point): ActionOutcome;
 }
 
 /** Undo, redo, and grouping several edits into one step. */

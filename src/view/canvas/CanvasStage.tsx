@@ -11,7 +11,8 @@ import {
   useWorkflowVersion,
 } from '@app/WorkbenchContext';
 import { NodeLayer } from '@view/nodes/NodeLayer';
-import { PALETTE_DRAG_TYPE } from '@view/palette/Palette';
+import { PALETTE_ASSEMBLY_DRAG_TYPE, PALETTE_DRAG_TYPE } from '@view/palette/Palette';
+import { assemblyById } from '@nodes/assemblies/revisionLoop';
 import '@canvas/canvas.css';
 
 /**
@@ -200,8 +201,12 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
 
   /* ---------------- palette drop ---------------- */
 
+  // Two payloads: one node type, or a whole wired assembly (ticket 21). Kept
+  // as separate MIME types so the canvas knows which it is about to receive
+  // *before* the drop, rather than inspecting an id and guessing.
   const isPaletteDrag = (event: React.DragEvent) =>
-    event.dataTransfer.types.includes(PALETTE_DRAG_TYPE);
+    event.dataTransfer.types.includes(PALETTE_DRAG_TYPE) ||
+    event.dataTransfer.types.includes(PALETTE_ASSEMBLY_DRAG_TYPE);
 
   return (
     <div
@@ -224,9 +229,24 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
         if (!isPaletteDrag(event)) return;
         event.preventDefault();
         setDropActive(false);
-        const typeId = event.dataTransfer.getData(PALETTE_DRAG_TYPE);
-        if (!typeId || !paper) return;
+        if (!paper) return;
         const at = paper.clientToLocal(event.clientX, event.clientY);
+
+        // An assembly drops as a fragment: several nodes and the edges between
+        // them, in one undoable step. It never splices onto an edge — that
+        // rule is about inserting *one* node into a link, and an assembly has
+        // no single entry or exit for a link to be rerouted through.
+        const assemblyId = event.dataTransfer.getData(PALETTE_ASSEMBLY_DRAG_TYPE);
+        if (assemblyId) {
+          const assembly = assemblyById(assemblyId);
+          if (!assembly) return;
+          const dropped = controller.clipboard.insertFragment(assembly.fragment, at);
+          if (!dropped.ok && dropped.message) onNotify(dropped.message);
+          return;
+        }
+
+        const typeId = event.dataTransfer.getData(PALETTE_DRAG_TYPE);
+        if (!typeId) return;
 
         // Ticket 25's splice-insert: a drop that lands near an existing
         // edge inserts inline instead of dropping onto empty canvas.

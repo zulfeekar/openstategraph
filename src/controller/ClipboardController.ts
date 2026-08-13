@@ -10,7 +10,7 @@ import {
   type IGroupingController,
   type ISelectionActions,
 } from './contracts';
-import type { ClipboardService } from './ClipboardService';
+import type { ClipboardFragment, ClipboardService } from './ClipboardService';
 import type { SelectionModel } from './SelectionModel';
 
 /**
@@ -48,6 +48,25 @@ export class ClipboardController implements IClipboardController {
   paste(at: Point): ActionOutcome {
     const { command, nodeIds } = this.clipboard.pasteCommand(at);
     if (!command) return failed('Clipboard is empty');
+    this.ctx.commands.execute(command);
+    if (nodeIds.length > 0) {
+      this.selection.selectNodes(nodeIds);
+      this.grouping.reparentByGeometry(nodeIds);
+    }
+    return OK;
+  }
+
+  insertFragment(fragment: ClipboardFragment, at: Point): ActionOutcome {
+    // Deliberately routed through `pasteCommand` rather than given its own
+    // path: an assembly drop needs exactly what a paste needs — fresh ids,
+    // edges rewired onto them, instance caps respected, one undoable step,
+    // and the result selected and reparented. A second implementation of that
+    // is a second place for it to be subtly different (ticket 21).
+    //
+    // `this.clipboard` is never written to, so dropping a loop does not
+    // overwrite whatever the developer had copied.
+    const { command, nodeIds } = this.clipboard.pasteCommand(at, fragment);
+    if (!command) return failed('Nothing to insert');
     this.ctx.commands.execute(command);
     if (nodeIds.length > 0) {
       this.selection.selectNodes(nodeIds);

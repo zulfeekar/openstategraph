@@ -21,10 +21,24 @@ import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
 import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
+import { ASSEMBLIES, type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
 import './Palette.css';
 
 /** Custom drag type, so canvas drops can tell a palette drag from a file. */
 export const PALETTE_DRAG_TYPE = 'application/x-openstategraph-node-type';
+
+/**
+ * A palette drag carrying an **assembly** rather than one node type.
+ *
+ * A separate MIME on purpose: the canvas has to know before the drop whether
+ * it is about to add one node or insert a wired fragment, and overloading the
+ * node-type payload would make every reader of it check what kind of id it
+ * had. An assembly is not a node type and must never look like one — it is
+ * absent from the registry, from `port_specs.json` and from the architect's
+ * grammar, which is what keeps it from becoming the `Loop` node three tickets
+ * have refused (ticket 21).
+ */
+export const PALETTE_ASSEMBLY_DRAG_TYPE = 'application/x-openstategraph-assembly';
 
 interface PaletteProps {
   onNotify: (message: string) => void;
@@ -282,6 +296,13 @@ export function Palette({ onNotify }: PaletteProps) {
                     onActivate={() => add(definition)}
                   />
                 ))}
+                {/* Assemblies sit in their category beside the node types,
+                    because to a reader choosing what to drag they are the
+                    same question. They are a different *kind* of item, so
+                    they carry their own drag type and their own component. */}
+                {assembliesFor(section.category.id, query).map((assembly) => (
+                  <AssemblyItem key={assembly.id} assembly={assembly} />
+                ))}
               </PanelSection>
             ))}
           </>
@@ -299,6 +320,51 @@ export function Palette({ onNotify }: PaletteProps) {
         ) : null}
       </PanelBody>
     </Panel>
+  );
+}
+
+/**
+ * Assemblies belonging to one palette section, filtered by the search box.
+ *
+ * Hidden entirely while searching unless they match — a filtered palette is a
+ * lookup, and an entry that ignores the filter reads as a bug.
+ */
+function assembliesFor(categoryId: string, query: string): readonly IAssemblyDefinition[] {
+  const needle = query.trim().toLowerCase();
+  return ASSEMBLIES.filter((assembly) => assembly.category === categoryId).filter(
+    (assembly) =>
+      !needle ||
+      assembly.label.toLowerCase().includes(needle) ||
+      assembly.keywords.some((keyword) => keyword.includes(needle)),
+  );
+}
+
+/**
+ * One assembly in the palette.
+ *
+ * Deliberately not `PaletteItem` with a widened prop: an assembly has no
+ * instance cap, no scope and no node id, so half of that component's
+ * behaviour would be dead here and the other half would need a branch.
+ */
+function AssemblyItem({ assembly }: { assembly: IAssemblyDefinition }) {
+  return (
+    <button
+      type="button"
+      className="palette-item"
+      data-accent="violet"
+      draggable
+      title={assembly.description}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(PALETTE_ASSEMBLY_DRAG_TYPE, assembly.id);
+        event.dataTransfer.effectAllowed = 'copy';
+      }}
+    >
+      <IconTile glyph={resolveIcon(assembly.iconId)} size="md" iconSize="sm" />
+      <span className="palette-item__text">
+        <span className="palette-item__title">{assembly.label}</span>
+        <span className="palette-item__description">{assembly.description}</span>
+      </span>
+    </button>
   );
 }
 

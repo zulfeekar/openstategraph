@@ -12,7 +12,7 @@ import {
   GitBranch,
   ShieldCheck,
   Split,
-  Target,
+  RefreshCw,
   Users,
   FileOutput,
   UserCheck,
@@ -48,10 +48,10 @@ const ICONS: Record<string, LucideIcon> = {
   'node-format-report': FileOutput,
   'node-discovered-tool': Wrench,
   'node-subgraph': Workflow,
-  // A Team is a mounted workflow that promises an outcome — so a target,
-  // not a crowd. `Users` is already the Worker glyph, and reusing it here
-  // would imply a headcount nothing verifies (ticket 02).
-  'node-team': Target,
+  // An assembly, not a node type — the palette's only non-node entry, and the
+  // glyph says what it does rather than what it is: the answer comes back
+  // round (ticket 21).
+  'assembly-revision-loop': RefreshCw,
   'port-feedback': ShieldCheck,
 
   // Port types
