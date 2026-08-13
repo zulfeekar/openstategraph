@@ -552,6 +552,97 @@
         "title": "PluginToolCapabilityResponse",
         "type": "object"
       },
+      "ProviderStatusResponse": {
+        "description": "What **the server** is configured for \u2014 names and booleans only.\n\nDeliberately carries no key material, not even masked. A mask still leaks\nlength, prefix and entropy, and it would contradict\n`chat_model.credential_error_from`, which drops OpenAI's own\n`sk-defin****-key` out of its 401 rather than forwarding it. Naming the\n*variable* is the fact a person can act on; a mask of the value is not.\n\nThis exists because \"Models and credentials\" could only describe the\n**browser's** credential store, and told a QA analyst the product runs\n\"offline against mock data\" on a server with three working keys.",
+        "properties": {
+          "configured": {
+            "description": "Whether this server can use it right now.",
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "configured_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which environment variable actually configured it. Ollama takes either of two, so naming the first would be wrong for it.",
+            "title": "Configured By"
+          },
+          "default_model": {
+            "description": "The model used when none is named.",
+            "title": "Default Model",
+            "type": "string"
+          },
+          "env_vars": {
+            "description": "Every variable that would configure it. Any one is enough.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Env Vars",
+            "type": "array"
+          },
+          "key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A glance at what configured this: a secret's first two characters and a FIXED mask (`sk****`), so the length is not revealed; a non-secret address such as OLLAMA_HOST in full. `null` when nothing is set.",
+            "title": "Key Hint"
+          },
+          "label": {
+            "description": "Its display name.",
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "description": "The provider id, e.g. `anthropic`.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "configured",
+          "default_model"
+        ],
+        "title": "ProviderStatusResponse",
+        "type": "object"
+      },
+      "ProviderVerifyResponse": {
+        "description": "Did a real call to this provider work, just now.\n\n`configured` answers \"is a variable set\"; this answers \"does it work\",\nand they are not the same question. The day this shipped, an Anthropic key\nwas set, well-formed, and rejected for want of credit \u2014 no inspection of\nthe value could have known that.",
+        "properties": {
+          "detail": {
+            "default": "",
+            "description": "Why not, in the product's own words. Never a stack trace, never the key.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Whether a real call succeeded.",
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ok"
+        ],
+        "title": "ProviderVerifyResponse",
+        "type": "object"
+      },
       "PublishWorkflowRequest": {
         "additionalProperties": false,
         "description": "POST /api/workflows/{slug}/publish \u2014 one endpoint for both directions;\nthe flag IS the whole state, so publish/unpublish is one body field.",
@@ -1398,6 +1489,75 @@
         "summary": "The locked prompt sections, per model-driven node type",
         "tags": [
           "Authoring"
+        ]
+      }
+    },
+    "/api/providers": {
+      "get": {
+        "description": "What the **server** can use, so a client stops guessing.\n\nThe editor's \"Models and credentials\" dialog could only read the\n*browser's* credential store, so it told a QA analyst the product\n\"runs offline against mock data\" on a server holding three working\nkeys. `/api/health` answers one boolean for any provider, which is\nenough to light a dot and not enough to say which key is missing.\n\n**Names and booleans only \u2014 never key material, not even masked.** A\nmask leaks length, prefix and entropy, and `credential_error_from`\nalready drops OpenAI's own masked fragment out of its 401 rather than\nforwarding it. What a person can act on is *which variable* did it.\n\nPresence, not validity: a key can be set, well-formed and rejected for\nwant of credit, which is exactly what happened here the day this was\nwritten. Verifying costs a real model call and belongs behind a button\nsomebody presses.",
+        "operationId": "provider_status_api_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderStatusResponse"
+                  },
+                  "title": "Response Provider Status Api Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Which providers this server is configured for",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/providers/{name}/verify": {
+      "post": {
+        "description": "`configured` says a variable is set. This says it works.\n\nThey are different questions and the gap between them is where the\nconfusing failures live: on the day this shipped an Anthropic key was\nset, well-formed, and rejected for want of credit. Nothing about the\n*value* could have revealed that \u2014 only a call.\n\n**Behind an explicit request, never on page load.** It costs money and\nlatency, so a dialog that verified every provider whenever it opened\nwould spend an adopter's budget to render a badge.\n\nThe failure is reported in the product's own words where it recognises\none, and never carries a stack trace or the credential \u2014 the same rule\n`credential_error_from` applies to a 401.",
+        "operationId": "verify_provider_api_providers__name__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderVerifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Make one real call, to find out whether a key actually works",
+        "tags": [
+          "Operations"
         ]
       }
     },

@@ -162,10 +162,15 @@ def describe_failure(exc: Any) -> str:
     genuinely different things about what to do next, and neither says so in
     its message.
     """
+    from openstategraph.providers import redact_known_secrets
+
     ours = as_our_error(exc)
     if ours is not None:
         return ours.developer_message()
-    return f"{type(exc).__name__}: {exc}"
+    # A vendor's own exception sometimes quotes the key back. Everything this
+    # project prints should be safe to paste into an issue, and that cannot
+    # depend on each vendor choosing to redact for us.
+    return redact_known_secrets(f"{type(exc).__name__}: {exc}")
 
 
 def describe_failure_for_customer(exc: Any) -> str:

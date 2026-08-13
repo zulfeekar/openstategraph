@@ -16,6 +16,32 @@ import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
  * credentials dialog owns.
  */
 
+/**
+ * What the **server** is configured for, per provider.
+ *
+ * Mirrors `ProviderStatusResponse`. Deliberately carries no key material: the
+ * endpoint sends names and booleans, so there is nothing here to leak even by
+ * accident (the-editor-makes-a-real-package ticket 04).
+ */
+export interface ProviderStatus {
+  readonly name: string;
+  readonly label: string;
+  /** Whether this server can use it right now. Presence, not validity. */
+  readonly configured: boolean;
+  /** Which variable actually did it — Ollama takes either of two. */
+  readonly configuredBy: string | null;
+  /** Every variable that would configure it. Any one is enough. */
+  readonly envVars: readonly string[];
+  /**
+   * A glance at what configured it: `sk****` for a secret, the whole value
+   * for an address like `OLLAMA_HOST`. `null` when nothing is set.
+   *
+   * The mask is fixed-width by design, so it shows that *a* key is present
+   * without revealing how long it is.
+   */
+  readonly keyHint: string | null;
+}
+
 export interface RunRequest {
   /** A `workflow.json` document, exactly as the serializer emits it. */
   readonly workflow: unknown;
@@ -526,7 +552,9 @@ export class RuntimeClient implements IRuntimeClient {
         decisions: asRecord(payload['decisions']),
         outputs: asRecord(payload['outputs']),
         nested: {
-          outputs: asRecord((payload['nested'] as Record<string, unknown> | undefined)?.['outputs']),
+          outputs: asRecord(
+            (payload['nested'] as Record<string, unknown> | undefined)?.['outputs'],
+          ),
           decisions: asRecord(
             (payload['nested'] as Record<string, unknown> | undefined)?.['decisions'],
           ),
@@ -693,7 +721,9 @@ export class RuntimeClient implements IRuntimeClient {
           decisions: asRecord(payload['decisions']),
           outputs: asRecord(payload['outputs']),
           nested: {
-            outputs: asRecord((payload['nested'] as Record<string, unknown> | undefined)?.['outputs']),
+            outputs: asRecord(
+              (payload['nested'] as Record<string, unknown> | undefined)?.['outputs'],
+            ),
             decisions: asRecord(
               (payload['nested'] as Record<string, unknown> | undefined)?.['decisions'],
             ),
@@ -808,6 +838,60 @@ export class RuntimeClient implements IRuntimeClient {
       });
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * Which providers **the server** is configured for.
+   *
+   * Names and booleans only — the endpoint never sends key material, not even
+   * masked, so nothing here can render one. What comes back is which variable
+   * did it, which is the fact a person can act on.
+   *
+   * Presence, not validity: a key can be set, well-formed and rejected for
+   * want of credit. `configured` means "this server has what it needs to try".
+   */
+  async providers(): Promise<Result<readonly ProviderStatus[], string>> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/providers`);
+      if (!response.ok) return Err(`Could not read providers (${response.status})`);
+      const rows = (await response.json()) as Record<string, unknown>[];
+      return Ok(
+        rows.map((row) => ({
+          name: String(row['name'] ?? ''),
+          label: String(row['label'] ?? ''),
+          configured: row['configured'] === true,
+          configuredBy: typeof row['configured_by'] === 'string' ? row['configured_by'] : null,
+          envVars: Array.isArray(row['env_vars']) ? row['env_vars'].map(String) : [],
+          keyHint: typeof row['key_hint'] === 'string' ? row['key_hint'] : null,
+        })),
+      );
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * Make one real call to a provider and report what came back.
+   *
+   * `configured` says a variable is set; this says it *works*, and the gap is
+   * where the confusing failures live — a key can be set, well-formed and
+   * rejected for want of credit. Costs money and latency, so it is only ever
+   * called when somebody presses the button.
+   */
+  async verifyProvider(name: string): Promise<Result<{ ok: boolean; detail: string }, string>> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/providers/${name}/verify`, {
+        method: 'POST',
+      });
+      if (!response.ok) return Err(`Could not verify ${name} (${response.status})`);
+      const payload = (await response.json()) as Record<string, unknown>;
+      return Ok({
+        ok: payload['ok'] === true,
+        detail: typeof payload['detail'] === 'string' ? payload['detail'] : '',
+      });
+    } catch {
+      return Err('Could not reach the runtime');
     }
   }
 

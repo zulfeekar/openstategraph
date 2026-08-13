@@ -57,6 +57,63 @@ class CompiledGraphResponse(BaseModel):
     mermaid: str
 
 
+class ProviderStatusResponse(BaseModel):
+    """What **the server** is configured for — names and booleans only.
+
+    Deliberately carries no key material, not even masked. A mask still leaks
+    length, prefix and entropy, and it would contradict
+    `chat_model.credential_error_from`, which drops OpenAI's own
+    `sk-defin****-key` out of its 401 rather than forwarding it. Naming the
+    *variable* is the fact a person can act on; a mask of the value is not.
+
+    This exists because "Models and credentials" could only describe the
+    **browser's** credential store, and told a QA analyst the product runs
+    "offline against mock data" on a server with three working keys.
+    """
+
+    name: str = Field(description="The provider id, e.g. `anthropic`.")
+    label: str = Field(description="Its display name.")
+    configured: bool = Field(description="Whether this server can use it right now.")
+    configured_by: str | None = Field(
+        default=None,
+        description=(
+            "Which environment variable actually configured it. Ollama takes "
+            "either of two, so naming the first would be wrong for it."
+        ),
+    )
+    env_vars: list[str] = Field(
+        default_factory=list,
+        description="Every variable that would configure it. Any one is enough.",
+    )
+    default_model: str = Field(description="The model used when none is named.")
+    key_hint: str | None = Field(
+        default=None,
+        description=(
+            "A glance at what configured this: a secret's first two characters "
+            "and a FIXED mask (`sk****`), so the length is not revealed; a "
+            "non-secret address such as OLLAMA_HOST in full. `null` when "
+            "nothing is set."
+        ),
+    )
+
+
+class ProviderVerifyResponse(BaseModel):
+    """Did a real call to this provider work, just now.
+
+    `configured` answers "is a variable set"; this answers "does it work",
+    and they are not the same question. The day this shipped, an Anthropic key
+    was set, well-formed, and rejected for want of credit — no inspection of
+    the value could have known that.
+    """
+
+    name: str
+    ok: bool = Field(description="Whether a real call succeeded.")
+    detail: str = Field(
+        default="",
+        description="Why not, in the product's own words. Never a stack trace, never the key.",
+    )
+
+
 class ValidateRequest(BaseModel):
     """`POST /api/workflows/validate` — check the posted document.
 

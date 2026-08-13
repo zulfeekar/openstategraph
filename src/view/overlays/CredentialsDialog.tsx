@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { KeyRound, RotateCcw, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import { AbstractLLMProvider } from '@core/providers/ILLMProvider';
+import { RuntimeClient, type ProviderStatus } from '@core/runtime/RuntimeClient';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { Dialog } from './Dialog';
 import './overlays.css';
@@ -43,10 +44,72 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
 
   useEffect(() => workbench.providers.onChange(refresh), [workbench]);
 
+  // What the **server** holds, which is a different machine from this one and
+  // was the whole defect: this dialog could only read the browser's store, so
+  // it told a QA analyst the product runs "offline against mock data" on a
+  // server with three working keys (ticket 04).
+  const [onServer, setOnServer] = useState<readonly ProviderStatus[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    void new RuntimeClient().providers().then((result) => {
+      if (live && result.ok) setOnServer(result.value);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const serverStatus = (id: string) => onServer?.find((row) => row.name === id) ?? null;
+  /** True once the server has answered and simply does not know this provider.
+   *  Mock is the case: it is a browser-only preview provider, so "Server:
+   *  asking…" would hang there forever waiting for a row that never comes. */
+  const serverDoesNotKnow = (id: string) => onServer !== null && !serverStatus(id);
+
+  /** What a real call last said about this provider, once one has been made. */
+  const [verified, setVerified] = useState<Record<string, 'ok' | string>>({});
+  const [verifying, setVerifying] = useState<string | null>(null);
+
+  const badgeLabel = (id: string): string => {
+    const outcome = verified[id];
+    if (outcome === 'ok') return 'ready';
+    if (outcome) return 'not valid';
+    const status = serverStatus(id);
+    if (status?.configured) return 'ready';
+    if (workbench.providers.get(id)?.isConfigured()) return 'preview only';
+    return 'needs key';
+  };
+
+  const badgeTone = (id: string): 'success' | 'danger' | 'neutral' => {
+    const outcome = verified[id];
+    if (outcome === 'ok') return 'success';
+    if (outcome) return 'danger';
+    return serverStatus(id)?.configured || workbench.providers.get(id)?.isConfigured()
+      ? 'success'
+      : 'neutral';
+  };
+
+  const verify = async (id: string) => {
+    setVerifying(id);
+    const result = await new RuntimeClient().verifyProvider(id);
+    setVerifying(null);
+    setVerified((current) => ({
+      ...current,
+      [id]: result.ok && result.value.ok ? 'ok' : result.ok ? result.value.detail : result.error,
+    }));
+  };
+  const serverHasAny = (onServer ?? []).some((row) => row.configured);
+
   return (
     <Dialog
       title="Models and credentials"
-      subtitle="OpenStateGraph runs offline against mock data by default. Add a key to use a real model."
+      subtitle={
+        // Said unconditionally, and so was false on any configured server.
+        // Until the server answers, claim nothing rather than guess wrong.
+        onServer === null
+          ? 'Where each provider gets its key, on the server and in this browser.'
+          : serverHasAny
+            ? 'The server is configured and runs against real models. Keys here are for the canvas preview only.'
+            : 'No provider is configured on the server, so runs use mock data. Add a key to its .env to use a real model.'
+      }
       icon={KeyRound}
       onClose={onClose}
       footer={
@@ -74,7 +137,6 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
       </p>
 
       {workbench.providers.list().map((provider) => {
-        const configured = provider.isConfigured();
         // The redacted form is all this component can ever obtain.
         const redacted = workbench.providers.describeApiKey(provider.id);
 
@@ -83,9 +145,17 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
             <div className="provider__head">
               <IconTile glyph={KeyRound} size="sm" iconSize="xs" />
               <span className="provider__name">{provider.label}</span>
-              <Badge tone={configured ? 'success' : 'neutral'}>
-                {configured ? 'ready' : provider.requiresApiKey ? 'needs key' : 'check endpoint'}
-              </Badge>
+              {/* The badge answers "can a run use this?", so it reads the
+                  **server** first: that is where real runs happen. It used to
+                  read only the browser store, so a provider the server was
+                  configured for showed "needs key" directly above a line
+                  saying it was configured (ticket 04). */}
+              {/* Three states, and the middle one is the point (ticket 04):
+                  a key that is *set* is not a key that *works*. `not valid` is
+                  only ever shown after a real call came back rejected — it is
+                  never guessed from the value's shape, because a well-formed
+                  key with no credit looks exactly like a working one. */}
+              <Badge tone={badgeTone(provider.id)}>{badgeLabel(provider.id)}</Badge>
             </div>
 
             {provider.requiresApiKey ? (
@@ -104,7 +174,10 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
                   autoComplete="off"
                   // Never the value: `describeApiKey` is the only accessor
                   // this component has, and it cannot return one.
-                  value={redacted ?? ''}
+                  // The server's hint first: that is the key a *run* uses.
+                  // A browser-held key is a preview-only thing and says so in
+                  // the field's own hint below.
+                  value={serverStatus(provider.id)?.keyHint ?? redacted ?? ''}
                   placeholder={`Add ${provider.label} key in .env`}
                 />
               </Field>
@@ -113,6 +186,32 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
                 {provider.credentialsHint ?? 'No credentials required.'}
               </p>
             )}
+
+            {/* The server's answer, per provider. Never a key, not even
+                masked: naming the *variable* is what a person can act on, and
+                a mask would contradict the 401 handler that deliberately drops
+                OpenAI's own masked fragment. */}
+            {serverDoesNotKnow(provider.id) ? null : (
+              <p className="provider__hint">
+                {(() => {
+                  const status = serverStatus(provider.id);
+                  if (!status) return 'Server: asking…';
+                  if (status.configured) {
+                    return `Server: configured via ${status.configuredBy ?? 'its environment'} ✓`;
+                  }
+                  return `Server: not configured — set ${status.envVars.join(' or ') || 'its variable'} in .env`;
+                })()}
+              </p>
+            )}
+
+            {serverStatus(provider.id)?.configured ? (
+              <Button onClick={() => void verify(provider.id)} disabled={verifying === provider.id}>
+                {verifying === provider.id ? 'Checking…' : 'Verify key'}
+              </Button>
+            ) : null}
+            {verified[provider.id] && verified[provider.id] !== 'ok' ? (
+              <p className="provider__hint">{verified[provider.id]}</p>
+            ) : null}
 
             {redacted ? (
               <Button

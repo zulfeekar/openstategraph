@@ -46,6 +46,32 @@ from typing import Mapping
 PROVIDERS_GROUP = "openstategraph.providers"
 
 
+#: Variable names whose value must never be shown. Everything else a provider
+#: declares is an address, not a credential — a host or an endpoint — and those
+#: are useful precisely because they are readable.
+_SECRET_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+
+def _is_secret(name: str) -> bool:
+    return name.upper().endswith(_SECRET_SUFFIXES)
+
+
+#: Fixed width, so the mask never reveals how long the value was. A
+#: proportional one leaks real entropy; four asterisks leak none.
+HINT_MASK = "****"
+
+#: How many leading characters a hint keeps. Two, on the owner's decision
+#: (the-editor-makes-a-real-package ticket 04, asked twice). Nearly free: every
+#: Anthropic and OpenAI key begins `sk`, so the revealed prefix is the part an
+#: attacker already knows — while it is enough for a person to see that *a* key
+#: is there, which is what was asked for.
+#:
+#: Module-level rather than class attributes: `ProviderSpec` is a frozen
+#: dataclass, so a class attribute with a default becomes a *field* and changes
+#: a Tier 1 public signature.
+HINT_PREFIX = 2
+
+
 @dataclass(frozen=True)
 class ProviderSpec:
     """One vendor, as much as this framework needs to know about it.
@@ -141,6 +167,24 @@ class ProviderSpec:
         if not self.requires_key:
             return True
         return any(str(source.get(name) or "").strip() for name in self.env_vars)
+
+    def key_hint(self, env: Mapping[str, str] | None = None) -> str | None:
+        """A glance at what configured this, or `None` when nothing did.
+
+        A **secret** variable is reduced to its first two characters and a
+        fixed mask. A **non-secret** one is shown whole: `OLLAMA_HOST` is a
+        URL, and masking it would hide the single thing a developer debugging
+        a mount needs to read.
+        """
+        source: Mapping[str, str] = os.environ if env is None else env
+        for name in self.env_vars:
+            value = str(source.get(name) or "").strip()
+            if not value:
+                continue
+            if not _is_secret(name):
+                return value
+            return value[:HINT_PREFIX] + HINT_MASK
+        return None
 
     def base_url(self, env: Mapping[str, str] | None = None) -> str | None:
         """This provider's endpoint, or `None` to leave the SDK's default alone.
@@ -466,6 +510,31 @@ def env_example_section(catalogue: "ProviderCatalogue | None" = None) -> str:
     lines.append("")
     lines.append(ENV_EXAMPLE_END)
     return "\n".join(lines)
+
+
+def redact_known_secrets(text: str, catalogue: "ProviderCatalogue | None" = None) -> str:
+    """Replace any configured credential value appearing in `text` with its hint.
+
+    A vendor's own exception sometimes quotes the key back — OpenAI's 401 does,
+    masked; others do not bother masking. Everything this project prints is
+    supposed to be safe to paste into an issue, and that promise cannot depend
+    on every vendor choosing to redact for us.
+
+    Only *secret* variables are replaced. A host or an endpoint is an address,
+    and blanking it out of an error would remove the one detail that explains
+    the error.
+    """
+    if not text:
+        return text
+    cat = catalogue if catalogue is not None else provider_catalogue()
+    for spec in cat.list():
+        for name in spec.env_vars:
+            if not _is_secret(name):
+                continue
+            value = os.environ.get(name, "").strip()
+            if len(value) >= 8 and value in text:
+                text = text.replace(value, value[:HINT_PREFIX] + HINT_MASK)
+    return text
 
 
 def missing_key_diagnosis(model_string: str) -> str | None:
