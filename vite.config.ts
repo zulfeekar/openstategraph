@@ -10,7 +10,21 @@ export default defineConfig({
   // plugin, so `tsconfig.app.json` stays the single place aliases are
   // declared and tests import exactly what the app imports.
   resolve: { tsconfigPaths: true },
-  server: { port: 5273, strictPort: false },
+  server: {
+    port: 5273,
+    strictPort: false,
+    watch: {
+      // `workflows/` is **data the editor writes**, not source it is built
+      // from. Since disk autosave landed, every edit updates a file in here —
+      // and with the default watcher that tripped a full page reload, which
+      // reloaded the workflow, which autosaved, which reloaded… The editor
+      // reloaded itself every few seconds with nobody touching it.
+      //
+      // Nothing under `workflows/` is imported by the frontend bundle, so
+      // there is no change here a reload would ever be the right answer to.
+      ignored: ['**/workflows/**'],
+    },
+  },
   build: { target: 'es2022', sourcemap: true },
 
   test: {

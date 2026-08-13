@@ -1,3 +1,5 @@
+import { writeOpenWorkflowToDisk } from '@app/diskAutosave';
+import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import {
   createContext,
   type ReactNode,
@@ -264,6 +266,9 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
   // (`lastSeenAt` advances with every write) and never read while rendering,
   // which is exactly what a ref is for and what React state is not.
   const writerRef = useRef<WriteGuard | null>(null);
+  // One client for the life of the hook: a new one per autosave would build a
+  // fresh base-url resolution on every keystroke.
+  const diskClientRef = useRef<WorkflowFileClient | null>(null);
   // `report` is recreated by the toaster on every toast, and the restore
   // effect below must not re-run because of that.
   const reportRef = useRef(report);
@@ -408,6 +413,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // on every edit, and a full quota would otherwise produce a toast per
     // second forever. Cleared by the next success, so a recovery is visible.
     let lastReported: string | null = null;
+    let lastDiskReported: string | null = null;
     const schedule = () => {
       if (timer != null) clearTimeout(timer);
       timer = setTimeout(() => {
@@ -420,11 +426,41 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
         );
         if (outcome.ok) {
           lastReported = null;
-          return;
+        } else if (outcome.kind !== lastReported) {
+          lastReported = outcome.kind ?? 'error';
+          reportRef.current(outcome.reason ?? 'This change was not autosaved.');
         }
-        if (outcome.kind === lastReported) return;
-        lastReported = outcome.kind ?? 'error';
-        reportRef.current(outcome.reason ?? 'This change was not autosaved.');
+
+        // …and to the package on disk, which is the copy a developer reads
+        // with `git diff` and the one the CLI, the tests and the wheel run
+        // (ticket 02). The browser draft stays: it is the crash-recovery
+        // layer, and the only home a workflow has before its first save
+        // mints a slug.
+        //
+        // `conflict` is the one failure that also stops the disk write:
+        // another tab owns this document, and two tabs writing one package
+        // file makes the last keystroke anywhere win, silently. `quota` and
+        // `too-large` do not stop it — those are limits of *browser* storage,
+        // and disk is precisely where such a workflow belongs.
+        if (outcome.kind === 'conflict') return;
+        //
+        // Failures are reported once per distinct reason for the same reason
+        // the storage ones are — this fires on every edit, and a backend that
+        // is down would otherwise raise a toast per second.
+        void writeOpenWorkflowToDisk(
+          diskClientRef.current ?? (diskClientRef.current = new WorkflowFileClient()),
+          workbench.model,
+          workbench.serializer,
+          sessionStorage,
+        ).then((disk) => {
+          if (disk.kind !== 'failed') {
+            lastDiskReported = null;
+            return;
+          }
+          if (disk.reason === lastDiskReported) return;
+          lastDiskReported = disk.reason;
+          reportRef.current(`Not written to the workflow folder: ${disk.reason}`);
+        });
       }, SAVE_DELAY_MS);
     };
 

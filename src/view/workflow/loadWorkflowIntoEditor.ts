@@ -14,6 +14,7 @@ import { recordKnownCapabilities } from '@app/capabilityRefresh';
 import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 import { pushDrillFrame } from '@app/drillStack';
 import { restoreDraftFor } from '@app/workflowDrafts';
+import { rememberDiskDocument } from '@app/diskAutosave';
 
 /**
  * What was opened, and where its contents came from.
@@ -216,6 +217,13 @@ export async function loadWorkflowIntoEditor(
     // after a load would report every tool the load itself registered as new.
     recordKnownCapabilities(slug, tools);
     workbench.controller.document.importJSON(JSON.stringify(outcome.value));
+    // What disk holds, for disk autosave — recorded here, and *before* the
+    // draft restore below. Importing fires `controller.onChange`, which is
+    // what autosave listens to, so without this baseline merely opening a
+    // workflow rewrote its file with an identical document and a new
+    // `savedAt`. A restored draft, by contrast, genuinely differs from the
+    // file and should reach it.
+    rememberDiskDocument(slug, workbench.model, workbench.serializer);
     // …and then this browser's own unsaved edits to *this* workflow, if it has
     // any that differ (ticket 23). Opening a second workflow used to discard
     // them with no prompt and no way back, because the draft was keyed on the

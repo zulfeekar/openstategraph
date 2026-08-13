@@ -383,19 +383,21 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
           >
             Save {workbench.model.name}
           </Button>
-          {/* UX-04. The editor autosaves to browser storage, and nothing on
-              screen said where "saved" meant — so a user who cleared site
-              data, or opened the app in a different browser, discovered the
-              limit by losing work. Stated here, next to the button that makes
-              it durable, rather than in a doc nobody reads mid-edit. */}
+          {/* UX-04, rewritten when autosave-to-disk landed (the-editor-makes-
+              a-real-package ticket 02). This paragraph used to say edits
+              autosave to "this browser only", which was true and is now
+              false — a saved workflow's edits reach its folder on their own.
+              The one case that still needs the button is the one the text
+              leads with, because it is the only one where nothing on disk
+              exists to write to yet. */}
           <p className="workflow-manager__hint">
-            Edits autosave to <strong>this browser only</strong>, one draft per workflow — opening
-            another workflow keeps yours, and coming back restores it. They are not on the backend,
-            so they will not follow you to another browser, another machine, or survive clearing
-            site data. Saving here writes <code>workflows/&lt;slug&gt;/workflow.json</code>, which
-            is the copy that lasts — and puts that slug in the address bar, so the URL is a link you
-            can send. The slug is chosen once, from the name; a second workflow of the same name
-            gets its own.
+            A workflow that has never been saved lives in <strong>this browser only</strong> — save
+            it once to give it a folder. After that, edits autosave to{' '}
+            <code>workflows/&lt;slug&gt;/workflow.json</code> as you make them, so what is on the
+            canvas is what the CLI and the tests run. The browser keeps a draft too, as crash
+            recovery. Saving puts the slug in the address bar, so the URL is a link you can send;
+            the slug is chosen once, from the name, and a second workflow of the same name gets its
+            own.
           </p>
         </PanelSection>
 

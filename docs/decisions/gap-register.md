@@ -388,6 +388,23 @@ diagnosis, so the first job was to name the actual failures. Reading
 store (quota *and* wholly-unavailable), a corrupt payload, and two guards
 writing against one store.
 
+> **Superseded in part, 2026-08-14.** The paragraph below argues against
+> autosaving to `workflows/<slug>/workflow.json`. The owner asked for exactly
+> that, three times, as the thing they expected as a developer — and the
+> counter-argument, "an experiment becomes indistinguishable from a commit",
+> answers a question `git` already answers better than a persistence design
+> can: an unwanted autosave is `git checkout`, and an autosave you *did* want
+> but never made is gone. So the editor now writes the package on every edit
+> (`src/app/diskAutosave.ts`, the-editor-makes-a-real-package ticket 02), and
+> the browser draft is demoted to crash recovery rather than the record.
+>
+> What survives from the paragraph is its premise, and it is worth keeping in
+> view: a workflow with **no slug yet** has nowhere on disk to be written, so
+> it still lives in `localStorage` alone until one explicit Save mints its
+> folder. That window — a brand-new canvas, before its first save — is the
+> only place the durability gap below still applies. The separate draft store
+> is no longer the plan for the rest.
+
 **What is still open, and the design for it.** None of the above makes the data
 *durable*: clearing site data, a different browser, or a different machine
 still loses whatever was never saved to the backend. The editor now says this
