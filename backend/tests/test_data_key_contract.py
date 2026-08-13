@@ -39,8 +39,10 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 import textwrap
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Callable
 
 import pytest
@@ -330,3 +332,72 @@ class TestTheSupervisorsRulesAreWritable:
             node_runtime.Orchestrator = monkey  # type: ignore[misc]
 
         assert captured and captured[0] == "Send anything numeric to the analyst."
+
+
+class TestEveryKeyWeShipIsAKeySomethingReads:
+    """The third direction — and the one instance four actually shipped through.
+
+    The class above asserts *read but undeclared*. Its docstring explains why
+    the reverse (*declared but unread*) is deliberately not asserted: a
+    declared field the factory never reads is legitimate.
+
+    There is a third direction, and it is unambiguous: **a `data` key written
+    into a document we ship, which no node type declares.** Nothing can read
+    it, no card or inspector can show it, and it is silently discarded at
+    compile time — so a developer edits it and nothing happens.
+
+    Instance four, found 2026-08-13 and fixed by this test: the `team`
+    scaffold shipped `"instruction": "Split the task into the smallest set of
+    independent subtasks."` on its supervisor. `instruction` is that node's
+    input *port* id — which is instance **three** in this file's own docstring.
+    The compiler was corrected to read `rules`; the template that writes it
+    never was. So the guard written because of instance three could not see
+    instance four, because it was pointed the other way.
+
+    Every package scaffolded from `team` carried a dispatch instruction that
+    did nothing.
+    """
+
+    @staticmethod
+    def _declared() -> dict[str, set[str]]:
+        specs = json.loads(
+            (Path(__file__).resolve().parents[1]
+             / "openstategraph/compile/port_specs.json").read_text()
+        )
+        return {
+            entry["type"]: set(entry["field_keys"]) | set(entry.get("legacy_data_keys") or [])
+            for entry in specs["node_types"]
+        }
+
+    @staticmethod
+    def _shipped() -> list[Path]:
+        root = Path(__file__).resolve().parents[2]
+        return sorted(
+            list((root / "backend/openstategraph/templates").glob("*/workflow.json"))
+            + list((root / "workflows").glob("*/workflow.json"))
+        )
+
+    def test_no_shipped_document_writes_a_key_no_node_type_declares(self) -> None:
+        declared = self._declared()
+        offences: list[str] = []
+        for path in self._shipped():
+            document = json.loads(path.read_text())
+            document = document.get("document", document)
+            for node in document.get("nodes") or []:
+                known = declared.get(node["type"])
+                if known is None:
+                    continue  # a workflow-scoped type that does not ship in the catalogue
+                for key in (node.get("data") or {}):
+                    if key not in known:
+                        offences.append(
+                            f"{path.parent.name}/{node['id']} ({node['type']}) "
+                            f"writes '{key}', which no node type declares"
+                        )
+        assert offences == [], "\n".join(offences)
+
+    def test_the_sweep_actually_looked_at_something(self) -> None:
+        # A glob that silently matched nothing would make the test above pass
+        # forever — the same vacuity guard the class above keeps.
+        shipped = self._shipped()
+        assert len(shipped) >= 5
+        assert any("templates" in str(p) for p in shipped)
