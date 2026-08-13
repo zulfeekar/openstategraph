@@ -31,7 +31,29 @@ from fastapi.responses import StreamingResponse
 # `basicConfig` is a no-op if the root logger already has handlers (e.g. under
 # pytest, or when `uvicorn --log-config` sets its own), so this is safe to call
 # unconditionally rather than guessing whether we're the entrypoint.
-logging.basicConfig(level=os.getenv("OPENSTATEGRAPH_LOG_LEVEL", "INFO"))
+def resolve_log_level(raw: str | None) -> int:
+    """A logging level from a variable a person wrote by hand.
+
+    This was `logging.basicConfig(level=os.getenv(...))`, which raises
+    `ValueError: Unknown level: \'\'` on an **empty** assignment — and
+    `OPENSTATEGRAPH_LOG_LEVEL=` is exactly what `.env.example` ships, so
+    copying it to `.env` and running `serve` killed the server. It died
+    *after* printing its URLs, so it read as a server that had started.
+
+    Lowercase failed the same way, which is the more likely thing to type.
+
+    Unrecognised falls back to the documented default rather than raising: a
+    log level is not worth refusing to start over, and a server that will not
+    boot tells you far less than one that boots at INFO.
+    """
+    level = (raw or "").strip().upper()
+    if not level:
+        return logging.INFO
+    resolved = logging.getLevelName(level)
+    return resolved if isinstance(resolved, int) else logging.INFO
+
+
+logging.basicConfig(level=resolve_log_level(os.getenv("OPENSTATEGRAPH_LOG_LEVEL")))
 logger = logging.getLogger(__name__)
 
 #: Where the editor dev server runs. Explicit, not `*` — the API will hold keys.

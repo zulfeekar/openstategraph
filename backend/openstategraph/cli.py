@@ -74,15 +74,41 @@ def _usage(message: str) -> int:
     return EXIT_USAGE
 
 
-def _load(args: argparse.Namespace) -> Any:
-    """The one `load_workflow` call the whole CLI shares."""
+def _load(args: argparse.Namespace, *, model: Any = None) -> Any:
+    """The one `load_workflow` call the whole CLI shares.
+
+    `model` overrides what the arguments resolve to, for the commands that
+    compile a graph without ever calling one — see `_drawing_only_model`.
+    """
     from openstategraph import load_workflow
 
     return load_workflow(
         args.package,
-        model=getattr(args, "model", None),
+        model=model if model is not None else getattr(args, "model", None),
         trace_file=getattr(args, "trace_file", None),
         knowledge_dir=getattr(args, "knowledge_dir", None),
+    )
+
+
+def _drawing_only_model() -> Any:
+    """A model for a command that compiles a graph and never calls one.
+
+    `graph` renders the compiled topology. It invokes nothing — but *building*
+    the graph built a chat model, so the command required the resolved
+    provider's integration package to be installed. In a venv holding only
+    `[ollama]`, a document that resolved to Anthropic could not be **drawn**.
+    Found by installing the wheel and using it.
+
+    Reuses the stand-in that already exists for an unconfigured provider, so
+    there is one thing in this codebase that means "a model nothing may call",
+    and it explains itself if anything ever does.
+    """
+    from openstategraph.chat_model import UnconfiguredProvider
+
+    return UnconfiguredProvider(
+        "`openstategraph graph` compiles the topology to draw it and builds no "
+        "model — nothing here should be calling one. Use `run` to execute the "
+        "workflow."
     )
 
 
@@ -207,7 +233,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 def cmd_graph(args: argparse.Namespace) -> int:
     """Mermaid **text**, on stdout. Never `draw_mermaid_png()`, which would post
     the user's graph to a third-party API."""
-    print(_load(args).mermaid(xray=args.xray))
+    print(_load(args, model=_drawing_only_model()).mermaid(xray=args.xray))
     return EXIT_OK
 
 
