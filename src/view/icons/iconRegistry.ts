@@ -12,6 +12,7 @@ import {
   GitBranch,
   ShieldCheck,
   Split,
+  Target,
   Users,
   FileOutput,
   UserCheck,
@@ -47,6 +48,10 @@ const ICONS: Record<string, LucideIcon> = {
   'node-format-report': FileOutput,
   'node-discovered-tool': Wrench,
   'node-subgraph': Workflow,
+  // A Team is a mounted workflow that promises an outcome — so a target,
+  // not a crowd. `Users` is already the Worker glyph, and reusing it here
+  // would imply a headcount nothing verifies (ticket 02).
+  'node-team': Target,
   'port-feedback': ShieldCheck,
 
   // Port types

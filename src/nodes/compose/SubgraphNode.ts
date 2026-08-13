@@ -43,7 +43,12 @@ export const subgraphNode: INodeDefinition = defineNode(
     id: SUBGRAPH_TYPE,
     category: CATEGORY.compose,
     label: 'Workflow',
-    description: 'Runs another workflow as a single step.',
+    // Isolation is the thing a reader cannot guess and the thing that decides
+    // whether this is the right node: the child sees a task and reports a
+    // result, never this graph's state, messages or tools. "Runs another
+    // workflow as a single step" said none of that (ticket 02).
+    description:
+      'Another workflow, run as one isolated step — task in, answer out. It brings its own state, tools and knowledge, and by reference: change the original and every mount of it changes.',
     iconId: 'node-subgraph',
     accent: 'violet',
     keywords: ['subgraph', 'workflow', 'compose', 'nest', 'call', 'reuse'],

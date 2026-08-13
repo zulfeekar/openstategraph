@@ -80,8 +80,12 @@ export const CATEGORIES: readonly INodeCategory[] = [
     id: CATEGORY.compose,
     label: 'Composition · organisms',
     order: 50,
+    // Said "its own nodes, state and revision loop", which overstated it: a
+    // mounted workflow loops only if the child does, and Workflow is the
+    // entry that does not promise one. The loop belongs to Team's copy, where
+    // it is read out of the child rather than asserted (ticket 02).
     description:
-      'A whole workflow — its own nodes, state and revision loop — mounted as one step.',
+      'A whole workflow — its own nodes, state and tools — mounted as one step, by reference. Change the original and every mount of it changes.',
   },
   {
     id: CATEGORY.annotate,

@@ -649,7 +649,7 @@
       "category": "compose",
       "scope": "app",
       "label": "Team",
-      "description": "A workflow that revises until it meets its outcome, run as one step.",
+      "description": "The same isolated mount, plus a stated outcome — its card shows what the child is expected to deliver, and whether that child really loops until a grader passes.",
       "ports": [
         {
           "id": "input",
@@ -1061,7 +1061,7 @@
       "category": "compose",
       "scope": "app",
       "label": "Workflow",
-      "description": "Runs another workflow as a single step.",
+      "description": "Another workflow, run as one isolated step — task in, answer out. It brings its own state, tools and knowledge, and by reference: change the original and every mount of it changes.",
       "ports": [
         {
           "id": "input",

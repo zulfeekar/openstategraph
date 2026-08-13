@@ -56,9 +56,18 @@ export const teamNode: INodeDefinition = defineNode(
     id: TEAM_TYPE,
     category: CATEGORY.compose,
     label: 'Team',
+    // States what Team *adds*, rather than restating what Workflow already
+    // is: the same mount, plus an outcome the card shows and a revision loop
+    // read out of the child document. Deliberately not "parallel" or
+    // "multi-agent" — the loop note is earned from the child's grader wiring,
+    // and a grader-less document can be mounted here today (ticket 03).
     description:
-      'A workflow that revises until it meets its outcome, run as one step.',
-    iconId: 'node-subgraph',
+      'The same isolated mount, plus a stated outcome — its card shows what the child is expected to deliver, and whether that child really loops until a grader passes.',
+    // Its own glyph. One shared icon across two violet cards in one category
+    // was the single visual channel available, spent on making them look
+    // identical (ticket 02). A target, not a crowd: what distinguishes a Team
+    // is the outcome it promises, not a headcount nothing verifies.
+    iconId: 'node-team',
     accent: 'violet',
     keywords: ['team', 'crew', 'group', 'subgraph', 'workflow', 'loop', 'outcome'],
     defaultSize: { width: 252, height: 190 },

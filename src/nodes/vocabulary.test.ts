@@ -68,3 +68,72 @@ describe('palette tiering', () => {
     }
   });
 });
+
+/**
+ * production-ready ticket 02.
+ *
+ * Two violet cards, the same glyph, the same ports, the same category,
+ * labelled "Workflow" and "Team". Research had already established there is
+ * **no compilation difference at all** — one backend builder serves both — so
+ * the honest fix was never to invent a difference, only to make the contract
+ * each one offers legible.
+ *
+ * These assert *properties* of the copy, not its exact words: a test that
+ * freezes marketing text makes improving it a failure. What must stay true is
+ * that each says what it is, that Team's extra is named, and that neither
+ * claims something the compiler does not do.
+ */
+describe('an organism states the contract it offers', () => {
+  const workflow = subgraphNode.description ?? '';
+  const team = teamNode.description ?? '';
+
+  it('gives the two organisms different glyphs', () => {
+    // The single visual channel available, and it was spent on making them
+    // look identical.
+    expect(subgraphNode.iconId).not.toBe(teamNode.iconId);
+  });
+
+  it('says a mounted workflow is isolated — the thing a user cannot guess', () => {
+    // Isolation is the whole mechanism: the child sees a task and reports a
+    // result, and never the parent's state or messages.
+    expect(workflow.toLowerCase()).toMatch(/isolat|its own|task in/);
+  });
+
+  it('names what Team adds, rather than restating what Workflow already is', () => {
+    expect(team.toLowerCase()).toContain('outcome');
+  });
+
+  it('never calls a Team parallel or multi-agent', () => {
+    // The badge is earned from the child's grader wiring, not from the label.
+    // A grader-less document can be mounted as a Team today (ticket 03), so
+    // the copy must not promise a shape the child may not have.
+    for (const text of [team, teamNode.label]) {
+      expect(text.toLowerCase()).not.toMatch(/parallel|multi-agent|concurrent/);
+    }
+  });
+
+  it('does not promise a revision loop on a plain mounted workflow', () => {
+    // A mounted workflow loops only if the child does. Claiming it here would
+    // be the same false claim the tiering bug made, one level down.
+    expect(workflow.toLowerCase()).not.toContain('loop');
+  });
+
+  it('says the same of the category, which covers both', () => {
+    const compose = CATEGORIES.find((c) => c.id === CATEGORY.compose)?.description ?? '';
+    expect(compose.toLowerCase()).not.toContain('revision loop');
+  });
+
+  it('tells a reader that a mount stays linked to its original', () => {
+    // The distinction ticket 01 left to this one: mounting keeps the link,
+    // starting from a template severs it at creation.
+    const compose = CATEGORIES.find((c) => c.id === CATEGORY.compose)?.description ?? '';
+    expect(`${compose} ${workflow}`.toLowerCase()).toMatch(/every instance|stays linked|reference/);
+  });
+
+  it('keeps both descriptions short enough to read in a palette', () => {
+    for (const text of [workflow, team]) {
+      expect(text.length).toBeGreaterThan(40);
+      expect(text.length).toBeLessThanOrEqual(200);
+    }
+  });
+});
