@@ -1032,10 +1032,19 @@ class NodeRuntime:
             return self.model
         key = f"{provider}:{model_id}"
         if key not in self._model_cache:
-            from langchain.chat_models import init_chat_model
+            from openstategraph.chat_model import UnconfiguredProvider, build_chat_model
 
             try:
-                self._model_cache[key] = init_chat_model(key)
+                selected = build_chat_model(key)
+                # An unconfigured provider comes back as a stand-in that raises
+                # on first use, so a workflow needing no model still runs. It
+                # must not reach a node here, though: the rule below is that a
+                # bad per-node *selection* degrades to the shared default
+                # rather than taking the run down, and a deferred raise would
+                # do the opposite.
+                if isinstance(selected, UnconfiguredProvider):
+                    selected = self.model
+                self._model_cache[key] = selected
             except Exception:
                 # An unconfigured provider (no API key) or an unrecognised
                 # model id must not take the whole run down — the shared

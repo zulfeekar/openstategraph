@@ -9,6 +9,47 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **Ollama takes its configuration from the environment, and is no longer the
+  zero-configuration fallback.** It now declares
+  `env_vars=("OLLAMA_API_KEY", "OLLAMA_HOST")`, and because `is_configured`
+  takes *any* of them, there are two supported setups and they coexist:
+  `OLLAMA_API_KEY` alone reaches the cloud, `OLLAMA_HOST` alone reaches a
+  daemon you run, which needs no key of ours because it owns its own auth.
+  Only "neither set" changes: that used to report ready and now does not.
+
+  What was removed was never keyless, it was **ambient** — the cloud was
+  reached through a local daemon signing with `~/.ollama/id_ed25519`, a
+  credential that never passes through the environment and cannot be seen,
+  moved or revoked from one. It was also, on the machine where this was
+  found, not running at all, while `/api/health` reported
+  `model_configured: true` unconditionally.
+
+  `ProviderSpec` gains `endpoint_env` and `default_endpoint` (additive, both
+  defaulted). Ollama declares `("OLLAMA_HOST", "OLLAMA_ENDPOINT")` and
+  `https://ollama.com`, so precedence is tuple order: your host, else the
+  cloud endpoint, else the cloud. Previously nothing passed an endpoint at
+  all and `ollama.Client` defaulted to `127.0.0.1:11434` — "Ollama means
+  cloud, never local" was being violated by omission rather than by decision.
+  Anthropic and OpenAI declare neither and are passed no `base_url`: their own
+  SDKs already read `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL`/`OPENAI_API_BASE`.
+
+  New internal module `openstategraph/chat_model.py` is now the single place a
+  model string becomes a model, carrying the credential gate, the endpoint and
+  the extras hint. Those lived in `loader.py` only, so the HTTP, MCP and
+  per-node paths raised the vendor SDK's error instead of ours; a test parses
+  the package for direct `init_chat_model` calls to keep it that way.
+
+  An unconfigured provider yields a stand-in that raises `MissingProviderKey`
+  on **first use** rather than at construction, so a workflow with no
+  model-calling node still runs with no credentials at all.
+
+- **`.env` values no longer keep their trailing `# comment`.** A quoted value
+  ends at its closing quote; unquoted, a comment must be preceded by
+  whitespace, so a `#` inside a credential survives. Found because a real
+  `.env` line — `OLLAMA_ENDPOINT = "https://ollama.com"  # Adjust if needed` —
+  arrived with the quotes and the comment attached, silently wrong rather than
+  absent.
+
 - **One Chinook workflow, with the router inline. `chinook-nl-to-sql` is
   deleted.** There were two Chinook documents — `chinook-assistant`, which had
   the five-intent router, and a hidden `chinook-nl-to-sql`, which did not —

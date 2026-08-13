@@ -661,9 +661,8 @@ class WorkflowRuns:
         server's own environment, exactly as `apply_credentials` guarantees the
         server's env always wins.
         """
-        from langchain.chat_models import init_chat_model
-
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
+        from openstategraph.chat_model import build_chat_model
         from openstategraph.compile.node_runtime import RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -688,7 +687,7 @@ class WorkflowRuns:
             return {"error": "The document does not compile.", "findings": findings}
 
         limit = max(10, min(int(recursion_limit), self.MAX_RECURSION_LIMIT))
-        chat_model = init_chat_model(resolve_model(model or workflow_default_model(resolved)))
+        chat_model = build_chat_model(resolve_model(model or workflow_default_model(resolved)))
         compiler = WorkflowCompiler()
         plan = compiler.plan(resolved)
         runtime = self._services.runtime_for(slug, resolved, chat_model)

@@ -229,16 +229,29 @@ class TestThreeProvidersCoexist:
     def test_a_keyed_provider_beats_a_keyless_fallback_whatever_the_order(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Ollama registers before any plugin, but must not shadow one.
+        """A keyless provider registered early must not shadow a later one.
 
-        Order alone would let the keyless fallback win simply by being
-        earlier, which would make a third-party provider unreachable by
-        default no matter how it is configured.
+        Order alone would let a keyless fallback win simply by being earlier,
+        which would make a third-party provider unreachable by default no
+        matter how it is configured. No *built-in* is keyless since
+        providers-and-credentials ticket 02, but a plugin may still declare
+        `env_vars=()`, so the two-pass rule in `default_spec` still earns its
+        place — this test now covers a plugin rather than Ollama.
         """
         from openstategraph.api.model_resolution import resolve_model
 
         install(
             monkeypatch,
+            # Registers *first*, and needs no key — the shadowing risk.
+            FakeEntryPoint(
+                "aardvark",
+                ProviderSpec(
+                    name="aardvark",
+                    default_model="aardvark-1",
+                    extra="aardvark",
+                    env_vars=(),
+                ),
+            ),
             FakeEntryPoint(
                 "nvidia",
                 ProviderSpec(
@@ -249,10 +262,187 @@ class TestThreeProvidersCoexist:
                 ),
             ),
         )
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST"):
+            monkeypatch.delenv(name, raising=False)
         monkeypatch.setenv("NVIDIA_API_KEY", "nv")
         assert resolve_model(None) == "nvidia:meta/llama-3.3-70b-instruct"
+
+
+class TestOllamaHasTwoWaysToBeConfigured:
+    """Providers-and-credentials ticket 02.
+
+    Ollama used to declare `env_vars=()` and so was *always* configured. That
+    was not keyless, it was **ambient**: it reached the cloud through a local
+    daemon signing with `~/.ollama/id_ed25519`, a credential that never passes
+    through the environment and cannot be seen, moved or revoked from one.
+
+    It now declares two variables, and `is_configured`'s existing `any()` gives
+    the rule for free — either signal is enough:
+
+    - `OLLAMA_HOST` alone — a local or self-hosted daemon owning its own auth.
+    - `OLLAMA_API_KEY` alone — the cloud, via `OLLAMA_ENDPOINT`.
+
+    Only "neither" changes behaviour, and that is the case indistinguishable
+    from a broken install.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_ambient_ollama(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in ("OLLAMA_API_KEY", "OLLAMA_HOST"):
+            monkeypatch.delenv(name, raising=False)
+
+    def _ollama(self) -> ProviderSpec:
+        spec = provider_catalogue().get("ollama")
+        assert spec is not None
+        return spec
+
+    def test_neither_variable_is_not_configured(self) -> None:
+        assert self._ollama().is_configured() is False
+
+    def test_a_host_alone_is_enough(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Running a local daemon is a legitimate, fully-supported setup."""
+        monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
+        assert self._ollama().is_configured() is True
+
+    def test_a_key_alone_is_enough(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
+        assert self._ollama().is_configured() is True
+
+    def test_the_message_names_the_key_not_the_host(self) -> None:
+        """The keyless path is the one you opt into by naming a host.
+
+        So the credential message names `OLLAMA_API_KEY` — the cloud default —
+        rather than offering a host as the first thing to try.
+        """
+        assert "OLLAMA_API_KEY" in self._ollama().missing_key_message()
+
+    def test_an_unconfigured_ollama_now_produces_a_diagnosis(self) -> None:
+        """It used to return `None`: a keyless provider cannot lack a key."""
+        from openstategraph.providers import missing_key_diagnosis
+
+        assert missing_key_diagnosis("ollama:gpt-oss:120b-cloud") is not None
+
+
+class TestTheEndpointIsCloudUnlessAHostIsNamed:
+    """`OLLAMA_HOST` and `OLLAMA_ENDPOINT` answer different questions.
+
+    Host is *where my Ollama is*; endpoint is *where the cloud is*. They
+    coexist, and precedence is just the order of `endpoint_env`.
+
+    The default matters most: with neither set, `ollama.Client` would dial
+    `127.0.0.1:11434`. That is how "Ollama means cloud, never local" was being
+    violated by omission — no decision was ever made to prefer a local model,
+    the SDK's default simply went unexamined.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_ambient_ollama(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in ("OLLAMA_HOST", "OLLAMA_ENDPOINT"):
+            monkeypatch.delenv(name, raising=False)
+
+    def _ollama(self) -> ProviderSpec:
+        spec = provider_catalogue().get("ollama")
+        assert spec is not None
+        return spec
+
+    def test_neither_set_means_the_cloud(self) -> None:
+        assert self._ollama().base_url() == "https://ollama.com"
+
+    def test_a_host_wins_over_the_cloud_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_ENDPOINT", "https://ollama.com")
+        assert self._ollama().base_url() == "http://localhost:11434"
+
+    def test_the_endpoint_is_used_when_no_host_is_named(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLLAMA_ENDPOINT", "https://ollama.example.internal")
+        assert self._ollama().base_url() == "https://ollama.example.internal"
+
+    def test_a_provider_that_declares_none_leaves_the_sdk_alone(self) -> None:
+        """Anthropic and OpenAI must be untouched by this mechanism.
+
+        Not favouritism — they already honour their own endpoint variables:
+        `ChatOpenAI` reads `OPENAI_BASE_URL`/`OPENAI_API_BASE` and
+        `ChatAnthropic` reads `ANTHROPIC_BASE_URL`, both verified against the
+        installed packages. Declaring ours as well would be a second spelling
+        of a working feature, which is the duplication this catalogue exists to
+        prevent. Ollama is the only provider whose SDK *default* is wrong for
+        this project.
+
+        So `None` means "pass no `base_url`" and leaves the SDK in charge —
+        deliberately different from passing a URL we believe to be its default.
+        """
+        for name in ("anthropic", "openai"):
+            spec = provider_catalogue().get(name)
+            assert spec is not None
+            assert spec.base_url() is None
+            assert spec.endpoint_env == ()
+
+    def test_the_mechanism_is_open_not_ollama_specific(self) -> None:
+        """A plugin gets the same lever, with no change to this module."""
+        spec = ProviderSpec(
+            name="acme",
+            default_model="acme-1",
+            extra="acme",
+            env_vars=("ACME_API_KEY",),
+            endpoint_env=("ACME_BASE_URL",),
+            default_endpoint="https://api.acme.test",
+        )
+        assert spec.base_url({}) == "https://api.acme.test"
+        assert spec.base_url({"ACME_BASE_URL": "http://box.local"}) == "http://box.local"
+
+
+class TestAnyMixOfProvidersWorks:
+    """Three vendors, independently configured, in any combination.
+
+    The catalogue has no notion of "the configured provider" — each spec
+    answers for itself, so a developer may hold keys for one, two or all
+    three, and adding Ollama's credential requirement changes none of that.
+    """
+
+    ALL = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST")
+
+    @pytest.fixture(autouse=True)
+    def _clean(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in self.ALL:
+            monkeypatch.delenv(name, raising=False)
+
+    def test_each_provider_answers_only_for_itself(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        catalogue = provider_catalogue()
+        configured = {
+            spec.name: spec.is_configured() for spec in catalogue.list() if spec.requires_key
+        }
+        assert configured == {"anthropic": False, "openai": True, "ollama": False}
+
+    def test_registration_order_decides_the_default_among_those_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """And only among those configured — an unset vendor is skipped."""
+        from openstategraph.api.model_resolution import resolve_model
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
+        # Anthropic registers first but is not configured, so OpenAI wins.
+        assert resolve_model(None).startswith("openai:")
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+        assert resolve_model(None).startswith("anthropic:")
+
+    def test_every_provider_stays_individually_addressable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A default is a default, not a restriction."""
+        from openstategraph.api.model_resolution import resolve_model
+
+        for name in self.ALL:
+            monkeypatch.setenv(name, "x")
+        assert resolve_model("openai:gpt-4.1-mini") == "openai:gpt-4.1-mini"
+        assert resolve_model("anthropic:claude-haiku-4-5") == "anthropic:claude-haiku-4-5"
+        assert resolve_model("ollama:gpt-oss:120b-cloud") == "ollama:gpt-oss:120b-cloud"
 
 
 class TestPerNodeOverridePicksBetweenProviders:

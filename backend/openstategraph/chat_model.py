@@ -1,0 +1,115 @@
+"""The single place a model string becomes a chat model.
+
+Three things have to happen between `"ollama:gpt-oss:120b-cloud"` and an object
+you can call, and before this module they happened in different places or not at
+all:
+
+1. **The credential gate.** A named provider with no credential fails here with
+   the exact fix, rather than raising the vendor SDK's own error — which names
+   *its* environment variable and knows nothing about our `.env.example`, so an
+   adopter had to work out the two were the same thing.
+2. **The endpoint.** `ProviderSpec.base_url` decides where the request goes.
+   Without this, `ollama.Client` silently dialled `127.0.0.1:11434` — which is
+   how "Ollama means cloud, never local" was violated by omission.
+3. **The extras hint.** A missing integration package names our install line,
+   not just the import that failed.
+
+**Why a module and not a helper on `ProviderSpec`.** `providers.py` is a
+catalogue: it imports `os`, `dataclasses` and `typing`, and nothing else. Giving
+it a method that constructs a LangChain object would make importing the provider
+list drag in the model layer, and the catalogue is imported by things that only
+want to know what a prefix means.
+
+**Why every caller must come through here.** Step 1 existed only in
+`loader.py`, so the HTTP, MCP and per-node paths each called `init_chat_model`
+directly and got the vendor's error instead of ours — the same "one behaviour,
+several spellings" defect the provider catalogue was built to end
+(providers-and-credentials ticket 02).
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
+
+from openstategraph.errors import MissingProviderKey
+from openstategraph.providers import missing_key_diagnosis, provider_catalogue
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from langchain_core.language_models import BaseChatModel
+
+
+def model_kwargs(model_name: str) -> dict[str, Any]:
+    """Extra `init_chat_model` arguments this model's provider asks for.
+
+    Empty for a provider that declares no endpoint, so Anthropic and OpenAI are
+    passed exactly what they were passed before this existed. `None` from
+    `base_url` means "the SDK's default is correct" and is deliberately not the
+    same as passing a URL we believe to be that default.
+    """
+    spec = provider_catalogue().for_model(model_name)
+    if spec is None:
+        return {}
+    base_url = spec.base_url()
+    return {"base_url": base_url} if base_url else {}
+
+
+class UnconfiguredProvider:
+    """Stands in for a model whose provider has no credential.
+
+    **Why a stand-in rather than raising immediately.** A workflow with no
+    model-calling node runs fine with no credentials at all, and that is a
+    property worth keeping — `input.text → output.formatted` needs nobody's
+    API key. Raising at construction took it away, because every run builds a
+    model before it knows whether any node will ask for one.
+
+    So the rule is: *a credential is required at the moment a model is used,
+    not at the moment one is built*. Any attribute access raises, which covers
+    `invoke`, `stream`, `bind_tools`, `with_structured_output` and anything
+    else a node reaches for, while a run that never touches it is unaffected.
+    """
+
+    __slots__ = ("_diagnosis",)
+
+    def __init__(self, diagnosis: str) -> None:
+        self._diagnosis = diagnosis
+
+    def __getattr__(self, name: str) -> Any:
+        raise MissingProviderKey(self._diagnosis)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        raise MissingProviderKey(self._diagnosis)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<UnconfiguredProvider: {self._diagnosis}>"
+
+
+def build_chat_model(model_name: str) -> "BaseChatModel":
+    """`provider:model` in, a callable model out — or an error that says why.
+
+    When the named provider has no credential this returns an
+    `UnconfiguredProvider`, which raises `MissingProviderKey` on first use
+    rather than at construction — see that class for why. A missing
+    integration package is re-raised as an `ImportError` naming the extra.
+    """
+    from langchain.chat_models import init_chat_model
+
+    from openstategraph._extras import provider_extra_hint
+
+    diagnosis = missing_key_diagnosis(model_name)
+    if diagnosis:
+        return UnconfiguredProvider(diagnosis)  # type: ignore[return-value]
+
+    try:
+        return cast("BaseChatModel", init_chat_model(model_name, **model_kwargs(model_name)))
+    except ImportError as exc:
+        # Provider SDKs are extras (framework-packaging §3.1). The adopter
+        # installed *us*, not `langchain-anthropic`, so name our install line
+        # rather than leaving them to map a package to an extra.
+        hint = provider_extra_hint(model_name)
+        raise ImportError(
+            f"{exc} — model {model_name!r} needs its provider integration"
+            + (f": {hint}" if hint else "")
+        ) from exc
+
+
+__all__ = ["UnconfiguredProvider", "build_chat_model", "model_kwargs"]

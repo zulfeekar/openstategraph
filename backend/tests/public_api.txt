@@ -62,7 +62,7 @@ openstategraph.providers.ENV_EXAMPLE_END = str
 openstategraph.providers.OPTIONAL_ENV_VARS = dict
 openstategraph.providers.PROVIDERS_GROUP = str
 openstategraph.providers.ProviderCatalogue = dataclass(object) fields(_specs,warnings)
-openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,label)
+openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label)
 openstategraph.providers.builtin_specs = def() -> 'tuple[ProviderSpec, ...]'
 openstategraph.providers.credential_env_vars = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'frozenset[str]'
 openstategraph.providers.env_example_section = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'str'

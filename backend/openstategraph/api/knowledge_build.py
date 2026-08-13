@@ -23,12 +23,11 @@ class UnknownSourceError(ValueError):
 
 def resolve_build_model(model_name: str | None, credentials: dict[str, str] | None) -> Any:
     """The same resolution chain the run endpoints use, in one place."""
-    from langchain.chat_models import init_chat_model
-
     from openstategraph.api.model_resolution import apply_credentials, resolve_model
+    from openstategraph.chat_model import build_chat_model
 
     apply_credentials(credentials)
-    return init_chat_model(resolve_model(model_name))
+    return build_chat_model(resolve_model(model_name))
 
 
 def run_build(

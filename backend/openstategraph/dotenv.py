@@ -12,12 +12,19 @@ pointing at a mechanism that did not exist.
 
 **Where this is called, and where it deliberately is not.** Environment
 variables are the mechanism; a `.env` file is a convenience that *populates*
-them, and someone has to do the populating. We do it in the two places the user
-launched a process of ours — the CLI, and `create_app` for a directly-run
-server. We do **not** do it in `load_workflow`: importing a library must not
-reach into the host application's process and rewrite its environment from a
-file on disk. That is the same split LangChain and LangGraph draw — the
-libraries read `os.environ` and never load a file; their CLI does.
+them, and someone has to do the populating. It happens in exactly one place:
+`cli.console_main`, the `[project.scripts]` entry point — a **process** the
+user launched.
+
+`create_app` and `cli.main` were both tried and both reverted, because a
+*function* anyone may call must not rewrite the process it is called in:
+`create_app` mutated the environment on every app construction including the
+hundreds in the test suite, and `main` is called in-process by tests, which
+poisoned every test that ran after it. `load_workflow` is the same objection at
+library scope — importing a library must not reach into the host application's
+process and rewrite its environment from a file on disk. That is the split
+LangChain and LangGraph draw: the libraries read `os.environ` and never load a
+file; their CLI does.
 
 **The real environment always wins.** A variable already set is never
 overwritten, so `ANTHROPIC_API_KEY=… openstategraph run …` beats the file, a
@@ -60,14 +67,41 @@ def find_env_file(start: Path | str | None = None) -> Path | None:
     return None
 
 
+def _strip_inline_comment(value: str) -> str:
+    """Drop a trailing `# note`, leaving `#` that is part of the value alone.
+
+    Two rules, and each earns its place against a line someone really wrote:
+
+    - **A quoted value ends at its closing quote.** Everything after it is
+      commentary. This is what makes `KEY = "https://…"  # adjust` work, and
+      it is also what protects a `#` *inside* the quotes.
+    - **Unquoted, a comment must be preceded by whitespace.** A credential may
+      legitimately contain a `#`, so cutting at every one of them would corrupt
+      far more values than it would tidy.
+    """
+    if value[:1] in ('"', "'"):
+        closing = value.find(value[0], 1)
+        if closing != -1:
+            return value[: closing + 1]
+        # An unbalanced quote is a typo we cannot repair; leave it whole so the
+        # value looks wrong rather than quietly becoming something shorter.
+        return value
+    for index in range(1, len(value)):
+        if value[index] == "#" and value[index - 1].isspace():
+            return value[:index]
+    return value
+
+
 def parse_env_file(text: str) -> dict[str, str]:
     """`KEY=value` lines, minus comments, blanks and shell decoration.
 
     Deliberately small. `export FOO=bar` is accepted because people paste it
     from a shell; surrounding quotes are stripped because people copy them from
-    documentation. Anything more elaborate is a sign the file wants a real
-    parser, and at that point `python-dotenv` is the honest answer rather than
-    growing this one.
+    documentation; a trailing `# note` is dropped because people annotate their
+    own files. Anything more elaborate — variable interpolation, multi-line
+    values, escape sequences — is a sign the file wants a real parser, and at
+    that point `python-dotenv` is the honest answer rather than growing this
+    one.
     """
     values: dict[str, str] = {}
     for raw in text.splitlines():
@@ -80,7 +114,7 @@ def parse_env_file(text: str) -> dict[str, str]:
         key = key.strip()
         if not key:
             continue
-        value = value.strip()
+        value = _strip_inline_comment(value.strip()).rstrip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         values[key] = value

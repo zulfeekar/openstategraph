@@ -361,7 +361,9 @@ class TestRunStream:
             ],
         }
 
-    def test_dispatched_worker_instances_carry_a_distinguishing_task_id(self) -> None:
+    def test_dispatched_worker_instances_carry_a_distinguishing_task_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The sidebar's "dynamically spawned subagents appear as they are
         created" requirement (ticket 27) needs a way to tell two concurrently
         dispatched instances of the *same* static worker node apart.
@@ -369,7 +371,24 @@ class TestRunStream:
         parent's namespace rather than getting its own, unlike a real nested
         subgraph — so this pins the fallback: the task id from
         `worker_results`.
+
+        **The model is faked, and has to be.** This posted a real document with
+        no model injected, so the workers called whatever `resolve_model`
+        picked — Ollama — and the run's outcome depended on whether a daemon
+        happened to be listening on the developer's machine. With none, the
+        connection error was absorbed by `__default_error_handler__` and the
+        failure read `0 == 3`, naming neither Ollama nor a credential
+        (providers-and-credentials ticket 02).
         """
+        from openstategraph import chat_model as chat_model_module
+
+        from conftest import RespondingModel
+
+        monkeypatch.setattr(
+            chat_model_module,
+            "build_chat_model",
+            lambda _name: RespondingModel([], default="done"),
+        )
         client = TestClient(create_app())
         response = client.post(
             "/api/runs/stream",

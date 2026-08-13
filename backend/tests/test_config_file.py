@@ -335,6 +335,10 @@ class TestPrecedence:
         from openstategraph.compile.node_runtime import NodeRuntime
 
         monkeypatch.setattr(langchain.chat_models, "init_chat_model", lambda key, **_: f"<{key}>")
+        # The node names OpenAI, so OpenAI has to be configured — otherwise
+        # this exercises the unconfigured-provider fallback instead of the
+        # precedence rule it is named for.
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
         runtime = NodeRuntime.__new__(NodeRuntime)
         runtime.model = "<workflow-default>"  # type: ignore[attr-defined]
         runtime._model_cache = {}  # type: ignore[attr-defined]
@@ -378,9 +382,24 @@ class TestAMissingKeyIsLoud:
         assert missing_key_diagnosis("anthropic:claude-haiku-4-5") is None
 
     def test_a_keyless_provider_produces_no_diagnosis(self) -> None:
-        from openstategraph.providers import missing_key_diagnosis
+        """A provider that declares no variables cannot be missing one.
 
-        assert missing_key_diagnosis("ollama:gpt-oss:120b-cloud") is None
+        Ollama used to be this case and no longer is
+        (providers-and-credentials ticket 02), so the rule is exercised
+        directly on a spec rather than through a built-in — which is better,
+        because the rule belongs to `ProviderSpec`, not to any one vendor.
+        """
+        from openstategraph.providers import (
+            ProviderCatalogue,
+            ProviderSpec,
+            missing_key_diagnosis,
+        )
+
+        keyless = ProviderSpec(name="aardvark", default_model="a-1", extra="aardvark")
+        assert keyless.requires_key is False
+        assert ProviderCatalogue().register(keyless).for_model("aardvark:a-1") is keyless
+        # And the built-in that used to occupy this branch now does not.
+        assert missing_key_diagnosis("ollama:gpt-oss:120b-cloud") is not None
 
     def test_an_unknown_provider_produces_no_diagnosis(self) -> None:
         """A wrong guess is worse than none — `init_chat_model`'s own error
@@ -429,6 +448,32 @@ class TestEnvExampleParity:
         start = text.index(ENV_EXAMPLE_BEGIN)
         end = text.index(ENV_EXAMPLE_END) + len(ENV_EXAMPLE_END)
         assert text[start:end] == env_example_section()
+
+    def test_a_provider_reachable_two_ways_does_not_call_both_required(self) -> None:
+        """"Required" is a lie when either variable on its own is enough.
+
+        Ollama takes `OLLAMA_API_KEY` *or* `OLLAMA_HOST`
+        (providers-and-credentials ticket 02). A developer reading two lines
+        each headed "Required" would reasonably conclude they need an API key
+        to point at their own daemon, which is exactly backwards.
+        """
+        from openstategraph.providers import env_example_section
+
+        section = env_example_section()
+        ollama = section[section.index("--- Ollama ---") :]
+        assert "set one of OLLAMA_API_KEY or OLLAMA_HOST" in ollama
+        # Not once per variable, and never the bare singular claim.
+        assert "without it this provider is skipped" not in ollama
+        assert ollama.count("Required for ollama") == 1
+
+    def test_a_single_variable_provider_still_says_required(self) -> None:
+        """The copy stays direct where there is only one thing to set."""
+        from openstategraph.providers import env_example_section
+
+        section = env_example_section()
+        anthropic = section[section.index("--- Anthropic ---") : section.index("--- OpenAI ---")]
+        assert "Required for anthropic:" in anthropic
+        assert "one of" not in anthropic
 
     def test_the_cli_prints_that_same_block(self, capsys: pytest.CaptureFixture[str]) -> None:
         from openstategraph.cli import main

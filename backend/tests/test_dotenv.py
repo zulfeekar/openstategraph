@@ -32,7 +32,7 @@ class TestParsing:
                     "ANTHROPIC_API_KEY=sk-ant-plain",
                     'OPENAI_API_KEY="sk-openai-quoted"',
                     "OPENSTATEGRAPH_OLLAMA_MODEL='gpt-oss:120b-cloud'",
-                    "export OLLAMA_HOST=http://example  # trailing text is part of the value",
+                    "export OLLAMA_HOST=http://example",
                     "   SPACED   =   padded   ",
                     "NOT_A_LINE",
                 ]
@@ -43,9 +43,46 @@ class TestParsing:
         assert parsed["OPENAI_API_KEY"] == "sk-openai-quoted"
         assert parsed["OPENSTATEGRAPH_OLLAMA_MODEL"] == "gpt-oss:120b-cloud"
         # `export` is accepted because people paste it out of a shell.
-        assert parsed["OLLAMA_HOST"].startswith("http://example")
+        assert parsed["OLLAMA_HOST"] == "http://example"
         assert parsed["SPACED"] == "padded"
         assert "NOT_A_LINE" not in parsed
+
+
+class TestInlineComments:
+    """A trailing `# note` is a comment, not part of the value.
+
+    Ticket 01 decided the opposite — deliberately, to keep the parser small.
+    A real `.env` settled it (providers-and-credentials ticket 02): this line,
+    written by hand and loaded on every CLI run,
+
+        OLLAMA_ENDPOINT = "https://ollama.com"  # Adjust if needed
+
+    arrived as `'"https://ollama.com"  # Adjust if needed'` — quotes intact,
+    because the quote-stripper requires the first and last character to match
+    and this one ends in `d`. The value was silently wrong rather than absent,
+    which is the failure mode this project spends the most effort avoiding.
+    """
+
+    def test_the_line_that_forced_this(self) -> None:
+        parsed = parse_env_file('OLLAMA_ENDPOINT = "https://ollama.com"  # Adjust if needed')
+        assert parsed["OLLAMA_ENDPOINT"] == "https://ollama.com"
+
+    def test_an_unquoted_value_loses_its_comment_too(self) -> None:
+        assert parse_env_file("OLLAMA_HOST=http://example  # note")["OLLAMA_HOST"] == (
+            "http://example"
+        )
+
+    def test_a_hash_inside_quotes_survives(self) -> None:
+        """The quotes are what make it data rather than a comment."""
+        assert parse_env_file('ANTHROPIC_API_KEY="sk-a # b"')["ANTHROPIC_API_KEY"] == "sk-a # b"
+
+    def test_a_hash_with_no_space_before_it_is_part_of_the_value(self) -> None:
+        """A credential may legitimately contain one, and often does.
+
+        The whitespace is the signal. Cutting at every `#` would corrupt keys
+        far more often than it would strip a comment.
+        """
+        assert parse_env_file("OPENAI_API_KEY=sk-abc#def")["OPENAI_API_KEY"] == "sk-abc#def"
 
 
 class TestLoading:
@@ -104,8 +141,8 @@ class TestTheLibrarySeamDoesNotLoadIt:
 
         Importing a library must not reach into the host application's process
         and rewrite its environment from a file on disk. `load_workflow` runs
-        inside someone else's app; the CLI and `create_app` are processes the
-        user launched. Same split LangChain and LangGraph draw.
+        inside someone else's app; `cli.console_main` is a process the user
+        launched. Same split LangChain and LangGraph draw.
         """
         import inspect
 

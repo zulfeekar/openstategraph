@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from openstategraph.errors import InvalidPackageName, MissingProviderKey, PackageNotFound
+from openstategraph.errors import InvalidPackageName, PackageNotFound
 from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
 
@@ -428,34 +428,15 @@ def load_workflow(
     )
     resolved_model = model
     if model is None or isinstance(model, str):
-        from langchain.chat_models import init_chat_model
+        from openstategraph.chat_model import build_chat_model
 
-        from openstategraph._extras import provider_extra_hint
-
-        from openstategraph.providers import missing_key_diagnosis
-
-        model_name = resolve_model(model or workflow_default_model(document))
-
-        # A named provider with no credential fails here, with the exact fix
-        # (ticket 03). Before this, `init_chat_model` raised the vendor SDK's
-        # own error — which names *its* environment variable and knows nothing
-        # about our `.env.example`, so the adopter had to work out that the two
-        # were the same thing.
-        diagnosis = missing_key_diagnosis(model_name)
-        if diagnosis:
-            raise MissingProviderKey(diagnosis)
-
-        try:
-            resolved_model = init_chat_model(model_name)
-        except ImportError as exc:
-            # Provider SDKs are extras (framework-packaging §3.1). The adopter
-            # installed *us*, not `langchain-anthropic`, so name our install
-            # line rather than leaving them to map a package to an extra.
-            hint = provider_extra_hint(model_name)
-            raise ImportError(
-                f"{exc} — model {model_name!r} needs its provider integration"
-                + (f": {hint}" if hint else "")
-            ) from exc
+        # The credential gate, the endpoint and the extras hint all live in
+        # `chat_model`. They used to live here, which meant the HTTP, MCP and
+        # per-node paths called `init_chat_model` directly and got the vendor
+        # SDK's error instead of ours.
+        resolved_model = build_chat_model(
+            resolve_model(model or workflow_default_model(document))
+        )
 
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)

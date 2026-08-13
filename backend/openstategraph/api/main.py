@@ -1209,7 +1209,7 @@ def create_app(
         # model-calling node still runs fine; `init_chat_model` builds a
         # client lazily and nothing calls it until an agent/worker node does.
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-        from langchain.chat_models import init_chat_model
+        from openstategraph.chat_model import build_chat_model
 
         document = normalize_document(request.workflow)
         # Browser-held keys, applied only where the server has none — see
@@ -1218,7 +1218,9 @@ def create_app(
         # Model precedence: explicit request > the document's own
         # settings.model > environment default. A workflow that names its
         # model runs the same everywhere it is opened.
-        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
+        model = build_chat_model(
+            resolve_model(request.model or workflow_default_model(document))
+        )
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
@@ -1368,12 +1370,14 @@ def create_app(
         # Ollama cloud is the default (see `resolve_model`) — a model is
         # always resolved, never `None`.
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-        from langchain.chat_models import init_chat_model
+        from openstategraph.chat_model import build_chat_model
 
         document = normalize_document(request.workflow)
         # Browser-held keys, fallback-only (see `apply_credentials`).
         apply_credentials(request.credentials)
-        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
+        model = build_chat_model(
+            resolve_model(request.model or workflow_default_model(document))
+        )
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
@@ -1467,12 +1471,14 @@ def create_app(
         from langgraph.types import Command
 
         from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-        from langchain.chat_models import init_chat_model
+        from openstategraph.chat_model import build_chat_model
 
         document = normalize_document(request.workflow)
         # Browser-held keys, fallback-only (see `apply_credentials`).
         apply_credentials(request.credentials)
-        model = init_chat_model(resolve_model(request.model or workflow_default_model(document)))
+        model = build_chat_model(
+            resolve_model(request.model or workflow_default_model(document))
+        )
 
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)

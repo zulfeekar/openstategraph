@@ -68,9 +68,16 @@ def test_none_is_a_no_op() -> None:
 
 
 def test_accepted_keys_cover_the_documented_providers() -> None:
+    """Everything a run request may write into the process, and nothing else.
+
+    Ollama contributes three: two that make it configured — `OLLAMA_API_KEY`
+    for the cloud, `OLLAMA_HOST` for a daemon you run — and `OLLAMA_ENDPOINT`,
+    which only says where the cloud is and has a working default.
+    """
     assert ACCEPTED_CREDENTIAL_KEYS == {
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "OLLAMA_API_KEY",
         "OLLAMA_HOST",
+        "OLLAMA_ENDPOINT",
     }

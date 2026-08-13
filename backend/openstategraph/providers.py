@@ -67,16 +67,28 @@ class ProviderSpec:
     #: integration package.
     extra: str
 
-    #: Credential environment variables, most significant first. The first is
-    #: the one an error message tells a developer to set. Empty means the
-    #: provider needs no credential from us (Ollama authenticates from its own
-    #: local config).
+    #: Environment variables that make this provider usable, most significant
+    #: first. **Any one of them is enough** — see `is_configured` — so a vendor
+    #: reachable two ways lists both, and the first is the one an error message
+    #: tells a developer to set. Empty means the provider needs no credential
+    #: from us at all; no built-in declares that, but a plugin may.
     env_vars: tuple[str, ...] = ()
 
     #: Further model-string prefixes that belong to this provider's extra.
     #: `claude:` and `azure_openai:` are the two that exist, and neither is a
     #: provider in its own right.
     aliases: tuple[str, ...] = ()
+
+    #: Variables naming this provider's API endpoint, **most significant
+    #: first** — the same idiom as `env_vars`, so precedence is tuple order
+    #: rather than a rule written down somewhere else. Empty means the vendor's
+    #: own SDK default is correct and we should not interfere.
+    endpoint_env: tuple[str, ...] = ()
+
+    #: The endpoint used when none of `endpoint_env` is set. Empty means "let
+    #: the SDK decide", which is not the same as a URL we happen to agree with:
+    #: declaring one is how a provider overrides a *wrong* SDK default.
+    default_endpoint: str = ""
 
     #: Human-facing name for messages. Defaults to `name`.
     label: str = ""
@@ -129,6 +141,29 @@ class ProviderSpec:
         if not self.requires_key:
             return True
         return any(str(source.get(name) or "").strip() for name in self.env_vars)
+
+    def base_url(self, env: Mapping[str, str] | None = None) -> str | None:
+        """This provider's endpoint, or `None` to leave the SDK's default alone.
+
+        Ollama is why this exists, and it is worth stating because the two
+        variables look interchangeable and are not:
+
+        - `OLLAMA_HOST` — *where my Ollama is*. A daemon the developer runs.
+        - `OLLAMA_ENDPOINT` — *where the cloud is*. Defaulted, rarely set.
+
+        Host first, so a developer who runs a daemon gets it without having to
+        also clear the cloud endpoint. With neither set, `default_endpoint`
+        sends the request to the cloud rather than to `localhost:11434`, which
+        is what `ollama.Client` would otherwise choose — and a silent localhost
+        default is how "Ollama means cloud, never local" was being violated by
+        omission.
+        """
+        source: Mapping[str, str] = os.environ if env is None else env
+        for name in self.endpoint_env:
+            value = str(source.get(name) or "").strip()
+            if value:
+                return value
+        return self.default_endpoint or None
 
     def model_string(self, env: Mapping[str, str] | None = None) -> str:
         """The full `provider:model` string, honouring the model env var."""
@@ -269,21 +304,37 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             # here, so a local model must be named explicitly to be used.
             default_model="gpt-oss:120b-cloud",
             extra="ollama",
-            # No env_vars: Ollama authenticates from its own local credentials,
-            # verified live with no ANTHROPIC/OPENAI/OLLAMA_HOST var set at
-            # all. That is what makes it the zero-configuration fallback.
-            # OLLAMA_API_KEY / OLLAMA_HOST are still *accepted* from a request
-            # — see `credential_env_vars` below.
-            env_vars=(),
+            # **Two ways to be configured, and `is_configured`'s `any()` gives
+            # the rule for free.** `OLLAMA_API_KEY` alone reaches the cloud via
+            # `OLLAMA_ENDPOINT`; `OLLAMA_HOST` alone reaches a local or
+            # self-hosted daemon that owns its own auth. Either is enough.
+            #
+            # This used to be `env_vars=()`, which made Ollama *always*
+            # configured. That was not keyless, it was **ambient**: it reached
+            # the cloud through a local daemon signing with
+            # `~/.ollama/id_ed25519` — a credential that never passes through
+            # the environment and cannot be seen, moved or revoked from one.
+            # The key is listed first so `missing_key_message` names it: the
+            # host path is the one you opt into by naming a host.
+            env_vars=("OLLAMA_API_KEY", "OLLAMA_HOST"),
+            # Host first — a developer running a daemon should not also have to
+            # clear the cloud endpoint. With neither set this sends the request
+            # to the cloud; `ollama.Client` would otherwise default to
+            # `127.0.0.1:11434`, which is how "cloud, never local" was being
+            # violated by omission rather than by decision.
+            endpoint_env=("OLLAMA_HOST", "OLLAMA_ENDPOINT"),
+            default_endpoint="https://ollama.com",
         ),
     )
 
 
 #: Variables a provider accepts but does not require, and so cannot declare in
-#: `env_vars` without becoming key-requiring. Ollama is the only case: setting
-#: `OLLAMA_HOST` configures it, but not setting it does not leave it broken.
+#: `env_vars` without becoming one of the things that makes it configured.
+#: Ollama is the only case: `OLLAMA_ENDPOINT` says *where the cloud is*, and it
+#: has a working default, so setting it can never be what makes the provider
+#: usable — but a run request may still override it.
 OPTIONAL_ENV_VARS: dict[str, tuple[str, ...]] = {
-    "ollama": ("OLLAMA_API_KEY", "OLLAMA_HOST"),
+    "ollama": ("OLLAMA_ENDPOINT",),
 }
 
 
@@ -381,8 +432,20 @@ def env_example_section(catalogue: "ProviderCatalogue | None" = None) -> str:
     for spec in cat.list():
         lines.append("")
         lines.append(f"# --- {spec.display} ---")
+        # "Required" is only true when there is one of them. `is_configured`
+        # takes *any* of `env_vars`, so a vendor reachable two ways — Ollama by
+        # key or by host — must not print two lines each headed "Required", or
+        # a developer pointing at their own daemon concludes they also need a
+        # cloud key.
+        if len(spec.env_vars) > 1:
+            joined = " or ".join(spec.env_vars)
+            lines.append(
+                f"# Required for {spec.name}: set one of {joined} — "
+                "with none of them this provider is skipped."
+            )
         for name in spec.env_vars:
-            lines.append(f"# Required for {spec.name}: without it this provider is skipped.")
+            if len(spec.env_vars) == 1:
+                lines.append(f"# Required for {spec.name}: without it this provider is skipped.")
             lines.append(f"{name}=")
         for name in OPTIONAL_ENV_VARS.get(spec.name, ()):
             if name in spec.env_vars:

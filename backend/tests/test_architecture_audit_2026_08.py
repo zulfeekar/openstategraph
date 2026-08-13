@@ -138,8 +138,12 @@ class TestWorkerIsAnAgentToo:
     def test_the_workers_own_model_selection_is_honoured(self, monkeypatch) -> None:
         override = object()
         monkeypatch.setattr(
-            "langchain.chat_models.init_chat_model", lambda key: override
+            "langchain.chat_models.init_chat_model", lambda key, **_: override
         )
+        # The worker names a provider, so that provider must be configured —
+        # otherwise this exercises the unconfigured fallback rather than the
+        # selection it is named for.
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
         captured = self._captured(monkeypatch, NodeRuntime(model=object()))
         assert captured["model"] is override
 
