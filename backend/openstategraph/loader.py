@@ -33,7 +33,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from openstategraph.errors import InvalidPackageName, PackageNotFound
 from openstategraph.results import RunResult
@@ -193,11 +193,17 @@ class CompiledWorkflow:
             {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
             config,
         )
+        outputs = final.get("outputs") or {}
         result = RunResult(
             str(final.get("answer") or ""),
             decisions=final.get("decisions") or {},
-            outputs=final.get("outputs") or {},
-            warnings=self.warnings,
+            outputs=outputs,
+            # A node that failed after retries writes its failure into
+            # `outputs` so downstream nodes still read *something*. Without
+            # promoting it here, the diagnosis stayed in a per-node output map
+            # and `openstategraph run` printed an empty line and exited 0 — a
+            # new user's first run after `new`, silently.
+            warnings=_warnings_with_node_failures(self.warnings, outputs),
             attempts=int(final.get("attempts") or 0),
         )
         self._append_trace(question, result, time.monotonic() - started)
@@ -305,6 +311,25 @@ class CompiledWorkflow:
         """
         title = str(self.document.get("name") or self.slug or "workflow")
         return f"Ask the {title!r} OpenStateGraph workflow a question and get its answer."
+
+
+def _warnings_with_node_failures(
+    warnings: Sequence[str], outputs: Mapping[str, Any]
+) -> list[str]:
+    """Compile-time findings, then what actually went wrong during the run.
+
+    The third door onto one behaviour. `api/registries.runtime_warnings` does
+    this for `/api/runs` and `/api/runs/stream`; this is the seam an adopter
+    embeds (`load_workflow`) and the one the CLI uses, and it was reporting
+    only the compile-time half (providers-and-credentials ticket 04 fixed the
+    other two and did not reach here).
+
+    Order matters to a reader: a warning about how the workflow was *built*
+    explains one about how it *ran*, so it goes first.
+    """
+    from openstategraph.compile.workflow_compiler import node_failure_warnings
+
+    return [*warnings, *node_failure_warnings(outputs)]
 
 
 def load_workflow(

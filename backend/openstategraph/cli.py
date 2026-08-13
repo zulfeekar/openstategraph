@@ -44,7 +44,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 # The one import this module makes eagerly, and it is stdlib-only: `--template`
 # uses argparse `choices`, so the catalogue has to exist while the parser is
@@ -53,6 +53,9 @@ from openstategraph import templates
 
 #: Fixed, documented above, and referenced by name everywhere below so a
 #: reader never has to decode a bare integer.
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from openstategraph.results import RunResult
+
 EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_USAGE = 2
@@ -119,7 +122,33 @@ def cmd_run(args: argparse.Namespace) -> int:
         # gives you only the answer while the degradation stays visible.
         print(f"warning: {warning}", file=sys.stderr)
     print(result)
-    return EXIT_OK
+    return run_exit_code(result)
+
+
+def run_exit_code(result: "RunResult") -> int:
+    """`0` unless the run produced nothing *and* a step failed.
+
+    Found by building the wheel and using it: a new user's first `run` after
+    `new` has no provider credential, and got back an empty line and a success
+    exit code. The diagnosis was in `outputs` and only `--json` showed it.
+
+    The condition is deliberately both halves, not either:
+
+    - **A step failed but there is still an answer** is a *degrade*, which this
+      project prefers to a crash — a workflow whose optional tool was missing
+      still answered, and failing the exit code there would make every partial
+      run look broken. The warning on stderr is the report.
+    - **An empty answer with nothing wrong** is legal too; a workflow may
+      answer with nothing.
+
+    Only the pair is a failed run, and a CLI that calls that success is a CLI
+    a script cannot gate on.
+    """
+    from openstategraph.compile.workflow_compiler import node_failure_warnings
+
+    if str(result).strip():
+        return EXIT_OK
+    return EXIT_FAILURE if node_failure_warnings(result.outputs) else EXIT_OK
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
