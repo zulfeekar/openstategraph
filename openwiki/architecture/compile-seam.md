@@ -79,7 +79,8 @@ package, and finally a passthrough.
 `NodeRuntime` is constructed once per request in `runtime_for()`
 ([`api/main.py`](../../backend/openstategraph/api/main.py)) so run, stream and resume
 can never disagree about capabilities. It carries the tool/function
-registries, a `document_loader` and `registry_loader` (a child workflow
+registries, a `document_loader` and a `package_loader` returning
+`PackageAssets` (a child workflow
 resolves tools from *its own* package), the memory `store`, the joined
 `skills_context`, and the package's `workflow_middleware` slots.
 

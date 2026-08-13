@@ -1,8 +1,10 @@
 # Chinook Assistant
 
 **The one visible workflow in this repository, and now the only Chinook
-package.** `/api/workflows` returns this and nothing else; everything else on
-disk (`concierge`, `workflow-architect`) is `hidden: true` infrastructure.
+package.** `GET /api/workflows?surface=chat` returns this and nothing else;
+everything else on disk (`concierge`, `workflow-architect`) is `hidden: true`
+infrastructure. The default surface is `editor`, which lists hidden packages
+too — flagged, so a developer sees what is there.
 
 Thirteen nodes, left to right. The rule it was built to: every node must be
 explainable in one line, and a diagram nobody can read has failed regardless
