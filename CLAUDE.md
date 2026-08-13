@@ -117,7 +117,9 @@ Prefer varying the number of ports over toggling one port's cardinality. If a po
 
 ### Never put a non-finite number in a serialisable field
 
-`Infinity` and `NaN` are not representable in JSON, and Pydantic/JSON Schema cannot express them. Use `int | None` with `None` meaning unbounded. (`maxConnections` currently violates this — see ticket 08.)
+`Infinity` and `NaN` are not representable in JSON, and Pydantic/JSON Schema cannot express them. Use `int | None` with `None` meaning unbounded.
+
+`maxConnections` is the worked example, and it is **fixed** — `number | null`, with the reasoning recorded at the field itself (`core/model/contracts/ports.ts`): `JSON.stringify(Infinity)` is `"null"`, so the value would not survive its own round trip and nothing would report the loss. (Until 2026-08-13 this line said `maxConnections` "currently violates this"; it had been corrected and the rule document had not caught up — the same stale-claim defect this file warns about two sections down.)
 
 ### Small, named packages
 
