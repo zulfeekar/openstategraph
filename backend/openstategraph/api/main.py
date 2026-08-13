@@ -713,7 +713,22 @@ def create_app(
         )
         from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
-        segments = [segment for segment in path.split("/") if segment]
+        segments = path.split("/")
+        if any(not segment for segment in segments):
+            # **Refuse rather than repair**, because `MountAddress` does.
+            # This used to filter empties out, so `parent//wf-music` resolved
+            # happily over HTTP while `parseMountAddress` returned null for the
+            # same string — one address grammar with two parsers and two
+            # answers. The moment a mount id contains a character the two treat
+            # differently, a link resolves to different instances by transport.
+            #
+            # 422 and not 404: this endpoint reserves 404 for an address that
+            # is well-formed and names something absent ("this link is stale").
+            # An empty segment is not stale, it is not an address.
+            raise HTTPException(
+                status_code=422,
+                detail=f"{root}/{path} is not a mount address — a segment is empty",
+            )
         try:
             resolved = resolve_mount_document(
                 workflow_store, root, segments, inherited=inherited

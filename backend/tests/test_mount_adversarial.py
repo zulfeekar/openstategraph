@@ -319,28 +319,30 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 class TestHttpSeam:
-    # FINDING (CONFIRMED): the endpoint repairs what the frontend refuses.
-    # `MountAddress.parseMountAddress` returns null for `parent//wf-music`
-    # ("refuses rather than repairs"), but `get_mount_document` filters empty
-    # segments, so the same address over HTTP resolves happily. Two parsers,
-    # two answers, for one address grammar.
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING: backend drops empty path segments (repairs), frontend "
-            "refuses them — one address grammar with two answers"
-        ),
-    )
+    # FIXED 2026-08-13. Was xfail(strict=True): `get_mount_document` filtered
+    # empty segments out, so `parent//wf-music` resolved happily over HTTP
+    # while `parseMountAddress` returned null for the same string — one
+    # address grammar with two parsers and two answers.
     def test_empty_segments_are_refused_like_the_frontend_does(
         self, client: TestClient
     ) -> None:
         assert client.get("/api/workflows/parent/mounts/wf-music//").status_code in (404, 422)
         assert client.get("/api/workflows/parent/mounts//wf-music").status_code in (404, 422)
 
-    def test_empty_segments_currently_resolve_as_if_absent(self, client: TestClient) -> None:
-        """Companion pin of today's behaviour."""
-        assert client.get("/api/workflows/parent/mounts/wf-music//").status_code == 200
-        assert client.get("/api/workflows/parent/mounts//wf-music").status_code == 200
+    def test_a_malformed_address_is_422_and_a_stale_one_is_404(
+        self, client: TestClient
+    ) -> None:
+        """The companion, rewritten when the defect was fixed.
+
+        It used to pin the repair (both returned 200). It now pins the
+        distinction the fix turns on, which is the thing a future change could
+        blur: **422 is "that is not an address", 404 is "that address names
+        nothing".** A client renders them differently — one is a bug in the
+        link, the other is a link that has gone stale.
+        """
+        assert client.get("/api/workflows/parent/mounts//wf-music").status_code == 422
+        # Well-formed, and names a mount that does not exist.
+        assert client.get("/api/workflows/parent/mounts/wf-nope").status_code == 404
 
     def test_uppercase_root_is_refused(self, client: TestClient) -> None:
         assert client.get("/api/workflows/PARENT/mounts/wf-music").status_code in (404, 422)
