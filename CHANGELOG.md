@@ -75,7 +75,72 @@ finally read by code. Wayfinder tickets 02–04;
   this tree, so "no saved document carries it" is not a condition anything
   here can check.
 
+### Added
+
+- **A mounted workflow can be addressed, opened and configured as an
+  *instance*** (ship-it ticket 42). Per-instance state has been correct since
+  mount overrides shipped — a package is a class, a mount node is an instance
+  carrying its own `data.overrides` — but there was no way to *name* one, so a
+  drill-in could not be linked, reloaded, or told apart from its sibling.
+
+  - `?w=concierge/wf-music` names one mount. A bare `?w=concierge` keeps its
+    exact current meaning, so every existing link still resolves. The unit is
+    the **mount node id**, not the slug: a slug names the class, so a second
+    mount of the same package is `concierge/wf-other` — same definition,
+    different props, different address.
+  - `GET /api/workflows/{root}/mounts/{path}` serves the document one instance
+    actually runs. The merge is **not** mirrored in TypeScript:
+    `apply_mount_overrides` stays its one owner, and the endpoint delegates to
+    it rather than reimplementing it. Nesting composes — one segment per level.
+  - Editing a field inside a mount writes an **override on the parent**, never
+    the package. Verified on the shipped `concierge`: the
+    `chinook-assistant` package's bytes are unchanged across the edit, the
+    parent's `wf-music` node gained the override, and the sibling mount is
+    untouched.
+  - What *cannot* differ per mount is refused with a sentence rather than
+    silently discarded. `data.overrides` carries a field's value; it cannot
+    carry a moved card, a new node or a deleted edge, and applying those to a
+    derived document that will never be saved is the silent no-op this codebase
+    has a standing rule against.
+  - Saving from inside a mount writes the parent, guarded by a compare-and-set
+    on its `saved_at` — the file watch follows the *class* while an instance is
+    open, so nothing else would notice the parent moving.
+
+  The same vocabulary the run frames already used (`path`, ticket 34) now names
+  an instance in the address bar too. The terminal frame's flat
+  `outputs`/`decisions` keys are the remaining surface, and ship separately
+  (ticket 40) because they are a published contract change.
+
 ### Fixed
+
+- **A blank answer had five independent causes** (ship-it QA sweep, found by
+  driving `?w=concierge` and reading the wire before touching anything). Every
+  one was hidden either by a node id that survives `safe_name` unchanged or by
+  the shipped `concierge` running its mount last.
+
+  The trigger underneath all five: Ollama cloud intermittently returns a 500
+  *inside* a tool-heavy agent loop while plain calls to the same model succeed.
+  Retry already existed and was not the gap — the gap was every path by which
+  that failure could be *seen*, since each defect below turns a provider outage
+  into "this step produced nothing".
+
+  - `_agent` read `messages[-1].content` where `_final_text` exists for exactly
+    this case and `_worker` already used it. A loop ending on an empty message
+    discarded a correct answer, and the grader downstream then spent its whole
+    retry budget re-asking a question already answered.
+  - `_output` published the raw upstream text as its own output while sending
+    the resolved answer to the chat, so the Answer card and the chat bubble
+    disagreed precisely when the fallback or the never-blank floor fired.
+  - The stream fold applied a mounted child's `RESET` to `answer`, which
+    `keep_latest_nonempty` *clears* on. `decisions` and `outputs` already
+    stripped the marker; `answer` did not, so any shape producing an answer
+    before a mount lost it.
+  - Every `update` frame from inside a mount carried `"output": null` — the
+    lookup used the parent-scoped id while the update dict is keyed by the
+    child's. `in1`/`out1` worked only because the two documents share them.
+  - A node that failed after retries filed its message under `safe_name(id)`,
+    which no reader of `outputs` uses, making a provider outage
+    indistinguishable from a node that produced nothing.
 
 - **A contributor's first hour is no longer a series of dead ends** (ship-it
   tickets 28–31, 01, 02). Every command in the README's setup block was run on

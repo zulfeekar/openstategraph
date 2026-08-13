@@ -413,6 +413,50 @@ You need this because a run takes the document as **input**. The workflow that
 executes is the one you can read — which is what makes the compile seam
 one-directional and a run reproducible outside this editor.
 
+#### One mount of it: `GET /api/workflows/{root}/mounts/{path}`
+
+A workflow package is a **class**. A `workflow.subgraph` (or `team.workflow`)
+node that references it is an **instance**, and that node's `data.overrides`
+are the instance's own — merged onto a copy of the package at compile time and
+never written back (`docs/decisions/mount-overrides.md`).
+
+So two mounts of one package run two different documents, and the call above
+cannot express which. This one can:
+
+```
+GET /api/workflows/concierge/mounts/wf-music
+```
+
+```json
+{
+  "root": "concierge",
+  "slug": "chinook-assistant",
+  "mount_path": ["wf-music"],
+  "document": { "…": "the package, with this mount's overrides applied" },
+  "warnings": []
+}
+```
+
+- `root` is the document the address is rooted in; `mount_path` is the chain of
+  **mount node ids** that identifies which instance. Node ids, not slugs — a
+  slug names the class, so `concierge/wf-other` is a different instance of the
+  same `chinook-assistant`.
+- `slug` is the **class**, and it is not redundant: capabilities, knowledge and
+  the SQL schema all belong to the package, so those calls still take it.
+- Add a segment per level of nesting —
+  `/mounts/wf-music/wf-inner` for a grandchild. Each level's overrides are
+  applied before the next is resolved, so a grandparent can override a
+  grandchild through the parent's own `overrides` field.
+- `warnings` is loud-but-not-fatal: an override naming a child node that no
+  longer exists runs the package default and says so, rather than refusing to
+  open.
+
+`404` covers both "no such workflow" and "that path names nothing" — a stale
+link and a deleted mount read the same way to a client. `422` is reserved for
+an address that could not be a request at all.
+
+The package on disk is never written by this call.
+
 ### 4 — Run it: `POST /api/runs/stream`
 
 ```json
