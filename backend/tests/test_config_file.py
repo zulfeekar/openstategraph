@@ -243,6 +243,60 @@ providers:
         # …without losing what the file did not mention.
         assert spec.env_vars == ("ANTHROPIC_API_KEY",)
 
+    def test_redeclaring_a_built_in_keeps_its_endpoint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every inherited field, not just the ones that existed at the time.
+
+        This rebuilds a `ProviderSpec` field by field, so a field added to the
+        dataclass and not added here is silently dropped. That is not
+        hypothetical: `endpoint_env` and `default_endpoint` were added for
+        providers-and-credentials ticket 02 and missed here, so a file
+        containing nothing but `- name: ollama` — which
+        `openstategraph.example.yaml` contains — reverted Ollama's endpoint to
+        `None` and sent every call back to `127.0.0.1:11434`. The exact
+        violation that ticket closed, reachable through a config file.
+        """
+        from openstategraph.providers import provider_catalogue
+
+        write(tmp_path, "version: 1\nproviders:\n  - name: ollama\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(tmp_path / "openstategraph.yaml"))
+        for name in ("OLLAMA_HOST", "OLLAMA_ENDPOINT"):
+            monkeypatch.delenv(name, raising=False)
+        reset_provider_catalogue()
+
+        spec = provider_catalogue().get("ollama")
+        assert spec is not None
+        assert spec.endpoint_env == ("OLLAMA_HOST", "OLLAMA_ENDPOINT")
+        assert spec.base_url() == "https://ollama.com"
+
+    def test_no_provider_field_is_silently_dropped(self) -> None:
+        """A guard against the next field, rather than only this one.
+
+        Any `ProviderSpec` field the config layer does not carry over is a
+        redeclaration that quietly loses behaviour. Listed explicitly so that
+        adding a field forces a decision here.
+        """
+        import dataclasses
+
+        from openstategraph.providers import ProviderSpec
+
+        carried = {
+            "name",
+            "default_model",
+            "extra",
+            "env_vars",
+            "aliases",
+            "endpoint_env",
+            "default_endpoint",
+            "label",
+        }
+        declared = {field.name for field in dataclasses.fields(ProviderSpec)}
+        assert declared == carried, (
+            "ProviderSpec gained or lost a field; config_file.config_provider_specs "
+            "rebuilds the spec field by field and must carry it over"
+        )
+
 
 # --------------------------------------------------------------------- #
 # Precedence — every adjacent pair

@@ -250,6 +250,25 @@ explicitly to be used. Never benchmark, demo or debug against a local model and 
 the result as representative — a weak model turns a wiring bug and a capability gap
 into the same symptom.
 
+**The cloud is reached by `OLLAMA_API_KEY` plus an endpoint default, not by an
+ambient daemon.** Until providers-and-credentials ticket 02 this rule was stated
+and not enforced: Ollama's `ProviderSpec` declared `env_vars=()` — presented as
+"keyless" — while nothing passed an endpoint at all, so `ollama.Client` dialled
+`127.0.0.1:11434` and the cloud was reached, when it was reached, through a local
+daemon signing with `~/.ollama/id_ed25519`. That credential never passes through
+the environment and cannot be seen, moved or revoked from one, and on a machine
+with no daemon running `/api/health` still reported `model_configured: true`. The
+rule was being broken by omission rather than by decision.
+
+It now declares `env_vars=("OLLAMA_API_KEY", "OLLAMA_HOST")` and
+`endpoint_env=("OLLAMA_HOST", "OLLAMA_ENDPOINT")` with `default_endpoint =
+"https://ollama.com"`. Because `is_configured` takes **any** of `env_vars`, two
+setups coexist and both are supported: the key alone is the cloud; `OLLAMA_HOST`
+alone is a daemon you run, which needs no key of ours because it owns its own
+auth. Endpoint precedence is tuple order — your host, else `OLLAMA_ENDPOINT`,
+else the cloud. Never restore a spec that reaches a vendor without naming a
+variable someone can set, see and revoke.
+
 ### Never send a user's graph to a third party
 
 `draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()` — `xray=True` expands subgraph internals, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.

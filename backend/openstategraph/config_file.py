@@ -388,6 +388,15 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
                 extra=entry.extra or (base.extra if base else entry.name),
                 env_vars=env_vars,
                 aliases=base.aliases if base else (),
+                # Inherited, and easy to forget: this rebuilds the spec field
+                # by field, so anything added to `ProviderSpec` and not added
+                # here is silently dropped. It happened — `endpoint_env` and
+                # `default_endpoint` were missed, so a file containing nothing
+                # but `- name: ollama` reverted the endpoint to `None` and sent
+                # every call back to `127.0.0.1:11434`.
+                # `tests/test_config_file.py` pins the full field list.
+                endpoint_env=base.endpoint_env if base else (),
+                default_endpoint=base.default_endpoint if base else "",
                 label=entry.label or (base.label if base else ""),
             )
         )

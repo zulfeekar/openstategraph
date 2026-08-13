@@ -33,8 +33,12 @@ default_model: ollama:gpt-oss:120b-cloud
 
 providers:
   # Adjusting a provider this framework already knows about: every field you
-  # omit is inherited, so this changes one string and leaves the env vars,
-  # aliases and extra alone.
+  # omit is inherited from the built-in, so this changes one string and leaves
+  # the env vars, aliases, extra and endpoint alone.
+  #
+  # Inherited is not the same as settable. A provider's endpoint
+  # (`endpoint_env` / `default_endpoint`) is carried over from the built-in but
+  # cannot be *declared* here — point `OLLAMA_HOST` at your own daemon instead.
   - name: anthropic
     default_model: claude-haiku-4-5
     api_key_env: ANTHROPIC_API_KEY
@@ -46,6 +50,13 @@ providers:
   # Ollama means Ollama CLOUD in this project, never a local model — a local
   # model turns a wiring bug and a capability gap into the same symptom. Name
   # a local model explicitly in a node if you really want one.
+  #
+  # Credentials: `OLLAMA_API_KEY` for the cloud, or `OLLAMA_HOST` for a daemon
+  # you run (it owns its own auth). Either alone is enough; with neither,
+  # Ollama is not configured. Until providers-and-credentials ticket 02 it
+  # declared no environment variables at all and so was always treated as
+  # configured — that was an ambient local-daemon credential, not a keyless
+  # provider.
   - name: ollama
     default_model: gpt-oss:120b-cloud
 

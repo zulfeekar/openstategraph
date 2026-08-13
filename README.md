@@ -99,8 +99,20 @@ what the framework owns, what it deliberately does not, and when not to use it.
 - Python 3.11+ (developed against 3.12/3.13)
 - No local model runtime needed — the backend defaults to **Ollama cloud**
   (an Ollama account, not a local `ollama serve`; see the "Ollama means
-  Ollama cloud" rule in `CLAUDE.md`). A local Ollama daemon only matters if
-  you pick the **Ollama** provider from the editor's canvas preview.
+  Ollama cloud" rule in `CLAUDE.md`). That default needs **`OLLAMA_API_KEY`**
+  in `.env`; `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is used ahead of it when
+  set. Setting **`OLLAMA_HOST`** instead points the backend at a daemon you
+  run — local or self-hosted — which needs no key of ours because it owns its
+  own auth. Set neither and Ollama is not configured.
+  (Until providers-and-credentials ticket 02 this line said no credential was
+  needed at all. That was not keyless, it was *ambient*: the cloud was reached
+  through a local daemon signing with `~/.ollama/id_ed25519`, a credential that
+  never passes through the environment and cannot be seen, moved or revoked
+  from one.)
+- A workflow with no model-calling node still runs with nothing configured. A
+  credential is required at the moment a model is *used*, not when one is
+  built — see `UnconfiguredProvider` in
+  [`backend/openstategraph/chat_model.py`](backend/openstategraph/chat_model.py).
 
 Two processes, two languages, run separately (ticket 12: no single unified
 dev command exists — a `Vite` process and a `uvicorn` process have little in
@@ -175,9 +187,13 @@ see [Using OpenStateGraph in your project](docs/adoption.md).
 
 Opens on a seeded demo that **runs with no credentials** on the canvas
 preview — the default model there is `Mock · Offline`, a deterministic
-simulator. The real backend, once running, defaults to **Ollama cloud** with
-zero configuration (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` override it if set —
-see `resolve_model` in `backend/openstategraph/api/main.py`).
+simulator. The real backend, once running, defaults to **Ollama cloud**, which
+needs `OLLAMA_API_KEY` (or `OLLAMA_HOST` for a daemon you run);
+`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` are preferred over it when set — see
+`resolve_model` in `backend/openstategraph/api/model_resolution.py`. Until
+providers-and-credentials ticket 02 this said "with zero configuration", which
+was true only because Ollama's `ProviderSpec` declared no environment variables
+at all and so was *always* reported configured.
 
 ### Example workflows
 
@@ -224,15 +240,29 @@ from templates that ship inside the wheel.
 
 ### Environment variables
 
-None are required. Copy [`.env.example`](.env.example) to `.env` to set any
-of these for the backend process:
+None are required to *start* the backend, and a workflow that calls no model
+runs without any of them. Calling a model needs one of the three provider
+credentials below. Copy [`.env.example`](.env.example) to `.env` to set any of
+these for the backend process:
 
 | Variable | Effect |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
+| `OLLAMA_API_KEY` | configures Ollama **cloud**, the last of the three |
+| `OLLAMA_HOST` | *instead* of the key: a daemon you run, which owns its own auth. Also the endpoint, ahead of `OLLAMA_ENDPOINT` |
+| `OLLAMA_ENDPOINT` | where the cloud is; defaults to `https://ollama.com`, rarely set |
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
 | `OPENSTATEGRAPH_LOG_LEVEL` | backend log verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
+
+`OLLAMA_API_KEY` and `OLLAMA_HOST` are alternatives, not a pair: `is_configured`
+takes **any** of a provider's `env_vars`. With both set the host wins for
+routing and the key rides along as a bearer token. Endpoint precedence is tuple
+order — `OLLAMA_HOST`, else `OLLAMA_ENDPOINT`, else `https://ollama.com`.
+Anthropic and OpenAI are passed no `base_url` at all; their SDKs already read
+`ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL`/`OPENAI_API_BASE`. See
+`builtin_specs()` in
+[`backend/openstategraph/providers.py`](backend/openstategraph/providers.py).
 
 The canvas-preview providers (Anthropic/OpenAI/Ollama keys entered in the
 credentials dialog) are separate — see **Providers** below. The canonical
@@ -428,12 +458,19 @@ model. See the comment block in
 | Provider | Credentials | Notes |
 | --- | --- | --- |
 | **Mock · Offline** | none | Default. Deterministic two-phase agent loop (requests a tool, then answers from its result) so the real execution path is exercised. |
-| **Ollama** | none | Discovers locally pulled models from `/api/tags`. Start Ollama with `OLLAMA_ORIGINS="*"` so the browser can reach it. |
+| **Ollama** | API key **or** a host | Cloud by default (`https://ollama.com`), reached with an `ollama.com` key sent as `Authorization: Bearer`. Naming a base URL instead points it at a daemon you run, which owns its own auth — start that with `OLLAMA_ORIGINS="*"` so the browser can reach it. Either signal is enough; models come from `/api/tags`, cloud first. |
 | **Anthropic** | API key | Official SDK, lazy-loaded. Adaptive thinking; drops to `thinking: disabled` below a 4096-token budget (`max_tokens` caps thinking *and* answer together) with the documented no-thinking guardrails applied. |
 | **OpenAI** | API key | Official SDK, lazy-loaded. Model list refreshed from the account. |
 
 Both vendor SDKs are dynamic imports, so they are separate chunks and cost
 nothing for users who stay on Mock or Ollama.
+
+> Until providers-and-credentials ticket 02, Ollama's credential here read
+> "none" and its default host was `http://localhost:11434`. Neither was right:
+> the cloud was reached through a local daemon holding its own credentials, so
+> "none" described an *ambient* credential rather than the absence of one, and
+> the localhost default made the preview a local provider while the project's
+> standing rule is that Ollama means cloud.
 
 > **Key storage:** keys are kept in this browser's `localStorage` and sent
 > directly from the page to the provider. That is an acceptable trade for a

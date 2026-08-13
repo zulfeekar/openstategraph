@@ -79,8 +79,8 @@ body:
       label: Model provider in use
       options:
         - Mock (offline)
-        - Ollama cloud (default)
-        - Ollama local
+        - Ollama cloud (default — OLLAMA_API_KEY)
+        - Ollama, my own daemon (OLLAMA_HOST)
         - Anthropic
         - OpenAI
         - Not applicable

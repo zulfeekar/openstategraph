@@ -46,14 +46,22 @@ def resolve_model(requested: str | None) -> str:
     this function owns is the bottom two: environment, then config file, then
     the keyless fallback.
 
-    **Ollama cloud is still the default**, not an opt-in — a developer with no
-    provider key at all gets a working model with zero configuration, because
-    `ollama` authenticates from its own local credentials (verified live:
-    `init_chat_model("ollama:gpt-oss:120b-cloud")` works with no
-    `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`OLLAMA_HOST` set). This never falls
-    back to a *local* model — see `OLLAMA_CLOUD_MODEL` — and an explicit
-    `model` argument still always wins, so a surprise provider is only
-    possible by asking for one.
+    **Ollama is still the default *name*, and that is all this decides.**
+    Naming a model is cheap and total; whether it can be *called* is
+    `chat_model.build_chat_model`'s question, and since
+    providers-and-credentials ticket 02 the answer needs `OLLAMA_API_KEY` or
+    `OLLAMA_HOST`.
+
+    Until that ticket this docstring said Ollama "authenticates from its own
+    local credentials", offered as reassurance that zero configuration worked.
+    It was true, and it was the defect: those credentials belonged to a
+    logged-in local daemon and could not be read, moved or revoked from an
+    environment — and on a machine without that daemon the "working model with
+    zero configuration" was a connection refused.
+
+    This never falls back to a *local* model — see `OLLAMA_CLOUD_MODEL` — and
+    an explicit `model` argument still always wins, so a surprise provider is
+    only possible by asking for one.
     """
     if requested:
         return requested

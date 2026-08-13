@@ -27,10 +27,21 @@ Two people arrive here, and they want different things:
 | **Node** | 20 or newer (developed against 22) |
 | **Python** | 3.11 or newer (developed against 3.12 / 3.13) |
 | **Docker** | only for `./start` (the production stack). `./start dev` needs no Docker. |
-| **A local model runtime** | **not needed.** The backend defaults to Ollama *cloud*. |
+| **A local model runtime** | **not needed.** The backend defaults to Ollama *cloud*, which needs `OLLAMA_API_KEY`. |
 
-No API key is required to get a first answer. Nothing here needs an account
-with us, a hosted control plane, or a credit card.
+One provider credential is required before anything calls a model:
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` (or `OLLAMA_HOST`, if
+you run your own daemon). Nothing here needs an account with us, a hosted
+control plane, or a credit card. The canvas preview still answers with no
+credential at all — its default is `Mock · Offline` — and a workflow with no
+model-calling node runs with nothing set.
+
+> This said "No API key is required to get a first answer", which was true only
+> because Ollama's provider spec declared no environment variables and so was
+> always treated as configured. It was not keyless but *ambient*: the cloud was
+> reached through a local daemon signing with `~/.ollama/id_ed25519`, a
+> credential that never passes through the environment and cannot be seen,
+> moved or revoked from one (providers-and-credentials ticket 02).
 
 ## 2. Start the stack
 
@@ -82,15 +93,34 @@ first-hour confusion.
 | Credentials | entered in the editor's credentials dialog, kept in this browser's `localStorage` | environment variables on the backend process |
 | Default | `Mock · Offline` | Ollama **cloud** |
 
-**Backend environment.** Nothing is required. Copy `.env.example` to `.env` to
-set any of:
+**Backend environment.** Nothing is required to start the backend, and a
+workflow that calls no model runs with none of this set — a credential is
+checked at the moment a model is *used*, not when one is built
+(`UnconfiguredProvider` in `backend/openstategraph/chat_model.py`). Calling a
+model needs one of the three provider credentials. Copy `.env.example` to
+`.env` to set any of:
 
 | Variable | Effect |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
+| `OLLAMA_API_KEY` | configures Ollama **cloud**, the last of the three |
+| `OLLAMA_HOST` | *instead* of the key: a daemon you run, local or self-hosted, which needs no key of ours because it owns its own auth. Also the endpoint, ahead of `OLLAMA_ENDPOINT` |
+| `OLLAMA_ENDPOINT` | where the cloud is; defaults to `https://ollama.com`, rarely set |
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
 | `OPENSTATEGRAPH_LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
+
+The two Ollama variables are alternatives, not a pair — `ProviderSpec.is_configured`
+takes **any** of a provider's `env_vars`, so either one alone is enough and
+neither means the provider is skipped. With both set, the host wins for routing
+and the key rides along as a bearer token. Endpoint precedence is tuple order:
+`OLLAMA_HOST`, else `OLLAMA_ENDPOINT`, else `https://ollama.com`. Anthropic and
+OpenAI are passed no `base_url`; their SDKs already read `ANTHROPIC_BASE_URL`
+and `OPENAI_BASE_URL`/`OPENAI_API_BASE`.
+
+Until providers-and-credentials ticket 02 nothing passed an endpoint at all, so
+`ollama.Client` defaulted to `127.0.0.1:11434` — "Ollama means cloud, never
+local" was being broken by omission rather than by decision.
 
 **Ollama means Ollama cloud.** A bare `ollama:` selection resolves to the
 cloud model, the picker sorts `-cloud` models first, and a local model has to

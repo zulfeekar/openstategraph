@@ -25,14 +25,21 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      # Optional — provider keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) and
-      # OPENSTATEGRAPH_OLLAMA_MODEL / OPENSTATEGRAPH_LOG_LEVEL. Copy
-      # .env.example to .env to use it; the stack starts without one.
+      # Provider credentials (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+      # OLLAMA_API_KEY / OLLAMA_HOST) and OPENSTATEGRAPH_OLLAMA_MODEL /
+      # OPENSTATEGRAPH_LOG_LEVEL. Copy .env.example to .env to use it; the
+      # stack starts without one, and a workflow that calls no model runs
+      # without one.
       #
-      # Note on Ollama cloud (the default provider): it authenticates from the
-      # local `ollama` CLI's own credentials, which do not exist inside this
-      # container. To use it from the container either supply an equivalent
-      # credential through .env, or run against Anthropic/OpenAI keys instead.
+      # Ollama cloud is the default provider and it needs OLLAMA_API_KEY here.
+      # This comment used to note that it authenticated from the local `ollama`
+      # CLI's own credentials, which do not exist inside this container, and
+      # left the fix vague. The fix is concrete now: put an ollama.com key in
+      # .env as OLLAMA_API_KEY. To reach a daemon on the host instead, set
+      # OLLAMA_HOST (for example http://host.docker.internal:11434) — that
+      # daemon owns its own auth and needs no key of ours. Either variable
+      # alone is enough; with neither, Ollama is not configured and a
+      # model-calling node fails with MissingProviderKey naming OLLAMA_API_KEY.
       - path: .env
         required: false
     volumes:

@@ -13,8 +13,16 @@ PYTHONPATH=backend:workflows/chinook-assistant \
   uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
 ```
 
-No API keys required: the editor runs on a deterministic Mock provider, the
-backend defaults to Ollama cloud.
+The editor runs on a deterministic Mock provider and needs no key. The backend
+defaults to Ollama cloud, which needs `OLLAMA_API_KEY` in `.env` — or
+`OLLAMA_HOST`, if you point it at a daemon you run; `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` is used ahead of it. The test suite needs none of them.
+
+> This said "No API keys required." That was true only because Ollama's
+> `ProviderSpec` declared no environment variables and so was always treated as
+> configured — an *ambient* credential (a local daemon signing with
+> `~/.ollama/id_ed25519`), not the absence of one
+> (providers-and-credentials ticket 02).
 
 `[all]` is a *contributor's* install. A consumer installs the lean core —
 `langgraph`, `langchain`, `langchain-core`, `pydantic` — plus whichever extras
@@ -55,7 +63,10 @@ argument in your pull-request description carries the weight the test would.
 Two more that are policy rather than architecture: **LangGraph and LangChain
 facts come from the `docs-langchain` MCP server, never from memory**, and
 **Ollama means Ollama cloud** — never benchmark, demo or debug against a local
-model and report the result as representative.
+model and report the result as representative. The cloud is reached by
+`OLLAMA_API_KEY` and the `default_endpoint` on Ollama's `ProviderSpec`, not by
+an ambient local daemon; a spec that reaches a vendor without naming a variable
+someone can set, see and revoke is the defect ticket 02 closed.
 
 ## Tests — the gate for every PR
 

@@ -166,6 +166,15 @@ back-compatibility while `apply_credentials` calls the function. The security
 property (a request may never write an arbitrary env var) is preserved;
 registering a provider is now what makes its key forwardable.
 
+The four names above are the *pre-ticket-02* set and stay written as history.
+The derived set is **five** for the built-ins today: Ollama's `env_vars` became
+`("OLLAMA_API_KEY", "OLLAMA_HOST")` — it had declared `env_vars=()`, which made
+it always configured on an *ambient* daemon credential — and `OPTIONAL_ENV_VARS`
+now holds `OLLAMA_ENDPOINT` alone, since an endpoint with a working default can
+never be what makes a provider usable. That is `credential_env_vars()`'s whole
+job: what a request may write, which is a wider question than what makes a
+provider configured.
+
 What remains open from this comparison is DA's **second** layer: a versioned,
 human- and agent-editable provider config *file* keyed on `api_key_env`. An
 entry point requires publishing a distribution; a file does not. That is

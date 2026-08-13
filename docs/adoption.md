@@ -114,9 +114,17 @@ That gives you two processes, supervised by [`scripts/dev.sh`](../scripts/dev.sh
 - **editor** — the Vite SPA on <http://localhost:5273>
 - **runtime** — `uvicorn --reload` on <http://localhost:8000>
 
-Stop with `./start stop`; watch with `scripts/status.sh`. No API key is needed
-to get a first answer — the backend defaults to Ollama **cloud** and the canvas
-preview defaults to `Mock · Offline`.
+Stop with `./start stop`; watch with `scripts/status.sh`. The canvas preview
+defaults to `Mock · Offline` and answers with no credential at all. The backend
+defaults to Ollama **cloud**, which needs `OLLAMA_API_KEY` in `.env` (or
+`OLLAMA_HOST`, pointing at a daemon you run); `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` is preferred over it when set.
+
+> This said "No API key is needed to get a first answer." That held only
+> because Ollama's `ProviderSpec` declared `env_vars=()` and so was always
+> treated as configured — an *ambient* credential (a local daemon signing with
+> `~/.ollama/id_ed25519`), not the absence of one
+> (providers-and-credentials ticket 02).
 
 ### Where your work goes
 
@@ -436,7 +444,7 @@ constructor is worse than one that is honest about the line.
 
 | Collaborator | Parameter | Default when omitted | When you'd override |
 | --- | --- | --- | --- |
-| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, else Ollama **cloud**) | a pre-built model object with your own retry, base URL, temperature or gateway |
+| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY`/`OLLAMA_HOST` → Ollama **cloud**; with none of them, a stand-in that raises `MissingProviderKey` the first time a node uses it) | a pre-built model object with your own retry, base URL, temperature or gateway |
 | Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
 | Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
@@ -542,8 +550,14 @@ things you asked for is how a list that matters gets ignored.
   uses, or an already-built LangChain model object, passed through untouched.
   Omit it and you get the document's own `settings.model` if it names one,
   otherwise the environment default: `ANTHROPIC_API_KEY` → Claude,
-  `OPENAI_API_KEY` → GPT, else Ollama **cloud**. A node that names its own
-  model still wins over all of it.
+  `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY` (or `OLLAMA_HOST`) → Ollama
+  **cloud**. A node that names its own model still wins over all of it.
+  With no provider credential set at all, `build_chat_model` returns an
+  `UnconfiguredProvider` that raises `MissingProviderKey` naming the exact
+  variable — on first *use*, not at construction, so a workflow whose nodes
+  never call a model still runs. (Until providers-and-credentials ticket 02
+  Ollama needed nothing here; that was ambient daemon credentials, not a
+  keyless provider.)
 - **`knowledge_dir`** — where the package's second brain is read from.
   Convention (`<package>/knowledge`) stays the default, because
   discovery-by-convention is why this function takes one argument. Override it

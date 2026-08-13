@@ -139,8 +139,15 @@ openstategraph serve --host 0.0.0.0
   and `/chat` keep working unchanged. A security control that breaks the
   product is a security control that gets switched off.
 - **`GET /api/health` stays open.** A liveness probe runs before anything has
-  credentials, and a probe that 401s is an outage. It answers a fixed literal
-  and reads no state.
+  credentials, and a probe that 401s is an outage. It reads environment
+  variables and nothing else — no socket, no database, no disk. This said "a
+  fixed literal": `model_configured` *was* the constant `True`, on the
+  reasoning that Ollama was always available, which was itself the defect. It
+  is now computed — true when any registered provider has the environment it
+  needs — so a machine with nothing configured no longer reports ready
+  (providers-and-credentials ticket 02). Still not a reachability check: a
+  configured provider that is down is a different question, and one this
+  endpoint has never answered.
 - **The MCP `streamable-http` transport uses the same variable**, machine-only
   (no form — an MCP client cannot fill one in). `stdio` is deliberately not
   gated: the client is the process that spawned it, and a token on a pipe is
