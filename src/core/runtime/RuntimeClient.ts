@@ -76,10 +76,35 @@ export interface RunResult {
    */
   readonly threadId: string;
   readonly answer: string;
-  /** node id → branch taken, so the canvas can highlight the path that ran. */
+  /**
+   * node id → branch taken, so the canvas can highlight the path that ran.
+   *
+   * **The outermost document's own nodes only** (ticket 40). It used to hold
+   * every document the run touched, and `concierge` and `chinook-assistant`
+   * ship sharing `in1`, `router1` and `out1` — so the child's values landed on
+   * the parent's keys and the parent's own branch was simply gone. Anything
+   * below the top level is in `nested`.
+   */
   readonly decisions: Readonly<Record<string, string>>;
-  /** node id → that node's output, for per-node inspection. */
+  /** node id → that node's output, for per-node inspection. Top level only. */
   readonly outputs: Readonly<Record<string, string>>;
+  /**
+   * The same two, for every node inside a mounted document — keyed by **mount
+   * path**, `wf-music/agent-sql`.
+   *
+   * The same vocabulary as a frame's `path` and the address bar
+   * (`MountAddress`), because "which node inside which mount" is one question
+   * and one spelling of it is the point of ticket 42. Two mounts of one
+   * package therefore stay apart: `wf-music/agent-sql` and
+   * `wf-other/agent-sql` are different keys where the slug was the same.
+   *
+   * Always present; empty for a run with no mounts, so a reader needs no
+   * special case.
+   */
+  readonly nested: {
+    readonly outputs: Readonly<Record<string, string>>;
+    readonly decisions: Readonly<Record<string, string>>;
+  };
   readonly attempts: number;
   /** Mermaid text of the graph that actually compiled. */
   readonly mermaid: string;
@@ -500,6 +525,13 @@ export class RuntimeClient implements IRuntimeClient {
         answer: asString(payload['answer']),
         decisions: asRecord(payload['decisions']),
         outputs: asRecord(payload['outputs']),
+        nested: {
+          outputs: asRecord((payload['nested'] as Record<string, unknown> | undefined)?.['outputs']),
+          decisions: asRecord(
+            (payload['nested'] as Record<string, unknown> | undefined)?.['decisions'],
+          ),
+        },
+
         attempts: typeof payload['attempts'] === 'number' ? payload['attempts'] : 0,
         mermaid: asString(payload['mermaid']),
         developer,
@@ -660,6 +692,13 @@ export class RuntimeClient implements IRuntimeClient {
           answer: asString(payload['answer']),
           decisions: asRecord(payload['decisions']),
           outputs: asRecord(payload['outputs']),
+          nested: {
+            outputs: asRecord((payload['nested'] as Record<string, unknown> | undefined)?.['outputs']),
+            decisions: asRecord(
+              (payload['nested'] as Record<string, unknown> | undefined)?.['decisions'],
+            ),
+          },
+
           attempts: typeof payload['attempts'] === 'number' ? payload['attempts'] : 0,
           mermaid: asString(payload['mermaid']),
           developer,

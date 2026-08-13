@@ -91,7 +91,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
-| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |
 
 #### Audience: what a customer's run cannot carry
@@ -139,6 +139,45 @@ that a chat page draws its live flow diagram from, and
 `GET /api/workflows/{slug}/graph` already serves the same text. `decisions`,
 `outputs` and `attempts` stay too — they are facts about the customer's own
 turn.
+
+#### `outputs`, `decisions` and `nested` — which document a node belongs to
+
+`decisions` and `outputs` hold **the outermost document's own nodes**, keyed by
+bare node id.
+
+They used to hold every document the run touched, and a node id is unique only
+*within* a document: `concierge` and `chinook-assistant` ship sharing `in1`,
+`router1` and `out1`, so the mounted child's values landed on the parent's keys
+and the parent's own facts vanished. Captured on a real run,
+`"decisions": {"router1": "b-data"}` was the **child's** branch — the parent had
+chosen `b-music`, and the frame had no way to say both.
+
+Everything below the top level is in `nested`, keyed by **mount path**:
+
+```json
+{
+  "decisions": { "router1": "b-music" },
+  "outputs":   { "in1": "Which five artists…" },
+  "nested": {
+    "decisions": { "wf-music/router1": "b-data" },
+    "outputs":   { "wf-music/agent-sql": "…", "wf-music/wf-inner/deep": "…" }
+  }
+}
+```
+
+The key is the chain of mount node ids plus the node's own id — the same
+vocabulary as a frame's `path` and as `?w=concierge/wf-music` in the editor's
+address bar. So two mounts of one package stay apart: `wf-music/agent-sql` and
+`wf-other/agent-sql` are different keys where the slug was the same.
+
+`nested` is always present, and empty for a run with no mounts, so a client can
+read it without a special case. The change is additive: a client that reads
+only the flat pair sees exactly what it saw before, minus the collisions.
+
+`POST /api/runs` (the blocking call) is unaffected and has no `nested`. Its
+`outputs` come from the graph's final **state**, and a mounted child is invoked
+with its own empty `outputs` and returns only its answer — so that map never
+held anyone else's nodes in the first place.
 
 #### The terminal-frame guarantee
 

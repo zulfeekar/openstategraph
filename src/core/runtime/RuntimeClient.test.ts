@@ -965,3 +965,43 @@ describe('the base URL a real page gets', () => {
     vi.unstubAllEnvs();
   });
 });
+
+describe('the terminal frame keeps the parent and its mounts apart (ticket 40)', () => {
+  it('reads the nested maps, keyed by mount path', async () => {
+    const text = sseBody([
+      [
+        'done',
+        {
+          answer: 'Iron Maiden.',
+          decisions: { router1: 'b-music' },
+          outputs: { in1: "the parent's question" },
+          nested: {
+            decisions: { 'wf-music/router1': 'b-data' },
+            outputs: { 'wf-music/agent-sql': 'the SQL answer' },
+          },
+        },
+      ],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 8)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || 'interrupted' in result.value || 'cancelled' in result.value) return;
+    // Both true facts, side by side. The flat map used to hold whichever
+    // document wrote last, and `concierge`'s own `b-music` was the casualty.
+    expect(result.value.decisions['router1']).toBe('b-music');
+    expect(result.value.nested.decisions['wf-music/router1']).toBe('b-data');
+    expect(result.value.nested.outputs['wf-music/agent-sql']).toBe('the SQL answer');
+  });
+
+  it('is empty rather than absent when a run touched no mounts', async () => {
+    // A reader should not have to special-case the common single-document run.
+    const text = sseBody([['done', { answer: 'Rock.', decisions: {}, outputs: { in1: 'q' } }]]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 4)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || 'interrupted' in result.value || 'cancelled' in result.value) return;
+    expect(result.value.nested).toEqual({ outputs: {}, decisions: {} });
+  });
+});

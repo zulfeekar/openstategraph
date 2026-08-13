@@ -674,6 +674,13 @@ def _run_frames(
     canvas_node_ids = set(node_ids_by_name.values())
     decisions: dict[str, str] = {}
     outputs: dict[str, str] = {}
+    #: The same two, for everything below the outermost document — keyed by
+    #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
+    #: `path`, the address bar and `MountAddress` already use. Additive, so a
+    #: client that reads only the flat pair sees what it always saw, minus the
+    #: collisions (ticket 40).
+    nested_decisions: dict[str, str] = {}
+    nested_outputs: dict[str, str] = {}
     attempts = 0
     # One guard per streamed text — per node, per message kind — because each
     # is its own sequence of chunks and a shared tail would splice two
@@ -743,21 +750,39 @@ def _run_frames(
                     # `update`. These dicts are local to this fold and are
                     # read once at the end (the `complete` frame), never
                     # snapshotted per frame, so mutating them cannot alias.
-                    decisions.update(
+                    # Which document this frame belongs to, as a mount chain
+                    # (ticket 40). Resolved here rather than further down
+                    # because the accumulators below need it: a node id is
+                    # unique only *within* a document, and `concierge` and
+                    # `chinook-assistant` ship sharing `in1`, `router1` and
+                    # `out1`. Flat maps therefore let the child's values land
+                    # on the parent's keys and the parent's own facts vanish —
+                    # captured live as `decisions.router1 = "b-data"`, the
+                    # child's branch, with the parent's `b-music` gone.
+                    frame_path, frame_slugs = run_path.resolve(raw_name, namespace)
+                    # The chain of mounts above this frame's own node. Empty
+                    # for the outermost document, which is exactly the set the
+                    # flat maps now hold.
+                    prefix = "/".join(frame_path[:-1]) if len(frame_path) > 1 else ""
+                    into_decisions = decisions if not prefix else nested_decisions
+                    into_outputs = outputs if not prefix else nested_outputs
+                    key = (lambda k: f"{prefix}/{k}") if prefix else (lambda k: k)
+
+                    into_decisions.update(
                         {
-                            k: str(v)
+                            key(k): str(v)
                             for k, v in (update.get("decisions") or {}).items()
                             if k != RESET
                         }
                     )
-                    outputs.update(
+                    into_outputs.update(
                         {
                             # Cleaned as it is accumulated, not as it is sent:
                             # this dict reaches the `done` frame *and* every
                             # surface's per-node inspector, and a value that
                             # is clean on one path and not the other is the
                             # shape of leak this whole seam exists to remove.
-                            k: str(_clean_output(str(v)))
+                            key(k): str(_clean_output(str(v)))
                             for k, v in (update.get("outputs") or {}).items()
                             if k != RESET
                         }
@@ -797,7 +822,7 @@ def _run_frames(
                     # before yielding, turning fire-and-run into ask-first.
                     # Default behaviour stays fire-and-run; nothing below
                     # blocks.
-                    update_path, update_slugs = run_path.resolve(raw_name, namespace)
+                    update_path, update_slugs = frame_path, frame_slugs
                     # The key this frame's own output is stored under, which is
                     # NOT `node_id`. `node_id` comes from the narrow map — the
                     # ids of the document the run was launched against — and
@@ -1047,6 +1072,11 @@ def _run_frames(
             "answer": prose,
             "decisions": decisions,
             "outputs": outputs,
+            # Everything below the outermost document, keyed by mount path
+            # (ticket 40). Always present, even when empty: a client that
+            # reads it unconditionally should not have to special-case the
+            # common single-document run.
+            "nested": {"outputs": nested_outputs, "decisions": nested_decisions},
             "attempts": attempts,
             # Topology, not guidance, and `/chat` draws its live flow diagram
             # from it — `GET /api/workflows/{slug}/graph` already serves the

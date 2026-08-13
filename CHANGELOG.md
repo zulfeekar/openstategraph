@@ -107,9 +107,29 @@ finally read by code. Wayfinder tickets 02–04;
     open, so nothing else would notice the parent moving.
 
   The same vocabulary the run frames already used (`path`, ticket 34) now names
-  an instance in the address bar too. The terminal frame's flat
-  `outputs`/`decisions` keys are the remaining surface, and ship separately
-  (ticket 40) because they are a published contract change.
+  an instance on all three surfaces.
+
+### Changed — the run stream's terminal frame
+
+- **`done.outputs` and `done.decisions` are the outermost document's own nodes;
+  everything below is in a new `nested` map** (ship-it ticket 40). They were
+  flat maps accumulated across every document a run touched, and a node id is
+  unique only *within* one: `concierge` and `chinook-assistant` ship sharing
+  `in1`, `router1` and `out1`, so a mounted child's values landed on the
+  parent's keys and the parent's own facts vanished. Measured on a real run,
+  `decisions.router1` read `b-data` — the child's branch — with the parent's
+  `b-music` gone.
+
+  `nested` is keyed by **mount path**: `{"wf-music/agent-sql": "…"}`, the same
+  vocabulary as a frame's `path` and as `?w=concierge/wf-music`. Two mounts of
+  one package therefore stay apart where a slug could not tell them apart.
+
+  **Additive.** A client reading only the flat pair sees exactly what it saw
+  before, minus the collisions. `nested` is always present and empty for a run
+  with no mounts, so no reader needs a special case. `POST /api/runs` is
+  unaffected and has no `nested` — its `outputs` come from the graph's final
+  state, and a mounted child is invoked with its own empty `outputs`, so that
+  map never held anyone else's nodes.
 
 ### Fixed
 
