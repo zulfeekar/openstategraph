@@ -1,10 +1,17 @@
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
+import type { IEditScope } from './editScope';
 
 /** Everything a command is allowed to touch. */
 export interface CommandContext {
   readonly model: WorkflowModel;
   readonly registry: ModelRegistry;
+  /**
+   * Whether a change is permitted at all — see `editScope`. Optional, and
+   * absent everywhere except the editor's own controller, so a context built
+   * for a test or a script allows everything exactly as before.
+   */
+  readonly editScope?: IEditScope;
 }
 
 /**
@@ -32,6 +39,23 @@ export interface ICommand {
    * discrete entry.
    */
   readonly coalesceKey?: string;
+
+  /**
+   * Whether this change is expressible as a **per-mount override** — ticket 42.
+   *
+   * A mount's own state is `data.overrides`: child node id → field key →
+   * value. A field's value can differ per instance; the workflow's *shape*
+   * cannot, and `docs/decisions/mount-overrides.md` says so on purpose. So a
+   * command declares this about itself, and `MountEditScope` refuses the ones
+   * that do not while an instance is displayed.
+   *
+   * Declared here rather than inferred from the label, because a label is
+   * display text and a list of permitted labels elsewhere would be a second
+   * place to update every time a command is added. Absent means "no", which is
+   * the safe default: a new command is refused inside an instance until
+   * someone has thought about what it would mean there.
+   */
+  readonly perInstance?: boolean;
 
   /**
    * Folds `next` into this command, returning the combined command, or

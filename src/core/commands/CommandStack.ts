@@ -8,6 +8,12 @@ interface CommandStackEvents extends Record<string, unknown> {
   executed: { command: ICommand };
   undone: { command: ICommand };
   redone: { command: ICommand };
+  /**
+   * A change the current edit scope would not allow — see `editScope`. Emitted
+   * rather than thrown: a refusal is a thing to *say*, and the view is what
+   * says it. Nothing ran and nothing was pushed, so undo reaches past it.
+   */
+  refused: { command: ICommand; reason: string };
 }
 
 export interface CommandStackOptions {
@@ -89,6 +95,15 @@ export class CommandStack {
    */
   execute(command: ICommand | null): void {
     if (!command) return;
+
+    // Asked before anything runs, so a refused change leaves no trace: the
+    // model is untouched, nothing is pushed, and undo reaches past it to
+    // whatever the user really did last.
+    const refusal = this.ctx.editScope?.refuse(command) ?? null;
+    if (refusal !== null) {
+      this.bus.emit('refused', { command, reason: refusal });
+      return;
+    }
 
     command.execute(this.ctx);
 

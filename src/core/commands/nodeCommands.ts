@@ -237,6 +237,13 @@ export class ResizeNodeCommand implements ICommand {
 export class SetFieldCommand implements ICommand {
   readonly label: string;
   readonly coalesceKey: string;
+  /**
+   * The one change a mount can carry per instance — `data.overrides` is a map
+   * of child node id → field key → value, which is exactly this command's
+   * arguments. Everything structural is refused inside an instance; see
+   * `commands/editScope`.
+   */
+  readonly perInstance = true;
   private previous: FieldValue | undefined;
 
   constructor(
