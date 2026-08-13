@@ -71,6 +71,29 @@ export interface SelectFieldSchema extends FieldSchemaBase<string> {
   readonly options: readonly FieldOption[] | ((data: Readonly<NodeData>) => readonly FieldOption[]);
 }
 
+/**
+ * A text box with a list of suggestions — pick what exists, type what does not.
+ *
+ * **Decided rather than defaulted** (production-ready ticket 05, which asked
+ * for exactly that). A listbox would make a typo unreachable, and would also
+ * make it impossible to mount a package you have not created yet — and
+ * drafting in that order is a real way to work: sketch the parent, then go and
+ * build the child. A combobox keeps the typo off the *normal* path, which is
+ * what the ticket asked for, without outlawing the order.
+ *
+ * The value is a plain string, unchanged: `data.workflow` is a serialised
+ * contract, and swapping the control must not alter what is written.
+ */
+export interface ComboboxFieldSchema extends FieldSchemaBase<string> {
+  readonly kind: 'combobox';
+  /** Suggestions, resolved the same way a `select`'s options are. */
+  readonly options: readonly FieldOption[] | ((data: Readonly<NodeData>) => readonly FieldOption[]);
+  readonly placeholder?: string;
+  readonly mono?: boolean;
+  /** Shown under the box when there is nothing to suggest. */
+  readonly emptyHint?: string;
+}
+
 export interface FieldOption {
   readonly value: string;
   readonly label: string;
@@ -129,6 +152,7 @@ export type FieldSchema =
   | TextFieldSchema
   | TextAreaFieldSchema
   | SelectFieldSchema
+  | ComboboxFieldSchema
   | SliderFieldSchema
   | ToggleFieldSchema
   | FileFieldSchema

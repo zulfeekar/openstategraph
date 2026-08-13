@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import { WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 
 /**
@@ -91,6 +92,16 @@ const POLL_INTERVAL_MS = 5000;
 export function useWorkflowFileWatch(onNotify: (message: string) => void): void {
   const clientRef = useRef<WorkflowFileClient | null>(null);
   if (!clientRef.current) clientRef.current = new WorkflowFileClient();
+
+  // The mount slug picker's source (ticket 05). Started here because this
+  // hook is already mounted once for the life of the editor and already holds
+  // a client — a second subscription to `/api/events` would be a second thing
+  // to reconnect and a second place to get the base URL wrong.
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!client) return;
+    return workflowCatalogue.syncFrom(client);
+  }, []);
 
   useEffect(() => {
     const client = clientRef.current;

@@ -5,6 +5,7 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 import { OVERRIDES_FIELD } from './overridesField';
+import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 
 export const SUBGRAPH_TYPE = 'workflow.subgraph';
 
@@ -65,11 +66,28 @@ export const subgraphNode: INodeDefinition = defineNode(
     defaultSize: { width: 252, height: 150 },
     fields: [
       {
-        kind: 'text',
+        // A combobox, not a text box and not a listbox (ticket 05). It was
+        // free text: nothing populated it, nothing validated it, and nothing
+        // told a developer what existed — so a typo produced a mount that
+        // resolved to nothing, and the catalogue was discoverable only by
+        // already knowing it.
+        //
+        // Not a listbox, decided rather than defaulted: mounting a package you
+        // have not built yet is a real way to work — sketch the parent, then
+        // go and build the child — and a listbox outlaws that order. The
+        // suggestions keep a typo off the *normal* path, which is what was
+        // asked for.
+        kind: 'combobox',
         key: FIELD_WORKFLOW,
         label: 'Workflow slug',
         placeholder: 'e.g. chinook-assistant',
         defaultValue: '',
+        mono: true,
+        emptyHint: 'No saved workflows yet — save one, and it appears here.',
+        options: () =>
+          workflowCatalogue
+            .list()
+            .map((choice) => ({ value: choice.slug, label: `${choice.name} · ${choice.slug}` })),
       },
       {
         kind: 'textarea',

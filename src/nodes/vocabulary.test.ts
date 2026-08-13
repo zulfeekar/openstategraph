@@ -171,3 +171,40 @@ describe('the mount outcome field does not claim an enforcement it has not got',
     expect((outcome?.hint ?? '').toLowerCase()).toMatch(/child|workflow/);
   });
 });
+
+/**
+ * production-ready ticket 05 — the mount's slug is chosen, not typed.
+ *
+ * It was `kind: 'text'` with a placeholder: nothing populated it, nothing
+ * validated it, and nothing told a developer what existed. A typo produced a
+ * mount that resolved to nothing.
+ */
+describe('the mount slug field offers what exists', () => {
+  const slugField = subgraphNode.fields.find((field) => field.key === 'workflow');
+
+  it('is a combobox — pick what exists, type what does not yet', () => {
+    // Decided rather than defaulted, which is what the ticket asked for. A
+    // listbox would make a typo unreachable *and* make it impossible to mount
+    // a package you have not built yet; drafting parent-first is a real way
+    // to work, so the suggestions keep typos off the normal path instead of
+    // outlawing the order.
+    expect(slugField?.kind).toBe('combobox');
+  });
+
+  it('still writes the same value a text box wrote', () => {
+    // `data.workflow` is a serialised contract read by the compiler; changing
+    // the control must not change what lands in the document.
+    expect(slugField?.key).toBe('workflow');
+    expect(slugField?.defaultValue).toBe('');
+  });
+
+  it('draws its suggestions from the live catalogue, not a literal', () => {
+    const options = slugField && 'options' in slugField ? slugField.options : undefined;
+    expect(typeof options).toBe('function');
+  });
+
+  it('says what to do when there is nothing to suggest', () => {
+    // An empty dropdown with no explanation reads as broken.
+    expect(String((slugField as { emptyHint?: string } | undefined)?.emptyHint ?? '')).not.toBe('');
+  });
+});

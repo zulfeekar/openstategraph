@@ -1,5 +1,6 @@
-import { useCallback, useRef, type ChangeEvent } from 'react';
+import { useCallback, useRef, useSyncExternalStore, type ChangeEvent } from 'react';
 import { Replace } from 'lucide-react';
+import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import {
   Button,
   DisplayRow,
@@ -148,6 +149,14 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
           <div data-no-drag>
             <Select id={id} options={options} value={value} onValueChange={set} />
           </div>
+        </Field>
+      );
+    }
+
+    case 'combobox': {
+      return (
+        <Field {...common}>
+          <ComboboxField id={id} schema={schema} data={data} onChange={set} />
         </Field>
       );
     }
@@ -383,5 +392,59 @@ function RepeatableGroupField({
         </div>
       </div>
     </Field>
+  );
+}
+
+/**
+ * A text box with suggestions, subscribed to the source of those suggestions.
+ *
+ * Its own component because it needs a hook: the workflow catalogue arrives
+ * over HTTP and moves when a package is saved or deleted, and a `case` in the
+ * switch above cannot call `useSyncExternalStore` — hooks may not be
+ * conditional. Extracting it is also what lets the subscription be *narrow*:
+ * only the mount's slug field re-renders when the catalogue changes, not every
+ * field on the inspector.
+ */
+function ComboboxField({
+  id,
+  schema,
+  data,
+  onChange,
+}: {
+  id: string;
+  schema: ComboboxFieldSchema;
+  data: Readonly<NodeData>;
+  onChange: (value: string) => void;
+}) {
+  useSyncExternalStore(
+    (notify) => workflowCatalogue.onChange(notify),
+    () => workflowCatalogue.list(),
+  );
+
+  // A native `<datalist>`: the browser gives the dropdown, the filtering and
+  // the keyboard handling, and the control stays a plain text input — so the
+  // value written is the same string a free-text box wrote, which is the
+  // constraint (`data.workflow` is a serialised contract).
+  const options = resolveOptions(schema, data);
+  const listId = `${id}-options`;
+  return (
+    <div data-no-drag>
+      <TextInput
+        id={id}
+        list={listId}
+        mono={schema.mono}
+        value={asString(data[schema.key])}
+        placeholder={schema.placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value} label={option.label} />
+        ))}
+      </datalist>
+      {options.length === 0 && schema.emptyHint ? (
+        <p className="field__hint">{schema.emptyHint}</p>
+      ) : null}
+    </div>
   );
 }
