@@ -11,6 +11,7 @@ Start with what you came here to do.
 | I want to… | Read | Then |
 | --- | --- | --- |
 | **decide whether this is for me** | [What this is](what-is-this.md) — the framework sentence, the atomic-design tiers, how the shape compares to other Lang\*-layered frameworks, the measured 36-distribution footprint, and when *not* to use it | [The stability contract](stability.md) |
+| **understand what I am drawing** | [On the canvas](on-the-canvas.md) — the five answers before the first drag: what a workflow is, the atom/molecule/organism tiers, how a revision loop is two edges, what a mount does (and what Workflow vs Team actually changes), and why a template is a copy. Plus a glossary | [Patterns](patterns.md) |
 | **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run the Chinook Assistant, ask it something in `/chat`. Or skip the clone: `openstategraph run ./workflows/chinook-assistant "…"` | [Patterns](patterns.md) |
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
@@ -25,7 +26,12 @@ Start with what you came here to do.
 | **cut a release, or fix one that went wrong** | [Releasing](releasing.md) — the train from pull request to PyPI, the one human gate and what to check before clicking it, the branch protection and environment settings to configure by hand, and the rollback commands for a burned version number | [`decisions/sdk-practice.md`](decisions/sdk-practice.md) |
 | **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
 
-Each page has exactly one job, and nothing here restates another page:
+Each page has exactly one job, and — with one deliberate exception — nothing
+here restates another page. The exception is [On the canvas](on-the-canvas.md),
+which is a **synthesis for a different reader**: someone drawing, who needs the
+mount semantics, the loop rule and the class/instance model in one place before
+they have any reason to open the pages those facts otherwise live in. It is
+allowed to repeat; the pages below are not allowed to repeat each other:
 [Ports and edges](ports-and-edges.md) is the only reference for the type
 system; [adoption](adoption.md) is the only place the CLI's flags and exit
 codes are enumerated for a consumer; [evaluation](evaluation.md) is the only

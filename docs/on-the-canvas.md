@@ -1,0 +1,180 @@
+# On the canvas: what each thing is
+
+You have the editor open and a palette down the side. This page is the five
+answers you need before the first drag, in the order you need them. It assumes
+nothing except that you can see a canvas.
+
+Everything else in `docs/` is written for someone extending, deploying or
+integrating. This one is for someone **drawing**.
+
+---
+
+## 1. A workflow is a folder
+
+What you draw is saved as `workflows/<slug>/workflow.json` — a folder on disk,
+not a row in a database. Beside it live the things the workflow uses: `tools/`,
+`functions/`, `skills/`, `knowledge/`, `tests/`.
+
+That folder is the whole artifact. You can commit it, copy it, or hand it to
+someone else, and it compiles to a plain LangGraph `StateGraph` — an ordinary
+Python object that runs anywhere Python runs. The editor authors it; nothing
+you draw depends on the editor to run.
+
+---
+
+## 2. Atoms, molecules, organisms — and only one tier you can get two ways
+
+The palette is ordered by **what a thing is made of**:
+
+| Tier | What it is | How you get one |
+| --- | --- | --- |
+| **atom** | no logic — an input, a formatted output | drag |
+| **molecule** | one reasoning step — an agent, a router, a grader | drag |
+| **organism** | a whole working assembly | **draw it, or drag it** |
+
+That last row is the one worth remembering, because it answers most of the
+questions people arrive with.
+
+**An organism is an assembly, not an item.** A supervisor with its workers and
+a join is an organism — but you build it by drawing four molecules, not by
+dragging one card. A revision loop is an organism too, and you can get it
+*either* way: draw it here, or drag in a workflow that already contains one.
+
+Organisms are the only tier with two routes. Atoms and molecules you drag;
+assemblies you draw *or* mount.
+
+---
+
+## 3. A revision loop is two edges
+
+This is the shape most people come for: **run a step, check it, run it again
+with the problems included.**
+
+You build it with the pieces already in the palette:
+
+```
+input → agent → grader ──(pass)──→ output
+          ↑                │
+          └───(revise)─────┘
+```
+
+The grader's `revise` output connects back to the agent's `feedback` input.
+That is the whole mechanism. There is no Loop node, and there does not need to
+be — a loop is a **cycle in the graph**, not a wrapper around one.
+
+Two things the editor does for you here:
+
+- **You cannot draw a loop by accident.** A cycle is only legal when it closes
+  on a `feedback` port, and `revise` is the only output that produces one. Any
+  other backward edge is refused, with a message pointing you at the grader.
+- **A loop always has a way out.** `revise` is a grader's *conditional* branch,
+  so the cycle contains a decision by construction — it cannot spin forever
+  because nothing is choosing.
+
+The safety net underneath is the **step budget**. It is counted in
+*supersteps*, not laps: with a fan-out, one lap can cost several. Do not read
+it as "maximum retries" — the grader's own attempt limit is that.
+
+> Starting from `openstategraph new my-thing --template routed-qa` gives you
+> this shape already wired, with a router in front of it.
+
+---
+
+## 4. A mount runs another workflow as one step
+
+Drag **Workflow** or **Team** onto the canvas and point it at a saved
+workflow's slug. It becomes one node: a task goes in, an answer comes out.
+
+**By reference, not by copy.** This is the part worth being precise about:
+
+- The mount **points at** the package. Edit that package and every mount of it
+  sees the change.
+- Editing *inside* a mount does **not** change the package. Your change is
+  stored as an **override on the parent** — the document with the mount node in
+  it. The child package's bytes do not move, and other mounts of the same
+  package are untouched.
+- The editor shows you which fields you have overridden, and offers a revert
+  that puts the package's own value back.
+
+So one saved workflow is a **class**, and each mount of it is an **instance**
+with its own settings. Two mounts of one package are two independent instances.
+
+Opening one has its own address — `?w=concierge/wf-music` is "the `wf-music`
+mount inside `concierge`", not the package on its own.
+
+**What crosses the boundary, and what does not:** the question goes in and the
+answer comes back. The child gets its own graph state, its own tools, its own
+knowledge and its own memory namespace — none of the parent's working state
+reaches it, and the parent never sees the child's.
+
+The one deliberate exception: **the conversation does cross.** A mounted child
+that talks to a person needs the dialogue so far, or it re-asks a question that
+was already answered one message ago. Working state is isolated; the
+conversation is shared.
+
+### Workflow or Team?
+
+**They compile to exactly the same thing** — one code path, no branch. Choosing
+between the cards changes nothing about what runs.
+
+What a **Team** card adds is a contract it *states*:
+
+- an **expected outcome** you write on the card, and
+- a "revises until it passes" badge — which the editor awards only after
+  checking that the mounted document really does have a grader wired back to
+  its agent.
+
+The badge is earned. The outcome is **documentation**: it is not read by the
+compiler, and nothing checks that it matches the child's grader criteria. If
+you want the child to enforce something, edit the child's grader.
+
+The cost you are weighing is in **the package you point at**, never the card.
+A supervisor-and-workers package buys a planning call and a fan-out; if the
+work has one worker role, that is a planner you pay for and do not use.
+
+---
+
+## 5. A template is a copy, and then it is gone
+
+`openstategraph new my-thing --template routed-qa`, or **New Workflow → Start
+from** in the editor, gives you a starting document. That is all it is:
+
+| | Original | If the original changes later |
+| --- | --- | --- |
+| **Mount a workflow** | a package you can open and edit | **every instance changes** |
+| **Start from a template** | a starter document | **nothing changes** — the link was severed on use |
+
+Nothing records which template you started from, deliberately: a document with
+a second, invisible owner is a document nobody can reason about.
+
+So *"template"* and *"mount"* are not two words for the same idea. One is
+copy-paste; the other is a live reference.
+
+---
+
+## Glossary
+
+The words this product uses, and what each one must not be mistaken for.
+
+| Word | Means | Not |
+| --- | --- | --- |
+| **workflow** | a folder with a `workflow.json`; compiles to a `StateGraph` | a run, a template |
+| **package** | the same folder, seen as a reusable definition | a PyPI distribution *(that sense exists too, in the install docs)* |
+| **mount** | a node that runs another workflow, **by reference** | a copy; inline expansion |
+| **instance** | one mount of a package, with its own overrides | a second copy of the package |
+| **override** | a per-instance setting, stored on the **parent** | an edit to the package |
+| **revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the budget runs out | an agent's internal tool-calling |
+| **step budget** | supersteps a run may take | "max retries" or "iterations" |
+| **template** | a starting document; produces a workflow and stops existing | a node type; a live link |
+| **organism** | a whole assembly — drawn or mounted | only the things you can drag |
+
+---
+
+## Where to go next
+
+- [Getting started](getting-started.md) — install, first run, the shipped example
+- [Patterns](patterns.md) — seven arrangements and when each earns its keep
+- [Ports and edges](ports-and-edges.md) — the type system, and every rule that
+  refuses a connection
+- [Building an atom](building-an-atom.md) — when you want a node that does not
+  exist yet
