@@ -7,7 +7,14 @@ session report" as the answer to *what is not done?*
 ## How to read this
 
 Every entry names its evidence — a `file:line`, a doc section, or a commit —
-because **a gap without evidence is not a gap, it is a worry**. Where a reason
+because **a gap without evidence is not a gap, it is a worry**.
+
+> **Fourteen entries currently cite `.scratch/**/tickets/*.md` as their only
+> evidence** (2026-08-13). `.scratch/` is session planning, not a published
+> artifact — so for anyone but the author those entries fail this file's own
+> rule. Either the claim can be restated against code, or the ticket's reasoning
+> belongs in a `decisions/` document. Recorded here rather than silently
+> tolerated, because the rule is the reason this register is worth reading. Where a reason
 for the deferral was recorded at the time, it is quoted verbatim rather than
 paraphrased, so nobody has to re-derive the argument before overturning it.
 
@@ -22,7 +29,9 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**38 gaps · 4 blocks-1.0 · 10 should-precede-launch · 24 fine-to-carry.**
+**45 gaps · 4 blocks-1.0 · 10 should-precede-launch · 31 fine-to-carry.**
+*(Recounted 2026-08-13 by parsing this file. The old line said 38/24 and
+disagreed with its own section headers, which summed to 45.)*
 (RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
 `.scratch/docs-and-gaps/`; PK-06, UX-01 and UX-02 closed 2026-08-10 — the
 last two together, since they were one ticket: the terminal-frame contract.
@@ -32,12 +41,12 @@ dead-surface sweep.)
 
 | Theme | Total | blocks 1.0 | precede launch | carry |
 | --- | --- | --- | --- | --- |
-| A. Runtime correctness & capability | 14 | 0 | 4 | 10 |
-| B. Packaging & release | 8 | 4 | 1 | 3 |
-| C. UX | 6 | 0 | 1 | 5 |
+| A. Runtime correctness & capability | 14 | 0 | 3 | 11 |
+| B. Packaging & release | 10 | 4 | 2 | 4 |
+| C. UX | 8 | 0 | 2 | 6 |
 | D. Docs | 4 | 0 | 2 | 2 |
-| E. Security & ops | 4 | 0 | 2 | 2 |
-| F. Performance | 2 | 0 | 0 | 2 |
+| E. Security & ops | 4 | 0 | 1 | 3 |
+| F. Performance | 5 | 0 | 0 | 5 |
 
 Six items on the intake list for this register were checked and found
 **already done** — they are listed at the bottom under "Verified closed", not
@@ -46,7 +55,7 @@ ever externally visible.
 
 ---
 
-## A. Runtime correctness & capability (16)
+## A. Runtime correctness & capability (14)
 
 ### Blocks 1.0
 
@@ -216,7 +225,7 @@ carry** — and do not build them until something asks.
 
 ---
 
-## B. Packaging & release (9)
+## B. Packaging & release (10)
 
 ### Blocks 1.0
 
@@ -237,7 +246,7 @@ is currently a promise. **Verdict: blocks 1.0.**
 Evidence: `backend/pyproject.toml:44-62` — *"PROVISIONAL, and deliberately
 un-mistakable. This checkout has no configured git remote, so the canonical
 host is not a fact yet"*; verified live (`git remote -v` → empty). The same
-literal appears ~12 times in `site/index.html` (e.g. `:802`, `:873`, `:1049`,
+literal appears **31 times** in `site/index.html` (recounted 2026-08-13; this said ~12) plus 6 in `backend/pyproject.toml` (e.g. `:802`, `:873`, `:1049`,
 `:1331`). **Size S** (owner action; `grep -rn PLACEHOLDER` is the whole
 checklist). **Risk:** a published PyPI page with four dead links. **Verdict:
 blocks 1.0.**
@@ -402,8 +411,14 @@ from a commit. The shape:
   becomes an ETag on the draft endpoint, so a 412 is the server-side spelling
   of the `conflict` outcome already implemented. This is why the CAS was built
   as compare-a-version rather than compare-an-owner.
-- **Identity needs an owner first.** There is no authentication in this
-  project, so a draft store today is per-installation, not per-user. That is
+- **Identity needs an owner first.** *(Amended 2026-08-13: both halves arrived
+  and this bullet contradicted SEC-01 in this same file, which records the
+  shared token as shipped.)* **Admission** exists — `api/auth.py`, a shared
+  bearer token, every holder the same principal. **Identity** exists too —
+  `openstategraph/principal.py`, resolved server-side, and it is what keys a
+  per-person memory namespace. What is still absent is per-user
+  *authorization*: nothing decides that person A may not open person B's draft.
+  So a draft store today is per-installation, not per-user. That is
   acceptable for a single-developer local editor and unacceptable for anything
   hosted — so the draft endpoint must not ship as a hosted feature ahead of
   auth. **Size M** for the draft store, **L** with auth. **Verdict on the
@@ -412,7 +427,13 @@ from a commit. The shape:
 
 ### Fine to carry
 
-**UX-05 — No per-field inherited-vs-overridden chips on a mount card.** Today
+**UX-05 — ~~No per-field inherited-vs-overridden chips on a mount card.~~ CLOSED 2026-08-13.**
+The drill-in landed: `src/core/model/MountContext.ts` provides
+`isOverridden(childNodeId, key)` and `inheritedValue(...)` — *"what a revert puts
+back, and what the inspector shows beside an overridden one"* — and
+`FieldRenderer.tsx` marks an overridden field and offers that revert.
+`mount-overrides.md` deferred the same work and has been corrected too.
+*Original entry below.* Today
 the card appends `· n overridden` and the inspector edits raw JSON. Evidence:
 `docs/decisions/mount-overrides.md` "UI contract" — *"Richer per-field
 'inherited/overridden' chips ride on the (charted, separate) inspector drill-in
@@ -466,7 +487,9 @@ to carry.**
 
 ### Should precede public launch
 
-**DC-01 — The site still says draft→publish "is landing now".** It landed:
+**DC-01 — ~~The site still says draft→publish "is landing now".~~ CLOSED 2026-08-13.**
+`grep -c "landing now" site/index.html` → **0**. The callout is gone; the entry
+was not updated when it went. *Original entry below.* It landed:
 ticket 04 of the launch-readiness map is closed, and its own resolution says
 *"Ticket 05's landing-page callout can now be deleted."* The callout is still
 there: `site/index.html:921-925` — *"**Draft → publish is landing now.**"*
@@ -562,7 +585,7 @@ marked, which is the whole cost of keeping the option.
 
 ---
 
-## F. Performance (4)
+## F. Performance (5)
 
 ### Fine to carry
 
