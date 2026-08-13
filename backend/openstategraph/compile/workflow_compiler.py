@@ -23,8 +23,9 @@ cycle, which can never terminate.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
@@ -121,10 +122,76 @@ def _error_handler_for(
         exc = getattr(error, "error", error)
         raw = getattr(error, "node", "unknown")
         node = canvas_ids.get(raw, raw)
-        message = f"{type(exc).__name__}: {exc}"
-        return {"outputs": {node: f"[{node} failed after retries: {message}]"}}
+        return {"outputs": {node: failure_marker(node, describe_failure(exc))}}
 
     return handle
+
+
+def describe_failure(exc: Any) -> str:
+    """One line for a reader, from an exception.
+
+    **Our own errors are already the copy.** `MissingProviderKey` exists to
+    carry a sentence naming the variable and the fix, so prefixing it with its
+    own class name adds a Python identifier to a message written for someone
+    who may not be reading Python (ticket 04).
+
+    A *foreign* exception keeps its type, because there the type is most of
+    the information: `ConnectError` and `AuthenticationError` say genuinely
+    different things about what to do next, and neither says so in its
+    message.
+    """
+    from openstategraph.chat_model import explain_credential_refusal
+    from openstategraph.errors import OpenStateGraphError
+
+    if isinstance(exc, OpenStateGraphError):
+        return str(exc)
+    # A credential that was read and refused. Recognised here rather than left
+    # as the vendor's own text, which is a raw dict and — for OpenAI —
+    # contains a fragment of the key.
+    refusal = explain_credential_refusal(exc)
+    if refusal:
+        return refusal
+    return f"{type(exc).__name__}: {exc}"
+
+
+#: How a failed node's output is written, and the only place it is spelled.
+#:
+#: Reader and writer are kept together on purpose. The last time they were
+#: apart — the failure filed under `safe_name(id)` while every reader looked up
+#: the canvas id — a node that failed read downstream as a node that produced
+#: nothing, and a grader spent its whole retry budget re-asking a question the
+#: provider had refused to answer. See `_error_handler_for` above.
+_FAILURE = "[{node} failed after retries: {message}]"
+_FAILURE_PATTERN = re.compile(r"^\[(?P<node>.+?) failed after retries: (?P<message>.*)\]$", re.S)
+
+
+def failure_marker(node: str, message: str) -> str:
+    """The text a failed node publishes as its output."""
+    return _FAILURE.format(node=node, message=message)
+
+
+def node_failure_warnings(outputs: Mapping[str, Any]) -> list[str]:
+    """Failed nodes, as developer-channel warnings.
+
+    `outputs` is where a failure lands so that downstream nodes still have
+    *something* to read — but every surface renders that map as each node's
+    **output**, so on its own a credential failure arrived looking like an
+    answer, and the run reported 200 with a blank `answer` and an empty
+    developer channel (providers-and-credentials ticket 04).
+
+    Reported here rather than raised: the run genuinely did complete, other
+    nodes genuinely did produce results, and this is the same "a step lost a
+    capability" shape that `api.registries.runtime_warnings` already carries.
+    """
+    warnings: list[str] = []
+    for node, value in outputs.items():
+        match = _FAILURE_PATTERN.match(str(value or ""))
+        if match:
+            # A full stop, not a dash: the message that follows carries its own
+            # em-dash ("… no credential — set X"), and two in one sentence read
+            # as one run-on rather than as a cause and its fix.
+            warnings.append(f'Node "{node}" failed and produced no result. {match["message"]}')
+    return warnings
 
 
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:

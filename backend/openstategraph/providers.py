@@ -176,13 +176,20 @@ class ProviderSpec:
         return f"{self.name}:{self.default_model}"
 
     def missing_key_message(self) -> str:
-        """The exact fix, for a provider named but not configured (ticket 03)."""
-        variable = self.primary_env_var
-        if variable is None:  # pragma: no cover - keyless providers never fail this way
+        """The exact fix, for a provider named but not configured (ticket 03).
+
+        **Names every variable that would work, not just the first.** While
+        each provider had one, naming `primary_env_var` was the same thing; it
+        stopped being so when Ollama gained a second way to be configured, and
+        the message then told a developer running their own daemon to go and
+        get a cloud key (providers-and-credentials ticket 04).
+        """
+        if not self.env_vars:  # pragma: no cover - keyless providers never fail this way
             return f'Provider "{self.name}" needs no key.'
+        variables = " or ".join(self.env_vars)
         return (
             f'Provider "{self.name}" has no credential — '
-            f"set {variable} in .env (see .env.example)."
+            f"set {variables} in .env (see .env.example)."
         )
 
 

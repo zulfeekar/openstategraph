@@ -1048,8 +1048,14 @@ def _run_frames(
     # makes "a developer-only payload cannot appear in a customer answer" a
     # property of the code rather than of the client that reads it.
     prose, suggestion = split_suggestion(answer)
+    from openstategraph.compile.workflow_compiler import node_failure_warnings
+
     channel = DeveloperChannel(
-        warnings=list(plan.warnings) + runtime_warnings(runtime),
+        warnings=list(plan.warnings)
+        + runtime_warnings(runtime)
+        # Both doors report it, or `/api/runs` becomes the only one telling
+        # the truth — see the same promotion in `api/main.py` (ticket 04).
+        + node_failure_warnings(outputs) + node_failure_warnings(nested_outputs),
         suggestion=suggestion,
     )
 

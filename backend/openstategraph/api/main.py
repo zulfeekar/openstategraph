@@ -1305,8 +1305,17 @@ def create_app(
         # in `outputs["agent-sql"]` while `answer` was spotless. Every surface
         # renders `outputs` per node, so that is the same leak one field along.
         prose, suggestion = split_suggestion(str(final.get("answer") or ""))
+        from openstategraph.compile.workflow_compiler import node_failure_warnings
+
         channel = DeveloperChannel(
-            warnings=list(plan.warnings) + runtime_warnings(runtime),
+            warnings=list(plan.warnings)
+            + runtime_warnings(runtime)
+            # A node that failed after retries writes its failure into
+            # `outputs` so downstream nodes still read *something*. Every
+            # surface renders that map as the node's output, so without this
+            # promotion a credential failure returned 200, a blank answer and
+            # an empty developer channel (ticket 04).
+            + node_failure_warnings(final.get("outputs") or {}),
             suggestion=suggestion,
         )
         developer = channel.payload(audience).get("developer")

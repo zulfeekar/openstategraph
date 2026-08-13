@@ -308,13 +308,25 @@ class TestOllamaHasTwoWaysToBeConfigured:
         monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
         assert self._ollama().is_configured() is True
 
-    def test_the_message_names_the_key_not_the_host(self) -> None:
-        """The keyless path is the one you opt into by naming a host.
+    def test_the_message_names_both_ways_of_fixing_it(self) -> None:
+        """Ticket 04: naming only the key sends a daemon user shopping.
 
-        So the credential message names `OLLAMA_API_KEY` — the cloud default —
-        rather than offering a host as the first thing to try.
+        The message named `primary_env_var` alone, which was the same thing as
+        "every variable that would work" while each provider had one. Ollama
+        having two made it advice to buy a cloud subscription that a developer
+        running their own daemon does not need.
         """
-        assert "OLLAMA_API_KEY" in self._ollama().missing_key_message()
+        message = self._ollama().missing_key_message()
+        assert "OLLAMA_API_KEY or OLLAMA_HOST" in message
+        assert message.endswith("in .env (see .env.example).")
+
+    def test_a_single_variable_provider_still_reads_naturally(self) -> None:
+        spec = provider_catalogue().get("anthropic")
+        assert spec is not None
+        assert spec.missing_key_message() == (
+            'Provider "anthropic" has no credential — '
+            "set ANTHROPIC_API_KEY in .env (see .env.example)."
+        )
 
     def test_an_unconfigured_ollama_now_produces_a_diagnosis(self) -> None:
         """It used to return `None`: a keyless provider cannot lack a key."""
@@ -465,6 +477,12 @@ class TestPerNodeOverridePicksBetweenProviders:
         import langchain.chat_models
 
         monkeypatch.setattr(langchain.chat_models, "init_chat_model", fake_init)
+        # These tests are about *selection*, so every provider they select must
+        # be configured. Without this they exercise the unconfigured-provider
+        # fallback instead, and pass or fail depending on what an earlier test
+        # happened to leave in the environment.
+        for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY"):
+            monkeypatch.setenv(name, "configured-for-this-test")
         runtime = NodeRuntime.__new__(NodeRuntime)
         runtime.model = "model<default>"  # type: ignore[attr-defined]
         runtime._model_cache = {}  # type: ignore[attr-defined]

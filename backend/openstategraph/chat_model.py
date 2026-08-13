@@ -37,6 +37,8 @@ from openstategraph.providers import missing_key_diagnosis, provider_catalogue
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from langchain_core.language_models import BaseChatModel
 
+    from openstategraph.providers import ProviderSpec
+
 
 def model_kwargs(model_name: str) -> dict[str, Any]:
     """Extra `init_chat_model` arguments this model's provider asks for.
@@ -112,4 +114,71 @@ def build_chat_model(model_name: str) -> "BaseChatModel":
         ) from exc
 
 
-__all__ = ["UnconfiguredProvider", "build_chat_model", "model_kwargs"]
+#: HTTP statuses that mean "your credential was read and refused".
+#: 403 counts: a key valid for the vendor but not for *this model* is the same
+#: action for the reader — look at the key and the account behind it.
+_REFUSED = (401, 403)
+
+
+def _provider_of(exc: BaseException) -> "ProviderSpec | None":
+    """Which registered provider raised this, by the SDK it came from.
+
+    Matched on the exception's root module against each spec's name, extra and
+    aliases — `openai.AuthenticationError` is `openai`'s. Returns `None` rather
+    than guessing when nothing matches, the same rule
+    `providers.missing_key_diagnosis` follows for an unknown prefix: a
+    confidently wrong "set MYSTERY_API_KEY" is worse than saying nothing.
+    """
+    root = (type(exc).__module__ or "").split(".")[0].lower()
+    if not root:
+        return None
+    for spec in provider_catalogue().list():
+        if root in {spec.name.lower(), spec.extra.lower(), *(a.lower() for a in spec.aliases)}:
+            return spec
+    return None
+
+
+def _was_refused(exc: BaseException) -> bool:
+    for attribute in ("status_code", "status", "http_status"):
+        if getattr(exc, attribute, None) in _REFUSED:
+            return True
+    name = type(exc).__name__
+    if name in ("AuthenticationError", "PermissionDeniedError"):
+        return True
+    text = str(exc)
+    return "401" in text or "Unauthorized" in text
+
+
+def explain_credential_refusal(exc: BaseException) -> str | None:
+    """House copy for "the credential was read and refused", else `None`.
+
+    The counterpart to `ProviderSpec.missing_key_message`, and the distinction
+    the reader actually needs: *not set* and *set but wrong* call for opposite
+    actions, and until this existed only the first had words of ours
+    (providers-and-credentials ticket 04).
+
+    **The vendor's own text is dropped, not appended.** OpenAI's 401 embeds a
+    fragment of the key — `sk-defin****************-key` — and this project
+    redacts credentials everywhere it controls; passing one through because it
+    arrived from outside would be a leak we merely did not author. What the
+    vendor said adds nothing here anyway: the status already carries the
+    meaning, and the variable to fix is ours to name.
+    """
+    if not _was_refused(exc):
+        return None
+    spec = _provider_of(exc)
+    if spec is None or not spec.env_vars:
+        return None
+    return (
+        f'Provider "{spec.name}" refused the credential — check '
+        f"{' or '.join(spec.env_vars)} in .env. The value was read and rejected, "
+        "so this is a wrong or expired credential rather than a missing one."
+    )
+
+
+__all__ = [
+    "UnconfiguredProvider",
+    "build_chat_model",
+    "explain_credential_refusal",
+    "model_kwargs",
+]
