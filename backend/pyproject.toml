@@ -42,7 +42,7 @@ dependencies = [
 # The console script (framework-packaging §3.2(a)) — argparse only, so it adds
 # nothing to the four-package floor above.
 [project.scripts]
-openstategraph = "openstategraph.cli:main"
+openstategraph = "openstategraph.cli:console_main"
 
 # PROVISIONAL, and deliberately un-mistakable. This checkout has no configured
 # git remote, so the canonical host is not a fact yet. The URLs below say

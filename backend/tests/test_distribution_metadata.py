@@ -185,7 +185,13 @@ class TestDistributionIdentity:
         typo in this one line is invisible until someone installs the wheel."""
         scripts = pyproject["project"]["scripts"]
 
-        assert scripts == {"openstategraph": "openstategraph.cli:main"}
+        # `console_main`, not `main`, and the difference is deliberate: the
+        # console script is a **process** entry point and reads `.env` before
+        # anything asks for a credential. `main()` stays a plain function this
+        # project's own tests call in-process — a function that rewrites
+        # `os.environ` from a file poisons every test after it, which is
+        # exactly what happened when the load lived there.
+        assert scripts == {"openstategraph": "openstategraph.cli:console_main"}
         module, _, attribute = scripts["openstategraph"].partition(":")
         assert callable(getattr(__import__(module, fromlist=[attribute]), attribute))
 

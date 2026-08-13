@@ -704,6 +704,8 @@ def cmd_env_example(_args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+from openstategraph.dotenv import load_env_file
+
 def main(argv: Sequence[str] | None = None) -> int:
     """The entry point. Returns the exit code rather than calling `sys.exit`,
     so a test can invoke it directly instead of shelling out to a subprocess
@@ -724,3 +726,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def console_main() -> int:
+    """The installed `openstategraph` command — the **process** entry point.
+
+    `.env` is read here and not in `main()`, and the distinction is the whole
+    design. `main()` is a function: this project's own tests call it in-process
+    (its docstring says so, deliberately, so a CLI does not end up with
+    untested commands), and a function that rewrites `os.environ` from a file on
+    disk poisons every test that runs after it — which is exactly what happened
+    when this lived one level down.
+
+    So: a **process** the user launched may populate their environment from
+    their file; a **function** anyone can call may not. Same boundary
+    `load_workflow` observes for a library consumer, one layer in.
+
+    Already-exported variables always win — see `openstategraph/dotenv.py`.
+    """
+    load_env_file()
+    return main()
