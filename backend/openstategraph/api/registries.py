@@ -297,6 +297,13 @@ def runtime_warnings(runtime: Any) -> list[str]:
         warnings.append(
             f'No function found for "{fn_type}" — the step passed its input through unchanged.'
         )
+    for node_id, slug in getattr(runtime, "unenforced_outcomes", []):
+        warnings.append(
+            f'Team "{node_id}" mounts "{slug}", whose graph has no grader routing '
+            "revise — so its Expected outcome is documentation and nothing in the "
+            "run checks it. Add a grader to that workflow and wire revise back, or "
+            "read the outcome as a note."
+        )
     for node_type, node_id in getattr(runtime, "unknown_node_types", []):
         warnings.append(
             f'Node "{node_id}" has type "{node_type}", which this build does not '

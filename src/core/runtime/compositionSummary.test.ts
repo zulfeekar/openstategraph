@@ -40,7 +40,11 @@ describe('summarizeComposition', () => {
     expect(formatComposition(summary!)).not.toContain('loops');
   });
 
-  it('claims no loop when the grader has no revise edge', () => {
+  it('claims no loop when the grader has no revise edge, and says why', () => {
+    // This asserted `{ parts }` with **no note at all** — the behaviour ticket
+    // 03 calls the defect. A Team card shows an `Expected outcome` the user
+    // wrote; saying nothing beside it reads as agreement. The counts are
+    // unchanged; what was silence is now a sentence.
     const document = {
       nodes: [
         { id: 'a', type: 'agent.llm' },
@@ -53,6 +57,7 @@ describe('summarizeComposition', () => {
         { label: 'agent', count: 1 },
         { label: 'grader', count: 1 },
       ],
+      note: 'its grader never revises — nothing sends a weak answer back',
     });
   });
 
@@ -117,5 +122,73 @@ describe('compositionPurpose', () => {
   it('caps a purpose that was written as a paragraph', () => {
     const long = `${'word '.repeat(60)}end.`;
     expect(compositionPurpose({ settings: { purpose: long } }).length).toBeLessThanOrEqual(160);
+  });
+});
+
+/**
+ * production-ready ticket 03.
+ *
+ * A Team's card carries an `Expected outcome` the user wrote, and the value
+ * never reaches the compiler — `_subgraph` reads only `workflow` and
+ * `overrides`. Worse, a document with **no grader at all** can be mounted as a
+ * Team: it still says Team, still runs, and still displays an outcome nobody
+ * checks.
+ *
+ * The census already knew. `loops` is computed here, and a child that does not
+ * loop was expressed as the *absence* of a note — silence, which is the same
+ * shape as the defect. Absence of a claim is not a claim of absence, and on a
+ * card nobody reads the gap.
+ */
+describe('a Team whose child cannot enforce its outcome says so', () => {
+  const graderless = {
+    nodes: [
+      { id: 'in1', type: 'input.text' },
+      { id: 'a1', type: 'agent.llm' },
+      { id: 'out1', type: 'output.formatted' },
+    ],
+    edges: [
+      { source: { nodeId: 'in1', portId: 'text' }, target: { nodeId: 'a1', portId: 'prompt' } },
+      { source: { nodeId: 'a1', portId: 'result' }, target: { nodeId: 'out1', portId: 'result' } },
+    ],
+  };
+
+  /** A grader that exists but never routes `revise` back — no loop closes. */
+  const openLoop = {
+    nodes: [
+      { id: 'in1', type: 'input.text' },
+      { id: 'a1', type: 'agent.llm' },
+      { id: 'g1', type: 'route.grader' },
+      { id: 'out1', type: 'output.formatted' },
+    ],
+    edges: [
+      { source: { nodeId: 'in1', portId: 'text' }, target: { nodeId: 'a1', portId: 'prompt' } },
+      { source: { nodeId: 'a1', portId: 'result' }, target: { nodeId: 'g1', portId: 'candidate' } },
+      { source: { nodeId: 'g1', portId: 'pass' }, target: { nodeId: 'out1', portId: 'result' } },
+    ],
+  };
+
+  it('states the gap rather than omitting the loop note', () => {
+    const summary = summarizeComposition(graderless, 'team');
+    expect(summary?.note).toBeDefined();
+    expect(formatComposition(summary!)).toMatch(/no grader|nothing checks/i);
+  });
+
+  it('counts a grader that never revises as not closing the loop', () => {
+    // The grader is present, so "no grader" would be wrong; what is missing is
+    // the `revise` edge that makes it a loop.
+    const summary = summarizeComposition(openLoop, 'team');
+    expect(summary?.note).toBeDefined();
+    expect(formatComposition(summary!)).not.toContain('loops until');
+  });
+
+  it('still says nothing of the sort for a plain subgraph mount', () => {
+    // Only a Team promises an outcome, so only a Team can fail to keep one.
+    // A `workflow.subgraph` mount never claimed a loop in the first place.
+    expect(summarizeComposition(graderless, 'subgraph')?.note).toBeUndefined();
+  });
+
+  it('leaves a real looping team exactly as it was', () => {
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'team');
+    expect(formatComposition(summary!)).toContain('loops until its grader passes');
   });
 });

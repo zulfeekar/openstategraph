@@ -137,3 +137,41 @@ describe('an organism states the contract it offers', () => {
     }
   });
 });
+
+/**
+ * production-ready ticket 03 — the copy half.
+ *
+ * `Expected outcome` never reaches the compiler: `_subgraph` reads `workflow`
+ * and `overrides` and nothing else. Its placeholder said "enforced by its
+ * grader", so a user wrote a constraint, reasonably believed it bound the run,
+ * and got no signal that it did not.
+ *
+ * That is the RouterNode lesson in a different field — a surface presenting a
+ * machine-owned promise as if it were configuration.
+ */
+describe('the Team outcome field does not claim an enforcement it has not got', () => {
+  const outcome = teamNode.fields.find((field) => field.key === 'outcome');
+
+  it('still exists and still shows on the card', () => {
+    // The fix is not to hide it: a reader of the card wants to know what the
+    // box is for, and it is genuinely useful documentation.
+    expect(outcome).toBeDefined();
+    expect(outcome?.onCard).toBe(true);
+  });
+
+  it('never says enforced, required or must', () => {
+    const copy = `${outcome?.label ?? ''} ${outcome?.placeholder ?? ''}`.toLowerCase();
+    expect(copy).not.toMatch(/enforc|required|must deliver/);
+  });
+
+  it('names itself as documentation where a user reads the label', () => {
+    expect((outcome?.label ?? '').toLowerCase()).toContain('documentation');
+  });
+
+  it('points at where enforcement actually lives', () => {
+    // Naming the real mechanism is what stops the misunderstanding from
+    // recurring — "it is not enforced" alone leaves nowhere to go.
+    expect((outcome?.hint ?? '').toLowerCase()).toMatch(/grader/);
+    expect((outcome?.hint ?? '').toLowerCase()).toMatch(/child|workflow/);
+  });
+});

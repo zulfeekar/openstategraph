@@ -859,6 +859,20 @@ class NodeRuntime:
         #: was not.
         self.unresolved_functions: list[str] = []
         self.unresolved_subgraphs: list[str] = []
+        #: Team mounts whose child cannot enforce the outcome on their card,
+        #: as `(node id, slug)`.
+        #:
+        #: `TeamNode`'s `Expected outcome` never reaches the compiler —
+        #: `_subgraph` reads `workflow` and `overrides` and nothing else — so a
+        #: user writes a constraint, reasonably believes it binds the run, and
+        #: gets no signal that it does not. A document with no grader at all
+        #: can be mounted as a Team and will still display that outcome
+        #: (production-ready ticket 03).
+        #:
+        #: Reported rather than refused: a Team without a loop is a legal graph
+        #: that answers questions. What it cannot do is keep the promise
+        #: printed on its card, which is a thing to say, not a thing to refuse.
+        self.unenforced_outcomes: list[tuple[str, str]] = []
         #: Node types this build has no factory for, as `type` and node id.
         #:
         #: The loud half of a rule that was only half kept. `errors.py` records
@@ -1968,6 +1982,24 @@ class NodeRuntime:
 
         return run
 
+    @staticmethod
+    def _closes_a_loop_impl(document: dict[str, Any]) -> bool:
+        """Whether any grader in this document routes `revise` somewhere.
+
+        Read off the compiled plan, not off the raw edges: `conditional` is
+        where a grader's `revise` destination becomes a fact, and asking the
+        compiler means this answer cannot disagree with what the graph does. A
+        document that will not plan is not a loop question — it has a louder
+        problem of its own.
+        """
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        try:
+            plan = WorkflowCompiler().plan(document)
+        except Exception:
+            return False
+        return any("revise" in branches for branches in plan.conditional.values())
+
     def _subgraph(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Another workflow, compiled and invoked as one node of this graph.
 
@@ -2018,6 +2050,15 @@ class NodeRuntime:
                 )
                 for warning in mount_warnings:
                     self.override_warnings.append(f"{slug or node_id}: {warning}")
+                # A Team's card shows an outcome its child may have no way to
+                # enforce. Asked of the *compiler's* plan rather than by
+                # re-scanning edges here: `conditional` is where a grader's
+                # `revise` destination becomes a fact, so this cannot drift
+                # from what the graph actually does (ticket 03).
+                if str(node.get("type") or "") == "team.workflow" and not self._closes_a_loop_impl(
+                    child_document
+                ):
+                    self.unenforced_outcomes.append((node_id, slug))
                 child_assets = PackageAssets(
                     tools=self.tools,
                     functions=self.functions,

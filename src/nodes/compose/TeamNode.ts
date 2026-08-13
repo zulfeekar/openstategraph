@@ -82,8 +82,16 @@ export const teamNode: INodeDefinition = defineNode(
       {
         kind: 'textarea',
         key: FIELD_OUTCOME,
-        label: 'Expected outcome',
-        placeholder: 'What this team must deliver — enforced by its grader.',
+        label: 'Expected outcome (documentation)',
+        // The placeholder said "enforced by its grader", which is the defect
+        // rather than a description of it: this value never reaches the
+        // compiler — `_subgraph` reads `workflow` and `overrides` and nothing
+        // else — so a user wrote a constraint, reasonably believed it bound
+        // the run, and got no signal that it did not. The RouterNode lesson in
+        // a different field: a surface presenting a machine-owned promise as
+        // if it were configuration (ticket 03).
+        placeholder: 'What this team is expected to deliver, in your words.',
+        hint: 'Shown on the card so a reader knows what this box is for. It does not constrain the run — enforcement lives in the child workflow’s own grader criteria, and the card says so when that grader is missing or never revises.',
         defaultValue: '',
         onCard: true,
       },

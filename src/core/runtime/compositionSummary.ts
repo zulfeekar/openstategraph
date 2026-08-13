@@ -155,8 +155,25 @@ export function summarizeComposition(
   }
   if (parts.length === 0) return null;
 
-  const loops = kind === 'team' && graderIds.some((id) => hasRevise(doc, id));
-  return loops ? { parts, note: 'loops until its grader passes' } : { parts };
+  if (kind !== 'team') return { parts };
+
+  // Only a Team promises an outcome, so only a Team can fail to keep one — a
+  // `workflow.subgraph` mount never claimed a loop and gets no note either way.
+  //
+  // **The gap is stated, not omitted** (ticket 03). A child that does not loop
+  // used to be expressed as the *absence* of the note below, and absence of a
+  // claim is not a claim of absence: the card showed an `Expected outcome` the
+  // user had written, beside nothing saying it is unchecked. Silence is the
+  // same shape as the defect.
+  if (graderIds.some((id) => hasRevise(doc, id))) {
+    return { parts, note: 'loops until its grader passes' };
+  }
+  return {
+    parts,
+    note: graderIds.length
+      ? 'its grader never revises — nothing sends a weak answer back'
+      : 'no grader — nothing checks the outcome',
+  };
 }
 
 /** The census as the one line a card shows. */
