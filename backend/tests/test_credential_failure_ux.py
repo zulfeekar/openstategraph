@@ -160,7 +160,7 @@ class TestWrongIsNotTheSameAsMissing:
         return exc
 
     def test_openai_refusal_names_the_variable(self) -> None:
-        from openstategraph.chat_model import explain_credential_refusal
+        from openstategraph.chat_model import credential_error_from
 
         exc = self._refused(
             "openai",
@@ -168,44 +168,44 @@ class TestWrongIsNotTheSameAsMissing:
             "Error code: 401 - {'error': {'message': 'Incorrect API key provided: "
             "sk-defin****************-key.'}}",
         )
-        explained = explain_credential_refusal(exc)
-        assert explained is not None
-        assert "OPENAI_API_KEY" in explained
-        assert "wrong or expired" in explained
+        error = credential_error_from(exc)
+        assert error is not None
+        assert "OPENAI_API_KEY" in error.developer_message()
+        assert "wrong or expired" in error.developer_message()
 
     def test_the_key_fragment_is_dropped_not_forwarded(self) -> None:
         """`SECURITY.md`'s rule does not stop applying because a vendor sent it."""
-        from openstategraph.chat_model import explain_credential_refusal
+        from openstategraph.chat_model import credential_error_from
 
         exc = self._refused(
             "openai", "AuthenticationError", "Incorrect API key provided: sk-defin****-key."
         )
-        explained = explain_credential_refusal(exc)
-        assert explained is not None
-        assert "sk-defin" not in explained
+        error = credential_error_from(exc)
+        assert error is not None
+        assert "sk-defin" not in error.developer_message()
 
     def test_ollama_refusal_names_both_of_its_variables(self) -> None:
-        from openstategraph.chat_model import explain_credential_refusal
+        from openstategraph.chat_model import credential_error_from
 
         # The real one says only "Unauthorized (status code: 401)" — no
         # provider, no variable, no action.
         exc = self._refused("ollama", "ResponseError", "Unauthorized (status code: 401)")
-        explained = explain_credential_refusal(exc)
-        assert explained is not None
-        assert "OLLAMA_API_KEY or OLLAMA_HOST" in explained
+        error = credential_error_from(exc)
+        assert error is not None
+        assert "OLLAMA_API_KEY or OLLAMA_HOST" in error.developer_message()
 
     def test_an_unrelated_failure_is_left_alone(self) -> None:
         """No guessing. A wrong "set MYSTERY_API_KEY" is worse than silence."""
-        from openstategraph.chat_model import explain_credential_refusal
+        from openstategraph.chat_model import credential_error_from
 
-        assert explain_credential_refusal(ValueError("something else entirely")) is None
-        assert explain_credential_refusal(self._refused("httpx", "ConnectError", "refused")) is None
+        assert credential_error_from(ValueError("something else entirely")) is None
+        assert credential_error_from(self._refused("httpx", "ConnectError", "refused")) is None
 
     def test_a_non_auth_vendor_error_is_left_alone(self) -> None:
-        from openstategraph.chat_model import explain_credential_refusal
+        from openstategraph.chat_model import credential_error_from
 
         exc = self._refused("openai", "RateLimitError", "Error code: 429 - rate limited")
-        assert explain_credential_refusal(exc) is None
+        assert credential_error_from(exc) is None
 
 
 class TestWhatACustomerSees:
@@ -267,3 +267,87 @@ class TestWhatACustomerSees:
         assert "This step did not complete." not in " ".join(
             str(v) for v in body["outputs"].values()
         )
+
+
+class TestTheErrorKnowsHowItReads:
+    """The OOP shape, rather than a type switch at each surface.
+
+    `describe_failure` used to ask *what kind of error is this* and then ask a
+    different module for a string. Two audiences × every error type is a
+    matrix that grows by editing call sites — the shape this project's rules
+    reject. The base class answers both questions now, and a vendor's error is
+    translated into the hierarchy once, at the edge.
+
+    There is deliberately no `IError` protocol above `OpenStateGraphError`:
+    Python's `except` accepts only classes deriving from `BaseException`, so
+    such an interface would be unbindable — see the base class docstring.
+    """
+
+    def test_a_protocol_could_not_have_been_caught(self) -> None:
+        """The constraint that decides the design, asserted rather than claimed."""
+        from typing import Protocol, runtime_checkable
+
+        @runtime_checkable
+        class IError(Protocol):
+            def developer_message(self) -> str: ...
+
+        with pytest.raises(TypeError, match="do not inherit from BaseException"):
+            try:
+                raise ValueError("x")
+            except IError:  # type: ignore[misc]
+                pass
+
+    def test_every_error_answers_both_questions(self) -> None:
+        """Inherited, so a new error type cannot forget to have an answer."""
+        from openstategraph.errors import MissingProviderKey, OpenStateGraphError
+
+        for error in (OpenStateGraphError("x"), MissingProviderKey("set FOO")):
+            assert isinstance(error.developer_message(), str)
+            assert isinstance(error.customer_message(), str)
+
+    def test_the_customer_default_is_the_safe_direction(self) -> None:
+        """A subclass opts *in* to saying more, so silence is the default.
+
+        The alternative — inherit the developer text and override to redact —
+        leaks by omission the first time someone adds an error type.
+        """
+        from openstategraph.errors import GENERIC_FAILURE_MESSAGE, MissingProviderKey
+
+        error = MissingProviderKey("set ANTHROPIC_API_KEY in .env")
+        assert "ANTHROPIC_API_KEY" in error.developer_message()
+        assert error.customer_message() == GENERIC_FAILURE_MESSAGE
+
+    def test_missing_and_refused_are_siblings_under_one_handler(self) -> None:
+        """`except CredentialError` is the one handler for "a key problem"."""
+        from openstategraph.errors import (
+            CredentialError,
+            MissingProviderKey,
+            ProviderRefusedCredential,
+        )
+
+        assert issubclass(MissingProviderKey, CredentialError)
+        assert issubclass(ProviderRefusedCredential, CredentialError)
+        assert not issubclass(ProviderRefusedCredential, MissingProviderKey)
+
+    def test_catching_the_builtin_still_works(self) -> None:
+        """The compatibility promise in `errors.py`'s own docstring.
+
+        `MissingProviderKey` was `OpenStateGraphError, RuntimeError`; moving it
+        under `CredentialError` must not quietly drop the builtin it used to be.
+        """
+        from openstategraph.errors import MissingProviderKey
+
+        with pytest.raises(RuntimeError):
+            raise MissingProviderKey("x")
+
+    def test_an_unknown_failure_still_tells_a_developer_its_type(self) -> None:
+        from openstategraph.compile.workflow_compiler import (
+            describe_failure,
+            describe_failure_for_customer,
+        )
+        from openstategraph.errors import GENERIC_FAILURE_MESSAGE
+
+        exc = RuntimeError("the checkpointer is gone")
+        assert describe_failure(exc) == "RuntimeError: the checkpointer is gone"
+        # …and tells a customer nothing about checkpointers.
+        assert describe_failure_for_customer(exc) == GENERIC_FAILURE_MESSAGE

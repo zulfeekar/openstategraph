@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from openstategraph.errors import MissingProviderKey
+from openstategraph.errors import MissingProviderKey, ProviderRefusedCredential
 from openstategraph.providers import missing_key_diagnosis, provider_catalogue
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -149,13 +149,14 @@ def _was_refused(exc: BaseException) -> bool:
     return "401" in text or "Unauthorized" in text
 
 
-def explain_credential_refusal(exc: BaseException) -> str | None:
-    """House copy for "the credential was read and refused", else `None`.
+def credential_error_from(exc: BaseException) -> ProviderRefusedCredential | None:
+    """A vendor's auth failure, translated into one of ours. Else `None`.
 
-    The counterpart to `ProviderSpec.missing_key_message`, and the distinction
-    the reader actually needs: *not set* and *set but wrong* call for opposite
-    actions, and until this existed only the first had words of ours
-    (providers-and-credentials ticket 04).
+    **The adapter at the edge of the hierarchy.** Returns an *error*, not a
+    string, so the translation happens once here and every surface downstream
+    treats it exactly like an error we raised — asking it for a developer or a
+    customer message rather than each one re-deciding what an
+    `AuthenticationError` from some vendor means.
 
     **The vendor's own text is dropped, not appended.** OpenAI's 401 embeds a
     fragment of the key — `sk-defin****************-key` — and this project
@@ -169,7 +170,7 @@ def explain_credential_refusal(exc: BaseException) -> str | None:
     spec = _provider_of(exc)
     if spec is None or not spec.env_vars:
         return None
-    return (
+    return ProviderRefusedCredential(
         f'Provider "{spec.name}" refused the credential — check '
         f"{' or '.join(spec.env_vars)} in .env. The value was read and rejected, "
         "so this is a wrong or expired credential rather than a missing one."
@@ -179,6 +180,6 @@ def explain_credential_refusal(exc: BaseException) -> str | None:
 __all__ = [
     "UnconfiguredProvider",
     "build_chat_model",
-    "explain_credential_refusal",
+    "credential_error_from",
     "model_kwargs",
 ]

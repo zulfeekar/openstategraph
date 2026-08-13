@@ -9,6 +9,31 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **An error knows how it reads.** `OpenStateGraphError` gains
+  `developer_message()` and `customer_message()`, and the new
+  `CredentialError` groups `MissingProviderKey` with its sibling
+  `ProviderRefusedCredential` — *not set* and *set but wrong* need opposite
+  actions from the reader, so `except CredentialError` is the one handler for
+  "a key problem". `MissingProviderKey`'s declared bases move from
+  `(OpenStateGraphError, RuntimeError)` to `(CredentialError)`, which inherits
+  both, so `except RuntimeError` and `except OpenStateGraphError` keep working;
+  a test asserts it.
+
+  This replaces a type switch. Each surface asked *what kind of error is this*
+  and then asked a different module for a string, which is two audiences ×
+  every error type as a matrix maintained by editing call sites. The base
+  class answers both questions now, `customer_message()` defaults to a generic
+  sentence so a new error type cannot leak a variable name by forgetting to
+  override anything, and a vendor's exception is translated into the hierarchy
+  once at the edge (`chat_model.credential_error_from`, which returns an error
+  rather than a string).
+
+  There is deliberately **no `IError` protocol** above the base. Python's
+  `except` accepts only classes deriving from `BaseException` — `except
+  SomeProtocol` raises `TypeError` — so such an interface would be unbindable
+  rather than merely leaky, the same reason `CLAUDE.md` gives for refusing
+  `IOrchestrator`. `OpenStateGraphError` *is* the interface.
+
 - **Ollama takes its configuration from the environment, and is no longer the
   zero-configuration fallback.** It now declares
   `env_vars=("OLLAMA_API_KEY", "OLLAMA_HOST")`, and because `is_configured`

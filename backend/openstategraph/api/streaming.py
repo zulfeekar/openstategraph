@@ -608,15 +608,15 @@ def _stream_run(
             # refused, and a customer gets none of it — `detail` reached them
             # reading "set OLLAMA_API_KEY in .env" (ticket 04).
             from openstategraph.compile.workflow_compiler import (
-                RUN_FAILED_ANSWER,
                 describe_failure,
+                describe_failure_for_customer,
             )
             from openstategraph.api.audience import Audience as _Audience
 
             detail = (
                 describe_failure(exc)
                 if audience == _Audience.DEVELOPER
-                else RUN_FAILED_ANSWER
+                else describe_failure_for_customer(exc)
             )
             yield _sse("error", {"threadId": thread_id, "detail": detail})
         return

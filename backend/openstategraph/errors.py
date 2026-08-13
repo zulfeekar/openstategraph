@@ -25,12 +25,57 @@ still answer the questions it can.
 from __future__ import annotations
 
 
+#: What someone who cannot fix it is told, whatever went wrong.
+#:
+#: One sentence, in one place, because it is shown by three surfaces — the
+#: run's `answer`, a terminal `error` frame's `detail`, and a failed node's
+#: entry in `outputs`. Three copies of a sentence is three chances to fix two
+#: of them.
+GENERIC_FAILURE_MESSAGE = (
+    "The workflow could not finish — a step failed before an answer was "
+    "produced. Try again, or contact whoever runs this workflow."
+)
+
+
 class OpenStateGraphError(Exception):
     """Base for every error this framework raises on purpose.
 
     `except OpenStateGraphError` is the one handler that means "the workflow
     layer failed", as distinct from the model, the network, or your own code.
+
+    **It also knows how to read.** An error is shown to two audiences that
+    need different things, and asking *what kind of error is this* at each
+    surface is a type switch standing in for polymorphism — the shape this
+    project's own rules reject. The two methods below are the whole interface;
+    a subclass with nothing special to say inherits both.
+
+    There is deliberately no `IError` protocol above this. Python's `except`
+    is the consumer, and it accepts only classes deriving from
+    `BaseException` — `except SomeProtocol` raises `TypeError: catching
+    classes that do not inherit from BaseException`. An interface no consumer
+    can bind to is unbindable rather than merely leaky, the same reason
+    `CLAUDE.md` gives for refusing `IOrchestrator`. This class **is** the
+    interface, and `Exception` is the ladder's abstract rung.
     """
+
+    def developer_message(self) -> str:
+        """This error, for someone who can act on it.
+
+        `str(self)` by default: our own errors are written as the copy, which
+        is the point of raising them instead of a vendor's. Overridden only
+        where a developer needs more than the sentence a customer's absence
+        of detail is derived from.
+        """
+        return str(self)
+
+    def customer_message(self) -> str:
+        """This error, for someone who cannot act on it.
+
+        Generic by default, and that is the safe direction: a subclass opts
+        *in* to saying more, so a new error type cannot leak a variable name
+        or a file path to a customer by forgetting to override anything.
+        """
+        return GENERIC_FAILURE_MESSAGE
 
 
 class WorkflowPackageError(OpenStateGraphError):
@@ -70,7 +115,20 @@ class SchemaVersionError(DocumentError):
     """
 
 
-class MissingProviderKey(OpenStateGraphError, RuntimeError):
+class CredentialError(OpenStateGraphError, RuntimeError):
+    """A provider's credential is the reason this run cannot proceed.
+
+    The family exists because there are two of these and they are **not the
+    same failure**: a credential that is absent and one that was read and
+    refused need opposite actions from the reader, and a caller who wants to
+    handle "anything to do with credentials" should not have to list them.
+
+    Groups the way `WorkflowPackageError` groups package failures, and for the
+    same reason: one `except` for one decision.
+    """
+
+
+class MissingProviderKey(CredentialError):
     """A model names a provider whose credential is not set (ticket 03).
 
     Raised in place of the vendor SDK's own error, which names *its*
@@ -85,12 +143,32 @@ class MissingProviderKey(OpenStateGraphError, RuntimeError):
     """
 
 
+class ProviderRefusedCredential(CredentialError):
+    """A credential was read, sent, and rejected by the vendor.
+
+    The sibling of `MissingProviderKey`, and the distinction is the whole
+    point: *not set* and *set but wrong* need opposite actions, and until this
+    existed only the first had words of ours — the second arrived as the
+    vendor's own error, a raw dict which in OpenAI's case embeds a fragment of
+    the key.
+
+    Constructed by `chat_model.credential_error_from`, which is the adapter
+    from a vendor SDK's exception into this hierarchy. That translation is why
+    this is a class and not a formatted string: once a foreign failure becomes
+    one of ours, every surface treats it like any other error we raise, rather
+    than each one re-deciding what an `AuthenticationError` means.
+    """
+
+
 __all__ = [
+    "GENERIC_FAILURE_MESSAGE",
+    "CredentialError",
     "DocumentError",
     "InvalidPackageName",
     "MissingProviderKey",
     "OpenStateGraphError",
     "PackageNotFound",
+    "ProviderRefusedCredential",
     "SchemaVersionError",
     "WorkflowPackageError",
 ]

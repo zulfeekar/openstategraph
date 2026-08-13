@@ -31,6 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
 from openstategraph.abc.orchestrator import archetype_key
+from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
@@ -127,31 +128,59 @@ def _error_handler_for(
     return handle
 
 
-def describe_failure(exc: Any) -> str:
-    """One line for a reader, from an exception.
+def as_our_error(exc: Any) -> "OpenStateGraphError | None":
+    """This failure as one of ours, translating a vendor's if we recognise it.
 
-    **Our own errors are already the copy.** `MissingProviderKey` exists to
-    carry a sentence naming the variable and the fix, so prefixing it with its
-    own class name adds a Python identifier to a message written for someone
-    who may not be reading Python (ticket 04).
+    The one place a foreign exception crosses into our hierarchy. Everything
+    downstream then asks the *error* how it reads, rather than each surface
+    re-deciding what someone else's `AuthenticationError` means — which is the
+    type switch this replaced.
 
-    A *foreign* exception keeps its type, because there the type is most of
-    the information: `ConnectError` and `AuthenticationError` say genuinely
-    different things about what to do next, and neither says so in its
-    message.
+    `None` for a failure we do not recognise. Not a guess: an unrecognised
+    exception keeps its own type and message, which is the honest thing to
+    show a developer and the same rule `missing_key_diagnosis` follows for an
+    unknown provider prefix.
     """
-    from openstategraph.chat_model import explain_credential_refusal
+    from openstategraph.chat_model import credential_error_from
     from openstategraph.errors import OpenStateGraphError
 
     if isinstance(exc, OpenStateGraphError):
-        return str(exc)
-    # A credential that was read and refused. Recognised here rather than left
-    # as the vendor's own text, which is a raw dict and — for OpenAI —
-    # contains a fragment of the key.
-    refusal = explain_credential_refusal(exc)
-    if refusal:
-        return refusal
+        return exc
+    return credential_error_from(exc)
+
+
+def describe_failure(exc: Any) -> str:
+    """One line for a **developer**, from an exception.
+
+    Our own errors are already the copy — `MissingProviderKey` exists to carry
+    a sentence naming the variable and the fix, so prefixing it with its own
+    class name adds a Python identifier to a message written for someone who
+    may not be reading Python (ticket 04).
+
+    A foreign exception we cannot place keeps its type, because there the type
+    is most of the information: `ConnectError` and `AuthenticationError` say
+    genuinely different things about what to do next, and neither says so in
+    its message.
+    """
+    ours = as_our_error(exc)
+    if ours is not None:
+        return ours.developer_message()
     return f"{type(exc).__name__}: {exc}"
+
+
+def describe_failure_for_customer(exc: Any) -> str:
+    """The same failure, for someone who cannot act on it.
+
+    Polymorphic rather than a branch here: the error decides, and the base
+    class's default is the generic sentence, so a new error type cannot leak a
+    variable name to a customer by forgetting to override anything. An
+    unrecognised exception gets that same default — never its own text, which
+    is how "RuntimeError: the checkpointer is gone" was reaching customers.
+    """
+    from openstategraph.errors import GENERIC_FAILURE_MESSAGE
+
+    ours = as_our_error(exc)
+    return ours.customer_message() if ours is not None else GENERIC_FAILURE_MESSAGE
 
 
 #: How a failed node's output is written, and the only place it is spelled.
@@ -184,10 +213,7 @@ CUSTOMER_STEP_FAILED = "This step did not complete."
 #: fails, the output node never runs at all — verified, `outputs` contains no
 #: entry for it — so the floor beneath every route to that node is not a floor
 #: beneath every run (providers-and-credentials ticket 04).
-RUN_FAILED_ANSWER = (
-    "The workflow could not finish — a step failed before an answer was "
-    "produced. Try again, or contact whoever runs this workflow."
-)
+RUN_FAILED_ANSWER = GENERIC_FAILURE_MESSAGE
 
 
 def redact_failure_markers(outputs: Mapping[str, Any]) -> dict[str, Any]:
