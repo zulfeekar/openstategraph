@@ -289,15 +289,27 @@ every tool by its `node_type`.
 This exists because the alternative is real: put one workflow's tools in the
 shared catalogue and every future palette carries every past workflow's tools.
 
-> **This path cannot be followed literally today, and that is a defect in the
-> code rather than in this sentence.**
-> [`workflowScoped.ts`](../src/nodes/workflowScoped.ts) hardcodes
-> `CHINOOK_NODES` in three places and offers no registry to add a second
-> family to — so a new workflow-scoped family means editing the engine, which
-> is the one thing `Registry<T>` exists to prevent. Tracked as ship-it ticket
-> 03. Until it is fixed, adding a family means editing
-> `syncWorkflowScopedNodes` **and** `registerNodeTypesForRawDocument`; miss the
-> second and your nodes are dropped on every load, per the warning below.
+A family is one entry in `workflowScopedFamilies`, the `Registry<T>` in
+[`workflowScoped.ts`](../src/nodes/workflowScoped.ts):
+
+```ts
+workflowScopedFamilies.register({ id: 'dice', nodes: DICE_NODES });
+```
+
+That is the whole registration. Both call sites — the pre-import one and the
+keep-in-sync one — iterate the registry, so neither needs to know your family
+exists. Chinook is registered on exactly the same line and has no other
+privilege.
+
+> Until 2026-08-13 this section told you to add your family to
+> `syncWorkflowScopedNodes`, which had nothing to add it to: it named
+> `CHINOOK_NODES` in its own body, as did `registerNodeTypesForRawDocument`.
+> Following it literally was impossible, and following it approximately meant
+> editing the second site too — miss that and your nodes were dropped on every
+> load, per the warning below. The guide could not be written correctly because
+> the seam was missing (ship-it ticket 03); the seam above is the fix, and this
+> paragraph is left here because a guide that was wrong should say when it
+> stopped being wrong.
 
 > **Load order matters.** `WorkflowSerializer.fromJSON` silently skips nodes
 > whose type is not registered yet. Workflow-scoped types must be registered
@@ -700,10 +712,17 @@ drifts, produces a card that looks wired and answers nothing.
 ### Register it
 
 `workflows/<slug>/tools/dice.py` is discovered automatically. For the
-TypeScript card, add `DICE_NODES` to `syncWorkflowScopedNodes` in
-[`workflowScoped.ts`](../src/nodes/workflowScoped.ts) — or, if the atom is
-genuinely useful everywhere, to `registerNodeCatalogue` in
-[`index.ts`](../src/nodes/index.ts) and to `build_tool_registry`.
+TypeScript card, register the family in
+[`workflowScoped.ts`](../src/nodes/workflowScoped.ts):
+
+```ts
+workflowScopedFamilies.register({ id: 'dice', nodes: DICE_NODES });
+```
+
+Nothing else in the engine changes — that is what makes it a registration
+rather than an edit. Or, if the atom is genuinely useful everywhere, add it to
+`registerNodeCatalogue` in [`index.ts`](../src/nodes/index.ts) and to
+`build_tool_registry`.
 
 Then drag it onto the canvas, wire its `tool` port to an agent's `tools` bus,
 and ask the agent to roll something.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addNode, makeWorkbench } from '@core/testing/fixtures';
 import { isToolExecutor, type ExecutionContext } from '@core/execution/INodeExecutor';
-import { registerChinookNodes } from '../workflowScoped';
+import { registerScopedFamily } from '../workflowScoped';
 import {
   getAllTablesExecutor,
   getAllTablesNode,
@@ -51,7 +51,7 @@ describe('Get Table Schema', () => {
   it('advertises the table as a model argument with no baked-in default', () => {
     if (!isToolExecutor(getTableSchemaExecutor)) throw new Error('not a tool');
     const workbench = makeWorkbench();
-    registerChinookNodes(workbench.registry, workbench.engine.executors);
+    registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
     const node = addNode(workbench, getTableSchemaNode.id);
 
     const spec = getTableSchemaExecutor.describeTool(node);
@@ -67,7 +67,7 @@ describe('Get Table Schema', () => {
 
   it('loads a legacy document carrying the dead tableName without complaint', () => {
     const workbench = makeWorkbench();
-    registerChinookNodes(workbench.registry, workbench.engine.executors);
+    registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
 
     const node = addNode(workbench, getTableSchemaNode.id, { data: { tableName: 'Artist' } });
 
@@ -89,7 +89,7 @@ describe('the browser preview refuses instead of inventing a schema', () => {
     it(`${label} points at the database rather than answering from a copy`, async () => {
       if (!isToolExecutor(executor)) throw new Error('not a tool');
       const workbench = makeWorkbench();
-      registerChinookNodes(workbench.registry, workbench.engine.executors);
+      registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
       const node = addNode(workbench, definition.id);
 
       const outcome = await executor.invokeTool(node, { tableName: 'Artist' }, contextFor(node.id));

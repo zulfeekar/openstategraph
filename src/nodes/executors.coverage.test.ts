@@ -24,7 +24,7 @@ import {
   getTableSchemaExecutor,
   getTableSchemaNode,
 } from './tools/ChinookDatabaseNode';
-import { registerChinookNodes } from './workflowScoped';
+import { registerScopedFamily } from './workflowScoped';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 
 /**
@@ -140,7 +140,7 @@ describe('local tool bodies', () => {
   function scopedWorkbench(): Workbench {
     const workbench = makeWorkbench();
     // Chinook is workflow-scoped, not in the default catalogue.
-    registerChinookNodes(workbench.registry, workbench.engine.executors);
+    registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
     return workbench;
   }
 

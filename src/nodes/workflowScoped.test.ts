@@ -3,7 +3,7 @@ import { Workbench } from '@app/Workbench';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 import {
-  registerChinookNodes,
+  registerScopedFamily,
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
 } from './workflowScoped';
@@ -160,7 +160,7 @@ describe('workflow-scoped node types announce their scope', () => {
     it('is not minted a second time when its node_type already resolves', () => {
       const workbench = new Workbench();
       // The hand-authored card, as `syncWorkflowScopedNodes` would have it.
-      registerChinookNodes(workbench.registry, workbench.engine.executors);
+      registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
       const before = workbench.registry.nodeTypes.get('tool.chinook-execute-sql');
       expect(before).toBeDefined();
 
@@ -211,7 +211,7 @@ describe('workflow-scoped node types announce their scope', () => {
       // otherwise opening a second workflow would drop the hand-authored
       // Chinook card that discovery merely declined to duplicate.
       const workbench = new Workbench();
-      registerChinookNodes(workbench.registry, workbench.engine.executors);
+      registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
       registerDiscoveredCapabilities(
         [capability({ nodeType: 'tool.chinook-execute-sql' })],
         workbench.registry,

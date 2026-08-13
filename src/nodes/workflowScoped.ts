@@ -1,11 +1,52 @@
 import type { ModelRegistry } from '@core/model/ModelRegistry';
-import type { Registry } from '@core/kernel/Registry';
+import { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
+
+/**
+ * One family of node types that belongs to a workflow package rather than to
+ * the shared catalogue — ship-it ticket 03.
+ *
+ * The members register and unregister together: a document using one Chinook
+ * tool gets all three, because a palette offering `Execute SQL` without
+ * `List Tables` describes a capability nobody has.
+ */
+export interface WorkflowScopedFamily {
+  /** Stable name, for registering and for taking it back out again. */
+  readonly id: string;
+  readonly nodes: ReadonlyArray<{
+    readonly definition: INodeDefinition;
+    readonly executor: INodeExecutor;
+  }>;
+}
+
+/**
+ * Every workflow-scoped family this build knows about.
+ *
+ * **The extension point ticket 03 was missing.** Chinook used to be a named
+ * import referenced in three separate function bodies, so a second family
+ * could not be added without editing all three — and
+ * `docs/building-an-atom.md` told contributors to add theirs to a function
+ * that had nothing to add it to. That is the **O** in CLAUDE.md's SOLID list
+ * broken in the one place it was broken: *extend by registering, never by
+ * editing the engine.*
+ *
+ * The useful part of that failure is what it says about documentation: the
+ * guide could not be written correctly because there was nothing correct to
+ * describe. The seam was missing, not the sentence.
+ *
+ * A module-level registry rather than one per `Workbench`, matching how node
+ * types and executors are already reached here: which families *exist* is a
+ * property of the build, while which are *registered* is a property of the
+ * open document, and only the second is per-workbench.
+ */
+export const workflowScopedFamilies = new Registry<WorkflowScopedFamily>('workflowScopedFamilies');
+
+workflowScopedFamilies.register({ id: 'chinook', nodes: CHINOOK_NODES });
 
 /**
  * Registers a node type only while a workflow that actually uses it is open.
@@ -36,9 +77,11 @@ export function syncWorkflowScopedNodes(
   registry: ModelRegistry,
   executors: Registry<INodeExecutor>,
 ): void {
-  const chinookTypeIds = new Set(CHINOOK_NODES.map((n) => n.definition.id));
-  const documentUsesChinook = model.nodes().some((node) => chinookTypeIds.has(node.type));
-  applyChinookRegistration(documentUsesChinook, registry, executors);
+  const used = new Set(model.nodes().map((node) => node.type));
+  for (const family of workflowScopedFamilies.list()) {
+    const inUse = family.nodes.some((node) => used.has(node.definition.id));
+    applyFamilyRegistration(family.nodes, inUse, registry, executors);
+  }
 }
 
 /**
@@ -69,22 +112,26 @@ export function registerNodeTypesForRawDocument(
   const nodes = (document as { nodes?: unknown })?.nodes;
   if (!Array.isArray(nodes)) return;
 
-  const chinookTypeIds = new Set(CHINOOK_NODES.map((n) => n.definition.id));
-  const documentUsesChinook = nodes.some(
-    (node) =>
-      typeof node === 'object' &&
-      node != null &&
-      chinookTypeIds.has((node as { type?: unknown }).type as string),
+  const used = new Set(
+    nodes
+      .filter((node): node is { type?: unknown } => typeof node === 'object' && node != null)
+      .map((node) => node.type)
+      .filter((type): type is string => typeof type === 'string'),
   );
-  applyChinookRegistration(documentUsesChinook, registry, executors);
+  for (const family of workflowScopedFamilies.list()) {
+    const inUse = family.nodes.some((node) => used.has(node.definition.id));
+    applyFamilyRegistration(family.nodes, inUse, registry, executors);
+  }
 }
 
 /**
- * Unconditionally registers Chinook's tools.
+ * Unconditionally registers one named family.
  *
  * For a caller that needs the family stated outright rather than inferred
- * from a document — today, tests that add a Chinook node to a bare workbench
- * with no document behind it.
+ * from a document — today, tests that add a scoped node to a bare workbench
+ * with no document behind it. Unknown ids are ignored rather than thrown on:
+ * a family is a property of the build, and a caller naming one this build does
+ * not ship is asking for nothing, not asking wrongly.
  *
  * **The startup seed is no longer one of them.** `seedDemo.ts` used to build
  * a Chinook showcase by writing nodes straight to the model before any
@@ -98,11 +145,14 @@ export function registerNodeTypesForRawDocument(
  * `registerNodeTypesForRawDocument` like every other load path and the
  * special case is gone rather than merely satisfied.
  */
-export function registerChinookNodes(
+export function registerScopedFamily(
+  familyId: string,
   registry: ModelRegistry,
   executors: Registry<INodeExecutor>,
 ): void {
-  applyChinookRegistration(true, registry, executors);
+  const family = workflowScopedFamilies.get(familyId);
+  if (!family) return;
+  applyFamilyRegistration(family.nodes, true, registry, executors);
 }
 
 /** Ids this tab currently has registered from the last workflow's discovery call. */
@@ -198,18 +248,8 @@ function asWorkflowScoped(definition: INodeDefinition): INodeDefinition {
   return { ...definition, scope: 'workflow' };
 }
 
-function applyChinookRegistration(
-  shouldBeRegistered: boolean,
-  registry: ModelRegistry,
-  executors: Registry<INodeExecutor>,
-): void {
-  applyFamilyRegistration(CHINOOK_NODES, shouldBeRegistered, registry, executors);
-}
-
 /**
- * The generic form of the per-family apply helper above: registers or
- * unregisters one workflow-scoped node family wholesale. A new family uses
- * this directly instead of adding another copy of the same loop.
+ * Registers or unregisters one workflow-scoped node family wholesale.
  */
 function applyFamilyRegistration(
   family: ReadonlyArray<{ definition: INodeDefinition; executor: INodeExecutor }>,

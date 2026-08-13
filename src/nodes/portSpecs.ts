@@ -9,7 +9,7 @@ import { maxConnectionsOf } from '@core/model/contracts/ports';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 
 import { registerNodeCatalogue } from './index';
-import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
+import { workflowScopedFamilies } from './workflowScoped';
 import { MODEL_FIELD_KEY } from './modelField';
 import { LEGACY_RULES_MODE_KEY, SKILL_PORT_ID } from './skillLayer';
 import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
@@ -196,7 +196,13 @@ function buildCatalogue(): { registry: ModelRegistry; definitions: readonly INod
   const executors = new Registry<INodeExecutor>('executors');
   registerNodeCatalogue(registry, executors, new ProviderRegistry(new CredentialStore(false)));
 
-  const workflowScoped = [...CHINOOK_NODES].map((entry) => entry.definition);
+  // Every workflow-scoped family, not a named one (ticket 03). The generated
+  // artifact is what the backend validates ports against, so a family missing
+  // from here is a family whose edges the compiler cannot check — which is
+  // exactly the "extending means editing the engine" this ticket removed.
+  const workflowScoped = workflowScopedFamilies
+    .list()
+    .flatMap((family) => family.nodes.map((entry) => entry.definition));
   return { registry, definitions: [...registry.nodeTypes.list(), ...workflowScoped] };
 }
 
