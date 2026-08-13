@@ -30,7 +30,15 @@ import uuid
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    NotRequired,
+    TypedDict,
+    cast,
+)
 
 if TYPE_CHECKING:
     # Types only. `from __future__ import annotations` above keeps every
@@ -185,8 +193,107 @@ class MemoryScope(str, Enum):
         """This scope's Store namespace, resolved from the running config."""
         return self._resolver()
 
+    @classmethod
+    def parse(cls, raw: object) -> MemoryScope:
+        """A scope by its label, or `ValueError`.
 
-def memory_tools() -> list[BaseTool]:
+        `MemoryScope(raw)` works at runtime but reads to a type checker as a
+        call to the two-argument `__new__` above, so lookup is given a name
+        rather than two `type: ignore`s at the call sites.
+        """
+        for member in cls:
+            if member.value == raw:
+                return member
+        raise ValueError(f"{raw!r} is not a memory scope")
+
+
+@dataclass(frozen=True)
+class MemorySettings:
+    """What a document's ``settings.memory`` block declares.
+
+    The default — every scope, enabled — is what a document with no block at
+    all gets, so this is additive and no existing workflow changes behaviour.
+
+    Deliberately a frozen dataclass and not a Pydantic model: ``settings`` is
+    part of ``workflow.json``, **not** of the run/stream seam, so it is not
+    published in ``docs/openapi.json`` and has no `RuntimeClient.ts` mirror to
+    drift from. Reaching for a `BaseModel` here would imply a contract that
+    does not exist. See `memory_settings` for why parsing is lenient.
+    """
+
+    enabled: bool = True
+    scopes: tuple[MemoryScope, ...] = tuple(MemoryScope)
+
+
+#: Every key `settings.memory` understands. Named so a typo can be *reported*
+#: rather than silently doing nothing — which is the failure mode a typed
+#: declaration exists to remove, and the one `settings.checkpointer` still has.
+_MEMORY_KEYS = frozenset({"enabled", "scopes"})
+
+
+def memory_settings(settings: dict[str, Any] | None) -> tuple[MemorySettings, list[str]]:
+    """Read ``settings.memory``, with findings for anything it could not use.
+
+    **Loud, not fatal** — the same channel and the same posture as every other
+    unresolved capability in this project: a workflow whose declaration has a
+    typo still runs, and says what it ignored. Raising here would mean a
+    mistyped key could stop a workflow that was working yesterday.
+    """
+    block = (settings or {}).get("memory")
+    if block is None:
+        return MemorySettings(), []
+    if not isinstance(block, dict):
+        return MemorySettings(), [
+            f"settings.memory should be a block of options, not {type(block).__name__} — ignored."
+        ]
+
+    findings = [
+        f'settings.memory has no option "{key}" — ignored. Known options: '
+        + ", ".join(sorted(_MEMORY_KEYS))
+        for key in block
+        if key not in _MEMORY_KEYS
+    ]
+
+    scopes: tuple[MemoryScope, ...] = tuple(MemoryScope)
+    if "scopes" in block:
+        declared, unknown = [], []
+        for raw in block.get("scopes") or []:
+            try:
+                declared.append(MemoryScope.parse(raw))
+            except ValueError:
+                unknown.append(str(raw))
+        findings += [
+            f'settings.memory.scopes names "{bad}", which is not a memory scope — '
+            "ignored. Scopes: " + ", ".join(s.value for s in MemoryScope)
+            for bad in unknown
+        ]
+        # Declaration order is the author's; iteration order stays the enum's,
+        # so what an agent reads does not depend on how the list was typed.
+        scopes = tuple(s for s in MemoryScope if s in declared)
+
+    return MemorySettings(enabled=bool(block.get("enabled", True)), scopes=scopes), findings
+
+
+def memory_preconditions(settings: MemorySettings, *, store: BaseStore | None) -> list[str]:
+    """Findings for a declaration this deployment cannot honour.
+
+    This is the *(c)* half of the map's settled design: declaring a scope
+    whose precondition is absent must be a reported finding, never a silent
+    default. Only preconditions knowable at compile time belong here — the
+    presence of a Store. Whether a *run* carries an identity is knowable only
+    when the run starts, and is ticket 01's.
+    """
+    if not settings.enabled or store is not None:
+        return []
+    return [
+        "settings.memory declares "
+        + ", ".join(s.value for s in settings.scopes)
+        + " but no memory store is configured, so nothing is remembered between "
+        "runs. Set OPENSTATEGRAPH_MEMORY_PATH or OPENSTATEGRAPH_POSTGRES_URL."
+    ]
+
+
+def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
     """The prebuilt long-term-memory tools, bound to agents when a store exists.
 
     Three scopes (user model, 2026-08-08): **user** — follows the person
@@ -194,11 +301,35 @@ def memory_tools() -> list[BaseTool]:
     **app** — shared knowledge every workflow can read, where the root/
     concierge deposits cross-workflow findings. Search reads all three and
     labels provenance, so an agent never guesses where a fact lives.
+
+    A document's ``settings.memory`` may narrow that set (ticket 03). The
+    narrowing is applied to the **schema**, so a scope this workflow does not
+    use is one the model is never offered — telling it about a scope and then
+    refusing the call would be ticket 02's defect one layer up. `search_memory`
+    reads exactly the same set, or it would leak what `save_memory` cannot
+    write.
     """
     from langchain_core.tools import tool
+    from pydantic import BaseModel, Field, create_model
 
-    @tool
-    def save_memory(fact: str, scope: MemoryScope = MemoryScope.USER) -> str:
+    allowed = (settings or MemorySettings()).scopes
+    if not (settings or MemorySettings()).enabled or not allowed:
+        return []
+
+    # The args schema is built rather than inferred, because the offered set is
+    # a runtime value. `Literal` over the allowed labels renders inline, so the
+    # model sees the closed set with no `$ref` for a provider to mishandle.
+    save_args: type[BaseModel] = create_model(
+        "SaveMemoryArgs",
+        fact=(str, Field(description="The fact to remember, in one sentence.")),
+        scope=(
+            Literal[tuple(s.value for s in allowed)],  # type: ignore[misc]
+            Field(default=allowed[0].value, description=MemoryScope.__doc__),
+        ),
+    )
+
+    @tool(args_schema=save_args)
+    def save_memory(fact: str, scope: str = allowed[0].value) -> str:
         """Save a lasting fact. scope='user' for facts about this person
         (preferences, their name); scope='workflow' for findings specific to
         the current workflow's domain; scope='app' for knowledge useful to
@@ -209,16 +340,21 @@ def memory_tools() -> list[BaseTool]:
         store = get_store()
         if store is None:
             return "No memory store is configured."
+        # Validated by `save_args` before arriving; parsing here is what makes
+        # a direct Python call obey the same rule as a model call.
+        resolved = MemoryScope.parse(scope)
+        if resolved not in allowed:
+            return f"This workflow does not use {resolved.value}-scoped memory."
         value: MemoryRecord = {"fact": fact.strip()}
-        if scope is MemoryScope.APP:
+        if resolved is MemoryScope.APP:
             # The spine is auditable: any workflow may deposit an app-wide
             # learning (permissive read, deliberate write — owner decision
             # 2026-08-09), but every deposit records which workflow made it.
             value["workflow"] = _workflow_namespace()[1]
-        store.put(scope.namespace, str(uuid.uuid4()), dict(value))
+        store.put(resolved.namespace, str(uuid.uuid4()), dict(value))
         # Names the scope that was *written*, which before this was not
         # guaranteed to be the scope that was asked for.
-        return f"Remembered ({scope.value})."
+        return f"Remembered ({resolved.value})."
 
     @tool
     def search_memory(query: str) -> str:
@@ -233,7 +369,7 @@ def memory_tools() -> list[BaseTool]:
         rows: list[str] = []
         # Iterating the enum is what keeps this from being a second copy of
         # the scope set; declaration order is the order the agent reads.
-        for scope in MemoryScope:
+        for scope in allowed:
             label, namespace = scope.value, scope.namespace
             try:
                 # limit=4 per scope caps the whole block at 12 one-liners —

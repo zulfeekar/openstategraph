@@ -445,6 +445,40 @@ constructor is worse than one that is honest about the line.
 | Knowledge directory | `knowledge_dir=` | the convention, `<package>/knowledge` | knowledge shared between two packages, living outside the repository, or a fixture directory in a test |
 | Run trace sink | `trace_file=` | none | you want one JSON line per `ask()` on disk |
 
+#### `settings.memory` — what a package declares about its own memory
+
+The `store=` row above is the *deployment's* answer to "where do memories
+live". A package states separately which memory it actually uses, in its
+`workflow.json`:
+
+```json
+"settings": {
+  "memory": { "enabled": true, "scopes": ["user", "workflow"] }
+}
+```
+
+| Option | Default | Means |
+| --- | --- | --- |
+| `enabled` | `true` | `false` binds no memory tools at all, even when a store exists |
+| `scopes` | all three | `user` (follows the person), `workflow` (this package's own findings), `app` (shared across every workflow) |
+
+The block is **additive** — a document without one behaves exactly as it did
+before the block existed, so no existing package changes.
+
+Two properties worth knowing, because they are the reason it is a declaration
+rather than a runtime check:
+
+- **Narrowing applies to the tool schema, not to the write.** A scope a package
+  does not declare is one the model is never offered, rather than one it is
+  offered and then refused. Being told about a capability and rejected for
+  using it is the failure mode the scope enum exists to prevent.
+- **A declaration this deployment cannot honour is reported, never silently
+  dropped.** Declaring memory with no store configured lands a finding on the
+  same `warnings` channel as an unresolved tool: *"settings.memory declares
+  user … but no memory store is configured."* So does a misspelled scope or an
+  unknown option — a typo that quietly does nothing is exactly what a typed
+  block removes.
+
 ```python
 app = load_workflow(
     "workflows/billing",

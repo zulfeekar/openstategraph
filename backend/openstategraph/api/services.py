@@ -288,6 +288,15 @@ class WorkflowServices:
         tools = self.tool_registry_for(
             slug, knowledge_dir=knowledge_dir, warnings=capability_warnings
         )
+        # The document's memory declaration, and everything it could not
+        # honour. Both findings go on the same channel every other unresolved
+        # capability uses, so a typo'd scope and a missing tool are reported
+        # the same way rather than one of them being silent (ticket 03).
+        from openstategraph.memory import memory_preconditions, memory_settings
+
+        declared, memory_findings = memory_settings(document.get("settings"))
+        capability_warnings.extend(memory_findings)
+        capability_warnings.extend(memory_preconditions(declared, store=self.memory_store))
         if warnings is not None:
             warnings.extend(capability_warnings)
         store = self.store
@@ -308,6 +317,7 @@ class WorkflowServices:
                     knowledge_dir=store.directory_for(child_slug),
                 ),
                 store=self.memory_store,
+                memory=declared,
                 skills_context=(discover_skills(store.directory_for(slug)) if slug else ""),
                 workflow_middleware=self.middleware_for(slug),
                 # Ambient knowledge seeking: a non-empty knowledge/ under the

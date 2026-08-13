@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Annotated, Any, Callable, TypedDict
 
@@ -28,6 +28,7 @@ from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
 from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
+from openstategraph.memory import MemorySettings
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
 
@@ -472,6 +473,10 @@ class RuntimeServices:
     document_loader: Callable[[str], dict[str, Any]] | None = None
     package_loader: Callable[[str], 'PackageAssets'] | None = None
     store: Any = None
+    #: What the document's `settings.memory` declared (ticket 03). The
+    #: default is every scope enabled, so a document with no block behaves
+    #: exactly as it did before the block existed.
+    memory: MemorySettings = field(default_factory=MemorySettings)
     skills_context: str = ""
     workflow_middleware: dict[str, Any] | None = None
     #: The open workflow's package directory, for ambient knowledge seeking
@@ -640,6 +645,7 @@ class NodeRuntime:
         document_loader: Callable[[str], dict[str, Any]] | None = None,
         package_loader: Callable[[str], 'PackageAssets'] | None = None,
         store: Any = None,
+        memory: MemorySettings | None = None,
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
         knowledge_package_dir: Any = None,
@@ -655,6 +661,7 @@ class NodeRuntime:
             document_loader = services.document_loader
             package_loader = services.package_loader
             store = services.store
+            memory = services.memory
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
             knowledge_package_dir = services.knowledge_package_dir
@@ -686,6 +693,10 @@ class NodeRuntime:
         #: tools reach it through `langgraph.config.get_store()` at run time,
         #: so this reference is a capability flag, not a data path.
         self.store = store
+        #: The document's memory declaration. Narrowing happens in the
+        #: tools' own schema, so a scope this workflow does not use is one
+        #: no agent is ever offered.
+        self.memory = memory or MemorySettings()
         #: Procedural skills (`workflows/<slug>/skills/*.md`) — business
         #: rules, JOIN conventions, house style — joined once and given to
         #: every agent in this workflow as prompt *context* (above rules,
@@ -1132,7 +1143,7 @@ class NodeRuntime:
         if self.store is not None:
             from openstategraph.memory import memory_tools
 
-            lc_tools.extend(memory_tools())
+            lc_tools.extend(memory_tools(self.memory))
 
         # Same rule for knowledge: a non-empty knowledge/ in this workflow's
         # package auto-binds the lookup tool. Deduped by tool name, so an

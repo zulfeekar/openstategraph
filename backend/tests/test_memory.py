@@ -8,11 +8,15 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.store.memory import InMemoryStore
 
+from openstategraph.compile.workflow_compiler import CompiledPlan
+
 from openstategraph.memory import (
     USER_MEMORY_NAMESPACE,
     MemoryScope,
     _user_namespace,
     checkpointer_for,
+    memory_preconditions,
+    memory_settings,
     memory_tools,
 )
 
@@ -145,6 +149,69 @@ class TestMemoryScopeIsANamedEnum:
         assert len(params["properties"]["scope"].get("description", "")) < 120
 
 
+class TestMemoryIsDeclaredInSettings:
+    """Memory-hardening ticket 03 — `settings.memory`, typed.
+
+    The map's settled design is *(c) with (a) as its runtime consequence*:
+    a workflow **declares** which scopes it uses, and a scope whose
+    preconditions are absent is a reported finding rather than a silent
+    default. Before this there was no `settings.memory` at all — the only
+    document-level memory knob was `settings.checkpointer`, a stringly key on
+    an untyped dict, validated nowhere.
+    """
+
+    def test_no_declaration_means_every_scope_exactly_as_before(self) -> None:
+        settings, findings = memory_settings(None)
+        assert settings.enabled and settings.scopes == tuple(MemoryScope)
+        assert findings == []
+
+    def test_disabled_means_no_memory_tools_even_with_a_store(self) -> None:
+        settings, _ = memory_settings({"memory": {"enabled": False}})
+        assert memory_tools(settings) == []
+
+    def test_a_declared_subset_is_the_only_set_the_model_is_offered(self) -> None:
+        # Narrowing the *schema*, not refusing at call time: telling a model
+        # about a scope it may not use and then rejecting it is the same
+        # defect ticket 02 removed, one layer up.
+        settings, _ = memory_settings({"memory": {"scopes": ["user", "app"]}})
+        save, _search = memory_tools(settings)
+        published = save.get_input_schema().model_json_schema()["properties"]["scope"]
+        assert published["enum"] == ["user", "app"]
+
+    def test_a_declared_subset_is_also_the_only_set_search_reads(self) -> None:
+        store = InMemoryStore()
+        everything = memory_tools()
+        narrowed = memory_tools(memory_settings({"memory": {"scopes": ["user"]}})[0])
+        config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
+                                  "thread_id": "t"}}
+        for scope in ("user", "workflow"):
+            _run_in_graph(
+                lambda s, sc=scope: {"out": everything[0].invoke({"fact": f"a {sc} fact",
+                                                                 "scope": sc})},
+                store=store, config=config)
+
+        result = _run_in_graph(lambda s: {"out": narrowed[1].invoke({"query": "fact"})},
+                               store=store, config=config)["out"]
+        assert "a user fact" in result and "a workflow fact" not in result
+
+    def test_an_unknown_scope_is_reported_and_the_valid_ones_survive(self) -> None:
+        settings, findings = memory_settings({"memory": {"scopes": ["user", "galaxy"]}})
+        assert settings.scopes == (MemoryScope.USER,)
+        assert any("galaxy" in f for f in findings)
+
+    def test_an_unknown_key_is_reported_rather_than_ignored(self) -> None:
+        # A typo in a declaration that silently does nothing is the failure
+        # mode a typed block exists to remove.
+        _settings, findings = memory_settings({"memory": {"scopez": ["user"]}})
+        assert any("scopez" in f for f in findings)
+
+    def test_declaring_memory_with_no_store_names_the_missing_precondition(self) -> None:
+        findings = memory_preconditions(memory_settings({"memory": {"scopes": ["user"]}})[0],
+                                        store=None)
+        assert findings and "store" in findings[0].lower()
+        assert memory_preconditions(memory_settings(None)[0], store=InMemoryStore()) == []
+
+
 class TestDegradationIsNeverSilent:
     """Memory-hardening ticket 07 — three `except Exception: pass` blocks.
 
@@ -209,9 +276,11 @@ class TestDegradationIsNeverSilent:
 
 
 class TestAgentsAreMemoryCapable:
+    """Binding is capability-by-configuration: a store's presence turns the
+    tools on, and `settings.memory` narrows what they offer."""
+
     def test_agents_bind_the_memory_tools_when_a_store_exists(self) -> None:
         from openstategraph.compile.node_runtime import NodeRuntime
-        from openstategraph.compile.workflow_compiler import CompiledPlan
 
         runtime = NodeRuntime(model=None, store=InMemoryStore())
         node = {"id": "a1", "type": "agent.llm", "data": {}}
@@ -220,12 +289,64 @@ class TestAgentsAreMemoryCapable:
 
     def test_no_store_means_no_memory_tools(self) -> None:
         from openstategraph.compile.node_runtime import NodeRuntime
-        from openstategraph.compile.workflow_compiler import CompiledPlan
 
         runtime = NodeRuntime(model=None)
         node = {"id": "a1", "type": "agent.llm", "data": {}}
         runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
         assert "save_memory" not in runtime.last_bound_tools
+
+    def test_a_documents_declaration_reaches_the_agent_that_binds_the_tools(
+        self, tmp_path
+    ) -> None:
+        """Ticket 03 end to end — the hop the unit tests cannot prove.
+
+        `memory_settings` parsing correctly is worth nothing if nothing carries
+        the result from the document to `NodeRuntime`. This walks the real path:
+        a document with a `settings.memory` block, through `runtime_for`, to the
+        tool schema an agent is actually handed.
+        """
+        from openstategraph.api.services import WorkflowServices
+
+        services = WorkflowServices(tmp_path, store=InMemoryStore())
+        document = {
+            "version": 2, "name": "declared", "nodes": [], "edges": [],
+            "settings": {"memory": {"scopes": ["workflow"]}},
+        }
+        warnings: list[str] = []
+        runtime = services.runtime_for(None, document, None, warnings=warnings)
+
+        # The hop itself. What the narrowed set then does to the tool schema is
+        # `test_a_declared_subset_is_the_only_set_the_model_is_offered`.
+        assert runtime.memory.scopes == (MemoryScope.WORKFLOW,)
+        assert warnings == []
+
+        node = {"id": "a1", "type": "agent.llm", "data": {}}
+        runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
+        assert {"save_memory", "search_memory"} <= set(runtime.last_bound_tools)
+
+    def test_declaring_memory_with_no_store_is_reported_on_the_run(self, tmp_path) -> None:
+        # The finding rides the channel every unresolved capability uses, so a
+        # deployment that cannot honour a declaration says so on the run itself.
+        from openstategraph.api.registries import runtime_warnings
+        from openstategraph.api.services import WorkflowServices
+
+        class NoMemory(WorkflowServices):
+            @property
+            def memory_store(self):  # type: ignore[override]
+                return None
+
+            @memory_store.setter
+            def memory_store(self, _value) -> None:
+                return
+
+        services = NoMemory(tmp_path)
+        runtime = services.runtime_for(
+            None,
+            {"version": 2, "name": "d", "nodes": [], "edges": [],
+             "settings": {"memory": {"scopes": ["user"]}}},
+            None,
+        )
+        assert any("no memory store is configured" in w for w in runtime_warnings(runtime))
 
 
 class TestDurableCheckpointer:
