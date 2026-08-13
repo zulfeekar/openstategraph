@@ -324,6 +324,73 @@ def _thread_question(state: RunState, limit: int = 6) -> str:
     )
 
 
+def _as_override_map(value: Any) -> dict[str, Any] | None:
+    """One override blob as a dict, accepting both spellings, or None.
+
+    The inspector writes a JSON *string*; a hand-authored document and the
+    compiler's own recursion write a dict. Both are one contract, so both are
+    parsed in one place rather than at each call site.
+    """
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return value if isinstance(value, dict) else None
+
+
+def _merge_override_maps(existing: Any, incoming: Any) -> tuple[Any, list[str]]:
+    """Merge two override blobs, field by field, with `incoming` winning ties.
+
+    **`overrides` is the one key this system may merge**, and the distinction
+    is the whole reason this function is narrow. Every other field is opaque
+    node data — a developer's prompt, a threshold, a model name — and merging
+    those would mean inventing semantics for lists and nested objects the
+    document never promised. `mount-overrides.md` rejected that outright, and
+    it still is rejected: a plain field is replaced, exactly as before.
+
+    But `overrides` is *ours*. Its shape is `{childNodeId: {field: value}}`,
+    defined by this module, and shallow-replacing it destroys information
+    nobody asked to discard: a package that pins its own grandchild's setting
+    loses it the moment an ancestor overrides any *other* field of that same
+    mount. That is the defect this exists to fix — silent, and the run reported
+    no warning at all.
+
+    Recursive, because a nested `overrides` may itself contain one: an edit at
+    the root can address a great-grandchild, and every level down is the same
+    merge with the same rule.
+    """
+    base = _as_override_map(existing)
+    over = _as_override_map(incoming)
+    if over is None:
+        # An unreadable incoming blob must not delete a readable existing one.
+        return (existing if base is None else base), (
+            [] if incoming in (None, "", {}) else
+            ["a nested overrides value is not valid JSON — the deeper override was ignored"]
+        )
+    if base is None:
+        return over, ([] if existing in (None, "", {}) else
+                      ["a nested overrides value is not valid JSON — it was replaced"])
+
+    merged = dict(base)
+    warnings: list[str] = []
+    for node_id, fields in over.items():
+        current = merged.get(node_id)
+        if not isinstance(current, dict) or not isinstance(fields, dict):
+            merged[node_id] = fields
+            continue
+        combined = dict(current)
+        for key, value in fields.items():
+            if key == "overrides":
+                combined[key], notes = _merge_override_maps(current.get(key), value)
+                warnings += notes
+            else:
+                combined[key] = value
+        merged[node_id] = combined
+    return merged, warnings
+
+
 def apply_mount_overrides(
     child_document: dict[str, Any], overrides: Any
 ) -> tuple[dict[str, Any], list[str]]:
@@ -368,7 +435,15 @@ def apply_mount_overrides(
                 f'override for "{node_id}" must be a mapping of field -> value — ignored'
             )
             continue
-        target.setdefault("data", {}).update(fields)
+        data = target.setdefault("data", {})
+        for key, value in fields.items():
+            if key == "overrides":
+                # The one key whose shape this module owns, so the one key it
+                # may merge rather than replace. See `_merge_override_maps`.
+                data[key], notes = _merge_override_maps(data.get(key), value)
+                warnings += notes
+            else:
+                data[key] = value
     return document, warnings
 
 

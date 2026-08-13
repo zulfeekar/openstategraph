@@ -100,16 +100,10 @@ class TestGrandchildOverrideClobbering:
             },
         )
 
-    # FINDING (CONFIRMED): overriding one grandchild field from the root
-    # silently reverts the child package's own overrides for that mount.
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING: a root-level grandchild override replaces the child "
-            "mount's whole `overrides` field, discarding the child package's "
-            "own overrides for the same mount (threshold=9 lost)"
-        ),
-    )
+    # FIXED 2026-08-13. Was xfail(strict=True): a root-level grandchild
+    # override replaced the child mount's whole `overrides` field, discarding
+    # threshold=9 with no warning. `apply_mount_overrides` now merges the
+    # `overrides` key — and only that key — per field.
     def test_the_childs_own_grandchild_overrides_survive_a_root_edit(
         self, store: WorkflowStore
     ) -> None:
@@ -120,16 +114,52 @@ class TestGrandchildOverrideClobbering:
         # touched threshold, so 9 must survive.
         assert deep["data"]["threshold"] == 9
 
-    def test_what_actually_happens_the_child_override_is_discarded(
+    def test_the_merge_is_per_field_and_the_nearer_override_wins(
         self, store: WorkflowStore
     ) -> None:
-        """The companion pin: today the grandchild runs the PACKAGE default
-        (threshold=1) with no warning of any kind."""
+        """The companion, rewritten when the defect was fixed.
+
+        It used to pin the bug — `threshold == 1`, the child's 9 silently gone,
+        `warnings == []`, nobody told. It now pins the *rule* that replaced it,
+        which is the thing a future change could get wrong in either direction:
+        merging must not become "the child always wins" any more than it was
+        "the root always wins". Precedence is per field, outermost first.
+        """
         resolved = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
         deep = _node(resolved.document, "deep")
+        # The root spoke about `rules`, so the root wins `rules`.
         assert deep["data"]["rules"] == "root says"
-        assert deep["data"]["threshold"] == 1  # child's 9 silently gone
-        assert resolved.warnings == []  # and nobody was told
+        # The root said nothing about `threshold`, so the child's pin stands —
+        # not the package default of 1.
+        assert deep["data"]["threshold"] == 9
+        assert resolved.warnings == []
+
+    def test_a_plain_field_is_still_replaced_not_merged(
+        self, tmp_path: Path
+    ) -> None:
+        """The boundary of the fix, and the reason it is one key wide.
+
+        `overrides` is merged because this module owns its shape. Every other
+        field is opaque node data, and merging it would invent semantics the
+        document never promised — which `mount-overrides.md` rejected. A dict
+        left in a plain field must therefore be replaced wholesale.
+        """
+        store = _store(
+            tmp_path,
+            {
+                "grandchild": _document([_agent("deep", rules="package")]),
+                "child": _document(
+                    [_mount("wf-inner", "grandchild", {"deep": {"shape": {"a": 1, "b": 2}}})]
+                ),
+                "parent": _document(
+                    [_mount("wf-music", "child",
+                            {"wf-inner": {"overrides": {"deep": {"shape": {"b": 9}}}}})]
+                ),
+            },
+        )
+        resolved = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
+        # `a` is gone: the nearer value replaced the whole object.
+        assert _node(resolved.document, "deep")["data"]["shape"] == {"b": 9}
 
 
 # ---------------------------------------------------------------------------
