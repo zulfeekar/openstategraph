@@ -265,6 +265,22 @@ def create_app(
     memory_store = services.memory_store
     runtime_for = services.runtime_for
 
+    def _principal_id(http: Request) -> str:
+        """Who this request is on behalf of — decided here, never sent here.
+
+        The one line ticket 01 exists for. `user_email` used to be a field on
+        `RunRequest`, typed into a box in `/chat` and copied into `configurable`
+        unverified, where it became the key of a memory namespace: any client
+        could read and write any person's memories by naming them.
+
+        `auth.py` does not cover this and does not try to — it is admission
+        (one shared token, every holder the same principal), and this is
+        identity. The default resolver identifies nobody, so per-person memory
+        does not bind until a deployment says how to know who someone is.
+        """
+        who = services.principals.resolve(http.headers)
+        return who.id if who is not None else ""
+
     # Resolved at startup, not on the first approval: the one line it logs
     # ("approvals persist at X" / "approvals are in-memory and will NOT survive
     # a restart") has to reach the operator *before* anyone can lose work. The
@@ -1162,7 +1178,7 @@ def create_app(
         summary="Run a workflow and wait for the whole answer",
         tags=["Runs"],
     )
-    def run_workflow(request: RunRequest) -> RunResponse:
+    def run_workflow(request: RunRequest, http: Request) -> RunResponse:
         """Compiles and runs a canvas-authored workflow, blocking until it ends.
 
         The simple call: one request, one JSON answer, no streaming to parse.
@@ -1227,7 +1243,7 @@ def create_app(
                     "configurable": {
                         "thread_id": thread_id,
                         "session_id": request.session_id or "",
-                        "user_email": request.user_email or "",
+                        "user_email": _principal_id(http),
                         "workflow_slug": request.workflow_slug or "",
                     },
                 },
@@ -1372,7 +1388,7 @@ def create_app(
             "configurable": {
                 "thread_id": thread_id,
                 "session_id": request.session_id or "",
-                "user_email": request.user_email or "",
+                "user_email": _principal_id(http),
                 "workflow_slug": request.workflow_slug or "",
             },
         }
@@ -1467,7 +1483,7 @@ def create_app(
             "configurable": {
                 "thread_id": request.thread_id,
                 "session_id": request.session_id or "",
-                "user_email": request.user_email or "",
+                "user_email": _principal_id(http),
                 "workflow_slug": request.workflow_slug or "",
             },
         }

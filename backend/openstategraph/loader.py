@@ -139,6 +139,8 @@ class CompiledWorkflow:
         question: str,
         *,
         thread_id: str | None = None,
+        user_email: str | None = None,
+        session_id: str | None = None,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
     ) -> RunResult:
         """Run the graph once and return its answer.
@@ -159,11 +161,32 @@ class CompiledWorkflow:
         every call is independent; pass the same string twice and the second
         call continues the first. Use `.graph` directly for streaming,
         multi-key results, or an interrupted human-approval resume.
+
+        `user_email` is **who this run is for**, and it is what scopes
+        per-person long-term memory. Omit it and user-scoped memory does not
+        bind at all — `save_memory(scope="user")` says so rather than writing
+        into a namespace shared with everyone else who did not identify
+        (memory ticket 01). Over HTTP this value is the server's to determine
+        and a client may not send it; here **you are** the server, so it is
+        yours to supply. `session_id` scopes thread listing only.
+
+        Both use the same names as `RunRequest`, so one vocabulary describes
+        identity whichever way a run is started.
+
+        `workflow_slug` needs no argument: this object knows its own slug and
+        now passes it, which is what scopes workflow memory and stamps the
+        provenance of an app-scope deposit. Before this it was dropped, so
+        every workflow in a process shared `("workflow-memory", "unsaved")`.
         """
         thread = thread_id or f"load-workflow-{uuid.uuid4().hex}"
         config = {
             "recursion_limit": recursion_limit,
-            "configurable": {"thread_id": thread},
+            "configurable": {
+                "thread_id": thread,
+                "user_email": user_email or "",
+                "session_id": session_id or "",
+                "workflow_slug": self.slug or "",
+            },
         }
         started = time.monotonic()
         final = self.graph.invoke(

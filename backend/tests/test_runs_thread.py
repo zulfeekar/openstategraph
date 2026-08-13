@@ -159,11 +159,16 @@ class TestTheDeclaredFieldsReachTheRun:
     def test_identity_and_slug_are_passed_not_dropped(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`session_id`, `user_email` and `workflow_slug` were dropped too.
+        """`session_id` and `workflow_slug` were dropped too.
 
-        Not cosmetic: `workflow_slug` scopes the memory Store's namespace and
-        `user_email` namespaces long-term memory, so a `save_memory` on this
-        endpoint wrote to the wrong place — silently, like everything else here.
+        Not cosmetic: `workflow_slug` scopes the memory Store's namespace, so a
+        `save_memory` on this endpoint wrote to the wrong place — silently,
+        like everything else here.
+
+        **`user_email` is deliberately absent from this list now** (memory
+        ticket 01). It used to be sent here and asserted below; it is the one
+        field a client must not be able to set, because it keys a per-person
+        memory namespace. See the test that follows.
         """
         seen: dict[str, Any] = {}
         from openstategraph.compile import workflow_compiler
@@ -190,7 +195,6 @@ class TestTheDeclaredFieldsReachTheRun:
                 "question": "hi",
                 "thread_id": "t-1",
                 "session_id": "s-1",
-                "user_email": "Me@Example.com",
                 "workflow_slug": "echo",
             },
         )
@@ -198,5 +202,25 @@ class TestTheDeclaredFieldsReachTheRun:
         configurable = (seen.get("config") or {}).get("configurable") or {}
         assert configurable.get("thread_id") == "t-1"
         assert configurable.get("session_id") == "s-1"
-        assert configurable.get("user_email") == "Me@Example.com"
         assert configurable.get("workflow_slug") == "echo"
+
+    def test_a_client_cannot_name_the_person_the_run_is_for(
+        self, client: TestClient
+    ) -> None:
+        """Memory ticket 01, at the boundary that had the hole.
+
+        `user_email` keyed `("memories", <that string>)`, so a request naming
+        someone read and wrote their memories. The field is gone, and because
+        `RunRequest` forbids extras, sending it is a 422 rather than a value
+        quietly ignored — an ignored field would leave every existing client
+        believing it still worked.
+        """
+        response = client.post(
+            "/api/runs",
+            json={
+                "workflow": _echo_doc(),
+                "question": "hi",
+                "user_email": "ceo@company.com",
+            },
+        )
+        assert response.status_code == 422

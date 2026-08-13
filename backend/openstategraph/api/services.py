@@ -30,6 +30,7 @@ from openstategraph.api.registries import (
     build_function_registry,
     build_tool_registry,
 )
+from openstategraph.principal import IPrincipals, principals_from_env
 from openstategraph.schema import normalize_document
 from openstategraph.api.workflow_store import WorkflowStore
 
@@ -60,6 +61,7 @@ class WorkflowServices:
         tools: dict[str, Any] | None = None,
         functions: dict[str, Any] | None = None,
         middleware: dict[str, Any] | None = None,
+        principals: IPrincipals | None = None,
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
         from openstategraph.memory import build_store
@@ -106,6 +108,11 @@ class WorkflowServices:
         self._injected_tools = dict(tools or {})
         self._injected_functions = dict(functions or {})
         self._injected_middleware = dict(middleware or {})
+        #: Who a run is for (ticket 01). A collaborator like every other
+        #: here — the default refuses to identify anyone unless the
+        #: environment named a trusted proxy header, because the value it
+        #: replaced was a text box in the browser.
+        self.principals = principals if principals is not None else principals_from_env()
 
     @property
     def checkpointer(self) -> BaseCheckpointSaver[Any]:

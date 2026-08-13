@@ -304,7 +304,7 @@ print(answer.decisions)               # ...and which branch each router took
 | --- | --- |
 | `.graph` | the compiled LangGraph `StateGraph` — **the escape hatch** |
 | `.warnings` | tools/functions/subgraphs the package names but could not be resolved |
-| `.ask(question, *, thread_id=None, recursion_limit=50)` | run it once, get a `RunResult` |
+| `.ask(question, *, thread_id=None, user_email=None, session_id=None, recursion_limit=50)` | run it once, get a `RunResult`. **`user_email` is who the run is for** — omit it and per-person memory does not bind (see [`deploying.md` §1b](deploying.md)); over HTTP a client may not send it, but here you are the server. `workflow_slug` needs no argument: it comes from the package |
 | `.as_tool(name=…, description=…)` | this workflow as one LangChain tool (see below) |
 | `.mermaid()` | the compiled topology as text, no network call |
 | `.slug` / `.package_dir` / `.document` | what it loaded, and from where |

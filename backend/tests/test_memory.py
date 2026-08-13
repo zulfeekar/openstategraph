@@ -51,12 +51,34 @@ class TestMemoryTools:
                                store=store, config=config)
         assert "Rock" in result["out"]
 
-    def test_an_anonymous_user_gets_the_anonymous_namespace_not_an_error(self) -> None:
+    def test_an_unidentified_run_has_nowhere_to_put_a_fact_about_a_person(self) -> None:
+        """Reversed by memory-hardening ticket 01, deliberately.
+
+        This test used to be `..._gets_the_anonymous_namespace_not_an_error`
+        and pinned the fold to `("memories", "anonymous")` as intended
+        behaviour. It was not a degradation, it was a **merge**: one bucket
+        shared by every unidentified person on the deployment, while the tool
+        told the model it holds "facts about this person".
+        """
         store = InMemoryStore()
         save, _ = memory_tools()
-        _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
-                      store=store, config={"configurable": {"thread_id": "t2"}})
-        assert store.search((USER_MEMORY_NAMESPACE, "anonymous"))
+        said = _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
+                             store=store, config={"configurable": {"thread_id": "t2"}})["out"]
+        assert "no identified user" in said
+        assert not store.search((USER_MEMORY_NAMESPACE, "anonymous"))
+
+    def test_the_refusal_names_a_scope_that_would_have_worked(self) -> None:
+        # A refusal an agent cannot act on is a dead end; this one is not.
+        store = InMemoryStore()
+        save, _ = memory_tools()
+        config = {"configurable": {"thread_id": "t", "workflow_slug": "w"}}
+        said = _run_in_graph(lambda s: {"out": save.invoke({"fact": "a finding"})},
+                             store=store, config=config)["out"]
+        assert "scope='workflow'" in said
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "a finding", "scope": "workflow"})},
+            store=store, config=config)
+        assert store.search(("workflow-memory", "w"))
 
     def test_users_never_see_each_others_memories(self) -> None:
         store = InMemoryStore()
@@ -253,7 +275,7 @@ class TestDegradationIsNeverSilent:
     def test_no_identity_and_no_config_at_all_say_different_things(self, caplog) -> None:
         """The distinction the whole ticket is about.
 
-        Both land on `("memories", "anonymous")`. One is a person who declined
+        Both mean "no user scope for this run". One is a person who declined
         to identify — normal. The other is `configurable` failing to reach this
         code — a bug. Before this they were the same silence.
         """
@@ -268,7 +290,7 @@ class TestDegradationIsNeverSilent:
 
         with caplog.at_level(logging.DEBUG, logger="openstategraph.memory"):
             # Outside a graph there is no config to read at all.
-            assert _user_namespace() == (USER_MEMORY_NAMESPACE, "anonymous")
+            assert _user_namespace() is None
         unreachable = [r.getMessage() for r in caplog.records]
 
         assert declined and unreachable

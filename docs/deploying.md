@@ -30,7 +30,8 @@ What that does *not* cover, said plainly:
 - **No per-user identity.** The token is one shared secret. Everyone who holds
   it is the same principal. There is no audit trail attributing an action to a
   person, and building authorization on top of the token would be building on
-  sand — see "Not solved here" at the end.
+  sand — see "Not solved here" at the end. Identity for *memory* is a separate,
+  narrower question with an answer: §1b.
 - **No rate limiting or quota.** A holder of the token can start runs as fast
   as the models answer. Put a rate limit in the proxy (gap register SEC-02).
 - **Nothing protects you from someone you gave the token to.** Publishing,
@@ -38,6 +39,54 @@ What that does *not* cover, said plainly:
   authenticated caller.
 
 ---
+
+## 1b. Identity, and what per-person memory needs before it works
+
+Authentication answers *may this request happen*. Identity answers *on whose
+behalf*, and they are not the same question — the shared token has exactly one
+principal, so it cannot answer the second one at all.
+
+This matters for one feature specifically: **long-term memory is namespaced per
+person**. A workflow's `save_memory(scope="user")` writes into
+`("memories", <who>)`, and `search_memory` reads it back.
+
+**The server decides who, and there is no way for a client to say.** Until
+2026-08-13 there was: `user_email` was a field on the run request, typed into a
+box in `/chat`, and used unverified as that namespace key — so any caller could
+read and write any person's memories by naming them. The field is gone, `/chat`
+has no identity box, and sending `user_email` is now a `422`.
+
+### Telling the deployment how to know who someone is
+
+One environment variable, naming the header your authenticating proxy sets:
+
+```bash
+OPENSTATEGRAPH_PRINCIPAL_HEADER=X-Forwarded-Email
+```
+
+This is the shape §2's reverse-proxy path already assumes: oauth2-proxy,
+Cloudflare Access or an ALB with OIDC terminates authentication and forwards
+the verified identity as a header.
+
+> **The proxy must strip any client-supplied copy of that header.** A header a
+> client can also set is not identity — it is the same defect one layer out.
+> Only you can guarantee this, which is why the variable names one header
+> explicitly instead of this code guessing at the usual suspects.
+
+### What happens when you do not set it
+
+Nothing breaks, and nothing is silently wrong:
+
+- `workflow`- and `app`-scoped memory work exactly as before — they are keyed
+  on the workflow, not the person.
+- `user`-scoped memory **does not bind**. `save_memory(scope="user")` tells the
+  agent there is no identified user for this run and points it at
+  `scope="workflow"` instead. It does not fall back to a shared bucket, which
+  is what it used to do: one namespace holding every unidentified person's
+  facts, while the tool described it to the model as "facts about this person".
+
+A library caller embedding `openstategraph` **is** the server, so identity is
+theirs to supply directly: `workflow.ask(question, user_email="ada@example.com")`.
 
 ## 2. Authentication: two supported answers
 
@@ -210,9 +259,13 @@ editor  http://127.0.0.1:8000
 
 Stated so nobody infers otherwise from the presence of a login form:
 
-- **Identity and per-user authorization.** One shared secret is not identity.
-  Every holder is the same principal, and no draft, publish or run is
-  attributed to a person.
+- **Per-user authorization.** One shared secret is not identity. Every holder
+  is the same principal, and no draft, publish or run is attributed to a
+  person. §1b closes exactly one part of this — which *memory namespace* a run
+  may touch — and closes it by refusing rather than guessing. It is not a
+  general authorization layer, and nothing else in the product is per-user yet:
+  thread listing filters by `user_email`, and `api/threads.py` says in as many
+  words that this is "a filter, not an authorization check".
 - **Rate limiting, quotas and an audit log** (gap register SEC-02). A token
   holder can spend the model budget as fast as the providers answer. The proxy
   is the place to put a limit today.

@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
 
+
 class MemoryRecord(TypedDict):
     """What one saved memory looks like in the Store.
 
@@ -78,19 +79,27 @@ def _log() -> logging.Logger:
 USER_MEMORY_NAMESPACE = "memories"
 
 
-def _user_namespace() -> tuple[str, str]:
+def _user_namespace() -> tuple[str, str] | None:
     """The current run's memory namespace, derived from config — never state.
 
-    ``user_email`` arrives via ``configurable`` (set by the chat clients,
-    ticket 64). An anonymous user still gets a working namespace rather than
-    an error: memory quietly scoped to "anonymous" degrades to per-deployment
-    shared notes, which is honest for a user who declined to identify.
+    ``user_email`` arrives via ``configurable``, and on the HTTP path it is
+    put there by the **server's** principal resolver, never by the request
+    (`principal.py`, ticket 01).
 
-    **The two ways of arriving at "anonymous" are logged apart** (ticket 07).
-    A person who declined to identify is normal; ``configurable`` failing to
-    reach this code is a bug, and before this the two were the same silence —
-    which is what would let a future refactor collapse every user into one
-    namespace with nothing to notice it by.
+    **`None` when nobody is identified**, which is the change ticket 01 made.
+    This used to fold to ``("memories", "anonymous")`` and call it an honest
+    degradation. It was not a degradation, it was a **merge**: every
+    unidentified person on a deployment shared one namespace while
+    ``save_memory`` told the model that namespace holds "facts about this
+    person". Two strangers read each other's remembered facts, silently.
+
+    Refusing has to happen *here* rather than at bind time, because binding is
+    per-compile and identity is per-run — the same graph serves an identified
+    request and an anonymous one.
+
+    **The two ways of arriving at nobody are logged apart** (ticket 07). A
+    person who declined to identify is normal; ``configurable`` failing to
+    reach this code is a bug, and before this the two were the same silence.
     """
     from langgraph.config import get_config
 
@@ -98,14 +107,14 @@ def _user_namespace() -> tuple[str, str]:
     try:
         email = str((get_config().get("configurable") or {}).get("user_email") or "")
     except Exception as exc:
-        _log().debug("no run config to read user_email from (%s); memory is anonymous", exc)
+        _log().debug("no run config to read user_email from (%s); no user scope", exc)
     else:
         if not email:
-            _log().debug("run config carries no user_email; memory is anonymous")
-    cleaned = email.strip().lower().replace(".", "_") or "anonymous"
+            _log().debug("run config carries no user_email; no user scope")
     # Store namespace labels forbid periods, and emails are full of them —
     # a deterministic substitution keeps one person one namespace.
-    return (USER_MEMORY_NAMESPACE, cleaned)
+    cleaned = email.strip().lower().replace(".", "_")
+    return (USER_MEMORY_NAMESPACE, cleaned) if cleaned else None
 
 
 def _workflow_namespace() -> tuple[str, str]:
@@ -176,9 +185,11 @@ class MemoryScope(str, Enum):
 
     #: Annotation only — an `Enum` treats a bare annotation as a non-member,
     #: which is how a member can carry data without becoming a member itself.
-    _resolver: Callable[[], tuple[str, ...]]
+    _resolver: Callable[[], tuple[str, ...] | None]
 
-    def __new__(cls, value: str, resolver: Callable[[], tuple[str, ...]]) -> MemoryScope:
+    def __new__(
+        cls, value: str, resolver: Callable[[], tuple[str, ...] | None]
+    ) -> MemoryScope:
         member = str.__new__(cls, value)
         member._value_ = value
         member._resolver = resolver
@@ -189,8 +200,13 @@ class MemoryScope(str, Enum):
     APP = ("app", _app_namespace)
 
     @property
-    def namespace(self) -> tuple[str, ...]:
-        """This scope's Store namespace, resolved from the running config."""
+    def namespace(self) -> tuple[str, ...] | None:
+        """This scope's Store namespace, or None if this run cannot have one.
+
+        Only `USER` ever answers None, and only when the run resolved no
+        identity. It is a property of the *run*, not of the scope, which is
+        why it cannot be decided when the tools are bound.
+        """
         return self._resolver()
 
     @classmethod
@@ -345,13 +361,22 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
         resolved = MemoryScope.parse(scope)
         if resolved not in allowed:
             return f"This workflow does not use {resolved.value}-scoped memory."
+        namespace = resolved.namespace
+        if namespace is None:
+            # Ticket 01. The alternative is the merge this refusal replaced:
+            # writing one stranger's fact where the next stranger reads it.
+            return (
+                "This run has no identified user, so there is nowhere to keep a "
+                "fact about them. Try scope='workflow' for a finding about this "
+                "workflow's domain."
+            )
         value: MemoryRecord = {"fact": fact.strip()}
         if resolved is MemoryScope.APP:
             # The spine is auditable: any workflow may deposit an app-wide
             # learning (permissive read, deliberate write — owner decision
             # 2026-08-09), but every deposit records which workflow made it.
             value["workflow"] = _workflow_namespace()[1]
-        store.put(resolved.namespace, str(uuid.uuid4()), dict(value))
+        store.put(namespace, str(uuid.uuid4()), dict(value))
         # Names the scope that was *written*, which before this was not
         # guaranteed to be the scope that was asked for.
         return f"Remembered ({resolved.value})."
@@ -371,6 +396,11 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
         # the scope set; declaration order is the order the agent reads.
         for scope in allowed:
             label, namespace = scope.value, scope.namespace
+            if namespace is None:
+                # Not an error and not worth a line to the model: this run
+                # simply has no such scope. `save_memory` is where a caller
+                # who *tried* to use it is told why.
+                continue
             try:
                 # limit=4 per scope caps the whole block at 12 one-liners —
                 # a hoarding workflow can never flood the calling prompt.

@@ -116,7 +116,6 @@ def _chat_body(question: str, document: dict[str, Any]) -> dict[str, Any]:
         "workflow_slug": None,
         "thread_id": "audience-test",
         "session_id": "s1",
-        "user_email": "anonymous",
     }
 
 

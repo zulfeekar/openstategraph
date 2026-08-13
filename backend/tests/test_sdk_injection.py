@@ -175,9 +175,14 @@ class TestTheStoreIsTheCallersToSupply:
         package = write_package(tmp_path, "demo-pkg", agent_document(None))
         model = ToolCallingModel("save_memory", {"fact": "the invoice run is monthly"})
 
-        load_workflow(package, model=model, store=store).ask("remember that")
+        # `user_email=` is how a library caller says who the run is for
+        # (memory ticket 01 / ship-it 47). Omitting it is not "anonymous" any
+        # more — it is no user scope at all.
+        load_workflow(package, model=model, store=store).ask(
+            "remember that", user_email="ada@example.com"
+        )
 
-        saved = [item.value["fact"] for item in store.search(("memories", "anonymous"))]
+        saved = [item.value["fact"] for item in store.search(("memories", "ada@example_com"))]
         assert saved == ["the invoice run is monthly"]
 
     def test_the_injected_object_is_used_as_is_not_copied(self, tmp_path: Path) -> None:

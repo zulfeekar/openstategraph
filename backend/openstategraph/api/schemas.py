@@ -78,12 +78,17 @@ class RunRequest(BaseModel):
     #: Set by the client on a fresh send; echoed back so a paused run's
     #: eventual resume call can target the same checkpointed thread.
     thread_id: str | None = None
-    #: Customer-client identity (ticket 64): a browser session and the person.
-    #: Neither ever enters a Store namespace by itself — per the memory
-    #: research (ticket 65), `user_email` namespaces long-term memory and
-    #: `thread_id`/`session_id` scope only the checkpointer/config.
+    #: The browser session this run belongs to. Scopes thread listing only —
+    #: it never enters a Store namespace, per the memory research (ticket 65).
+    #:
+    #: **There is deliberately no `user_email` here** (ticket 01). Who a run is
+    #: for is decided by the *server* from the request's authenticated context
+    #: (`openstategraph/principal.py`), because this value keys a per-person
+    #: memory namespace: a client that could name the person could read and
+    #: write that person's memories. The same rule `prebuilt_session.py`
+    #: already applied to the model — "the transport says who this is" — now
+    #: also applies to the transport's own callers.
     session_id: str | None = None
-    user_email: str | None = None
     #: The open workflow's slug, when the client knows it. Tools discovered
     #: in that workflow's own `tools/` folder are layered over the defaults,
     #: so a document can bind the tools that live beside it. Optional and
@@ -123,8 +128,9 @@ class ResumeRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     thread_id: str = Field(min_length=1)
+    #: No `user_email`, for the reason `RunRequest` records: identity is the
+    #: server's to determine, never the caller's to assert.
     session_id: str | None = None
-    user_email: str | None = None
     workflow: dict[str, Any]
     decision: Literal["approve", "reject"]
     feedback: str | None = None

@@ -378,7 +378,6 @@
   <strong>OpenStateGraph</strong>
   <select id="wf" title="Workflow"></select>
   <button id="newconv" title="Start a fresh thread">New conversation</button>
-  <input id="email" type="email" placeholder="you@example.com" title="Used to remember you across sessions" style="width:180px">
   <span id="who" style="font-size:var(--font-size-12);color:var(--muted)"></span>
 </header>
 <div id="notice" hidden role="status"><span></span><button type="button" title="Dismiss">×</button></div>
@@ -403,20 +402,16 @@
 <script src="/chat/mermaid.js"></script>
 <script>
 "use strict";
+// No identity box: who a run is for is decided by the server from the
+// request's authenticated context, never sent by this page. See
+// `openstategraph/principal.py` and docs/deploying.md.
 const $ = (id) => document.getElementById(id);
 const state = {
-  email: localStorage.getItem("openstategraph.email") || "",
   sessionId: sessionStorage.getItem("openstategraph.session") || crypto.randomUUID(),
   threads: JSON.parse(localStorage.getItem("openstategraph.threads") || "{}"),
   workflow: null, doc: null, pending: null,
 };
 sessionStorage.setItem("openstategraph.session", state.sessionId);
-$("email").value = state.email;
-$("email").onchange = () => {
-  state.email = $("email").value.trim() || "anonymous";
-  localStorage.setItem("openstategraph.email", state.email);
-  $("who").textContent = state.sessionId.slice(0, 8);
-};
 $("who").textContent = state.sessionId.slice(0, 8);
 
 function threadFor(slug) {
@@ -1268,7 +1263,7 @@ function renderInterrupt(el, d) {
         // key, and every approval died 422 "thread_id: Field required".
         thread_id: d.threadId || d.thread_id || threadFor(state.workflow),
         workflow: { document: doc }, decision: b.dataset.d,
-        workflow_slug: state.workflow, session_id: state.sessionId, user_email: state.email || "anonymous",
+        workflow_slug: state.workflow, session_id: state.sessionId,
       }, el);
       // The decision was accepted and the run moved on — the card has done
       // its job. Anything else means it did NOT: the thread is still parked
@@ -1331,7 +1326,7 @@ async function send() {
   }
   await runStream("/api/runs/stream", {
     workflow: { document: doc }, question: q, workflow_slug: state.workflow,
-    thread_id: threadFor(state.workflow), session_id: state.sessionId, user_email: state.email || "anonymous",
+    thread_id: threadFor(state.workflow), session_id: state.sessionId,
   }, el);
 }
 

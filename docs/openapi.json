@@ -670,17 +670,6 @@
             "title": "Thread Id",
             "type": "string"
           },
-          "user_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Email"
-          },
           "workflow": {
             "additionalProperties": true,
             "title": "Workflow",
@@ -777,17 +766,6 @@
               }
             ],
             "title": "Thread Id"
-          },
-          "user_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Email"
           },
           "workflow": {
             "additionalProperties": true,
