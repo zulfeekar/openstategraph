@@ -656,7 +656,9 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           <h3>Teams you can drill into</h3>
           <p>
             A team node is a whole workflow behind one card — supervisor plus workers, composed as
-            a subgraph. Open it and you are editing the child package, not a copy. Subagents stay
+            a subgraph. Open it and you are editing <em>this mount</em>: the package is the class,
+            the mount is the instance, and your change is stored as an override on the parent — the
+            child package's bytes never move, and other mounts of it are untouched. Subagents stay
             isolated by design: they receive a task and report a result, never the parent's history.
           </p>
         </div>
