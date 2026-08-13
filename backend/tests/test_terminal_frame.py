@@ -95,8 +95,28 @@ class _Graph:
         return SimpleNamespace(draw_mermaid=_mermaid)
 
 
-def _run(graph: Any) -> Any:
-    return _stream_run(graph, {}, {}, SimpleNamespace(warnings=[]), KNOWN, _RUNTIME, "t1")
+def _run(graph: Any, audience: Any = None) -> Any:
+    """The stream, as a developer by default.
+
+    The audience argument matters to what an `error` frame may *say*: the
+    detail is our diagnosis for a developer and a plain sentence for a
+    customer, who can do nothing with "the checkpointer is gone" and should
+    not be shown a credential variable either (ticket 04). These tests are
+    about the terminal-frame guarantee, so they watch the developer feed —
+    `test_a_customer_error_frame_says_nothing_internal` covers the other side.
+    """
+    from openstategraph.api.audience import Audience
+
+    return _stream_run(
+        graph,
+        {},
+        {},
+        SimpleNamespace(warnings=[]),
+        KNOWN,
+        _RUNTIME,
+        "t1",
+        audience or Audience.DEVELOPER,
+    )
 
 
 def _events(frames: list[str]) -> list[str]:
@@ -387,3 +407,22 @@ def test_is_terminal_recognises_exactly_the_ending_events() -> None:
         assert _is_terminal(_sse(name, {})) is True
     for name in ("update", "token", "spawn"):
         assert _is_terminal(_sse(name, {})) is False
+
+
+def test_a_customer_error_frame_says_nothing_internal() -> None:
+    """The other side of the audience split on `error.detail`.
+
+    `detail` was `f"{type(exc).__name__}: {exc}"` for everyone, so a customer
+    was shown "RuntimeError: the checkpointer is gone" — and, when the cause
+    was a credential, the environment variable to set. Neither is something
+    they can act on, and the second is the boundary
+    `test_audience_boundary.py` exists to hold (ticket 04).
+    """
+    from openstategraph.api.audience import Audience
+
+    frames = list(_run(_Graph(raise_at=1), Audience.CUSTOMER))
+
+    assert _events(frames)[-1] == "error"
+    assert "the model provider hung up" not in frames[-1]
+    assert "RuntimeError" not in frames[-1]
+    assert "could not finish" in frames[-1]

@@ -20,6 +20,21 @@ from openstategraph.developer_channel import ProseGuard  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 
 
+def _redact_for(audience: Any) -> Any:
+    """A single-value redactor for one audience, for use inside the fold.
+
+    The terminal frame redacts a whole `outputs` map at once; a live `update`
+    frame carries one node's output and is just as much a surface, so the same
+    rule has to be applied a value at a time (ticket 04).
+    """
+    from openstategraph.api.audience import Audience as _Audience
+    from openstategraph.compile.workflow_compiler import redact_failure_markers
+
+    if audience == _Audience.DEVELOPER:
+        return lambda value: value
+    return lambda value: redact_failure_markers({"": value}).get("", value)
+
+
 def _coerce_update(raw: Any) -> dict[str, Any]:
     """A node's contribution to one `updates`-mode chunk, defensively.
 
@@ -587,10 +602,23 @@ def _stream_run(
             # `threadId` on the failure path too (ticket 11): the turn that
             # died is still checkpointed, and a client that wants to try again
             # in the *same* conversation needs to name the thread it was in.
-            yield _sse(
-                "error",
-                {"threadId": thread_id, "detail": f"{type(exc).__name__}: {exc}"},
+            # Same two rules the terminal frame obeys, because this *is* the
+            # terminal frame when a run dies: our own errors are already the
+            # copy (no Python class name), a refused credential is named as
+            # refused, and a customer gets none of it — `detail` reached them
+            # reading "set OLLAMA_API_KEY in .env" (ticket 04).
+            from openstategraph.compile.workflow_compiler import (
+                RUN_FAILED_ANSWER,
+                describe_failure,
             )
+            from openstategraph.api.audience import Audience as _Audience
+
+            detail = (
+                describe_failure(exc)
+                if audience == _Audience.DEVELOPER
+                else RUN_FAILED_ANSWER
+            )
+            yield _sse("error", {"threadId": thread_id, "detail": detail})
         return
     finally:
         # Not left to refcounting: under a stop the checkpointer/DB handles
@@ -866,10 +894,17 @@ def _run_frames(
                             # Split like the final answer, and for the same
                             # reason: this is a node's own settled output and
                             # both surfaces render it in their trace.
-                            "output": _clean_output(
-                                (update.get("outputs") or {}).get(output_id)
-                                or (update.get("worker_results") or {}).get(
-                                    task_ids[0] if task_ids else "", None
+                            # Redacted for a customer for the same reason the
+                            # terminal frame's `outputs` is: a failure marker
+                            # names an environment variable and a file, and a
+                            # live trace frame is as much a surface as the
+                            # final one (ticket 04).
+                            "output": _redact_for(audience)(
+                                _clean_output(
+                                    (update.get("outputs") or {}).get(output_id)
+                                    or (update.get("worker_results") or {}).get(
+                                        task_ids[0] if task_ids else "", None
+                                    )
                                 )
                             ),
                         },
@@ -1048,16 +1083,29 @@ def _run_frames(
     # makes "a developer-only payload cannot appear in a customer answer" a
     # property of the code rather than of the client that reads it.
     prose, suggestion = split_suggestion(answer)
-    from openstategraph.compile.workflow_compiler import node_failure_warnings
+    from openstategraph.compile.workflow_compiler import (
+        RUN_FAILED_ANSWER,
+        node_failure_warnings,
+        redact_failure_markers,
+    )
 
+    failures = node_failure_warnings(outputs) + node_failure_warnings(nested_outputs)
     channel = DeveloperChannel(
-        warnings=list(plan.warnings)
-        + runtime_warnings(runtime)
+        warnings=list(plan.warnings) + runtime_warnings(runtime)
         # Both doors report it, or `/api/runs` becomes the only one telling
         # the truth — see the same promotion in `api/main.py` (ticket 04).
-        + node_failure_warnings(outputs) + node_failure_warnings(nested_outputs),
+        + failures,
         suggestion=suggestion,
     )
+
+    # A step failed and no answer was produced; see `RUN_FAILED_ANSWER` for
+    # why `node_runtime`'s never-blank floor cannot reach this case. And the
+    # marker is developer guidance, so it leaves a customer's `outputs` too.
+    if not prose.strip() and failures:
+        prose = RUN_FAILED_ANSWER
+    if not channel.payload(audience).get("developer"):
+        outputs = redact_failure_markers(outputs)
+        nested_outputs = redact_failure_markers(nested_outputs)
 
     yield _sse(
         "done",

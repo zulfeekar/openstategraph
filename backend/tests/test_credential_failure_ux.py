@@ -96,14 +96,31 @@ class TestTheDiagnosisReachesTheDeveloperChannel:
 
 
 class TestBothDoorsReportIt:
-    def test_the_streaming_endpoint_says_the_same_thing(self) -> None:
-        """`/api/runs` must not be the only door that tells the truth."""
+    """The two doors do not fail the *same way*, which is worth knowing.
+
+    A credential failure completes on `/api/runs` — the node error handler
+    absorbs it, the run reaches its terminal state, and the diagnosis arrives
+    as a developer warning. On `/api/runs/stream` it escapes the fold and
+    becomes an `error` frame instead, so the run never reaches `done` and
+    there are no warnings to carry it.
+
+    Both are defensible; what matters is that each carries our copy rather
+    than a vendor's, and that neither hands it to a customer. An earlier
+    version of this test asserted only that `OLLAMA_API_KEY` appeared
+    somewhere in the stream, which passed against the raw
+    `f"{type(exc).__name__}: {exc}"` detail — it was green for the wrong
+    reason and proved nothing about the copy.
+    """
+
+    def test_the_streaming_endpoint_names_the_variable_for_a_developer(self) -> None:
         response = TestClient(create_app()).post(
             "/api/runs/stream",
             json={"workflow": DOCUMENT, "question": "what is 2+2?", "audience": "developer"},
         )
         assert response.status_code == 200
         assert "OLLAMA_API_KEY" in response.text
+        # Our copy, not the exception's repr.
+        assert "MissingProviderKey:" not in response.text
 
 
 class TestTheCopyItself:
@@ -189,3 +206,64 @@ class TestWrongIsNotTheSameAsMissing:
 
         exc = self._refused("openai", "RateLimitError", "Error code: 429 - rate limited")
         assert explain_credential_refusal(exc) is None
+
+
+class TestWhatACustomerSees:
+    """The other half of the boundary: what reaches someone who cannot fix it.
+
+    Both were decided rather than defaulted. A blank answer with a 200 is
+    indistinguishable from a broken client, and the failure marker names an
+    environment variable and a file — developer guidance, on the surface
+    `test_audience_boundary.py` exists to keep developer guidance off.
+    """
+
+    def test_a_customer_gets_a_sentence_not_a_blank(self) -> None:
+        answer = _run(audience="customer")["answer"]
+        assert answer.strip(), "a customer asked a question and got an empty string"
+        assert "could not finish" in answer
+
+    def test_that_sentence_names_no_variable_provider_or_file(self) -> None:
+        answer = _run(audience="customer")["answer"]
+        for leak in ("OLLAMA", "API_KEY", ".env", "ollama", "MissingProviderKey"):
+            assert leak not in answer
+
+    def test_the_failure_marker_does_not_reach_a_customer_through_outputs(self) -> None:
+        """`outputs` is rendered per node on every surface — same seam as `answer`."""
+        outputs = _run(audience="customer")["outputs"]
+        joined = " ".join(str(v) for v in outputs.values())
+        assert "OLLAMA_API_KEY" not in joined
+        assert ".env" not in joined
+        assert "failed after retries" not in joined
+
+    def test_a_developer_still_gets_the_whole_thing(self) -> None:
+        """Redaction is for the audience that cannot act, not for everyone."""
+        outputs = _run(audience="developer")["outputs"]
+        assert any("OLLAMA_API_KEY" in str(v) for v in outputs.values())
+
+    def test_the_streaming_door_agrees_on_both_counts(self) -> None:
+        response = TestClient(create_app()).post(
+            "/api/runs/stream",
+            json={"workflow": DOCUMENT, "question": "what is 2+2?", "audience": "customer"},
+        )
+        assert "OLLAMA_API_KEY" not in response.text
+        assert "could not finish" in response.text
+
+    def test_a_healthy_run_is_untouched(self) -> None:
+        """The substitution must fire only when a step actually failed."""
+        from conftest import RespondingModel
+        import openstategraph.chat_model as chat_model_module
+
+        client = TestClient(create_app())
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(
+                chat_model_module,
+                "build_chat_model",
+                lambda _name: RespondingModel([], default="four"),
+            )
+            body = client.post(
+                "/api/runs", json={"workflow": DOCUMENT, "question": "2+2?"}
+            ).json()
+        assert "could not finish" not in body["answer"]
+        assert "This step did not complete." not in " ".join(
+            str(v) for v in body["outputs"].values()
+        )

@@ -170,6 +170,40 @@ def failure_marker(node: str, message: str) -> str:
     return _FAILURE.format(node=node, message=message)
 
 
+#: What a failed step says to someone who cannot fix it.
+#:
+#: No variable, no provider, no file — that is developer guidance, and the
+#: audience boundary exists to keep it off a customer surface. Says what
+#: happened and who can act, and invents nothing about why.
+CUSTOMER_STEP_FAILED = "This step did not complete."
+
+#: The answer a run gives when a step failed before one was produced.
+#:
+#: `node_runtime`'s never-blank floor already covers a run that *reaches* the
+#: output node with nothing. It cannot cover this: when an upstream node
+#: fails, the output node never runs at all — verified, `outputs` contains no
+#: entry for it — so the floor beneath every route to that node is not a floor
+#: beneath every run (providers-and-credentials ticket 04).
+RUN_FAILED_ANSWER = (
+    "The workflow could not finish — a step failed before an answer was "
+    "produced. Try again, or contact whoever runs this workflow."
+)
+
+
+def redact_failure_markers(outputs: Mapping[str, Any]) -> dict[str, Any]:
+    """`outputs` with every failure marker replaced, for a customer.
+
+    The marker is written for whoever can set an environment variable, and
+    `outputs` is rendered per node on every surface — so without this it
+    reached a customer reading "set OLLAMA_API_KEY in .env", which is the
+    boundary `tests/test_audience_boundary.py` exists to hold.
+    """
+    return {
+        node: (CUSTOMER_STEP_FAILED if _FAILURE_PATTERN.match(str(value or "")) else value)
+        for node, value in outputs.items()
+    }
+
+
 def node_failure_warnings(outputs: Mapping[str, Any]) -> list[str]:
     """Failed nodes, as developer-channel warnings.
 

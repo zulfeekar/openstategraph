@@ -1305,8 +1305,13 @@ def create_app(
         # in `outputs["agent-sql"]` while `answer` was spotless. Every surface
         # renders `outputs` per node, so that is the same leak one field along.
         prose, suggestion = split_suggestion(str(final.get("answer") or ""))
-        from openstategraph.compile.workflow_compiler import node_failure_warnings
+        from openstategraph.compile.workflow_compiler import (
+            RUN_FAILED_ANSWER,
+            node_failure_warnings,
+            redact_failure_markers,
+        )
 
+        raw_outputs = final.get("outputs") or {}
         channel = DeveloperChannel(
             warnings=list(plan.warnings)
             + runtime_warnings(runtime)
@@ -1315,10 +1320,21 @@ def create_app(
             # surface renders that map as the node's output, so without this
             # promotion a credential failure returned 200, a blank answer and
             # an empty developer channel (ticket 04).
-            + node_failure_warnings(final.get("outputs") or {}),
+            + node_failure_warnings(raw_outputs),
             suggestion=suggestion,
         )
         developer = channel.payload(audience).get("developer")
+
+        # A step failed and no answer was produced. Someone asked a question
+        # and a blank string with a 200 is indistinguishable from a broken
+        # client — see `RUN_FAILED_ANSWER` for why the never-blank floor in
+        # `node_runtime` cannot reach this case.
+        if not prose.strip() and node_failure_warnings(raw_outputs):
+            prose = RUN_FAILED_ANSWER
+
+        # Developer guidance stays off a customer surface, in `outputs` as
+        # much as in `answer` — the same seam ticket 15 found one field along.
+        visible = raw_outputs if developer else redact_failure_markers(raw_outputs)
 
         return RunResponse(
             answer=prose,
@@ -1329,9 +1345,7 @@ def create_app(
             # is the one that did not name a thread.
             thread_id=thread_id,
             decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
-            outputs={
-                k: str(clean_output(str(v))) for k, v in (final.get("outputs") or {}).items()
-            },
+            outputs={k: str(clean_output(str(v))) for k, v in visible.items()},
             attempts=int(final.get("attempts") or 0),
             mermaid=graph.get_graph().draw_mermaid(),
             developer=DeveloperChannelResponse(**developer) if developer else None,
