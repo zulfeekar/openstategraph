@@ -332,9 +332,12 @@ class RunPathResolver:
                 return
             # The document this level lives in: the run's own for the first
             # entry, and thereafter whatever the mount above it descended
-            # into. Empty when a mount's slug is unknown, which a client must
-            # read as "no claim" rather than as a match.
-            owner = self._root if not path else self._mounts.get(path[-1], "")
+            # into. Looked up by the **whole chain so far**, because a mount
+            # node id is unique only within its own document — two sibling
+            # subtrees can both mount at a node called `inner`. Empty when a
+            # mount's slug is unknown, which a client must read as "no claim"
+            # rather than as a match.
+            owner = self._root if not path else self._mounts.get("/".join(path), "")
             path.append(canvas_id)
             slugs.append(owner)
 

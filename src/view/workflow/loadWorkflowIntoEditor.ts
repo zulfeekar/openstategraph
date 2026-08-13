@@ -142,10 +142,27 @@ export async function loadMountIntoEditor(
     // The autosave *key* still moves, to the address rather than the class
     // slug (`setOpenAddress`), so whatever this tab writes cannot land on the
     // package's own draft and be restored over it later.
-    // Baselined on the **class**: the file that actually backs this instance
-    // is the package, so that is the one whose changes matter to it.
-    const row = await client.summary(slug);
-    recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+    // **Two baselines, because two documents matter and they matter for
+    // different reasons.**
+    //
+    // The **class** is the file that actually backs what is on screen, so its
+    // changes are the ones that make this view stale.
+    //
+    // The **root** is the file an instance save actually *writes*: an override
+    // is stored on the parent, so `WorkflowManager.handleSave` compare-and-sets
+    // against `getKnownSavedAt(address.root)`. Without a baseline recorded here
+    // that guard short-circuits on `baseline && …` and disables itself — so on
+    // a fresh deep link to `?w=root/mount`, the first override save wrote the
+    // whole retained parent document back and silently reverted any parent
+    // edit made since the tab opened. The guard existed for exactly that; it
+    // just never had a baseline on this path.
+    const baselined = new Set<string>();
+    for (const target of [slug, address.root]) {
+      if (baselined.has(target)) continue;
+      baselined.add(target);
+      const row = await client.summary(target);
+      recordKnownSavedAt(target, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+    }
     return Ok({ name: workbench.model.name, restoredDraft: false });
   } catch (error) {
     // Put the address back: it was set before the import so the projection

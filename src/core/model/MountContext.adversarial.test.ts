@@ -43,7 +43,7 @@ describe('escaping and round-trips', () => {
     expect(ctx.readOverride('agent-sql', 'rules')).toBe(value);
     // and through the committed string spelling, as the backend will read it
     const reparsed = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-    expect(reparsed['agent-sql']['rules']).toBe(value);
+    expect(reparsed['agent-sql']?.['rules']).toBe(value);
   });
 
   it('write then clear restores the document byte-for-byte', () => {
@@ -88,7 +88,7 @@ describe('hostile blobs already on the mount node', () => {
       const ctx = context('concierge/wf-music/wf-inner', document);
       ctx.writeOverride('agent-x', 'rules', 'new');
       const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-      const inner = blob['wf-inner']['overrides'] as Record<string, unknown>;
+      const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
       expect(inner['grader1']).toEqual({ threshold: 9 });
       expect(inner['agent-x']).toEqual({ rules: 'new' });
     },
@@ -100,7 +100,7 @@ describe('hostile blobs already on the mount node', () => {
     const ctx = context('concierge/wf-music/wf-inner', document);
     ctx.writeOverride('agent-x', 'rules', 'new');
     const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-    const inner = blob['wf-inner']['overrides'] as Record<string, unknown>;
+    const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
     expect(inner['grader1']).toBeUndefined(); // gone, silently
     expect(inner['agent-x']).toEqual({ rules: 'new' });
   });
@@ -110,7 +110,7 @@ describe('hostile blobs already on the mount node', () => {
     const ctx = context('concierge/wf-music/wf-inner', document);
     ctx.writeOverride('agent-x', 'rules', 'new');
     const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-    const inner = blob['wf-inner']['overrides'] as Record<string, unknown>;
+    const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
     expect(inner['grader1']).toEqual({ threshold: 9 });
   });
 

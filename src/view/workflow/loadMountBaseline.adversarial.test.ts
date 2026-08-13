@@ -16,13 +16,16 @@ import { loadMountIntoEditor } from './loadWorkflowIntoEditor';
  * comment says why: this save "would silently revert someone else's parent
  * edit".
  *
- * But `loadMountIntoEditor` baselines only the CLASS slug ("Baselined on the
- * class", loadWorkflowIntoEditor.ts:148). Nothing records a baseline for
- * `address.root` at instance-open time — so on a fresh deep link to
- * `?w=concierge/wf-music`, `baseline` is `undefined`, the `baseline &&`
- * short-circuit disables the guard, and the first save of an override
- * overwrites any parent edit made since the instance was opened. The test
- * that FAILS below is the finding; production source was not changed.
+ * `loadMountIntoEditor` used to baseline only the CLASS slug. Nothing recorded
+ * a baseline for `address.root`, so on a fresh deep link to
+ * `?w=concierge/wf-music` the `baseline &&` short-circuit disabled the guard
+ * and the first save of an override overwrote any parent edit made since the
+ * instance was opened.
+ *
+ * **Fixed 2026-08-13**: both are baselined, and both tests below now pass —
+ * the class because it backs what is on screen, the root because it is the
+ * file an instance save actually writes. Keep both assertions: dropping either
+ * baseline is a silent regression in a different failure mode.
  */
 
 const CHILD_EFFECTIVE = {
@@ -70,12 +73,11 @@ describe('instance-open baselines and the parent save guard', () => {
     expect(getKnownSavedAt('chinook-assistant')).toBe('2026-08-13T00:00:00Z');
   });
 
-  // FINDING (CONFIRMED): no baseline is recorded for the PARENT the save
-  // guard checks, so on a fresh deep link the compare-and-set in
-  // WorkflowManager.handleSave (line 201: `baseline && ... !== baseline`)
-  // is silently disabled and the first instance save can clobber a
-  // concurrent edit to the parent document.
-  it.fails('also baselines the parent root the save guard compares against', async () => {
+  // FIXED 2026-08-13. Was `it.fails`: no baseline was recorded for the PARENT
+  // the save guard checks, so on a fresh deep link the compare-and-set in
+  // `WorkflowManager.handleSave` short-circuited on `baseline && …` and the
+  // first instance save could clobber a concurrent edit to the parent.
+  it('also baselines the parent root the save guard compares against', async () => {
     await loadMountIntoEditor(parseMountAddress('concierge/wf-music')!, client, new Workbench());
     expect(getKnownSavedAt('concierge')).toBe('2026-08-13T00:00:00Z');
   });

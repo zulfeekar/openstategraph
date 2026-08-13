@@ -506,9 +506,13 @@ class TestSiblingMountsAtRunTime:
         self,
     ) -> None:
         """Two different child packages each mount a DIFFERENT grandchild at
-        the same node id `inner`. `NodeRuntime.mount_slugs` is flat, keyed by
-        mount node id — `setdefault` keeps the first — so the second sibling's
-        grandchild frames get attributed to the FIRST sibling's package."""
+        the same node id `inner`.
+
+        Rewritten when the defect was fixed. It used to pin the bug: one flat
+        key `inner`, two truths, whichever value it held wrong for the other
+        sibling. `mount_slugs` is now keyed by the **mount path**, so the two
+        are distinct entries and neither shadows the other.
+        """
         grand_x = dict(CHILD_RUNNABLE, name="grand-x")
         grand_y = dict(CHILD_RUNNABLE, name="grand-y")
         child_b = _runnable_parent([_mount("inner", "grand-x")])
@@ -524,21 +528,17 @@ class TestSiblingMountsAtRunTime:
         WorkflowCompiler().build(parent, RunState, runtime.factory(parent))
         assert runtime.mount_slugs["m1"] == "child-b"
         assert runtime.mount_slugs["m2"] == "child-d"
-        # FINDING material: one key, two truths. Whichever value it holds is
-        # wrong for the other sibling.
-        assert runtime.mount_slugs["inner"] in {"grand-x", "grand-y"}
+        # The two sibling grandchildren, told apart by their path.
+        assert runtime.mount_slugs["m1/inner"] == "grand-x"
+        assert runtime.mount_slugs["m2/inner"] == "grand-y"
+        # And the bare id is not a key at all any more, so a reader cannot
+        # accidentally ask the ambiguous question.
+        assert "inner" not in runtime.mount_slugs
 
-    # FINDING (CONFIRMED): RunPathResolver attributes the second sibling's
-    # grandchild level to the first sibling's package, because mount_slugs is
-    # keyed by bare mount node id and ids are unique only within a document.
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING: mount_slugs is flat by mount node id; two sibling "
-            "documents mounting different packages at the same id `inner` "
-            "collapse to one entry, so path slugs lie for one sibling"
-        ),
-    )
+    # FIXED 2026-08-13. Was xfail(strict=True): `mount_slugs` was flat by
+    # mount node id, so sibling subtrees reusing an id collapsed first-wins and
+    # a frame from one was attributed to the other's package. Producer and
+    # `RunPathResolver` now key by the mount path.
     def test_path_slugs_distinguish_sibling_grandchildren_with_one_id(self) -> None:
         from openstategraph.api.streaming import RunPathResolver
 

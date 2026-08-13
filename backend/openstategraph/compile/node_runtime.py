@@ -2032,11 +2032,19 @@ class NodeRuntime:
                 # only exist on `child_runtime` once it has run.
                 for name, canvas_id in child_runtime.node_ids_by_name.items():
                     self.node_ids_by_name.setdefault(name, canvas_id)
-                # Which document each level of a run's path happened in. Set
-                # for this mount, then inherited for the mounts inside it.
+                # Which document each level of a run's path happened in,
+                # keyed by the **mount path** — the chain of mount node ids
+                # from this document down — not by the bare node id.
+                #
+                # Node ids are unique within a document and nowhere else. Two
+                # sibling subtrees that each mount something at a node called
+                # `inner` are two different mounts of two different packages,
+                # and a flat map collapsed them first-wins: a frame from one
+                # was attributed to the other's slug. That is the exact lie
+                # `pathSlugs` exists to remove, reappearing one level down.
                 self.mount_slugs[node_id] = slug
-                for mount_id, mounted_slug in child_runtime.mount_slugs.items():
-                    self.mount_slugs.setdefault(mount_id, mounted_slug)
+                for mount_path, mounted_slug in child_runtime.mount_slugs.items():
+                    self.mount_slugs[f"{node_id}/{mount_path}"] = mounted_slug
 
         if child_graph is None:
             label = slug or "(no workflow selected)"
