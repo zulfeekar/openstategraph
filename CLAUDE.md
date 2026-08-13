@@ -307,6 +307,14 @@ one did, do it on the main checkout and re-link.
 
 This repository uses OpenWiki for recurring code documentation. Start with `openwiki/quickstart.md`, then follow its links to architecture, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
 
-The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+A scheduled OpenWiki GitHub Actions workflow **exists** (`.github/workflows/openwiki-update.yml`) and is intended to refresh the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+> **It has never run.** This repository has six workflow files and **zero git
+> remotes**, so nothing in `.github/` has ever executed — not this, not the type
+> gate, not the drift gates, not `clean-install`. Until that changes (ship-it
+> ticket 49), "let OpenWiki regenerate" means *a human runs it*, and a generated
+> page you leave stale stays stale. Treat every sentence in this repository
+> asserting that a gate "runs" or "is enforced" as describing intent, not
+> observed behaviour.
 
 <!-- OPENWIKI:END -->
