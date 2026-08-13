@@ -17,7 +17,7 @@
     out.textContent = `ready: ${first.name}\n`;
   }
 
-  async function stream(path, body) { // 3 + 4: POST, then read the frames
+  async function stream(path, body) { // 4 + 5: POST, then read the frames
     const res = await fetch(`${API}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },

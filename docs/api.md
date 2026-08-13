@@ -353,7 +353,7 @@ covers one worker (which is the documented deployment ceiling); and only writes
 
 ---
 
-## 3. The five calls a custom chat needs
+## 3. The six calls a custom chat needs
 
 Every request and response below was captured from a running server. The model
 was a deterministic fake — this machine has no provider key, and a doc whose
@@ -500,7 +500,7 @@ The package on disk is never written by this call.
 
 ```json
 {
-  "workflow": { "...": "the document from call 2" },
+  "workflow": { "...": "the document from call 3" },
   "workflow_slug": "quarterly-brief",
   "question": "How did revenue do this quarter?",
   "thread_id": "chat-8f2a1c"
@@ -643,7 +643,7 @@ checkpoint by checkpoint.
 
 Both are **reads**. Nothing re-executes, no model is called, and neither
 endpoint can start or change a run — a `paused` thread is continued through
-`POST /api/runs/resume` (call 4) and nowhere else. Values are capped
+`POST /api/runs/resume` (call 5) and nowhere else. Values are capped
 server-side and private channels are omitted, so a thread carrying a long
 message history does not become a multi-megabyte response.
 
@@ -691,7 +691,7 @@ open http://localhost:8765/minimal-client.html
     out.textContent = `ready: ${first.name}\n`;
   }
 
-  async function stream(path, body) { // 3 + 4: POST, then read the frames
+  async function stream(path, body) { // 4 + 5: POST, then read the frames
     const res = await fetch(`${API}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -792,7 +792,7 @@ shared network wants the proxy, not the shared secret. See
 **Decision: we ship the schema, not a package.** There is no
 `@openstategraph/client` on npm and none is planned.
 
-The argument for publishing one is real but small: five calls, four of them a
+The argument for publishing one is real but small: six calls, five of them a
 single `fetch`. The argument against is that a package is a *version* — its own
 release train, its own changelog, its own semver relationship to a Tier 3 API
 that may change in a patch, and its own bug reports for a bug in the API. It

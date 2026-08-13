@@ -63,7 +63,7 @@ with no commercial packages.
 
 This repository is the editor **and** the framework, and you do not need the
 first to use the second. From 0.3.0 the backend is a proper distribution — one
-wheel, a four-package core, seven named extras, `py.typed`, and an
+wheel, a four-package core, eight named extras, `py.typed`, and an
 `openstategraph` console script:
 
 ```bash
@@ -505,7 +505,7 @@ pure TypeScript with no excuse for untested logic.
   project](docs/adoption.md) (the three consumption modes, the CLI,
   `load_workflow`), [the stability contract](docs/stability.md) (what can be
   taken away), [the HTTP API](docs/api.md) (build your own UI: the OpenAPI
-  document, the SSE streams, five calls), [the MCP
+  document, the SSE streams, six calls), [the MCP
   layer](docs/mcp.md) (your own LLM composes the graph),
   [evaluation](docs/evaluation.md) (`openstategraph eval`, and the metric it
   scores with), [testing a second brain](docs/second-brain.md) (is the

@@ -24,7 +24,7 @@ deliberately; mixing them is where confusion starts.
 
 **The checkout is no longer the only path.** It was, before 0.3.0, and much of
 this page was written then. Today the backend is a distribution: one wheel, a
-four-package core, seven extras, `py.typed`, and an `openstategraph` console
+four-package core, eight extras, `py.typed`, and an `openstategraph` console
 script — verified by a CI job that installs it into an empty virtualenv outside
 the checkout and runs a workflow there. Mode (b) is a first-class path; what is
 still outstanding is one `twine upload`, and this page says exactly where.
@@ -609,7 +609,7 @@ needed if you run the MCP transport.
 
 **The wheel is real; the PyPI upload has not happened yet.** From 0.3.0 the
 backend is a proper distribution — `hatchling`, `LICENSE`, `py.typed`,
-classifiers, a console script, a lean core and seven extras — built, `twine
+classifiers, a console script, a lean core and eight extras — built, `twine
 check`-clean, and proven by CI's `clean-install` job, which installs it into an
 empty virtualenv **outside** the checkout and runs a workflow there. What is
 outstanding is one `twine upload` by the maintainer. So the command that will

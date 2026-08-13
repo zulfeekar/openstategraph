@@ -15,7 +15,7 @@ Node types and their ports (in → out):
 - orchestrate.worker — title = its archetype name; data: {role, default?: true}. in: dispatch, tools(bus), skill. out: result
 - function.format_report — data: {reportTitle}. in: candidate (accepts many). out: report
 - human.approval — data: {message}. in: candidate. out: approved, rejected
-- workflow.subgraph / team.workflow — data: {workflow: "<slug>"}. in: input. out: result. The slug must be one platform_list_workflows returned; never invent one.
+- workflow.subgraph / team.workflow — data: {workflow: "<slug>", overrides?, outcome?}. in: input. out: result. The slug must be one platform_list_workflows returned; never invent one. Both types compile identically; "outcome" is a card label on team.workflow that nothing enforces.
 - output.formatted — the final answer. in: result (accepts many)
 
 Rules that make a document valid:
@@ -26,6 +26,9 @@ Rules that make a document valid:
 - A supervisor with several workers: give each worker a distinct title (its archetype) and a role; mark one {"default": true}.
 - rulesMode is ONE field across all five model-driven types (agent.llm, route.classifier, route.grader, orchestrate.supervisor, orchestrate.worker): "extend" (default) adds the developer's text to the type's built-in rules, "replace" keeps only the topmost supplied layer. Never emit "criteriaMode" — that was the grader-only spelling of the same field and it is superseded.
 - Every model-driven type works with NO rules written and NO skill wired: each ships built-in rules. Write rules only where the domain needs them.
+- A mount is a REFERENCE, so the same package can be mounted twice and configured differently each time. "overrides" on the mount is how: {"<child node id>": {"<field>": value}}, applied per field to a copy of the child. It is stored on THIS document, never on the child — the mounted package is never rewritten. Use it to make one mount stricter or cheaper than another; do not copy a package to change one setting.
+- Two keys "overrides" cannot set. "workflow" is reserved — an override narrows a mount, it never redirects it to a different package. And null does not mean "no override": it overrides the child's value WITH null. Omit the key instead.
+- Overrides nest by mount id for a mount inside a mount: {"<their mount id>": {"overrides": {...}}}. Only reach for that when a grandchild genuinely needs per-instance settings.
 
 Team template (customize roles, criteria, counts):
 input.text -> supervisor -> workers (with roles+tools) -> format_report -> grader(criteria = the outcome) -pass-> output; grader -revise-> supervisor.feedback

@@ -153,12 +153,13 @@ skipped, so adding a job to its `needs:` list is how a new check becomes
 mandatory — no second place to update, and no re-listing when a job is renamed
 or gains a matrix.
 
-If you would rather see the six individually, require these exact names
+If you would rather see the seven individually, require these exact names
 instead, and remember to revisit the list whenever `ci.yml` changes:
 
 ```
 frontend
 generated-port-specs
+generated-openapi
 backend
 clean-install
 docs-freshness

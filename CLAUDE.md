@@ -2,9 +2,9 @@
 
 Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph runtime.
 
-**Before planning anything, read `.scratch/fullstack-langgraph/map.md`** — the multi-session plan. Resolve one ticket per session (research excepted).
+**Before planning anything, read the maps under `.scratch/`** — each is a multi-session plan with its own tickets, and there are several live at once (`production-ready/` is the current one; `fullstack-langgraph/`, `ship-it/` and `memory-hardening/` are others). Resolve one ticket per session (research excepted).
 
-**Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is ~17k lines; reading files to orient is a waste of context.
+**Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
 
 ---
 
