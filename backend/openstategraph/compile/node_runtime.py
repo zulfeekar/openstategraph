@@ -324,6 +324,22 @@ def _thread_question(state: RunState, limit: int = 6) -> str:
     )
 
 
+#: Override keys that are refused rather than applied.
+#:
+#: `workflow` names the package a mount runs, so overriding it does not
+#: *configure* the mount — it replaces what the mount **is**, from a data field
+#: nothing surfaces. The card would go on naming the original package while the
+#: run executed a different one, and `MountEditScope` already refuses shape
+#: changes per instance in the editor; this closes the same door on the data
+#: path. Reserved rather than blessed (owner decision, 2026-08-13): an override
+#: narrows a mount, it never redirects it.
+#:
+#: Safe as a bare key name: `workflow` is declared by `workflow.subgraph` and
+#: `team.workflow` and by no other node type, so reserving it cannot shadow an
+#: unrelated field.
+RESERVED_OVERRIDE_KEYS = frozenset({"workflow"})
+
+
 def _as_override_map(value: Any) -> dict[str, Any] | None:
     """One override blob as a dict, accepting both spellings, or None.
 
@@ -437,13 +453,34 @@ def apply_mount_overrides(
             continue
         data = target.setdefault("data", {})
         for key, value in fields.items():
+            if key in RESERVED_OVERRIDE_KEYS:
+                warnings.append(
+                    f'override for "{node_id}" tried to set "{key}" — that field '
+                    "selects which workflow the mount runs, and an override may "
+                    "narrow a mount, never replace it. Ignored."
+                )
+                continue
             if key == "overrides":
                 # The one key whose shape this module owns, so the one key it
                 # may merge rather than replace. See `_merge_override_maps`.
                 data[key], notes = _merge_override_maps(data.get(key), value)
                 warnings += notes
-            else:
-                data[key] = value
+                continue
+            if value is None:
+                # Applied, not skipped — `None` may be a legitimate value for a
+                # nullable field and this module does not get to decide the
+                # author meant something else. But it is reported, because the
+                # editor never writes one: `MountContext.clearOverride` removes
+                # the key instead, precisely so a "cleared" field is not an
+                # override of `null` that the card keeps counting. A `null`
+                # here is therefore always hand-written, and ambiguous between
+                # "make it null" and "I meant to remove this".
+                warnings.append(
+                    f'override sets "{node_id}.{key}" to null, which overrides the '
+                    "package value rather than restoring it — remove the key to "
+                    "restore the default"
+                )
+            data[key] = value
     return document, warnings
 
 

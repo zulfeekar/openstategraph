@@ -256,9 +256,18 @@ class TestCycles:
     def test_an_override_can_retarget_a_grandchild_mount_into_a_cycle(
         self, tmp_path: Path
     ) -> None:
-        """An override may rewrite `workflow` itself — the mount's target —
-        because `workflow` is just a data field. Retargeting into a cycle must
-        still be refused by the visited check on the MERGED document."""
+        """An override cannot form a cycle any more, because it cannot retarget.
+
+        This used to assert that a `workflow` override pointing back at the
+        root was caught by the visited check on the merged document. Reserving
+        the key (owner decision, 2026-08-13) removes the attack one step
+        earlier: the retarget never happens, so the cycle never forms, and the
+        resolve succeeds against the package the mount actually declares.
+
+        The visited check is still the defence for cycles that are genuinely
+        drawn — direct self-mount and mutual recursion, both covered by the
+        tests above — so nothing was lost by this becoming unreachable.
+        """
         store = _store(
             tmp_path,
             {
@@ -269,15 +278,26 @@ class TestCycles:
                 ),
             },
         )
-        with pytest.raises(MountResolutionError, match="parent"):
-            resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
+        resolved = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
+        assert resolved.slug == "innocent"
+        assert any("workflow" in w for w in resolved.warnings), resolved.warnings
 
     def test_an_override_can_retarget_a_grandchild_mount_to_any_package(
         self, tmp_path: Path
     ) -> None:
-        """The non-cyclic version is ACCEPTED: an override silently swaps
-        which package a grandchild mount runs. The edit scope forbids shape
-        changes in the UI, but the data path allows this one wholesale."""
+        """Reserved 2026-08-13 (owner decision), and this test reversed with it.
+
+        It used to assert that an override silently swapped which package a
+        grandchild mount runs — accepted behaviour, recorded. The decision was
+        to **reserve** the key instead: an override narrows a mount, it never
+        redirects it. The card would otherwise go on naming the original
+        package while the run executed a different one, and `MountEditScope`
+        already refuses shape changes in the editor; this closes the same door
+        on the data path.
+
+        Loud, not fatal: the mount runs its declared package and the run says
+        what it ignored.
+        """
         store = _store(
             tmp_path,
             {
@@ -290,8 +310,9 @@ class TestCycles:
             },
         )
         resolved = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
-        assert resolved.slug == "evil"
-        assert _node(resolved.document, "leaf")["data"]["rules"] == "evil"
+        assert resolved.slug == "innocent"
+        assert _node(resolved.document, "leaf")["data"]["rules"] == "innocent"
+        assert any("workflow" in w for w in resolved.warnings), resolved.warnings
 
 
 # ---------------------------------------------------------------------------
@@ -381,14 +402,21 @@ class TestHttpSeam:
 
 
 class TestHostileOverrides:
-    def test_null_silently_replaces_a_real_value_with_no_warning(self) -> None:
-        """Pinned: a `null` override is applied over the package's value and
-        nothing warns. `MountContext.clearOverride` documents this trap and
-        avoids writing null — but a hand-written null is accepted silently."""
+    def test_a_null_override_is_applied_and_reported(self) -> None:
+        """Was `..._silently_replaces_a_real_value_with_no_warning`.
+
+        Still **applied**: `None` may be a legitimate value for a nullable
+        field, and this module does not get to decide the author meant
+        something else. Now **reported**, because the editor never writes one —
+        `MountContext.clearOverride` removes the key instead, precisely so a
+        cleared field is not an override of `null` the card keeps counting. A
+        null here is therefore always hand-written and ambiguous between "make
+        it null" and "I meant to remove this".
+        """
         child = _document([_agent("a1", rules="real")])
         merged, warnings = apply_mount_overrides(child, {"a1": {"rules": None}})
         assert _node(merged, "a1")["data"]["rules"] is None
-        assert warnings == []
+        assert any("null" in w and "a1.rules" in w for w in warnings), warnings
 
     def test_overriding_top_level_node_keys_only_lands_in_data(self) -> None:
         """`id`/`type` as override keys must not rewrite the node's identity."""
