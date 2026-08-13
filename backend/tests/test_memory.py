@@ -727,7 +727,7 @@ class TestScopeThreadingAcrossSubgraphs:
 
     def test_a_team_mounts_child_memory_the_same_way(self) -> None:
         store = InMemoryStore()
-        self._run(store, node_type="team.workflow")
+        self._run(store, node_type="workflow.subgraph")
         assert store.search(("workflow-memory", "child-flow"))
         assert not store.search(("workflow-memory", "parent-flow"))
 

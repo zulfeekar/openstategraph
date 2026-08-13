@@ -4,7 +4,7 @@
   "hidden": true,
   "savedAt": "2026-08-08T12:00:00.000000+00:00",
   "document": {
-    "version": 2,
+    "version": 3,
     "name": "Concierge (gateway)",
     "settings": {
       "model": "ollama:gpt-oss:120b-cloud",

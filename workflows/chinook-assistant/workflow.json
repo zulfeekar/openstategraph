@@ -3,7 +3,7 @@
   "name": "Chinook Assistant",
   "savedAt": "2026-08-11T00:00:00.000000+00:00",
   "document": {
-    "version": 2,
+    "version": 3,
     "name": "Chinook Assistant",
     "settings": {
       "model": "ollama:gpt-oss:120b-cloud",

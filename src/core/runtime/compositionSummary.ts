@@ -1,7 +1,7 @@
 /**
  * What is inside a mounted workflow, said in one line.
  *
- * A Team or Workflow node is deliberately opaque on the canvas — the atoms it
+ * A Workflow mount is deliberately opaque on the canvas — the atoms it
  * contains (a supervisor, its workers, a grader, the tools they hold) live in
  * *another* document, and drilling in is a navigation, not a zoom. That
  * opacity is right for composition and wrong for orientation: a card reading
@@ -28,14 +28,25 @@ export interface CompositionPart {
 export interface CompositionSummary {
   readonly parts: readonly CompositionPart[];
   /**
-   * Set only for a Team whose grader feeds revision back into the graph —
-   * the structural fact that makes a team a *loop* rather than a pipeline.
+   * What the child's own wiring says about revision: that its grader feeds
+   * work back, or — where this mount claims an outcome — that nothing does.
    */
   readonly note?: string;
 }
 
-/** Which mount is asking. A Team claims a loop; a Workflow claims nothing. */
-export type CompositionKind = 'team' | 'subgraph';
+/**
+ * What the caller knows about the mount, beyond its document.
+ *
+ * Replaces `CompositionKind = 'team' | 'subgraph'`. Since schema v3 there is
+ * one mount type, so the *card* no longer distinguishes anything — what
+ * decides whether a missing loop is worth mentioning is whether this mount
+ * claims an outcome, which is a property of what the author wrote on it
+ * (production-ready tickets 03 and 16).
+ */
+export interface CompositionContext {
+  /** True when this mount carries authored `outcome` prose. */
+  readonly claimsOutcome?: boolean;
+}
 
 /**
  * Node type → the word a reader uses for it, singular and plural.
@@ -57,7 +68,6 @@ const VOCABULARY: readonly (readonly [
   [(t) => t === 'human.approval', 'approval', 'approvals'],
   [(t) => t.startsWith('function.'), 'function', 'functions'],
   [(t) => t.startsWith('tool.'), 'tool', 'tools'],
-  [(t) => t === 'team.workflow', 'team', 'teams'],
   [(t) => t === 'workflow.subgraph', 'workflow', 'workflows'],
   [(t) => t.startsWith('input.'), 'input', 'inputs'],
   [(t) => t.startsWith('output.'), 'output', 'outputs'],
@@ -128,7 +138,7 @@ export function compositionPurpose(document: unknown): string {
  */
 export function summarizeComposition(
   document: unknown,
-  kind: CompositionKind,
+  context: CompositionContext = {},
 ): CompositionSummary | null {
   const doc = asDocument(document);
   if (!doc) return null;
@@ -155,19 +165,22 @@ export function summarizeComposition(
   }
   if (parts.length === 0) return null;
 
-  if (kind !== 'team') return { parts };
-
-  // Only a Team promises an outcome, so only a Team can fail to keep one — a
-  // `workflow.subgraph` mount never claimed a loop and gets no note either way.
-  //
-  // **The gap is stated, not omitted** (ticket 03). A child that does not loop
-  // used to be expressed as the *absence* of the note below, and absence of a
-  // claim is not a claim of absence: the card showed an `Expected outcome` the
-  // user had written, beside nothing saying it is unchecked. Silence is the
-  // same shape as the defect.
+  // A loop is worth stating wherever it exists — it is the most useful thing
+  // to know about a mounted document, and it is earned from that document
+  // rather than claimed by the card.
   if (graderIds.some((id) => hasRevise(doc, id))) {
     return { parts, note: 'loops until its grader passes' };
   }
+
+  // **The gap is stated, not omitted** (ticket 03) — but only where something
+  // was promised. A mount that claims no outcome claims nothing, and telling
+  // it there is no grader would be a nag about a shape it never wanted.
+  //
+  // A child that does *not* loop used to be expressed as the absence of the
+  // note above, and absence of a claim is not a claim of absence: the card
+  // showed an `Expected outcome` the user had written, beside nothing saying
+  // it is unchecked. Silence is the same shape as the defect.
+  if (!context.claimsOutcome) return { parts };
   return {
     parts,
     note: graderIds.length

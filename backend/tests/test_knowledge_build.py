@@ -541,7 +541,7 @@ class TestRootKnowledgeBuilder:
         self._save_child(tmp_path, "shop-child")
         discovery = RootKnowledgeBuilder().discover(
             tmp_path / "gateway",
-            self._root_document("shop-child", kind="team.workflow"),
+            self._root_document("shop-child", kind="workflow.subgraph"),
             tmp_path,
         )
         assert [t.name for t in discovery.topics] == ["shop-child"]

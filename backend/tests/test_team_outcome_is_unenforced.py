@@ -62,7 +62,7 @@ OPEN_LOOP = {
 }
 
 
-def mount(child: dict[str, Any], node_type: str = "team.workflow") -> NodeRuntime:
+def mount(child: dict[str, Any], node_type: str = "workflow.subgraph") -> NodeRuntime:
     runtime = NodeRuntime(
         services=RuntimeServices(model=None, document_loader=lambda _slug: child)
     )
@@ -91,9 +91,23 @@ class TestTheGapIsReported:
     def test_a_real_looping_team_is_not_reported(self) -> None:
         assert mount(LOOPING).unenforced_outcomes == []
 
-    def test_a_plain_subgraph_mount_is_never_reported(self) -> None:
-        """Only a Team promises an outcome, so only a Team can fail to keep one."""
-        assert mount(GRADERLESS, node_type="workflow.subgraph").unenforced_outcomes == []
+    def test_a_mount_that_promises_nothing_is_never_reported(self) -> None:
+        """The rule is the promise, not the card.
+
+        This asserted that a `workflow.subgraph` mount is never reported, which
+        was the same thing while `team.workflow` existed. Since schema v3 there
+        is one mount type (ticket 16), so what earns the warning is prose on
+        the card claiming an outcome — a mount with none claims nothing.
+        """
+        runtime = NodeRuntime(
+            services=RuntimeServices(model=None, document_loader=lambda _slug: GRADERLESS)
+        )
+        runtime._subgraph(
+            "mount1",
+            {"id": "mount1", "type": "workflow.subgraph", "data": {"workflow": "child-pkg"}},
+            CompiledPlan(),
+        )
+        assert runtime.unenforced_outcomes == []
 
     def test_an_unresolvable_child_is_left_to_its_own_warning(self) -> None:
         """`unresolved_subgraphs` already says the child could not be loaded.

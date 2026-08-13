@@ -97,7 +97,6 @@ class TestNothingWasLostInTheMove:
         catalogue = load_catalogue()
         for node_type in (
             "workflow.subgraph",
-            "team.workflow",
             "tool.reddit-search",
             "tool.web-search",
             "tool.chinook-execute-sql",

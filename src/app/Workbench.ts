@@ -70,6 +70,35 @@ export class Workbench {
 
     this.serializer = new WorkflowSerializer(this.registry);
 
+    // Migration v2 → v3: `team.workflow` collapses into `workflow.subgraph`
+    // (production-ready ticket 16). The two compiled identically — one backend
+    // builder, no branch, identical ports — and what made Team look like a
+    // second organism was a glyph, an `outcome` field that turned out to be
+    // documentation, and a census note the *child document* earns.
+    //
+    // The id is all that changes: the node keeps its id so edges still
+    // resolve, and its data — slug, overrides, and the authored `outcome`
+    // `workflow.subgraph` gained in the same change — comes across untouched.
+    // Mirrors `MIGRATIONS[2]` in `backend/openstategraph/schema.py`; the two
+    // sides read the same documents and must agree.
+    this.serializer.register({
+      from: 2,
+      to: 3,
+      migrate: (doc: Record<string, unknown>): Record<string, unknown> => {
+        const nodes = Array.isArray(doc['nodes']) ? doc['nodes'] : [];
+        for (const node of nodes) {
+          if (
+            typeof node === 'object' &&
+            node !== null &&
+            (node as Record<string, unknown>)['type'] === 'team.workflow'
+          ) {
+            (node as Record<string, unknown>)['type'] = 'workflow.subgraph';
+          }
+        }
+        return doc;
+      },
+    });
+
     // Migration v1 → v2: convert router branches from newline-separated text
     // to repeatable-group array with stable ids (ticket 20).
     this.serializer.register({

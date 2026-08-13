@@ -4,7 +4,6 @@ import {
   compositionPurpose,
   formatComposition,
   summarizeComposition,
-  type CompositionKind,
 } from '@core/runtime/compositionSummary';
 import { peekDiagramId, peekMermaid } from '@core/runtime/mermaidPeek';
 import { useWorkbench } from '@app/WorkbenchContext';
@@ -64,7 +63,7 @@ function overriddenCount(node: NodeBodyProps['node']): number {
   return 0;
 }
 
-function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: CompositionKind }) {
+function CompositionAnnotation({ node }: NodeBodyProps) {
   const slug = (node.getField<string>('workflow') ?? '').trim();
   const [state, setState] = useState<SlugState>(
     () => CACHE.get(slug)?.settled ?? { status: 'loading' },
@@ -92,7 +91,11 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
   }
   if (state.status !== 'ready') return null;
 
-  const summary = summarizeComposition(state.document, kind);
+  // Whether this mount promises anything is what decides if a missing loop
+  // is worth mentioning — see `CompositionContext`. Read from the node rather
+  // than from its type, because since v3 the type no longer distinguishes.
+  const claimsOutcome = Boolean((node.getField<string>('outcome') ?? '').trim());
+  const summary = summarizeComposition(state.document, { claimsOutcome });
   if (!summary) return null;
 
   // What the box achieves, above what is in it. The census is machinery; a
@@ -124,7 +127,7 @@ function CompositionAnnotation({ node, kind }: NodeBodyProps & { kind: Compositi
             </span>
           ) : null}
         </button>
-        <OpenMount slug={slug} mountId={node.id} kind={kind} />
+        <OpenMount slug={slug} mountId={node.id} />
       </div>
       {expanded ? <GraphPeek slug={slug} /> : null}
     </div>
@@ -195,19 +198,14 @@ function GraphPeek({ slug }: { slug: string }) {
  * invented plumbing to the shell's `Toaster`. Success needs no message: the
  * canvas becomes the other workflow, which is the loudest feedback available.
  */
-function OpenMount({
-  slug,
-  mountId,
-  kind,
-}: {
-  slug: string;
-  mountId: string;
-  kind: CompositionKind;
-}) {
+function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
   const workbench = useWorkbench();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const label = kind === 'team' ? 'Open this mount' : 'Open this mount';
+  // One label. This was a ternary on the mount kind whose two branches were
+  // the same string — dead before `team.workflow` was collapsed, and there is
+  // now not even a kind to branch on (ticket 16).
+  const label = 'Open this mount';
 
   const open = useCallback(async () => {
     setBusy(true);
@@ -216,7 +214,8 @@ function OpenMount({
     // the slug alone could not tell the editor which one was opened.
     //
     // Read before the load, since the import replaces the open document.
-    const here = getOpenAddress() ?? parseMountAddress(sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '');
+    const here =
+      getOpenAddress() ?? parseMountAddress(sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '');
     const target = here ? childAddress(here, mountId) : null;
     if (!target) {
       setBusy(false);
@@ -250,15 +249,15 @@ function OpenMount({
 }
 
 /**
- * The body for one mount kind.
+ * The body a mount card shows.
  *
  * Ticket vocabulary: a Team claims its loop, a Workflow mount does not — the
  * claim is derived by `summarizeComposition`, never asserted by the card.
- * Which type ids get which kind is declared once, in `mountKind.ts`.
+ * Which type ids are mounts is declared once, in `mountKind.ts`.
  */
-export function compositionBody(kind: CompositionKind): NodeBody {
-  const Body = (props: NodeBodyProps) => <CompositionAnnotation {...props} kind={kind} />;
-  Body.displayName = `CompositionBody(${kind})`;
+export function compositionBody(): NodeBody {
+  const Body = (props: NodeBodyProps) => <CompositionAnnotation {...props} />;
+  Body.displayName = 'CompositionBody';
   return Body;
 }
 

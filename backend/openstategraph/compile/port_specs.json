@@ -644,50 +644,6 @@
       ]
     },
     {
-      "type": "team.workflow",
-      "kind": "standard",
-      "category": "compose",
-      "scope": "app",
-      "label": "Team",
-      "description": "The same isolated mount, plus a stated outcome — its card shows what the child is expected to deliver, and whether that child really loops until a grader passes.",
-      "ports": [
-        {
-          "id": "input",
-          "direction": "in",
-          "type": "result",
-          "label": "task",
-          "required": true,
-          "max_connections": 1,
-          "accepts": [
-            "result",
-            "text"
-          ]
-        },
-        {
-          "id": "result",
-          "direction": "out",
-          "type": "result",
-          "label": "outcome",
-          "required": false,
-          "max_connections": null,
-          "accepts": [
-            "result",
-            "text"
-          ]
-        }
-      ],
-      "dynamic_ports": [],
-      "drives_model": false,
-      "accepts_skill": false,
-      "field_keys": [
-        "maxRetries",
-        "outcome",
-        "overrides",
-        "timeoutSeconds",
-        "workflow"
-      ]
-    },
-    {
       "type": "tool.chinook-execute-sql",
       "kind": "standard",
       "category": "tools",
@@ -1093,6 +1049,7 @@
       "accepts_skill": false,
       "field_keys": [
         "maxRetries",
+        "outcome",
         "overrides",
         "timeoutSeconds",
         "workflow"

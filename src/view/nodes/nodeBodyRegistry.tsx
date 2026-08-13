@@ -7,7 +7,7 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import { MARKDOWN_COMPONENTS, MARKDOWN_PLUGINS } from '@view/common/RichText';
 import { FieldRenderer } from './FieldRenderer';
 import { compositionBody } from './CompositionBody';
-import { MOUNT_KINDS } from './mountKind';
+import { MOUNT_TYPES } from './mountKind';
 import { KnowledgeBody } from './KnowledgeBody';
 import { SqlSchemaBody } from './SqlSchemaBody';
 import { intentBody } from './IntentBody';
@@ -185,8 +185,8 @@ registerNodeBody('input.text', LiveInputBody);
 // The mounts, driven from the one declaration of which types are mounts —
 // the same map `NodeCard` badges from, so a card can never be badged as
 // holding a graph while showing no composition (or the reverse).
-for (const [typeId, kind] of Object.entries(MOUNT_KINDS)) {
-  registerNodeBody(typeId, compositionBody(kind));
+for (const typeId of MOUNT_TYPES) {
+  registerNodeBody(typeId, compositionBody());
 }
 registerNodeBody('annotate.group', GroupBody);
 registerNodeBody('annotate.note', NoteBody);

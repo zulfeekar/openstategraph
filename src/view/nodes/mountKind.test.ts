@@ -1,21 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { MOUNT_BADGE, MOUNT_KINDS, mountKindOf } from './mountKind';
+import { MOUNT_BADGE, MOUNT_TYPES, isMountType } from './mountKind';
 
-describe('mountKindOf', () => {
-  it('names the two mount types by kind', () => {
-    expect(mountKindOf('team.workflow')).toBe('team');
-    expect(mountKindOf('workflow.subgraph')).toBe('subgraph');
+/**
+ * One mount type since schema v3 (production-ready ticket 16).
+ *
+ * This asserted two ids and a `kind` for each. `team.workflow` compiled
+ * through the same builder with no branch and identical ports; what made it
+ * look like a second organism was a glyph, a documentation field and a census
+ * note the child earns. So the question a card asks is no longer *which* mount
+ * this is — only whether it is one.
+ */
+describe('isMountType', () => {
+  it('recognises the mount', () => {
+    expect(isMountType('workflow.subgraph')).toBe(true);
   });
 
-  it('is null for an atom, so only mounts are badged', () => {
-    expect(mountKindOf('agent.llm')).toBeNull();
-    expect(mountKindOf('route.grader')).toBeNull();
-    expect(mountKindOf('tool.chinook-query')).toBeNull();
-    expect(mountKindOf('')).toBeNull();
+  it('does not recognise the id that was collapsed away', () => {
+    // A document still carrying it has been migrated by `normalize_document`
+    // before any card sees it, so treating it as a mount here would keep a
+    // dead id alive in the one place nothing would notice.
+    expect(isMountType('team.workflow')).toBe(false);
+  });
+
+  it('is false for an atom, so only mounts are badged', () => {
+    expect(isMountType('agent.llm')).toBe(false);
+    expect(isMountType('route.grader')).toBe(false);
+    expect(isMountType('tool.chinook-query')).toBe(false);
+    expect(isMountType('')).toBe(false);
   });
 
   it('covers exactly the composition-bodied types', () => {
-    expect(Object.keys(MOUNT_KINDS).sort()).toEqual(['team.workflow', 'workflow.subgraph']);
+    expect([...MOUNT_TYPES].sort()).toEqual(['workflow.subgraph']);
+  });
+
+  it('stays a list, because it declares a category and not a count', () => {
+    // A registered plugin mount would join it without reopening `NodeCard`,
+    // `nodeBodyRegistry` or these tests.
+    expect(Array.isArray(MOUNT_TYPES)).toBe(true);
   });
 });
 

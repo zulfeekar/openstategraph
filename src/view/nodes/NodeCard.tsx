@@ -25,7 +25,7 @@ import {
 } from '@app/WorkbenchContext';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { FieldRenderer } from './FieldRenderer';
-import { MOUNT_BADGE, mountKindOf } from './mountKind';
+import { MOUNT_BADGE, isMountType } from './mountKind';
 import { resolveNodeBody } from './nodeBodyRegistry';
 import { planPortLayout, portPositions, type PlannedPortRow } from './portLayout';
 import './NodeCard.css';
@@ -262,7 +262,7 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
   // before a word is read, hence both a chip and a card treatment: the chip
   // says which kind of thing this is up close, the tinted header band survives
   // the zoom level at which no caption is readable at all.
-  const mount = mountKindOf(definition.id);
+  const mount = isMountType(definition.id);
 
   return (
     <div

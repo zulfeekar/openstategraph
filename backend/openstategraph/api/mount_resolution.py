@@ -29,7 +29,10 @@ from openstategraph.compile.node_runtime import apply_mount_overrides
 #: `NodeRuntime._subgraph` and both carry `OVERRIDES_FIELD`, so both are
 #: addressable; asking the type registry would couple this module to the
 #: compiler for two string constants.
-MOUNT_TYPES = frozenset({"workflow.subgraph", "team.workflow"})
+#: One id since schema v3 — `team.workflow` collapsed into it, because the
+#: two compiled identically and Team was a property of the mounted document
+#: rather than a kind of node (production-ready ticket 16).
+MOUNT_TYPES = frozenset({"workflow.subgraph"})
 
 
 class MountResolutionError(Exception):

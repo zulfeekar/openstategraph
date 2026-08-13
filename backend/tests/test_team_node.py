@@ -1,9 +1,13 @@
-"""The Team node (ticket 56): `team.workflow` runs a team package as one step.
+"""Mounting a *team package* — ticket 56, as it stands after ticket 16.
 
-A Team compiles through the exact same path as `workflow.subgraph` — the type
-exists for its contract (outcome on the card), not for new machinery. These
-tests pin the aliasing and the scaffolded package's shape, because the
-prebuilt template is the "minimum viable code" every prebuilt node owes.
+A team is a **package shape**, not a node type. `team.workflow` used to be a
+second id that compiled through the exact same path as `workflow.subgraph`,
+existing only for a contract on the card; schema v3 collapsed it, so what is
+left is the thing that was always real — a scaffolded package of supervisor +
+worker + grader, mounted like any other workflow.
+
+These tests pin the mount and the scaffolded package's shape, because that
+template is the "minimum viable code" every prebuilt owes.
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ def parent_doc(slug: str) -> dict:
         "name": "parent",
         "nodes": [
             {"id": "in1", "type": "input.text", "data": {}},
-            {"id": "team1", "type": "team.workflow", "data": {"workflow": slug}},
+            {"id": "team1", "type": "workflow.subgraph", "data": {"workflow": slug}},
             {"id": "out1", "type": "output.formatted", "data": {}},
         ],
         "edges": [
@@ -43,12 +47,12 @@ class TestTeamCompilesAsSubgraph:
         assert plan.entry == ["in1"] and plan.exits == ["out1"]
 
     def test_the_runtime_builds_a_team_through_the_subgraph_loader(self) -> None:
-        """`team.workflow` must hit the same loader as `workflow.subgraph` —
+        """A mount hits the subgraph loader —
         a missing loader is the readable error, not a passthrough."""
         runtime = NodeRuntime(model=None)
         doc = parent_doc("some-team")
         factory = runtime.factory(doc)
-        run = factory("team1", {"id": "team1", "type": "team.workflow", "data": {"workflow": "nope"}},
+        run = factory("team1", {"id": "team1", "type": "workflow.subgraph", "data": {"workflow": "nope"}},
                       WorkflowCompiler().plan(doc))
         update = run(RunState(question="q"))  # type: ignore[typeddict-item]
         assert update["outputs"]["team1"] == ""

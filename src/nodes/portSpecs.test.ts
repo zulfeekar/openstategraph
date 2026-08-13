@@ -171,9 +171,14 @@ describe('generated node/port catalogue', () => {
     }
   });
 
-  it('gives the mountable composition nodes the ports MCP was reporting as empty', () => {
-    for (const nodeType of ['workflow.subgraph', 'team.workflow']) {
-      expect(byType.get(nodeType)?.ports.map((port) => port.id)).toEqual(['input', 'result']);
-    }
+  it('gives the mountable composition node the ports MCP was reporting as empty', () => {
+    // Was a loop over two ids. `team.workflow` collapsed into this one at
+    // schema v3 (ticket 16); the ports are unchanged, which is most of why the
+    // two were never really different node types.
+    expect(byType.get('workflow.subgraph')?.ports.map((port) => port.id)).toEqual([
+      'input',
+      'result',
+    ]);
+    expect(byType.has('team.workflow')).toBe(false);
   });
 });

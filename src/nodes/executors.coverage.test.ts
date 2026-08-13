@@ -14,7 +14,6 @@ import { orchestratorExecutor } from './orchestrate/OrchestratorNode';
 import { workerExecutor } from './orchestrate/WorkerNode';
 import { humanApprovalExecutor } from './routing/HumanApprovalNode';
 import { subgraphExecutor } from './compose/SubgraphNode';
-import { teamExecutor } from './compose/TeamNode';
 import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode';
 import {
   executeSqlExecutor,
@@ -117,10 +116,15 @@ describe('honest backend-only refusals', () => {
 
   it('subgraph and team refuse, naming the slug when set', async () => {
     const workbench = makeWorkbench();
+    // One mount type since schema v3 (ticket 16) — this used to pair a bare
+    // `workflow.subgraph` against a named `team.workflow`, which was two
+    // executors for what is now one.
     const bare = addNode(workbench, 'workflow.subgraph');
-    const named = addNode(workbench, 'team.workflow', { data: { workflow: 'some-team-package' } });
+    const named = addNode(workbench, 'workflow.subgraph', {
+      data: { workflow: 'some-team-package' },
+    });
     const bareOut = await subgraphExecutor.execute(ctxFor(workbench, bare.id));
-    const namedOut = await teamExecutor.execute(ctxFor(workbench, named.id));
+    const namedOut = await subgraphExecutor.execute(ctxFor(workbench, named.id));
     expect(bareOut.ok).toBe(false);
     expect(namedOut.ok).toBe(false);
     if (!namedOut.ok) expect(namedOut.error).toContain('some-team-package');

@@ -20,7 +20,7 @@ const readWorkflow = (slug: string): unknown =>
 
 describe('summarizeComposition', () => {
   it('counts the real mounted example into the atomic vocabulary', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'team');
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
     expect(summary).not.toBeNull();
     expect(formatComposition(summary!)).toBe(
       '3 agents · 1 router · 1 grader · 5 tools — loops until its grader passes',
@@ -29,15 +29,17 @@ describe('summarizeComposition', () => {
 
   it('accepts a bare document as well as a saved envelope', () => {
     const envelope = readWorkflow('chinook-assistant') as { document: unknown };
-    expect(summarizeComposition(envelope.document, 'team')).toEqual(
-      summarizeComposition(envelope, 'team'),
-    );
+    expect(summarizeComposition(envelope.document)).toEqual(summarizeComposition(envelope));
   });
 
-  it('claims no loop for a subgraph mount, even one containing a grader', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'subgraph');
-    expect(summary?.note).toBeUndefined();
-    expect(formatComposition(summary!)).not.toContain('loops');
+  it('reports the loop it finds, whoever is mounting', () => {
+    // This asserted the opposite: that a `subgraph`-kind mount never claims a
+    // loop even when its child plainly has one, because only a Team was
+    // allowed to say so. Since schema v3 there is one mount type (ticket 16),
+    // and the claim is earned from the *document* rather than granted by the
+    // card — so withholding it here would be hiding a true and useful fact.
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
+    expect(summary?.note).toBe('loops until its grader passes');
   });
 
   it('claims no loop when the grader has no revise edge, and says why', () => {
@@ -52,7 +54,7 @@ describe('summarizeComposition', () => {
       ],
       edges: [{ source: { nodeId: 'g', portId: 'pass' }, target: { nodeId: 'o', portId: 'x' } }],
     };
-    expect(summarizeComposition(document, 'team')).toEqual({
+    expect(summarizeComposition(document, { claimsOutcome: true })).toEqual({
       parts: [
         { label: 'agent', count: 1 },
         { label: 'grader', count: 1 },
@@ -69,29 +71,28 @@ describe('summarizeComposition', () => {
         { id: 'a', type: 'agent.llm' },
       ],
     };
-    expect(formatComposition(summarizeComposition(document, 'subgraph')!)).toBe('1 agent');
+    expect(formatComposition(summarizeComposition(document)!)).toBe('1 agent');
   });
 
   it('counts nested mounts as content', () => {
     const document = {
       nodes: [
-        { id: 't', type: 'team.workflow' },
         { id: 'w', type: 'workflow.subgraph' },
         { id: 'w2', type: 'workflow.subgraph' },
+        { id: 'w3', type: 'workflow.subgraph' },
       ],
     };
-    expect(formatComposition(summarizeComposition(document, 'subgraph')!)).toBe(
-      '1 team · 2 workflows',
-    );
+    // Was `1 team · 2 workflows`. `team.workflow` left the vocabulary with the
+    // node type; a child document still carrying the old id has been migrated
+    // by `normalize_document` before any card sees it.
+    expect(formatComposition(summarizeComposition(document)!)).toBe('3 workflows');
   });
 
   it('returns null for anything without countable content', () => {
-    expect(summarizeComposition(null, 'team')).toBeNull();
-    expect(summarizeComposition({ nodes: [] }, 'team')).toBeNull();
-    expect(
-      summarizeComposition({ nodes: [{ id: 'n', type: 'annotate.note' }] }, 'team'),
-    ).toBeNull();
-    expect(summarizeComposition('not a document', 'subgraph')).toBeNull();
+    expect(summarizeComposition(null)).toBeNull();
+    expect(summarizeComposition({ nodes: [] })).toBeNull();
+    expect(summarizeComposition({ nodes: [{ id: 'n', type: 'annotate.note' }] })).toBeNull();
+    expect(summarizeComposition('not a document')).toBeNull();
   });
 });
 
@@ -139,7 +140,7 @@ describe('compositionPurpose', () => {
  * shape as the defect. Absence of a claim is not a claim of absence, and on a
  * card nobody reads the gap.
  */
-describe('a Team whose child cannot enforce its outcome says so', () => {
+describe('a mount whose child cannot enforce its outcome says so', () => {
   const graderless = {
     nodes: [
       { id: 'in1', type: 'input.text' },
@@ -168,7 +169,7 @@ describe('a Team whose child cannot enforce its outcome says so', () => {
   };
 
   it('states the gap rather than omitting the loop note', () => {
-    const summary = summarizeComposition(graderless, 'team');
+    const summary = summarizeComposition(graderless, { claimsOutcome: true });
     expect(summary?.note).toBeDefined();
     expect(formatComposition(summary!)).toMatch(/no grader|nothing checks/i);
   });
@@ -176,7 +177,7 @@ describe('a Team whose child cannot enforce its outcome says so', () => {
   it('counts a grader that never revises as not closing the loop', () => {
     // The grader is present, so "no grader" would be wrong; what is missing is
     // the `revise` edge that makes it a loop.
-    const summary = summarizeComposition(openLoop, 'team');
+    const summary = summarizeComposition(openLoop, { claimsOutcome: true });
     expect(summary?.note).toBeDefined();
     expect(formatComposition(summary!)).not.toContain('loops until');
   });
@@ -184,11 +185,11 @@ describe('a Team whose child cannot enforce its outcome says so', () => {
   it('still says nothing of the sort for a plain subgraph mount', () => {
     // Only a Team promises an outcome, so only a Team can fail to keep one.
     // A `workflow.subgraph` mount never claimed a loop in the first place.
-    expect(summarizeComposition(graderless, 'subgraph')?.note).toBeUndefined();
+    expect(summarizeComposition(graderless)?.note).toBeUndefined();
   });
 
   it('leaves a real looping team exactly as it was', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'), 'team');
+    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
     expect(formatComposition(summary!)).toContain('loops until its grader passes');
   });
 });

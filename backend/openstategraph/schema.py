@@ -87,7 +87,7 @@ from openstategraph.errors import DocumentError, SchemaVersionError
 logger = logging.getLogger(__name__)
 
 #: The schema version this build writes and understands.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: The oldest version this build will migrate from. Raised only in a major.
 MIN_SUPPORTED_VERSION = 1
@@ -104,8 +104,50 @@ Migration = Callable[[dict[str, Any]], dict[str, Any]]
 #: means "unsupported" and a present identity means "checked, nothing to do" —
 #: and the next real migration then has a chain to slot into rather than a
 #: mechanism to invent under time pressure.
+#: The node type id that ceased to exist in v3, and what it became.
+#:
+#: `team.workflow` and `workflow.subgraph` compiled identically — one builder,
+#: no branch, identical ports. What made Team look like a second organism was a
+#: glyph, an `outcome` field that turned out to be documentation, and a census
+#: note the *child document* earns. None of those is a kind of node, so Team
+#: was a Workflow node whose mounted document happens to contain a revision
+#: loop (production-ready ticket 16).
+_TEAM_TYPE = "team.workflow"
+_MOUNT_TYPE = "workflow.subgraph"
+
+
+def _collapse_team_into_workflow(document: dict[str, Any]) -> dict[str, Any]:
+    """v2 → v3: `team.workflow` mounts become `workflow.subgraph` mounts.
+
+    **Nothing about the node is dropped.** The id is stable so edges still
+    resolve, the slug and per-mount overrides come across untouched, and so
+    does the authored `outcome` — `workflow.subgraph` gained that field in the
+    same change, precisely so this migration would not have to destroy prose a
+    person wrote. Silent loss during an automatic upgrade is the failure this
+    codebase treats as the worst kind: no error, no warning, and nothing in the
+    result that looks wrong.
+
+    Copies rather than mutates, at every level it touches — `migrate_document`
+    promises a caller holding the on-disk payload keeps it, and a shallow copy
+    of the document would still have shared the node dicts.
+    """
+    nodes = document.get("nodes")
+    if not isinstance(nodes, list):
+        return document
+    return {
+        **document,
+        "nodes": [
+            {**node, "type": _MOUNT_TYPE}
+            if isinstance(node, dict) and node.get("type") == _TEAM_TYPE
+            else node
+            for node in nodes
+        ],
+    }
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: lambda document: document,
+    2: _collapse_team_into_workflow,
 }
 
 

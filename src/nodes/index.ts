@@ -29,7 +29,6 @@ import {
   formatReportExecutor,
 } from './orchestrate/FormatReportNode';
 import { subgraphExecutor, subgraphNode } from './compose/SubgraphNode';
-import { teamExecutor, teamNode } from './compose/TeamNode';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 
 /**
@@ -89,7 +88,6 @@ export function registerNodeCatalogue(
       workerNode,
       formatReportNode,
       subgraphNode,
-      teamNode,
       ...PLATFORM_TOOL_NODES.map((entry) => entry.definition),
       formattedOutputNode,
       groupNode,
@@ -110,7 +108,6 @@ export function registerNodeCatalogue(
     workerExecutor,
     formatReportExecutor,
     subgraphExecutor,
-    teamExecutor,
     ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
     formattedOutputExecutor,
   ]);
@@ -138,7 +135,6 @@ export const NODE_TYPE = {
   worker: WORKER_TYPE,
   formatReport: FORMAT_REPORT_TYPE,
   subgraph: subgraphNode.id,
-  team: teamNode.id,
   formattedOutput: formattedOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,

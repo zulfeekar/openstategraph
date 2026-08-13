@@ -31,7 +31,7 @@ class TestValidateWorkflowTool:
 
     def test_known_types_stay_in_lockstep_with_the_runtime(self) -> None:
         from openstategraph.compile.node_runtime import NodeRuntime
-        runtime_types = set(NodeRuntime(model=None)._builders) | {"workflow.subgraph", "team.workflow"}
+        runtime_types = set(NodeRuntime(model=None)._builders) | {"workflow.subgraph"}
         assert runtime_types <= KNOWN_NODE_TYPES | {"input.markdown"}
         assert KNOWN_NODE_TYPES <= runtime_types
 

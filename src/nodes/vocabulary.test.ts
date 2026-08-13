@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CATEGORIES, CATEGORY } from './vocabulary';
-import { teamNode } from './compose/TeamNode';
+import { NODE_TYPE } from './index';
 import { subgraphNode } from './compose/SubgraphNode';
 import { createOrchestratorNode } from './orchestrate/OrchestratorNode';
 import { formattedOutputNode } from './output/FormattedOutputNode';
@@ -40,8 +40,7 @@ describe('palette tiering', () => {
     expect(ranks).toEqual(ranks.slice().sort((a, b) => a - b));
   });
 
-  it('files a mounted workflow as an organism — it brings its own nodes, state and loop', () => {
-    expect(teamNode.category).toBe(CATEGORY.compose);
+  it('files a mounted workflow as an organism — it brings its own nodes and state', () => {
     expect(subgraphNode.category).toBe(CATEGORY.compose);
     expect(label(CATEGORY.compose)).toContain('organisms');
   });
@@ -70,27 +69,30 @@ describe('palette tiering', () => {
 });
 
 /**
- * production-ready ticket 02.
+ * production-ready tickets 02 and 16.
  *
- * Two violet cards, the same glyph, the same ports, the same category,
- * labelled "Workflow" and "Team". Research had already established there is
- * **no compilation difference at all** — one backend builder serves both — so
- * the honest fix was never to invent a difference, only to make the contract
- * each one offers legible.
+ * There were two violet cards — "Workflow" and "Team" — with the same glyph,
+ * the same ports and the same category, and research had already established
+ * they **compile identically**: one backend builder, no branch.
+ *
+ * Ticket 02 made each state its contract, which is what let 16 see there was
+ * only one contract: Team's whole difference was a glyph, an `outcome` field
+ * that turned out to be documentation, and a census note the *child document*
+ * earns. Schema v3 collapsed it away, so the palette now offers one organism
+ * and the loop is learned from the badge rather than from picking the right
+ * card.
  *
  * These assert *properties* of the copy, not its exact words: a test that
- * freezes marketing text makes improving it a failure. What must stay true is
- * that each says what it is, that Team's extra is named, and that neither
- * claims something the compiler does not do.
+ * freezes marketing text makes improving it a failure.
  */
-describe('an organism states the contract it offers', () => {
+describe('the one organism states the contract it offers', () => {
   const workflow = subgraphNode.description ?? '';
-  const team = teamNode.description ?? '';
 
-  it('gives the two organisms different glyphs', () => {
-    // The single visual channel available, and it was spent on making them
-    // look identical.
-    expect(subgraphNode.iconId).not.toBe(teamNode.iconId);
+  it('is the only mount the palette offers', () => {
+    // Registering the collapsed id as well would let a user create a node that
+    // documents are migrated *away* from.
+    expect(NODE_TYPE.subgraph).toBe('workflow.subgraph');
+    expect(Object.values(NODE_TYPE)).not.toContain('team.workflow');
   });
 
   it('says a mounted workflow is isolated — the thing a user cannot guess', () => {
@@ -99,42 +101,33 @@ describe('an organism states the contract it offers', () => {
     expect(workflow.toLowerCase()).toMatch(/isolat|its own|task in/);
   });
 
-  it('names what Team adds, rather than restating what Workflow already is', () => {
-    expect(team.toLowerCase()).toContain('outcome');
+  it('never calls a mount parallel or multi-agent', () => {
+    // Whatever shape the child has is the child's, and the census reads it.
+    expect(`${workflow} ${subgraphNode.label}`.toLowerCase()).not.toMatch(
+      /parallel|multi-agent|concurrent/,
+    );
   });
 
-  it('never calls a Team parallel or multi-agent', () => {
-    // The badge is earned from the child's grader wiring, not from the label.
-    // A grader-less document can be mounted as a Team today (ticket 03), so
-    // the copy must not promise a shape the child may not have.
-    for (const text of [team, teamNode.label]) {
-      expect(text.toLowerCase()).not.toMatch(/parallel|multi-agent|concurrent/);
-    }
-  });
-
-  it('does not promise a revision loop on a plain mounted workflow', () => {
-    // A mounted workflow loops only if the child does. Claiming it here would
-    // be the same false claim the tiering bug made, one level down.
+  it('does not promise a revision loop on the card itself', () => {
+    // The badge is earned from the mounted document by `summarizeComposition`;
+    // asserting it here would be the same fact said twice, with one of the two
+    // eventually wrong.
     expect(workflow.toLowerCase()).not.toContain('loop');
   });
 
-  it('says the same of the category, which covers both', () => {
+  it('says the same of the category, which covers it', () => {
     const compose = CATEGORIES.find((c) => c.id === CATEGORY.compose)?.description ?? '';
     expect(compose.toLowerCase()).not.toContain('revision loop');
   });
 
   it('tells a reader that a mount stays linked to its original', () => {
-    // The distinction ticket 01 left to this one: mounting keeps the link,
-    // starting from a template severs it at creation.
     const compose = CATEGORIES.find((c) => c.id === CATEGORY.compose)?.description ?? '';
     expect(`${compose} ${workflow}`.toLowerCase()).toMatch(/every instance|stays linked|reference/);
   });
 
-  it('keeps both descriptions short enough to read in a palette', () => {
-    for (const text of [workflow, team]) {
-      expect(text.length).toBeGreaterThan(40);
-      expect(text.length).toBeLessThanOrEqual(200);
-    }
+  it('keeps the description short enough to read in a palette', () => {
+    expect(workflow.length).toBeGreaterThan(40);
+    expect(workflow.length).toBeLessThanOrEqual(200);
   });
 });
 
@@ -149,8 +142,11 @@ describe('an organism states the contract it offers', () => {
  * That is the RouterNode lesson in a different field — a surface presenting a
  * machine-owned promise as if it were configuration.
  */
-describe('the Team outcome field does not claim an enforcement it has not got', () => {
-  const outcome = teamNode.fields.find((field) => field.key === 'outcome');
+describe('the mount outcome field does not claim an enforcement it has not got', () => {
+  // Moved from the collapsed `team.workflow` to the one mount type, on purpose:
+  // `MIGRATIONS[2]` carries authored outcome prose across, and it would have
+  // had nowhere to land if the field had gone with the node (ticket 16).
+  const outcome = subgraphNode.fields.find((field) => field.key === 'outcome');
 
   it('still exists and still shows on the card', () => {
     // The fix is not to hide it: a reader of the card wants to know what the

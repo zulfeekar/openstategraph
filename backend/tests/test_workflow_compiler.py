@@ -321,9 +321,19 @@ class TestPresentationKeysAreIgnored:
         assert compiler.plan(routed).edges == compiler.plan(LINEAR).edges
 
     def test_the_document_version_did_not_move_for_it(self) -> None:
-        from openstategraph.schema import SCHEMA_VERSION
+        """Presentation keys stayed additive — that claim is unchanged.
 
-        assert SCHEMA_VERSION == 2
+        The number itself moved to 3 for an unrelated reason: `team.workflow`
+        collapsed into `workflow.subgraph`, and a node type id changing is one
+        of the listed bumps (production-ready ticket 16). Pinning the literal
+        here made this test assert *someone else's* change, so it now asserts
+        what it is named for — that vertices and positions bumped nothing.
+        """
+        from openstategraph.schema import MIGRATIONS
+
+        # v1 -> v2 is the identity: the difference was additive only, which is
+        # the property this test exists to protect.
+        assert MIGRATIONS[1]({"nodes": []}) == {"nodes": []}
 
 
 class TestPlanIsInspectable:

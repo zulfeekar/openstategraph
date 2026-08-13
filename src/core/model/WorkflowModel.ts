@@ -17,8 +17,16 @@ import type {
   WorkflowEvents,
 } from './contracts/workflow';
 
-/** Current on-disk schema version. Bump alongside a migration. */
-export const WORKFLOW_SCHEMA_VERSION = 2;
+/**
+ * Current on-disk schema version. Bump alongside a migration.
+ *
+ * **Two-sided.** `backend/openstategraph/schema.py` declares the same number
+ * and the same chain, because a document is written by one side and read by
+ * the other. They move together or a document written here is refused there
+ * as coming from the future — which is what a v3 stamp did until the editor's
+ * own chain caught up (production-ready ticket 16).
+ */
+export const WORKFLOW_SCHEMA_VERSION = 3;
 
 /**
  * The document.

@@ -9,6 +9,7 @@ import { OVERRIDES_FIELD } from './overridesField';
 export const SUBGRAPH_TYPE = 'workflow.subgraph';
 
 const FIELD_WORKFLOW = 'workflow';
+const FIELD_OUTCOME = 'outcome';
 
 /**
  * Another workflow, run as one node of this one — ticket 34.
@@ -26,10 +27,19 @@ const FIELD_WORKFLOW = 'workflow';
  * would otherwise show, a registered card body
  * (`view/nodes/CompositionBody`) annotates it with a census of the
  * referenced document — node-type counts in the palette's own vocabulary,
- * derived by the pure `summarizeComposition`. Unlike a Team's, this one
- * never claims a loop: a plain mount promises no outcome. A workflow that (transitively)
- * includes itself is refused by the compiler at build time with the chain
- * spelled out.
+ * derived by the pure `summarizeComposition`. That census says "loops until
+ * its grader passes" when — and only when — the child's own grader routes
+ * `revise`, so the claim is earned from the document rather than asserted by
+ * the card. A workflow that (transitively) includes itself is refused by the
+ * compiler at build time with the chain spelled out.
+ *
+ * **This is the only mount.** `team.workflow` was a second node type that
+ * compiled through this very builder with no branch and identical ports; what
+ * made it look different was a glyph, an `outcome` field that turned out to be
+ * documentation, and that same earned census note. None of those is a kind of
+ * node, so schema v3 collapsed it into this one — a Team was a Workflow whose
+ * mounted document happens to contain a revision loop (production-ready
+ * ticket 16). `MIGRATIONS[2]` rewrites the old id.
  */
 export class SubgraphNodeModel extends AbstractNodeModel {
   /** The referenced workflow's slug, e.g. `chinook-assistant`. */
@@ -60,6 +70,22 @@ export const subgraphNode: INodeDefinition = defineNode(
         label: 'Workflow slug',
         placeholder: 'e.g. chinook-assistant',
         defaultValue: '',
+      },
+      {
+        kind: 'textarea',
+        key: FIELD_OUTCOME,
+        label: 'Expected outcome (documentation)',
+        // Inherited from the collapsed `team.workflow`, and kept precisely so
+        // its migration would not have to destroy prose a person wrote.
+        //
+        // It does not reach the compiler, and the copy says so: enforcement
+        // is a property of the *child package's* grader criteria, not of this
+        // mount. Claiming otherwise was ticket 03's defect — a surface
+        // presenting a machine-owned promise as configuration.
+        placeholder: 'What this workflow is expected to deliver, in your words.',
+        hint: 'Shown on the card so a reader knows what this mount is for. It does not constrain the run — enforcement lives in the mounted workflow’s own grader criteria, and the card says so when that grader is missing or never revises.',
+        defaultValue: '',
+        onCard: true,
       },
       OVERRIDES_FIELD,
     ],

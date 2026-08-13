@@ -104,7 +104,7 @@ _CHINOOK_DATABASE = "chinook-assistant/data/Chinook_Sqlite.sqlite"
 #: The node types that mount another workflow as a child. Their
 #: ``data.workflow`` slugs ARE ``RootKnowledgeBuilder``'s topics — a parent
 #: writes a routing doc for what it can actually route to, and nothing else.
-_MOUNT_NODE_TYPES = ("workflow.subgraph", "team.workflow")
+_MOUNT_NODE_TYPES = ("workflow.subgraph",)
 
 #: The node types that make **the project** a source. A workflow wiring these
 #: can enumerate and describe every package on the platform at run time, so
@@ -441,7 +441,7 @@ class RootKnowledgeBuilder(AbstractWorkflowPointerBuilder):
 
     **Discovery rule (ticket 16, corrected against live evidence).** The
     topics are the distinct slugs named by this document's own
-    ``workflow.subgraph`` / ``team.workflow`` nodes — nothing else. A
+    ``workflow.subgraph`` nodes — nothing else. A
     workflow that mounts nothing yields no topics, so the builder never
     fires on a leaf.
 

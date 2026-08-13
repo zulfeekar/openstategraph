@@ -335,8 +335,7 @@ def _thread_question(state: RunState, limit: int = 6) -> str:
 #: narrows a mount, it never redirects it.
 #:
 #: Safe as a bare key name: `workflow` is declared by `workflow.subgraph` and
-#: `team.workflow` and by no other node type, so reserving it cannot shadow an
-#: unrelated field.
+#: by no other node type, so reserving it cannot shadow an unrelated field.
 RESERVED_OVERRIDE_KEYS = frozenset({"workflow"})
 
 
@@ -1014,7 +1013,7 @@ class NodeRuntime:
         # Discovered capabilities resolve by convention, after the
         # explicitly-registered builders so a built-in like
         # `function.format_report` can never be shadowed by accident.
-        if node_type in ("workflow.subgraph", "team.workflow"):
+        if node_type == "workflow.subgraph":
             return self._subgraph
         if node_type.startswith("function."):
             return self._discovered_function
@@ -2050,14 +2049,22 @@ class NodeRuntime:
                 )
                 for warning in mount_warnings:
                     self.override_warnings.append(f"{slug or node_id}: {warning}")
-                # A Team's card shows an outcome its child may have no way to
-                # enforce. Asked of the *compiler's* plan rather than by
-                # re-scanning edges here: `conditional` is where a grader's
-                # `revise` destination becomes a fact, so this cannot drift
-                # from what the graph actually does (ticket 03).
-                if str(node.get("type") or "") == "team.workflow" and not self._closes_a_loop_impl(
-                    child_document
-                ):
+                # A mount's card shows an outcome its child may have no way to
+                # enforce. Keyed on *an outcome being written* rather than on
+                # the node's type — since v3 there is one mount type, and what
+                # makes a card a promise is the prose on it, not which card it
+                # is (tickets 03 and 16). A mount with no outcome claims
+                # nothing and is not warned about.
+                #
+                # (That sentence began "# type: since v3…", which mypy read as
+                # a PEP 484 type comment and rejected as invalid syntax. Do not
+                # start a comment line with `type:`.)
+                #
+                # Asked of the *compiler's* plan rather than by re-scanning
+                # edges here: `conditional` is where a grader's `revise`
+                # destination becomes a fact, so this cannot drift from what
+                # the graph actually does.
+                if _text(data, "outcome").strip() and not self._closes_a_loop_impl(child_document):
                     self.unenforced_outcomes.append((node_id, slug))
                 child_assets = PackageAssets(
                     tools=self.tools,
