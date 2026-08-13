@@ -100,18 +100,19 @@ export async function loadMountIntoEditor(
       ...outcome.value.warnings,
     ]);
     recordKnownCapabilities(slug, tools);
-    workbench.controller.document.importJSON(JSON.stringify(document));
-    // **No draft restore.** A draft belongs to a document someone can save,
-    // and this one is derived — the package plus this mount's overrides. There
-    // is nothing here that a later Save could write back as itself.
+
+    // The address and the mount context are recorded **before** the import,
+    // and that ordering is load-bearing rather than tidy.
     //
-    // The autosave *key* still moves, to the address rather than the class
-    // slug (`setOpenAddress`), so whatever this tab writes cannot land on the
-    // package's own draft and be restored over it later.
-    // The **root** package, retained so an edit here can be written as an
-    // override on it — the one document a Save from inside an instance
-    // persists. Only the root: nesting composes as JSON inside its mount's
-    // `overrides`, so no intermediate (and underivable) document is held.
+    // `importJSON` fires `workflow:reset`, which is what makes a newly-opened
+    // document catch up to the run (`AskPanel`, ticket 34/43). That projection
+    // resolves frames through the *open address* — so with the address still
+    // naming the document being left behind, every write landed on a node this
+    // one does not contain, and the canvas stayed blank. Setting it first
+    // means the one signal carries a consistent pair.
+    //
+    // The rule it appears to break — never name a document that failed to open
+    // — is honoured by the `catch` below, which puts both back.
     const mountId = address.mountPath[address.mountPath.length - 1] ?? '';
     const [root, inheritedDoc] = await Promise.all([
       client.load(address.root),
@@ -122,21 +123,36 @@ export async function loadMountIntoEditor(
       // user had already committed to it.
       client.loadMount(address, { inherited: true }),
     ]);
-    const mounts = root.ok
-      ? new MountContext(
-          address,
-          root.value as Record<string, unknown>,
-          inheritedDoc.ok ? (inheritedDoc.value.document as Record<string, unknown>) : undefined,
-        )
-      : undefined;
-    workbench.controller.document.enterInstance(mountId, mounts);
+    workbench.controller.document.enterInstance(
+      mountId,
+      root.ok
+        ? new MountContext(
+            address,
+            root.value as Record<string, unknown>,
+            inheritedDoc.ok ? (inheritedDoc.value.document as Record<string, unknown>) : undefined,
+          )
+        : undefined,
+    );
     setOpenAddress(address, slug);
+    workbench.controller.document.importJSON(JSON.stringify(document));
+    // **No draft restore.** A draft belongs to a document someone can save,
+    // and this one is derived — the package plus this mount's overrides. There
+    // is nothing here that a later Save could write back as itself.
+    //
+    // The autosave *key* still moves, to the address rather than the class
+    // slug (`setOpenAddress`), so whatever this tab writes cannot land on the
+    // package's own draft and be restored over it later.
     // Baselined on the **class**: the file that actually backs this instance
     // is the package, so that is the one whose changes matter to it.
     const row = await client.summary(slug);
     recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
     return Ok({ name: workbench.model.name, restoredDraft: false });
   } catch (error) {
+    // Put the address back: it was set before the import so the projection
+    // would see a consistent pair, and a document that did not open must not
+    // keep claiming the address bar.
+    workbench.controller.document.leaveInstance();
+    clearOpenAddress();
     return Err(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

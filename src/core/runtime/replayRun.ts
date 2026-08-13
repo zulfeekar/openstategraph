@@ -107,3 +107,59 @@ export function replayRun(
 function pickOutput(previous: ReplayWrite | undefined): { output?: string } {
   return previous?.output !== undefined ? { output: previous.output } : {};
 }
+
+/**
+ * A turn, as far as this decision is concerned.
+ *
+ * Structural rather than importing `AskPanel`'s own type: `core/` owes nothing
+ * to the view, and this needs three fields out of a dozen.
+ */
+export interface ReplayCandidate {
+  readonly running: boolean;
+  /** Why this turn is not running, when it was cut short rather than finished. */
+  readonly stopped: 'streaming' | 'paused' | null;
+  readonly activity: readonly ReplayFrame[];
+}
+
+/**
+ * Which turn a newly-opened document should catch up to, and whether to glow.
+ *
+ * Ticket 43. The subscription used to project the running turn and give up
+ * otherwise — "a finished run leaves nothing to catch up to". That was true of
+ * the *stream* and false of the *record*: the turn keeps every frame it
+ * received, because the trace and timeline views are built from them, and
+ * `replayRun` is a pure projection over exactly those frames. So the editor
+ * showed a developer the run if they clicked into a mount fast enough, and a
+ * static diagram if they did not — the same
+ * *renders-what-was-saved-not-what-happened* shape as tickets 33 and 34, one
+ * beat later.
+ *
+ * Two turns are deliberately **not** replayed:
+ *
+ * - **Stopped.** `AskPanel` marks every node `idle` when a run is stopped
+ *   (ticket 33), because the developer abandoned it. Replaying it as a series
+ *   of successes would undo that on the next document opened, claiming steps
+ *   finished that never did.
+ * - **Paused.** A run waiting on a human approval is mid-flight, and its
+ *   interrupt node is `paused` — a state this projection does not model.
+ *   Painting it as finished is a worse lie than painting nothing.
+ *
+ * The live turn still wins, and it is still the only one whose last card
+ * glows: `running` rides out with the choice so the caller cannot pair the
+ * wrong turn with the wrong flag.
+ */
+export function turnToReplay(
+  turns: readonly ReplayCandidate[],
+): { readonly turn: ReplayCandidate; readonly running: boolean } | null {
+  const live = turns.find((turn) => turn.running);
+  if (live) return { turn: live, running: true };
+
+  // Last first: a conversation's newest settled turn is the one whose state
+  // the canvas should be showing.
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn || turn.stopped !== null || turn.activity.length === 0) continue;
+    return { turn, running: false };
+  }
+  return null;
+}

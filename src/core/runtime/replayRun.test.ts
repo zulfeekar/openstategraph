@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { replayRun, type ReplayFrame } from './replayRun';
+import { replayRun, turnToReplay, type ReplayFrame } from './replayRun';
 import { parseMountAddress } from '@core/model/MountAddress';
 
 const address = (raw: string) => parseMountAddress(raw)!;
@@ -145,5 +145,60 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
 
   it('is empty for a run that has produced no frames yet', () => {
     expect(replayRun([], PARENT, true)).toEqual([]);
+  });
+});
+
+describe('turnToReplay — which turn a newly-opened document catches up to', () => {
+  const frame: ReplayFrame = { node: 'a', path: ['a'], output: 'x' };
+  const turn = (
+    over: Partial<{ running: boolean; stopped: 'streaming' | 'paused' | null; activity: ReplayFrame[] }>,
+  ) => ({ running: false, stopped: null, activity: [frame], ...over });
+
+  it('prefers the run in progress', () => {
+    // Unchanged: a live turn is still the one to project, and it is the only
+    // one whose last card should glow.
+    const live = turn({ running: true });
+    const settled = turn({});
+    expect(turnToReplay([settled, live])).toEqual({ turn: live, running: true });
+  });
+
+  it('falls back to the last finished run', () => {
+    // Ticket 43. The gate used to stop here and show a static diagram, on the
+    // reasoning that "a finished run leaves nothing to catch up to". The turn
+    // keeps every frame — the trace and timeline are built from them — so the
+    // history is right there, and the editor was showing a developer the run
+    // only if they were quick enough to click.
+    const older = turn({ activity: [{ node: 'old', path: ['old'], output: 'o' }] });
+    const newer = turn({ activity: [{ node: 'new', path: ['new'], output: 'n' }] });
+    expect(turnToReplay([older, newer])).toEqual({ turn: newer, running: false });
+  });
+
+  it('never resurrects a run the developer stopped', () => {
+    // `AskPanel` marks every node `idle` on stop, deliberately (ticket 33).
+    // Replaying it as a series of successes would undo that on the next
+    // document opened, claiming steps completed that were abandoned.
+    expect(turnToReplay([turn({ stopped: 'streaming' })])).toBeNull();
+  });
+
+  it('leaves a paused run alone', () => {
+    // A run waiting on an approval is mid-flight, and its interrupt node is
+    // `paused` — a state this projection does not model. Painting it as
+    // finished would be a worse lie than painting nothing.
+    expect(turnToReplay([turn({ stopped: 'paused' })])).toBeNull();
+  });
+
+  it('skips a stopped turn to reach a good one behind it', () => {
+    const good = turn({ activity: [{ node: 'good', path: ['good'], output: 'g' }] });
+    expect(turnToReplay([good, turn({ stopped: 'streaming' })])?.turn).toBe(good);
+  });
+
+  it('ignores a turn that produced no frames', () => {
+    // A question that failed before its first frame has no history to show,
+    // and an empty replay would blank a canvas rather than leave it alone.
+    expect(turnToReplay([turn({ activity: [] })])).toBeNull();
+  });
+
+  it('is null for a conversation that has not run anything', () => {
+    expect(turnToReplay([])).toBeNull();
   });
 });

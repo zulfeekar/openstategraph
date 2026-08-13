@@ -20,9 +20,9 @@ import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
-import { getOpenAddress } from '@app/openAddress';
+import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
 import { parseMountAddress } from '@core/model/MountAddress';
-import { replayRun } from '@core/runtime/replayRun';
+import { replayRun, turnToReplay } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
@@ -909,7 +909,7 @@ export function AskPanel({
   }, [clearPausedNodes, turns, updateTurn]);
 
   /**
-   * Repaints the canvas for a document that was opened **during** a run.
+   * Repaints the canvas for a document opened during a run — or after one.
    *
    * The last piece of ticket 34, and the one no amount of per-frame projection
    * can cover. Clicking "Edit workflow" on a mount loads the child into this
@@ -926,36 +926,61 @@ export function AskPanel({
    * have had if it had been open all along. The decision is `replayRun`, in
    * `core/`, where it is a pure function and unit-testable; this is only the
    * subscription and the writes.
+   *
+   * Ticket 43 widened *which* turn that is. This used to project only a
+   * running one, on the reasoning that "a finished run leaves nothing to catch
+   * up to" — true of the stream, false of the record, since the frames are all
+   * still held. A developer who opened a mount a second too late got a static
+   * diagram, which is the very symptom ticket 34 existed to remove. The choice
+   * moved to `turnToReplay`, which also refuses the two turns that must not be
+   * repainted: a stopped one (its nodes were set `idle` on purpose) and a
+   * paused one (mid-flight, in a state this projection cannot express).
    */
   const turnsRef = useRef(turns);
   useEffect(() => {
     turnsRef.current = turns;
   }, [turns]);
-  useEffect(
-    () =>
-      controller.model.on('workflow:reset', () => {
-        // The run in progress, if any. A finished run leaves nothing to catch
-        // up to: the developer is opening a document to read it, not to watch.
-        const live = turnsRef.current.find((turn) => turn.running);
-        if (!live) return;
-        const writes = replayRun(
-          live.activity,
-          (id) => controller.model.node(id) != null,
-          true,
-          // The address, same rule as the live path — a replay onto a canvas
-          // that is one of two mounts of the same package must land on the one
-          // actually open.
-          getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined,
-        );
-        for (const write of writes) {
-          controller.model.setNodeRuntime(write.nodeId, {
-            status: write.status,
-            ...(write.output !== undefined ? { output: write.output } : {}),
-          });
-        }
-      }),
-    [controller],
-  );
+  useEffect(() => {
+    const project = () => {
+      // The run in progress if there is one, else the last that finished
+      // (ticket 43). The rule is `turnToReplay`, in `core/`, for the same
+      // reason `replayRun` is: it is a decision over data, and a decision
+      // buried in a subscription is a decision nobody can test.
+      const chosen = turnToReplay(turnsRef.current);
+      if (!chosen) return;
+      const writes = replayRun(
+        chosen.turn.activity,
+        (id) => controller.model.node(id) != null,
+        chosen.running,
+        // The address, same rule as the live path — a replay onto a canvas
+        // that is one of two mounts of the same package must land on the one
+        // actually open.
+        getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined,
+      );
+      for (const write of writes) {
+        controller.model.setNodeRuntime(write.nodeId, {
+          status: write.status,
+          ...(write.output !== undefined ? { output: write.output } : {}),
+        });
+      }
+    };
+
+    // Two signals, because two things can put a different document on screen
+    // and the projection has to follow both.
+    //
+    // `workflow:reset` is the real one: every import fires it, including a
+    // draft restore that lands *after* a load has finished. It only resolves
+    // correctly because `loadMountIntoEditor` now records the address before
+    // importing — with the old ordering it projected through the address of
+    // the document being left behind, and since a mount address indexes a run
+    // by position, the writes went to a node the new document does not have.
+    //
+    // The address change is belt-and-braces for the reverse order, and costs
+    // one extra pass: `replayRun` is a pure function of the same frames, so
+    // projecting twice writes the same thing twice.
+    const off = [controller.model.on('workflow:reset', project), subscribeOpenAddress(project)];
+    return () => off.forEach((stop) => stop());
+  }, [controller]);
 
   // Stop, pressed in the toolbar. Same nonce discipline as Run above, and the
   // same reason: the press is the event, not the value.
