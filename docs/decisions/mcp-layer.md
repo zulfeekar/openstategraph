@@ -215,7 +215,9 @@ fix rather than an ImportError traceback.
 
 - ~~The MCP layer leaves a trusted network — authentication stops being the
   proxy's job.~~ **Done (ticket 06)**: a shared token ships and the proxy is
-  committed. Re-open when *identity* is needed rather than admission — the MCP
+  committed. **Update 2026-08-13: the owner concept shipped** — `openstategraph/principal.py`, resolved server-side on the HTTP transport. The MCP layer has **not** adopted it: `mcp_server.py` resolves no principal, so an MCP run is identity-less and user-scoped memory never binds over it. That is now a concrete, scoped piece of work rather than a missing concept.
+
+Re-open when *identity* is needed rather than admission — the MCP
   specification's authorization story, and an owner concept this project does
   not yet have.
 - We want interrupts over MCP — the persisted checkpointer prerequisite is met

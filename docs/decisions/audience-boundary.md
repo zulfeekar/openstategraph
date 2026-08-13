@@ -116,6 +116,15 @@ deployment can refuse to serve it at all, and there is now **one function** to
 give a real identity check to when identity arrives — rather than five
 features each developer-only by their own convention.
 
+> **Identity has arrived, and this function has not taken it up** (2026-08-13).
+> `openstategraph/principal.py` resolves a run's principal server-side, and
+> `api/audience.py` does not consult it: the audience boundary is still a
+> per-request *flag* with a deployment-level ceiling, not a per-person check.
+> That remains the correct default — the ceiling is what a deployment actually
+> wants — but the sentence above described a hook waiting for a prerequisite,
+> and the prerequisite is here. Whether to wire it is now a decision rather
+> than a blocker.
+
 ## What joined the channel, and what deliberately did not
 
 | Content | Channel | Why |

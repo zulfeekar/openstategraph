@@ -11,7 +11,7 @@ reason has changed (see "Durability"). Companion to
 | --- | --- | --- | --- |
 | **Context** | checkpointer thread (`thread_id`) — `messages` is the record; turn-scratch (`outputs`/`answer`/`feedback`/`attempts`/`decisions`) is wiped at each turn boundary by the input node's `RESET` update | the graph itself | **yes, by default** (ticket 05); opt out with `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` |
 | **Procedural** | `skills/` (always in the prompt, small) + `knowledge/` (on-demand `knowledge_lookup`, chunked) | developers and build-time trainers | yes — files in git |
-| **Episodic** | the Store, via `save_memory`/`search_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` | agents at runtime | opt-in: `OPENSTATEGRAPH_MEMORY_PATH` |
+| **Episodic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | opt-in: `OPENSTATEGRAPH_MEMORY_PATH`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
 | **Knowledge** | the second brain (see `knowledge-architecture.md`) | builders on the button, **never** runtime agents | yes — files in git |
 
 **Knowledge ≠ memory** stays an invariant: promoting a runtime learning into
@@ -45,9 +45,35 @@ slug** (`node_runtime._subgraph`) while everything else crosses untouched.
 
 | Scope | Read | Write |
 | --- | --- | --- |
-| user `("memories", email)` | every workflow (search labels `[user]`) | every workflow — the person is one person everywhere |
+| user `("memories", <identity>)` | every workflow that *can* bind it (search labels `[user]`) | same — the person is one person everywhere. **But see the two gates below: out of the box this scope binds for nobody.** |
 | workflow `("workflow-memory", slug)` | only that workflow (its own slug via config) | only that workflow — the slug is config-derived, **never a tool argument** |
 | app `("app-memory",)` | every workflow (`[app via <slug>]`) | permissive-read, **deliberate-write**: any workflow may deposit, but every deposit is provenance-stamped with the originating slug so the spine stays auditable |
+
+> **Two gates the matrix above does not show** (hardening tickets 01 and 03).
+>
+> **Identity.** The user scope needs a principal, and the default resolver
+> identifies nobody — `principal.py`'s `NoPrincipals`: *"a deployment that has
+> configured no identity has no identities, and user-scoped memory does not
+> bind at all."* So on a fresh install the user row is read and written by
+> **no** workflow, not every workflow. A deployment opts in by naming the
+> header its authenticating proxy sets
+> (`OPENSTATEGRAPH_PRINCIPAL_HEADER`); a library caller passes
+> `ask(..., user_email=…)` directly, because there the caller *is* the server.
+>
+> **A client may not assert it.** `user_email` was a field on `RunRequest` and
+> is gone — `RunRequest` forbids extras, so sending it is a `422`. Who a run is
+> for is the server's to determine. `configurable` still carries the value; it
+> is just no longer the client who puts it there.
+>
+> **Declaration.** `settings.memory` lets a document narrow which scopes its
+> agents may bind, and the narrowing is applied to the tool *schema* — a scope
+> a package does not declare is one the model is never offered.
+>
+> **A transport asymmetry worth naming:** `mcp_server.py` resolves no
+> principal, so an MCP `run_workflow` runs identity-less and user-scoped memory
+> never binds over that transport. Workflow and app scopes are unaffected.
+> Not a defect of this design; an unclaimed prerequisite of the MCP layer's own
+> auth story (`mcp-layer.md` §5).
 
 The parent's **thread messages** deliberately cross into mounted children
 (ticket 73 — a routed conversational child needs the dialogue), but graph
