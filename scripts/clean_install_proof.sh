@@ -221,6 +221,75 @@ print('loaded', workflow.slug, 'with', len(workflow.warnings), 'capability warni
 print(workflow.mermaid().splitlines()[4])
 "
 
+# ---------------------------------------------------------------------------
+# THE GRAPH ACTUALLY RUNS (added after a wheel audit, 2026-08-13)
+#
+# Everything above compiles, validates, draws and serves. Until this step
+# nothing in this file had ever *executed* a workflow — and that gap was not
+# theoretical. Three defects lived in it, all found by hand in a venv:
+#
+#   - `openstategraph run` with no credential printed an empty line and exited
+#     **0**. A new user's literal first command after `new`, reported as a
+#     success.
+#   - `graph` demanded the resolved provider's integration package in order to
+#     draw a Mermaid diagram, so a venv holding only [ollama] could not draw a
+#     document that resolved to Anthropic.
+#   - `serve` died on an empty OPENSTATEGRAPH_LOG_LEVEL — the value
+#     `.env.example` ships — after printing its URLs, so it read as a server
+#     that had started.
+#
+# A fake model, not a real one: this must pass on a clean machine with no
+# credential, no network and no provider account. What is proven is that the
+# *runtime* installed from the wheel executes a compiled graph — the
+# supersteps, the state channels, the node factories — not that a vendor
+# answers. `load_workflow(model=...)` is the documented seam for exactly this.
+# ---------------------------------------------------------------------------
+echo "==> the runtime executes a graph, from the wheel, with no credential"
+run python -c "
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from openstategraph import load_workflow
+
+# A subclass rather than GenericFakeChatModel itself: that one raises on
+# bind_tools, and create_agent binds tools for any agent that has them.
+class Fixed(GenericFakeChatModel):
+    def __init__(self, text):
+        super().__init__(messages=iter([]))
+        object.__setattr__(self, 'text', text)
+    def _generate(self, messages, stop=None, run_manager=None, **kw):
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=self.text))])
+    def bind_tools(self, tools, **kw):
+        return self
+
+workflow = load_workflow('workflows/proof-minimal', model=Fixed('PROOF-ANSWER-42'))
+answer = workflow.ask('what is the answer?')
+
+assert str(answer) == 'PROOF-ANSWER-42', repr(str(answer))
+assert answer.outputs, 'the run recorded no node outputs'
+assert not answer.warnings, answer.warnings
+print('ran ->', repr(str(answer)), 'across', len(answer.outputs), 'node(s)')
+"
+
+# The other half, and the one that was actually broken: a run that CANNOT work
+# must say so and fail. It exited 0 with an empty answer, and the diagnosis sat
+# in `outputs` where only --json would show it.
+echo "==> a run with no credential fails loudly rather than silently"
+set +e
+no_creds="$(cd "$PROJECT" && env -u PYTHONPATH -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OLLAMA_API_KEY -u OLLAMA_HOST "$VENV/bin/openstategraph" run workflows/proof-minimal "does this fail loudly?" 2>&1)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || {
+  echo "a credential-less run exited 0 — it is silently succeeding again"
+  echo "$no_creds"
+  exit 1
+}
+case "$no_creds" in
+  *API_KEY*) : ;;
+  *) echo "the failure named no environment variable to set:"; echo "$no_creds"; exit 1 ;;
+esac
+echo "    exited $code, naming the variable to set"
+
 echo "==> the workflows root is the project's, never the interpreter's lib/"
 run python -c "
 from openstategraph.workflows_root import checkout_root, content_root, workflows_root
