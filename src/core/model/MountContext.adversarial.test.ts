@@ -80,7 +80,9 @@ describe('hostile blobs already on the mount node', () => {
   // `apply_mount_overrides` accepts at every level — is not `isJson`, so
   // `descend(create: true)` replaces it with `{}` and the previously stored
   // grandchild overrides are silently discarded by an unrelated write.
-  it.fails(
+  // FIXED 2026-08-13. Was `it.fails`: `descend` tested `isJson` alone, so a
+  // string-spelled nested `overrides` was replaced with `{}` on any deep write.
+  it(
     'a deep write preserves nested overrides stored in their string spelling',
     () => {
       const nested = JSON.stringify({ grader1: { threshold: 9 } });
@@ -94,15 +96,28 @@ describe('hostile blobs already on the mount node', () => {
     },
   );
 
-  it('companion pin: the string-spelled nested overrides are clobbered today', () => {
+  it('a malformed nested overrides string is refused, not replaced', () => {
+    // Rewritten when the defect was fixed. It used to pin the loss — the
+    // string-spelled blob clobbered, `grader1` gone silently. It now pins the
+    // other half of the rule `blob()` already followed at the top level:
+    // unparseable JSON someone hand-edited is refused, because starting from
+    // `{}` would delete their work without telling them.
+    const document = rootDocument({ 'wf-inner': { overrides: '{not json' } });
+    const ctx = context('concierge/wf-music/wf-inner', document);
+    expect(() => ctx.writeOverride('agent-x', 'rules', 'new')).toThrow(/not valid JSON/);
+    // And the text they wrote is still there to fix.
+    const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
+    expect(blob['wf-inner']?.['overrides']).toBe('{not json');
+  });
+
+  it('a read sees a string-spelled nested override too', () => {
+    // The same defect on the read path, which the finding did not name: an
+    // inspector asking "is this overridden?" got `undefined` and would have
+    // shown a field as inherited while the document overrode it.
     const nested = JSON.stringify({ grader1: { threshold: 9 } });
     const document = rootDocument({ 'wf-inner': { overrides: nested } });
     const ctx = context('concierge/wf-music/wf-inner', document);
-    ctx.writeOverride('agent-x', 'rules', 'new');
-    const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-    const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
-    expect(inner['grader1']).toBeUndefined(); // gone, silently
-    expect(inner['agent-x']).toEqual({ rules: 'new' });
+    expect(ctx.readOverride('grader1', 'threshold')).toBe(9);
   });
 
   it('object-spelled nested overrides survive a deep write', () => {

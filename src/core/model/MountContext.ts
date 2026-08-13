@@ -181,15 +181,48 @@ function descend(blob: Json, segments: readonly string[], create: boolean): Json
       container[segment] = step;
     }
     const entry = step as Json;
-    let nested = entry['overrides'];
-    if (!isJson(nested)) {
+    let nested = readOverridesField(entry, segment);
+    if (nested === undefined) {
       if (!create) return undefined;
       nested = {};
-      entry['overrides'] = nested;
     }
-    container = nested as Json;
+    // **Attached even on a read**, and that is load-bearing rather than
+    // tidiness. `clearOverride` reads with `create: false` and then mutates
+    // what it got back; a parsed-but-unattached object would take the delete
+    // and be thrown away, so the clear would silently do nothing.
+    entry['overrides'] = nested;
+    container = nested;
   }
   return container;
+}
+
+/**
+ * One nesting level's `overrides`, in whichever spelling it is stored.
+ *
+ * **Both spellings are one contract**, and this function exists because that
+ * rule lived in `blob()` and nowhere else. `commit()` writes a JSON *string*,
+ * and `apply_mount_overrides` accepts a string at every level — so a
+ * hand-authored or backend-round-tripped document legitimately carries a
+ * string here. `descend` used to test `isJson` alone, so a string was "not an
+ * object", and on a write it was replaced with `{}`: every override the deeper
+ * level held vanished, silently, from an edit to an unrelated field.
+ *
+ * Malformed JSON **throws**, matching `blob()`'s reasoning exactly — starting
+ * from `{}` would delete a person's hand-edit without telling them.
+ */
+function readOverridesField(entry: Json, segment: string): Json | undefined {
+  const nested = entry['overrides'];
+  if (isJson(nested)) return nested;
+  if (typeof nested === 'string' && nested.trim()) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(nested);
+    } catch {
+      throw new Error(`The ${segment} mount's overrides are not valid JSON`);
+    }
+    if (isJson(parsed)) return parsed;
+  }
+  return undefined;
 }
 
 /** Drops every container the last clear emptied, innermost first. */
