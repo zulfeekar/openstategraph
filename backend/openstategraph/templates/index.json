@@ -23,6 +23,11 @@
       "directories": ["tools", "functions", "middlewares", "skills", "tests", "data"]
     },
     {
+      "name": "loop",
+      "summary": "an agent drafts, a grader reviews, weak answers go back — a revision loop.",
+      "directories": ["tools", "functions", "middlewares", "skills", "tests", "data"]
+    },
+    {
       "name": "routed-qa",
       "summary": "a router picks a branch, an agent answers, a grader sends weak answers back.",
       "directories": ["tools", "functions", "middlewares", "skills", "tests", "data"]

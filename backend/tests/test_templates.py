@@ -40,8 +40,16 @@ def scaffolded(root: Path, template: str) -> Path:
 
 
 class TestTheCatalogue:
-    def test_it_ships_the_three_shapes_and_nothing_padded(self) -> None:
-        assert NAMES == ["minimal", "routed-qa", "team"]
+    def test_it_ships_the_four_shapes_and_nothing_padded(self) -> None:
+        assert NAMES == ["minimal", "loop", "routed-qa", "team"]
+
+    def test_loop_sits_between_minimal_and_routed_qa(self) -> None:
+        """Order is cost, and the picker shows it in this order.
+
+        A revision loop is one agent plus a grader — dearer than `minimal`,
+        cheaper than routing to two branches and grading one of them.
+        """
+        assert NAMES.index("minimal") < NAMES.index("loop") < NAMES.index("routed-qa")
 
     def test_minimal_is_the_default_so_a_first_run_is_one_model_call(self) -> None:
         assert templates.DEFAULT_TEMPLATE == "minimal"
@@ -205,6 +213,79 @@ class TestRoutedQaTeachesTheVocabulary:
 
         assert len(router["data"]["branches"]) >= 2
         assert len(targets) >= 2
+
+
+class TestLoopIsTheOnRampToARevisionLoop:
+    """production-ready ticket 01.
+
+    The capability was complete and the on-ramp did not exist: `revise` is the
+    only `feedback`-typed output in the product, so a user found it by drawing
+    an illegal edge and reading the rejection. This is the four-node subset of
+    `routed-qa` with the router removed — the shape people actually come for.
+
+    **Still not a node type.** `templates/index.json` records the rule: a
+    template is a scaffold input, it produces a document and stops existing. A
+    Loop node would compile to nothing new. Reuse is the *other* end of the
+    same path — mount this workflow in another one.
+    """
+
+    def _document(self, tmp_path: Path) -> dict[str, Any]:
+        return json.loads((scaffolded(tmp_path, "loop") / "workflow.json").read_text())[
+            "document"
+        ]
+
+    def test_the_grader_revises_back_onto_the_agent(self, tmp_path: Path) -> None:
+        """The one edge the whole template exists to demonstrate."""
+        document = self._document(tmp_path)
+        edges = {
+            (e["source"]["nodeId"], e["source"]["portId"], e["target"]["nodeId"], e["target"]["portId"])
+            for e in document["edges"]
+        }
+
+        assert ("grader1", "revise", "agent1", "feedback") in edges
+        assert ("grader1", "pass", "out1", "result") in edges
+
+    def test_it_is_the_four_nodes_and_no_router(self, tmp_path: Path) -> None:
+        types = [n["type"] for n in self._document(tmp_path)["nodes"]]
+
+        assert sorted(types) == sorted(
+            ["input.text", "agent.llm", "route.grader", "output.formatted"]
+        )
+        assert "route.classifier" not in types
+
+    def test_the_cycle_contains_a_conditional_edge(self, tmp_path: Path) -> None:
+        """An all-static cycle can never terminate — `CLAUDE.md`'s rule.
+
+        The grader is that conditional: `pass` leaves, `revise` goes back.
+        """
+        document = self._document(tmp_path)
+        grader = next(n for n in document["nodes"] if n["type"] == "route.grader")
+        ports = {
+            e["source"]["portId"]
+            for e in document["edges"]
+            if e["source"]["nodeId"] == grader["id"]
+        }
+
+        assert {"pass", "revise"} <= ports
+
+    def test_the_loop_is_bounded(self, tmp_path: Path) -> None:
+        """A loop a stranger scaffolds must not be able to run forever."""
+        grader = next(
+            n for n in self._document(tmp_path)["nodes"] if n["type"] == "route.grader"
+        )
+        assert int(grader["data"]["maxAttempts"]) >= 1
+
+    def test_its_summary_uses_the_settled_words(self) -> None:
+        """`CLAUDE.md`: "revision loop", and never "iterations".
+
+        `recursion_limit` counts **supersteps**, so calling anything here an
+        iteration count would teach the wrong model of the thing.
+        """
+        summary = templates.get("loop").summary.lower()
+
+        assert "loop" in summary
+        assert "iteration" not in summary
+        assert "recursion" not in summary
 
 
 class TestTheTeamOutcomeIsStillAuthorable:

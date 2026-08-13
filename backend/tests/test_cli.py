@@ -258,10 +258,14 @@ class TestTemplates:
 
         assert code == cli.EXIT_OK
         printed = capsys.readouterr().out
-        for name in ("minimal", "routed-qa", "team"):
+        # Derived rather than listed: a hand-kept copy here is a second
+        # catalogue, and adding `loop` is exactly when it would have drifted.
+        from openstategraph import templates
+
+        for name in templates.names():
             assert name in printed
         assert "(default)" in printed
-        assert len(printed.strip().splitlines()) == 3
+        assert len(printed.strip().splitlines()) == len(templates.names())
 
     def test_new_without_a_slug_is_a_usage_error(self, capsys) -> None:
         code = cli.main(["new"])
