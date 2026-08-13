@@ -161,7 +161,14 @@ export interface ILLMProvider extends IIdentifiable {
   readonly id: string;
   readonly label: string;
   readonly models: readonly ModelDescriptor[];
-  /** False for local/offline providers such as Mock and Ollama. */
+  /**
+   * False for offline providers such as Mock.
+   *
+   * Ollama was here too until it turned out not to be keyless but *ambient* —
+   * it borrowed a local daemon's own cloud credentials. A provider reachable
+   * more than one way declares `true` and overrides `isConfigured`; see
+   * `OllamaProvider`.
+   */
   readonly requiresApiKey: boolean;
   /** Where to get a key, surfaced in the credentials dialog. */
   readonly credentialsHint?: string;

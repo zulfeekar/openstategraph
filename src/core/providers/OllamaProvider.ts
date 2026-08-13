@@ -8,7 +8,15 @@ import {
   type ToolCall,
 } from './ILLMProvider';
 
-const DEFAULT_HOST = 'http://localhost:11434';
+/**
+ * Ollama cloud — the default, matching the backend's `default_endpoint`.
+ *
+ * This used to be `http://localhost:11434`, which quietly made the preview a
+ * *local* provider while the project's standing rule is that Ollama means
+ * cloud. A developer running their own daemon still gets it by naming the host
+ * in "Models and credentials" — one explicit act rather than a default.
+ */
+const DEFAULT_HOST = 'https://ollama.com';
 
 /* ---- Ollama wire types (only the fields we consume) ---- */
 
@@ -28,32 +36,52 @@ interface OllamaTagsResponse {
 }
 
 /**
- * Local models via Ollama.
+ * Ollama — cloud by default, or a daemon you name.
  *
- * No credentials — the trade is that the daemon has to allow browser
- * origins. Ollama rejects cross-origin requests by default, and the failure
- * is indistinguishable from "not running" at the `fetch` level, so the
- * error path below names both causes and the exact fix.
+ * **Two ways to be configured, and they coexist**, mirroring the backend's
+ * `env_vars=("OLLAMA_API_KEY", "OLLAMA_HOST")`: an API key reaches the cloud,
+ * a base URL reaches a daemon you run. Either is enough, which is why
+ * `isConfigured` is overridden below.
  *
- * Uses `fetch` rather than an SDK deliberately: the two endpoints needed
- * here are trivial, and this keeps a local-only provider from adding weight
- * to the bundle for users who never touch it.
+ * This used to declare `requiresApiKey = false` and so was *always* reported
+ * as configured. That was not keyless, it was **ambient**: the cloud was
+ * reached through a local daemon holding its own credentials. It also left the
+ * credentials dialog with no field to type `OLLAMA_API_KEY` into, while the
+ * onboarding hint told people to add their Ollama cloud key there.
+ *
+ * A daemon you run still has to allow browser origins. Ollama rejects
+ * cross-origin requests by default, and the failure is indistinguishable from
+ * "not running" at the `fetch` level, so the error path below names both
+ * causes and the exact fix.
+ *
+ * Uses `fetch` rather than an SDK deliberately: the two endpoints needed here
+ * are trivial, and this keeps the bundle light for users who never touch it.
  */
 export class OllamaProvider extends AbstractLLMProvider {
   readonly id = 'ollama';
-  readonly label = 'Ollama · Local';
-  readonly requiresApiKey = false;
+  readonly label = 'Ollama';
+  readonly requiresApiKey = true;
   override readonly credentialsHint =
-    'Start Ollama with OLLAMA_ORIGINS="*" so the browser can reach it';
+    'An API key from ollama.com, or the address of a daemon you run ' +
+    '(started with OLLAMA_ORIGINS="*" so the browser can reach it)';
   override readonly allowsCustomModel = true;
-  // The daemon's host is the caller's choice, so the credentials dialog
-  // offers a base-url field. Declared here rather than detected there — see
+  // The host is the caller's choice, so the credentials dialog offers a
+  // base-url field. Declared here rather than detected there — see
   // `ILLMProvider.configurableEndpoint`.
   override readonly configurableEndpoint = true;
-  // Ollama *cloud* is what this project uses (never a local model), and a
-  // cloud model is what a backend run resolves by default — so a key set
-  // here is worth forwarding even though the browser path needs none.
   override readonly runtimeCredentialKey = 'OLLAMA_API_KEY';
+
+  /**
+   * Either signal is enough — a key for the cloud, or a host of your own.
+   *
+   * The inherited rule is `!requiresApiKey || hasApiKey()`, which cannot
+   * express "or a host". Ollama is the only provider reachable two ways, so
+   * this is an override rather than a change to the base: a vendor with one
+   * way to be configured should keep the simpler rule.
+   */
+  override isConfigured(): boolean {
+    return this.hasApiKey() || this.baseUrl != null;
+  }
 
   private discovered: readonly ModelDescriptor[] | null = null;
 
@@ -81,6 +109,18 @@ export class OllamaProvider extends AbstractLLMProvider {
   }
 
   /**
+   * `Authorization: Bearer` when a key is held, nothing when it is not.
+   *
+   * The same header the `ollama` client sends, and the reason the key matters
+   * now: with the cloud as the default host, a request without it is a 401. A
+   * daemon you run typically wants no header at all, so an absent key sends
+   * none rather than an empty one.
+   */
+  private get headers(): Record<string, string> {
+    return this.hasApiKey() ? { authorization: `Bearer ${this.apiKey ?? ''}` } : {};
+  }
+
+  /**
    * Reads the available models from `/api/tags`, **cloud first**.
    *
    * Ollama lists locally pulled models and cloud-hosted ones together, and the
@@ -95,7 +135,7 @@ export class OllamaProvider extends AbstractLLMProvider {
    */
   async listModels(): Promise<readonly ModelDescriptor[]> {
     try {
-      const response = await fetch(`${this.host}/api/tags`);
+      const response = await fetch(`${this.host}/api/tags`, { headers: this.headers });
       if (!response.ok) return this.seed;
       const payload = (await response.json()) as OllamaTagsResponse;
       const found = (payload.models ?? []).map((model) => {
@@ -130,7 +170,7 @@ export class OllamaProvider extends AbstractLLMProvider {
   /** True when the daemon answers — used by the credentials dialog. */
   async probe(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.host}/api/tags`);
+      const response = await fetch(`${this.host}/api/tags`, { headers: this.headers });
       return response.ok;
     } catch {
       return false;
@@ -180,7 +220,7 @@ export class OllamaProvider extends AbstractLLMProvider {
     try {
       const response = await fetch(`${this.host}/api/chat`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...this.headers },
         body: JSON.stringify(body),
         ...(request.signal ? { signal: request.signal } : {}),
       });
@@ -217,8 +257,13 @@ export class OllamaProvider extends AbstractLLMProvider {
       });
     } catch (error) {
       if (error instanceof Error && error.message.includes('Failed to fetch')) {
+        // Two different fixes behind one indistinguishable `fetch` failure, so
+        // name the one that matches the host actually in use rather than
+        // offering both and making the reader choose.
         return Err(
-          `Couldn't reach Ollama at ${this.host}. Start it with OLLAMA_ORIGINS="*" to allow browser requests.`,
+          this.baseUrl == null
+            ? `Couldn't reach Ollama cloud at ${this.host}. Check your connection, or set a host in Models and credentials to use your own daemon.`
+            : `Couldn't reach Ollama at ${this.host}. Start it with OLLAMA_ORIGINS="*" to allow browser requests.`,
         );
       }
       return Err(this.describeError(error));

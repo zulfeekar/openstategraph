@@ -126,10 +126,18 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
             ) : null}
 
             {provider.configurableEndpoint ? (
-              <Field label="Endpoint">
+              // The placeholder is the *effect of leaving it blank*, not an
+              // example to copy. It read `http://localhost:11434` while the
+              // default was localhost; now that the default is the cloud, the
+              // old placeholder would have described the opposite of what an
+              // empty field does.
+              <Field
+                label="Endpoint"
+                hint="Leave blank for the cloud. Set it to reach a daemon you run."
+              >
                 <TextInput
                   mono
-                  placeholder="http://localhost:11434"
+                  placeholder="https://ollama.com"
                   defaultValue=""
                   onChange={(event) =>
                     workbench.providers.setBaseUrl(provider.id, event.target.value || null)
