@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -23,6 +24,10 @@ from openstategraph.memory import (
     memory_settings,
     memory_tools,
 )
+
+
+#: The repository root, so package-shipped files resolve wherever pytest runs.
+REPO = Path(__file__).resolve().parents[2]
 
 
 class S(TypedDict, total=False):
@@ -205,6 +210,46 @@ class TestRetentionIsTheDurableStoresToOffer:
             build_store()
         assert any("in-memory" in r.getMessage().lower() and MEMORY_TTL_ENV in r.getMessage()
                    for r in caplog.records)
+
+
+class TestTheAppSpineIsWiredNotJustDescribed:
+    """Memory-hardening ticket 05.
+
+    `memory.py` and `docs/decisions/memory-architecture.md` both described the
+    concierge as "the app spine … where cross-workflow findings are deposited".
+    `workflows/concierge/` had no `skills/` directory and no occurrence of the
+    word "memory" anywhere in it, so the only writer of `("app-memory",)` was
+    an agent spontaneously passing `scope="app"` after reading a tool
+    docstring that every agent in every workflow sees equally.
+
+    The mechanism was real and tested; the **policy** was fiction — knowledge
+    stated in two documents and implemented in zero, which is the DRY rule in
+    its documentation form.
+    """
+
+    def test_the_concierge_carries_an_app_memory_skill(self) -> None:
+        from openstategraph.api.capability_discovery import discover_skills
+
+        context = discover_skills(REPO / "workflows/concierge")
+        assert "app" in context.lower() and "memory" in context.lower()
+
+    def test_the_skill_reaches_the_agents_of_that_package(self) -> None:
+        # A skill file nobody loads is the same fiction one layer down, so this
+        # asserts the discovery path rather than the file's existence.
+        from openstategraph.api.services import WorkflowServices
+
+        services = WorkflowServices(REPO / "workflows")
+        runtime = services.runtime_for(
+            "concierge", {"version": 2, "name": "c", "nodes": [], "edges": []}, None
+        )
+        assert "app" in runtime.skills_context.lower()
+
+    def test_a_package_without_the_skill_is_unaffected(self) -> None:
+        # The spine is the concierge's job, not an ambient instruction every
+        # workflow inherits — app scope stays permissive-write by design.
+        from openstategraph.api.capability_discovery import discover_skills
+
+        assert "app-memory" not in discover_skills(REPO / "workflows/chinook-assistant")
 
 
 class TestMemoryScopeIsANamedEnum:

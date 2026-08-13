@@ -328,9 +328,17 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
 
     Three scopes (user model, 2026-08-08): **user** — follows the person
     appwide; **workflow** — this workflow's own accumulated findings;
-    **app** — shared knowledge every workflow can read, where the root/
-    concierge deposits cross-workflow findings. Search reads all three and
-    labels provenance, so an agent never guesses where a fact lives.
+    **app** — shared knowledge every workflow can read. Search reads all three
+    and labels provenance, so an agent never guesses where a fact lives.
+
+    **App scope is permissive-write by mechanism and concierge-shaped by
+    policy** (ticket 05), and the distinction is worth keeping straight because
+    this docstring used to blur it. *Any* workflow may deposit an app finding —
+    nothing here privileges the root — but the policy of when to is carried by
+    the concierge's own `skills/app-memory.md`, procedural memory doing the job
+    it exists for. Before that file, the claim that "the root deposits
+    cross-workflow findings" was true of nothing: the concierge had no skills
+    directory and every agent read the same tool docstring.
 
     A document's ``settings.memory`` may narrow that set (ticket 03). The
     narrowing is applied to the **schema**, so a scope this workflow does not

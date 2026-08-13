@@ -20,7 +20,21 @@ reason has changed (see "Durability"). Companion to
 ## The spine rule
 
 The ROOT workflow (concierge) is the **app spine**: app-wide memory is its
-home scope. Every workflow — root or mounted child — holds its OWN stateful
+home scope.
+
+> **Mechanism and policy are separate here, and only one of them is enforced**
+> (memory-hardening ticket 05). Nothing in the code privileges the root: *any*
+> workflow may write `scope="app"`, deliberately — a permissive write with an
+> auditable provenance stamp was the owner decision on 2026-08-09. What makes
+> the concierge the spine is `workflows/concierge/skills/app-memory.md`, an
+> ambient skill that tells its agents when a finding is app-wide and, just as
+> importantly, when it is not.
+>
+> Until that file existed this paragraph described a policy no code expressed:
+> the concierge package had no `skills/` directory and contained no occurrence
+> of the word "memory", so the only writer of `("app-memory",)` was any agent
+> anywhere that happened to pass `scope="app"` after reading a tool docstring
+> they all share. Every workflow — root or mounted child — holds its OWN stateful
 memory: its `("workflow-memory", <its-own-slug>)` namespace, its own
 `knowledge/`, its own skills. Config carries identity: `workflow_slug`,
 `user_email`, `thread_id`, `session_id` ride in `configurable`, and at every
@@ -39,6 +53,42 @@ The parent's **thread messages** deliberately cross into mounted children
 (ticket 73 — a routed conversational child needs the dialogue), but graph
 state does not, and Send-dispatched **workers stay isolated**: they see only
 their Send payload (`task_id`, `task_instruction`).
+
+### A mounted workflow's memory belongs to the class, not the instance
+
+Recorded because it is a decision, not an accident (memory-hardening ticket 08),
+and because the counter-argument is good enough that someone will raise it.
+
+`decisions/mount-overrides.md` frames a mount as **correct OOP: the package is
+the class, the mount node plus its `data.overrides` is the instance.** So the
+question is real: does an instance get its own memory?
+
+**It does not, and that is deliberate.** `api/mount_resolution.py` resolves a
+mount to the child package's slug, and `node_runtime._subgraph` overrides
+`workflow_slug` to that slug — so two mounts of one package, and the package
+opened standalone, all share `("workflow-memory", <slug>)`.
+
+The reason is what workflow memory actually holds: **domain findings.**
+"Chinook revenue sums `InvoiceLine` amounts" is true of every instance of the
+package, and scoping it per-instance would make each mount rediscover the same
+fact — paying for the same lesson twice and halving the value of the scope.
+
+**The argument against, which is real.** Overrides mean two instances can be
+configured into materially different behaviour — a stricter grader, a smaller
+model. A finding written by the strict instance ("three attempts are never
+enough here") can be false for its sibling. That is instance *tuning* leaking
+through a class-level channel.
+
+It is accepted, because today workflow memory carries domain knowledge rather
+than tuning, and the failure is a mildly wrong hint rather than a wrong answer.
+If that stops being true, **the delivery mechanism already exists**: a mount
+`overrides` field, which is how an instance already differs from its class. It
+does not need a new namespace scheme.
+
+Instance namespaces are **explicitly rejected as speculative** for now: the
+mount address is not carried in `configurable` at all, and `/chat` runs mounts
+under leaf slugs, so building them would mean inventing plumbing for a problem
+nobody has hit.
 
 ## Durability
 
