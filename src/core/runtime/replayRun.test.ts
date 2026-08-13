@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { replayRun, type ReplayFrame } from './replayRun';
+import { parseMountAddress } from '@core/model/MountAddress';
+
+const address = (raw: string) => parseMountAddress(raw)!;
 
 const documentWith =
   (...ids: string[]) =>
@@ -55,7 +58,7 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
     // The ticket: opening the mount mid-run showed a static diagram, because
     // every frame before the click had been projected onto the parent. The
     // parent's `in1` and `router1` steps must not come along for the ride.
-    expect(replayRun(MOUNTED_RUN, CHILD, true, 'chinook-assistant')).toEqual([
+    expect(replayRun(MOUNTED_RUN, CHILD, true, address('chinook-assistant'))).toEqual([
       { nodeId: 'in1', status: 'success', output: QUESTION },
       { nodeId: 'agent-sql', status: 'running' },
     ]);
@@ -64,12 +67,12 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
   it('gives the child the question the run is carrying, not its saved one', () => {
     // The sharper half of the ticket. `in1`'s output *is* the question the
     // graph received, and it is the only place the child's card can learn it.
-    const [input] = replayRun(MOUNTED_RUN, CHILD, true, 'chinook-assistant');
+    const [input] = replayRun(MOUNTED_RUN, CHILD, true, address('chinook-assistant'));
     expect(input?.output).toBe(QUESTION);
   });
 
   it('leaves the parent showing the mount, as it already did', () => {
-    expect(replayRun(MOUNTED_RUN, PARENT, true, 'concierge')).toEqual([
+    expect(replayRun(MOUNTED_RUN, PARENT, true, address('concierge'))).toEqual([
       { nodeId: 'in1', status: 'success', output: QUESTION },
       { nodeId: 'router1', status: 'success', output: 'music_store' },
       { nodeId: 'wf-music', status: 'running' },
@@ -77,7 +80,7 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
   });
 
   it('glows nothing once the run has finished', () => {
-    const done = replayRun(MOUNTED_RUN, PARENT, false, 'concierge');
+    const done = replayRun(MOUNTED_RUN, PARENT, false, address('concierge'));
     expect(done.map((write) => write.status)).toEqual(['success', 'success', 'success']);
   });
 
@@ -127,17 +130,17 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
       pathSlugs: ['concierge', 'chinook-assistant'],
       output: 'Iron Maiden, with $138.60.',
     };
-    expect(replayRun([settled], CHILD, false, 'chinook-assistant')).toEqual([
+    expect(replayRun([settled], CHILD, false, address('chinook-assistant'))).toEqual([
       { nodeId: 'agent-sql', status: 'success', output: 'Iron Maiden, with $138.60.' },
     ]);
     // ...and the parent still learns nothing about the inside of its mount.
-    expect(replayRun([settled], PARENT, false, 'concierge')).toEqual([
+    expect(replayRun([settled], PARENT, false, address('concierge'))).toEqual([
       { nodeId: 'wf-music', status: 'success' },
     ]);
   });
 
   it('skips frames belonging to a document nobody has open', () => {
-    expect(replayRun(MOUNTED_RUN, documentWith('unrelated'), true, 'something-else')).toEqual([]);
+    expect(replayRun(MOUNTED_RUN, documentWith('unrelated'), true, address('something-else'))).toEqual([]);
   });
 
   it('is empty for a run that has produced no frames yet', () => {

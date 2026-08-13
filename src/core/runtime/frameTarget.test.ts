@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { frameTarget } from './frameTarget';
+import { parseMountAddress } from '@core/model/MountAddress';
+
+const address = (raw: string) => parseMountAddress(raw)!;
 
 /** The open document, as the projection sees it: a set of ids. */
 const documentWith =
@@ -107,7 +110,7 @@ describe('frameTarget — project onto the document that is open', () => {
     it('claims nothing for a step that happened in another document', () => {
       // Without the slug this lights the child's own `in1` — the parent's
       // input step painted onto the child's card.
-      expect(frameTarget(topLevelInput, child, 'chinook-assistant')).toBeNull();
+      expect(frameTarget(topLevelInput, child, address('chinook-assistant'))).toBeNull();
       expect(frameTarget(topLevelInput, child)).toBe('in1');
     });
 
@@ -118,8 +121,61 @@ describe('frameTarget — project onto the document that is open', () => {
         path: ['wf-music', 'in1'],
         pathSlugs: ['concierge', 'chinook-assistant'],
       };
-      expect(frameTarget(inside, child, 'chinook-assistant')).toBe('in1');
-      expect(frameTarget(inside, documentWith('in1', 'wf-music'), 'concierge')).toBe('wf-music');
+      expect(frameTarget(inside, child, address('chinook-assistant'))).toBe('in1');
+      expect(frameTarget(inside, documentWith('in1', 'wf-music'), address('concierge'))).toBe('wf-music');
+    });
+
+    it('tells two mounts of one package apart', () => {
+      // The live bug tranche 6 exists for. `concierge` can mount
+      // `chinook-assistant` twice, so `pathSlugs` holds that slug at more than
+      // one level and `indexOf` answers with the *first* — lighting a card in
+      // the instance the user is not looking at, with the other instance's
+      // values. A slug names the class; only the address names which one.
+      const inSecondMount = {
+        node: 'agent_sql',
+        activeNode: 'wf-other',
+        path: ['wf-other', 'agent-sql'],
+        pathSlugs: ['concierge', 'chinook-assistant'],
+      };
+      const inFirstMount = {
+        node: 'agent_sql',
+        activeNode: 'wf-music',
+        path: ['wf-music', 'agent-sql'],
+        pathSlugs: ['concierge', 'chinook-assistant'],
+      };
+
+      // Viewing `wf-other`: its own frame lights, the sibling's does not.
+      expect(frameTarget(inSecondMount, child, address('concierge/wf-other'))).toBe('agent-sql');
+      expect(frameTarget(inFirstMount, child, address('concierge/wf-other'))).toBeNull();
+
+      // …and the mirror image, from inside the other instance.
+      expect(frameTarget(inFirstMount, child, address('concierge/wf-music'))).toBe('agent-sql');
+      expect(frameTarget(inSecondMount, child, address('concierge/wf-music'))).toBeNull();
+    });
+
+    it('still lights the mount card on the parent canvas', () => {
+      const inside = {
+        node: 'agent_sql',
+        activeNode: 'wf-music',
+        path: ['wf-music', 'agent-sql'],
+        pathSlugs: ['concierge', 'chinook-assistant'],
+      };
+      const parent = documentWith('in1', 'wf-music', 'wf-other', 'out1');
+      expect(frameTarget(inside, parent, address('concierge'))).toBe('wf-music');
+    });
+
+    it('falls back to the slug rule when the run is rooted elsewhere', () => {
+      // Someone opened the shared definition (`?w=chinook-assistant`) while a
+      // run of `concierge` is going. The address cannot index this run's path,
+      // so the older class-level rule decides — which is the right answer for
+      // a document that is not in the run's tree at all.
+      const inside = {
+        node: 'in1',
+        activeNode: 'wf-music',
+        path: ['wf-music', 'in1'],
+        pathSlugs: ['concierge', 'chinook-assistant'],
+      };
+      expect(frameTarget(inside, child, address('chinook-assistant'))).toBe('in1');
     });
 
     it('falls back to the id walk when a level could not be named', () => {
@@ -132,7 +188,7 @@ describe('frameTarget — project onto the document that is open', () => {
         path: ['wf-music', 'agent-sql'],
         pathSlugs: ['concierge', ''],
       };
-      expect(frameTarget(partial, child, 'chinook-assistant')).toBe('agent-sql');
+      expect(frameTarget(partial, child, address('chinook-assistant'))).toBe('agent-sql');
     });
   });
 

@@ -46,6 +46,8 @@
  * The older node/owner rule stays underneath as the fallback, so a frame with
  * no usable path — or a server that predates the field — behaves as before.
  */
+import type { MountAddress } from '@core/model/MountAddress';
+
 export interface RunFrameEnds {
   /** The step that actually ran, as the *runtime* named it. */
   readonly node: string;
@@ -71,23 +73,45 @@ export interface RunFrameEnds {
 
 /**
  * @param hasNode whether the open document contains an id. Injected rather
- *   than taking a model, so the decision is a pure function over two strings
- *   and a predicate — `core/` owes nothing to the canvas here.
- * @param openSlug the workflow the caller is displaying, when it knows. This
- *   is the exact answer and it is tried first: an id can belong to two
- *   documents, a slug names one.
+ *   than taking a model, so the decision is a pure function over an id, a
+ *   predicate and an address — `core/` owes nothing to the canvas here.
+ * @param open the **address** the caller is displaying, when it knows.
+ *
+ *   An address, not a slug, and that is tranche 6's whole substance. A slug
+ *   names the *class*, and `concierge` may mount `chinook-assistant` twice —
+ *   so `pathSlugs` holds that slug at more than one level and `indexOf`
+ *   answered with the first, lighting a card in the instance nobody was
+ *   looking at, carrying the other instance's values. The address names which
+ *   mount, and the frame's `path` is the same vocabulary, so the two line up
+ *   position for position.
  */
 export function frameTarget(
   frame: RunFrameEnds,
   hasNode: (id: string) => boolean,
-  openSlug?: string,
+  open?: MountAddress,
 ): string | null {
   const path = frame.path ?? [];
   const slugs = frame.pathSlugs ?? [];
 
-  // The exact rule, when both sides can name the document.
-  if (openSlug && slugs.length > 0) {
-    const level = slugs.indexOf(openSlug);
+  // The exact rule: this run's path and this address are the same chain of
+  // mount ids, so the document on screen sits at exactly `mountPath.length`
+  // levels in. Guarded on the root, because an address only indexes a run
+  // rooted at the same document — open the shared definition mid-run and the
+  // class rule below is the one that applies.
+  if (open && path.length > 0 && (slugs[0] ?? open.root) === open.root) {
+    const depth = open.mountPath.length;
+    const prefixMatches = open.mountPath.every((segment, index) => path[index] === segment);
+    if (prefixMatches) return depth < path.length ? (path[depth] ?? null) : null;
+    // The address indexes this run, and this frame is on a different branch of
+    // it — a sibling mount. Saying so is the answer; it is the case the slug
+    // could not express.
+    return null;
+  }
+
+  // The older class-level rule, for a frame whose run is rooted somewhere the
+  // address cannot index.
+  if (open && slugs.length > 0) {
+    const level = slugs.indexOf(open.root);
     if (level >= 0 && level < path.length) return path[level] ?? null;
     // Every level was nameable and none was us: this frame is genuinely about
     // some other document, and saying so is an answer rather than a gap. If

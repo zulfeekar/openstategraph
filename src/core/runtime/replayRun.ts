@@ -1,4 +1,5 @@
 import { frameOwnsOutput, frameTarget, type RunFrameEnds } from './frameTarget';
+import type { MountAddress } from '@core/model/MountAddress';
 
 /**
  * Catches a newly-opened document up to where the run already is (ticket 34).
@@ -55,7 +56,7 @@ export interface ReplayWrite {
  *   injected predicate `frameTarget` takes, for the same reason.
  * @param running whether the run is still live. A finished run leaves no card
  *   glowing, exactly as it would have if the document had been open at the end.
- * @param openSlug the workflow now on screen, when known. Passed straight
+ * @param open the address now on screen, when known. Passed straight
  *   through to `frameTarget`, and it matters more here than on the live path:
  *   a replay writes every frame at once, so an id shared by two documents
  *   would repaint a whole history that never happened here.
@@ -64,7 +65,7 @@ export function replayRun(
   frames: readonly ReplayFrame[],
   hasNode: (id: string) => boolean,
   running: boolean,
-  openSlug?: string,
+  open?: MountAddress,
 ): readonly ReplayWrite[] {
   // Insertion-ordered, and that is the point: a node the run visited twice —
   // a revise loop's second lap — keeps its first position and its latest
@@ -74,7 +75,7 @@ export function replayRun(
   let last: string | null = null;
 
   for (const frame of frames) {
-    const target = frameTarget(frame, hasNode, openSlug);
+    const target = frameTarget(frame, hasNode, open);
     // A frame belonging to a sibling branch of a document nobody has open.
     // Skipped rather than defaulted, exactly as the live path skips it.
     if (target === null) continue;

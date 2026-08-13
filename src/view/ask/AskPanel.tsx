@@ -20,6 +20,8 @@ import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
+import { getOpenAddress } from '@app/openAddress';
+import { parseMountAddress } from '@core/model/MountAddress';
 import { replayRun } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
@@ -417,7 +419,13 @@ export function AskPanel({
       // and the projection must follow the developer. This is what lets a
       // frame be matched to the *document* it happened in rather than to an
       // id two documents may share — see `frameTarget`.
-      const openSlug = () => currentWorkflowSlug();
+      //
+      // The **address**, not the slug (ticket 42, tranche 6): `concierge` can
+      // mount one package twice, and a slug cannot say which of the two is on
+      // screen. The class slug is the fallback for a tab showing a document
+      // that is not in this run's tree at all.
+      const openAddress = () =>
+        getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined;
 
       // For the per-node duration readout the Inspector already shows (built
       // for the local preview path, which measures a real start/end) — a
@@ -520,7 +528,7 @@ export function AskPanel({
           // diagram — see `frameTarget`. On the parent canvas this still
           // answers with the mount, because a parent never holds its child's
           // node ids.
-          const target = frameTarget(event, hasNode, openSlug());
+          const target = frameTarget(event, hasNode, openAddress());
           if (target && (!event.internal || target !== queuedActive)) {
             seen.add(target);
             // The output belongs to the frame's own node; a frame reporting
@@ -613,7 +621,7 @@ export function AskPanel({
           // No output is written: a token frame carries a fragment of text,
           // never the node's finished result, and the `update` frame that
           // follows is what fills the card.
-          const tokenTarget = frameTarget(event, hasNode, openSlug());
+          const tokenTarget = frameTarget(event, hasNode, openAddress());
           if (tokenTarget && tokenTarget !== queuedActive) {
             seen.add(tokenTarget);
             activate(tokenTarget, null);
@@ -934,7 +942,10 @@ export function AskPanel({
           live.activity,
           (id) => controller.model.node(id) != null,
           true,
-          currentWorkflowSlug(),
+          // The address, same rule as the live path — a replay onto a canvas
+          // that is one of two mounts of the same package must land on the one
+          // actually open.
+          getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined,
         );
         for (const write of writes) {
           controller.model.setNodeRuntime(write.nodeId, {
