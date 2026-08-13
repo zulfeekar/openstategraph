@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.store.memory import InMemoryStore
 
-from openstategraph.memory import USER_MEMORY_NAMESPACE, checkpointer_for, memory_tools
+from openstategraph.memory import (
+    USER_MEMORY_NAMESPACE,
+    MemoryScope,
+    _user_namespace,
+    checkpointer_for,
+    memory_tools,
+)
 
 
 class S(TypedDict, total=False):
@@ -55,6 +62,150 @@ class TestMemoryTools:
         result = _run_in_graph(lambda s: {"out": search.invoke({"query": "secret"})}, store=store,
                                config={"configurable": {"user_email": "b@x.com", "thread_id": "t4"}})
         assert "secret A" not in result["out"]
+
+
+class TestMemoryScopeIsANamedEnum:
+    """Memory-hardening ticket 02 — the scope set is one declaration.
+
+    It used to be four copies of the same knowledge: an if/elif chain in
+    `_namespace_for`, a hardcoded three-pair tuple in `search_memory`, and
+    prose in two docstrings. A scope outside the set fell through the chain
+    into the **user** namespace and the tool reported success naming a scope
+    that does not exist — `save_memory(fact, scope="global")` stored a
+    cross-workflow finding in one person's private namespace and answered
+    "Remembered (global)."
+
+    That is this project's own reducers-are-a-named-enum rule in a different
+    noun, and the RouterNode lesson in tool form: a confirmation that names
+    something other than what happened.
+    """
+
+    def test_every_member_resolves_a_namespace(self) -> None:
+        # Exhaustive by construction: a member that forgot its resolver
+        # cannot exist, because the resolver is how a member is declared.
+        config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
+                                   "thread_id": "t"}}
+        seen = _run_in_graph(
+            lambda s: {"out": repr([tuple(m.namespace) for m in MemoryScope])},
+            store=InMemoryStore(), config=config)["out"]
+        assert seen == repr([("memories", "a@x_com"), ("workflow-memory", "w"),
+                             ("app-memory",)])
+
+    def test_the_three_scopes_are_the_whole_set(self) -> None:
+        assert [m.value for m in MemoryScope] == ["user", "workflow", "app"]
+
+    def test_an_unknown_scope_is_refused_not_rerouted_to_the_user(self) -> None:
+        # The defect this ticket exists for: "global" is not a scope, and the
+        # old chain silently made it mean "user".
+        store = InMemoryStore()
+        save, _ = memory_tools()
+        config = {"configurable": {"user_email": "a@x.com", "thread_id": "t"}}
+
+        def _attempt(_s: Any) -> dict[str, str]:
+            try:
+                save.invoke({"fact": "cross-workflow finding", "scope": "global"})
+            except Exception as exc:  # the tool layer's own validation
+                return {"out": type(exc).__name__}
+            return {"out": "accepted"}
+
+        assert _run_in_graph(_attempt, store=store, config=config)["out"] != "accepted"
+        assert not store.search((USER_MEMORY_NAMESPACE, "a@x_com"))
+
+    def test_the_confirmation_names_the_scope_actually_written(self) -> None:
+        # Asserts the *value*, not merely that a confirmation came back.
+        store = InMemoryStore()
+        save, _ = memory_tools()
+        config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
+                                   "thread_id": "t"}}
+        for scope in ("user", "workflow", "app"):
+            said = _run_in_graph(
+                lambda s, sc=scope: {"out": save.invoke({"fact": f"f-{sc}", "scope": sc})},
+                store=store, config=config)["out"]
+            assert said == f"Remembered ({scope})."
+
+    def test_the_model_is_handed_the_closed_set_not_prose(self) -> None:
+        # The reason this is worth doing at all: an enum reaches the model as
+        # a JSON-Schema `enum`, so an out-of-set scope becomes a validation
+        # error it can see and retry instead of a silent success.
+        save, _ = memory_tools()
+        schema = save.get_input_schema().model_json_schema()
+        published = [d["enum"] for d in schema.get("$defs", {}).values() if "enum" in d]
+        published += [p["enum"] for p in schema["properties"].values() if "enum" in p]
+        assert published == [["user", "workflow", "app"]]
+
+    def test_the_scope_description_the_model_pays_for_stays_short(self) -> None:
+        # Found while verifying the enum: Pydantic renders a class docstring
+        # as the parameter's `description`, so the first version of this shipped
+        # ~250 words of engineering history to the model on every request. The
+        # rationale belongs in a comment; this is the guard that keeps it there.
+        from langchain_core.utils.function_calling import convert_to_openai_tool
+
+        save, _ = memory_tools()
+        params = convert_to_openai_tool(save)["function"]["parameters"]
+        assert len(params["properties"]["scope"].get("description", "")) < 120
+
+
+class TestDegradationIsNeverSilent:
+    """Memory-hardening ticket 07 — three `except Exception: pass` blocks.
+
+    Two of them swallowed a `get_config()` failure into `""`, which folds to
+    `"anonymous"`/`"unsaved"` — so a config-propagation bug and a user who
+    declined to identify produced the *identical* outcome with no signal.
+    That is the machinery that made the shared-namespace merge silent.
+
+    The third dropped a whole scope from search results when its `store.search`
+    raised: a Postgres store with one corrupt namespace would quietly halve
+    memory and nothing would say so.
+
+    The module already defines a named logger for exactly this, and says why
+    (`memory.py`, `_log`): "messages whose entire job is to be noticed."
+    """
+
+    def test_a_scope_whose_store_raises_is_reported_not_dropped(self, caplog) -> None:
+        class OneBadScope(InMemoryStore):
+            def search(self, namespace, **kwargs):  # type: ignore[override]
+                if namespace[0] == "workflow-memory":
+                    raise RuntimeError("namespace is corrupt")
+                return super().search(namespace, **kwargs)
+
+        store = OneBadScope()
+        save, search = memory_tools()
+        config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
+                                  "thread_id": "t"}}
+        _run_in_graph(lambda s: {"out": save.invoke({"fact": "a user fact"})},
+                      store=store, config=config)
+
+        with caplog.at_level(logging.WARNING, logger="openstategraph.memory"):
+            result = _run_in_graph(lambda s: {"out": search.invoke({"query": "fact"})},
+                                   store=store, config=config)
+
+        # The surviving scopes still answer — a bad scope degrades, not fails.
+        assert "a user fact" in result["out"]
+        assert any("workflow-memory" in r.getMessage() for r in caplog.records)
+
+    def test_no_identity_and_no_config_at_all_say_different_things(self, caplog) -> None:
+        """The distinction the whole ticket is about.
+
+        Both land on `("memories", "anonymous")`. One is a person who declined
+        to identify — normal. The other is `configurable` failing to reach this
+        code — a bug. Before this they were the same silence.
+        """
+        store = InMemoryStore()
+        save, _ = memory_tools()
+
+        with caplog.at_level(logging.DEBUG, logger="openstategraph.memory"):
+            _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
+                          store=store, config={"configurable": {"thread_id": "t"}})
+        declined = [r.getMessage() for r in caplog.records]
+        caplog.clear()
+
+        with caplog.at_level(logging.DEBUG, logger="openstategraph.memory"):
+            # Outside a graph there is no config to read at all.
+            assert _user_namespace() == (USER_MEMORY_NAMESPACE, "anonymous")
+        unreachable = [r.getMessage() for r in caplog.records]
+
+        assert declined and unreachable
+        assert set(declined).isdisjoint(unreachable)
 
 
 class TestAgentsAreMemoryCapable:

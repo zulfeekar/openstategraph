@@ -18,7 +18,13 @@ MCP server holds one, neither inherits anything.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Types only — `from __future__ import annotations` keeps these out of
+    # the runtime import graph, the same pattern `loader.py` established.
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.store.base import BaseStore
 
 from openstategraph.api.registries import (
     build_function_registry,
@@ -49,8 +55,8 @@ class WorkflowServices:
         self,
         workflows_root: Any = None,
         *,
-        store: Any = None,
-        checkpointer: Any = None,
+        store: BaseStore | None = None,
+        checkpointer: BaseCheckpointSaver[Any] | None = None,
         tools: dict[str, Any] | None = None,
         functions: dict[str, Any] | None = None,
         middleware: dict[str, Any] | None = None,
@@ -94,7 +100,7 @@ class WorkflowServices:
         #: slug -> the saver `settings.checkpointer: "sqlite"` opened for it.
         #: Always ours, by construction: an entry only exists when this object
         #: opened a per-workflow file.
-        self._workflow_checkpointers: dict[str, Any] = {}
+        self._workflow_checkpointers: dict[str, BaseCheckpointSaver[Any]] = {}
         # Copied, not aliased: a caller's dict must not become live state that
         # a later mutation of theirs changes mid-run.
         self._injected_tools = dict(tools or {})
@@ -102,7 +108,7 @@ class WorkflowServices:
         self._injected_middleware = dict(middleware or {})
 
     @property
-    def checkpointer(self) -> Any:
+    def checkpointer(self) -> BaseCheckpointSaver[Any]:
         """The one saver every transport compiles against, built on first ask.
 
         Durable by default — `build_checkpointer` puts it under this services
@@ -115,7 +121,9 @@ class WorkflowServices:
             self._checkpointer = build_checkpointer(self.store.root)
         return self._checkpointer
 
-    def checkpointer_for(self, settings: dict[str, Any] | None, slug: str | None) -> Any:
+    def checkpointer_for(
+        self, settings: dict[str, Any] | None, slug: str | None
+    ) -> BaseCheckpointSaver[Any]:
         """The saver a document asked for — opened once per workflow, not per call.
 
         `memory.checkpointer_for` is a pure resolver: given a document's

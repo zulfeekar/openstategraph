@@ -134,7 +134,8 @@ def resolve_mount_document(
 
 
 def _node(document: dict[str, Any], node_id: str) -> dict[str, Any] | None:
-    for node in document.get("nodes") or []:
+    nodes: list[dict[str, Any]] = document.get("nodes") or []
+    for node in nodes:
         if node.get("id") == node_id:
             return node
     return None

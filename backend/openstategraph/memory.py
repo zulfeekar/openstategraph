@@ -27,8 +27,33 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+
+if TYPE_CHECKING:
+    # Types only. `from __future__ import annotations` above keeps every
+    # annotation a string, so naming these costs no import at runtime and the
+    # lazy-import guarantee this module relies on is untouched — the same
+    # pattern, and the same reasoning, as `loader.py`.
+    from langchain_core.tools import BaseTool
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.store.base import BaseStore
+
+
+class MemoryRecord(TypedDict):
+    """What one saved memory looks like in the Store.
+
+    The record schema is *knowledge* and was previously implicit in a
+    `dict[str, Any]` literal — so the app-scope provenance stamp (`workflow`)
+    existed only in the one branch that wrote it, and nothing typed it as
+    optional-but-meaningful.
+    """
+
+    fact: str
+    #: Only on app-scope deposits: which workflow made this one.
+    workflow: NotRequired[str]
 
 
 def _log() -> logging.Logger:
@@ -52,14 +77,23 @@ def _user_namespace() -> tuple[str, str]:
     ticket 64). An anonymous user still gets a working namespace rather than
     an error: memory quietly scoped to "anonymous" degrades to per-deployment
     shared notes, which is honest for a user who declined to identify.
+
+    **The two ways of arriving at "anonymous" are logged apart** (ticket 07).
+    A person who declined to identify is normal; ``configurable`` failing to
+    reach this code is a bug, and before this the two were the same silence —
+    which is what would let a future refactor collapse every user into one
+    namespace with nothing to notice it by.
     """
     from langgraph.config import get_config
 
     email = ""
     try:
         email = str((get_config().get("configurable") or {}).get("user_email") or "")
-    except Exception:
-        pass
+    except Exception as exc:
+        _log().debug("no run config to read user_email from (%s); memory is anonymous", exc)
+    else:
+        if not email:
+            _log().debug("run config carries no user_email; memory is anonymous")
     cleaned = email.strip().lower().replace(".", "_") or "anonymous"
     # Store namespace labels forbid periods, and emails are full of them —
     # a deterministic substitution keeps one person one namespace.
@@ -67,14 +101,23 @@ def _user_namespace() -> tuple[str, str]:
 
 
 def _workflow_namespace() -> tuple[str, str]:
-    """Findings scoped to the running workflow (its slug rides in config)."""
+    """Findings scoped to the running workflow (its slug rides in config).
+
+    Logged apart for the same reason as `_user_namespace`: "unsaved" reached
+    by an unsaved document and "unsaved" reached by config never arriving are
+    different facts, and the second one also silently defeats the app-scope
+    provenance stamp (ship-it 47's rider).
+    """
     from langgraph.config import get_config
 
     slug = ""
     try:
         slug = str((get_config().get("configurable") or {}).get("workflow_slug") or "")
-    except Exception:
-        pass
+    except Exception as exc:
+        _log().debug("no run config to read workflow_slug from (%s); scope is 'unsaved'", exc)
+    else:
+        if not slug:
+            _log().debug("run config carries no workflow_slug; scope is 'unsaved'")
     return ("workflow-memory", slug.strip().lower().replace(".", "_") or "unsaved")
 
 
@@ -83,7 +126,67 @@ def _workflow_namespace() -> tuple[str, str]:
 APP_NAMESPACE: tuple[str, ...] = ("app-memory",)
 
 
-def memory_tools() -> list[Any]:
+def _app_namespace() -> tuple[str, ...]:
+    """The app pool, as a resolver so every scope is declared the same way."""
+    return APP_NAMESPACE
+
+
+# `MemoryScope` — the whole scope set, declared once, each member carrying how
+# it resolves. The rationale lives in this comment rather than in the class
+# docstring **because the docstring is shipped to the model**: Pydantic renders
+# it as the `scope` parameter's description, so every paragraph here would ride
+# in every agent's prompt on every request. Keep the docstring one line.
+#
+# It used to be the same knowledge in four places — an if/elif chain, a
+# hardcoded tuple in `search_memory`, and prose in two docstrings — with two
+# consequences, both silent:
+#
+#   - A scope outside the set fell through the chain into the **user**
+#     namespace, and the tool confirmed the scope the caller *asked for* rather
+#     than the one it wrote. `save_memory(fact, scope="global")` filed a
+#     cross-workflow finding in one person's private namespace and answered
+#     "Remembered (global)." That is the RouterNode lesson in tool form: a
+#     machine-owned answer must describe what happened.
+#   - Adding a scope meant editing this module's body in several places — the
+#     **O** violation ship-it ticket 03 fixed for workflow-scoped node families,
+#     quoting the same rule.
+#
+# Deriving the tool signature from this enum is also what hands the model a
+# JSON-Schema `enum` instead of three scope names buried in prose, so an
+# out-of-set value is a validation error the agent can see and retry.
+#
+# Deliberately **not** a `Registry`. A plugin contributing a fourth memory scope
+# is not a designed capability the way a node type is, and registry machinery
+# for a set of three would be ceremony. A new scope is one member plus its
+# resolver — one site — which is as open as this should be.
+#
+# Matching is exact: "App " and "User" are refused rather than normalised. The
+# model is given the closed set, so a near-miss is a bug to surface rather than
+# spelling to guess at.
+class MemoryScope(str, Enum):
+    """Where a memory lives: the person, this workflow, or every workflow."""
+
+    #: Annotation only — an `Enum` treats a bare annotation as a non-member,
+    #: which is how a member can carry data without becoming a member itself.
+    _resolver: Callable[[], tuple[str, ...]]
+
+    def __new__(cls, value: str, resolver: Callable[[], tuple[str, ...]]) -> MemoryScope:
+        member = str.__new__(cls, value)
+        member._value_ = value
+        member._resolver = resolver
+        return member
+
+    USER = ("user", _user_namespace)
+    WORKFLOW = ("workflow", _workflow_namespace)
+    APP = ("app", _app_namespace)
+
+    @property
+    def namespace(self) -> tuple[str, ...]:
+        """This scope's Store namespace, resolved from the running config."""
+        return self._resolver()
+
+
+def memory_tools() -> list[BaseTool]:
     """The prebuilt long-term-memory tools, bound to agents when a store exists.
 
     Three scopes (user model, 2026-08-08): **user** — follows the person
@@ -94,16 +197,8 @@ def memory_tools() -> list[Any]:
     """
     from langchain_core.tools import tool
 
-    def _namespace_for(scope: str) -> tuple[str, ...]:
-        cleaned = (scope or "user").strip().lower()
-        if cleaned == "workflow":
-            return _workflow_namespace()
-        if cleaned == "app":
-            return APP_NAMESPACE
-        return _user_namespace()
-
     @tool
-    def save_memory(fact: str, scope: str = "user") -> str:
+    def save_memory(fact: str, scope: MemoryScope = MemoryScope.USER) -> str:
         """Save a lasting fact. scope='user' for facts about this person
         (preferences, their name); scope='workflow' for findings specific to
         the current workflow's domain; scope='app' for knowledge useful to
@@ -114,15 +209,16 @@ def memory_tools() -> list[Any]:
         store = get_store()
         if store is None:
             return "No memory store is configured."
-        value: dict[str, Any] = {"fact": fact.strip()}
-        cleaned = (scope or "user").strip().lower()
-        if cleaned == "app":
+        value: MemoryRecord = {"fact": fact.strip()}
+        if scope is MemoryScope.APP:
             # The spine is auditable: any workflow may deposit an app-wide
             # learning (permissive read, deliberate write — owner decision
             # 2026-08-09), but every deposit records which workflow made it.
             value["workflow"] = _workflow_namespace()[1]
-        store.put(_namespace_for(scope), str(uuid.uuid4()), value)
-        return f"Remembered ({cleaned})."
+        store.put(scope.namespace, str(uuid.uuid4()), dict(value))
+        # Names the scope that was *written*, which before this was not
+        # guaranteed to be the scope that was asked for.
+        return f"Remembered ({scope.value})."
 
     @tool
     def search_memory(query: str) -> str:
@@ -135,16 +231,20 @@ def memory_tools() -> list[Any]:
         if store is None:
             return "No memory store is configured."
         rows: list[str] = []
-        for label, namespace in (
-            ("user", _user_namespace()),
-            ("workflow", _workflow_namespace()),
-            ("app", APP_NAMESPACE),
-        ):
+        # Iterating the enum is what keeps this from being a second copy of
+        # the scope set; declaration order is the order the agent reads.
+        for scope in MemoryScope:
+            label, namespace = scope.value, scope.namespace
             try:
                 # limit=4 per scope caps the whole block at 12 one-liners —
                 # a hoarding workflow can never flood the calling prompt.
                 hits = store.search(namespace, query=query, limit=4)
-            except Exception:
+            except Exception as exc:
+                # A warning, not a debug line: the other scopes still answer,
+                # so the caller sees a plausible result that is quietly missing
+                # a third of memory. That is precisely the failure that needs
+                # to be noticeable from outside.
+                _log().warning("memory scope %s is unreadable (%s); skipped", namespace, exc)
                 continue
             for item in hits:
                 source = item.value.get("workflow", "")
@@ -155,7 +255,7 @@ def memory_tools() -> list[Any]:
     return [save_memory, search_memory]
 
 
-def build_store() -> Any:
+def build_store() -> BaseStore:
     """The process-wide long-term store.
 
     In-memory by default (the dev tool's honest baseline). Setting
@@ -184,7 +284,7 @@ def build_store() -> Any:
     raw_path = os.environ.get("OPENSTATEGRAPH_MEMORY_PATH", "").strip()
     postgres_url = postgres.postgres_url()
     if not raw_path and postgres_url:
-        return postgres.store(postgres_url)
+        return cast("BaseStore", postgres.store(postgres_url))
     if raw_path:
         try:
             import sqlite3
@@ -244,7 +344,7 @@ from openstategraph.state_dir import state_dir
 CHECKPOINT_FILE_NAME = "checkpoints.sqlite"
 
 
-def checkpoint_path(workflows_root_dir: Any = None) -> Path | None:
+def checkpoint_path(workflows_root_dir: Path | str | None = None) -> Path | None:
     """Where the process-wide checkpointer writes, or None for in-memory.
 
     Two sources, in order: the env var above, then ``state_dir()`` — which is
@@ -268,7 +368,7 @@ def checkpoint_path(workflows_root_dir: Any = None) -> Path | None:
     return state_dir(workflows_root_dir) / CHECKPOINT_FILE_NAME
 
 
-def _open_sqlite_saver(path: Path, asked_by: str) -> Any | None:
+def _open_sqlite_saver(path: Path, asked_by: str) -> BaseCheckpointSaver[Any] | None:
     """A `SqliteSaver` on `path`, or None having said loudly why not.
 
     One implementation for both callers — the process default and a
@@ -322,7 +422,7 @@ def _open_sqlite_saver(path: Path, asked_by: str) -> Any | None:
         return None
 
 
-def build_checkpointer(workflows_root_dir: Any = None) -> Any:
+def build_checkpointer(workflows_root_dir: Path | str | None = None) -> BaseCheckpointSaver[Any]:
     """The process-wide thread checkpointer, and the one line that states it.
 
     Held by `WorkflowServices` (the assembly point) and shared by HTTP, MCP
@@ -353,7 +453,7 @@ def build_checkpointer(workflows_root_dir: Any = None) -> Any:
 
     postgres_url = postgres.postgres_url()
     if postgres_url and not os.environ.get(CHECKPOINT_PATH_ENV, "").strip():
-        return postgres.checkpointer(postgres_url)
+        return cast("BaseCheckpointSaver[Any]", postgres.checkpointer(postgres_url))
 
     path = checkpoint_path(workflows_root_dir)
     saver = _open_sqlite_saver(path, "the default checkpointer") if path is not None else None
@@ -401,10 +501,10 @@ def close_resource(resource: Any) -> None:
 def checkpointer_for(
     settings: dict[str, Any] | None,
     slug: str | None,
-    fallback: Any,
+    fallback: BaseCheckpointSaver[Any],
     *,
-    workflows_root_dir: Any = None,
-) -> Any:
+    workflows_root_dir: Path | str | None = None,
+) -> BaseCheckpointSaver[Any]:
     """The thread checkpointer a document asked for.
 
     ``settings.checkpointer: "sqlite"`` opts a single workflow into its **own**

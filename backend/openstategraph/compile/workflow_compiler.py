@@ -93,7 +93,9 @@ def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str,
     return _error_handler_for({})(state, error)
 
 
-def _error_handler_for(canvas_ids: dict[str, str]) -> Any:
+def _error_handler_for(
+    canvas_ids: dict[str, str],
+) -> Callable[[dict[str, Any], NodeError], dict[str, Any]]:
     """`_default_error_handler`, told which canvas node each graph name is.
 
     LangGraph names the failing node with whatever `add_node` received —
