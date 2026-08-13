@@ -21,11 +21,17 @@ class HealthResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
 
     ok: bool
-    #: Always true since Ollama cloud became the default — `resolve_model` can
-    #: always name *a* model. Whether that provider is reachable is a different
-    #: question this endpoint has never answered.
+    #: Whether **any** registered provider has the environment it needs. This
+    #: was hardcoded `True` while Ollama was treated as always-available, which
+    #: meant it reported ready on a machine with nothing configured
+    #: (providers-and-credentials ticket 02). Reads environment variables only;
+    #: whether a configured provider is *reachable* is a different question
+    #: this endpoint has never answered.
     model_configured: bool = Field(
-        description="A model name can be resolved. Not a reachability check."
+        description=(
+            "At least one provider has its credentials set. "
+            "Not a reachability check."
+        )
     )
 
 

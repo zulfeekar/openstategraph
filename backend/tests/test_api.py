@@ -110,10 +110,15 @@ class TestModelResolution:
     def test_no_configuration_defaults_to_ollama_cloud_not_an_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Ollama cloud is the default now, not an opt-in: a developer with no
-        Anthropic or OpenAI key configured still gets a working model with
-        zero configuration, since `ollama` authenticates from its own local
-        credentials rather than an env var this process needs to see.
+        """Ollama stays the *named* default when nothing else is configured.
+
+        What changed with providers-and-credentials ticket 02 is what happens
+        next, not this: resolving a name is still cheap and total, but building
+        that model now needs `OLLAMA_API_KEY` or `OLLAMA_HOST`. The old
+        docstring here claimed Ollama "authenticates from its own local
+        credentials rather than an env var this process needs to see" — which
+        was true, and was the defect: those credentials were a logged-in
+        daemon's, unreadable and unrevocable from the environment.
         """
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
@@ -895,3 +900,53 @@ class TestTemplates:
 
         assert team["document"]["name"] == "Payments"
         assert any(n.get("title") == "Payments Lead" for n in team["document"]["nodes"])
+
+
+class TestHealthReportsRealReadiness:
+    """`model_configured` used to be the literal `True`.
+
+    The reasoning was that Ollama was always available, which was itself the
+    defect: it reached the cloud through an ambient local daemon, so this
+    endpoint reported ready on a machine with nothing configured and nothing
+    listening (providers-and-credentials ticket 02). A health check that
+    cannot say "no" is not a health check.
+    """
+
+    CREDENTIALS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST")
+
+    def _model_configured(self) -> bool:
+        response = TestClient(create_app()).get("/api/health")
+        assert response.status_code == 200
+        return bool(response.json()["model_configured"])
+
+    def test_nothing_configured_is_reported_as_such(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for name in self.CREDENTIALS:
+            monkeypatch.delenv(name, raising=False)
+        assert self._model_configured() is False
+
+    @pytest.mark.parametrize("variable", CREDENTIALS)
+    def test_any_one_credential_is_enough(
+        self, monkeypatch: pytest.MonkeyPatch, variable: str
+    ) -> None:
+        """Any provider, and either of Ollama's two ways of being configured."""
+        for name in self.CREDENTIALS:
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv(variable, "http://localhost:11434" if "HOST" in variable else "x")
+        assert self._model_configured() is True
+
+    def test_it_opens_no_socket(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Still cheap: environment only, never a reachability probe.
+
+        A configured provider that is down is a different question, and one
+        this endpoint has never claimed to answer.
+        """
+        import socket
+
+        def refuse(*args: object, **kwargs: object) -> None:
+            raise AssertionError("/api/health must not open a socket")
+
+        monkeypatch.setattr(socket.socket, "connect", refuse)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+        assert self._model_configured() is True

@@ -200,7 +200,7 @@
         "description": "`GET /api/health` \u2014 is this process up, and does it know a model?\n\nNamed rather than left a bare dict (scale-and-adopt ticket 05): a\npublished contract whose first endpoint answers `{}` teaches a reader\nthat the rest of the document is decoration too.",
         "properties": {
           "model_configured": {
-            "description": "A model name can be resolved. Not a reachability check.",
+            "description": "At least one provider has its credentials set. Not a reachability check.",
             "title": "Model Configured",
             "type": "boolean"
           },
@@ -1315,7 +1315,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "Answers \"is this process up?\" and nothing more expensive.\n\n`model_configured` is always true now: Ollama cloud is the default,\nnot an opt-in, so `resolve_model` never fails to name *a* model. It is\nkept in the response rather than removed because both clients already\nread it \u2014 and whether that provider is actually reachable is a\nseparate question this endpoint was never answering anyway.",
+        "description": "Answers \"is this process up?\" and nothing more expensive.\n\n`model_configured` asks whether **any** registered provider has the\nenvironment it needs. It used to be the literal `True`, on the\nreasoning that Ollama was always available \u2014 which was itself the\ndefect: Ollama reached the cloud through an ambient local daemon, so\nthis reported ready on a machine with nothing configured and no daemon\nlistening (providers-and-credentials ticket 02).\n\nStill cheap, and still not a reachability check: it reads environment\nvariables and never opens a socket. A configured provider that is down\nis a different question, and one this endpoint has never answered.",
         "operationId": "health_api_health_get",
         "responses": {
           "200": {

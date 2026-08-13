@@ -511,13 +511,21 @@ def create_app(
     def health() -> HealthResponse:
         """Answers "is this process up?" and nothing more expensive.
 
-        `model_configured` is always true now: Ollama cloud is the default,
-        not an opt-in, so `resolve_model` never fails to name *a* model. It is
-        kept in the response rather than removed because both clients already
-        read it — and whether that provider is actually reachable is a
-        separate question this endpoint was never answering anyway.
+        `model_configured` asks whether **any** registered provider has the
+        environment it needs. It used to be the literal `True`, on the
+        reasoning that Ollama was always available — which was itself the
+        defect: Ollama reached the cloud through an ambient local daemon, so
+        this reported ready on a machine with nothing configured and no daemon
+        listening (providers-and-credentials ticket 02).
+
+        Still cheap, and still not a reachability check: it reads environment
+        variables and never opens a socket. A configured provider that is down
+        is a different question, and one this endpoint has never answered.
         """
-        return HealthResponse(ok=True, model_configured=True)
+        from openstategraph.providers import provider_catalogue
+
+        configured = any(spec.is_configured() for spec in provider_catalogue().list())
+        return HealthResponse(ok=True, model_configured=configured)
 
     @app.get(
         "/api/templates",
