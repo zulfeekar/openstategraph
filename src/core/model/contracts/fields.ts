@@ -162,8 +162,17 @@ export type FieldSchema =
 /** Node configuration state: a flat, JSON-safe record keyed by field. */
 export type NodeData = Record<string, FieldValue>;
 
+/**
+ * A field's options, whether they are a literal list or a function of the
+ * node's own data.
+ *
+ * Takes the *option-carrying* shape rather than `SelectFieldSchema`
+ * specifically: a combobox resolves its suggestions the same way a select
+ * resolves its choices, and narrowing to one kind would have meant a second
+ * copy of this one line for the other.
+ */
 export function resolveOptions(
-  schema: SelectFieldSchema,
+  schema: Pick<SelectFieldSchema, 'options'>,
   data: Readonly<NodeData> = {},
 ): readonly FieldOption[] {
   return typeof schema.options === 'function' ? schema.options(data) : schema.options;

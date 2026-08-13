@@ -1,6 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore, type ChangeEvent } from 'react';
 import { Replace } from 'lucide-react';
 import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
+import type { ComboboxFieldSchema } from '@core/model/contracts/fields';
 import {
   Button,
   DisplayRow,

@@ -70,6 +70,46 @@ NOT_BUILT = (
 )
 
 
+STALE = (
+    "the built editor is stale — `dist/` is older than `src/`, so the wheel "
+    "would ship an editor built before the code it is packaged with.\n"
+    "Rebuild it:\n"
+    "    npm run build\n"
+    "or point the build at a current one:\n"
+    "    OPENSTATEGRAPH_EDITOR_DIST=/path/to/dist python -m build backend"
+)
+
+#: Suffixes worth comparing. Everything the editor is actually built from;
+#: a stray `.md` beside a component should not force a rebuild.
+_SOURCE_SUFFIXES = (".ts", ".tsx", ".css", ".html")
+
+
+def editor_is_stale(dist: Path, src: Path) -> bool:
+    """Whether `dist/` predates the sources it was supposed to be built from.
+
+    Modification times, not hashes: the question is "did somebody edit the
+    editor and forget to rebuild", and an mtime answers it in milliseconds
+    without a content index. False negatives are possible (a touched file with
+    no change) and cost one needless rebuild; a false *positive* would ship the
+    defect this exists to catch, which is the asymmetry that decides the
+    method.
+
+    `False` when there is no source tree at all — a wheel built from our own
+    sdist has package data and no `src/`, and refusing there would break every
+    downstream repackager over a check that cannot apply.
+    """
+    index = dist / "index.html"
+    if not index.is_file() or not src.is_dir():
+        return False
+
+    built = index.stat().st_mtime
+    for path in src.rglob("*"):
+        if path.suffix in _SOURCE_SUFFIXES and path.is_file():
+            if path.stat().st_mtime > built:
+                return True
+    return False
+
+
 def _editor_source(root: Path) -> Path | None:
     explicit = os.environ.get("OPENSTATEGRAPH_EDITOR_DIST", "").strip()
     candidate = Path(explicit) if explicit else root.parent / "dist"
@@ -95,6 +135,13 @@ def editor_force_include(root: Path, version: str) -> dict[str, str]:
         if version == "editable":
             return {}
         raise RuntimeError(NOT_BUILT)
+
+    # A missing editor already fails loudly; an *old* one used to ship in
+    # silence. The wheel carried an editor three days behind the backend it was
+    # packaged with — including a schema version, which the two sides must
+    # agree on or the editor refuses documents the backend writes.
+    if version != "editable" and editor_is_stale(source, root.parent / "src"):
+        raise RuntimeError(STALE)
 
     include = {
         str(path): f"{EDITOR_DEST}/{path.relative_to(source).as_posix()}"

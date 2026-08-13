@@ -82,6 +82,9 @@ export const revisionLoopAssembly: IAssemblyDefinition = {
         type: AGENT_TYPE,
         position: AGENT_AT,
         size: { width: 300, height: 220 },
+        // Required by `SerializedNode`: a fragment is the same shape a copy
+        // produces, and a paste reparents by geometry after the drop anyway.
+        parentId: null,
         title: 'Draft',
         data: {
           systemPrompt:
@@ -93,6 +96,7 @@ export const revisionLoopAssembly: IAssemblyDefinition = {
         type: GRADER_TYPE,
         position: GRADER_AT,
         size: { width: 300, height: 220 },
+        parentId: null,
         title: 'Review',
         data: {
           // A vague grader never passes, so the loop burns its whole attempt
@@ -108,13 +112,11 @@ export const revisionLoopAssembly: IAssemblyDefinition = {
     ],
     edges: [
       {
-        id: 'loop-forward',
         source: { nodeId: 'loop-agent', portId: 'result' },
         target: { nodeId: 'loop-grader', portId: 'candidate' },
       },
       {
         // The edge the whole assembly exists for.
-        id: 'loop-revise',
         source: { nodeId: 'loop-grader', portId: 'revise' },
         target: { nodeId: 'loop-agent', portId: 'feedback' },
       },

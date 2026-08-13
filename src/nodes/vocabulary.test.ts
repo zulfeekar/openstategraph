@@ -156,7 +156,11 @@ describe('the mount outcome field does not claim an enforcement it has not got',
   });
 
   it('never says enforced, required or must', () => {
-    const copy = `${outcome?.label ?? ''} ${outcome?.placeholder ?? ''}`.toLowerCase();
+    const placeholder =
+      outcome && 'placeholder' in outcome
+        ? ((outcome as { placeholder?: string }).placeholder ?? '')
+        : '';
+    const copy = `${outcome?.label ?? ''} ${placeholder}`.toLowerCase();
     expect(copy).not.toMatch(/enforc|required|must deliver/);
   });
 
