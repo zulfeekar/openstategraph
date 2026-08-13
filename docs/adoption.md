@@ -141,7 +141,7 @@ picker offers the same three from the same source.
 | --- | --- | --- |
 | `minimal` *(default)* | you are finding out whether any of this works, or you know exactly what you are building and want an empty-ish canvas | one model call |
 | `routed-qa` | you have more than one kind of request to handle, or you want the answer checked before it is returned. Router → agent → grader → output, plus a cheap branch that skips the grader | up to three, plus one per revision |
-| `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow as a Team node | several — a fan-out per subtask |
+| `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow. Either composition card runs it — `Team` and `Workflow` compile identically | several — a fan-out per subtask |
 
 Every scaffolded package carries an `AGENTS.md` that names what was created and
 the next step for that particular shape. `--team` still works as a deprecated

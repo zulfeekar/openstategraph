@@ -284,12 +284,22 @@ than sit among them — the palette's only two **organisms**:
   unchanged and still exercised by a shipped document, but no *visible*
   example demonstrates it any more. That cost was accepted deliberately: the
   second document was hidden, and it was the one the editor opened.
-- **`team.workflow`** mounts a whole supervisor-plus-workers package behind a
-  single card. Reach for it when the child genuinely has several worker
-  *roles*; with one role the supervisor is a planning model call and a
-  fan-out you pay for and do not use, and a plain subgraph mount around an
-  agent → grader loop gives the same retry semantics for one call less. That
-  is why no shipped example uses a Team.
+- **`team.workflow`** mounts the same way. **It compiles identically** —
+  `node_runtime` dispatches both type ids to one builder with no branch — so
+  the choice between the two cards changes nothing about what runs.
+
+  What a Team card adds is a contract it *states*: an expected outcome, and a
+  "revises until it passes" badge the editor shows only when the mounted
+  document really has a grader wired back to its agent. The expected outcome is
+  documentation on the card; the enforcement is the child's grader criteria,
+  and nothing links the two.
+
+  **The cost that decides this is the child's, not the card's.** Reach for a
+  supervisor-plus-workers package when the work genuinely has several worker
+  *roles*; with one role you pay for a planning call and a fan-out you do not
+  use, and an agent → grader revision loop gives the same retry semantics for
+  one call less. That is why no shipped example mounts one — a fact about the
+  packages we ship, not about the node type.
 
 A subagent invoked as a tool is **isolated**: it receives a task and reports a
 result as a `ToolMessage`. It never sees the parent's message history or graph

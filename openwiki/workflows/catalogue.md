@@ -31,9 +31,14 @@ table above is an index, not a replacement.
 `workflow.subgraph` and `team.workflow` are the same slug-as-data mechanism
 compiled by the same backend path
 ([`NodeRuntime._subgraph`](../../backend/openstategraph/compile/node_runtime.py)). What
-distinguishes a **Team** is the contract its card states — its expected
-outcome, whose enforcing copy is the child's grader criteria
-([`src/nodes/compose/TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)).
+distinguishes a **Team** is the contract its card states, and only that: an
+expected outcome, plus a "revises until it passes" badge the editor awards by
+checking the mounted document for a grader wired back to its agent.
+
+**The expected outcome never reaches the compiler.** It is a field on the card
+([`src/nodes/compose/TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)) that
+`_subgraph` does not read; the enforcement is the child's own grader criteria,
+and nothing checks that the two agree. Read it as documentation of intent.
 
 Self-inclusion is refused at build time via the runtime's `_ancestry` chain,
 not discovered by recursing forever at run time.

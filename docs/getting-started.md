@@ -174,9 +174,16 @@ router in it. One document now, and the loop that matters is on it: agent →
 grader → (`revise`) → agent, bounded at three attempts, then the Markdown
 output node.
 
-There is no Team here either: a Team brings a supervisor, which costs a
-planning model call and a fan-out, and there is exactly one worker role to
-plan for.
+Nothing here is mounted, either. A mounted workflow is worth its keep when
+the child has several worker *roles* to plan for; here there is one, so a
+supervisor's planning call and fan-out would be paid for and not used.
+
+That cost belongs to the **child package**, not to the card you drag. `Team`
+and `Workflow` compile through the same builder — one code path, no branch —
+so choosing between the two cards changes nothing about what runs. What a Team
+card adds is a *contract it states*: an expected outcome, and a
+"revises until it passes" badge the editor only shows when the mounted document
+really does have a grader wired back to its agent.
 
 Two things on this canvas are worth a second look, because they are the
 answer to "how do I customise a prebuilt node without editing it":
@@ -317,7 +324,7 @@ picker offers the same three:
 | --- | --- | --- |
 | `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
 | `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
-| `team` | supervisor + worker + grader | the work splits into parallel subtasks, and you want to mount it as a Team node elsewhere |
+| `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere — the `Team` and `Workflow` cards run it identically |
 
 An unknown name exits `2` and lists the valid ones. `--team` still works as a
 deprecated alias for `--template team`. Each scaffolded package gets an

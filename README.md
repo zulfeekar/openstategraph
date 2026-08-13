@@ -198,10 +198,13 @@ bound to three Chinook tools (list tables → schema → read-only query), takin
 its rules from a wired Markdown skill file, behind a grader that sends a bad
 answer back for another attempt, up to three times. It is inline rather than a
 mount because **there was a second Chinook document and it was the one the
-editor opened** — so a reader met a graph with no router in it. There is also
-no Team here: a Team buys a supervisor's planning call and a fan-out, and
-there is exactly one worker role to plan for. The retry loop is what the
-branch needs; the planner is what it would pay for and not use.
+editor opened** — so a reader met a graph with no router in it. Nothing is
+mounted here either, and the reason is the *package* a mount would point at,
+not the card: a supervisor-plus-workers package buys a planning call and a
+fan-out, and there is exactly one worker role to plan for. The revision loop is
+what the branch needs; the planner is what it would pay for and not use.
+(`Team` and `Workflow` are the same builder — the card changes nothing about
+what runs.)
 
 The recorded cost: no *visible* example demonstrates composition any more.
 The hidden `concierge` still mounts this workflow and `workflow-architect` as
