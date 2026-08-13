@@ -81,7 +81,17 @@ export class WorkflowController {
     // an instance (ticket 42). Not an eleventh public member — the scope is
     // machinery, and "which document is this" already belongs to `document`.
     const editScope = new MountEditScope();
-    const ctx: CommandContext = { model: deps.model, registry: deps.registry, editScope };
+    // `mounts` is a getter, not a value: the context object is built once and
+    // the instance being displayed changes on every load. Reading through the
+    // scope keeps one holder of that fact rather than two that can disagree.
+    const ctx: CommandContext = {
+      model: deps.model,
+      registry: deps.registry,
+      editScope,
+      get mounts() {
+        return editScope.mounts;
+      },
+    };
     this.commands = new CommandStack(ctx);
 
     const editing: EditingContext = {

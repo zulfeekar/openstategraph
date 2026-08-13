@@ -13,9 +13,10 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
-import { forgetKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import { forgetKnownSavedAt, getKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
 import { clearOpenSlug, getOpenSlug, setOpenSlug } from '@app/openWorkflow';
-import { isInstanceOpen } from '@app/openAddress';
+import { getOpenAddress } from '@app/openAddress';
+import { isInstance } from '@core/model/MountAddress';
 import {
   WorkflowFileClient,
   type WorkflowSummary,
@@ -180,16 +181,46 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   // workflow already lived at `my-workflow` and so overwrote it.
   const handleSave = useCallback(async () => {
     // Ticket 42. What is on screen while an instance is open is a *derived*
-    // document — the package plus this mount's overrides — and saving it back
-    // to the package would burn those overrides into the shared definition,
-    // hitting every other mount. That is fork-on-configure by accident, which
-    // `docs/decisions/mount-overrides.md` rejects outright, so the door is
-    // shut until the write path lands as an override on the parent.
-    if (isInstanceOpen()) {
-      onNotify(
-        'This is one mount, not the workflow itself. Saving an instance writes an ' +
-          'override on its parent — not built yet. Open the shared definition to save changes to the package.',
+    // document — the package plus this mount's overrides — so saving it back
+    // to the package would burn those overrides into the shared definition and
+    // hit every other mount. What is saved instead is the **parent**, whose
+    // mount node the edits were written to as overrides.
+    const address = getOpenAddress();
+    if (address && isInstance(address)) {
+      const mounts = workbench.controller.document.mountContext();
+      if (!mounts) {
+        onNotify('This mount has no parent loaded, so there is nowhere to save its overrides.');
+        return;
+      }
+      setBusy(true);
+      // Compare-and-set on the parent's `saved_at`. The file watch follows the
+      // *class* while an instance is open, so nothing would otherwise notice
+      // the parent moving — and this save writes a whole retained document,
+      // which would silently revert someone else's parent edit.
+      const current = await client.summary(address.root);
+      const baseline = getKnownSavedAt(address.root);
+      if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
+        setBusy(false);
+        onNotify(
+          `"${address.root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
+        );
+        return;
+      }
+      const written = await client.save(
+        address.root,
+        (mounts.rootDocument['name'] as string) ?? address.root,
+        mounts.rootDocument,
       );
+      setBusy(false);
+      onNotify(
+        written.ok
+          ? `Saved this mount's overrides to ${address.root}`
+          : `Could not save: ${written.error}`,
+      );
+      if (written.ok) {
+        const row = await client.summary(address.root);
+        recordKnownSavedAt(address.root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+      }
       return;
     }
     const open = getOpenSlug();

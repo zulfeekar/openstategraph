@@ -1,3 +1,4 @@
+import type { MountContext } from '@core/model/MountContext';
 import { CompositeCommand, type ICommand } from './ICommand';
 
 /**
@@ -39,15 +40,30 @@ export interface IEditScope {
  */
 export class MountEditScope implements IEditScope {
   private mountId: string | null = null;
+  /**
+   * The parent document this instance's edits are written to, when the caller
+   * supplied one. Held here rather than beside it because "which mount is
+   * displayed" and "where do its edits go" are one fact with two readers —
+   * the stack's gate and `SetMountOverrideCommand` — and two holders that can
+   * disagree is a bug waiting for a race.
+   */
+  private context: MountContext | null = null;
 
   /** Now displaying the instance mounted at `mountId`. */
-  enterInstance(mountId: string): void {
+  enterInstance(mountId: string, context?: MountContext): void {
     this.mountId = mountId;
+    this.context = context ?? null;
   }
 
   /** Back to a document, where every change is expressible. */
   leaveInstance(): void {
     this.mountId = null;
+    this.context = null;
+  }
+
+  /** Where an instance edit is written, or `undefined` outside one. */
+  get mounts(): MountContext | undefined {
+    return this.context ?? undefined;
   }
 
   refuse(command: ICommand): string | null {

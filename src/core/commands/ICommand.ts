@@ -1,6 +1,7 @@
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { IEditScope } from './editScope';
+import type { MountContext } from '@core/model/MountContext';
 
 /** Everything a command is allowed to touch. */
 export interface CommandContext {
@@ -12,6 +13,12 @@ export interface CommandContext {
    * for a test or a script allows everything exactly as before.
    */
   readonly editScope?: IEditScope;
+  /**
+   * The parent document an instance's edits are written to — ticket 42.
+   * Present only while a mount is displayed, which is exactly when
+   * `SetMountOverrideCommand` has anywhere to write.
+   */
+  readonly mounts?: MountContext;
 }
 
 /**

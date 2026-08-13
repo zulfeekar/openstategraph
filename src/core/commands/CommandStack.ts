@@ -93,6 +93,16 @@ export class CommandStack {
    * unchanged value) can return without touching the model; it still
    * records, so callers may pass `null` to opt out entirely instead.
    */
+  /**
+   * What a command will be handed. Exposed so a collaborator can ask *which*
+   * command to construct — `NodeEditor` builds a mount override instead of a
+   * field edit while an instance is displayed — without holding a second copy
+   * of the context that could disagree with this one.
+   */
+  get context(): CommandContext {
+    return this.ctx;
+  }
+
   execute(command: ICommand | null): void {
     if (!command) return;
 

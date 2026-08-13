@@ -9,6 +9,7 @@ import {
   setOpenAddress,
 } from '@app/openAddress';
 import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
+import { MountContext } from '@core/model/MountContext';
 import { clearDrillStack } from '@app/drillStack';
 import { loadMountIntoEditor, loadWorkflowIntoEditor, type LoadedWorkflow } from './loadWorkflowIntoEditor';
 
@@ -81,7 +82,15 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
         // inside either.
         if (isInstance(openAddress)) {
           const mountId = openAddress.mountPath[openAddress.mountPath.length - 1] ?? '';
-          workbench.controller.document.enterInstance(mountId);
+          // The root package is fetched even on a restore, because it is what
+          // an edit here is written to. Without it the instance would be
+          // editable with nowhere to put the result.
+          void new WorkflowFileClient().load(openAddress.root).then((root) => {
+            workbench.controller.document.enterInstance(
+              mountId,
+              root.ok ? new MountContext(openAddress, root.value as Record<string, unknown>) : undefined,
+            );
+          });
         }
         return;
       }

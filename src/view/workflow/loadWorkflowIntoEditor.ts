@@ -5,6 +5,7 @@ import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { setOpenSlug } from '@app/openWorkflow';
 import { clearOpenAddress, setOpenAddress } from '@app/openAddress';
 import type { MountAddress } from '@core/model/MountAddress';
+import { MountContext } from '@core/model/MountContext';
 import {
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
@@ -107,8 +108,16 @@ export async function loadMountIntoEditor(
     // The autosave *key* still moves, to the address rather than the class
     // slug (`setOpenAddress`), so whatever this tab writes cannot land on the
     // package's own draft and be restored over it later.
+    // The **root** package, retained so an edit here can be written as an
+    // override on it — the one document a Save from inside an instance
+    // persists. Only the root: nesting composes as JSON inside its mount's
+    // `overrides`, so no intermediate (and underivable) document is held.
     const mountId = address.mountPath[address.mountPath.length - 1] ?? '';
-    workbench.controller.document.enterInstance(mountId);
+    const root = await client.load(address.root);
+    const mounts = root.ok
+      ? new MountContext(address, root.value as Record<string, unknown>)
+      : undefined;
+    workbench.controller.document.enterInstance(mountId, mounts);
     setOpenAddress(address, slug);
     // Baselined on the **class**: the file that actually backs this instance
     // is the package, so that is the one whose changes matter to it.

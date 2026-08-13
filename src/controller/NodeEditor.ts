@@ -1,3 +1,4 @@
+import { SetMountOverrideCommand } from '@core/commands/mountCommands';
 import { CANVAS } from '@design/tokens';
 import { snapPoint, type Point, type Size } from '@core/kernel/geometry';
 import {
@@ -133,8 +134,24 @@ export class NodeEditor implements INodeEditor {
     this.ctx.model.resizeNode(nodeId, size);
   }
 
+  /**
+   * The single funnel every field edit already goes through — an inspector
+   * control, a card body, a shortcut, a future scripting call — which is why
+   * the instance branch is here and in exactly one place (ticket 42).
+   *
+   * While a mount is displayed the edit is not a change to the document on
+   * screen: that document is derived, and saving it back would burn the value
+   * into the shared package. It is a change to *this mount's* overrides, in
+   * the parent — so a different command runs, writing both the parent and the
+   * model, and undo stays generic because both are one command.
+   */
   setField(nodeId: NodeId, key: string, value: FieldValue): void {
-    this.ctx.commands.execute(new SetFieldCommand(nodeId, key, value));
+    const mounts = this.ctx.commands.context.mounts;
+    this.ctx.commands.execute(
+      mounts
+        ? new SetMountOverrideCommand(nodeId, key, value)
+        : new SetFieldCommand(nodeId, key, value),
+    );
   }
 
   setFields(nodeId: NodeId, patch: Partial<NodeData>, label?: string): void {

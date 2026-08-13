@@ -4,6 +4,7 @@ import type { WorkflowSerializer } from '@core/serialization/WorkflowSerializer'
 import type { Diagnostic, WorkflowValidator } from '@core/validation/WorkflowValidator';
 import { RenameWorkflowCommand } from '@core/commands/edgeCommands';
 import type { MountEditScope } from '@core/commands/editScope';
+import type { MountContext } from '@core/model/MountContext';
 import { failed, OK, type ActionOutcome, type IDocumentController } from './contracts';
 import type { SelectionModel } from './SelectionModel';
 
@@ -60,11 +61,15 @@ export class DocumentController implements IDocumentController {
     this.commands.execute(new RenameWorkflowCommand(name));
   }
 
-  enterInstance(mountId: string): void {
-    this.scope?.enterInstance(mountId);
+  enterInstance(mountId: string, mounts?: MountContext): void {
+    this.scope?.enterInstance(mountId, mounts);
   }
 
   leaveInstance(): void {
     this.scope?.leaveInstance();
+  }
+
+  mountContext(): MountContext | undefined {
+    return this.scope?.mounts;
   }
 }

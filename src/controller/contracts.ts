@@ -8,6 +8,7 @@ import type { PortRef } from '@core/model/contracts/ports';
 import type { NodeId, NodeTypeId } from '@core/model/contracts/node';
 import type { EdgeId } from '@core/model/contracts/workflow';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
+import type { MountContext } from '@core/model/MountContext';
 import type { SelectionMode } from './SelectionModel';
 
 /**
@@ -131,9 +132,15 @@ export interface IDocumentController {
    * because "which document is this, and where did it come from" is already
    * this collaborator's question — `importJSON` is next to it.
    */
-  enterInstance(mountId: string): void;
+  enterInstance(mountId: string, mounts?: MountContext): void;
   /** Back to a package, where every change is expressible. */
   leaveInstance(): void;
+  /**
+   * The parent document an instance's edits have been written to, or
+   * `undefined` outside one. Read by Save, which persists *that* document
+   * rather than the derived one on screen.
+   */
+  mountContext(): MountContext | undefined;
 }
 
 /**
