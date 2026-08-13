@@ -85,6 +85,39 @@ export class OllamaProvider extends AbstractLLMProvider {
 
   private discovered: readonly ModelDescriptor[] | null = null;
 
+  /**
+   * Whether this is pointed at Ollama cloud rather than a daemon you named.
+   *
+   * **A browser cannot call the cloud**, and every network path here has to
+   * know it: `ollama.com` sends no `Access-Control-*` headers and 405s the
+   * preflight, so no setting on either side makes a cross-origin request from
+   * the canvas preview work. The backend path is unaffected — a server has no
+   * origin — which is where a cloud run belongs.
+   */
+  private get isCloud(): boolean {
+    return this.baseUrl == null;
+  }
+
+  /**
+   * Cloud tags, for the case a browser cannot enumerate.
+   *
+   * Not the daemon's list — that is fetched. These are the models a backend
+   * run would actually reach, so the picker offers something usable instead of
+   * four local names for a provider whose standing rule is that Ollama means
+   * cloud.
+   */
+  private readonly cloudSeed: readonly ModelDescriptor[] = [
+    'gpt-oss:120b-cloud',
+    'gpt-oss:20b-cloud',
+  ].map((id) => ({
+    id,
+    label: `${id} · cloud`,
+    providerId: 'ollama',
+    contextWindow: 32_768,
+    maxOutputTokens: 8_192,
+    supportsTools: true,
+  }));
+
   /** Common local tags, replaced by whatever is actually pulled. */
   private readonly seed: readonly ModelDescriptor[] = [
     'llama3.2',
@@ -101,7 +134,7 @@ export class OllamaProvider extends AbstractLLMProvider {
   }));
 
   get models(): readonly ModelDescriptor[] {
-    return this.discovered ?? this.seed;
+    return this.discovered ?? (this.isCloud ? this.cloudSeed : this.seed);
   }
 
   private get host(): string {
@@ -134,6 +167,9 @@ export class OllamaProvider extends AbstractLLMProvider {
    * local model — it just should not be the easy accident.
    */
   async listModels(): Promise<readonly ModelDescriptor[]> {
+    // No request at all against the cloud. One that can only ever fail is not
+    // a fallback, it is a CORS error in the console on every page load.
+    if (this.isCloud) return this.models;
     try {
       const response = await fetch(`${this.host}/api/tags`, { headers: this.headers });
       if (!response.ok) return this.seed;
@@ -167,8 +203,9 @@ export class OllamaProvider extends AbstractLLMProvider {
     }
   }
 
-  /** True when the daemon answers — used by the credentials dialog. */
+  /** True when a daemon you named answers. Always false for the cloud. */
   async probe(): Promise<boolean> {
+    if (this.isCloud) return false;
     try {
       const response = await fetch(`${this.host}/api/tags`, { headers: this.headers });
       return response.ok;
@@ -261,8 +298,8 @@ export class OllamaProvider extends AbstractLLMProvider {
         // name the one that matches the host actually in use rather than
         // offering both and making the reader choose.
         return Err(
-          this.baseUrl == null
-            ? `Couldn't reach Ollama cloud at ${this.host}. Check your connection, or set a host in Models and credentials to use your own daemon.`
+          this.isCloud
+            ? 'Ollama cloud cannot be reached from a browser — it sends no CORS headers, so the canvas preview cannot call it however it is configured. Run this workflow through the backend, which can, or set an endpoint in Models and credentials to use a daemon you run.'
             : `Couldn't reach Ollama at ${this.host}. Start it with OLLAMA_ORIGINS="*" to allow browser requests.`,
         );
       }
