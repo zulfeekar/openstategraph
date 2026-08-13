@@ -110,7 +110,13 @@ describe('acyclicGraphRule', () => {
     // Collapsed: ONE notice per loop, naming its size, anchored to a member
     // (a 7-node revise loop used to produce 7 identical warnings).
     expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]?.severity).toBe('warning');
+    // `info`, not `warning`. A revision loop that has a way out is a correct
+    // graph — it is the shape the palette's "Revision loop" assembly exists to
+    // create — so flagging it amber makes the product warn about its own
+    // recommended affordance, and a warning on the happy path teaches people
+    // to ignore warnings. What remains true is that the *preview* cannot walk
+    // a cycle, and that is a fact worth stating, not a problem with the graph.
+    expect(diagnostics[0]?.severity).toBe('info');
     expect(diagnostics[0]?.code).toBe('escapable-loop');
     expect(diagnostics[0]?.message).toContain('2 nodes');
   });
@@ -382,5 +388,39 @@ describe('the escapable-loop notice describes Run rather than instructing the us
 
   it('says Run handles it, which is what actually happens', () => {
     expect(loopMessage()).toContain('Run');
+  });
+
+  it('is not a warning, because there is nothing wrong with the graph', () => {
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    const c = addNode(workbench, LOOPABLE_TYPE, { at: { x: 400, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+    connect(workbench, a, 'out', c, 'in');
+
+    const [notice] = acyclicGraphRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(notice?.severity).toBe('info');
+  });
+
+  it('still blocks the loop that genuinely cannot finish', () => {
+    // The severity split is the whole point: escapable is information,
+    // inescapable is an error on every engine including the backend.
+    const workbench = makeWorkbench();
+    registerLoopableType(workbench);
+    const a = addNode(workbench, LOOPABLE_TYPE);
+    const b = addNode(workbench, LOOPABLE_TYPE, { at: { x: 200, y: 0 } });
+    connect(workbench, a, 'out', b, 'in');
+    connect(workbench, b, 'out', a, 'in');
+
+    const diagnostics = acyclicGraphRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(diagnostics.every((d) => d.severity === 'error')).toBe(true);
   });
 });

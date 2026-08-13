@@ -212,7 +212,18 @@ export const acyclicGraphRule: IWorkflowRule = {
       return [
         {
           code: 'escapable-loop',
-          severity: 'warning' as const,
+          // `info`, not `warning`. A revision loop with a way out is a
+          // *correct* graph — it is precisely the shape the palette's
+          // "Revision loop" assembly exists to create — so amber here makes
+          // the product warn about its own recommended affordance, and a
+          // warning on the happy path is how people learn to ignore warnings.
+          //
+          // The sentence itself stays, because it is genuinely worth knowing:
+          // the in-canvas preview is a sequential DAG walk and a cycle has no
+          // topological order, so only that engine cannot follow it. That is
+          // a fact about the preview, not a defect in the graph — which is
+          // exactly what `info` means and `warning` does not.
+          severity: 'info' as const,
           nodeId: first,
           // Describes what Run will do, rather than instructing the user to
           // do something instead (ticket 22). The old wording — "use Chat to
