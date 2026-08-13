@@ -709,7 +709,22 @@ def _run_frames(
                 for raw_name, raw_update in payload.items():
                     update = _coerce_update(raw_update)
                     node_id = node_ids_by_name.get(raw_name, raw_name)
-                    answer = keep_latest_nonempty(answer, str(update.get("answer") or ""))
+                    # `RESET` stripped here for the same reason it is stripped
+                    # from `decisions` and `outputs` below — a mounted child
+                    # runs its own `input.text`, so the marker arrives mid-run
+                    # — but the consequence is worse on this channel: the
+                    # other two merely ignore it, while `keep_latest_nonempty`
+                    # *clears* on it by design. One child frame therefore wiped
+                    # an answer the fold had already collected. `concierge`
+                    # masks it (its mount runs before `out1`, which writes the
+                    # answer again); agent → mount loses it outright.
+                    #
+                    # The fold is per-run, so it needs no turn reset at all:
+                    # the parent's own `_input` fires before anything has been
+                    # accumulated.
+                    incoming = str(update.get("answer") or "")
+                    if incoming != RESET:
+                        answer = keep_latest_nonempty(answer, incoming)
                     # Strip the turn-reset marker before accumulating: this
                     # dict is per-run (it needs no reset), and a mounted
                     # child workflow's OWN input node emits the marker too —
@@ -783,6 +798,19 @@ def _run_frames(
                     # Default behaviour stays fire-and-run; nothing below
                     # blocks.
                     update_path, update_slugs = run_path.resolve(raw_name, namespace)
+                    # The key this frame's own output is stored under, which is
+                    # NOT `node_id`. `node_id` comes from the narrow map — the
+                    # ids of the document the run was launched against — and
+                    # that narrowness is deliberate for `node`/`activeNode`
+                    # (ticket 01: a parent canvas must not glow on a card it
+                    # does not contain). But the update dict being read here
+                    # belongs to whichever document produced the frame, and its
+                    # keys are *that* document's canvas ids, so a child's
+                    # `agent-sql` was looked up as the mangled `agent_sql` and
+                    # every mounted node reported `null`. `path` already
+                    # resolves ids across every document in the run, and its
+                    # last entry is this frame's own card.
+                    output_id = update_path[-1] if update_path else node_id
                     for spawn in spawns.inspect(node_id, namespace, update, is_internal):
                         yield _sse("spawn", spawn)
                     yield _sse(
@@ -811,7 +839,7 @@ def _run_frames(
                             # reason: this is a node's own settled output and
                             # both surfaces render it in their trace.
                             "output": _clean_output(
-                                (update.get("outputs") or {}).get(node_id)
+                                (update.get("outputs") or {}).get(output_id)
                                 or (update.get("worker_results") or {}).get(
                                     task_ids[0] if task_ids else "", None
                                 )

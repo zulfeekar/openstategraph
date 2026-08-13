@@ -19,7 +19,7 @@ import {
 import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
-import { frameTarget } from '@core/runtime/frameTarget';
+import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
 import { replayRun } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
@@ -525,7 +525,10 @@ export function AskPanel({
             seen.add(target);
             // The output belongs to the frame's own node; a frame reporting
             // from inside a mount has nothing to write onto the mount's card.
-            activate(target, event.node === target ? event.output : null);
+            // `frameOwnsOutput`, not `event.node === target`: `node` is the
+            // runtime's name for the step, so inside a mount it never equals a
+            // canvas id and every nested card glowed empty.
+            activate(target, frameOwnsOutput(event, target) ? event.output : null);
             queuedActive = target;
           }
           // Data collection is never delayed by the animation pacing above —
@@ -546,6 +549,11 @@ export function AskPanel({
                         // again later, onto a document that was not open when
                         // it arrived — see `ActivityRow.path` and `replayOnto`.
                         path: event.path,
+                        // Without the slugs the replay cannot use the exact
+                        // rule and falls back to the ambiguous id walk — two
+                        // rules for one wire format, which is the drift
+                        // `frameTarget` exists to prevent.
+                        pathSlugs: event.pathSlugs,
                         activeNode: event.activeNode,
                         durationMs,
                         output: event.output,

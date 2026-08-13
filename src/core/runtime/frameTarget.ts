@@ -116,3 +116,34 @@ export function frameTarget(
   // the alternative is lighting whichever card happens to share an id.
   return null;
 }
+
+/**
+ * Whether this frame's `output` belongs to `target` — the card `frameTarget`
+ * just chose.
+ *
+ * A frame from inside a mount lights the mount's card on the parent canvas,
+ * and it has nothing to say about that card: the text belongs to a step one
+ * level down. So the value needs its own gate, and the gate is *not*
+ * `frame.node === target`, which is what both call sites used to ask.
+ *
+ * `node` is the **runtime's** name for the step — `model` or `tools` inside a
+ * compiled agent loop, otherwise the compiler's `safe_name`, which rewrites
+ * every non-alphanumeric character. Inside a mount it therefore never equals a
+ * canvas id, so the comparison answered `false` for every nested node and the
+ * output was dropped on the floor. Captured on a real `?w=concierge` run: the
+ * child's cards glowed and stayed empty for the whole run.
+ *
+ * `path` already answers this exactly. Its last entry is the frame's own card,
+ * in its own document — one level deep for a top-level step, deeper for a
+ * mounted one. A frame with no path falls back to the old comparison, so a
+ * server that predates the field behaves as it did.
+ *
+ * Declared beside `frameTarget` rather than inlined at each caller because it
+ * is one rule about one wire format, and the live path and the replay path
+ * disagreeing about it is precisely how half a fix ships.
+ */
+export function frameOwnsOutput(frame: RunFrameEnds, target: string): boolean {
+  const path = frame.path ?? [];
+  if (path.length > 0) return path[path.length - 1]?.trim() === target;
+  return frame.node?.trim() === target;
+}

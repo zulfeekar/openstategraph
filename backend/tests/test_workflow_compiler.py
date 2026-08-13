@@ -464,6 +464,43 @@ class TestFaultTolerance:
         assert "boom" in final["outputs"]["n1"]
 
     @_SKIP_IF_OLD
+    def test_the_failure_is_filed_under_the_canvas_id_not_the_graph_name(
+        self, compiler
+    ) -> None:
+        """`n1` cannot prove this: `safe_name` leaves it unchanged.
+
+        LangGraph names the failing node with whatever `add_node` was given —
+        `safe_name(id)`, which rewrites every non-alphanumeric character — but
+        every reader of `outputs` uses the *canvas* id (`_upstream_text`, the
+        `update` frame's output lookup, the trace). Filing the failure under
+        the mangled name writes it where nothing looks, so a node that failed
+        after retries reads downstream as a node that produced nothing: the
+        grader calls it an empty answer and burns its whole retry budget on a
+        provider outage it is never told about.
+
+        Every id in the existing fault tests survives `safe_name` untouched,
+        which is the same collision that hid the mounted-output defect.
+        """
+
+        def always_fails_factory(node_id: str, _node: dict[str, Any], _plan: Any) -> Any:
+            if node_id != "agent-sql":
+                return lambda state: {}
+
+            def run(state: FaultState) -> dict[str, Any]:
+                raise RuntimeError("boom")
+
+            return run
+
+        graph = compiler.build(self._linear("agent-sql"), FaultState, always_fails_factory)
+        final = graph.invoke({})
+
+        assert "agent_sql" not in final["outputs"], (
+            "the failure was filed under the graph's name for the node, which "
+            "no reader of `outputs` ever uses"
+        )
+        assert "boom" in final["outputs"]["agent-sql"]
+
+    @_SKIP_IF_OLD
     def test_the_error_handler_does_not_mask_a_programming_error_by_retrying_it(
         self, compiler
     ) -> None:

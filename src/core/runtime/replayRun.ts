@@ -1,4 +1,4 @@
-import { frameTarget, type RunFrameEnds } from './frameTarget';
+import { frameOwnsOutput, frameTarget, type RunFrameEnds } from './frameTarget';
 
 /**
  * Catches a newly-opened document up to where the run already is (ticket 34).
@@ -78,7 +78,8 @@ export function replayRun(
     // A frame belonging to a sibling branch of a document nobody has open.
     // Skipped rather than defaulted, exactly as the live path skips it.
     if (target === null) continue;
-    const output = frame.node === target && frame.output != null ? frame.output : undefined;
+    const output =
+      frameOwnsOutput(frame, target) && frame.output != null ? frame.output : undefined;
     settled.set(target, {
       nodeId: target,
       status: 'success',

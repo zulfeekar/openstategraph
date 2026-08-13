@@ -90,10 +90,39 @@ def _default_error_handler(state: dict[str, Any], error: NodeError) -> dict[str,
     assembly-level version of `_grader`'s own rule: a candidate that failed
     is still evidence, not a reason to discard the run.
     """
-    exc = getattr(error, "error", error)
-    node = getattr(error, "node", "unknown")
-    message = f"{type(exc).__name__}: {exc}"
-    return {"outputs": {node: f"[{node} failed after retries: {message}]"}}
+    return _error_handler_for({})(state, error)
+
+
+def _error_handler_for(canvas_ids: dict[str, str]) -> Any:
+    """`_default_error_handler`, told which canvas node each graph name is.
+
+    LangGraph names the failing node with whatever `add_node` received —
+    `safe_name(id)`, which rewrites every non-alphanumeric character. Every
+    *reader* of `outputs` uses the canvas id instead: `_upstream_text`, the
+    `update` frame's output lookup, the trace, the final report. Filing the
+    failure under the mangled name therefore wrote it where nothing looks, and
+    a node that failed after retries read downstream as a node that produced
+    nothing — so a grader called it an empty answer and spent its whole retry
+    budget re-asking a question the provider had simply refused to answer.
+
+    Invisible to the existing fault tests because every id in them (`n1`)
+    survives `safe_name` unchanged; the same collision hid the mounted-output
+    defect on the streaming side.
+
+    The map is passed in rather than looked up because this handler is
+    installed once per compiled graph and the compiler is the only thing that
+    knows the correspondence. An unmapped name falls back to itself, so a stub
+    graph built without one behaves exactly as before.
+    """
+
+    def handle(_state: dict[str, Any], error: NodeError) -> dict[str, Any]:
+        exc = getattr(error, "error", error)
+        raw = getattr(error, "node", "unknown")
+        node = canvas_ids.get(raw, raw)
+        message = f"{type(exc).__name__}: {exc}"
+        return {"outputs": {node: f"[{node} failed after retries: {message}]"}}
+
+    return handle
 
 
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
@@ -452,7 +481,9 @@ class WorkflowCompiler:
                 # its name+annotation matcher — a gap in the library's types,
                 # not in ours. `test_node_overrides` proves the handler really
                 # fires, so the ignore is narrow and covered.
-                error_handler=_default_error_handler,  # type: ignore[arg-type]
+                error_handler=_error_handler_for(  # type: ignore[arg-type]
+                    {safe_name(node_id): node_id for node_id in plan.nodes}
+                ),
             )
 
         for node_id in plan.nodes:

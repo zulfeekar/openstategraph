@@ -113,6 +113,29 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
     ]);
   });
 
+  it("gives a mounted node the output the frame reported for it", () => {
+    // The other half of the same ticket, and the half that survived it: the
+    // *value*. `node` is the runtime's name for the step (`tools`, `model`,
+    // or `safe_name(id)`) and it is never a canvas id inside a mount — so an
+    // `output` was correctly routed to `agent-sql` and then dropped on the
+    // floor by a guard comparing it against `node`. The card glowed, and
+    // stayed empty for the whole run.
+    const settled: ReplayFrame = {
+      node: 'agent_sql',
+      activeNode: 'wf-music',
+      path: ['wf-music', 'agent-sql'],
+      pathSlugs: ['concierge', 'chinook-assistant'],
+      output: 'Iron Maiden, with $138.60.',
+    };
+    expect(replayRun([settled], CHILD, false, 'chinook-assistant')).toEqual([
+      { nodeId: 'agent-sql', status: 'success', output: 'Iron Maiden, with $138.60.' },
+    ]);
+    // ...and the parent still learns nothing about the inside of its mount.
+    expect(replayRun([settled], PARENT, false, 'concierge')).toEqual([
+      { nodeId: 'wf-music', status: 'success' },
+    ]);
+  });
+
   it('skips frames belonging to a document nobody has open', () => {
     expect(replayRun(MOUNTED_RUN, documentWith('unrelated'), true, 'something-else')).toEqual([]);
   });

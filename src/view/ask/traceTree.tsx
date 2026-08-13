@@ -35,6 +35,18 @@ export interface ActivityRow {
    * rather than starting from a blank diagram.
    */
   readonly path?: readonly string[];
+  /**
+   * Which document each entry of `path` belongs to — carried for the same
+   * reason `path` is, and useless without it.
+   *
+   * `frameTarget`'s exact rule matches the open document by *slug*, because
+   * ids are unique only within a document and the shipped pair proves it:
+   * `concierge` and `chinook-assistant` share `in1`, `router1` and `out1`.
+   * Dropping this field left every replayed frame to the ambiguous id walk —
+   * so the live path and the replay path resolved the same frame by different
+   * rules, which is exactly the drift `frameTarget` was written to end.
+   */
+  readonly pathSlugs?: readonly string[];
   /** The top-level owner the stream resolved for this frame — the fallback
    * `frameTarget` uses when `path` says nothing about the open document. */
   readonly activeNode?: string;

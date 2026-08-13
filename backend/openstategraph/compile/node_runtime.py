@@ -1277,8 +1277,14 @@ class NodeRuntime:
             if rubric_text:
                 invocation["rubric"] = rubric_text
             result = agent.invoke(invocation)
-            messages = result.get("messages") or []
-            text = messages[-1].content if messages else ""
+            # `_final_text`, not `messages[-1]`: a loop can legitimately end on
+            # a message with no content — a dangling tool call, or a provider
+            # blip the retry swallowed — and the last message is then "" while
+            # the answer sits one message back. `_worker` and `_ModelShim`
+            # already read it this way; this node did not, which is how a
+            # correct Chinook answer reached a grader as "the answer is empty"
+            # and spent the whole retry budget re-asking an answered question.
+            text = _final_text(result.get("messages") or [])
             answer = text if isinstance(text, str) else str(text)
             return {
                 "outputs": {node_id: answer},
@@ -2081,7 +2087,16 @@ class NodeRuntime:
                     "Check the run trace to see which step returned nothing."
                 )
 
-            update: dict[str, Any] = {"answer": answer, "outputs": {node_id: text}}
+            # `answer`, not `text`: this node's own output IS the run's answer,
+            # and the card on the canvas is fed from `outputs[node]` while the
+            # chat is fed from `answer`. Publishing the raw upstream text here
+            # made the two disagree in exactly the cases the fallback and the
+            # floor exist for — an answer that arrived by another path (a
+            # mount's, most often) or no answer at all showed a blank Answer
+            # card beside a chat bubble that had one. Reported by a tester on
+            # `?w=concierge`: "the end node answer remaining empty while the
+            # answer is already produced."
+            update: dict[str, Any] = {"answer": answer, "outputs": {node_id: answer}}
             if answer:
                 # The thread record's other half (ticket 73): the answer is
                 # logged where every path converges, agent or not.
