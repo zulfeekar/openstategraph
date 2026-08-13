@@ -46,6 +46,7 @@ from typing import Any
 # process that may be an installed wheel rather than this checkout, is
 # `openstategraph.workflows_root`'s one job — see its docstring for what a
 # constant frozen at import time cost.
+from openstategraph.scaffold import WORKFLOW_DIRECTORIES
 from openstategraph.workflows_root import workflows_root
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -356,6 +357,16 @@ class WorkflowStore:
                 directory.mkdir(parents=True, exist_ok=False)
             except FileExistsError:
                 continue
+            # A package, not a lone document. `openstategraph new` lays these
+            # out and the editor did not, so the two doors onto "make me a new
+            # workflow" disagreed — and the palette tells a developer that
+            # "Python tools in its tools/ folder show up here", advice naming a
+            # directory the editor never created.
+            #
+            # Read from `scaffold`, never re-listed: a second copy is a copy
+            # that drifts the day a directory is added.
+            for name_of in WORKFLOW_DIRECTORIES:
+                (directory / name_of).mkdir(exist_ok=True)
             self._write(directory, name=name, document=document, saved_at=saved_at, is_new=True)
             return slug
         raise SlugMintingError(
