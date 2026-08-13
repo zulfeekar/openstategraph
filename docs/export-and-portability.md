@@ -65,7 +65,7 @@ If your goal is minimizing the dependency rather than eliminating it, that's
 what [adoption.md's mode (b), "Artifact"](adoption.md) already gives you: you
 commit `workflow.json` + the package folder to your own repo and
 `pip install openstategraph[<providers>]` — the measured core is **4
-packages / 36 distributions** (`langgraph`, `langchain`, `langchain-core`,
+packages / 36 distributions** (measured 2026-08-10; see `adoption.md`) (`langgraph`, `langchain`, `langchain-core`,
 `pydantic`, plus transitive deps), 38 with one provider extra
 ([`decisions/framework-packaging.md`](decisions/framework-packaging.md)). No
 `[server]`, no `[mcp]`, no editor. That's the floor today, not zero.

@@ -188,7 +188,7 @@ Read the list the way a sceptic does: of those 36, essentially all are
 LangChain's and LangGraph's own closure — which you would have installed anyway,
 because the alternative to using us is writing the `StateGraph` by hand.
 
-**Our own wheel is 2.9 MB, and 2.7 MB of that is the editor.** The Python is
+**Our own wheel is 2.9 MB, and 2.7 MB of that is the editor.** *(Measured once on one machine, 2026-08-10; nothing in the repository regenerates it, so read it as an order of magnitude rather than a fact you can check.)* The Python is
 276 KiB compressed; the built canvas is 1,553 KiB and the `/chat` flow view's
 Mermaid is 952 KiB. That weight rides in the main wheel rather than a separate
 `openstategraph-editor` distribution, deliberately: against the ~72 MB a

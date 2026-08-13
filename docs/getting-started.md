@@ -240,7 +240,7 @@ composer's Send). Stop is honest about where it can and cannot reach:
 - **It cannot interrupt work already dispatched.** Tasks LangGraph handed to
   its executor for the *current* superstep run to completion — a blocking model
   call has no cancellation seam — and their results are discarded. Draining
-  measures at roughly 15 seconds for an early stop and up to ~75 seconds in the
+  measured (once, 2026-08-10, and by nothing since) at roughly 15 seconds for an early stop and up to ~75 seconds in the
   middle of a fan-out. The stream ends immediately; the process quietens after.
 - **Stopping a run paused at an approval discards only the local prompt.** The
   thread is checkpointed, so it is still resumable.

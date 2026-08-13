@@ -636,8 +636,8 @@ PYTHONPATH=/path/to/openstategraph/backend python your_service.py
 ```
 
 Either way you get the console script and the same import package. Measured
-from a real clean venv: **36 distributions** for the core, **38** with
-`[ollama]` — down from 78 before 0.3.0. The Docker image is the third option;
+from a real clean venv on 2026-08-10, and recorded in `backend/pyproject.toml`'s own dependency comment: **36 distributions** for the core, **38** with
+`[ollama]` — down from 79 before 0.3.0 (the figure `backend/pyproject.toml` records; this page said 78). The Docker image is the third option;
 it already contains the runtime, so a service that shells out to the container
 needs nothing installed locally.
 

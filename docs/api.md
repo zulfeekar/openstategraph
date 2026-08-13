@@ -658,7 +658,7 @@ calls and nothing else.
 ## 4. A whole client, in one file
 
 `docs/examples/minimal-client.html` is a complete chat client — list, load,
-stream, approve, done — in about forty lines. Save it, serve it, use it:
+stream, approve, done — in about sixty lines. Save it, serve it, use it:
 
 ```bash
 openstategraph serve --port 8000                      # terminal 1
@@ -734,7 +734,7 @@ open http://localhost:8765/minimal-client.html
 </script>
 ```
 
-Forty-six lines, and it handles all three terminal frames plus the
+Sixty lines, and it handles all three terminal frames plus the
 no-terminal-frame case. That is the whole shape of a client; everything else is
 presentation.
 
