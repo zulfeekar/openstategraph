@@ -105,6 +105,46 @@ class WriteTopicArgs(BaseModel):
     )
 
 
+
+#: Suffixes a model reaches for when it is documenting the instrument rather
+#: than the subject. `web-search-tool` was the live example.
+_INSTRUMENT_SUFFIXES = ("-tool", "-tools", "-api", "-sdk")
+
+
+def _tool_named_by(topic: str, provenance: tuple[str, ...]) -> str | None:
+    """The studied tool this topic is *about*, if it is about one.
+
+    **A tool is a way to reach a corpus, never a corpus itself.** A SQL tool's
+    topics are its tables; a web tool's topics are whatever the workflow's
+    domain turns out to be. A topic named after the tool can only be generic
+    vendor documentation — and the explorer cannot ground vendor documentation
+    in anything it called, so it writes it from parametric memory. That is the
+    laundered-hallucination failure this project treats as its worst:
+    `web-search-tool.md` documented OpenAI's Responses API while the wired tool
+    was a keyless DuckDuckGo endpoint.
+
+    Deliberately **not** a deny-list entry on `tool.web-`. That was the first
+    proposed fix and it is wrong: `EXPLORER_DENY_PREFIXES` records web tools as
+    a *considered inclusion* ("web tools, future MCP adapters — is plausibly
+    data-access and qualifies"), and denying them would remove the real
+    capability of researching a domain. The subject is what must be refused,
+    not the instrument.
+    """
+    stripped = topic
+    for suffix in _INSTRUMENT_SUFFIXES:
+        if stripped.endswith(suffix):
+            stripped = stripped[: -len(suffix)]
+            break
+    for label in provenance:
+        # Provenance reads "tool <name>" / "file <name>"; only tools apply.
+        kind, _, raw = label.partition(" ")
+        if kind != "tool":
+            continue
+        if BaseKnowledge.normalize(raw) in {topic, stripped}:
+            return raw
+    return None
+
+
 class WriteTopicTool(BaseTool):
     """The exploration's ONE write path — the store seam, as a tool.
 
@@ -144,6 +184,15 @@ class WriteTopicTool(BaseTool):
             return ToolResult.failure(
                 f"Topic budget exhausted ({self._topic_cap} topics). Do not "
                 "write more; report what you did not cover instead."
+            )
+        subject = _tool_named_by(name, self._provenance())
+        if subject is not None:
+            return ToolResult.failure(
+                f"Refused: '{subject}' is a tool, not a topic. A tool is how you "
+                "reach a corpus, never the corpus itself — writing about it "
+                "produces vendor documentation you did not verify. Use it to "
+                "study this workflow's domain, and name the topic after what "
+                "you found."
             )
         topic = KnowledgeTopic(name=name, brief="", provenance=self._provenance())
         other = self._builder.collides_with(self._workflow_dir, topic)

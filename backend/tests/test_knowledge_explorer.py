@@ -118,6 +118,44 @@ class TestWriteSeam:
         assert marker_source(text) == "explorer"
         assert report.written == ["weather-api"]
 
+    def test_a_studied_tool_cannot_itself_become_the_topic(self, tmp_path: Path) -> None:
+        """production-ready ticket 10, found live.
+
+        A manual build on `concierge` produced `web-search-tool.md` — a
+        document about *OpenAI's* Responses-API `web_search`, with an invented
+        model name and invented limits, while the tool this repo wires is a
+        keyless DuckDuckGo endpoint. Nothing was called; it was written from
+        parametric memory and handed to agents as fact.
+
+        The rule that catches it is narrow on purpose: a tool is a way to
+        *reach* a corpus, never a corpus itself. Studying `web_search` can
+        legitimately produce a topic about the workflow's domain — it must
+        never produce a topic about `web_search`.
+        """
+        report = ExplorationReport()
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report,
+            provenance=lambda: ("tool web_search", "tool web_fetch"),
+        )
+        for topic in ("web-search-tool", "Web Search", "web_search", "web-fetch-api"):
+            result = tool.run(topic=topic, content=f"{topic} — vendor docs.")
+            assert not result.ok, f"{topic} should be refused"
+            assert "not a topic" in str(result.error)
+        assert report.written == []
+
+    def test_the_domain_behind_a_studied_tool_is_still_writable(
+        self, tmp_path: Path
+    ) -> None:
+        # The guard must not cost the explorer its actual job: a web tool used
+        # to research a domain is exactly what it is for.
+        report = ExplorationReport()
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report,
+            provenance=lambda: ("tool web_search",),
+        )
+        assert tool.run(topic="uk-vat-rates", content="uk-vat-rates — 20% standard.").ok
+        assert report.written == ["uk-vat-rates"]
+
     def test_a_topic_owned_by_the_sql_builder_is_refused(self, tmp_path: Path) -> None:
         knowledge = tmp_path / "flow" / "knowledge"
         knowledge.mkdir(parents=True)
