@@ -859,6 +859,21 @@ class NodeRuntime:
         #: was not.
         self.unresolved_functions: list[str] = []
         self.unresolved_subgraphs: list[str] = []
+        #: Node types this build has no factory for, as `type` and node id.
+        #:
+        #: The loud half of a rule that was only half kept. `errors.py` records
+        #: the policy — an unknown node type is *reported*, not raised, so a
+        #: document containing one still answers what it can — and
+        #: `_passthrough` implemented the degrade while reporting nothing. Its
+        #: docstring claimed "the gap is visible as an unchanged value", which
+        #: is exactly what hides it: the skipped node forwards its input, so
+        #: the run answers the user's own question back and looks like it
+        #: worked. Found through the typo `agent.react` for `agent.llm`.
+        #:
+        #: Recorded here rather than in `factory_for`, which is a pure lookup
+        #: that `test_data_key_contract.py` enumerates over every catalogue
+        #: type — a side effect there would report node types nobody wired.
+        self.unknown_node_types: list[tuple[str, str]] = []
         #: Per-mount override problems (unknown child node id, wrong shape) —
         #: surfaced through `runtime_warnings` beside unresolved tools.
         self.override_warnings: list[str] = []
@@ -2261,13 +2276,31 @@ class NodeRuntime:
 
         return run
 
-    def _passthrough(self, node_id: str, _node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """An unknown node type forwards its input unchanged.
+    def _passthrough(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """An unknown node type forwards its input unchanged, and says so.
 
         Better than raising: a workflow containing one node this build does not
-        know still runs, and the gap is visible as an unchanged value rather than
-        a dead endpoint.
+        know still runs and answers what it can, which is the "degrade loud,
+        never silent" rule `errors.py` states for exactly this case.
+
+        **The "loud" half was missing, and the docstring said otherwise.** It
+        claimed the gap was "visible as an unchanged value" — but an unchanged
+        value is what makes it invisible: the skipped node forwards its input,
+        so the output node publishes the question as the answer and the run
+        reports 200 with nothing amiss. Asked "what is 2+2?", a document with
+        one unrecognised node answered "what is 2+2?". Found through the typo
+        `agent.react` for `agent.llm`, which is the realistic way to meet it.
+
+        A function node with no discovered callable reaches here too, and
+        `_discovered_function` has already reported it in more useful terms —
+        so it is not reported twice.
         """
+        node_type = str(node.get("type", ""))
+        already_reported = node_type in self.unresolved_functions
+        if node_type and not already_reported:
+            entry = (node_type, node_id)
+            if entry not in self.unknown_node_types:
+                self.unknown_node_types.append(entry)
         upstream = [src for src, dst in plan.edges if dst == node_id]
 
         def run(state: RunState) -> dict[str, Any]:

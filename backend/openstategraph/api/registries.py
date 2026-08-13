@@ -297,6 +297,12 @@ def runtime_warnings(runtime: Any) -> list[str]:
         warnings.append(
             f'No function found for "{fn_type}" — the step passed its input through unchanged.'
         )
+    for node_type, node_id in getattr(runtime, "unknown_node_types", []):
+        warnings.append(
+            f'Node "{node_id}" has type "{node_type}", which this build does not '
+            "implement — the step passed its input through unchanged, so any "
+            "answer downstream of it skipped that work."
+        )
     for slug_name in runtime.unresolved_subgraphs:
         warnings.append(
             f'Subgraph workflow "{slug_name}" could not be loaded — the node produced nothing.'

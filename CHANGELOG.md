@@ -199,6 +199,30 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Fixed
 
+- **An unknown node type degraded silently, and its docstring said otherwise.**
+  A document containing a type this build has no factory for — say the typo
+  `agent.react` for the real `agent.llm` — ran to completion, and because the
+  skipped node forwards its input unchanged, the output node published the
+  user's own question as the answer. Asked "what is 2+2?", the run returned
+  `"what is 2+2?"`, HTTP 200, `developer.warnings == []`.
+
+  `errors.py` states the policy and names this exact case: an unknown node type
+  is *reported*, not raised, because raising it would break "degrade loud,
+  never silent". The degrade was implemented and the loud was not.
+  `_passthrough`'s own docstring claimed the gap was "visible as an unchanged
+  value" — which is what hides it, since an unchanged value reads as an answer.
+
+  `NodeRuntime.unknown_node_types` now records the type and the node, and
+  `runtime_warnings` reports it beside unresolved tools, functions and
+  subgraphs, on both run endpoints. The document is still **not** refused: the
+  policy is deliberate, and the MCP door already refuses separately through
+  `ValidateWorkflowTool`. A function node with no discovered callable reaches
+  the same fallback and is still reported once, in its own more useful terms.
+
+  There is still no HTTP validate endpoint — validation exists as an MCP tool —
+  so the run path has to carry this itself. A test pins that absence together
+  with the reason it matters.
+
 - **A blank answer had five independent causes** (ship-it QA sweep, found by
   driving `?w=concierge` and reading the wire before touching anything). Every
   one was hidden either by a node id that survives `safe_name` unchanged or by
