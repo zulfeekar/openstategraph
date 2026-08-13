@@ -454,8 +454,8 @@ one-directional and a run reproducible outside this editor.
 
 #### One mount of it: `GET /api/workflows/{root}/mounts/{path}`
 
-A workflow package is a **class**. A `workflow.subgraph` (or `team.workflow`)
-node that references it is an **instance**, and that node's `data.overrides`
+A workflow package is a **class**. A `workflow.subgraph` node that references
+it is an **instance**, and that node's `data.overrides`
 are the instance's own — merged onto a copy of the package at compile time and
 never written back (`docs/decisions/mount-overrides.md`).
 

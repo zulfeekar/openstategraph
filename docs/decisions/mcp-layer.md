@@ -187,7 +187,7 @@ fix rather than an ImportError traceback.
   `/api/runs/resume` or the editor. A resume tool here is the remaining work
   (register PF-04); the durable checkpointer it was blocked on now exists.
 - **Compile is stateless, so it cannot resolve a document's children or its
-  package.** A `workflow.subgraph` / `team.workflow` node naming a hosted slug,
+  package.** A `workflow.subgraph` node naming a hosted slug,
   or an agent bound to a `tool.*` that lives in a package's `tools/` folder,
   resolves to nothing here. The topology is still valid, so this is a
   **warning, not a finding** — `compile_workflow` returns `warnings` distinct
@@ -201,9 +201,9 @@ fix rather than an ImportError traceback.
   two CI checks. The mirror is gone, and serving the table over MCP is no
   longer a way to publish drift. What the move surfaced: the hand-written table
   was missing 28 of the 38 node types the editor actually registers, including
-  `workflow.subgraph` and `team.workflow` — which `get_node_vocabulary`
-  advertised with **zero ports**, so a client had no way to wire a mounted
-  workflow.
+  `workflow.subgraph` and the then-still-extant `team.workflow` — which
+  `get_node_vocabulary` advertised with **zero ports**, so a client had no way
+  to wire a mounted workflow.
 - **No rate limiting, no quotas, no audit log.** `run_workflow` in particular
   spends the deployer's model budget on any connected client's request — and
   the shared token does not change this, because it answers "may this stranger

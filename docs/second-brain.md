@@ -42,7 +42,7 @@ like everything else.
 | Builder | Recognised from | Topics | The doc says |
 | --- | --- | --- | --- |
 | `sql` | a SQL tool's `database` | one per table | what the table means, its JOINs, its caveats |
-| `root` | `workflow.subgraph` / `team.workflow` | the children it **mounts** | *send the question there* |
+| `root` | `workflow.subgraph` | the children it **mounts** | *send the question there* |
 | `project` | a `tool.platform-*` node | the packages those tools **show**, minus the mounts | *this exists, and here is when it is the wrong answer* |
 | `codebase`, `explorer` | package code / other read-only tools | a concept map | openwiki-shaped concept pages |
 

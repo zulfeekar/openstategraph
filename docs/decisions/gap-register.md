@@ -699,8 +699,9 @@ as **RC-17** in §A rather than left buried inside a closed entry.
    (`src/nodes/portSpecs.test.ts` byte-compares; the `generated-port-specs` job
    regenerates and diffs). Externally visible because `docs/mcp.md` listed it
    as a limitation of `get_node_vocabulary`. The mirror had drifted: it held 10
-   of the 38 node types the editor registers, and `workflow.subgraph` /
-   `team.workflow` were advertised over MCP with zero ports.
+   of the 38 node types the editor registers, and `workflow.subgraph` (plus
+   `team.workflow`, which still existed then) were advertised over MCP with
+   zero ports.
 8. **RC-02 — the API's human-in-the-loop checkpointer was an `InMemorySaver`.**
    Closed 2026-08-10 by ticket 05. The module-level saver in `api/main.py` is
    gone; `WorkflowServices.checkpointer` is the one seam, shared by HTTP, MCP

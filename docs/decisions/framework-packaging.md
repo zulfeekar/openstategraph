@@ -571,6 +571,13 @@ the tree may carry a third.
 
 Create `backend/openstategraph/schema.py` — Tier 1, no runtime imports:
 
+> **Shipped, and the numbers have moved on.** The module exists as proposed.
+> `SCHEMA_VERSION` is **3** and `MIGRATIONS` is populated: `1 -> 2` is the
+> identity (that difference was additive only), and `2 -> 3` rewrites
+> `team.workflow` nodes to `workflow.subgraph` — the chain's first real use.
+> Read the numbers below as the proposal's starting point, not as current
+> values; `backend/openstategraph/schema.py` is the authority.
+
 ```python
 SCHEMA_VERSION = 2                     # what this build writes
 MIN_SUPPORTED_VERSION = 1              # oldest we will migrate from

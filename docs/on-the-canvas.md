@@ -82,8 +82,10 @@ it as "maximum retries" — the grader's own attempt limit is that.
 
 ## 4. A mount runs another workflow as one step
 
-Drag **Workflow** or **Team** onto the canvas and point it at a saved
-workflow's slug. It becomes one node: a task goes in, an answer comes out.
+Drag **Workflow** onto the canvas and point it at a saved workflow's slug. It
+becomes one node: a task goes in, an answer comes out. It is the only mount
+card in the palette — see *Workflow or Team?* below for what happened to the
+second one.
 
 **By reference, not by copy.** This is the part worth being precise about:
 
@@ -114,19 +116,40 @@ conversation is shared.
 
 ### Workflow or Team?
 
-**They compile to exactly the same thing** — one code path, no branch. Choosing
-between the cards changes nothing about what runs.
+**There is no longer a choice, because there was never a difference.** Until
+schema v2 the palette offered a second organism, `team.workflow`, beside
+`workflow.subgraph`. This page used to tell you to weigh them. That advice is
+withdrawn: the two compiled through one backend builder with no branch and
+identical ports, so the only things separating them were a different glyph, an
+`outcome` field that turned out to be documentation, and a "loops until its
+grader passes" note that the *mounted child document* earns. None of those is a
+kind of node. Schema v3 collapsed Team into Workflow, and a saved document
+still carrying `team.workflow` is rewritten on load — same node id, same slug,
+same `overrides`, same authored `outcome` text.
 
-What a **Team** card adds is a contract it *states*:
+So **a team is a package shape, not a node type**: a supervisor, its workers
+and a grader wired into a revision loop, living in `workflows/<slug>/` and
+mounted with the same Workflow card as anything else. `openstategraph new
+my-team --template team` still scaffolds exactly that.
 
-- an **expected outcome** you write on the card, and
-- a "revises until it passes" badge — which the editor awards only after
-  checking that the mounted document really does have a grader wired back to
-  its agent.
+The two things the old Team card claimed both survived, and both moved to where
+they were already true:
 
-The badge is earned. The outcome is **documentation**: it is not read by the
-compiler, and nothing checks that it matches the child's grader criteria. If
-you want the child to enforce something, edit the child's grader.
+- **Expected outcome** is now an optional field on the Workflow card, labelled
+  *Expected outcome (documentation)*. It is not read by the compiler. It says
+  what this mount is for; enforcement is the **child package's own grader
+  criteria**, and nothing links the two automatically.
+- **"loops until its grader passes"** is shown for any mount whose child
+  document really does have a grader with a wired `revise` edge. It was always
+  earned from the child rather than granted by the card, which is why it did
+  not need a node type of its own.
+
+The card also states the gap now. Write an outcome on a mount whose child has
+no grader and it reads **"no grader — nothing checks the outcome"**; where the
+child has a grader that never routes `revise`, **"its grader never revises —
+nothing sends a weak answer back"**. A run in that state also emits a
+developer-channel `runtime_warnings` entry naming the node and the slug. Loud,
+never fatal.
 
 The cost you are weighing is in **the package you point at**, never the card.
 A supervisor-and-workers package buys a planning call and a fan-out; if the

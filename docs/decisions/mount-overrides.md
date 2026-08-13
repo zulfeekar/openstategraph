@@ -1,11 +1,18 @@
-# Per-mount overrides for mounted organisms (Team / Subgraph)
+# Per-mount overrides for mounted organisms
 
 **Status: accepted, implemented.**
 
+> **Node types, updated.** This decision was written while there were two mount
+> types, `team.workflow` and `workflow.subgraph`, and its original title said
+> "(Team / Subgraph)". Schema v3 collapsed the two into `workflow.subgraph`
+> (production-ready ticket 16) — they compiled through one builder with no
+> branch, so nothing here changes except the count of type ids. `MIGRATIONS[2]`
+> in `backend/openstategraph/schema.py` carries each mount's `overrides` across
+> untouched, which is the only thing this document depends on.
+
 ## Problem
 
-A Team (`team.workflow`) or Subgraph (`workflow.subgraph`) node references one
-shared package. Two mounts of one analyst package share one definition — which
+A mount (`workflow.subgraph`) node references one shared package. Two mounts of one analyst package share one definition — which
 is correct OOP (class vs instance) — but a user legitimately wants *this*
 mount to differ: a stricter grader outcome, a different `maxAttempts`, another
 model. Today the only option is forking the package, which destroys the single
@@ -55,7 +62,7 @@ drill-in work.
 ## Rejected alternatives
 
 - **Fork-on-configure** (copy the package per mount): kills the single source
-  of truth the Team concept exists for.
+  of truth a mounted package exists for.
 - **Deep merge with list semantics**: ambiguity about list replacement vs
   append invites silent misconfiguration; shallow per-field replace is
   predictable and matches how the inspector edits fields.

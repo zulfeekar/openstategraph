@@ -27,7 +27,7 @@ can register more without touching the editor.
 | `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
 | `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
 | `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
-| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `function.format_report.report`, `human.approval.approved`, `team.workflow.result`, `workflow.subgraph.result` | `route.grader.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `output.formatted.result`, `team.workflow.input`, `workflow.subgraph.input` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `function.format_report.report`, `human.approval.approved`, `workflow.subgraph.result` | `route.grader.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `output.formatted.result`, `workflow.subgraph.input` |
 | `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback` |
 | `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
 

@@ -64,5 +64,5 @@ An envelope around the document:
   sandboxing.
 - A function's contract is deliberately narrow: `fn(text: str) -> str`. Code is
   referenced by name, never embedded in the document.
-- A child workflow (subgraph / Team) resolves tools and functions from **its
+- A mounted child workflow resolves tools and functions from **its
   own** package, carried by `PackageAssets`, not from the parent's.

@@ -237,8 +237,18 @@ through, including a hand-edited file.
 `vertices` is exactly that. An older build ignores it and draws the router's
 own run, which is what it drew before. A bump would push every user's document
 through a two-sided change to gain nothing, and would burn a migration slot on
-a no-op. `SCHEMA_VERSION == 2` is now asserted in the same test that pins the
-compiler's indifference, so the two facts fail together if either changes.
+a no-op.
+
+**Two corrections since.** This section used to add that `SCHEMA_VERSION == 2`
+was asserted in the same test that pins the compiler's indifference to
+`vertices`. That assertion no longer exists, and the number no longer reads 2:
+`SCHEMA_VERSION` is **3**, bumped by production-ready ticket 16 when
+`team.workflow` was removed — a node type id disappearing, which is squarely
+on the *do bump* list. Neither fact disturbs the decision above. `vertices` is
+still additive, still ignored by an older build, and still costs no migration
+slot; `MIGRATIONS[2]` transforms node types and does not touch edges. The
+version pin now lives with the migration it belongs to
+(`backend/tests/test_schema_v3_team_collapse.py`).
 
 ### What happens to hand-placed points when Arrange re-runs
 

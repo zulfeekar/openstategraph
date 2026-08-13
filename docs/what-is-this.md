@@ -22,7 +22,7 @@ ordering:
 | --- | --- | --- |
 | **Atoms** | `Inputs`, `Tools`, `Output` | one thing, made of nothing else. Sources with no logic; one capability bound to an agent; sinks with one input and no decision. |
 | **Molecules** | `Reasoning & control` | one decision step — `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`. |
-| **Organisms** | `Composition` | `workflow.subgraph` and `team.workflow`, and only these: an entire compiled workflow — its own nodes, state and loop — mounted as one step. |
+| **Organisms** | `Composition` | `workflow.subgraph`, and only this: an entire compiled workflow — its own nodes, state and loop — mounted as one step. (`team.workflow` was listed here until schema v3 collapsed it into `workflow.subgraph`; it compiled through the same builder with no branch.) |
 | **No tier** | `Annotate` | `group` and `note`. Never compiled, never executed, so they are not made of anything and nothing is made of them. |
 
 Two boundaries are load-bearing, because getting them wrong is how a palette

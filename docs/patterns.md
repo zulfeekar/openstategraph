@@ -270,8 +270,8 @@ reach is a thing it may decide to do.
 
 ## Beyond one graph
 
-Two things this list does not cover, because they compose *patterns* rather
-than sit among them — the palette's only two **organisms**:
+One thing this list does not cover, because it composes *patterns* rather than
+sits among them — the palette's only **organism**:
 
 - **`workflow.subgraph`** mounts another workflow as one node. The hidden
   `concierge` gateway mounts both `chinook-assistant` and
@@ -284,17 +284,21 @@ than sit among them — the palette's only two **organisms**:
   unchanged and still exercised by a shipped document, but no *visible*
   example demonstrates it any more. That cost was accepted deliberately: the
   second document was hidden, and it was the one the editor opened.
-- **`team.workflow`** mounts the same way. **It compiles identically** —
-  `node_runtime` dispatches both type ids to one builder with no branch — so
-  the choice between the two cards changes nothing about what runs.
+  **A second organism used to be listed here.** `team.workflow` mounted the
+  same way and compiled identically — `node_runtime` dispatched both type ids
+  to one builder with no branch — and this page's advice was to pick a card.
+  Schema v3 removed the choice by removing the type: what distinguished Team
+  was a glyph, an `outcome` field that turned out to be documentation, and a
+  "loops until its grader passes" note the *child document* earns, none of
+  which is a kind of node. `MIGRATIONS[2]` in `backend/openstategraph/schema.py`
+  rewrites the old id, preserving node id, slug, `overrides` and the authored
+  `outcome`; `workflow.subgraph` gained the `outcome` field to receive it.
 
-  What a Team card adds is a contract it *states*: an expected outcome, and a
-  "revises until it passes" badge the editor shows only when the mounted
-  document really has a grader wired back to its agent. The expected outcome is
-  documentation on the card; the enforcement is the child's grader criteria,
-  and nothing links the two.
+  A **team** is therefore a package *shape* — supervisor, workers and a grader
+  wired into a revision loop — that you mount like any other workflow.
+  `openstategraph new <slug> --template team` still scaffolds it.
 
-  **The cost that decides this is the child's, not the card's.** Reach for a
+  **The cost that decides a mount is the child's, not the card's.** Reach for a
   supervisor-plus-workers package when the work genuinely has several worker
   *roles*; with one role you pay for a planning call and a fan-out you do not
   use, and an agent → grader revision loop gives the same retry semantics for

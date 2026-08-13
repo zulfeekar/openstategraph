@@ -145,8 +145,8 @@ model-free — that half needs no provider key at all.
 - **No MCP client.** The server can't consume someone else's MCP tools, and
   importing a client's `mcp.json` stays an explicit, reported gap (see
   [`decisions/agent-plugins.md`](decisions/agent-plugins.md) §7).
-- **Compile is stateless**, so it can't resolve a `workflow.subgraph` /
-  `team.workflow` child or a package-local `tool.*` — reported as a
+- **Compile is stateless**, so it can't resolve a `workflow.subgraph` child or
+  a package-local `tool.*` — reported as a
   `warnings` field, never silently dropped, but a client has to read it.
 
 ## 3. Output shape: Python vs. Node/TypeScript

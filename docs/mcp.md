@@ -109,7 +109,7 @@ The gist of what comes back:
     // …and 27 more. The grammar: annotate.group, annotate.note,
     //  function.format_report, human.approval, input.markdown, input.skill,
     //  input.text, orchestrate.supervisor, orchestrate.worker,
-    //  output.formatted, route.classifier, route.grader, team.workflow,
+    //  output.formatted, route.classifier, route.grader,
     //  workflow.subgraph.
     //
     //  Then every bindable tool, which is the half that matters when you are
@@ -451,7 +451,7 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   are no per-client scopes — so the reverse proxy is still where you draw a
   boundary between different callers. `docs/decisions/mcp-layer.md` records why
   a token earns its place rather than deferring entirely to the deployer.
-- **Compile is stateless**, so a `workflow.subgraph` or `team.workflow` naming
+- **Compile is stateless**, so a `workflow.subgraph` naming
   a hosted child, or an agent bound to a package-local tool, resolves to
   nothing. Valid topology, real capability gap — it comes back as a `warning`,
   never silently.

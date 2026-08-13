@@ -28,17 +28,30 @@ table above is an index, not a replacement.
 
 ## Composition
 
-`workflow.subgraph` and `team.workflow` are the same slug-as-data mechanism
-compiled by the same backend path
-([`NodeRuntime._subgraph`](../../backend/openstategraph/compile/node_runtime.py)). What
-distinguishes a **Team** is the contract its card states, and only that: an
-expected outcome, plus a "revises until it passes" badge the editor awards by
-checking the mounted document for a grader wired back to its agent.
+`workflow.subgraph` is the one mount type: a slug as data, compiled by
+[`NodeRuntime._subgraph`](../../backend/openstategraph/compile/node_runtime.py).
 
-**The expected outcome never reaches the compiler.** It is a field on the card
-([`src/nodes/compose/TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)) that
-`_subgraph` does not read; the enforcement is the child's own grader criteria,
-and nothing checks that the two agree. Read it as documentation of intent.
+**`team.workflow` was a second type until schema v3, and this page used to
+describe what distinguished a Team.** Nothing did that was a property of the
+node: both ids dispatched to `_subgraph` with no branch and identical ports,
+the `outcome` field never reached the compiler, and the "loops until its grader
+passes" note is earned by the *mounted child document*. Production-ready
+ticket 16 collapsed the two; `MIGRATIONS[2]` in
+[`schema.py`](../../backend/openstategraph/schema.py) rewrites the old id,
+keeping node id, slug, `overrides` and the authored `outcome` text.
+`src/nodes/compose/TeamNode.ts` is gone —
+[`SubgraphNode.ts`](../../src/nodes/compose/SubgraphNode.ts) is the only mount
+definition. A **team** is now a package *shape* (supervisor + workers + a
+grader closing a revision loop), scaffolded by `--template team` and mounted
+like any other workflow.
+
+**The expected outcome still never reaches the compiler.** `workflow.subgraph`
+gained the field, labelled *Expected outcome (documentation)*, so the migration
+would not destroy prose a person wrote. Enforcement is the child's own grader
+criteria. Where a mount writes an outcome its child cannot enforce, the card
+says so ("no grader — nothing checks the outcome", or "its grader never revises
+— nothing sends a weak answer back") and the run emits a `runtime_warnings`
+entry naming the node and the slug. Loud, never fatal.
 
 Self-inclusion is refused at build time via the runtime's `_ancestry` chain,
 not discovered by recursing forever at run time.

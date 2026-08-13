@@ -61,7 +61,7 @@ Intelligence is agentic only where discovery is genuinely hard:
 ## Which children the root builder writes for (ticket 16, corrected)
 
 **Topics are the children this document MOUNTS** — the distinct slugs named by
-its own `workflow.subgraph` / `team.workflow` nodes, and nothing else. A
+its own `workflow.subgraph` nodes, and nothing else. A
 workflow that mounts nothing yields no topics.
 
 This is a **difference from what the code did**, not a restatement of it. The

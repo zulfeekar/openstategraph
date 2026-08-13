@@ -208,12 +208,14 @@ Nothing here is mounted, either. A mounted workflow is worth its keep when
 the child has several worker *roles* to plan for; here there is one, so a
 supervisor's planning call and fan-out would be paid for and not used.
 
-That cost belongs to the **child package**, not to the card you drag. `Team`
-and `Workflow` compile through the same builder — one code path, no branch —
-so choosing between the two cards changes nothing about what runs. What a Team
-card adds is a *contract it states*: an expected outcome, and a
-"revises until it passes" badge the editor only shows when the mounted document
-really does have a grader wired back to its agent.
+That cost belongs to the **child package**, not to the card you drag — and
+there is one mount card, **Workflow**. A `Team` card used to sit beside it and
+compile through the same builder with no branch; schema v3 removed it, because
+a glyph, an `outcome` field that nothing enforces and a loop the child document
+earns are not a kind of node. A team is now a package *shape* you mount like
+any other. The Workflow card carries the optional *Expected outcome
+(documentation)* field, and shows "loops until its grader passes" when the
+mounted document really does have a grader wired back to its agent.
 
 Two things on this canvas are worth a second look, because they are the
 answer to "how do I customise a prebuilt node without editing it":
@@ -251,7 +253,7 @@ a third party.
 
 While a run streams, the activity trace beside the conversation shows more
 than node names. When a run creates children — an orchestrator's `Send`
-fan-out, a deep agent's `task` call, or a mounted Team or subgraph starting —
+fan-out, a deep agent's `task` call, or a mounted workflow starting —
 a row appears reading **`⤷ spawned <label>`** with the first ~120 characters
 of the instruction it was given. A spawn is an *announcement*, not a step: it
 takes no time of its own and occupies no lane in the timeline, it just names
@@ -354,7 +356,7 @@ picker offers the same three:
 | --- | --- | --- |
 | `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
 | `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
-| `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere — the `Team` and `Workflow` cards run it identically |
+| `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere with the `Workflow` card — "team" is a package shape, not a node type |
 
 An unknown name exits `2` and lists the valid ones. `--team` still works as a
 deprecated alias for `--template team`. Each scaffolded package gets an

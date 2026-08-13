@@ -72,9 +72,9 @@ type, so adding a node type is a registration:
 `route.grader`, `human.approval`, `orchestrate.supervisor`,
 `orchestrate.worker`, `function.format_report`, `output.formatted`.
 
-Resolved after the registry, by convention: `workflow.subgraph` and
-`team.workflow` (both `_subgraph`), any `function.<name>` discovered in the
-package, and finally a passthrough.
+Resolved after the registry, by convention: `workflow.subgraph` (`_subgraph`
+— it was joined by `team.workflow` until schema v3 collapsed the two into it),
+any `function.<name>` discovered in the package, and finally a passthrough.
 
 `NodeRuntime` is constructed once per request in `runtime_for()`
 ([`api/main.py`](../../backend/openstategraph/api/main.py)) so run, stream and resume

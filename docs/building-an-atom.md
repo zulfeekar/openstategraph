@@ -12,7 +12,7 @@ atomic-design tier, declared once in
 | `Tools · atoms` | every tool node — the built-ins, the platform family, and anything a workflow or a plugin adds |
 | `Output · atoms` | `output.formatted` |
 | `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
-| `Composition · organisms` | `workflow.subgraph`, `team.workflow` — the only organisms |
+| `Composition · organisms` | `workflow.subgraph` — the only organism (schema v3 collapsed `team.workflow` into it) |
 | `Annotate · no tier` | `group`, `note` — canvas furniture, deliberately tier-less |
 
 Atoms sort first, organisms last; the test asserts that ordering, so the
