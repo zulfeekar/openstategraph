@@ -572,10 +572,16 @@ class DiceRollTool(BaseTool):
         return ToolResult(
             content=f"Rolled {args.count}d{args.sides}: {rolls} — total {sum(rolls)}"
         )
-
-
-TOOLS = [DiceRollTool()]
 ```
+
+> **No `TOOLS` list here, deliberately.** Workflow-scoped discovery imports the
+> module and collects `BaseTool` **subclasses** via `inspect.getmembers` —
+> classes, not instances, and no list is consulted
+> ([`capability_discovery.py`](../backend/openstategraph/api/capability_discovery.py),
+> `discover_tool_instances`). A `TOOLS = [DiceRollTool()]` line here would run
+> nothing and read as the mechanism, which is the more expensive kind of
+> wrong. `TOOLS` belongs to the *entry-point* path in `extensions.py`, for a
+> tool shipped as an installable distribution — see **Published**, above.
 
 ### Its test — `workflows/<slug>/tests/test_dice.py`
 
@@ -722,7 +728,11 @@ workflowScopedFamilies.register({ id: 'dice', nodes: DICE_NODES });
 Nothing else in the engine changes — that is what makes it a registration
 rather than an edit. Or, if the atom is genuinely useful everywhere, add it to
 `registerNodeCatalogue` in [`index.ts`](../src/nodes/index.ts) and to
-`build_tool_registry`.
+`_process_tool_layer` in
+[`registries.py`](../backend/openstategraph/api/registries.py) — the same pair
+named at the top of this page. **Not** `build_tool_registry`: that function
+assembles the layers and holds no list of its own, as the app-wide section
+above already says. This sentence contradicted it until 2026-08-13.
 
 Then drag it onto the canvas, wire its `tool` port to an agent's `tools` bus,
 and ask the agent to roll something.
