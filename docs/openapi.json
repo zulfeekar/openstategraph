@@ -1848,7 +1848,7 @@
     },
     "/api/workflows/{root}/mounts/{path}": {
       "get": {
-        "description": "The effective document for one **instance** of a mounted workflow.\n\nA package is a class and a mount node is an instance of it, carrying\nits own `data.overrides`. `GET /api/workflows/concierge` returns the\nshared definition; this returns what the mount at `wf-music` runs,\nwith that mount's overrides merged in \u2014 and `.../mounts/wf-music/wf-inner`\nwalks on to a grandchild, applying each level in turn.\n\nServed rather than merged client-side on purpose: the merge has one\nowner (`apply_mount_overrides`), and a second implementation of it\nwould be duplicated knowledge buying only a round trip.\n\nThe package on disk is never written \u2014 the merge exists only in the\ncopy returned here, so the compile seam stays one-directional.",
+        "description": "The effective document for one **instance** of a mounted workflow.\n\nA package is a class and a mount node is an instance of it, carrying\nits own `data.overrides`. `GET /api/workflows/concierge` returns the\nshared definition; this returns what the mount at `wf-music` runs,\nwith that mount's overrides merged in \u2014 and `.../mounts/wf-music/wf-inner`\nwalks on to a grandchild, applying each level in turn.\n\nServed rather than merged client-side on purpose: the merge has one\nowner (`apply_mount_overrides`), and a second implementation of it\nwould be duplicated knowledge buying only a round trip.\n\n`?inherited=true` answers the neighbouring question: what this instance\nwould run if it overrode nothing. That is what an inspector shows\nbeside an overridden field, and what a revert restores \u2014 and it cannot\nbe computed by the caller, because the override has already replaced\nthe inherited value in the document above.\n\nThe package on disk is never written \u2014 the merge exists only in the\ncopy returned here, so the compile seam stays one-directional.",
         "operationId": "get_mount_document_api_workflows__root__mounts__path__get",
         "parameters": [
           {
@@ -1867,6 +1867,16 @@
             "schema": {
               "title": "Path",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "inherited",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Inherited",
+              "type": "boolean"
             }
           }
         ],

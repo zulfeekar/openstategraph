@@ -669,7 +669,7 @@ def create_app(
         summary="Fetch the document one mounted instance actually runs",
         tags=["Catalogue"],
     )
-    def get_mount_document(root: str, path: str) -> MountDocumentResponse:
+    def get_mount_document(root: str, path: str, inherited: bool = False) -> MountDocumentResponse:
         """The effective document for one **instance** of a mounted workflow.
 
         A package is a class and a mount node is an instance of it, carrying
@@ -682,6 +682,12 @@ def create_app(
         owner (`apply_mount_overrides`), and a second implementation of it
         would be duplicated knowledge buying only a round trip.
 
+        `?inherited=true` answers the neighbouring question: what this instance
+        would run if it overrode nothing. That is what an inspector shows
+        beside an overridden field, and what a revert restores — and it cannot
+        be computed by the caller, because the override has already replaced
+        the inherited value in the document above.
+
         The package on disk is never written — the merge exists only in the
         copy returned here, so the compile seam stays one-directional.
         """
@@ -693,7 +699,9 @@ def create_app(
 
         segments = [segment for segment in path.split("/") if segment]
         try:
-            resolved = resolve_mount_document(workflow_store, root, segments)
+            resolved = resolve_mount_document(
+                workflow_store, root, segments, inherited=inherited
+            )
         except WorkflowNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"No workflow named {exc}") from exc
         except MountResolutionError as exc:

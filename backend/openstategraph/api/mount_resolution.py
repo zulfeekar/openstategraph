@@ -60,7 +60,7 @@ class MountResolution(NamedTuple):
 
 
 def resolve_mount_document(
-    store: Any, root: str, mount_path: list[str]
+    store: Any, root: str, mount_path: list[str], *, inherited: bool = False
 ) -> MountResolution:
     """Walk `root` inward along `mount_path`, applying each mount's overrides.
 
@@ -69,6 +69,19 @@ def resolve_mount_document(
     "recursion composes naturally": a grandparent may override a parent's
     `overrides` field itself, and only a walk that carries the merged document
     forward will see it.
+
+    `inherited=True` skips **only the last** mount's overrides, answering "what
+    would this instance run if it overrode nothing" — the value an inspector
+    shows beside an overridden field, and the one a revert restores. It cannot
+    be computed in the browser, because the override has already replaced the
+    inherited value in the effective document.
+
+    "The last level" really means **the overrides this address's own edits
+    write to**. At depth one that is the root mount's `overrides`; at depth two
+    it is the nested blob inside it, because a grandchild's override is
+    expressed as an override of the parent's `overrides` field. The two are the
+    same storage location by construction, which is what lets one flag serve
+    every depth.
 
     Refuses rather than guesses, and every refusal names where the walk
     stopped — an address is usually hand-typed or stale, and "something went
@@ -110,7 +123,9 @@ def resolve_mount_document(
                 f"{child_slug!r} mounts itself: {' -> '.join([*visited, child_slug])}"
             )
 
-        document, step_warnings = apply_mount_overrides(store.load(child_slug), data.get("overrides"))
+        is_last = depth == len(mount_path) - 1
+        overrides = None if (inherited and is_last) else data.get("overrides")
+        document, step_warnings = apply_mount_overrides(store.load(child_slug), overrides)
         warnings.extend(f"{mount_id}: {warning}" for warning in step_warnings)
         visited.append(child_slug)
         slug = child_slug

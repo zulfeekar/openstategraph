@@ -1,4 +1,7 @@
-import { SetMountOverrideCommand } from '@core/commands/mountCommands';
+import {
+  ClearMountOverrideCommand,
+  SetMountOverrideCommand,
+} from '@core/commands/mountCommands';
 import { CANVAS } from '@design/tokens';
 import { snapPoint, type Point, type Size } from '@core/kernel/geometry';
 import {
@@ -152,6 +155,16 @@ export class NodeEditor implements INodeEditor {
         ? new SetMountOverrideCommand(nodeId, key, value)
         : new SetFieldCommand(nodeId, key, value),
     );
+  }
+
+  /**
+   * Drop this instance's override of one field, so the package's own value
+   * applies again. A no-op outside a mount, where there is no override to
+   * drop — the inspector only offers it when there is one.
+   */
+  clearOverride(nodeId: NodeId, key: string): void {
+    if (!this.ctx.commands.context.mounts) return;
+    this.ctx.commands.execute(new ClearMountOverrideCommand(nodeId, key));
   }
 
   setFields(nodeId: NodeId, patch: Partial<NodeData>, label?: string): void {

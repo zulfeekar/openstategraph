@@ -94,3 +94,54 @@ export class SetMountOverrideCommand implements ICommand {
     return merged;
   }
 }
+
+
+/**
+ * Back to the package default — the other half of tranche 5's affordance.
+ *
+ * Deliberately not `SetMountOverrideCommand` carrying the inherited value:
+ * that would *write an override that happens to equal the default*, which
+ * reads identically on screen and is a completely different document. The
+ * mount would keep counting it, a later change to the package would no longer
+ * reach this instance, and "revert" would have quietly pinned the value.
+ */
+export class ClearMountOverrideCommand implements ICommand {
+  readonly label = 'Use the package default';
+  readonly perInstance = true;
+
+  private previousOverride: unknown = ABSENT;
+  private previousField: FieldValue | undefined;
+
+  constructor(
+    private readonly nodeId: NodeId,
+    private readonly key: string,
+  ) {}
+
+  execute(ctx: CommandContext): void {
+    const mounts = ctx.mounts;
+    if (!mounts) return;
+    const node = ctx.model.node(this.nodeId);
+    if (!node) return;
+
+    if (this.previousOverride === ABSENT) {
+      const existing = mounts.readOverride(this.nodeId, this.key);
+      this.previousOverride = existing === undefined ? ABSENT : existing;
+      this.previousField = node.data[this.key] ?? null;
+    }
+
+    mounts.clearOverride(this.nodeId, this.key);
+    const inherited = mounts.inheritedValue(this.nodeId, this.key);
+    ctx.model.setNodeData(this.nodeId, this.key, (inherited ?? null) as FieldValue);
+  }
+
+  undo(ctx: CommandContext): void {
+    const mounts = ctx.mounts;
+    if (!mounts) return;
+    if (this.previousOverride !== ABSENT) {
+      mounts.writeOverride(this.nodeId, this.key, this.previousOverride);
+    }
+    if (this.previousField !== undefined) {
+      ctx.model.setNodeData(this.nodeId, this.key, this.previousField);
+    }
+  }
+}

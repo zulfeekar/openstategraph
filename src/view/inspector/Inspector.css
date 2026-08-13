@@ -172,3 +172,25 @@
   opacity: 0.7;
   margin-bottom: var(--space-0-5);
 }
+
+/* The "overridden" badge on a field label, while a mount is displayed
+   (ticket 42). A button rather than a chip because it *does* something —
+   clicking it drops this instance's override and the package's own value
+   applies again. Sized to sit inside the label row without changing its
+   height, since fields are rendered on height-constrained node cards too. */
+.field__override {
+  font: inherit;
+  font-size: var(--font-size-2xs, 0.6875rem);
+  line-height: 1;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-accent-border, currentColor);
+  background: var(--color-accent-subtle, transparent);
+  color: var(--color-accent-text, inherit);
+  cursor: pointer;
+}
+
+.field__override:disabled {
+  cursor: default;
+  opacity: 0.7;
+}

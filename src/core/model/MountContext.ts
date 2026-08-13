@@ -41,6 +41,14 @@ export class MountContext {
     readonly address: MountAddress,
     /** The root package document. Mutated in place; it is ours to hold. */
     readonly rootDocument: Json,
+    /**
+     * What this instance would run if it overrode nothing — served by
+     * `?inherited=true`, because the override has already replaced the
+     * inherited value in the document on screen and no amount of client-side
+     * work can recover it. Optional: without it a field can still be *marked*
+     * as overridden, only not reverted.
+     */
+    private readonly inheritedDocument?: Json,
   ) {
     if (!isInstance(address)) {
       throw new Error(`${formatMountAddress(address)} names a workflow, not a mount inside one`);
@@ -50,6 +58,30 @@ export class MountContext {
   /** The mount node id being displayed — the innermost segment. */
   get mountId(): string {
     return this.address.mountPath[this.address.mountPath.length - 1] ?? '';
+  }
+
+  /** Whether this instance says anything of its own about that field. */
+  isOverridden(childNodeId: string, key: string): boolean {
+    return this.readOverride(childNodeId, key) !== undefined;
+  }
+
+  /**
+   * The package's own value for a field — what a revert puts back, and what
+   * the inspector shows beside an overridden one. `undefined` when the
+   * inherited document was not loaded, which a caller must treat as "cannot
+   * revert" rather than as "the default is empty".
+   */
+  inheritedValue(childNodeId: string, key: string): unknown {
+    const nodes = this.inheritedDocument?.['nodes'];
+    if (!Array.isArray(nodes)) return undefined;
+    const node = (nodes as Json[]).find((entry) => entry['id'] === childNodeId);
+    const data = node?.['data'];
+    return isJson(data) ? data[key] : undefined;
+  }
+
+  /** Whether a revert is possible at all — see `inheritedValue`. */
+  get knowsInherited(): boolean {
+    return this.inheritedDocument !== undefined;
   }
 
   readOverride(childNodeId: string, key: string): unknown {

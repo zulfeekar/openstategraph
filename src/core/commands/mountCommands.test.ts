@@ -7,7 +7,7 @@ import { parseMountAddress } from '@core/model/MountAddress';
 import { CommandStack } from './CommandStack';
 import type { CommandContext } from './ICommand';
 import { MountEditScope } from './editScope';
-import { SetMountOverrideCommand } from './mountCommands';
+import { ClearMountOverrideCommand, SetMountOverrideCommand } from './mountCommands';
 
 /**
  * `instance.field = x` — ticket 42, tranche 4.
@@ -163,5 +163,68 @@ describe('SetMountOverrideCommand', () => {
     const stack = new CommandStack({ model, registry });
     stack.execute(new SetMountOverrideCommand('agent-sql', 'rules', 'x'));
     expect(model.node('agent-sql')?.data['rules']).toBe('');
+  });
+});
+
+describe('ClearMountOverrideCommand — back to the package default', () => {
+  function withInherited() {
+    const registry = new ModelRegistry();
+    registry.nodeTypes.register(AGENT);
+    const model = modelWithAgent();
+    const root: Record<string, unknown> = {
+      version: 2,
+      name: 'concierge',
+      nodes: [{ id: 'wf-music', type: 'workflow.subgraph', data: { workflow: 'child' } }],
+      edges: [],
+    };
+    const inherited: Record<string, unknown> = {
+      nodes: [{ id: 'agent-sql', data: { rules: 'the package rules' } }],
+    };
+    const mounts = new MountContext(parseMountAddress('concierge/wf-music')!, root, inherited);
+    const scope = new MountEditScope();
+    scope.enterInstance('wf-music', mounts);
+    return {
+      stack: new CommandStack({ model, registry, editScope: scope, mounts }),
+      model,
+      root,
+    };
+  }
+
+  it('removes the override and restores the package value on the card', () => {
+    const { stack, model, root } = withInherited();
+    stack.execute(new SetMountOverrideCommand('agent-sql', 'rules', 'mine'));
+    stack.execute(new ClearMountOverrideCommand('agent-sql', 'rules'));
+    expect(overridesOf(root, 'wf-music')).toBeUndefined();
+    expect(model.node('agent-sql')?.data['rules']).toBe('the package rules');
+  });
+
+  it('does not write an override equal to the default', () => {
+    // The whole reason this is its own command. Writing the inherited value
+    // back through `SetMountOverride` looks identical on screen and is a
+    // different document: the mount would keep counting it, and a later change
+    // to the package would stop reaching this instance — a revert that quietly
+    // pins the value.
+    const { stack, root } = withInherited();
+    stack.execute(new SetMountOverrideCommand('agent-sql', 'rules', 'mine'));
+    stack.execute(new ClearMountOverrideCommand('agent-sql', 'rules'));
+    const nodes = root['nodes'] as { id: string; data: Record<string, unknown> }[];
+    expect(nodes[0]!.data['overrides']).toBeUndefined();
+  });
+
+  it('undo puts the override back', () => {
+    const { stack, model, root } = withInherited();
+    stack.execute(new SetMountOverrideCommand('agent-sql', 'rules', 'mine'));
+    stack.execute(new ClearMountOverrideCommand('agent-sql', 'rules'));
+    stack.undo();
+    expect(overridesOf(root, 'wf-music')).toEqual({ 'agent-sql': { rules: 'mine' } });
+    expect(model.node('agent-sql')?.data['rules']).toBe('mine');
+  });
+
+  it('reports whether a field is overridden at all', () => {
+    const { stack } = withInherited();
+    const mounts = stack.context.mounts!;
+    expect(mounts.isOverridden('agent-sql', 'rules')).toBe(false);
+    stack.execute(new SetMountOverrideCommand('agent-sql', 'rules', 'mine'));
+    expect(mounts.isOverridden('agent-sql', 'rules')).toBe(true);
   });
 });

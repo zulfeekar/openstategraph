@@ -181,7 +181,10 @@ export interface IWorkflowFileClient {
   summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
   load(slug: string): Promise<Result<unknown, string>>;
   /** The effective document for one mount — see `LoadedMount`. */
-  loadMount(address: MountAddress): Promise<Result<LoadedMount, string>>;
+  loadMount(
+    address: MountAddress,
+    options?: { inherited?: boolean },
+  ): Promise<Result<LoadedMount, string>>;
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   /** Create a workflow and receive the slug the backend minted for it. */
   create(name: string, document: unknown): Promise<Result<string, string>>;
@@ -396,7 +399,10 @@ export class WorkflowFileClient
     }
   }
 
-  async loadMount(address: MountAddress): Promise<Result<LoadedMount, string>> {
+  async loadMount(
+    address: MountAddress,
+    options: { inherited?: boolean } = {},
+  ): Promise<Result<LoadedMount, string>> {
     if (!isInstance(address)) {
       // Not a fallback to `load`: this method answers about an instance, and
       // quietly becoming the class call would give one question two spellings
@@ -408,7 +414,12 @@ export class WorkflowFileClient
     // while leaving segments raw would let a colon in a minted id through
     // unescaped.
     const path = address.mountPath.map((segment) => encodeURIComponent(segment)).join('/');
-    const url = `${this.baseUrl}/api/workflows/${encodeURIComponent(address.root)}/mounts/${path}`;
+    const url =
+      `${this.baseUrl}/api/workflows/${encodeURIComponent(address.root)}/mounts/${path}` +
+      // What this instance would run if it overrode nothing — the value the
+      // inspector shows beside an overridden field, and the one a revert puts
+      // back. Not computable here: the override has already replaced it.
+      (options.inherited ? '?inherited=true' : '');
 
     let response: Response;
     try {

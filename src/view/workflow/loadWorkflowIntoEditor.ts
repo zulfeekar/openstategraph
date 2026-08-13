@@ -113,9 +113,21 @@ export async function loadMountIntoEditor(
     // persists. Only the root: nesting composes as JSON inside its mount's
     // `overrides`, so no intermediate (and underivable) document is held.
     const mountId = address.mountPath[address.mountPath.length - 1] ?? '';
-    const root = await client.load(address.root);
+    const [root, inheritedDoc] = await Promise.all([
+      client.load(address.root),
+      // What this mount would run with no overrides of its own — the value the
+      // inspector's "overridden" badge offers to put back. Fetched with the
+      // rest rather than on demand: it is one small request, and asking for it
+      // at click time would make a revert fail on a flaky connection after the
+      // user had already committed to it.
+      client.loadMount(address, { inherited: true }),
+    ]);
     const mounts = root.ok
-      ? new MountContext(address, root.value as Record<string, unknown>)
+      ? new MountContext(
+          address,
+          root.value as Record<string, unknown>,
+          inheritedDoc.ok ? (inheritedDoc.value.document as Record<string, unknown>) : undefined,
+        )
       : undefined;
     workbench.controller.document.enterInstance(mountId, mounts);
     setOpenAddress(address, slug);

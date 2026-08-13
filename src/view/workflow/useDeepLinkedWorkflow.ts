@@ -85,10 +85,22 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
           // The root package is fetched even on a restore, because it is what
           // an edit here is written to. Without it the instance would be
           // editable with nowhere to put the result.
-          void new WorkflowFileClient().load(openAddress.root).then((root) => {
+          const client = new WorkflowFileClient();
+          void Promise.all([
+            client.load(openAddress.root),
+            client.loadMount(openAddress, { inherited: true }),
+          ]).then(([root, inheritedDoc]) => {
             workbench.controller.document.enterInstance(
               mountId,
-              root.ok ? new MountContext(openAddress, root.value as Record<string, unknown>) : undefined,
+              root.ok
+                ? new MountContext(
+                    openAddress,
+                    root.value as Record<string, unknown>,
+                    inheritedDoc.ok
+                      ? (inheritedDoc.value.document as Record<string, unknown>)
+                      : undefined,
+                  )
+                : undefined,
             );
           });
         }

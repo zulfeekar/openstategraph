@@ -50,8 +50,44 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     [controller, nodeId, schema.key],
   );
 
+  // Inherited-vs-overridden, in the one place every field is rendered
+  // (ticket 42, tranche 5). Before this, a mount's own values were real but
+  // invisible: the only way to see or author one was a JSON textarea keyed by
+  // child node ids you had to know by heart.
+  const mounts = controller.document.mountContext();
+  const overridden = mounts?.isOverridden(nodeId, schema.key) ?? false;
+  const revert = useCallback(
+    () => controller.nodes.clearOverride(nodeId, schema.key),
+    [controller, nodeId, schema.key],
+  );
+
   const common = {
     label: schema.label,
+    ...(overridden
+      ? {
+          labelValue: (
+            <button
+              type="button"
+              className="field__override"
+              // The package's own value, so the badge answers "what would I
+              // get back" without a second click. `knowsInherited` is false
+              // when the inherited document could not be fetched, and then
+              // this must not claim a default it does not have.
+              title={
+                mounts?.knowsInherited
+                  ? `This mount overrides the package. Click to use the package default: ${String(
+                      mounts.inheritedValue(nodeId, schema.key) ?? '(empty)',
+                    ).slice(0, 120)}`
+                  : 'This mount overrides the package.'
+              }
+              disabled={!mounts?.knowsInherited}
+              onClick={revert}
+            >
+              overridden
+            </button>
+          ),
+        }
+      : {}),
     ...(schema.hint ? { hint: schema.hint } : {}),
     ...(error ? { error } : {}),
     htmlFor: id,

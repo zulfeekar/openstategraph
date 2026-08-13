@@ -60,6 +60,8 @@ export interface INodeEditor {
   resize(nodeId: NodeId, size: Size): void;
   applyMeasuredSize(nodeId: NodeId, size: Size): void;
   setField(nodeId: NodeId, key: string, value: FieldValue): void;
+  /** Drop this instance's override of one field (ticket 42). */
+  clearOverride(nodeId: NodeId, key: string): void;
   setFields(nodeId: NodeId, patch: Partial<NodeData>, label?: string): void;
   setTitle(nodeId: NodeId, title: string): void;
 }

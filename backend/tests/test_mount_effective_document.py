@@ -243,3 +243,76 @@ def test_the_resolver_does_not_mutate_the_document_it_was_given(store: WorkflowS
     snapshot = copy.deepcopy(parent)
     resolve_mount_document(store, "parent", ["wf-music"])
     assert store.load("parent") == snapshot
+
+
+class TestTheInheritedDocument:
+    """What this instance would run if it overrode nothing — ticket 42, tranche 5.
+
+    The inspector's job is to show a field's package default beside this
+    mount's value, and to put the default back on request. Neither is
+    computable in the browser: the override has already *replaced* the
+    inherited value in the effective document, so the original is simply not
+    there any more.
+
+    A second fetch is the honest answer, and the parameter belongs on this
+    endpoint rather than in a new one, because "resolve this chain" is the same
+    walk either way — only the last step differs. Doing it client-side would
+    mean a second implementation of the merge, which is the thing the whole
+    "serve it" decision was about.
+
+    "Skip the last level" is the rule, and what it really means is **skip the
+    overrides this address's own edits write to**. At depth one that is the
+    root mount's `overrides`. At depth two it is the nested blob inside it —
+    and there is no *separate* place a grandparent could have written, because
+    a grandchild's override is expressed as an override of the parent's
+    `overrides` field. The two are the same storage location by construction,
+    which is what makes one flag enough for every depth.
+    """
+
+    def test_it_skips_only_this_mounts_overrides(self, store: WorkflowStore) -> None:
+        resolved = resolve_mount_document(store, "parent", ["wf-music"], inherited=True)
+        target = next(n for n in resolved.document["nodes"] if n["id"] == "agent-sql")
+        assert target["data"]["rules"] == "package rules"
+
+    def test_the_effective_document_still_applies_them(self, store: WorkflowStore) -> None:
+        """The two calls must differ, or the chip has nothing to compare."""
+        effective = resolve_mount_document(store, "parent", ["wf-music"])
+        inherited = resolve_mount_document(store, "parent", ["wf-music"], inherited=True)
+        assert effective.document != inherited.document
+
+    def test_at_depth_two_it_skips_the_nested_blob_this_address_writes_to(
+        self, store: WorkflowStore
+    ) -> None:
+        """The first draft of this test asserted that a "grandparent's
+        override" survives an inherited read, on the assumption that it was
+        stored somewhere other than this instance's own overrides. It is not,
+        and the test was wrong rather than the code.
+
+        A grandchild's override *is* an override of the parent's `overrides`
+        field — `concierge.wf-music.overrides = {"wf-inner": {"overrides": …}}`
+        — so it lands in exactly the place an edit made at
+        `concierge/wf-music/wf-inner` writes to. There is no second location to
+        tell apart, which is precisely why one flag serves every depth.
+        """
+        parent = store.load("parent")
+        for node in parent["nodes"]:
+            if node["id"] == "wf-music":
+                node["data"]["overrides"] = {
+                    "wf-inner": {"overrides": {"deep": {"rules": "written at this address"}}}
+                }
+        store.save("parent", name="parent", document=parent, saved_at="2026-08-13T00:00:00Z")
+
+        effective = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"])
+        inherited = resolve_mount_document(store, "parent", ["wf-music", "wf-inner"], inherited=True)
+        value = lambda doc: next(n for n in doc["nodes"] if n["id"] == "deep")["data"]["rules"]
+        assert value(effective.document) == "written at this address"
+        assert value(inherited.document) == "package deep"
+
+    def test_a_mount_with_no_overrides_reads_the_same_either_way(
+        self, store: WorkflowStore
+    ) -> None:
+        both = [
+            resolve_mount_document(store, "parent", ["wf-other"], inherited=flag).document
+            for flag in (False, True)
+        ]
+        assert both[0] == both[1]
