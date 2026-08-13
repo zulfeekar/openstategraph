@@ -141,6 +141,8 @@ from openstategraph.api.schemas import (  # noqa: E402
     PluginToolCapabilityResponse,
     ToolCapabilityResponse,
     ToolFieldResponse,
+    ValidateRequest,
+    ValidateResponse,
     WorkflowDocumentResponse,
     WorkflowSummaryResponse,
 )
@@ -1157,6 +1159,36 @@ def create_app(
                 for source in reachable_schema(document, workflow_store.root)
             ]
         )
+
+    @app.post(
+        "/api/workflows/validate",
+        response_model=ValidateResponse,
+        summary="Can this document compile, and if not, why",
+        tags=["Authoring"],
+    )
+    def validate_workflow(request: ValidateRequest) -> ValidateResponse:
+        """The compile-check, without running anything.
+
+        Validation existed only as an MCP tool, so the two clients were not
+        equal: an LLM client had its document checked before every run and the
+        editor could not check one at all. That asymmetry is what let a
+        document containing an unregistered node type reach a run and answer
+        with the user's own question — the skipped node forwards its input, so
+        the run looks like it worked.
+
+        Cheap and credential-free on purpose: `ValidateWorkflowTool` plans the
+        graph in memory and throws it away, so this reaches no provider and a
+        developer can call it long before they have a key configured.
+
+        **A `valid: false` verdict is not a refusal.** The run endpoints report
+        an unknown node type on the developer channel and continue, per
+        `errors.py`'s "degrade loud, never silent" rule; the MCP door refuses.
+        One validator, two policies — see `openstategraph.validation`.
+        """
+        from openstategraph.validation import validate_document
+
+        valid, findings = validate_document(request.workflow)
+        return ValidateResponse(valid=valid, findings=findings)
 
     @app.get(
         "/api/workflows/{slug}/graph",

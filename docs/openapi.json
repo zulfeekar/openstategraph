@@ -1176,6 +1176,46 @@
         "title": "ToolFieldResponse",
         "type": "object"
       },
+      "ValidateRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/workflows/validate` \u2014 check the posted document.\n\nThe posted document, like `RunRequest`: what the developer can see on the\ncanvas is what gets checked, so a verdict cannot be about a saved version\nthey are not looking at.",
+        "properties": {
+          "workflow": {
+            "additionalProperties": true,
+            "description": "A workflow.json document.",
+            "title": "Workflow",
+            "type": "object"
+          }
+        },
+        "required": [
+          "workflow"
+        ],
+        "title": "ValidateRequest",
+        "type": "object"
+      },
+      "ValidateResponse": {
+        "description": "Can this compile, and if not, what is wrong with it.\n\n`findings` is a list of single lines rather than one blob because every\ncaller renders them \u2014 a caller that has to split a string is a caller that\nwill split it differently.\n\nA `valid: false` verdict is **not** a refusal to run. The run endpoints\nreport an unknown node type and continue, per `errors.py`'s \"degrade loud,\nnever silent\" rule; the MCP door refuses. See `openstategraph.validation`.",
+        "properties": {
+          "findings": {
+            "description": "One line per problem. Empty when valid.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "valid": {
+            "description": "Whether the document compiles.",
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "title": "ValidateResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -1821,6 +1861,48 @@
         "summary": "The Chinook demo's own endpoint (not a general API)",
         "tags": [
           "Demo"
+        ]
+      }
+    },
+    "/api/workflows/validate": {
+      "post": {
+        "description": "The compile-check, without running anything.\n\nValidation existed only as an MCP tool, so the two clients were not\nequal: an LLM client had its document checked before every run and the\neditor could not check one at all. That asymmetry is what let a\ndocument containing an unregistered node type reach a run and answer\nwith the user's own question \u2014 the skipped node forwards its input, so\nthe run looks like it worked.\n\nCheap and credential-free on purpose: `ValidateWorkflowTool` plans the\ngraph in memory and throws it away, so this reaches no provider and a\ndeveloper can call it long before they have a key configured.\n\n**A `valid: false` verdict is not a refusal.** The run endpoints report\nan unknown node type on the developer channel and continue, per\n`errors.py`'s \"degrade loud, never silent\" rule; the MCP door refuses.\nOne validator, two policies \u2014 see `openstategraph.validation`.",
+        "operationId": "validate_workflow_api_workflows_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Can this document compile, and if not, why",
+        "tags": [
+          "Authoring"
         ]
       }
     },

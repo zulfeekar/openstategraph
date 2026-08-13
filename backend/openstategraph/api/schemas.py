@@ -57,6 +57,38 @@ class CompiledGraphResponse(BaseModel):
     mermaid: str
 
 
+class ValidateRequest(BaseModel):
+    """`POST /api/workflows/validate` — check the posted document.
+
+    The posted document, like `RunRequest`: what the developer can see on the
+    canvas is what gets checked, so a verdict cannot be about a saved version
+    they are not looking at.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    workflow: dict[str, Any] = Field(description="A workflow.json document.")
+
+
+class ValidateResponse(BaseModel):
+    """Can this compile, and if not, what is wrong with it.
+
+    `findings` is a list of single lines rather than one blob because every
+    caller renders them — a caller that has to split a string is a caller that
+    will split it differently.
+
+    A `valid: false` verdict is **not** a refusal to run. The run endpoints
+    report an unknown node type and continue, per `errors.py`'s "degrade loud,
+    never silent" rule; the MCP door refuses. See `openstategraph.validation`.
+    """
+
+    valid: bool = Field(description="Whether the document compiles.")
+    findings: list[str] = Field(
+        default_factory=list,
+        description="One line per problem. Empty when valid.",
+    )
+
+
 class AskRequest(BaseModel):
     model_config = {"extra": "forbid"}
 

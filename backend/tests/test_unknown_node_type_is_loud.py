@@ -134,24 +134,39 @@ class TestItIsStillNotRefused:
         assert len(mentions) == 1, mentions
 
 
-class TestTheOtherDoorRefuses:
-    """MCP validates first; HTTP does not. Recorded, not discovered."""
+class TestValidationIsAvailableButNotAGate:
+    """One validator, two policies — deliberately.
+
+    This class replaces a test asserting there was **no** HTTP validate
+    endpoint, which existed to explain why the run path had to carry the
+    warning itself. `POST /api/workflows/validate` now exists, and the warning
+    still has to be there: validation is something a caller *asks for*, and the
+    run path cannot assume anyone did.
+    """
 
     def test_the_validator_calls_it_a_problem(self) -> None:
-        from openstategraph.prebuilt_architect import ValidateWorkflowTool
+        from openstategraph.validation import validate_document
 
-        result = ValidateWorkflowTool().run(document=json.dumps(DOCUMENT))
-        assert result.error is not None
-        assert BOGUS_TYPE in result.error
+        valid, findings = validate_document(DOCUMENT)
+        assert valid is False
+        assert any(BOGUS_TYPE in finding for finding in findings)
 
-    def test_there_is_still_no_http_validate_endpoint(self) -> None:
-        """Why the run path has to carry this itself.
+    def test_the_http_door_will_say_so_when_asked(self) -> None:
+        response = TestClient(create_app()).post(
+            "/api/workflows/validate", json={"workflow": DOCUMENT}
+        )
+        assert response.status_code == 200
+        assert response.json()["valid"] is False
 
-        If one is ever added, this test should be deleted along with the
-        reason it exists.
+    def test_but_running_it_is_still_allowed(self) -> None:
+        """The endpoint is a check, not a gate.
+
+        A canvas mid-edit is invalid most of the time, and `errors.py`'s
+        policy is that an unknown node type is reported rather than raised. If
+        this ever starts returning 4xx, the warning above is the only thing
+        left telling a developer what happened.
         """
-        paths = {getattr(route, "path", "") for route in create_app().routes}
-        assert not any("validate" in path for path in paths)
+        assert _run()["answer"] is not None
 
 
 @pytest.mark.parametrize("audience", ["customer", "developer"])

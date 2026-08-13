@@ -621,6 +621,29 @@ The slug is **frozen at creation**. Renaming a workflow changes the display
 name inside `workflow.json` and never the directory, so every link, mount and
 line of git history keeps resolving.
 
+### Checking before writing — `POST /api/workflows/validate`
+
+```
+POST /api/workflows/validate   {"workflow": {...}}
+  → 200 {"valid": false, "findings": ["unknown node type 'agent.react' on 'a1'"]}
+```
+
+Plans the posted document in memory and throws it away, so it reaches no
+provider and needs no credential — a developer can call it long before a key
+is configured. `findings` is a list of single lines, one per problem, empty
+when valid.
+
+**A `false` verdict is not a refusal to run.** The run endpoints report an
+unknown node type on the developer channel and continue, because a canvas
+mid-edit is invalid most of the time and `errors.py`'s rule for this case is
+"degrade loud, never silent". The MCP door does refuse, because an LLM client
+can act on the findings and a run that cannot produce a meaningful answer
+wastes a model call. One validator, two policies.
+
+This existed only as an MCP tool until 0.3.0, which is why an unregistered node
+type could reach a run: the skipped node forwards its input unchanged, so the
+run answered with the user's own question and looked like it worked.
+
 ### Optional — past runs: `GET /api/threads` and `GET /api/threads/{id}`
 
 What the checkpointer already stored, read back. `GET /api/threads` lists runs

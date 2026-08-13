@@ -87,23 +87,14 @@ DocumentError = _DocumentError
 normalize_document = _normalize_document
 
 
-def _validate(document: dict[str, Any]) -> tuple[bool, list[str]]:
-    """The compile-check, reused verbatim from the Architect's own tool.
-
-    `ValidateWorkflowTool` is the existing seam: it plans the graph in memory,
-    throws it away, and reports unknown node types, compiler warnings and
-    missing entry/exit points. No second validator lives here.
-    """
-    from openstategraph.prebuilt_architect import ValidateWorkflowTool
-
-    result = ValidateWorkflowTool().run(document=json.dumps(document))
-    report = result.error if result.error is not None else result.content
-    findings = [line[2:].strip() for line in report.splitlines() if line.startswith("- ")]
-    if result.error is not None and not findings:
-        # A hard failure (unparseable, no nodes) has no bulleted list; the
-        # message itself is the single finding.
-        findings = [report.strip()]
-    return result.error is None, findings
+#: The compile-check, shared with the HTTP door.
+#:
+#: It lived here, under a comment reading "No second validator lives here" —
+#: a rule about one transport that became a rule about two the moment the
+#: editor needed the same check. See `openstategraph.validation` for why the
+#: two doors then *diverge* on what a finding means: MCP refuses to run an
+#: invalid document, the run endpoints report and continue.
+from openstategraph.validation import validate_document as _validate
 
 
 class NodeVocabulary:
