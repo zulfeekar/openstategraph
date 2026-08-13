@@ -155,12 +155,33 @@ Two consequences worth stating: a client that reuses a fixed literal
 two workflows that both hardcode one would share it. `/chat` avoids both by
 deriving the thread from its session.
 
-Retention is **manual**: nothing prunes checkpoints, and the file grows with
-use. It is a plain sqlite database with no other content — deleting it (or the
-`.openstategraph` directory) discards paused runs and thread history and
-nothing else. An automatic reaper is deliberately not built; a TTL that
-silently eats a pending approval would be the same class of bug this ticket
-just closed.
+Retention is **manual**, and this is a statement about **checkpoints only**.
+Nothing prunes them, and the file grows with use. It is a plain sqlite database
+with no other content — deleting it (or the `.openstategraph` directory)
+discards paused runs and thread history and nothing else. An automatic reaper
+is deliberately not built; a TTL that silently eats a pending approval would be
+the same class of bug this ticket just closed.
+
+**The Store's retention story is the opposite, and the difference is not an
+inconsistency** (memory-hardening ticket 04). A checkpoint may be a person
+waiting on an approval, so expiring one destroys work in progress. A long-term
+memory is a durable *claim* — "the user prefers concise answers" — and a wrong
+or stale one is not merely dead weight: `search_memory` shows four results per
+scope, so stale facts actively crowd correct ones out of the window. Expiring
+them is a feature; expiring a checkpoint is data loss.
+
+So long-term memory has both a manual and an automatic answer, and the
+checkpointer has neither:
+
+| | Manual | Automatic |
+| --- | --- | --- |
+| Long-term memory (Store) | `forget_memory(handle)`, bound to every agent | `OPENSTATEGRAPH_MEMORY_TTL_MINUTES`, durable stores only |
+| Checkpoints | delete the file | **deliberately none**, for the reason above |
+
+Retention is `int | None` minutes with unset meaning "never expire", and
+`refresh_on_read` is **False** — against LangGraph's own default — because a
+fact an agent merely looked at would otherwise live another full term, making
+a stale fact immortal precisely because it keeps surfacing in search.
 
 ## Efficiency
 

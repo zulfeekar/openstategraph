@@ -26,6 +26,7 @@ project's minimum-viable-prebuilt rule demands.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from collections.abc import Callable
 from enum import Enum
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
     # pattern, and the same reasoning, as `loader.py`.
     from langchain_core.tools import BaseTool
     from langgraph.checkpoint.base import BaseCheckpointSaver
-    from langgraph.store.base import BaseStore
+    from langgraph.store.base import BaseStore, TTLConfig
 
 
 
@@ -141,6 +142,19 @@ def _workflow_namespace() -> tuple[str, str]:
 #: The shared pool — appwide knowledge and cross-workflow findings, exactly
 #: one namespace so the root (which sits above every workflow) can aggregate.
 APP_NAMESPACE: tuple[str, ...] = ("app-memory",)
+
+#: How much of a memory's key `search_memory` prints, and `forget_memory`
+#: accepts. Eight hex characters of a uuid4 is short enough for a model to
+#: quote back without transcription errors and long enough that a collision
+#: inside one scope is not a practical concern — and an ambiguous prefix is
+#: refused rather than resolved, so a collision is a message, not a wrong delete.
+HANDLE_LENGTH = 8
+
+#: How many items `forget_memory` scans per scope when resolving a handle.
+#: Deliberately far above `search_memory`'s window of 4: search is capped to
+#: protect the *prompt*, and deleting a fact the caller can see but this scan
+#: cannot reach would be the worst kind of "it did nothing".
+SEARCH_CEILING = 200
 
 
 def _app_namespace() -> tuple[str, ...]:
@@ -416,10 +430,104 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
             for item in hits:
                 source = item.value.get("workflow", "")
                 tag = f"{label} via {source}" if label == "app" and source else label
-                rows.append(f"- [{tag}] {item.value.get('fact', '')}")
+                # The handle is what makes a fact nameable again — `forget_memory`
+                # needs a referent, and quoted prose is a guess, not a referent.
+                rows.append(f"- [{tag} · {item.key[:HANDLE_LENGTH]}] {item.value.get('fact', '')}")
         return "\n".join(rows) if rows else "No saved memories match."
 
-    return [save_memory, search_memory]
+    @tool
+    def forget_memory(memory_id: str) -> str:
+        """Delete one saved fact, named by the handle `search_memory` printed
+        beside it (the short code after the scope, like `[user · a1b2c3d4]`).
+        Use this when a fact is wrong or out of date."""
+        from langgraph.config import get_store
+
+        store = get_store()
+        if store is None:
+            return "NOT FORGOTTEN. No memory store is configured."
+        wanted = memory_id.strip().lower()
+
+        # Searched only across the scopes this workflow declared, for the same
+        # reason `save_memory` writes only to them: a tool must not become a
+        # way to reach a namespace the declaration excluded.
+        found = []
+        for scope in allowed:
+            namespace = scope.namespace
+            if namespace is None:
+                continue
+            try:
+                items = store.search(namespace, limit=SEARCH_CEILING)
+            except Exception as exc:
+                _log().warning("memory scope %s is unreadable (%s); skipped", namespace, exc)
+                continue
+            found += [(namespace, i) for i in items if i.key.startswith(wanted)]
+
+        if not found:
+            return (
+                f"NOT FORGOTTEN. No saved fact has the handle {memory_id!r}. "
+                "Run search_memory first and use the code it prints beside a fact."
+            )
+        if len(found) > 1:
+            # Refusing beats deleting the wrong one: a handle is a prefix, and
+            # an ambiguous prefix is the caller's to resolve, not ours to guess.
+            return (
+                f"NOT FORGOTTEN. {len(found)} saved facts start with {memory_id!r}. "
+                "Use more of the handle."
+            )
+        namespace, item = found[0]
+        store.delete(namespace, item.key)
+        return f"Forgotten: {item.value.get('fact', '')}"
+
+    return [save_memory, search_memory, forget_memory]
+
+
+#: Retention for long-term memory, in **minutes**, matching LangGraph's own
+#: `default_ttl` vocabulary. Unset means items do not expire, which is the
+#: library's documented default and — per the non-finite-number rule — is
+#: spelled `None` rather than a sentinel like `-1` or `Infinity`.
+MEMORY_TTL_ENV = "OPENSTATEGRAPH_MEMORY_TTL_MINUTES"
+
+#: How often the durable store sweeps expired items. Not configurable: it is a
+#: performance knob with no correct value a user could know, and LangGraph's
+#: own default reasoning applies unchanged.
+_SWEEP_INTERVAL_MINUTES = 60
+
+
+def memory_ttl() -> TTLConfig | None:
+    """The configured retention, or None for "items do not expire".
+
+    Retention is a **deployment** property, not a document one: it is about how
+    long this installation keeps data, which no workflow author can answer for
+    the person running it. So it is an env var beside `OPENSTATEGRAPH_MEMORY_PATH`
+    rather than a `settings.memory` key.
+
+    `refresh_on_read` is deliberately **False**. LangGraph defaults it to True,
+    which means a fact an agent merely *looked at* lives another full term —
+    so a stale fact that keeps surfacing in search results becomes immortal
+    precisely because it keeps surfacing. Retention here is meant to expire
+    what nobody writes any more.
+    """
+    from langgraph.store.base import TTLConfig
+
+    raw = os.environ.get(MEMORY_TTL_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        minutes = int(raw)
+        if minutes <= 0:
+            raise ValueError("must be positive")
+    except ValueError:
+        _log().warning(
+            "%s=%r is not a positive whole number of minutes; memories will not "
+            "expire. Example: %s=10080 for seven days.",
+            MEMORY_TTL_ENV, raw, MEMORY_TTL_ENV,
+        )
+        return None
+    return TTLConfig(
+        default_ttl=minutes,
+        refresh_on_read=False,
+        sweep_interval_minutes=_SWEEP_INTERVAL_MINUTES,
+    )
 
 
 def build_store() -> BaseStore:
@@ -465,8 +573,12 @@ def build_store() -> BaseStore:
                 check_same_thread=False,
                 isolation_level=None,  # autocommit — the store BEGINs itself
             )
-            store = SqliteStore(conn)
+            store = SqliteStore(conn, ttl=memory_ttl())
             store.setup()
+            if store.ttl_config is not None:
+                # Nothing expires without a sweeper running; `close_resource`
+                # already knows to stop it before closing the connection.
+                store.start_ttl_sweeper()
             return store
         except ImportError:
             # Same undeclared-dependency trap as `checkpointer_for`: the user
@@ -488,6 +600,17 @@ def build_store() -> BaseStore:
                 raw_path,
                 exc_info=True,
             )
+    if os.environ.get(MEMORY_TTL_ENV, "").strip():
+        # The named-extra degradation shape this module already uses: somebody
+        # asked for expiry and would otherwise never learn they did not get it.
+        # `InMemoryStore`'s constructor takes `index` and nothing else, and a
+        # process that loses every memory on restart has no retention question.
+        _log().warning(
+            "%s is set, but memories are IN-MEMORY and expire only when this "
+            "process ends. Retention needs a durable store: set "
+            "OPENSTATEGRAPH_MEMORY_PATH or OPENSTATEGRAPH_POSTGRES_URL.",
+            MEMORY_TTL_ENV,
+        )
     return InMemoryStore()
 
 

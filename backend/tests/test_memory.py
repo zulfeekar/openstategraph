@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -11,10 +12,13 @@ from langgraph.store.memory import InMemoryStore
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
 from openstategraph.memory import (
+    MEMORY_TTL_ENV,
     USER_MEMORY_NAMESPACE,
     MemoryScope,
     _user_namespace,
+    build_store,
     checkpointer_for,
+    memory_ttl,
     memory_preconditions,
     memory_settings,
     memory_tools,
@@ -38,7 +42,7 @@ def _run_in_graph(fn, *, store, config) -> dict[str, Any]:
 class TestMemoryTools:
     def test_save_then_search_round_trips_through_the_user_namespace(self) -> None:
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         config = {"configurable": {"user_email": "Me@Zulfeekar.com", "thread_id": "t1"}}
 
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "favourite genre is Rock"})},
@@ -61,7 +65,7 @@ class TestMemoryTools:
         told the model it holds "facts about this person".
         """
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         said = _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
                              store=store, config={"configurable": {"thread_id": "t2"}})["out"]
         # "NOT SAVED" leads, because a refusal a model can gloss is a
@@ -72,7 +76,7 @@ class TestMemoryTools:
     def test_the_refusal_names_a_scope_that_would_have_worked(self) -> None:
         # A refusal an agent cannot act on is a dead end; this one is not.
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         config = {"configurable": {"thread_id": "t", "workflow_slug": "w"}}
         said = _run_in_graph(lambda s: {"out": save.invoke({"fact": "a finding"})},
                              store=store, config=config)["out"]
@@ -84,12 +88,123 @@ class TestMemoryTools:
 
     def test_users_never_see_each_others_memories(self) -> None:
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "secret A"})}, store=store,
                       config={"configurable": {"user_email": "a@x.com", "thread_id": "t3"}})
         result = _run_in_graph(lambda s: {"out": search.invoke({"query": "secret"})}, store=store,
                                config={"configurable": {"user_email": "b@x.com", "thread_id": "t4"}})
         assert "secret A" not in result["out"]
+
+
+class TestAMemoryCanBeForgotten:
+    """Memory-hardening ticket 04 — the Store contract has `delete`; we never
+    surfaced it.
+
+    A wrong fact was permanent. Worse than permanent: `search_memory` caps each
+    scope at 4 results, so stale junk does not merely sit there, it **crowds
+    correct facts out of the window**. And once identity is real (ticket 01),
+    a person's stored facts with no way to remove them is a data-subject-rights
+    problem, not only an annoyance.
+    """
+
+    def test_search_hands_back_a_handle_so_a_fact_can_be_named_again(self) -> None:
+        # Deletion needs a referent. Text alone is not one — two facts can read
+        # alike, and a model quoting prose back is guessing.
+        store = InMemoryStore()
+        save, search, _forget = memory_tools()
+        config = {"configurable": {"workflow_slug": "w", "thread_id": "t"}}
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "invoices run monthly",
+                                           "scope": "workflow"})},
+            store=store, config=config)
+        listed = _run_in_graph(lambda s: {"out": search.invoke({"query": "invoices"})},
+                               store=store, config=config)["out"]
+        assert re.search(r"\[workflow · [0-9a-f]{8}\]", listed)
+
+    def test_a_fact_named_by_its_handle_is_gone(self) -> None:
+        store = InMemoryStore()
+        save, search, forget = memory_tools()
+        config = {"configurable": {"workflow_slug": "w", "thread_id": "t"}}
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "the name is Brian",
+                                           "scope": "workflow"})},
+            store=store, config=config)
+        listed = _run_in_graph(lambda s: {"out": search.invoke({"query": "Brian"})},
+                               store=store, config=config)["out"]
+        handle = re.search(r"· ([0-9a-f]{8})\]", listed).group(1)  # type: ignore[union-attr]
+
+        said = _run_in_graph(lambda s: {"out": forget.invoke({"memory_id": handle})},
+                             store=store, config=config)["out"]
+        assert said.startswith("Forgotten")
+        assert not store.search(("workflow-memory", "w"))
+
+    def test_an_unknown_handle_is_refused_and_says_so(self) -> None:
+        store = InMemoryStore()
+        _save, _search, forget = memory_tools()
+        said = _run_in_graph(lambda s: {"out": forget.invoke({"memory_id": "deadbeef"})},
+                             store=store, config={"configurable": {"thread_id": "t"}})["out"]
+        assert said.startswith("NOT FORGOTTEN")
+
+    def test_it_cannot_reach_a_scope_this_workflow_does_not_use(self) -> None:
+        # The same containment `save_memory` has: a tool must not become a way
+        # to touch a namespace the declaration excluded.
+        store = InMemoryStore()
+        everything = memory_tools()
+        config = {"configurable": {"workflow_slug": "w", "thread_id": "t"}}
+        _run_in_graph(
+            lambda s: {"out": everything[0].invoke({"fact": "a workflow fact",
+                                                    "scope": "workflow"})},
+            store=store, config=config)
+        key = store.search(("workflow-memory", "w"))[0].key
+
+        narrowed = memory_tools(memory_settings({"memory": {"scopes": ["app"]}})[0])
+        said = _run_in_graph(lambda s: {"out": narrowed[2].invoke({"memory_id": key[:8]})},
+                             store=store, config=config)["out"]
+        assert said.startswith("NOT FORGOTTEN")
+        assert store.search(("workflow-memory", "w"))
+
+
+class TestRetentionIsTheDurableStoresToOffer:
+    """Ticket 04's second half — and the honest half of it.
+
+    `SqliteStore` accepts a `TTLConfig` and runs a sweeper; `InMemoryStore`'s
+    constructor takes `index` and nothing else. LangGraph's `store.ttl` block
+    is Agent Server configuration, which this project does not use — so
+    retention is available exactly where it matters and is refused loudly
+    where it is not.
+    """
+
+    def test_unset_means_items_do_not_expire(self, monkeypatch) -> None:
+        monkeypatch.delenv(MEMORY_TTL_ENV, raising=False)
+        assert memory_ttl() is None
+
+    def test_it_is_minutes_and_none_means_unbounded(self, monkeypatch) -> None:
+        # `int | None`, never a sentinel — a non-finite number is unrepresentable
+        # in the config this eventually rides in.
+        monkeypatch.setenv(MEMORY_TTL_ENV, "10080")
+        config = memory_ttl()
+        assert config is not None and config["default_ttl"] == 10080
+
+    def test_a_nonsense_value_degrades_loudly_rather_than_crashing(
+        self, monkeypatch, caplog
+    ) -> None:
+        monkeypatch.setenv(MEMORY_TTL_ENV, "seven days")
+        with caplog.at_level(logging.WARNING, logger="openstategraph.memory"):
+            assert memory_ttl() is None
+        assert any(MEMORY_TTL_ENV in r.getMessage() for r in caplog.records)
+
+    def test_asking_for_retention_without_a_durable_store_is_reported(
+        self, monkeypatch, caplog
+    ) -> None:
+        # The named-extra degradation shape this module already uses: the user
+        # asked for expiry and would otherwise never learn they did not get it.
+        monkeypatch.setenv(MEMORY_TTL_ENV, "60")
+        monkeypatch.delenv("OPENSTATEGRAPH_MEMORY_PATH", raising=False)
+        monkeypatch.delenv("OPENSTATEGRAPH_POSTGRES_URL", raising=False)
+        with caplog.at_level(logging.WARNING, logger="openstategraph.memory"):
+            build_store()
+        assert any("in-memory" in r.getMessage().lower() and MEMORY_TTL_ENV in r.getMessage()
+                   for r in caplog.records)
 
 
 class TestMemoryScopeIsANamedEnum:
@@ -126,7 +241,7 @@ class TestMemoryScopeIsANamedEnum:
         # The defect this ticket exists for: "global" is not a scope, and the
         # old chain silently made it mean "user".
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         config = {"configurable": {"user_email": "a@x.com", "thread_id": "t"}}
 
         def _attempt(_s: Any) -> dict[str, str]:
@@ -142,7 +257,7 @@ class TestMemoryScopeIsANamedEnum:
     def test_the_confirmation_names_the_scope_actually_written(self) -> None:
         # Asserts the *value*, not merely that a confirmation came back.
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
                                    "thread_id": "t"}}
         for scope in ("user", "workflow", "app"):
@@ -155,7 +270,7 @@ class TestMemoryScopeIsANamedEnum:
         # The reason this is worth doing at all: an enum reaches the model as
         # a JSON-Schema `enum`, so an out-of-set scope becomes a validation
         # error it can see and retry instead of a silent success.
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         schema = save.get_input_schema().model_json_schema()
         published = [d["enum"] for d in schema.get("$defs", {}).values() if "enum" in d]
         published += [p["enum"] for p in schema["properties"].values() if "enum" in p]
@@ -168,7 +283,7 @@ class TestMemoryScopeIsANamedEnum:
         # rationale belongs in a comment; this is the guard that keeps it there.
         from langchain_core.utils.function_calling import convert_to_openai_tool
 
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         params = convert_to_openai_tool(save)["function"]["parameters"]
         assert len(params["properties"]["scope"].get("description", "")) < 120
 
@@ -198,7 +313,7 @@ class TestMemoryIsDeclaredInSettings:
         # about a scope it may not use and then rejecting it is the same
         # defect ticket 02 removed, one layer up.
         settings, _ = memory_settings({"memory": {"scopes": ["user", "app"]}})
-        save, _search = memory_tools(settings)
+        save, _search, _forget = memory_tools(settings)
         published = save.get_input_schema().model_json_schema()["properties"]["scope"]
         assert published["enum"] == ["user", "app"]
 
@@ -260,7 +375,7 @@ class TestDegradationIsNeverSilent:
                 return super().search(namespace, **kwargs)
 
         store = OneBadScope()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         config = {"configurable": {"user_email": "a@x.com", "workflow_slug": "w",
                                   "thread_id": "t"}}
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "a user fact"})},
@@ -282,7 +397,7 @@ class TestDegradationIsNeverSilent:
         code — a bug. Before this they were the same silence.
         """
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
 
         with caplog.at_level(logging.DEBUG, logger="openstategraph.memory"):
             _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes tables"})},
@@ -422,7 +537,7 @@ class TestMemoryScopes:
 
     def test_workflow_scope_lands_in_the_slug_namespace(self) -> None:
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         _run_in_graph(
             lambda s: {"out": save.invoke({"fact": "chinook revenue sums InvoiceLine amounts", "scope": "workflow"})},
             store=store,
@@ -432,7 +547,7 @@ class TestMemoryScopes:
 
     def test_search_reads_all_scopes_and_labels_provenance(self) -> None:
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         config = {"configurable": {"thread_id": "t", "user_email": "a@x.com",
                                    "workflow_slug": "chinook-assistant"}}
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "likes concise answers"})},
@@ -445,14 +560,16 @@ class TestMemoryScopes:
                                store=store, config=config)
         out = result["out"]
         # App hits carry their originating slug — the spine stays auditable.
-        assert "[user]" in out and "[workflow]" in out
-        assert "[app via chinook-assistant]" in out
+        # `· <handle>` is ticket 04: every row is nameable again, which is
+        # what `forget_memory` resolves against.
+        assert "[user · " in out and "[workflow · " in out
+        assert "[app via chinook-assistant · " in out
 
     def test_app_scope_writes_are_stamped_with_the_originating_slug(self) -> None:
         """The spine is auditable: any workflow may contribute app-wide
         learnings, but every deposit records which workflow made it."""
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "billing runs Mondays", "scope": "app"})},
                       store=store,
                       config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-assistant"}})
@@ -461,18 +578,18 @@ class TestMemoryScopes:
         result = _run_in_graph(lambda s: {"out": search.invoke({"query": "billing"})},
                                store=store,
                                config={"configurable": {"thread_id": "t2", "workflow_slug": "concierge"}})
-        assert "[app via chinook-assistant]" in result["out"]
+        assert "[app via chinook-assistant · " in result["out"]
 
     def test_the_tools_offer_no_way_to_name_another_workflows_namespace(self) -> None:
         """A child cannot write another workflow's workflow-scope: the slug is
         config-derived, never a tool argument."""
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         assert set(save.args) == {"fact", "scope"}
         assert set(search.args) == {"query"}
 
     def test_search_caps_each_scope_so_a_hoarder_cannot_flood_the_prompt(self) -> None:
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         config = {"configurable": {"thread_id": "t", "user_email": "a@x.com"}}
         for i in range(10):
             _run_in_graph(lambda s, i=i: {"out": save.invoke({"fact": f"note {i} about cats"})},
@@ -483,7 +600,7 @@ class TestMemoryScopes:
 
     def test_app_scope_is_shared_across_workflows(self) -> None:
         store = InMemoryStore()
-        save, search = memory_tools()
+        save, search, _ = memory_tools()
         _run_in_graph(lambda s: {"out": save.invoke({"fact": "shared finding", "scope": "app"})},
                       store=store,
                       config={"configurable": {"thread_id": "t1", "workflow_slug": "concierge"}})
@@ -533,7 +650,7 @@ class TestScopeThreadingAcrossSubgraphs:
         from openstategraph.compile.node_runtime import NodeRuntime, RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
 
         def probe(text: str) -> str:
             return save.invoke({"fact": f"finding about {text}", "scope": "workflow"})
@@ -574,7 +691,7 @@ class TestScopeThreadingAcrossSubgraphs:
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
         document = {
             "version": 2,
             "name": "solo",
@@ -604,7 +721,7 @@ class TestScopeThreadingAcrossSubgraphs:
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
         store = InMemoryStore()
-        save, _ = memory_tools()
+        save, _, _ = memory_tools()
 
         runtime = NodeRuntime(
             document_loader={"child-flow": self.CHILD}.__getitem__,

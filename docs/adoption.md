@@ -465,6 +465,27 @@ live". A package states separately which memory it actually uses, in its
 The block is **additive** — a document without one behaves exactly as it did
 before the block existed, so no existing package changes.
 
+Every agent that binds memory gets three tools: `save_memory`, `search_memory`
+and `forget_memory`. Search prints a short handle beside each fact
+(`[workflow · a1b2c3d4]`) and forget takes that handle — a wrong fact is
+removable, and because search shows only four results per scope, removing stale
+ones is what keeps correct ones visible.
+
+**Retention is a deployment property, not a document one** — how long *this
+installation* keeps data is not something a workflow author can answer for the
+person running it:
+
+```bash
+OPENSTATEGRAPH_MEMORY_TTL_MINUTES=10080   # seven days; unset means never expire
+```
+
+It needs a durable store (`OPENSTATEGRAPH_MEMORY_PATH` or
+`OPENSTATEGRAPH_POSTGRES_URL`) and says so loudly if you set it without one —
+an in-process store loses everything on restart, so it has no retention
+question to answer. Expiry deliberately does **not** refresh on read: a stale
+fact that keeps surfacing in search results would otherwise become immortal
+precisely because it keeps surfacing.
+
 Two properties worth knowing, because they are the reason it is a declaration
 rather than a runtime check:
 
