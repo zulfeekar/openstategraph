@@ -97,6 +97,45 @@ export const PLATFORM_TOOL_NODES = [
     keywords: ['web', 'fetch', 'url', 'online'],
   }),
   backendTool({
+    id: 'tool.youtube-transcript',
+    label: 'YouTube Transcript',
+    description: 'Reads one YouTube video’s captions as plain text (keyless, no timestamps).',
+    keywords: ['youtube', 'video', 'transcript', 'captions', 'subtitles'],
+    // Beside Web Fetch because it is the same promise — keyless, read-only —
+    // but it cannot *be* Web Fetch: the only route that returns caption text
+    // is a JSON POST to InnerTube's player endpoint followed by a GET of the
+    // URL that answer issues, and a POST body is not a `url` argument
+    // (`backend/openstategraph/prebuilt_youtube.py` records the probes).
+    fields: [
+      {
+        key: 'language',
+        label: 'Language',
+        kind: 'text',
+        defaultValue: 'en',
+        placeholder: 'en',
+        hint: 'Preferred caption language. Falls back to the same language family, then to whatever exists.',
+      },
+      {
+        key: 'allowAutoCaptions',
+        label: 'Auto captions',
+        kind: 'toggle',
+        defaultValue: true,
+        description: 'Accept machine-generated (ASR) captions when no authored ones exist.',
+      },
+      {
+        key: 'maxChars',
+        label: 'Max characters',
+        kind: 'slider',
+        min: 1000,
+        max: 20000,
+        step: 1000,
+        defaultValue: 8000,
+        onCard: false,
+        format: (value) => `${value}`,
+      },
+    ],
+  }),
+  backendTool({
     id: 'tool.knowledge-lookup',
     label: 'Knowledge',
     description:

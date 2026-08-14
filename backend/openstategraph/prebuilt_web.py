@@ -124,13 +124,23 @@ def _validate_url(url: str) -> None:
 
 
 def _request(
-    url: str, *, data: bytes | None = None, user_agent: str = USER_AGENT
+    url: str,
+    *,
+    data: bytes | None = None,
+    user_agent: str = USER_AGENT,
+    content_type: str = "application/x-www-form-urlencoded",
 ) -> tuple[int, str]:
     """One read of one URL, as `(status, body)`.
 
     The status is returned rather than discarded because a caller that cannot
     see it cannot tell a refusal from an empty answer — which is exactly what
     made a 202 challenge page read as "no results" for the whole of ticket 26.
+
+    `content_type` defaults to the form encoding `web_search` posts, because
+    that was the only POST here until the YouTube atom needed a JSON one
+    (`prebuilt_youtube`). It is a parameter rather than a second transport so
+    that the SSRF guard, the redirect re-validation, the certifi context and
+    the timeout stay declared exactly once.
     """
     _validate_url(url)
     opener = urllib.request.build_opener(
@@ -138,7 +148,7 @@ def _request(
     )
     headers = {"User-Agent": user_agent}
     if data is not None:
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        headers["Content-Type"] = content_type
     request = urllib.request.Request(url, data=data, headers=headers)
     with opener.open(request, timeout=FETCH_TIMEOUT) as resp:
         body: str = resp.read(600_000).decode("utf-8", errors="replace")

@@ -230,6 +230,22 @@ error back so it can read and retry. Raising aborts the graph node instead of
 letting the agent recover. `ToolResult.failure(message)` is the whole
 mechanism.
 
+**Two failures that share a sentence are one failure.**
+[`prebuilt_youtube.py`](../backend/openstategraph/prebuilt_youtube.py) is the
+worked example: seven conditions, seven distinguishable messages, and a test
+(`test_every_failure_says_something_different`) whose only job is to fail if
+anyone collapses two of them. The one that decides the design is a caption URL
+answering **HTTP 200 with zero bytes** — measured on every URL the *web*
+client issues. Reported as "no transcript", it makes an agent describe a video
+it never read, from the title, with complete confidence. Reported as a failed
+download, the agent retries or says what it does not know. Whenever your tool
+can be *refused*, check whether your code can tell that apart from being
+*answered with nothing*. `web_search` had the same defect through a different
+door — DuckDuckGo's 202 challenge page parsed to zero results and was reported
+as `No results for '…'` — and
+[`prebuilt_web.py`](../backend/openstategraph/prebuilt_web.py) carries that
+story in its module docstring.
+
 ### Configuration reaches the tool through `configure`
 
 A node's field values arrive via `configure(data)`, which returns **the

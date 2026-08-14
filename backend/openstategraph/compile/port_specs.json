@@ -1012,6 +1012,37 @@
       ]
     },
     {
+      "type": "tool.youtube-transcript",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "YouTube Transcript",
+      "description": "Reads one YouTube video’s captions as plain text (keyless, no timestamps).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "allowAutoCaptions",
+        "language",
+        "maxChars",
+        "maxRetries",
+        "timeoutSeconds"
+      ]
+    },
+    {
       "type": "workflow.subgraph",
       "kind": "standard",
       "category": "compose",

@@ -79,6 +79,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     from openstategraph.prebuilt_session import SESSION_TOOLS
     from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
     from openstategraph.prebuilt_web import WEB_TOOLS
+    from openstategraph.prebuilt_youtube import YOUTUBE_TOOLS
 
     builtin: dict[str, Any] = {}
     try:
@@ -103,6 +104,12 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
         # The open web, read-only (search + SSRF-guarded fetch) — the root
         # assistant's generic-chat requirement (ticket 67 refinement).
         WEB_TOOLS,
+        # One video's captions as plain text (workflow-gallery ticket 09).
+        # Beside the web family because it is the same promise — keyless,
+        # read-only, no account — but it cannot be `web_fetch`: the only route
+        # that returns caption text is a JSON POST to InnerTube followed by a
+        # GET of the URL that answer issues, and a POST body is not a `url`.
+        YOUTUBE_TOOLS,
         # The compiler as a tool (ticket 69): read-only compile-checking, the
         # Architect's revise-loop evidence.
         ARCHITECT_TOOLS,

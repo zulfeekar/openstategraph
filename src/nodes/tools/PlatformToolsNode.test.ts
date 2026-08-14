@@ -52,6 +52,52 @@ describe('platform tool nodes', () => {
     expect(workbench.model.countOfType('tool.knowledge-lookup')).toBe(1);
   });
 
+  describe('the YouTube transcript atom', () => {
+    const youtube = PLATFORM_TOOL_NODES.find(
+      (entry) => entry.definition.id === 'tool.youtube-transcript',
+    );
+
+    it('declares the same node type id the Python tool answers to', () => {
+      // The seam, tested. If this drifts, the card looks wired and answers
+      // nothing — `prebuilt_youtube.YouTubeTranscriptTool.node_type` is the
+      // other half, pinned by `backend/tests/test_prebuilt_youtube.py`.
+      expect(youtube).toBeDefined();
+      expect(youtube?.definition.id).toBe('tool.youtube-transcript');
+    });
+
+    it('exposes exactly one out port: the tool bus connector', () => {
+      const outs = (youtube?.definition.ports({}) ?? []).filter((port) => port.direction === 'out');
+      expect(outs).toHaveLength(1);
+      expect(outs[0]?.id).toBe('tool');
+    });
+
+    it('declares the three keys `configure` reads, with the Python defaults', () => {
+      // A key the Python half reads that no field declares is a control
+      // reaching nothing — the defect `test_data_key_contract.py` exists for.
+      const fields = new Map(youtube?.definition.fields?.map((f) => [f.key, f]) ?? []);
+      // `maxRetries`/`timeoutSeconds` are injected onto every node type by
+      // `ModelRegistry` and read by graph assembly, not by the tool.
+      expect([...fields.keys()]).toEqual([
+        'language',
+        'allowAutoCaptions',
+        'maxChars',
+        'maxRetries',
+        'timeoutSeconds',
+      ]);
+      expect(fields.get('language')?.defaultValue).toBe('en');
+      expect(fields.get('allowAutoCaptions')?.defaultValue).toBe(true);
+      expect(fields.get('maxChars')?.defaultValue).toBe(8000);
+    });
+
+    it('keeps the truncation budget inside the range the tool clamps to', () => {
+      const budget = youtube?.definition.fields?.find((f) => f.key === 'maxChars');
+      expect(budget?.kind).toBe('slider');
+      if (budget?.kind === 'slider') {
+        expect([budget.min, budget.max]).toEqual([1000, 20000]);
+      }
+    });
+  });
+
   it('states the build-time rule on the atom every developer reads', () => {
     // Invariant 3 of the knowledge architecture, stated where the affordance
     // lives rather than only in a decision record: the button is build-time,

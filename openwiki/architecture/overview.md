@@ -56,6 +56,7 @@ file that knows the whole node catalogue is
 | --- | --- | --- |
 | [`prebuilt_sql.py`](../../backend/openstategraph/prebuilt_sql.py) | `tool.sql-list-tables`, `tool.sql-get-schema`, `tool.sql-query` | read-only SQLite (`mode=ro`, path jailed to `workflows/`) |
 | [`prebuilt_web.py`](../../backend/openstategraph/prebuilt_web.py) | `tool.web-search`, `tool.web-fetch` | keyless search + SSRF-guarded fetch |
+| [`prebuilt_youtube.py`](../../backend/openstategraph/prebuilt_youtube.py) | `tool.youtube-transcript` | one video's captions as plain text — an InnerTube POST over a client ladder, because `web_fetch` is GET-only and every web-client caption URL answers 200 with zero bytes |
 | [`prebuilt_platform.py`](../../backend/openstategraph/prebuilt_platform.py) | `tool.platform-list-workflows`, `-describe-workflow`, `-ls`, `-read-file`, `-grep` | read-only platform introspection for the concierge |
 | [`prebuilt_architect.py`](../../backend/openstategraph/prebuilt_architect.py) | `tool.validate-workflow` | the compiler exposed as a tool, so an agent can compose-validate-revise |
 
