@@ -1,19 +1,32 @@
-"""The one visible example, pinned as a document contract.
+"""The curated example, pinned as a document contract.
 
-`workflows/one-example/01-one-workflow.md`: the catalogue ships **one**
-visible workflow — `chinook-assistant` — and everything else on disk is
-infrastructure a reader never has to meet (the gateway, the architect). Three
-earlier examples (`page-analytics`, `chinook-metrics-team`, and a *visible*
-`chinook-nl-to-sql`) were deleted or hidden to get there, so these are the
-tests that stop them growing back.
+`.scratch/one-example/tickets/01-one-workflow.md`: `chinook-assistant` is the
+worked example the owner asked for — a horizontal text-to-SQL workflow whose
+router names five real intents, whose analyst retries until a grader passes,
+and in which every node can be explained in one line. Three earlier examples
+(`page-analytics`, `chinook-metrics-team`, and a *visible* `chinook-nl-to-sql`)
+were deleted or folded in to get there, so these are the tests that stop them
+growing back.
 
 **One-chinook ticket 10 finished the job.** `chinook-nl-to-sql` is gone
 entirely: the analyst is no longer a mounted package but the `data_query`
 branch of this document, and its `tools/`, `data/`, `knowledge/`, `evals/`
-and `tests/` moved into `workflows/chinook-assistant/`. So the pair of
-assertions that used to read "the analyst is hidden but loadable" now reads
-"the analyst is not a package at all", and the retry-loop tests below read
-the same node ids out of the *one* document.
+and `tests/` moved into the assistant's package. So the pair of assertions
+that used to read "the analyst is hidden but loadable" now reads "the analyst
+is not a package at all", and the retry-loop tests below read the same node
+ids out of the *one* document.
+
+**The count of one is spent; the example it protected is not**
+(workflow-gallery ticket 20). This file used to open by asserting that the
+listing showed exactly one visible workflow, because when it was written the
+catalogue *was* one. The owner ordered twenty permanent examples on
+2026-08-14 and batch A landed five, so that assertion stopped describing a
+regression and started describing the plan working. It is gone, along with
+the note that composition was therefore invisible to a reader — batch C ships
+visible mounts on purpose. What replaces a count is a sweep: *every* package
+on disk validates and compiles clean, which is the property the count was a
+one-package proxy for and which gets stronger, not falser, as the gallery
+grows. Everything else here is unchanged and still reads the curated example.
 
 They are document tests, not model tests: every claim here is checkable from
 `workflow.json` and the compiled plan, with no provider call, because the
@@ -25,47 +38,92 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openstategraph.api.workflow_store import WorkflowStore
+from openstategraph.api.workflow_store import WorkflowStore, validate_package
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.workflows_root import workflows_root
 
 REPO = Path(__file__).resolve().parents[2]
-WORKFLOWS = REPO / "workflows"
 
 ASSISTANT = "chinook-assistant"
 
+MOUNT_TYPES = ("workflow.subgraph", "team.workflow")
+
+
+def homes() -> tuple[Path, ...]:
+    """Where a shipped package may live — asked, never spelled inline.
+
+    `workflows_root()` is the project's own answer to that question (env →
+    config file → checkout → cwd) and is the only home that exists today. The
+    other two are the homes gallery ticket 07 is choosing between when the
+    examples stop being *staged* in `workflows/` and start shipping in the
+    wheel. Searching a directory that does not exist costs one `is_dir()`, and
+    it means a relocation that changes nothing this file guards is a one-line
+    edit here rather than thirty red assertions.
+    """
+    return (
+        workflows_root(),
+        REPO / "examples",
+        REPO / "backend" / "openstategraph" / "examples",
+    )
+
+
+def packages() -> list[Path]:
+    """Every package directory, in every home, by slug. First home wins."""
+    found: dict[str, Path] = {}
+    for home in homes():
+        if not home.is_dir():
+            continue
+        for manifest in sorted(home.glob("*/workflow.json")):
+            found.setdefault(manifest.parent.name, manifest.parent)
+    return [found[slug] for slug in sorted(found)]
+
+
+def package(slug: str) -> Path:
+    for home in homes():
+        if (home / slug / "workflow.json").is_file():
+            return home / slug
+    raise AssertionError(f"no package {slug!r} in any of {[str(h) for h in homes()]}")
+
 
 def document(slug: str) -> dict:
-    return json.loads((WORKFLOWS / slug / "workflow.json").read_text())["document"]
+    return json.loads((package(slug) / "workflow.json").read_text())["document"]
 
 
-def envelope(slug: str) -> dict:
-    return json.loads((WORKFLOWS / slug / "workflow.json").read_text())
+def mounts(doc: dict) -> set[str]:
+    return {n["data"]["workflow"] for n in doc["nodes"] if n["type"] in MOUNT_TYPES}
 
 
-class TestExactlyOneVisibleWorkflow:
-    """The whole point of the ticket: a catalogue of one."""
+class TestTheCuratedExampleIsStillOnDisk:
+    """What the one-example map actually cared about: this example, present,
+    complete and coherent. Not how many neighbours it has."""
 
-    def test_the_listing_shows_the_assistant_and_nothing_else(self) -> None:
-        assert [s.slug for s in WorkflowStore(WORKFLOWS).list()] == [ASSISTANT]
+    def test_the_assistant_is_offered_to_a_customer(self) -> None:
+        """Visible, not hidden. It was the whole listing once; now it is the
+        row that must never go missing from it."""
+        store = WorkflowStore(package(ASSISTANT).parent)
+        assert ASSISTANT in [s.slug for s in store.list()]
 
     def test_the_deleted_examples_stay_deleted(self) -> None:
         for slug in ("page-analytics", "chinook-metrics-team", "chinook-nl-to-sql"):
-            assert not (WORKFLOWS / slug).exists(), f"{slug} came back"
+            for home in homes():
+                assert not (home / slug).exists(), f"{slug} came back in {home}"
 
     def test_there_is_exactly_one_chinook_package(self) -> None:
-        """The ticket, stated as a directory listing. A second Chinook package
-        is the regression — not because two is many, but because the editor
-        seeded the *other* one, which is why the owner spent a map's worth of
-        sessions looking at a graph with no router in it."""
-        chinook = sorted(p.name for p in WORKFLOWS.iterdir() if p.name.startswith("chinook"))
+        """Not a count of the gallery — a count of *Chinooks*. A second one is
+        the regression, not because two is many, but because the editor seeded
+        the *other* one, which is why the owner spent a map's worth of sessions
+        looking at a graph with no router in it. The twenty keep this clear:
+        the catalogue's own SQL example is `sql-qa`, over the generic
+        `prebuilt_sql` atoms, precisely so it is not a second Chinook."""
+        chinook = sorted(p.name for p in packages() if p.name.startswith("chinook"))
         assert chinook == [ASSISTANT]
 
-    def test_the_one_package_owns_the_database_and_its_tools(self) -> None:
-        package = WORKFLOWS / ASSISTANT
-        assert (package / "data" / "Chinook_Sqlite.sqlite").is_file()
-        assert (package / "tools" / "chinook.py").is_file()
-        assert (package / "evals" / "chinook.eval.json").is_file()
-        assert len(list((package / "knowledge").glob("*.md"))) == 11
+    def test_the_package_owns_the_database_and_its_tools(self) -> None:
+        assistant = package(ASSISTANT)
+        assert (assistant / "data" / "Chinook_Sqlite.sqlite").is_file()
+        assert (assistant / "tools" / "chinook.py").is_file()
+        assert (assistant / "evals" / "chinook.eval.json").is_file()
+        assert len(list((assistant / "knowledge").glob("*.md"))) == 11
 
 
 class TestTheRouterIsTheDiagram:
@@ -232,43 +290,67 @@ class TestTheRulesLayersAreWhereTheDocumentSaysTheyAre:
         """The deprecated spelling, swept. Left in place it would ride into
         every workflow the Architect generates, because its grammar file
         taught the model to emit it."""
-        for path in WORKFLOWS.rglob("workflow.json"):
-            assert "criteriaMode" not in path.read_text(), path
-        grammar = (WORKFLOWS / "workflow-architect" / "skills" / "document-grammar.md").read_text()
+        for pkg in packages():
+            assert "criteriaMode" not in (pkg / "workflow.json").read_text(), pkg
+        grammar = (package("workflow-architect") / "skills" / "document-grammar.md").read_text()
         assert "rulesMode" in grammar
         assert 'Never emit "criteriaMode"' in grammar
 
 
 class TestCompositionIsStillDemonstratedSomewhere:
-    """The accepted cost of the collapse, checked rather than assumed."""
+    """The gateway is the composition example, checked rather than assumed.
+
+    Its companion assertion — "no *visible* workflow demonstrates a mount",
+    the recorded cost of collapsing to one example — is deleted, not moved.
+    Batch C of the gallery ships nested mounts and a package mounted twice
+    with different overrides, deliberately visible, so that sentence now
+    describes a gap being closed rather than a regression."""
 
     def test_the_gateway_still_mounts_two_workflows(self) -> None:
-        doc = document("concierge")
-        mounts = {
-            n["data"]["workflow"]
-            for n in doc["nodes"]
-            if n["type"] in ("workflow.subgraph", "team.workflow")
-        }
-        assert mounts == {ASSISTANT, "workflow-architect"}
-
-    def test_no_visible_workflow_demonstrates_a_mount(self) -> None:
-        """Stated as a test so nobody has to rediscover it. Every mount this
-        repository ships now sits inside a `hidden: true` package, so a reader
-        who opens only the visible example never meets composition. That is
-        the recorded cost of the collapse, not an oversight."""
-        for slug in (s.slug for s in WorkflowStore(WORKFLOWS).list()):
-            types = {n["type"] for n in document(slug)["nodes"]}
-            assert not types & {"workflow.subgraph", "team.workflow"}
+        assert mounts(document("concierge")) == {ASSISTANT, "workflow-architect"}
 
 
 class TestNothingElseStillPointsAtTheDeletedExamples:
-    def test_the_concierge_routes_to_packages_that_exist(self) -> None:
-        doc = document("concierge")
-        for node in doc["nodes"]:
-            if node["type"] in ("workflow.subgraph", "team.workflow"):
-                slug = node["data"]["workflow"]
-                assert (WORKFLOWS / slug / "workflow.json").is_file(), slug
+    def test_every_mount_names_a_package_that_exists(self) -> None:
+        """Was the concierge alone, because the concierge was the only thing
+        that mounted. Stated over every package it keeps its original job —
+        nothing still points at a deleted example — and picks up a new one:
+        a gallery example cannot ship a mount onto a slug nobody wrote."""
+        for pkg in packages():
+            for slug in mounts(document(pkg.name)):
+                assert (pkg.parent / slug / "workflow.json").is_file(), f"{pkg.name} → {slug}"
 
     def test_the_gateways_knowledge_store_has_no_orphan_docs(self) -> None:
-        for doc_path in (WORKFLOWS / "concierge" / "knowledge").glob("*.md"):
-            assert (WORKFLOWS / doc_path.stem).is_dir(), f"{doc_path.name} routes nowhere"
+        concierge = package("concierge")
+        for doc_path in (concierge / "knowledge").glob("*.md"):
+            assert (concierge.parent / doc_path.stem).is_dir(), f"{doc_path.name} routes nowhere"
+
+
+class TestEveryPackageStandsUpOnItsOwn:
+    """What replaces the count of one.
+
+    The old assertion said "the listing is exactly `[chinook-assistant]`",
+    which read as a statement about the *catalogue* but was doing duty as a
+    statement about *quality*: nothing half-built had been left lying in the
+    workflows directory. The catalogue claim is now false by owner decision;
+    the quality claim is the one worth keeping, and unlike a count it gets
+    harder to satisfy — never easier — as the twenty land."""
+
+    def test_the_sweep_is_not_vacuous(self) -> None:
+        found = [p.name for p in packages()]
+        assert ASSISTANT in found
+        assert len(found) > 1, "the gallery lost its packages, or homes() lost the gallery"
+
+    def test_every_package_satisfies_the_package_contract(self) -> None:
+        for pkg in packages():
+            errors = [f for f in validate_package(pkg) if f.startswith("error:")]
+            assert errors == [], f"{pkg.name}: {errors}"
+
+    def test_every_package_compiles_with_no_warnings(self) -> None:
+        """A warning is the compiler saying it could not make sense of
+        something a reader can see. An example that ships one teaches it."""
+        for pkg in packages():
+            plan = WorkflowCompiler().plan(document(pkg.name))
+            assert plan.warnings == [], f"{pkg.name}: {plan.warnings}"
+            assert plan.entry, f"{pkg.name} has no entry node"
+            assert plan.exits, f"{pkg.name} has no exit node"
