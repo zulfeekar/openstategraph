@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "name": "Agentic RAG Rewrite",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Agentic RAG Rewrite",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "The loop whose revise edge reshapes the question rather than the answer: a rewriter upstream of a retriever, and a grader that sends the question back to be asked better."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Vague question",
+        "data": {},
+        "position": { "x": 40, "y": 260 }
+      },
+      {
+        "id": "rewrite1",
+        "type": "agent.llm",
+        "title": "Rewriter",
+        "data": {
+          "systemPrompt": "You reshape a question so a handbook lookup can answer it. You never answer it yourself.\n\nThe handbook is Northwind Robotics' internal operations handbook. Its topics are: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers.\n\nReply with ONE question, on one line. It must name at least one of those topics by its exact name, and it must ask for something concrete the handbook could state — a named tier, a number of minutes, a role, a step in a sequence. Do not answer, do not explain, do not add a preamble.\n\nWhen you are given feedback on a previous attempt, that feedback is about the ANSWER the last version of your question produced. Ask a different question: name a different topic, or ask for the specific figure the feedback says was missing."
+        },
+        "position": { "x": 340, "y": 260 }
+      },
+      {
+        "id": "know1",
+        "type": "tool.knowledge-lookup",
+        "title": "Handbook",
+        "data": {},
+        "position": { "x": 640, "y": 440 }
+      },
+      {
+        "id": "retrieve1",
+        "type": "agent.llm",
+        "title": "Retriever",
+        "data": {
+          "systemPrompt": "Answer the question you are given using ONLY the Northwind Robotics handbook, which you read with the knowledge_lookup tool.\n\nThe topics are: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers. Look up every topic the question names before you answer; if the first lookup does not contain the figure you need, look up another topic.\n\nNorthwind Robotics is a private company and you have no memory of it — anything you state without having read it in a topic document is invented. Quote the concrete values you found (tier names, minutes, roles) and name the topic each came from. If the handbook genuinely does not say, reply with exactly: the handbook does not say."
+        },
+        "position": { "x": 640, "y": 260 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Grounding review",
+        "data": {
+          "criteria": "- The answer must name at least one handbook topic it came from, spelled as one of: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers.\n- It must quote at least one concrete value from the handbook — a tier name, a number of minutes or hours, or a named role.\n- 'the handbook does not say' is a failure: it means the question was asked of the wrong topic.\n- Generic advice that would be true of any company is a failure.\n- If it falls short, say which topic should have been asked about instead, and which concrete figure is missing.",
+          "rulesMode": "extend",
+          "maxAttempts": 6
+        },
+        "position": { "x": 940, "y": 260 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Grounded answer",
+        "data": {},
+        "position": { "x": 1240, "y": 260 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "rewrite1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "rewrite1", "portId": "result" },
+        "target": { "nodeId": "retrieve1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "know1", "portId": "tool" },
+        "target": { "nodeId": "retrieve1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "retrieve1", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "rewrite1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "name": "Fanout In A Loop",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Fanout In A Loop",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "The only cycle containing a Send: a grader that rejects the joined report sends the whole plan back to the supervisor, and one lap costs several supersteps."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Brief",
+        "data": {},
+        "position": { "x": 40, "y": 300 }
+      },
+      {
+        "id": "lead1",
+        "type": "orchestrate.supervisor",
+        "title": "Planner",
+        "data": {
+          "maxSubtasks": 3,
+          "rules": "Each numbered line of the brief is one independent subtask. Keep them in the order given."
+        },
+        "position": { "x": 340, "y": 300 }
+      },
+      {
+        "id": "worker1",
+        "type": "orchestrate.worker",
+        "title": "Analyst",
+        "data": {
+          "default": true,
+          "role": "Answers exactly one subtask about operating software in production. Six lines at most. Every line states something operational and concrete — a failure mode, who is on the hook for it, what it costs to recover — never a generic benefit. Do not restate the subtask, do not address the other subtasks, do not write a conclusion."
+        },
+        "position": { "x": 640, "y": 300 }
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "title": "Join",
+        "data": { "reportTitle": "Deployment comparison" },
+        "position": { "x": 940, "y": 300 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Report review",
+        "data": {
+          "criteria": "- The report must contain three '###' sections and none of them may be empty or say a task produced no result.\n- Each of the first two sections must name at least one concrete failure mode and who recovers it.\n- The last section must actually choose one of the two approaches and say which, in its first sentence. 'It depends' is a failure.\n- If it falls short, name the section by its task id and say exactly what is missing from it.",
+          "rulesMode": "extend",
+          "maxAttempts": 3
+        },
+        "position": { "x": 1240, "y": 300 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Report",
+        "data": {},
+        "position": { "x": 1540, "y": 300 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "lead1", "portId": "instruction" }
+      },
+      {
+        "source": { "nodeId": "lead1", "portId": "workers" },
+        "target": { "nodeId": "worker1", "portId": "dispatch" }
+      },
+      {
+        "source": { "nodeId": "worker1", "portId": "result" },
+        "target": { "nodeId": "join1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "join1", "portId": "report" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "lead1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}
