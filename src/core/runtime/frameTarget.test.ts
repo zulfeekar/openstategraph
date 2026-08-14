@@ -122,7 +122,9 @@ describe('frameTarget — project onto the document that is open', () => {
         pathSlugs: ['concierge', 'chinook-assistant'],
       };
       expect(frameTarget(inside, child, address('chinook-assistant'))).toBe('in1');
-      expect(frameTarget(inside, documentWith('in1', 'wf-music'), address('concierge'))).toBe('wf-music');
+      expect(frameTarget(inside, documentWith('in1', 'wf-music'), address('concierge'))).toBe(
+        'wf-music',
+      );
     });
 
     it('tells two mounts of one package apart', () => {

@@ -55,7 +55,9 @@ describe('readAddressFromSearch', () => {
 describe('urlWithAddress', () => {
   it('writes a class address exactly as the slug form did', () => {
     // Byte-identical to the old output, so no existing link changes shape.
-    expect(urlWithAddress('http://localhost:5273/', address('my-workflow'))).toBe('/?w=my-workflow');
+    expect(urlWithAddress('http://localhost:5273/', address('my-workflow'))).toBe(
+      '/?w=my-workflow',
+    );
   });
 
   it('percent-encodes the separator, as the standard serializer does', () => {
@@ -67,9 +69,7 @@ describe('urlWithAddress', () => {
     expect(urlWithAddress('http://localhost:5273/', address('concierge/wf-music'))).toBe(
       '/?w=concierge%2Fwf-music',
     );
-    expect(readAddressFromSearch('?w=concierge%2Fwf-music')).toEqual(
-      address('concierge/wf-music'),
-    );
+    expect(readAddressFromSearch('?w=concierge%2Fwf-music')).toEqual(address('concierge/wf-music'));
   });
 
   it('preserves every other parameter and the hash', () => {
@@ -151,9 +151,9 @@ describe('resolveAddressRequest', () => {
   });
 
   it('restores when there is no address in the URL at all', () => {
-    expect(
-      resolveAddressRequest({ urlAddress: null, openAddress: address('concierge') }),
-    ).toEqual({ action: 'restore' });
+    expect(resolveAddressRequest({ urlAddress: null, openAddress: address('concierge') })).toEqual({
+      action: 'restore',
+    });
   });
 
   it('still honours an old bookmark naming a bare slug', () => {

@@ -38,9 +38,7 @@ const CHILD_EFFECTIVE = {
 const PARENT = {
   version: 2,
   name: 'concierge',
-  nodes: [
-    { id: 'wf-music', type: 'workflow.subgraph', data: { workflow: 'chinook-assistant' } },
-  ],
+  nodes: [{ id: 'wf-music', type: 'workflow.subgraph', data: { workflow: 'chinook-assistant' } }],
   edges: [],
 };
 
@@ -68,7 +66,11 @@ describe('instance-open baselines and the parent save guard', () => {
   });
 
   it('baselines the class slug, as documented', async () => {
-    const outcome = await loadMountIntoEditor(parseMountAddress('concierge/wf-music')!, client, new Workbench());
+    const outcome = await loadMountIntoEditor(
+      parseMountAddress('concierge/wf-music')!,
+      client,
+      new Workbench(),
+    );
     expect(outcome.ok).toBe(true);
     expect(getKnownSavedAt('chinook-assistant')).toBe('2026-08-13T00:00:00Z');
   });

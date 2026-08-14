@@ -1,7 +1,4 @@
-import {
-  ClearMountOverrideCommand,
-  SetMountOverrideCommand,
-} from '@core/commands/mountCommands';
+import { ClearMountOverrideCommand, SetMountOverrideCommand } from '@core/commands/mountCommands';
 import { CANVAS } from '@design/tokens';
 import { snapPoint, type Point, type Size } from '@core/kernel/geometry';
 import {

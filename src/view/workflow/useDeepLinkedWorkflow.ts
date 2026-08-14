@@ -11,7 +11,11 @@ import {
 import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
 import { MountContext } from '@core/model/MountContext';
 import { clearDrillStack } from '@app/drillStack';
-import { loadMountIntoEditor, loadWorkflowIntoEditor, type LoadedWorkflow } from './loadWorkflowIntoEditor';
+import {
+  loadMountIntoEditor,
+  loadWorkflowIntoEditor,
+  type LoadedWorkflow,
+} from './loadWorkflowIntoEditor';
 
 /**
  * What the toast says — and it must say when the canvas is *not* the file.

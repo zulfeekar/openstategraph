@@ -82,19 +82,16 @@ describe('hostile blobs already on the mount node', () => {
   // grandchild overrides are silently discarded by an unrelated write.
   // FIXED 2026-08-13. Was `it.fails`: `descend` tested `isJson` alone, so a
   // string-spelled nested `overrides` was replaced with `{}` on any deep write.
-  it(
-    'a deep write preserves nested overrides stored in their string spelling',
-    () => {
-      const nested = JSON.stringify({ grader1: { threshold: 9 } });
-      const document = rootDocument({ 'wf-inner': { overrides: nested } });
-      const ctx = context('concierge/wf-music/wf-inner', document);
-      ctx.writeOverride('agent-x', 'rules', 'new');
-      const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
-      const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
-      expect(inner['grader1']).toEqual({ threshold: 9 });
-      expect(inner['agent-x']).toEqual({ rules: 'new' });
-    },
-  );
+  it('a deep write preserves nested overrides stored in their string spelling', () => {
+    const nested = JSON.stringify({ grader1: { threshold: 9 } });
+    const document = rootDocument({ 'wf-inner': { overrides: nested } });
+    const ctx = context('concierge/wf-music/wf-inner', document);
+    ctx.writeOverride('agent-x', 'rules', 'new');
+    const blob = blobOf(document, 'wf-music') as Record<string, Record<string, unknown>>;
+    const inner = blob['wf-inner']?.['overrides'] as Record<string, unknown>;
+    expect(inner['grader1']).toEqual({ threshold: 9 });
+    expect(inner['agent-x']).toEqual({ rules: 'new' });
+  });
 
   it('a malformed nested overrides string is refused, not replaced', () => {
     // Rewritten when the defect was fixed. It used to pin the loss — the

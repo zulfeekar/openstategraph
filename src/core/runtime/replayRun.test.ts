@@ -116,7 +116,7 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
     ]);
   });
 
-  it("gives a mounted node the output the frame reported for it", () => {
+  it('gives a mounted node the output the frame reported for it', () => {
     // The other half of the same ticket, and the half that survived it: the
     // *value*. `node` is the runtime's name for the step (`tools`, `model`,
     // or `safe_name(id)`) and it is never a canvas id inside a mount — so an
@@ -140,7 +140,9 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
   });
 
   it('skips frames belonging to a document nobody has open', () => {
-    expect(replayRun(MOUNTED_RUN, documentWith('unrelated'), true, address('something-else'))).toEqual([]);
+    expect(
+      replayRun(MOUNTED_RUN, documentWith('unrelated'), true, address('something-else')),
+    ).toEqual([]);
   });
 
   it('is empty for a run that has produced no frames yet', () => {
@@ -151,7 +153,11 @@ describe('replayRun — catching a newly-opened document up to the run', () => {
 describe('turnToReplay — which turn a newly-opened document catches up to', () => {
   const frame: ReplayFrame = { node: 'a', path: ['a'], output: 'x' };
   const turn = (
-    over: Partial<{ running: boolean; stopped: 'streaming' | 'paused' | null; activity: ReplayFrame[] }>,
+    over: Partial<{
+      running: boolean;
+      stopped: 'streaming' | 'paused' | null;
+      activity: ReplayFrame[];
+    }>,
   ) => ({ running: false, stopped: null, activity: [frame], ...over });
 
   it('prefers the run in progress', () => {

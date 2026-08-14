@@ -95,7 +95,6 @@ export class SetMountOverrideCommand implements ICommand {
   }
 }
 
-
 /**
  * Back to the package default — the other half of tranche 5's affordance.
  *

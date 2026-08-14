@@ -13,7 +13,14 @@ test('the seeded demo renders nodes and links', async ({ page }) => {
 
 test('clicking a node selects it and opens its inspector', async ({ page }) => {
   const card = page.locator('[data-node-id]').first();
-  await card.click();
+  // The **header**, not the card's centre. Every on-card control is wrapped in
+  // `data-no-drag` and the paper guard ignores pointer events from one, so a
+  // click landing on a field selects nothing — deliberate, so that dragging
+  // cannot start from inside a textarea. This test used to click the centre
+  // and pass only because the first seeded node had no field there; the demo
+  // changed to one whose prompt textarea fills the card, and the assertion
+  // started reporting a fixture change as a selection bug.
+  await card.locator('.node__header').click();
   // The inspector switches from the workflow view to the node view.
   await expect(page.locator('.inspector')).not.toContainText('Diagnostics');
 });
@@ -37,18 +44,27 @@ test('dragging a node moves it and undo restores it', async ({ page }) => {
 test('auto-arrange works in both flow directions', async ({ page }) => {
   await page.getByLabel('Arrange automatically').click();
   const horizontal = await page.locator('[data-node-id]').first().boundingBox();
+  expect(horizontal).toBeTruthy();
   await page.getByLabel(/flow direction/i).click();
-  const vertical = await page.locator('[data-node-id]').first().boundingBox();
-  expect(horizontal && vertical).toBeTruthy();
+  // Polled, not read once. The toggle defers `autoLayout.run` into a
+  // `requestAnimationFrame` (and `fitToContent` into a second one), so an
+  // immediate read races the frame that does the work: it passes on a quiet
+  // machine and fails on a loaded one, which is the worst kind of red.
   // Direction change re-arranges: some geometry must differ.
-  expect(horizontal!.x !== vertical!.x || horizontal!.y !== vertical!.y).toBe(true);
+  await expect
+    .poll(async () => {
+      const now = await page.locator('[data-node-id]').first().boundingBox();
+      return now!.x !== horizontal!.x || now!.y !== horizontal!.y;
+    })
+    .toBe(true);
 });
 
 test('the palette adds a node to the canvas', async ({ page }) => {
   const before = await page.locator('[data-node-id]').count();
   await page.getByPlaceholder('Search nodes…').fill('Note');
-  await page.locator('.palette [class*=card], .palette button', { hasText: 'Note' }).first().click();
-  await expect
-    .poll(async () => page.locator('[data-node-id]').count())
-    .toBeGreaterThan(before);
+  await page
+    .locator('.palette [class*=card], .palette button', { hasText: 'Note' })
+    .first()
+    .click();
+  await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
 });
