@@ -2398,7 +2398,7 @@
     },
     "/api/workflows/{slug}/graph": {
       "get": {
-        "description": "The COMPILED topology as Mermaid text (ticket 54) \u2014 what the\ncompiler actually produced, not a hand-drawn approximation.\n\n`xray=True` expands subgraph internals (a concierge shows its routed\nchildren; a Team shows its members), which is also the cheap half of\nthe editor's dual-view ask (ticket 68). Text, never a PNG \u2014\n`draw_mermaid_png()` posts the graph to a third-party API.",
+        "description": "The COMPILED topology as Mermaid text (ticket 54) \u2014 what the\ncompiler actually produced, not a hand-drawn approximation.\n\n`xray=True` expands subgraph internals (a concierge shows its routed\nchildren; a Team shows its members), which is also the cheap half of\nthe editor's dual-view ask (ticket 68). Text, never a PNG \u2014\n`draw_mermaid_png()` posts the graph to a third-party API.\n\n`audience=customer` hides the compiler's own vocabulary \u2014 `__start__`,\n`__default_error_handler__`, `safe_name`d ids, branch ids \u2014 and labels\neach node with the name its author gave it. The default is\n**developer**, deliberately: an existing caller keeps the ids, which\nare what a mount bug gets reported under, and only the customer page\nopts out (reviews-2026-08-14 ticket 04).",
         "operationId": "compiled_graph_api_workflows__slug__graph_get",
         "parameters": [
           {
@@ -2407,6 +2407,20 @@
             "required": true,
             "schema": {
               "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "default": "developer",
+              "enum": [
+                "developer",
+                "customer"
+              ],
+              "title": "Audience",
               "type": "string"
             }
           }

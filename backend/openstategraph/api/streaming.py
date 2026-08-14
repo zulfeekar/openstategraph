@@ -22,6 +22,26 @@ from openstategraph.developer_channel import ProseGuard  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 
 
+def customer_task_id(task_id: Any, audience: Any) -> Any:
+    """A task id, unless it is machinery and the reader is a customer.
+
+    `__turn_reset__` marks the start of a turn. To a developer that is real
+    information — it is how one turn is told from the next in a thread. To a
+    customer it arrived in the trace as `in1 (__turn_reset__)`, reading like
+    the name of something their question had spawned
+    (reviews-2026-08-14 ticket 04).
+
+    Dropped here rather than hidden by the page, because that is this
+    boundary's rule: a developer value is absent from a customer's frame
+    because no code path put one there.
+    """
+    from openstategraph.api.audience import Audience
+
+    if audience is Audience.CUSTOMER and isinstance(task_id, str) and task_id.startswith("__"):
+        return None
+    return task_id
+
+
 def _redact_for(audience: Any) -> Any:
     """A single-value redactor for one audience, for use inside the fold.
 
@@ -876,7 +896,9 @@ def _run_frames(
                         {
                             "node": node_id,
                             "namespace": list(namespace),
-                            "taskId": task_ids[0] if task_ids else None,
+                            "taskId": customer_task_id(
+                                task_ids[0] if task_ids else None, audience
+                            ),
                             "internal": is_internal,
                             # Additive (ticket 01): the canvas node a client
                             # should show as running for this frame. Both

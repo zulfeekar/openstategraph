@@ -123,6 +123,10 @@ from openstategraph.api.audience import (  # noqa: E402
     DeveloperChannel,
     clean_output,
     resolve as resolve_audience,
+)
+from openstategraph.api.customer_graph import customer_mermaid
+from openstategraph.api.audience import (
+    Audience,
     split_suggestion,
 )
 from openstategraph.api.editor_assets import mount_editor  # noqa: E402
@@ -1361,7 +1365,9 @@ def create_app(
         summary="The compiled topology, as Mermaid text",
         tags=["Runs"],
     )
-    def compiled_graph(slug: str) -> CompiledGraphResponse:
+    def compiled_graph(
+        slug: str, audience: Literal["developer", "customer"] = "developer"
+    ) -> CompiledGraphResponse:
         """The COMPILED topology as Mermaid text (ticket 54) — what the
         compiler actually produced, not a hand-drawn approximation.
 
@@ -1369,6 +1375,13 @@ def create_app(
         children; a Team shows its members), which is also the cheap half of
         the editor's dual-view ask (ticket 68). Text, never a PNG —
         `draw_mermaid_png()` posts the graph to a third-party API.
+
+        `audience=customer` hides the compiler's own vocabulary — `__start__`,
+        `__default_error_handler__`, `safe_name`d ids, branch ids — and labels
+        each node with the name its author gave it. The default is
+        **developer**, deliberately: an existing caller keeps the ids, which
+        are what a mount bug gets reported under, and only the customer page
+        opts out (reviews-2026-08-14 ticket 04).
         """
         from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
         from openstategraph.compile.node_runtime import RunState
@@ -1390,6 +1403,8 @@ def create_app(
             mermaid_text = graph.get_graph(xray=True).draw_mermaid()
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}")
+        if resolve_audience(audience) is Audience.CUSTOMER:
+            mermaid_text = customer_mermaid(mermaid_text, document)
         return CompiledGraphResponse(mermaid=mermaid_text)
 
     @app.post(

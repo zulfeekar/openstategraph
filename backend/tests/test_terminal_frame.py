@@ -426,3 +426,47 @@ def test_a_customer_error_frame_says_nothing_internal() -> None:
     assert "the model provider hung up" not in frames[-1]
     assert "RuntimeError" not in frames[-1]
     assert "could not finish" in frames[-1]
+
+
+class TestTheCustomerSurfaceUsesNamesNotIds:
+    """Source assertions, for the same reason the class above gives: `chat.html`
+    is a dependency-free page and this repo has no JS test harness for it.
+
+    What is pinned is the *wiring* — that the page asks for the customer view
+    of the diagram, and routes trace labels through the lookup — not the
+    rendering, which the Python tests beside it already cover.
+    """
+
+    @staticmethod
+    def _page() -> str:
+        from pathlib import Path
+
+        import openstategraph
+
+        return (Path(openstategraph.__file__).parent / "api" / "static" / "chat.html").read_text(
+            encoding="utf-8"
+        )
+
+    def test_it_asks_for_the_customer_view_of_the_diagram(self) -> None:
+        # Without the parameter the page gets `__start__`,
+        # `__default_error_handler__` and `safe_name`d ids — what it used to
+        # render (reviews-2026-08-14 ticket 04).
+        assert "/graph?audience=customer" in self._page()
+
+    def test_the_trace_labels_go_through_the_name_lookup(self) -> None:
+        page = self._page()
+
+        assert "function displayName(" in page
+        assert "displayName(d.node)" in page
+        assert "displayName(row.node)" in page
+
+    def test_a_spawn_names_the_child_too(self) -> None:
+        # `⤷ spawned agent-chat` was the last id left on the customer's trace
+        # after the step rows were fixed.
+        assert 'displayName(d.label)' in self._page()
+
+    def test_no_raw_node_id_is_concatenated_into_a_trace_row(self) -> None:
+        # The exact shape that shipped: `"▸ " + d.node`.
+        page = self._page()
+        assert '+ d.node +' not in page
+        assert '+ d.label +' not in page

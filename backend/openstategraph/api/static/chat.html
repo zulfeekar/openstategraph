@@ -495,7 +495,11 @@ async function renderFlow(slug) {
   flow.slug = slug; flow.ready = false;
   host.textContent = "compiling…";
   try {
-    const resp = await fetch(`/api/workflows/${slug}/graph`);
+    // `audience=customer`: the compiler's own names — `__start__`,
+    // `__default_error_handler__`, `safe_name`d ids, branch ids — are not this
+    // reader's vocabulary. The editor asks the same endpoint without it and
+    // still gets the ids it debugs with.
+    const resp = await fetch(`/api/workflows/${slug}/graph?audience=customer`);
     if (!resp.ok) { host.textContent = "no compiled view: " + resp.status; return; }
     const { mermaid: text } = await resp.json();
     const source = themeMermaid(text);
@@ -790,7 +794,7 @@ function renderTimeline(el, rows, names) {
     const ns = (row.namespace && row.namespace[0]) || null;
     if (ns && last && last.ns === ns && last.taskId === row.taskId) { last.ms += d; last.count++; clock += d; continue; }
     const label = (row.taskId && names["task:" + row.taskId])
-      || (ns && names["ns:" + ns]) || ns || row.node.replace(/^node:/, "");
+      || (ns && names["ns:" + ns]) || ns || displayName(row.node);
     visits[label] = (visits[label] || 0) + 1;
     steps.push({ label, ns, taskId: row.taskId, ms: d, start: clock, count: 1, internal: 0, visit: visits[label] });
     clock += d;
@@ -944,6 +948,22 @@ function watchCatalogue() {
   addEventListener("beforeunload", shut);
 }
 
+/**
+ * The name a node's author gave it, for the trace.
+ *
+ * Frames carry the node **id** — `in1`, `router1`, `node:agent.llm-1` — which
+ * is the compiler's handle on it, not a word this reader chose. The document
+ * is already loaded for the run, so the title is a lookup away
+ * (reviews-2026-08-14 ticket 04). Falls back to the bare id: a node its author
+ * never named has no better name to show, and inventing one would be worse.
+ */
+function displayName(nodeId) {
+  const bare = String(nodeId || "").replace(/^node:/, "");
+  const nodes = (state.doc && state.doc.document && state.doc.document.nodes) || [];
+  const hit = nodes.find((n) => n.id === nodeId || n.id === bare);
+  return (hit && hit.title) || bare;
+}
+
 async function docFor(slug) {
   if (!state.doc || state.doc.slug !== slug) {
     const record = await (await fetch(`/api/workflows/${slug}`)).json();
@@ -1037,7 +1057,7 @@ async function stream(path, body, el, signal) {
               }
             } else {
               const row = document.createElement("div");
-              const base = "▸ " + d.node + (d.taskId ? " (" + d.taskId + ")" : "");
+              const base = "▸ " + displayName(d.node) + (d.taskId ? " (" + d.taskId + ")" : "");
               row.dataset.base = base;
               row.textContent = base;
               steps.appendChild(row);
@@ -1048,7 +1068,7 @@ async function stream(path, body, el, signal) {
             // its own, never a tick on the previous step's internal counter:
             // "3 more internal steps" is exactly what hides a fan-out.
             const row = document.createElement("div");
-            const base = "⤷ spawned " + d.label + (d.instruction ? " — " + d.instruction : "");
+            const base = "⤷ spawned " + displayName(d.label) + (d.instruction ? " — " + d.instruction : "");
             row.className = "spawn";
             row.dataset.base = base;
             row.textContent = base;

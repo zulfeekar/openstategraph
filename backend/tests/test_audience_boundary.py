@@ -479,3 +479,39 @@ class TestTheChannelShape:
         assert channel.payload(Audience.DEVELOPER) == {
             "developer": {"warnings": ["w"], "suggestion": None}
         }
+
+
+class TestNoMachineryNameReachesACustomer:
+    """A customer's frames never carry the compiler's own identifiers.
+
+    `/chat` rendered a trace reading `in1 (__turn_reset__)` — the turn-reset
+    marker is an internal signal that a new turn began, and it arrived as if
+    it were the name of a task the customer's question had spawned
+    (reviews-2026-08-14 ticket 04).
+
+    Fixed on the **server**, not in the page, because that is this module's own
+    stated rule: a customer's frame carries no developer value "because no
+    code path puts one there, not because the customer's client declines to
+    look."
+    """
+
+    @staticmethod
+    def _task_ids(audience: str) -> list[object]:
+        from openstategraph.api.streaming import customer_task_id
+
+        from openstategraph.api.audience import Audience
+
+        for_audience = Audience.CUSTOMER if audience == "customer" else Audience.DEVELOPER
+        return [
+            customer_task_id("__turn_reset__", for_audience),
+            customer_task_id("task-1", for_audience),
+            customer_task_id(None, for_audience),
+        ]
+
+    def test_a_customer_never_sees_an_internal_marker(self) -> None:
+        assert self._task_ids("customer") == [None, "task-1", None]
+
+    def test_a_developer_still_sees_everything(self) -> None:
+        # The marker is how a developer tells one turn from the next in a
+        # thread; removing it from their trace would cost real information.
+        assert self._task_ids("developer") == ["__turn_reset__", "task-1", None]
