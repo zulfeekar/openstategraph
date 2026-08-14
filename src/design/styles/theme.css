@@ -42,9 +42,19 @@
   --color-focus-ring: var(--blue-500);
 
   /* ---------- Brand / primary action ---------- */
-  --color-primary: var(--green-500);
-  --color-primary-hover: var(--green-600);
-  --color-primary-active: var(--green-700);
+  /* One step down the scale from the obvious choice, and the reason is the
+     text on top of it. `--green-500` is the brand green and reads beautifully
+     as a *line* on the canvas — which is still where it is used — but white
+     13px text on it is 3.30:1, where WCAG AA asks 4.5:1. The Run button is the
+     most important control in the product (reviews-2026-08-14 ticket 11).
+
+     The same token is the pill *text* colour on `--color-primary-subtle`, and
+     that failed at 3.12:1 for the same reason: a green tuned as a fill, then
+     reused anywhere green was wanted. Both wanted darker, so one move fixes
+     both — 5.02:1 as a fill, 4.76:1 as pill text. */
+  --color-primary: var(--green-600);
+  --color-primary-hover: var(--green-700);
+  --color-primary-active: var(--green-800);
   --color-primary-subtle: var(--green-50);
   --color-primary-text: var(--neutral-0);
 
@@ -134,9 +144,13 @@
   --color-border-focus: #5b93f0;
   --color-focus-ring: #5b93f0;
 
-  --color-primary: #1fa855;
-  --color-primary-hover: #24b95e;
-  --color-primary-active: #189347;
+  /* Dark was worse than light: 3.09:1. The scale keeps this theme's own
+     intent — hover *brightens*, active *deepens* — which took some care,
+     because brightening is what costs contrast against white text. These
+     three are 6.17, 4.62 and 7.80. */
+  --color-primary: #12703a;
+  --color-primary-hover: #17864a;
+  --color-primary-active: #0f5f2c;
   --color-primary-subtle: rgba(31, 168, 85, 0.14);
   --color-primary-text: #ffffff;
 

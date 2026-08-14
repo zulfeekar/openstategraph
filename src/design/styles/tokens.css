@@ -144,6 +144,10 @@
   --green-500: #16a34a;
   --green-600: #15803d;
   --green-700: #126e33;
+  /* Deep enough to carry white 13px text at 7.8:1 — the pressed state of the
+     primary button, which had no token dark enough once `--color-primary`
+     moved down the scale to pass AA. */
+  --green-800: #0f5f2c;
 
   --amber-50: #fffaeb;
   --amber-100: #fef0c7;
