@@ -242,7 +242,7 @@ class TestTheAppSpineIsWiredNotJustDescribed:
         runtime = services.runtime_for(
             "concierge", {"version": 2, "name": "c", "nodes": [], "edges": []}, None
         )
-        assert "app" in runtime.skills_context.lower()
+        assert "app" in runtime.services.skills_context.lower()
 
     def test_a_package_without_the_skill_is_unaffected(self) -> None:
         # The spine is the concierge's job, not an ambient instruction every
@@ -501,7 +501,7 @@ class TestAgentsAreMemoryCapable:
 
         # The hop itself. What the narrowed set then does to the tool schema is
         # `test_a_declared_subset_is_the_only_set_the_model_is_offered`.
-        assert runtime.memory.scopes == (MemoryScope.WORKFLOW,)
+        assert runtime.services.memory.scopes == (MemoryScope.WORKFLOW,)
         assert warnings == []
 
         node = {"id": "a1", "type": "agent.llm", "data": {}}
@@ -574,7 +574,7 @@ class TestWorkflowMiddlewareDiscovery:
         from openstategraph.compile.node_runtime import NodeRuntime
         sentinel = object()
         runtime = NodeRuntime(model=None, workflow_middleware={"audit": sentinel})
-        assert runtime.workflow_middleware["audit"] is sentinel
+        assert runtime.services.workflow_middleware["audit"] is sentinel
 
 
 class TestMemoryScopes:

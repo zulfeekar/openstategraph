@@ -393,8 +393,12 @@ class TestPrecedence:
         # this exercises the unconfigured-provider fallback instead of the
         # precedence rule it is named for.
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
-        runtime = NodeRuntime.__new__(NodeRuntime)
-        runtime.model = "<workflow-default>"  # type: ignore[attr-defined]
+        # A real runtime rather than `__new__` plus two hand-set attributes.
+        # The surgery predated `RuntimeServices` being kept whole and broke
+        # the moment the class had a collaborator to set up
+        # (reviews-2026-08-14 ticket 07); the constructor is all defaults, so
+        # it was never the cost the shortcut implied.
+        runtime = NodeRuntime(model="<workflow-default>")
         runtime._model_cache = {}  # type: ignore[attr-defined]
 
         assert runtime._resolve_model({}) == "<workflow-default>"

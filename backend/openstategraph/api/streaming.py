@@ -714,10 +714,11 @@ def _run_frames(
     # does not contain — the exact behaviour ticket 01 fixed. `path` asks a
     # different question ("which card, on whichever canvas") and needs the
     # wider answer. `getattr` because the fold is also driven by scripted
-    # stubs, which declare no runtime map and degrade to the parent's.
+    # stubs, which declare no runtime names and degrade to the parent's.
+    names = getattr(runtime, "names", None)
     run_path = RunPathResolver(
-        {**(getattr(runtime, "node_ids_by_name", None) or {}), **node_ids_by_name},
-        getattr(runtime, "mount_slugs", None) or {},
+        {**(dict(names.node_ids_by_name) if names else {}), **node_ids_by_name},
+        dict(names.mount_slugs) if names else {},
         str((config.get("configurable") or {}).get("workflow_slug") or ""),
     )
     # `dict.values()` is a *view*, so `x in view` is a linear scan. Asking it

@@ -25,6 +25,7 @@ from typing import Annotated, Any, Callable, TypedDict
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
+from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
@@ -592,8 +593,15 @@ class RuntimeServices:
     """
 
     model: Any = None
-    tools: ToolRegistry | None = None
-    functions: dict[str, Any] | None = None
+    #: Non-optional, with an empty default. `NodeRuntime` normalises `None`
+    #: to `{}` on the way in, so the stored object never holds one — and
+    #: while these were declared optional, every read inside the class had to
+    #: be written as though it might be (reviews-2026-08-14 ticket 07).
+    #: `document_loader`, `package_loader` and `store` stay optional because
+    #: for those, absent genuinely means something: no subgraph resolution,
+    #: no memory.
+    tools: ToolRegistry = field(default_factory=dict)
+    functions: dict[str, Any] = field(default_factory=dict)
     document_loader: Callable[[str], dict[str, Any]] | None = None
     package_loader: Callable[[str], 'PackageAssets'] | None = None
     store: Any = None
@@ -602,7 +610,7 @@ class RuntimeServices:
     #: exactly as it did before the block existed.
     memory: MemorySettings = field(default_factory=MemorySettings)
     skills_context: str = ""
-    workflow_middleware: dict[str, Any] | None = None
+    workflow_middleware: dict[str, Any] = field(default_factory=dict)
     #: The open workflow's package directory, for ambient knowledge seeking
     #: (a non-empty `knowledge/` under it auto-binds the lookup tool).
     knowledge_package_dir: Any = None
@@ -792,59 +800,39 @@ class NodeRuntime:
             knowledge_dir_override = services.knowledge_dir_override
             max_attempts = services.max_attempts
             advisor_catalog = services.advisor_catalog
-        #: Non-empty only for a run whose audience is `developer`
-        #: (`audience: "developer"` on the request — see `api/audience.py`,
-        #: which is the generation half of that boundary). See
-        #: `advisor_context`.
-        self.advisor_catalog = advisor_catalog
-        self.model = model
-        self.tools = tools or {}
-        #: `function.<name>` -> callable — deterministic graph steps
-        #: discovered from the workflow's `functions/` (ticket 35).
-        self.functions = functions or {}
-        #: Loads another workflow's document by slug, for `workflow.subgraph`
-        #: nodes (ticket 34). None means subgraphs cannot resolve — recorded
-        #: loudly in `unresolved_subgraphs`, never silently.
-        self.document_loader = document_loader
-        #: Resolves a CHILD workflow's (tools, functions) from its own
-        #: package, for subgraph/team nodes. Without this, a child inherits
-        #: the parent's registries and a routed tabular question under the
-        #: concierge (ticket 67) silently loses its tools — the
-        #: parametric-answer failure this codebase treats as the worst kind.
-        self.package_loader = package_loader
-        #: The long-term memory store (ticket 65). Its presence is what turns
-        #: the prebuilt save/search-memory tools on for every agent — the
-        #: tools reach it through `langgraph.config.get_store()` at run time,
-        #: so this reference is a capability flag, not a data path.
-        self.store = store
-        #: The document's memory declaration. Narrowing happens in the
-        #: tools' own schema, so a scope this workflow does not use is one
-        #: no agent is ever offered.
-        self.memory = memory or MemorySettings()
-        #: Procedural skills (`workflows/<slug>/skills/*.md`) — business
-        #: rules, JOIN conventions, house style — joined once and given to
-        #: every agent in this workflow as prompt *context* (above rules,
-        #: below the locked preamble; SystemPrompt owns the ordering).
-        self.skills_context = skills_context
-        #: Ambient knowledge seeking (knowledge-architecture decision):
-        #: mirroring how `store` turns the memory tools on, a non-empty
-        #: `knowledge/` under this package directory auto-binds the
-        #: knowledge-lookup tool to every agent and worker — capability by
-        #: configuration, no Knowledge atom wiring required.
-        self.knowledge_package_dir = knowledge_package_dir
-        #: The explicit `load_workflow(knowledge_dir=...)` override, or None
-        #: for the convention. Applies to this workflow's own agents only.
-        self.knowledge_dir_override = knowledge_dir_override
-        #: Slot-name -> middleware instance from `workflows/<slug>/middlewares/`
-        #: (ticket 32): merged into every agent's slot table AFTER the tier
-        #: preset and BEFORE per-node config, so a workflow file replaces a
-        #: preset slot and a node's own setting still wins.
-        self.workflow_middleware = dict(workflow_middleware or {})
+        #: Everything this runtime collaborates with, as one named object.
+        #:
+        #: `RuntimeServices` is ticket 72's parameter object, built because
+        #: the keyword constructor had grown to nine parameters. `__init__`
+        #: then unpacked it straight back onto `self` as thirteen public
+        #: attributes, so the grouping existed for exactly the length of the
+        #: call and `NodeRuntime` carried the whole widening anyway
+        #: (reviews-2026-08-14 ticket 07). Kept whole now, which is what
+        #: CLAUDE.md means by extending a class with a collaborator rather
+        #: than a member.
+        #:
+        #: Normalised here rather than at every read: `tools or {}` in
+        #: forty-eight places is the same defect wearing a different hat.
+        #: What each service *is* is documented on the dataclass' own fields.
+        self.services = RuntimeServices(
+            model=model,
+            tools=tools or {},
+            functions=functions or {},
+            document_loader=document_loader,
+            package_loader=package_loader,
+            store=store,
+            memory=memory or MemorySettings(),
+            skills_context=skills_context,
+            workflow_middleware=dict(workflow_middleware or {}),
+            knowledge_package_dir=knowledge_package_dir,
+            knowledge_dir_override=knowledge_dir_override,
+            max_attempts=max_attempts,
+            advisor_catalog=advisor_catalog,
+        )
         #: The chain of subgraph slugs above this runtime — how a workflow
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
         self._ancestry = _ancestry
-        self.max_attempts = max_attempts
         #: Per-node model overrides, keyed by the resolved LangChain model
         #: string — cached so ten agents on the same non-default model share
         #: one client instance rather than each cold-starting its own.
@@ -852,7 +840,7 @@ class NodeRuntime:
         #: node id -> node type, populated by `factory()`.
         self._types: dict[str, str] = {}
         #: node id -> raw node dict, populated by `factory()`. A tool
-        #: binding is resolved by *type* against `self.tools`, which has no
+        #: binding is resolved by *type* against `self.services.tools`, which has no
         #: access to that specific bound node's own `data` — this is how a
         #: tool factory (e.g. `tool.chinook-execute-sql`'s row cap) reads a
         #: per-node config value rather than only ever seeing its type.
@@ -904,22 +892,13 @@ class NodeRuntime:
         #: stream, so the parent's stream fold is the only place that can
         #: resolve them. The parent's own entries win a collision — `in1` and
         #: `router1` are shared by `concierge` and `chinook-assistant` today —
-        #: though both spellings agree wherever `safe_name` is the identity.
-        self.node_ids_by_name: dict[str, str] = {}
-        #: Mount canvas node id -> the workflow slug it descends into, for
-        #: this document and every document mounted under it.
+        #: Which canvas node, in which document, each compiled graph name
+        #: refers to — see `compile/graph_names.py`, which holds the two maps
+        #: and the rule for folding a mounted child's into this document's.
         #:
-        #: `node_ids_by_name` alone cannot say *which document* a resolved id
-        #: belongs to, and that is not a theoretical gap: the shipped
-        #: `concierge` mounts `chinook-assistant`, and both documents have an
-        #: `in1`, a `router1` and an `out1`. Without this, a client with the
-        #: child open would light its `router1` when the PARENT's router ran —
-        #: a second, quieter version of the lie tickets 33/34 are about.
-        #:
-        #: With it, every level of a run's path can name the document it
-        #: happened in, and a client matches on the slug it has open rather
-        #: than on an id that two documents may share.
-        self.mount_slugs: dict[str, str] = {}
+        #: They were two attributes here, always handed to `RunPathResolver`
+        #: together and read defensively (reviews-2026-08-14 ticket 07).
+        self.names = GraphNames()
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             # NOT `_input`. A skill source is a *static text source*, not the
@@ -961,7 +940,7 @@ class NodeRuntime:
             # Recorded for every node, not only the machinery ones: this map
             # answers "which card is this frame about", and that question is
             # asked of every step a mounted document runs.
-            self.node_ids_by_name.setdefault(safe_name(node_id), node_id)
+            self.names.remember(safe_name(node_id), node_id)
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
             return self.builder_for(str(node.get("type", "")))(node_id, node, plan)
@@ -1024,10 +1003,10 @@ class NodeRuntime:
         """The model itself, before any per-call parameter is applied."""
         selection = _text(data, "model")
         if not selection:
-            return self.model
+            return self.services.model
         provider, _, model_id = selection.partition("/")
         if not model_id or provider == "mock":
-            return self.model
+            return self.services.model
         key = f"{provider}:{model_id}"
         if key not in self._model_cache:
             from openstategraph.chat_model import UnconfiguredProvider, build_chat_model
@@ -1041,7 +1020,7 @@ class NodeRuntime:
                 # rather than taking the run down, and a deferred raise would
                 # do the opposite.
                 if isinstance(selected, UnconfiguredProvider):
-                    selected = self.model
+                    selected = self.services.model
                 self._model_cache[key] = selected
             except Exception:
                 # An unconfigured provider (no API key) or an unrecognised
@@ -1049,7 +1028,7 @@ class NodeRuntime:
                 # default still produces an answer, just not the node's own
                 # choice. Cached too, so one bad selection does not retry
                 # (and re-fail) on every node that shares it.
-                self._model_cache[key] = self.model
+                self._model_cache[key] = self.services.model
         return self._model_cache[key]
 
     def _apply_effort(self, model: Any, effort: str) -> Any:
@@ -1175,7 +1154,7 @@ class NodeRuntime:
     def _attach_ambient_knowledge(self, lc_tools: list[Any]) -> None:
         """Ambient knowledge seeking — capability by configuration.
 
-        The exact mirror of the memory rule above (`self.store is not None`
+        The exact mirror of the memory rule above (`self.services.store is not None`
         → memory tools): when this workflow package's `knowledge/` directory
         is non-empty, the knowledge-lookup tool is bound to every agent and
         worker with no Knowledge atom wired. The atom remains the visible
@@ -1189,7 +1168,7 @@ class NodeRuntime:
             from openstategraph import prebuilt_knowledge
 
             self._ambient_knowledge_memo = prebuilt_knowledge.ambient_knowledge_tool(
-                self.knowledge_package_dir, knowledge_dir=self.knowledge_dir_override
+                self.services.knowledge_package_dir, knowledge_dir=self.services.knowledge_dir_override
             )
         ambient = self._ambient_knowledge_memo
         if ambient is None:
@@ -1201,7 +1180,7 @@ class NodeRuntime:
     def _bound_tool(self, tool_node_id: str) -> Any | None:
         """Resolves one bound tool node to the implementation it should use.
 
-        The shared registry (`self.tools`) is keyed by *type*, one instance
+        The shared registry (`self.services.tools`) is keyed by *type*, one instance
         per type for the whole document — right for a stateless tool, wrong
         the moment a canvas field varies the instance's own behaviour.
         `tool.chinook-execute-sql`'s "Max rows" is exactly that case (found
@@ -1214,7 +1193,7 @@ class NodeRuntime:
         clobber the first's ceiling.
         """
         tool_type = self._types.get(tool_node_id, "")
-        tool = self.tools.get(tool_type)
+        tool = self.services.tools.get(tool_type)
         if tool is None:
             self.diagnostics.record(Finding.UNRESOLVED_TOOL, tool_type)
             return None
@@ -1258,10 +1237,10 @@ class NodeRuntime:
         # A store's presence turns on the prebuilt memory tools for every
         # agent (ticket 65) — capability by configuration, no per-workflow
         # wiring, matching the minimum-viable-prebuilt rule.
-        if self.store is not None:
+        if self.services.store is not None:
             from openstategraph.memory import memory_tools
 
-            lc_tools.extend(memory_tools(self.memory))
+            lc_tools.extend(memory_tools(self.services.memory))
 
         # Same rule for knowledge: a non-empty knowledge/ in this workflow's
         # package auto-binds the lookup tool. Deduped by tool name, so an
@@ -1309,7 +1288,7 @@ class NodeRuntime:
 
         def agent_for(skill: str) -> Any:
             if skill not in built:
-                contributions: dict[str, Any] = dict(self.workflow_middleware)
+                contributions: dict[str, Any] = dict(self.services.workflow_middleware)
                 if _text(data, "rubric").strip() and model is not None:
                     # deepagents' own LLM-as-judge (beta, >=0.6.5): a grader
                     # sub-agent inside the agent, iterating until the rubric
@@ -1354,14 +1333,14 @@ class NodeRuntime:
                             # Ambient, package-wide `skills/*.md`: house style
                             # for every agent here, not a choice about this
                             # node. Context, and it stays context.
-                            self.skills_context,
+                            self.services.skills_context,
                             # The branches this agent's own classifier can
                             # reach (ticket 11) — generated context, so an
                             # agent's suggestions are grounded in the graph
                             # rather than in what its prompt author guessed
                             # the graph contained.
                             branch_context(node_id, plan, self._nodes),
-                            advisor_context(node_id, self.advisor_catalog),
+                            advisor_context(node_id, self.services.advisor_catalog),
                         )
                         if part
                     ),
@@ -1511,7 +1490,7 @@ class NodeRuntime:
              "required": bool(row.get("required", True))}
             for row in raw_rubric
         ] if isinstance(raw_rubric, list) else []
-        cap = int(data.get("maxAttempts") or self.max_attempts)
+        cap = int(data.get("maxAttempts") or self.services.max_attempts)
         upstream = [src for src, dst in plan.edges if dst == node_id]
         skills = plan.skill_bindings.get(node_id, [])
 
@@ -1666,7 +1645,7 @@ class NodeRuntime:
                 described = []
                 for tool_node_id in plan.tool_bindings.get(worker_id, []):
                     tool_type = str((self._nodes.get(tool_node_id) or {}).get("type", ""))
-                    tool = self.tools.get(tool_type)
+                    tool = self.services.tools.get(tool_type)
                     described.append(
                         getattr(tool, "description", None) or tool_type or tool_node_id
                     )
@@ -1858,7 +1837,7 @@ class NodeRuntime:
                 default_rules=default_prompt,
                 skill=_wired_skill(state, skills, self._nodes),
                 replace_rules=_replaces_rules(data),
-                context=self.skills_context,
+                context=self.services.skills_context,
             ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
@@ -1931,7 +1910,7 @@ class NodeRuntime:
         the message downstream where a grader or a person can read it.
         """
         node_type = str(node.get("type", ""))
-        fn = self.functions.get(node_type)
+        fn = self.services.functions.get(node_type)
         if fn is None:
             self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, node_type)
             return self._passthrough(node_id, node, plan)
@@ -2003,9 +1982,9 @@ class NodeRuntime:
             )
 
         child_graph = None
-        if slug and self.document_loader is not None:
+        if slug and self.services.document_loader is not None:
             try:
-                child_document = self.document_loader(slug)
+                child_document = self.services.document_loader(slug)
             except Exception:
                 child_document = None
             if child_document is not None:
@@ -2037,31 +2016,31 @@ class NodeRuntime:
                 if _text(data, "outcome").strip() and not self._closes_a_loop_impl(child_document):
                     self.diagnostics.record(Finding.UNENFORCED_OUTCOME, node_id, slug)
                 child_assets = PackageAssets(
-                    tools=self.tools,
-                    functions=self.functions,
-                    skills_context=self.skills_context,
-                    workflow_middleware=self.workflow_middleware,
-                    knowledge_dir=self.knowledge_package_dir,
+                    tools=self.services.tools,
+                    functions=self.services.functions,
+                    skills_context=self.services.skills_context,
+                    workflow_middleware=self.services.workflow_middleware,
+                    knowledge_dir=self.services.knowledge_package_dir,
                 )
-                if self.package_loader is not None:
+                if self.services.package_loader is not None:
                     try:
-                        child_assets = self.package_loader(slug)
+                        child_assets = self.services.package_loader(slug)
                     except Exception:
                         pass  # the parent assets remain the honest fallback
                 child_runtime = NodeRuntime(
                     services=RuntimeServices(
-                        model=self.model,
-                        tools={**self.tools, **child_assets.tools},
-                        functions={**self.functions, **child_assets.functions},
-                        document_loader=self.document_loader,
-                        package_loader=self.package_loader,
-                        store=self.store,
+                        model=self.services.model,
+                        tools={**self.services.tools, **child_assets.tools},
+                        functions={**self.services.functions, **child_assets.functions},
+                        document_loader=self.services.document_loader,
+                        package_loader=self.services.package_loader,
+                        store=self.services.store,
                         skills_context=child_assets.skills_context,
                         workflow_middleware=child_assets.workflow_middleware or {},
                         # The child's OWN knowledge, never the parent's —
                         # the same isolation as skills (ticket 67's lesson).
                         knowledge_package_dir=child_assets.knowledge_dir,
-                        max_attempts=self.max_attempts,
+                        max_attempts=self.services.max_attempts,
                         # Deliberately NOT inherited. A child subgraph's node
                         # ids do not exist in the document open on the canvas,
                         # so any `attachTo` it produced would name a node the
@@ -2076,7 +2055,7 @@ class NodeRuntime:
                     child_document,
                     RunState,
                     child_factory,
-                    store=self.store,
+                    store=self.services.store,
                 )
                 # Inherited *upwards*, unlike everything else about a child
                 # runtime, and deliberately: the child's frames ride the
@@ -2098,32 +2077,14 @@ class NodeRuntime:
                 # nothing about the rest.
                 self.machinery_nodes |= child_runtime.machinery_nodes
                 # Same direction and the same reason as `machinery_nodes`,
-                # different question: the child's name->id map is what lets a
-                # frame from inside this mount say which card of the CHILD's
-                # canvas it is about. Without it the only ids on the wire
-                # belong to documents the viewer may not have open (tickets
-                # 33/34). `setdefault` keeps this document's own answer
-                # authoritative where two documents share an id — `concierge`
-                # and `chinook-assistant` both have `in1` and `router1`.
-                #
-                # Taken after `build()`, not after `factory()`: a mount inside
-                # the child is resolved by that build, so a grandchild's ids
-                # only exist on `child_runtime` once it has run.
-                for name, canvas_id in child_runtime.node_ids_by_name.items():
-                    self.node_ids_by_name.setdefault(name, canvas_id)
-                # Which document each level of a run's path happened in,
-                # keyed by the **mount path** — the chain of mount node ids
-                # from this document down — not by the bare node id.
-                #
-                # Node ids are unique within a document and nowhere else. Two
-                # sibling subtrees that each mount something at a node called
-                # `inner` are two different mounts of two different packages,
-                # and a flat map collapsed them first-wins: a frame from one
-                # was attributed to the other's slug. That is the exact lie
-                # `pathSlugs` exists to remove, reappearing one level down.
-                self.mount_slugs[node_id] = slug
-                for mount_path, mounted_slug in child_runtime.mount_slugs.items():
-                    self.mount_slugs[f"{node_id}/{mount_path}"] = mounted_slug
+                # different question: which card of the CHILD's canvas a frame
+                # from inside this mount is about. `GraphNames.absorb` owns
+                # the two folding rules and why they differ; the timing is the
+                # part that belongs here — taken after `build()`, not after
+                # `factory()`, because a mount inside the child is resolved by
+                # that build, so a grandchild's ids only exist on
+                # `child_runtime` once it has run.
+                self.names.absorb(child_runtime.names, through=node_id, slug=slug)
 
         if child_graph is None:
             label = slug or "(no workflow selected)"

@@ -371,7 +371,7 @@ class TestToolBinding:
         # A fresh instance, not the shared registry one — mutating the
         # shared object would leak across every other binding of this type
         # in the same document.
-        assert tool is not runtime.tools["tool.chinook-execute-sql"]
+        assert tool is not runtime.services.tools["tool.chinook-execute-sql"]
 
 
 class TestDegradedInputs:

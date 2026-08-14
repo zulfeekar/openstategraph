@@ -32,6 +32,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
@@ -48,6 +49,18 @@ MOUNT_NS = ("wf_music:2f0b",)
 DEEP_NS = ("wf_music:2f0b", "wf_inner:9ac1")
 
 
+
+def _names(node_ids_by_name: dict[str, str]) -> GraphNames:
+    """A `GraphNames` seeded like a compiled runtime's.
+
+    The stub used to carry the two raw maps; `NodeRuntime` holds one
+    collaborator now (reviews-2026-08-14 ticket 07).
+    """
+    names = GraphNames()
+    for name, node_id in node_ids_by_name.items():
+        names.remember(name, node_id)
+    return names
+
 def _done(chunks: list[Any]) -> dict[str, Any]:
     class _Graph:
         def stream(self, *_a: Any, **_k: Any) -> Any:
@@ -61,8 +74,7 @@ def _done(chunks: list[Any]) -> dict[str, Any]:
 
     runtime = SimpleNamespace(
         diagnostics=CompileDiagnostics(),
-        node_ids_by_name=WIDE,
-        mount_slugs={},
+        names=_names(WIDE),
     )
     for raw in _run_frames(
         _Graph(),

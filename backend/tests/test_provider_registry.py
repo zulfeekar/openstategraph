@@ -483,9 +483,9 @@ class TestPerNodeOverridePicksBetweenProviders:
         # happened to leave in the environment.
         for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY"):
             monkeypatch.setenv(name, "configured-for-this-test")
-        runtime = NodeRuntime.__new__(NodeRuntime)
-        runtime.model = "model<default>"  # type: ignore[attr-defined]
-        runtime._model_cache = {}  # type: ignore[attr-defined]
+        # A real runtime rather than `__new__` plus hand-set attributes — see
+        # the same note in `test_config_file.py`.
+        runtime = NodeRuntime(model="model<default>")
         return runtime, seen
 
     def test_two_nodes_two_providers_one_run(self, monkeypatch: pytest.MonkeyPatch) -> None:

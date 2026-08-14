@@ -556,14 +556,14 @@ class TestSiblingMountsAtRunTime:
         }
         runtime = NodeRuntime(document_loader=docs.__getitem__)
         WorkflowCompiler().build(parent, RunState, runtime.factory(parent))
-        assert runtime.mount_slugs["m1"] == "child-b"
-        assert runtime.mount_slugs["m2"] == "child-d"
+        assert runtime.names.mount_slugs["m1"] == "child-b"
+        assert runtime.names.mount_slugs["m2"] == "child-d"
         # The two sibling grandchildren, told apart by their path.
-        assert runtime.mount_slugs["m1/inner"] == "grand-x"
-        assert runtime.mount_slugs["m2/inner"] == "grand-y"
+        assert runtime.names.mount_slugs["m1/inner"] == "grand-x"
+        assert runtime.names.mount_slugs["m2/inner"] == "grand-y"
         # And the bare id is not a key at all any more, so a reader cannot
         # accidentally ask the ambiguous question.
-        assert "inner" not in runtime.mount_slugs
+        assert "inner" not in runtime.names.mount_slugs
 
     # FIXED 2026-08-13. Was xfail(strict=True): `mount_slugs` was flat by
     # mount node id, so sibling subtrees reusing an id collapsed first-wins and
@@ -585,7 +585,9 @@ class TestSiblingMountsAtRunTime:
         }
         runtime = NodeRuntime(document_loader=docs.__getitem__)
         WorkflowCompiler().build(parent, RunState, runtime.factory(parent))
-        resolver = RunPathResolver(runtime.node_ids_by_name, runtime.mount_slugs, "parent")
+        resolver = RunPathResolver(
+            dict(runtime.names.node_ids_by_name), dict(runtime.names.mount_slugs), "parent"
+        )
 
         # A frame from grand-y's input node, under m2 -> inner.
         _path, slugs = resolver.resolve("in1", ("m2:task", "inner:task", "in1:task"))
