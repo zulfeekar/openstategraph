@@ -22,6 +22,7 @@ import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { ASSEMBLIES, type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
+import { freePositionNear } from '@core/model/placement';
 import './Palette.css';
 
 /** Custom drag type, so canvas drops can tell a palette drag from a file. */
@@ -159,8 +160,32 @@ export function Palette({ onNotify }: PaletteProps) {
     }
   };
 
+  // A click has no drop point, so the canvas has to choose one: the centre of
+  // what the user is currently looking at. That much was already right.
+  //
+  // The cascade is the fix for what happened on the *second* click — three
+  // clicks put three nodes at exactly (314, 501), one visible card with two
+  // buried underneath and nothing to say so (canvas-feels-right ticket 01).
+  // Someone who clicks again because the first click looked like it did
+  // nothing ends up owning the node they think they failed to create.
+  //
+  // Only the click path needs this. A **drag** carries the point the pointer
+  // was released on, and placing the node exactly there is its whole contract.
   const add = (definition: INodeDefinition) => {
-    const at = paper?.viewportCenter() ?? { x: 120, y: 120 };
+    const preferred = paper?.viewportCenter() ?? { x: 120, y: 120 };
+    // Compared as **centres**, in the same space `add` interprets its point.
+    // `NodeEditor.add` treats what it is given as the centre and stores
+    // `centre - size / 2` as the node's top-left, so checking a centre against
+    // stored top-left corners compares two different quantities and never
+    // matches — which is exactly the bug that made the first version of this
+    // cascade do nothing at all.
+    const at = freePositionNear(
+      preferred,
+      controller.model.nodes().map((node) => ({
+        x: node.position.x + node.size.width / 2,
+        y: node.position.y + node.size.height / 2,
+      })),
+    );
     const outcome = controller.nodes.add(definition.id, at);
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };
