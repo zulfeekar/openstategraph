@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "name": "SQL QA",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "SQL QA",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "Text-to-SQL over a real database with the generic prebuilt SQL Explorer atoms: list tables, read one schema, run one read-only SELECT. Nothing here is Chinook-specific except the file the three nodes point at."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 260 }
+      },
+      {
+        "id": "t-tables",
+        "type": "tool.sql-list-tables",
+        "title": "List tables",
+        "data": {
+          "database": "sql-qa/data/Chinook_Sqlite.sqlite"
+        },
+        "position": { "x": 380, "y": 460 }
+      },
+      {
+        "id": "t-schema",
+        "type": "tool.sql-get-schema",
+        "title": "Table schema",
+        "data": {
+          "database": "sql-qa/data/Chinook_Sqlite.sqlite"
+        },
+        "position": { "x": 380, "y": 580 }
+      },
+      {
+        "id": "t-query",
+        "type": "tool.sql-query",
+        "title": "Run SELECT",
+        "data": {
+          "database": "sql-qa/data/Chinook_Sqlite.sqlite",
+          "maxRows": 50
+        },
+        "position": { "x": 380, "y": 700 }
+      },
+      {
+        "id": "answer1",
+        "type": "agent.llm",
+        "title": "Analyst",
+        "data": {
+          "systemPrompt": "You answer questions about a SQL database you have never seen, using only the three tools bound to you.\n\nWork in that order, every time:\n\n1. `sql_list_tables` — find out what exists. Never guess a table name.\n2. `sql_get_table_schema` on each table you intend to use. Its foreign keys are the JOIN rules; use them rather than inventing a join condition from column names.\n3. `sql_query` — one read-only SELECT. The connection is read-only, so a write will be refused by the driver, not by you.\n\nThen answer the question in one sentence, stating the figure the query returned. Give the number, not a description of the number. If the query returned no rows, say so.\n\nAfter the sentence, state the query you ran, and only that one, in a fenced ```sql block. It is the evidence for the sentence: an answer nobody can re-execute cannot be checked.\n\nIf the database does not hold what was asked for, say which tables you looked at and that it does not — never estimate, and in that case run no query and show no SQL block, because there is nothing to show."
+        },
+        "position": { "x": 760, "y": 260 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": { "x": 1100, "y": 260 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "answer1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "t-tables", "portId": "tool" },
+        "target": { "nodeId": "answer1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "t-schema", "portId": "tool" },
+        "target": { "nodeId": "answer1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "t-query", "portId": "tool" },
+        "target": { "nodeId": "answer1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "answer1", "portId": "result" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

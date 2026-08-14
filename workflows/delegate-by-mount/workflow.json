@@ -16,7 +16,10 @@
         "type": "input.text",
         "title": "Request",
         "data": {},
-        "position": { "x": 40, "y": 320 }
+        "position": {
+          "x": 40,
+          "y": 320
+        }
       },
       {
         "id": "router1",
@@ -24,68 +27,119 @@
         "title": "Which package answers this",
         "data": {
           "branches": [
-            { "id": "b-explain", "name": "explain" },
-            { "id": "b-release-note", "name": "release_note" }
+            {
+              "id": "b-database",
+              "name": "database"
+            },
+            {
+              "id": "b-web",
+              "name": "web"
+            }
           ],
-          "fallback": "explain",
-          "rules": "explain: asks what something is, or asks for an idea to be explained, defined or summarised.\nrelease_note: asks for a release note, changelog entry or announcement about something that was broken and is now fixed."
+          "fallback": "web",
+          "rules": "database: asks for a figure, a count, a total or a ranking that would be looked up in this company's own records — customers, invoices, tracks, albums, genres.\nweb: asks about anything outside this company — a release, a project, a person, a news item, a fact that lives on the open web.\n\nRoute on where the answer lives, never on how the question is phrased. \"How many\" is a database question when the thing being counted is ours and a web question when it is not."
         },
-        "position": { "x": 380, "y": 320 }
+        "position": {
+          "x": 380,
+          "y": 320
+        }
       },
       {
-        "id": "mount-explain",
+        "id": "mount-sql",
         "type": "workflow.subgraph",
-        "title": "Chained Summarizer",
+        "title": "SQL QA",
         "data": {
-          "workflow": "chained-summarizer"
+          "workflow": "sql-qa"
         },
-        "position": { "x": 760, "y": 180 }
+        "position": {
+          "x": 760,
+          "y": 180
+        }
       },
       {
-        "id": "mount-note",
+        "id": "mount-web",
         "type": "workflow.subgraph",
-        "title": "Evaluator / Optimizer",
+        "title": "Web Research Digest",
         "data": {
-          "workflow": "evaluator-optimizer",
-          "outcome": "Loops until its own grader passes the note."
+          "workflow": "web-research-digest",
+          "outcome": "Loops until its own grader accepts a digest with a source it actually fetched."
         },
-        "position": { "x": 760, "y": 460 }
+        "position": {
+          "x": 760,
+          "y": 460
+        }
       },
       {
-        "id": "out-explain",
+        "id": "out-database",
         "type": "output.formatted",
-        "title": "Explanation",
+        "title": "Database answer",
         "data": {},
-        "position": { "x": 1120, "y": 180 }
+        "position": {
+          "x": 1120,
+          "y": 180
+        }
       },
       {
-        "id": "out-note",
+        "id": "out-web",
         "type": "output.formatted",
-        "title": "Release note",
+        "title": "Web digest",
         "data": {},
-        "position": { "x": 1120, "y": 460 }
+        "position": {
+          "x": 1120,
+          "y": 460
+        }
       }
     ],
     "edges": [
       {
-        "source": { "nodeId": "in1", "portId": "text" },
-        "target": { "nodeId": "router1", "portId": "question" }
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
       },
       {
-        "source": { "nodeId": "router1", "portId": "branch:b-explain" },
-        "target": { "nodeId": "mount-explain", "portId": "input" }
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-database"
+        },
+        "target": {
+          "nodeId": "mount-sql",
+          "portId": "input"
+        }
       },
       {
-        "source": { "nodeId": "router1", "portId": "branch:b-release-note" },
-        "target": { "nodeId": "mount-note", "portId": "input" }
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-web"
+        },
+        "target": {
+          "nodeId": "mount-web",
+          "portId": "input"
+        }
       },
       {
-        "source": { "nodeId": "mount-explain", "portId": "result" },
-        "target": { "nodeId": "out-explain", "portId": "result" }
+        "source": {
+          "nodeId": "mount-sql",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-database",
+          "portId": "result"
+        }
       },
       {
-        "source": { "nodeId": "mount-note", "portId": "result" },
-        "target": { "nodeId": "out-note", "portId": "result" }
+        "source": {
+          "nodeId": "mount-web",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-web",
+          "portId": "result"
+        }
       }
     ]
   }

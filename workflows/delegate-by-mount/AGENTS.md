@@ -7,10 +7,10 @@ answers: a supervisor of *packages* rather than of agents.
 | Node | One line |
 | --- | --- |
 | `in1` **Request** | where the request enters |
-| `router1` **Which package answers this** | two exclusive branches, `explain` and `release_note` |
-| `mount-explain` **Chained Summarizer** | gallery example 1, mounted |
-| `mount-note` **Evaluator / Optimizer** | gallery example 4, mounted — it loops until its own grader passes |
-| `out-explain` / `out-note` | one output per branch |
+| `router1` **Which package answers this** | two exclusive branches, `database` and `web` |
+| `mount-sql` **SQL QA** | gallery example 17, mounted — answers from this company's own records |
+| `mount-web` **Web Research Digest** | gallery example 18, mounted — answers from the open web, and loops until it has a source it fetched |
+| `out-database` / `out-web` | one output per branch |
 
 Each branch gets its **own** `output.formatted`. Two edges into one output
 node load and compile, but the capacity rule makes drawing the second edge
@@ -26,56 +26,60 @@ can never reach an agent's `tools` bus. Delegation today is call *and return*
 through a graph step, which is what this document draws. The gap is
 organisms-first-class ticket 31.
 
-## Deviation from the catalogue, deliberate
+## The mounts point where the catalogue always meant them to
 
-Catalogue row 13 mounts `sql-qa` and `web-research-digest` — examples 17 and
-18, which **batch D has not built yet**. Rather than defer this example out of
-its own batch, it mounts two packages that exist today. The mechanism under
-test is heterogeneous mounts as exclusive branches, which is package-agnostic,
-and re-pointing a mount is a one-field edit (`data.workflow`) if batch D wants
-the original pairing back.
+Batch C built this example before batch D existed, so it mounted
+`chained-summarizer` and `evaluator-optimizer` and recorded the substitution as
+temporary. **Batch D re-pointed it** to catalogue row 13's own pair, `sql-qa`
+and `web-research-digest`, once both were built, validated and smoke-run. The
+smoke question travelled with the mount, exactly as batch C said it would.
 
-The pair chosen is not arbitrary. The two packages differ in the way that
-matters to a mount card: `chained-summarizer` is a straight line, and
-`evaluator-optimizer` closes a loop. So `mount-note` can carry an `outcome`
-— *"Loops until its own grader passes the note."* — and mean it. That claim is
-checked at compile time: a mount that states an outcome its child cannot
-enforce is a warning (`Finding.UNENFORCED_OUTCOME`), keyed on the child
-actually routing a `revise` edge rather than on the node type. `mount-explain`
-states no outcome, because it would have nothing to back it.
+Nothing was lost in the move. The property batch C chose its pair for — one
+child that loops and one that does not, so the `outcome` field and its
+`UNENFORCED_OUTCOME` check are exercised on the same card — holds for the new
+pair too: `web-research-digest` routes a `revise` edge and can carry an
+outcome; `sql-qa` is a straight line and states none, because it would have
+nothing to back it.
+
+What the new pair *adds* is that the two branches now differ in **where the
+answer lives** rather than in what shape it takes. That is what delegation is
+actually for: one package owns the company's records, the other owns the open
+web, and the classifier's job is to know which question is which. The rules
+field says so in one line — *"Route on where the answer lives, never on how the
+question is phrased."*
 
 ## Smoke run
 
 ```
-openstategraph run workflows/delegate-by-mount \
-  "Write the release note for a fix to a crash when the export button was pressed twice."
+openstategraph run workflows/delegate-by-mount "How many tracks are in the database?"
 ```
 
-Recorded 2026-08-15 on `ollama:gpt-oss:120b-cloud`, ~12s:
+Recorded 2026-08-15 on `ollama:gpt-oss:120b-cloud`, ~6s — the catalogue's own
+question for this row, back where it belongs:
 
-> The app crashed when the export button was pressed twice. After the fix, it
-> completed the export without crashing when the button was pressed twice.
+> 3503
+>
+> ```sql
+> SELECT COUNT(*) AS track_count FROM Track;
+> ```
 
-Two sentences, defect then fixed behaviour, no marketing language — which is
-`evaluator-optimizer`'s contract, not this document's. `decisions` is
-`{"router1": "b-release-note"}` and `outputs` holds `in1`, `router1`,
-`mount-note`, `out-note`: **the other mount never compiled a model call**, and
-its package was never even loaded.
-
-The catalogue's own question for this row ("How many tracks are in the
-database?") belongs to `sql-qa` and moves with the mount if it is ever
-re-pointed.
+`decisions` is `{"router1": "b-database"}` and `outputs` holds `in1`,
+`router1`, `mount-sql`, `out-database`: **the other mount never compiled a
+model call**, and its package was never even loaded. The answer's shape —
+a figure with the query under it — is `sql-qa`'s contract, not this document's,
+which is the whole point of mounting rather than reimplementing.
 
 ## What a mount does not report
 
-`decisions` names `router1` and stops. The mounted child ran its own grader
-and reached its own verdict, and neither appears here — a mount is one
-isolated step, so the parent sees the answer and not the reasoning. That is
-the subagent-isolation rule holding, not a reporting gap; if you want the
+`decisions` names `router1` and stops. The mounted child ran its own tools,
+and in the web branch its own grader, and none of that appears here — a mount
+is one isolated step, so the parent sees the answer and not the reasoning. That
+is the subagent-isolation rule holding, not a reporting gap; if you want the
 child's decisions, open the child.
 
 ## Tests
 
 `tests/` asserts the two branches reach two different packages, that each
-branch has its own output, that only the looping mount claims an outcome, and
+branch has its own output, that only the looping mount claims an outcome — and
+that the claim is true of the child document, not merely of its node type — and
 that both mounted slugs exist on disk.

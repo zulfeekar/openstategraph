@@ -1,0 +1,100 @@
+{
+  "name": "sql-qa",
+  "database": "../data/Chinook_Sqlite.sqlite",
+  "description": "Five questions over the package's own Chinook copy, graded by execution accuracy: two single-table counts, one one-join aggregation, one two-join revenue question, and one the database cannot answer. The point of the fixture is that this is the only example in the twenty whose expectation is a machine's, not a reader's — the answer is graded by re-executing the SQL the run stated, not by matching its prose. Expected rows come from scripts/refresh_eval_expectations.py, never from a hand.",
+  "cases": [
+    {
+      "id": "s01",
+      "question": "How many customers are in the database?",
+      "difficulty": "easy",
+      "expects": "answer",
+      "gold_sql": "SELECT COUNT(*) AS CustomerCount FROM Customer",
+      "notes": "The catalogue's own smoke question. 59 is the figure a reader can check by hand.",
+      "expected": {
+        "columns": [
+          "CustomerCount"
+        ],
+        "rows": [
+          [
+            59
+          ]
+        ],
+        "row_count": 1
+      }
+    },
+    {
+      "id": "s02",
+      "question": "How many albums are in the database?",
+      "difficulty": "easy",
+      "expects": "answer",
+      "gold_sql": "SELECT COUNT(*) AS AlbumCount FROM Album",
+      "notes": "A second single-table count, on a table the first question gives no reason to look at — sql_list_tables has to be read, not remembered.",
+      "expected": {
+        "columns": [
+          "AlbumCount"
+        ],
+        "rows": [
+          [
+            347
+          ]
+        ],
+        "row_count": 1
+      }
+    },
+    {
+      "id": "s03",
+      "question": "Which genre has the most tracks? Give the genre name and the number of tracks.",
+      "difficulty": "medium",
+      "expects": "answer",
+      "gold_sql": "SELECT g.Name AS Genre, COUNT(t.TrackId) AS TrackCount FROM Genre g JOIN Track t ON t.GenreId = g.GenreId GROUP BY g.GenreId, g.Name ORDER BY TrackCount DESC LIMIT 1",
+      "order_matters": false,
+      "notes": "One join, and the join rule is a foreign key sql_get_table_schema reports. The ORDER BY picks the row rather than presenting it, so ordering is not graded.",
+      "expected": {
+        "columns": [
+          "Genre",
+          "TrackCount"
+        ],
+        "rows": [
+          [
+            "Rock",
+            1297
+          ]
+        ],
+        "row_count": 1
+      }
+    },
+    {
+      "id": "s04",
+      "question": "Which country's customers have spent the most in total? Name the country and the total.",
+      "difficulty": "hard",
+      "expects": "answer",
+      "gold_sql": "SELECT c.Country, ROUND(SUM(i.Total), 2) AS Spend FROM Customer c JOIN Invoice i ON i.CustomerId = c.CustomerId GROUP BY c.Country ORDER BY Spend DESC LIMIT 1",
+      "order_matters": false,
+      "notes": "Two tables and a rounded sum. Billing country lives on Invoice as well, so a run that joins the wrong way round gets a different figure — which is what execution accuracy is for.",
+      "expected": {
+        "columns": [
+          "Country",
+          "Spend"
+        ],
+        "rows": [
+          [
+            "USA",
+            523.06
+          ]
+        ],
+        "row_count": 1
+      }
+    },
+    {
+      "id": "s05",
+      "question": "What is each customer's date of birth?",
+      "difficulty": "easy",
+      "expects": "refusal",
+      "forbidden_patterns": [
+        "(19|20)\\d{2}-\\d{2}-\\d{2}",
+        "\\baged? \\d{1,3}\\b"
+      ],
+      "notes": "Chinook records no birth dates. The honest run reads the Customer schema, finds no such column and says so; a run that produces dates produced them from nowhere."
+    }
+  ]
+}

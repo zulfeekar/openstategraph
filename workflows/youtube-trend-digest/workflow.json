@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "name": "YouTube Trend Digest",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "YouTube Trend Digest",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "The flagship: find what is trending on YouTube right now, read the top video's actual transcript, and hand both to Claude for a three-sentence synthesis. Two providers in one graph, and the only example whose acceptance test is external reachability."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 320 }
+      },
+      {
+        "id": "t-search",
+        "type": "tool.web-search",
+        "title": "Search",
+        "data": {},
+        "position": { "x": 380, "y": 620 }
+      },
+      {
+        "id": "t-fetch",
+        "type": "tool.web-fetch",
+        "title": "Fetch",
+        "data": {},
+        "position": { "x": 380, "y": 740 }
+      },
+      {
+        "id": "trend1",
+        "type": "agent.llm",
+        "title": "Trend finder",
+        "data": {
+          "systemPrompt": "You find out what is trending on YouTube right now, using search and page fetches only.\n\nYouTube's own pages will not help you: `/feed/trending` is withheld from a signed-out client and its search results page is script-only, and `web_fetch` deletes `<script>` before you see it. So work through third parties:\n\n1. `web_search` for a current YouTube trending list, e.g. \"trending on YouTube today\".\n2. `web_fetch` the most promising result. You want a server-rendered ranking — one whose text comes back as rank, category, channel, title, views. If a page comes back as \"Loading trending videos…\" it is client-rendered; try the next candidate rather than reporting it.\n3. Pick the top video the page ranks. Those pages carry no link text, so `web_search` its exact title plus the channel and the word youtube to recover the `watch?v=` URL.\n\nReport, in this order and nothing else: rank, title, channel, category, view count, the eleven-character video id, and the watch URL. Name the aggregator page you read.\n\nDo not hardcode a host. If the site you tried is gone, that is what the search step is for. If you genuinely cannot find a ranking, say which pages you tried and what each returned — never name a video from memory, because anything you remember is by definition not trending now."
+        },
+        "position": { "x": 760, "y": 320 }
+      },
+      {
+        "id": "t-transcript",
+        "type": "tool.youtube-transcript",
+        "title": "Transcript",
+        "data": {
+          "language": "en",
+          "allowAutoCaptions": true,
+          "maxChars": 8000
+        },
+        "position": { "x": 1100, "y": 620 }
+      },
+      {
+        "id": "read1",
+        "type": "agent.llm",
+        "title": "Transcript reader",
+        "data": {
+          "systemPrompt": "You are given a trending video: its rank, title, channel, view count and video id.\n\nCall `youtube_transcript` with that video id and read what comes back.\n\nThen write two blocks, in this order:\n\nTREND: the rank, title, channel, category and view count you were given, unchanged.\nTRANSCRIPT: the transcript, quoted, up to about 2000 characters. Quote it — do not summarise it, and do not clean it up.\n\nThe tool distinguishes its failures deliberately. A bot check is not \"no captions\"; an empty caption track is not an empty transcript. If it fails, repeat the failure message verbatim under TRANSCRIPT and write nothing else there. If the id looks wrong you may `web_search` the title once to recover a better one, and then stop.\n\nNever write a transcript you were not given. A video's title tells you nothing about what is said in it, and inventing the words is the one failure this step exists to prevent."
+        },
+        "position": { "x": 1440, "y": 320 }
+      },
+      {
+        "id": "synth1",
+        "type": "agent.llm",
+        "title": "Synthesis",
+        "data": {
+          "model": "anthropic/claude-haiku-4-5",
+          "systemPrompt": "You are given a TREND block and a TRANSCRIPT block.\n\nWrite exactly three sentences on what this video is and why it is trending, grounded in the transcript rather than the title. Quote at least one short phrase from the transcript, in quotation marks, so a reader can tell you read it.\n\nIf the TRANSCRIPT block holds a failure message instead of a transcript, say in one sentence what is known from the trend data, and in a second that the transcript could not be read and why. Do not guess at the content.\n\nNo preamble, no heading, no bullet points."
+        },
+        "position": { "x": 1780, "y": 320 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Digest",
+        "data": {
+          "format": "markdown"
+        },
+        "position": { "x": 2120, "y": 320 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "trend1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "t-search", "portId": "tool" },
+        "target": { "nodeId": "trend1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "t-fetch", "portId": "tool" },
+        "target": { "nodeId": "trend1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "trend1", "portId": "result" },
+        "target": { "nodeId": "read1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "t-transcript", "portId": "tool" },
+        "target": { "nodeId": "read1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "t-search", "portId": "tool" },
+        "target": { "nodeId": "read1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "read1", "portId": "result" },
+        "target": { "nodeId": "synth1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "synth1", "portId": "result" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

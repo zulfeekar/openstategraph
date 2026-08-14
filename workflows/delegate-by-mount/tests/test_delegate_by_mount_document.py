@@ -9,7 +9,7 @@ That last one is the interesting assertion. `Finding.UNENFORCED_OUTCOME` fires
 when a mount states an outcome and the child does not route a `revise` edge, so
 "this mount loops until its grader passes" is a claim checked against the child
 document rather than against the node type. A mount with no outcome claims
-nothing and is not warned about — which is why `mount-explain` states none.
+nothing and is not warned about — which is why `mount-sql` states none.
 
 Whether the classifier routes this particular question correctly is a model
 question; the smoke run records it.
@@ -57,8 +57,8 @@ def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
 def test_the_two_branches_reach_two_different_packages(doc: dict) -> None:
     slugs = {node_id: m["data"]["workflow"] for node_id, m in mounts(doc).items()}
     assert slugs == {
-        "mount-explain": "chained-summarizer",
-        "mount-note": "evaluator-optimizer",
+        "mount-sql": "sql-qa",
+        "mount-web": "web-research-digest",
     }
     # Heterogeneous is the point: one class of answer per branch. Two mounts of
     # ONE package with different overrides is example 12, a different question.
@@ -73,8 +73,8 @@ def test_both_delegates_exist_on_disk(doc: dict) -> None:
 def test_the_router_reaches_each_mount_and_nothing_else(doc: dict) -> None:
     plan = WorkflowCompiler().plan(doc)
     assert plan.conditional["router1"] == {
-        "b-explain": "mount-explain",
-        "b-release-note": "mount-note",
+        "b-database": "mount-sql",
+        "b-web": "mount-web",
     }
 
 
@@ -83,7 +83,7 @@ def test_each_branch_owns_its_output(doc: dict) -> None:
     makes drawing the second *replace* the first, so the graph would not be
     redrawable (gallery ticket 13). Every example in the twenty avoids it."""
     plan = WorkflowCompiler().plan(doc)
-    assert sorted(plan.exits) == ["out-explain", "out-note"]
+    assert sorted(plan.exits) == ["out-database", "out-web"]
     targets = [
         (e["target"]["nodeId"], e["target"]["portId"])
         for e in doc["edges"]
@@ -94,11 +94,11 @@ def test_each_branch_owns_its_output(doc: dict) -> None:
 
 def test_only_the_looping_mount_claims_an_outcome(doc: dict) -> None:
     by_id = mounts(doc)
-    assert by_id["mount-note"]["data"]["outcome"].strip()
-    assert not by_id["mount-explain"]["data"].get("outcome", "").strip()
+    assert by_id["mount-web"]["data"]["outcome"].strip()
+    assert not by_id["mount-sql"]["data"].get("outcome", "").strip()
     # …and the claim is true of the child, which is what the compiler checks.
-    assert closes_a_loop(document("evaluator-optimizer"))
-    assert not closes_a_loop(document("chained-summarizer"))
+    assert closes_a_loop(document("web-research-digest"))
+    assert not closes_a_loop(document("sql-qa"))
 
 
 def test_it_compiles_without_a_warning(doc: dict) -> None:

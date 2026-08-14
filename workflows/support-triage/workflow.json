@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "name": "Support Triage",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Support Triage",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "Every control molecule in one graph: classify the ticket, answer it on the matching desk, grade the reply, and let a person decide whether it is sent. Nothing reaches a customer without the gate."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Ticket",
+        "data": {},
+        "position": { "x": 40, "y": 420 }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "title": "Which desk",
+        "data": {
+          "branches": [
+            { "id": "b-billing", "name": "billing" },
+            { "id": "b-technical", "name": "technical" },
+            { "id": "b-account", "name": "account" }
+          ],
+          "fallback": "account",
+          "rules": "billing: an invoice, a charge, a refund, a price, a payment that failed or a subscription that renewed.\ntechnical: something in the product is broken, slow, erroring, or not doing what it says.\naccount: sign-in, access, permissions, seats, contact details, cancellation — anything about who the customer is rather than what they were charged or what broke.\n\nA ticket that mentions a wrong charge is billing even when the customer is also angry about the wait: route on what must be fixed, never on tone."
+        },
+        "position": { "x": 380, "y": 420 }
+      },
+      {
+        "id": "a-billing",
+        "type": "agent.llm",
+        "title": "Billing desk",
+        "data": {
+          "systemPrompt": "You answer billing tickets for a software company.\n\nWrite the reply that goes to the customer. Three sentences at most: acknowledge the specific charge or invoice they named, say what you will do about it, and say when they will hear back. Name a concrete next step — a correction, a refund request, an escalation — never \"we are looking into it\".\n\nYou cannot see their account, so never state a figure, a date or an invoice number they did not give you. Apologise once, in plain words, and never for more than the thing that happened."
+        },
+        "position": { "x": 760, "y": 200 }
+      },
+      {
+        "id": "a-technical",
+        "type": "agent.llm",
+        "title": "Technical desk",
+        "data": {
+          "systemPrompt": "You answer technical support tickets for a software company.\n\nWrite the reply that goes to the customer. Three sentences at most: say what you understand to be broken in their words, give the one diagnostic step most likely to narrow it down, and say what you need back from them.\n\nDo not guess a root cause, do not promise a fix date, and do not ask for anything you could work out from what they already told you."
+        },
+        "position": { "x": 760, "y": 420 }
+      },
+      {
+        "id": "a-account",
+        "type": "agent.llm",
+        "title": "Account desk",
+        "data": {
+          "systemPrompt": "You answer account tickets for a software company — access, seats, permissions, contact details, cancellation.\n\nWrite the reply that goes to the customer. Three sentences at most: confirm what they are asking to change, state what you can do without further authorisation, and state what you need from them if the change needs it.\n\nNever confirm an identity you have not verified, and never state a plan, seat count or renewal date they did not give you."
+        },
+        "position": { "x": 760, "y": 640 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Is this sendable",
+        "data": {
+          "criteria": "- At most three sentences, addressed to the customer, no internal notes.\n- Every specific — a figure, a date, an invoice number, a plan name — must be one the customer supplied. An invented specific is the failure that matters here, because the reader cannot tell it from a real one.\n- A concrete next step, not a holding phrase.\n- No promise the company has not been asked to make: no refund confirmed, no fix date, no compensation.\n- Say plainly which of these it breaks. Your verdict is read by the person deciding whether to send it.",
+          "rulesMode": "extend",
+          "maxAttempts": 2
+        },
+        "position": { "x": 1140, "y": 420 }
+      },
+      {
+        "id": "gate1",
+        "type": "human.approval",
+        "title": "Send to the customer?",
+        "data": {
+          "message": "This reply goes to a customer under your name. Approve to send it, or reject with a note saying what is wrong — the note becomes the reason on the held ticket."
+        },
+        "position": { "x": 1500, "y": 420 }
+      },
+      {
+        "id": "hold1",
+        "type": "agent.llm",
+        "title": "Held ticket note",
+        "data": {
+          "systemPrompt": "A reply to this ticket was written and a person refused to send it. Their note says why.\n\nWrite the internal record, never sent to the customer. Two sentences: what the ticket was about, and the reason the draft was refused, in the reviewer's own terms. No apology, no reply text, no advice — this is a record, and someone will pick the ticket up from it."
+        },
+        "position": { "x": 1860, "y": 640 }
+      },
+      {
+        "id": "out-sent",
+        "type": "output.formatted",
+        "title": "Approved reply",
+        "data": {},
+        "position": { "x": 1860, "y": 300 }
+      },
+      {
+        "id": "out-held",
+        "type": "output.formatted",
+        "title": "Held for review",
+        "data": {},
+        "position": { "x": 2200, "y": 640 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "router1", "portId": "question" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-billing" },
+        "target": { "nodeId": "a-billing", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-technical" },
+        "target": { "nodeId": "a-technical", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-account" },
+        "target": { "nodeId": "a-account", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "a-billing", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "a-technical", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "a-account", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "gate1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "gate1", "portId": "approved" },
+        "target": { "nodeId": "out-sent", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "gate1", "portId": "rejected" },
+        "target": { "nodeId": "hold1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "hold1", "portId": "result" },
+        "target": { "nodeId": "out-held", "portId": "result" }
+      }
+    ]
+  }
+}
