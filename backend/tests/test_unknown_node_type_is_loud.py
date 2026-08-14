@@ -114,17 +114,16 @@ class TestItIsStillNotRefused:
         What is asserted instead is what "still completes" actually means: the
         run reaches the end and each node published something.
 
-        **The answer is still the question**, because `_passthrough` forwards
-        its input by design — `test_an_unknown_node_type_forwards_instead_of_
-        dead_ending` in `test_node_runtime.py` records that decision. Whether
-        an unknown node should forward at all, or publish a failure marker as
-        `_final_text` concluded for the agent, is a live question and is filed
-        (`reviews-2026-08-14` ticket 12) rather than settled here.
+        And the answer is **not the question**. `_passthrough` used to forward
+        its input, so the run answered "what is 2+2?" with "what is 2+2?" — the
+        failure this module is named for, which its own assertion could not
+        catch. It now publishes a failure marker (ticket 12).
         """
         result = _run()
 
         assert isinstance(result["answer"], str)
         assert set(result["outputs"]) >= {"in1", "a1", "out1"}, result["outputs"]
+        assert "what is 2+2?" not in result["answer"], result["answer"]
 
     def test_a_known_document_reports_nothing(self) -> None:
         """No false positive on the types the runtime does implement."""

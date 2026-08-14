@@ -36,7 +36,10 @@ export function assembliesFor(categoryId: string, query: string): readonly IAsse
  * component renders the answer, it does not own the rule.
  */
 export function sectionSurvivesSearch(
-  section: { readonly category: { readonly id: string }; readonly nodes: readonly INodeDefinition[] },
+  section: {
+    readonly category: { readonly id: string };
+    readonly nodes: readonly INodeDefinition[];
+  },
   query: string,
 ): boolean {
   if (!query.trim()) return true;

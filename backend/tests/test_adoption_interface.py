@@ -70,7 +70,15 @@ class TestAskReturnsARunResult:
 
     def test_the_workflows_warnings_ride_along(self, tmp_path: Path) -> None:
         """A caller checking one run should not have to keep the workflow
-        object around to find out the run was degraded."""
+        object around to find out the run was degraded.
+
+        A superset rather than equality: the workflow's warnings are what
+        *compiling* it found, and a run can find more. A node type nothing
+        implements now publishes a failure marker instead of forwarding its
+        input, so the run also reports the step that produced nothing
+        (reviews-2026-08-14 ticket 12). Equality would make every future
+        run-time warning a failure here for no reason.
+        """
         document = {
             **LINEAR,
             "nodes": [*LINEAR["nodes"], node("t1", "tool.nowhere")],
@@ -79,7 +87,8 @@ class TestAskReturnsARunResult:
 
         answer = workflow.ask("hello")
 
-        assert answer.warnings == workflow.warnings
+        assert set(workflow.warnings) <= set(answer.warnings)
+        assert any("tool.nowhere" in warning for warning in answer.warnings)
 
 
 class TestTheTraceFile:

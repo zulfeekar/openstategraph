@@ -27,7 +27,11 @@ from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
-from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
+from openstategraph.compile.workflow_compiler import (
+    ROUTER_TYPE,
+    CompiledPlan,
+    failure_marker,
+)
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
 from openstategraph.memory import MemorySettings
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
@@ -2360,7 +2364,21 @@ class NodeRuntime:
         upstream = [src for src, dst in plan.edges if dst == node_id]
 
         def run(state: RunState) -> dict[str, Any]:
-            return {"outputs": {node_id: _upstream_text(state, upstream)}}
+            if already_reported:
+                # A function node whose callable was not discovered. It keeps
+                # forwarding: `_discovered_function` has already said so in
+                # better words, a second marker would report it twice, and the
+                # developer channel's suggestion rides through this text.
+                return {"outputs": {node_id: _upstream_text(state, upstream)}}
+            return {
+                "outputs": {
+                    node_id: failure_marker(
+                        node_id,
+                        f'No runtime implements node type "{node_type}", '
+                        "so this step produced nothing.",
+                    )
+                }
+            }
 
         return run
 

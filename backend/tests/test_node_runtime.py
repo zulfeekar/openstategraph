@@ -395,7 +395,22 @@ class TestDegradedInputs:
         assert "the live question" in model.prompts[0]
         assert "stale saved prompt" not in model.prompts[0]
 
-    def test_an_unknown_node_type_forwards_instead_of_dead_ending(self) -> None:
+    def test_an_unknown_node_type_does_not_dead_end_and_does_not_echo(self) -> None:
+        """Still completes — and no longer answers with the question.
+
+        The name was "forwards instead of dead ending", and *not dead ending*
+        is the part that mattered: a document with one node this build does not
+        know still runs and answers what it can, which is `errors.py`'s
+        "degrade loud, never silent" rule.
+
+        Forwarding was the mechanism, and it was the silent half. The skipped
+        node passed its input on, so the output node published the user's own
+        question as the answer and the run reported success — a grader read it
+        as a reply, a customer read it as a reply, and only somebody already
+        reading warnings could tell (reviews-2026-08-14 ticket 12). It now
+        publishes a failure marker, which is what `_final_text` concluded for
+        the agent facing the identical choice.
+        """
         document = {
             "version": 1,
             "name": "x",
@@ -410,7 +425,12 @@ class TestDegradedInputs:
             ],
         }
         final = run(document, "hello", None)
-        assert final["answer"] == "hello"
+
+        # It ran to the end: the output node published something.
+        assert final["outputs"]["node:output.formatted-1"]
+        # And that something is not the question.
+        assert final["answer"] != "hello"
+        assert "future.thing" in final["outputs"]["node:future.thing-1"]
 
 
 class TestPerNodeModelResolution:
