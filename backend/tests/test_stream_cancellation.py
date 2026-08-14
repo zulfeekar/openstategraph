@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import _stream_run
 
 
@@ -57,7 +58,7 @@ KNOWN = {"step_one": "node:a", "step_two": "node:b", "step_three": "node:c"}
 
 
 _RUNTIME = SimpleNamespace(
-    unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[]
+    diagnostics=CompileDiagnostics()
 )
 
 

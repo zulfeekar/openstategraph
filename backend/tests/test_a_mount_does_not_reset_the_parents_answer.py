@@ -26,6 +26,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
 from openstategraph.compile.node_runtime import RESET
@@ -46,7 +47,7 @@ def _frames(chunks: list[Any]) -> list[tuple[str, dict[str, Any]]]:
             return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
 
     runtime = SimpleNamespace(
-        unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[]
+        diagnostics=CompileDiagnostics()
     )
     out: list[tuple[str, dict[str, Any]]] = []
     for raw in _run_frames(

@@ -41,6 +41,7 @@ from typing import Any
 
 import pytest
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import AnswerChannel, Audience
 from openstategraph.api.streaming import _stream_run
 
@@ -98,9 +99,7 @@ def _replay(audience: Audience) -> list[tuple[str, dict[str, Any]]]:
             return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
 
     runtime = SimpleNamespace(
-        unresolved_tools=[],
-        unresolved_functions=[],
-        unresolved_subgraphs=[],
+        diagnostics=CompileDiagnostics(),
         machinery_nodes=set(MACHINERY),
     )
     events: list[tuple[str, dict[str, Any]]] = []

@@ -15,6 +15,7 @@ import inspect
 
 import pytest
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_catalogue import load_catalogue
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.reasoning import (
@@ -182,7 +183,7 @@ class TestTheRuntimeReportsIt:
         runtime = NodeRuntime(model=ollama.ChatOllama(model="gpt-oss:120b-cloud"))
         for _ in range(4):
             runtime._resolve_model({REASONING_EFFORT_KEY: "high"})
-        assert len(runtime.capability_warnings) == 1
+        assert len(runtime.diagnostics.subjects(Finding.CAPABILITY_FAILED)) == 1
 
     def test_every_model_driven_node_gets_it_because_one_method_applies_it(self) -> None:
         """No node type opts in, and none can forget.

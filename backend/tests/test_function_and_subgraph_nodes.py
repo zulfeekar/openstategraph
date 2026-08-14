@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.api.capability_discovery import discover_function_callables
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
@@ -88,7 +89,7 @@ class TestFunctionNode:
         runtime = NodeRuntime(functions={})
         graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
         final = graph.invoke({"question": "x", "attempts": 0, "decisions": {}, "outputs": {}})
-        assert "function.ghost" in runtime.unresolved_functions
+        assert ("function.ghost",) in runtime.diagnostics.subjects(Finding.UNRESOLVED_FUNCTION)
         # The step degrades to passthrough rather than killing the run.
         assert final["answer"] == "x"
 
@@ -160,5 +161,8 @@ class TestSubgraphNode:
         document = self._parent()
         graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
         final = graph.invoke({"question": "q", "attempts": 0, "decisions": {}, "outputs": {}})
-        assert "child-flow" in " ".join(runtime.unresolved_subgraphs)
+        assert any(
+            "child-flow" in label
+            for (label,) in runtime.diagnostics.subjects(Finding.UNRESOLVED_SUBGRAPH)
+        )
         assert final.get("outputs", {}).get("sub1", "") == ""

@@ -29,6 +29,7 @@ from typing import Any
 
 import pytest
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import TERMINAL_EVENTS, _is_terminal, _stream_run
 
 CHUNKS = [
@@ -38,7 +39,7 @@ CHUNKS = [
 
 KNOWN = {"step_one": "node:a", "step_two": "node:b"}
 
-_RUNTIME = SimpleNamespace(unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[])
+_RUNTIME = SimpleNamespace(diagnostics=CompileDiagnostics())
 
 
 class _Graph:

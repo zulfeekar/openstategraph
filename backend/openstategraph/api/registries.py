@@ -286,41 +286,17 @@ def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, 
 
 
 def runtime_warnings(runtime: Any) -> list[str]:
-    """Every "this step silently lost a capability" condition, spelled out."""
-    warnings: list[str] = []
-    for tool_type in runtime.unresolved_tools:
-        warnings.append(
-            f'No implementation for tool "{tool_type}" — the agent ran without it, '
-            "so its answer may not be grounded in that data source."
-        )
-    for fn_type in runtime.unresolved_functions:
-        warnings.append(
-            f'No function found for "{fn_type}" — the step passed its input through unchanged.'
-        )
-    for node_id, slug in getattr(runtime, "unenforced_outcomes", []):
-        warnings.append(
-            f'Team "{node_id}" mounts "{slug}", whose graph has no grader routing '
-            "revise — so its Expected outcome is documentation and nothing in the "
-            "run checks it. Add a grader to that workflow and wire revise back, or "
-            "read the outcome as a note."
-        )
-    for node_type, node_id in getattr(runtime, "unknown_node_types", []):
-        warnings.append(
-            f'Node "{node_id}" has type "{node_type}", which this build does not '
-            "implement — the step passed its input through unchanged, so any "
-            "answer downstream of it skipped that work."
-        )
-    for slug_name in runtime.unresolved_subgraphs:
-        warnings.append(
-            f'Subgraph workflow "{slug_name}" could not be loaded — the node produced nothing.'
-        )
-    for override_warning in getattr(runtime, "override_warnings", []):
-        warnings.append(f"Mount override — {override_warning}")
-    # Capabilities that never loaded (ticket 07). Already full sentences
-    # naming the class, the file and the fix, so no prefix is added — a
-    # discovery finding is not a sub-species of an unresolved binding, it is
-    # the other half of the same question.
-    for capability_warning in getattr(runtime, "capability_warnings", []):
-        warnings.append(capability_warning)
-    return warnings
+    """Every "this step silently lost a capability" condition, spelled out.
+
+    A pass-through now. This function used to reach across into seven separate
+    lists on `NodeRuntime` and build the sentences itself — three of them via
+    `getattr(runtime, name, [])`, because it could not rely on the attribute
+    being there (reviews-2026-08-14 ticket 07). The findings and the sentences
+    they produce live together on `CompileDiagnostics`.
+
+    Kept as a function rather than deleted: it is the name the API layer and
+    the adoption interface call, and what a warning *is* should not be a
+    detail those layers have to know.
+    """
+    return list(runtime.diagnostics.warnings())
 

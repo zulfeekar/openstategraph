@@ -24,6 +24,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience  # noqa: E402
 from openstategraph.api.streaming import _is_tool_message, _stream_run  # noqa: E402
 
@@ -42,7 +43,7 @@ def _frames(chunks, audience: Audience = Audience.DEVELOPER):
             return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
 
     runtime = SimpleNamespace(
-        unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[]
+        diagnostics=CompileDiagnostics()
     )
     out = []
     for frame in _stream_run(

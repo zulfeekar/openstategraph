@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_runtime import apply_mount_overrides
 
 CHILD = {
@@ -71,7 +72,7 @@ class TestValidationIsLoudNotFatal:
 class TestWiringThroughTheMount:
     def test_subgraph_factory_applies_overrides_and_collects_warnings(self) -> None:
         """The child compiles with the merged copy; a bad id reaches
-        `override_warnings` prefixed with the slug."""
+        `OVERRIDE_PROBLEM` findings prefixed with the slug."""
         from openstategraph.compile.node_runtime import NodeRuntime, RuntimeServices
         from openstategraph.compile.workflow_compiler import CompiledPlan
 
@@ -92,8 +93,8 @@ class TestWiringThroughTheMount:
                           "overrides": {"cin": {"prompt": "seeded"},
                                         "ghost": {"x": 1}}}}
         runtime._subgraph("team1", node, CompiledPlan())
-        assert runtime.override_warnings == [
-            'mini: override targets unknown child node "ghost" — the package default ran'
+        assert runtime.diagnostics.subjects(Finding.OVERRIDE_PROBLEM) == [
+            ('mini: override targets unknown child node "ghost" — the package default ran',)
         ]
         # and the shared child dict itself was never mutated
         assert child["nodes"][0]["data"] == {}

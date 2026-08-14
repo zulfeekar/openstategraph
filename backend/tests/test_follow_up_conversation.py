@@ -23,6 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import _stream_run
 from openstategraph.compile.node_runtime import _thread_question
 
@@ -133,7 +134,7 @@ class _FailingGraph(_FinishingGraph):
 
 
 _RUNTIME = SimpleNamespace(
-    unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[]
+    diagnostics=CompileDiagnostics()
 )
 
 

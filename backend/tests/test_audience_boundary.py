@@ -85,7 +85,7 @@ def _broken_doc() -> dict[str, Any]:
     """Same shape with a function node nothing can bind — one runtime warning.
 
     `function.nowhere` is not in any registry, so `NodeRuntime` records it in
-    `unresolved_functions` and `runtime_warnings()` turns it into a sentence
+    `UNRESOLVED_FUNCTION` and `runtime_warnings()` turns it into a sentence
     naming the missing capability. Exactly the kind of authoring diagnostic
     `/chat` used to print to a customer in red.
     """

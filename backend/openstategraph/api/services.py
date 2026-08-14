@@ -268,6 +268,7 @@ class WorkflowServices:
         """
         from openstategraph.api.audience import Audience, resolve as resolve_audience
         from openstategraph.api.capability_discovery import discover_skills
+        from openstategraph.compile.diagnostics import Finding
         from openstategraph.compile.node_runtime import (
             NodeRuntime,
             PackageAssets,
@@ -338,7 +339,8 @@ class WorkflowServices:
                 ),
             )
         )
-        runtime.capability_warnings.extend(capability_warnings)
+        for capability_warning in capability_warnings:
+            runtime.diagnostics.record(Finding.CAPABILITY_FAILED, capability_warning)
         return runtime
 
 

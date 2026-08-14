@@ -25,6 +25,7 @@ from typing import Annotated, Any, Callable, TypedDict
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
+from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
 from openstategraph.compile.workflow_compiler import (
@@ -856,63 +857,20 @@ class NodeRuntime:
         #: tool factory (e.g. `tool.chinook-execute-sql`'s row cap) reads a
         #: per-node config value rather than only ever seeing its type.
         self._nodes: dict[str, dict[str, Any]] = {}
-        #: Tool nodes wired on the canvas with no implementation available.
+        #: What the compiler noticed and could not resolve — unresolved
+        #: tools and functions, unknown node types, mounts whose outcome
+        #: nothing enforces, capabilities that failed to load.
         #:
-        #: Surfaced rather than swallowed. An agent that silently loses its tools
-        #: does not fail — it answers from parametric knowledge, confidently and
-        #: wrongly. Observed exactly that: a Reddit tool node wired to an agent
-        #: produced an authoritative-sounding answer about global music revenue
-        #: instead of querying anything. A visible warning beats a plausible lie.
-        self.unresolved_tools: list[str] = []
-        #: Function node types wired on the canvas with no discovered callable,
-        #: and subgraph nodes whose workflow could not be loaded. Same loudness
-        #: rule as tools: a silently-degraded step reads as "covered" when it
-        #: was not.
-        self.unresolved_functions: list[str] = []
-        self.unresolved_subgraphs: list[str] = []
-        #: Team mounts whose child cannot enforce the outcome on their card,
-        #: as `(node id, slug)`.
+        #: These were seven separate lists here, read by
+        #: `api/registries.runtime_warnings()` reaching across into all seven
+        #: (reviews-2026-08-14 ticket 07). The reasoning behind each kind, and
+        #: the sentence it produces, is on `Finding` in
+        #: `compile/diagnostics.py`; recording is deduplicated there rather
+        #: than at each call site here.
         #:
-        #: `TeamNode`'s `Expected outcome` never reaches the compiler —
-        #: `_subgraph` reads `workflow` and `overrides` and nothing else — so a
-        #: user writes a constraint, reasonably believes it binds the run, and
-        #: gets no signal that it does not. A document with no grader at all
-        #: can be mounted as a Team and will still display that outcome
-        #: (production-ready ticket 03).
-        #:
-        #: Reported rather than refused: a Team without a loop is a legal graph
-        #: that answers questions. What it cannot do is keep the promise
-        #: printed on its card, which is a thing to say, not a thing to refuse.
-        self.unenforced_outcomes: list[tuple[str, str]] = []
-        #: Node types this build has no factory for, as `type` and node id.
-        #:
-        #: The loud half of a rule that was only half kept. `errors.py` records
-        #: the policy — an unknown node type is *reported*, not raised, so a
-        #: document containing one still answers what it can — and
-        #: `_passthrough` implemented the degrade while reporting nothing. Its
-        #: docstring claimed "the gap is visible as an unchanged value", which
-        #: is exactly what hides it: the skipped node forwards its input, so
-        #: the run answers the user's own question back and looks like it
-        #: worked. Found through the typo `agent.react` for `agent.llm`.
-        #:
-        #: Recorded here rather than in `factory_for`, which is a pure lookup
-        #: that `test_data_key_contract.py` enumerates over every catalogue
-        #: type — a side effect there would report node types nobody wired.
-        self.unknown_node_types: list[tuple[str, str]] = []
-        #: Per-mount override problems (unknown child node id, wrong shape) —
-        #: surfaced through `runtime_warnings` beside unresolved tools.
-        self.override_warnings: list[str] = []
-        #: Capabilities that failed to *load* — a tool module that would not
-        #: import, an abstract class discovery could not instantiate, a plugin
-        #: distribution that half-installed (ticket 07 / RC-04).
-        #:
-        #: Distinct from `unresolved_tools`, which is about a node on the
-        #: canvas finding no implementation; this is about an implementation
-        #: that never became one. Both share the channel deliberately: from a
-        #: developer's seat, "the tool I wrote is not here" is one question,
-        #: and answering half of it in a server log they never open is how the
-        #: original bug survived. Populated by `WorkflowServices.runtime_for`.
-        self.capability_warnings: list[str] = []
+        #: `CAPABILITY_FAILED` is populated from outside, by
+        #: `WorkflowServices.runtime_for`.
+        self.diagnostics = CompileDiagnostics()
         #: Graph node names whose streamed text is machinery rather than the
         #: reply — the compile half of the streaming audience boundary
         #: (ticket 25; `api/audience.AnswerChannel` is the other half).
@@ -1115,8 +1073,8 @@ class NodeRuntime:
         model is one fact, not ten.
         """
         resolved, warning = apply_reasoning_effort(model, effort)
-        if warning and warning not in self.capability_warnings:
-            self.capability_warnings.append(warning)
+        if warning:
+            self.diagnostics.record(Finding.CAPABILITY_FAILED, warning)
         return resolved
 
     # -- node kinds ------------------------------------------------------- #
@@ -1258,8 +1216,7 @@ class NodeRuntime:
         tool_type = self._types.get(tool_node_id, "")
         tool = self.tools.get(tool_type)
         if tool is None:
-            if tool_type not in self.unresolved_tools:
-                self.unresolved_tools.append(tool_type)
+            self.diagnostics.record(Finding.UNRESOLVED_TOOL, tool_type)
             return None
 
         data = self._nodes.get(tool_node_id, {}).get("data") or {}
@@ -1976,8 +1933,7 @@ class NodeRuntime:
         node_type = str(node.get("type", ""))
         fn = self.functions.get(node_type)
         if fn is None:
-            if node_type not in self.unresolved_functions:
-                self.unresolved_functions.append(node_type)
+            self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, node_type)
             return self._passthrough(node_id, node, plan)
 
         upstream = [src for src, dst in plan.edges if dst == node_id]
@@ -2060,7 +2016,9 @@ class NodeRuntime:
                     child_document, data.get("overrides")
                 )
                 for warning in mount_warnings:
-                    self.override_warnings.append(f"{slug or node_id}: {warning}")
+                    self.diagnostics.record(
+                        Finding.OVERRIDE_PROBLEM, f"{slug or node_id}: {warning}"
+                    )
                 # A mount's card shows an outcome its child may have no way to
                 # enforce. Keyed on *an outcome being written* rather than on
                 # the node's type — since v3 there is one mount type, and what
@@ -2077,7 +2035,7 @@ class NodeRuntime:
                 # destination becomes a fact, so this cannot drift from what
                 # the graph actually does.
                 if _text(data, "outcome").strip() and not self._closes_a_loop_impl(child_document):
-                    self.unenforced_outcomes.append((node_id, slug))
+                    self.diagnostics.record(Finding.UNENFORCED_OUTCOME, node_id, slug)
                 child_assets = PackageAssets(
                     tools=self.tools,
                     functions=self.functions,
@@ -2169,8 +2127,7 @@ class NodeRuntime:
 
         if child_graph is None:
             label = slug or "(no workflow selected)"
-            if label not in self.unresolved_subgraphs:
-                self.unresolved_subgraphs.append(label)
+            self.diagnostics.record(Finding.UNRESOLVED_SUBGRAPH, label)
             captured = None
         else:
             captured = child_graph
@@ -2356,11 +2313,14 @@ class NodeRuntime:
         so it is not reported twice.
         """
         node_type = str(node.get("type", ""))
-        already_reported = node_type in self.unresolved_functions
+        # Recorded here rather than in `factory_for`, which is a pure lookup
+        # that `test_data_key_contract.py` enumerates over every catalogue
+        # type — a side effect there would report node types nobody wired.
+        already_reported = (node_type,) in self.diagnostics.subjects(
+            Finding.UNRESOLVED_FUNCTION
+        )
         if node_type and not already_reported:
-            entry = (node_type, node_id)
-            if entry not in self.unknown_node_types:
-                self.unknown_node_types.append(entry)
+            self.diagnostics.record(Finding.UNKNOWN_NODE_TYPE, node_type, node_id)
         upstream = [src for src, dst in plan.edges if dst == node_id]
 
         def run(state: RunState) -> dict[str, Any]:

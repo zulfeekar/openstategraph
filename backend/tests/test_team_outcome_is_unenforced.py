@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.api.registries import runtime_warnings
 from openstategraph.compile.node_runtime import NodeRuntime, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan
@@ -78,7 +79,7 @@ def mount(child: dict[str, Any], node_type: str = "workflow.subgraph") -> NodeRu
 class TestTheGapIsReported:
     def test_a_grader_less_child_is_reported(self) -> None:
         """The case a user can reach today with no warning at all."""
-        assert mount(GRADERLESS).unenforced_outcomes
+        assert mount(GRADERLESS).diagnostics.any(Finding.UNENFORCED_OUTCOME)
 
     def test_a_grader_that_never_revises_is_reported_too(self) -> None:
         """Present is not the same as wired.
@@ -86,10 +87,10 @@ class TestTheGapIsReported:
         A grader with no `revise` destination judges once and passes whatever
         it got — there is no loop for the outcome to be enforced by.
         """
-        assert mount(OPEN_LOOP).unenforced_outcomes
+        assert mount(OPEN_LOOP).diagnostics.any(Finding.UNENFORCED_OUTCOME)
 
     def test_a_real_looping_team_is_not_reported(self) -> None:
-        assert mount(LOOPING).unenforced_outcomes == []
+        assert not mount(LOOPING).diagnostics.any(Finding.UNENFORCED_OUTCOME)
 
     def test_a_mount_that_promises_nothing_is_never_reported(self) -> None:
         """The rule is the promise, not the card.
@@ -107,10 +108,10 @@ class TestTheGapIsReported:
             {"id": "mount1", "type": "workflow.subgraph", "data": {"workflow": "child-pkg"}},
             CompiledPlan(),
         )
-        assert runtime.unenforced_outcomes == []
+        assert not runtime.diagnostics.any(Finding.UNENFORCED_OUTCOME)
 
     def test_an_unresolvable_child_is_left_to_its_own_warning(self) -> None:
-        """`unresolved_subgraphs` already says the child could not be loaded.
+        """`UNRESOLVED_SUBGRAPH` already says the child could not be loaded.
 
         Adding "and its outcome is unenforced" would report a second, weaker
         consequence of the same fact.
@@ -122,7 +123,7 @@ class TestTheGapIsReported:
         )
         node = {"id": "team1", "type": "team.workflow", "data": {"workflow": "missing"}}
         runtime._subgraph("team1", node, CompiledPlan())
-        assert runtime.unenforced_outcomes == []
+        assert not runtime.diagnostics.any(Finding.UNENFORCED_OUTCOME)
 
 
 class TestTheWarningReadsLikeAProduct:
@@ -158,5 +159,5 @@ class TestItIsLoudNotFatal:
         thing to say, not a thing to refuse.
         """
         runtime = mount(GRADERLESS)
-        assert runtime.unenforced_outcomes
-        assert runtime.unresolved_subgraphs == []
+        assert runtime.diagnostics.any(Finding.UNENFORCED_OUTCOME)
+        assert not runtime.diagnostics.any(Finding.UNRESOLVED_SUBGRAPH)

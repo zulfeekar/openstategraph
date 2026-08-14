@@ -7,7 +7,7 @@ The snippet `docs/adoption.md` used to print —
     graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
 
 — compiles, runs, and answers. It also never wires the package's own
-`tools/`: `runtime.unresolved_tools` came back with all three Chinook tools
+`tools/`: `UNRESOLVED_TOOL` findings came back with all three Chinook tools
 and the agent replied "we need to call chinook_list_tables" instead of
 querying anything. A workflow that looks like it works and answers nothing is
 exactly the failure this codebase treats as the worst kind, and the correct

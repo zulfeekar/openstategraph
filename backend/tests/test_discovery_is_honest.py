@@ -22,6 +22,9 @@ from typing import Any
 
 import pytest
 
+from types import SimpleNamespace
+
+from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.abc import BaseTool, NoArgs, ToolResult
 from openstategraph.api.capability_discovery import (
     discover_tool_instances,
@@ -324,13 +327,17 @@ class TestTheFindingsReachAHumanWhoNeverReadsLogs:
     def test_they_land_on_runtime_warnings(self, tmp_path: Path) -> None:
         from openstategraph.api.registries import runtime_warnings
 
-        class FakeRuntime:
-            unresolved_tools: list[str] = []
-            unresolved_functions: list[str] = []
-            unresolved_subgraphs: list[str] = []
-            capability_warnings = ["AcmePing overrides run()"]
+        # A real `CompileDiagnostics` rather than a fake with four fields.
+        # The fake existed because `runtime_warnings` read seven attributes
+        # off whatever it was handed, three of them defensively; there is one
+        # collaborator to hold now, and it is a cheap value object
+        # (reviews-2026-08-14 ticket 07).
+        diagnostics = CompileDiagnostics()
+        diagnostics.record(Finding.CAPABILITY_FAILED, "AcmePing overrides run()")
 
-        assert "AcmePing overrides run()" in runtime_warnings(FakeRuntime())
+        assert "AcmePing overrides run()" in runtime_warnings(
+            SimpleNamespace(diagnostics=diagnostics)
+        )
 
     def test_a_runtime_built_for_a_broken_package_carries_them(self, tmp_path: Path) -> None:
         from openstategraph.api.services import WorkflowServices
@@ -342,7 +349,7 @@ class TestTheFindingsReachAHumanWhoNeverReadsLogs:
         services = WorkflowServices(tmp_path)
         runtime = services.runtime_for("my-flow", {"nodes": [], "edges": []}, None)
 
-        assert any("AcmePing" in w for w in runtime.capability_warnings)
+        assert any("AcmePing" in w for w in runtime.diagnostics.warnings())
 
     def test_load_workflow_reports_it_on_compiled_workflow_warnings(
         self, tmp_path: Path

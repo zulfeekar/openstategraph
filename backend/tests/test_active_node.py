@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import ActiveNodeResolver
 
 KNOWN = {
@@ -89,7 +90,7 @@ def _frames(chunks: list[tuple[tuple[str, ...], str, dict]], known: dict[str, st
             return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
 
     runtime = SimpleNamespace(
-        unresolved_tools=[], unresolved_functions=[], unresolved_subgraphs=[]
+        diagnostics=CompileDiagnostics()
     )
     out = []
     for frame in _stream_run(

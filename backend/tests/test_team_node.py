@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -57,7 +58,7 @@ class TestTeamCompilesAsSubgraph:
         update = run(RunState(question="q"))  # type: ignore[typeddict-item]
         assert update["outputs"]["team1"] == ""
         # The miss is recorded loudly — the API surfaces this as a warning.
-        assert runtime.unresolved_subgraphs == ["nope"]
+        assert runtime.diagnostics.subjects(Finding.UNRESOLVED_SUBGRAPH) == [("nope",)]
 
 
 class TestScaffoldedTeamPackage:

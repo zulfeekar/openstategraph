@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -334,7 +335,7 @@ class TestToolBinding:
         # Observed for real: a Reddit tool node with no Python implementation
         # produced an authoritative answer about global music revenue instead of
         # querying anything.
-        assert runtime.unresolved_tools == ["tool.unknown"]
+        assert runtime.diagnostics.subjects(Finding.UNRESOLVED_TOOL) == [("tool.unknown",)]
 
     def test_a_bound_sql_tools_max_rows_field_actually_reaches_the_tool(self) -> None:
         """Found by a TS-schema-vs-Python-factory diff: `ChinookDatabaseNode.ts`'s

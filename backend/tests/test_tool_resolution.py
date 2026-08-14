@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.api.capability_discovery import discover_tool_registry, discover_tools
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
@@ -69,7 +70,7 @@ class TestBoundToolConfiguration:
         runtime = NodeRuntime(tools={})
         runtime._types["t1"] = "tool.ghost"
         assert runtime._bound_tool("t1") is None
-        assert "tool.ghost" in runtime.unresolved_tools
+        assert ("tool.ghost",) in runtime.diagnostics.subjects(Finding.UNRESOLVED_TOOL)
 
     def test_chinook_row_cap_still_configures_through_the_generic_hook(self) -> None:
         import importlib.util

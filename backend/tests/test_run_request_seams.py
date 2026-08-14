@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from openstategraph.compile.diagnostics import Finding
 from openstategraph.api.main import create_app
 
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -120,7 +121,7 @@ class TestSlugToolBinding:
 
     def test_a_bound_chinook_tool_resolves_with_no_warning(self) -> None:
         """The end of the chain: a runtime holding the slug registry binds
-        `tool.chinook-execute-sql` silently — no `unresolved_tools` entry,
+        `tool.chinook-execute-sql` silently — no `UNRESOLVED_TOOL` finding,
         which is the exact signal whose absence meant 'agent answers from
         memory'."""
         from openstategraph.api.main import build_tool_registry
@@ -132,4 +133,4 @@ class TestSlugToolBinding:
         tool = runtime._bound_tool("t1")
         assert tool is not None
         assert tool.row_cap == 5
-        assert runtime.unresolved_tools == []
+        assert not runtime.diagnostics.any(Finding.UNRESOLVED_TOOL)

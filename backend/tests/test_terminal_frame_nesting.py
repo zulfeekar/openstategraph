@@ -32,6 +32,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
 
@@ -59,9 +60,7 @@ def _done(chunks: list[Any]) -> dict[str, Any]:
             return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
 
     runtime = SimpleNamespace(
-        unresolved_tools=[],
-        unresolved_functions=[],
-        unresolved_subgraphs=[],
+        diagnostics=CompileDiagnostics(),
         node_ids_by_name=WIDE,
         mount_slugs={},
     )
