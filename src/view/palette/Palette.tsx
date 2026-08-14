@@ -188,7 +188,7 @@ export function Palette({ onNotify }: PaletteProps) {
   // Only the click path needs this. A **drag** carries the point the pointer
   // was released on, and placing the node exactly there is its whole contract.
   const add = (definition: INodeDefinition) => {
-    const preferred = paper?.viewportCenter() ?? { x: 120, y: 120 };
+    const preferred = paper?.viewport.center ?? { x: 120, y: 120 };
     const outcome = controller.nodes.add(definition.id, preferred, { avoidOverlap: true });
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };

@@ -27,6 +27,21 @@ import {
  * because it has no reference to the graph it lives in; keeping that
  * one-way makes it impossible to mutate a node without an event firing.
  */
+/**
+ * The node's write side, handed only to `WorkflowModel`.
+ *
+ * Named as an interface so the rule has something to point at, and so the
+ * grep in `nodeWriteSeam.test.ts` has a stable shape to look for.
+ */
+export interface NodeWrite {
+  position(position: Point): void;
+  size(size: Size): void;
+  parent(parentId: NodeId | null): void;
+  field(key: string, value: FieldValue): void;
+  title(title: string): void;
+  runtime(patch: Partial<NodeRuntimeState>): void;
+}
+
 export abstract class AbstractNodeModel implements INodeModel {
   readonly id: NodeId;
   readonly definition: INodeDefinition;
@@ -112,11 +127,6 @@ export abstract class AbstractNodeModel implements INodeModel {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   }
 
-  getFlag(key: string, fallback = false): boolean {
-    const value = this._data[key];
-    return typeof value === 'boolean' ? value : fallback;
-  }
-
   /* ---------------- ports ---------------- */
 
   /**
@@ -155,38 +165,49 @@ export abstract class AbstractNodeModel implements INodeModel {
     return this._runtime;
   }
 
-  /* ---------------- mutators — WorkflowModel only ---------------- */
+  /* ---------------- the write seam ---------------- */
 
-  applyPosition(position: Point): void {
-    this._position = { ...position };
-  }
-
-  applySize(size: Size): void {
-    this._size = { ...size };
-  }
-
-  applyParent(parentId: NodeId | null): void {
-    this._parentId = parentId;
-  }
-
-  applyField(key: string, value: FieldValue): void {
-    this._data = { ...this._data, [key]: value };
-  }
-
-  applyData(patch: Partial<NodeData>): void {
-    this._data = mergeData(this._data, patch);
-  }
-
-  applyTitle(title: string): void {
-    const trimmed = title.trim();
-    // An empty title falls back to the type label rather than rendering a
-    // blank header.
-    this._title = trimmed.length > 0 ? trimmed : null;
-  }
-
-  applyRuntime(patch: Partial<NodeRuntimeState>): void {
-    this._runtime = { ...this._runtime, ...patch };
-  }
+  /**
+   * The only way to change a node, and only `WorkflowModel` may use it.
+   *
+   * These were seven public `apply*` methods under a comment saying
+   * "WorkflowModel only", which was the entire enforcement
+   * (reviews-2026-08-14 ticket 14). Seven public setters on a node are seven
+   * ways for view or canvas code to move one without going through a command
+   * — which does not fail, it silently drops out of undo and out of the
+   * change events the canvas projection is built from.
+   *
+   * Grouping them names the seam so `nodeWriteSeam.test.ts` can hold the
+   * layering rule (`gesture → Controller → ICommand → Model → event →
+   * Adapter → canvas`) rather than a comment asking for it.
+   *
+   * Closures rather than a `NodeWriter` class: TypeScript's `private` is
+   * per-class, so a separate class could not reach these fields without
+   * widening them to the world — which is the thing being prevented.
+   */
+  readonly write: NodeWrite = {
+    position: (position: Point) => {
+      this._position = { ...position };
+    },
+    size: (size: Size) => {
+      this._size = { ...size };
+    },
+    parent: (parentId: NodeId | null) => {
+      this._parentId = parentId;
+    },
+    field: (key: string, value: FieldValue) => {
+      this._data = { ...this._data, [key]: value };
+    },
+    title: (title: string) => {
+      const trimmed = title.trim();
+      // An empty title falls back to the type label rather than rendering a
+      // blank header.
+      this._title = trimmed.length > 0 ? trimmed : null;
+    },
+    runtime: (patch: Partial<NodeRuntimeState>) => {
+      this._runtime = { ...this._runtime, ...patch };
+    },
+  };
 
   /* ---------------- serialization ---------------- */
 

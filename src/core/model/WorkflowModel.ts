@@ -192,7 +192,7 @@ export class WorkflowModel implements IWorkflowModel {
     if (!node) return;
     const previous = node.position;
     if (previous.x === position.x && previous.y === position.y) return;
-    node.applyPosition(position);
+    node.write.position(position);
     this.bus.emit('node:moved', { nodeId: id, position: node.position, previous });
   }
 
@@ -201,7 +201,7 @@ export class WorkflowModel implements IWorkflowModel {
     if (!node) return;
     const previous = node.size;
     if (previous.width === size.width && previous.height === size.height) return;
-    node.applySize(size);
+    node.write.size(size);
     this.bus.emit('node:resized', { nodeId: id, size: node.size, previous });
   }
 
@@ -210,7 +210,7 @@ export class WorkflowModel implements IWorkflowModel {
     if (!node) return;
     const previous = node.data[key] ?? null;
     if (previous === value) return;
-    node.applyField(key, value);
+    node.write.field(key, value);
     this.bus.emit('node:data', { nodeId: id, key, value, previous });
   }
 
@@ -230,14 +230,14 @@ export class WorkflowModel implements IWorkflowModel {
   setNodeTitle(id: NodeId, title: string): void {
     const node = this.nodeMap.get(id);
     if (!node) return;
-    node.applyTitle(title);
+    node.write.title(title);
     this.bus.emit('node:title', { nodeId: id, title: node.title });
   }
 
   setNodeRuntime(id: NodeId, runtime: Partial<NodeRuntimeState>): void {
     const node = this.nodeMap.get(id);
     if (!node) return;
-    node.applyRuntime(runtime);
+    node.write.runtime(runtime);
     this.bus.emit('node:runtime', { nodeId: id, runtime: node.runtime });
   }
 
@@ -249,7 +249,7 @@ export class WorkflowModel implements IWorkflowModel {
     // Refuse a cycle: a container cannot end up inside its own subtree.
     if (parentId && this.queries.isAncestorOf(id, parentId)) return;
     if (previous) this.adjacency.unlinkChild(previous, id);
-    node.applyParent(parentId);
+    node.write.parent(parentId);
     if (parentId) this.adjacency.linkChild(parentId, id);
     this.bus.emit('node:parent', { nodeId: id, parentId, previous });
   }

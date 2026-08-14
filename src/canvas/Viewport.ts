@@ -59,6 +59,19 @@ export class Viewport {
     };
   }
 
+  /**
+   * The model-space point in the middle of the view.
+   *
+   * `PaperController.viewportCenter()` derived this from `visibleRect`, which
+   * put a camera calculation on the thing that owns a camera rather than on
+   * the camera (reviews-2026-08-14 ticket 14). Its one caller wants somewhere
+   * to put a node the user just added from the palette.
+   */
+  get center(): Point {
+    const rect = this.visibleRect;
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }
+
   /** Converts a client (viewport-relative) point to model coordinates. */
   clientToLocal(clientX: number, clientY: number): Point {
     const rect = this.container.getBoundingClientRect();

@@ -230,7 +230,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
         event.preventDefault();
         setDropActive(false);
         if (!paper) return;
-        const at = paper.clientToLocal(event.clientX, event.clientY);
+        const at = paper.viewport.clientToLocal(event.clientX, event.clientY);
 
         // An assembly drops as a fragment: several nodes and the edges between
         // them, in one undoable step. It never splices onto an edge — that

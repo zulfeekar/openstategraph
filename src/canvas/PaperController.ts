@@ -264,21 +264,6 @@ export class PaperController implements IDisposable {
     return this.controller.model.bounds();
   }
 
-  /** Model coordinates at the centre of the current view. */
-  viewportCenter(): { x: number; y: number } {
-    const rect = this.viewport.visibleRect;
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }
-
-  /** Converts a drop event's client coordinates into model space. */
-  clientToLocal(clientX: number, clientY: number): { x: number; y: number } {
-    return this.viewport.clientToLocal(clientX, clientY);
-  }
-
-  get element(): HTMLElement {
-    return this.container;
-  }
-
   dispose(): void {
     for (const feature of this.features.list()) feature.dispose();
     this.disposables.dispose();
