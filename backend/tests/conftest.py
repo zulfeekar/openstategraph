@@ -108,6 +108,75 @@ class RespondingModel(GenericFakeChatModel):
         return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
 
 
+class BlockRespondingModel(RespondingModel):
+    """`RespondingModel`, but it answers in **content blocks** rather than a string.
+
+    Exists because the string-shaped fake cannot express the shape that broke
+    the product (the-editor-makes-a-real-package tickets 03 and 06). LangChain
+    documents `content` as "loosely-typed, supporting strings and lists of
+    untyped objects", and an Anthropic `AIMessage` in particular "can either be
+    a single string or a list of content blocks". Adding `"messages"` to
+    `stream_mode` — which both shipped UIs do and no test did — is enough to
+    switch a settled message from
+
+        content="144"
+
+    to
+
+        content=[{"type": "text", "text": "144", "index": 0}]
+
+    Every fake in this suite answered in the first shape, so every test agreed
+    with a runtime that was wrong in the second: `/api/runs` answered `49`
+    while `/api/runs/stream` answered the *question*, and 2000 tests stayed
+    green.
+
+    `reasoning` puts a thinking block ahead of the text, because a thinking
+    model's private deliberation rides in the same list and must not reach the
+    answer.
+    """
+
+    reasoning: str = ""
+
+    def __init__(self, rules: list[RouteRule], default: str = "PASS", reasoning: str = ""):
+        super().__init__(rules, default)
+        object.__setattr__(self, "reasoning", reasoning)
+
+    def _reply(self, text: str):  # noqa: ANN001
+        from langchain_core.outputs import ChatGeneration, ChatResult
+
+        blocks: list[dict[str, object]] = []
+        if self.reasoning:
+            blocks.append({"type": "thinking", "thinking": self.reasoning, "signature": "sig"})
+        # `index` is present on real streamed blocks and absent on settled
+        # ones; carrying it keeps this honest about what aggregation produces.
+        blocks.append({"type": "text", "text": text, "index": len(blocks)})
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=blocks))])
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001
+        """Block-shaped chunks, because the inherited one refuses to emit them.
+
+        `GenericFakeChatModel._stream` raises *"Expected content to be a
+        string"* outright, so a block-shaped fake cannot stream at all without
+        this — and streaming is the only path that matters here.
+
+        Each chunk carries a one-block list rather than a bare string, which
+        is what a real provider sends and what makes the aggregate settle as a
+        block *list*. That aggregate is the whole point: it is the shape the
+        product got wrong.
+        """
+        from langchain_core.messages import AIMessageChunk
+        from langchain_core.outputs import ChatGenerationChunk
+
+        message = self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+        for index, block in enumerate(message.generations[0].message.content):
+            chunk = ChatGenerationChunk(
+                message=AIMessageChunk(content=[{**block, "index": index}])
+            )
+            if run_manager:
+                run_manager.on_llm_new_token(block.get("text", ""), chunk=chunk)
+            yield chunk
+
+
 @pytest.fixture(autouse=True)
 def _fresh_process_tool_layer():
     """No process-lifetime cache may outlive the test that populated it.

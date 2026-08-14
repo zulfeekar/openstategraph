@@ -430,6 +430,140 @@ class TestRunStream:
         assert response.status_code == 422
 
 
+class TestAStreamedAnswerIsTheAnswer:
+    """The streamed **answer**, not merely the streamed frames (ticket 06).
+
+    `TestRunStream` above proves the frame vocabulary — that `update`, `spawn`
+    and `done` arrive with the right shape and ids. It does not prove that the
+    answer inside them is right, and for a long time it was not:
+
+        POST /api/runs      → "49"
+        POST /api/runs/stream → "What is 7 * 7? Reply with just the number."
+
+    Same workflow, same server, seconds apart (ticket 03, found by driving the
+    wheel in a browser). Both shipped UIs stream — `/api/runs` cannot show
+    progress and cannot pause for an approval — so **every run a person could
+    see was wrong while every run a test made was right**. The CLI,
+    `/api/runs` and effectively every other run test go through `invoke`.
+
+    Two things had to be true for a suite this size to miss it, and this class
+    fixes both:
+
+    - Nothing asserted on an answer obtained through the streaming path.
+    - Every fake model replied with string content, so no test could reproduce
+      the shape that triggers it. `BlockRespondingModel` exists for that and
+      is the load-bearing half — with a string-shaped fake these tests pass
+      against the broken runtime.
+    """
+
+    @staticmethod
+    def _agent_doc() -> dict[str, Any]:
+        """in1 → agent1 → out1: the `minimal` template, and the shape of every
+        workflow a newcomer builds first."""
+
+        def n(i: str, ty: str, **d: Any) -> dict[str, Any]:
+            return {"id": i, "type": ty, "data": d, "position": {"x": 0, "y": 0}}
+
+        def e(s: str, sp: str, d: str, dp: str) -> dict[str, Any]:
+            return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": d, "portId": dp}}
+
+        return {
+            "version": 1,
+            "name": "answers",
+            "nodes": [n("in1", "input.text"), n("agent1", "agent.llm"), n("out1", "output.formatted")],
+            "edges": [e("in1", "text", "agent1", "prompt"), e("agent1", "result", "out1", "result")],
+        }
+
+    @staticmethod
+    def _done(response: Any) -> dict[str, Any]:
+        events = TestRunStream._events(response.text)
+        return next(data for name, data in events if name == "done")
+
+    def _ask(self, monkeypatch: pytest.MonkeyPatch, model: Any, question: str) -> dict[str, Any]:
+        from openstategraph import chat_model as chat_model_module
+
+        monkeypatch.setattr(chat_model_module, "build_chat_model", lambda _name: model)
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/runs/stream", json={"workflow": self._agent_doc(), "question": question}
+        )
+        assert response.status_code == 200
+        return self._done(response)
+
+    def test_the_streamed_answer_is_what_the_model_said(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from conftest import BlockRespondingModel
+
+        done = self._ask(
+            monkeypatch,
+            BlockRespondingModel([], default="144"),
+            "What is 12 * 12? Reply with just the number.",
+        )
+
+        assert done["answer"] == "144"
+        assert done["outputs"]["agent1"] == "144"
+        assert done["outputs"]["out1"] == "144"
+
+    def test_the_streamed_answer_is_never_the_question(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The negative that has now bitten twice — this defect and the earlier
+        # unknown-node-type one both presented as an echo. It is the single
+        # worst failure this product can have: a grader reads it as a reply, a
+        # customer reads it as a reply, and the run reports success. An empty
+        # answer is visibly broken; an echo is a lie.
+        from conftest import BlockRespondingModel
+
+        question = "Which genre earns the most revenue?"
+        done = self._ask(monkeypatch, BlockRespondingModel([], default="Rock."), question)
+
+        assert done["answer"] != question
+        assert question not in done["outputs"].values() or done["outputs"]["in1"] == question
+        assert done["outputs"]["agent1"] != question
+
+    def test_a_thinking_models_reasoning_stays_out_of_the_answer(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Reasoning rides in the same content list as the text. Concatenating
+        # the list blind would hand a customer the model's private
+        # deliberation, which is worse than showing them nothing.
+        from conftest import BlockRespondingModel
+
+        done = self._ask(
+            monkeypatch,
+            BlockRespondingModel([], default="42", reasoning="the user wants 6*7, that is 42"),
+            "What is 6 * 7?",
+        )
+
+        assert done["answer"] == "42"
+        assert "deliberation" not in done["answer"]
+        assert "the user wants" not in done["answer"]
+
+    def test_the_two_endpoints_agree(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The assertion that would have caught it on its own.
+
+        `/api/runs` and `/api/runs/stream` compile the same document with the
+        same input; the only difference is `stream_mode`. A user should never
+        be able to tell which one answered — and for months they could.
+        """
+        from conftest import BlockRespondingModel
+
+        from openstategraph import chat_model as chat_model_module
+
+        monkeypatch.setattr(
+            chat_model_module, "build_chat_model", lambda _name: BlockRespondingModel([], default="81")
+        )
+        client = TestClient(create_app())
+        payload = {"workflow": self._agent_doc(), "question": "What is 9 * 9?"}
+
+        plain = client.post("/api/runs", json=payload).json()
+        streamed = self._done(client.post("/api/runs/stream", json=payload))
+
+        assert plain["answer"] == streamed["answer"] == "81"
+        assert plain["outputs"]["agent1"] == streamed["outputs"]["agent1"]
+
+
 class TestHumanInTheLoop:
     """`/api/runs/stream` pausing on `human.approval`, resumed via
     `/api/runs/resume` — the real HTTP surface for the graph-level lifecycle

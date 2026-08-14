@@ -243,6 +243,35 @@ class _DeepAgentAsChatModel:
 
 
 
+def _content_text(content: Any) -> str:
+    """The human-readable text of a message's content, whichever shape it is.
+
+    LangChain documents `content` as "loosely-typed, supporting strings and
+    lists of untyped objects"; an Anthropic `AIMessage` in particular "can
+    either be a single string or a list of content blocks". Both shapes are
+    normal and which one arrives is not the caller's choice — adding
+    `"messages"` to `stream_mode` is enough to switch it.
+
+    Only `text` blocks are joined. A thinking model puts its reasoning in the
+    same list, and concatenating blindly would hand a customer the model's
+    private deliberation as if it were the answer.
+
+    Written out rather than delegating to `message.text`: that accessor is a
+    property on current message classes and a deprecated *method* on others,
+    so reading it generically means guessing which — and the stand-ins this
+    module is also handed have neither.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return ""
+
+
 def _final_text(messages: list[Any]) -> str:
     """What the model said this turn — or "", never something else.
 
@@ -293,15 +322,7 @@ def _final_text(messages: list[Any]) -> str:
         # as {"path": ...} in the customer chat.
         if getattr(message, "tool_calls", None):
             continue
-        text = getattr(message, "text", None)
-        # `.text` is a property on modern message classes and a plain string
-        # on the hand-rolled stand-ins some tests and shims pass; fall back to
-        # `content` for anything that has neither.
-        if callable(text):
-            text = text()
-        if not isinstance(text, str):
-            content = getattr(message, "content", "")
-            text = content if isinstance(content, str) else ""
+        text = _content_text(getattr(message, "content", ""))
         if text.strip():
             return text
     return ""
