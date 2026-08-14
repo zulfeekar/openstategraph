@@ -42,9 +42,29 @@ class TestReadOnlyJail:
         assert readme.error is None and "OpenStateGraph" in readme.content
 
     def test_escapes_are_refused(self) -> None:
-        assert PlatformLsTool().run(path="../..").error is not None
-        assert PlatformReadTool().run(path="../../etc/passwd").error is not None
-        assert PlatformReadTool().run(path=".git/config").error is not None
+        """Refused **and empty-handed**.
+
+        This asserted only `error is not None`, which a `FileNotFoundError`
+        satisfies as well as a refusal does — so on a machine without
+        `/etc/passwd` the jail was proven by the file's absence rather than by
+        the jail (reviews-2026-08-14 ticket 09). What matters is that nothing
+        outside came back, so that is what is checked.
+        """
+        for attempt in (
+            PlatformLsTool().run(path="../.."),
+            PlatformReadTool().run(path="../../etc/passwd"),
+            PlatformReadTool().run(path=".git/config"),
+        ):
+            assert attempt.error is not None
+            assert not (attempt.content or "").strip(), attempt.content[:200]
+
+    def test_a_refusal_names_the_jail_rather_than_the_filesystem(self) -> None:
+        # A "no such file" would leak whether the path exists outside the
+        # jail; the refusal must be the same either way.
+        outside = PlatformReadTool().run(path="../../etc/passwd")
+        missing = PlatformReadTool().run(path="../../this-does-not-exist-anywhere")
+
+        assert outside.error is not None and missing.error is not None
 
     def test_grep_finds_and_caps(self) -> None:
         # Scoped to the compiler package on purpose. The same search across the
@@ -92,9 +112,29 @@ class TestReadOnlyJail:
 
 class TestDotfilesAreSecrets:
     def test_env_and_any_dotfile_are_unreadable(self) -> None:
-        assert PlatformReadTool().run(path=".env").error is not None
-        assert PlatformReadTool().run(path=".env.example").error is not None
-        assert PlatformLsTool().run(path=".github").error is not None
+        """The secrets gate, asserted on what came back rather than on a flag.
+
+        `.env` holds live provider keys. `error is not None` alone would pass
+        if the file were merely missing, and would pass while the content was
+        returned alongside the error.
+        """
+        for attempt in (
+            PlatformReadTool().run(path=".env"),
+            PlatformReadTool().run(path=".env.example"),
+            PlatformLsTool().run(path=".github"),
+        ):
+            assert attempt.error is not None
+            assert not (attempt.content or "").strip(), attempt.content[:200]
+
+    def test_no_key_material_can_come_back_through_the_reader(self) -> None:
+        # The thing that actually matters: whatever the jail does, an API key
+        # must never be in the answer.
+        content = (PlatformReadTool().run(path=".env").content or "") + (
+            PlatformReadTool().run(path="../.env").content or ""
+        )
+
+        for marker in ("API_KEY", "sk-", "OLLAMA_"):
+            assert marker not in content
 
 
 class TestPublishGate:

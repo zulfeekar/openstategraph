@@ -105,7 +105,26 @@ class TestItIsStillNotRefused:
     """"Degrade loud, never silent" — loud, but still a degrade."""
 
     def test_the_run_still_completes(self) -> None:
-        assert _run()["answer"] is not None
+        """Completes, and every node reports — not merely "answer is not None".
+
+        That was the whole assertion, and it passed on `""` and on the echoed
+        question alike, which is the failure this module exists for
+        (reviews-2026-08-14 ticket 09). It could not fail for its own subject.
+
+        What is asserted instead is what "still completes" actually means: the
+        run reaches the end and each node published something.
+
+        **The answer is still the question**, because `_passthrough` forwards
+        its input by design — `test_an_unknown_node_type_forwards_instead_of_
+        dead_ending` in `test_node_runtime.py` records that decision. Whether
+        an unknown node should forward at all, or publish a failure marker as
+        `_final_text` concluded for the agent, is a live question and is filed
+        (`reviews-2026-08-14` ticket 12) rather than settled here.
+        """
+        result = _run()
+
+        assert isinstance(result["answer"], str)
+        assert set(result["outputs"]) >= {"in1", "a1", "out1"}, result["outputs"]
 
     def test_a_known_document_reports_nothing(self) -> None:
         """No false positive on the types the runtime does implement."""

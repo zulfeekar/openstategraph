@@ -30,8 +30,34 @@ class TestAgainstARealDatabase:
         assert "JOIN rules" in result.content and "Album.AlbumId" in result.content
 
     def test_the_driver_refuses_writes_regardless_of_spelling(self) -> None:
+        """Refused, **and the table is still there**.
+
+        `error is not None` alone is satisfied by a syntax error from the
+        comment prefix just as well as by the write refusal this test is named
+        for — so it could pass while the drop succeeded and something else
+        complained (reviews-2026-08-14 ticket 09).
+        """
         result = SqlQueryTool(database=CHINOOK).run(query="/**/dRoP TABLE Artist")
         assert result.error is not None
+
+        survived = SqlQueryTool(database=CHINOOK).run(query="SELECT COUNT(*) FROM Artist")
+        assert survived.error is None, survived.error
+        assert survived.content.strip()
+
+    def test_every_spelling_of_a_write_is_refused_and_changes_nothing(self) -> None:
+        before = SqlQueryTool(database=CHINOOK).run(query="SELECT COUNT(*) FROM Artist").content
+
+        for query in (
+            "DELETE FROM Artist",
+            "UPDATE Artist SET Name = 'x'",
+            "INSERT INTO Artist (Name) VALUES ('x')",
+            "SELECT 1; DROP TABLE Artist",
+            "  drop   table   Artist  ",
+        ):
+            assert SqlQueryTool(database=CHINOOK).run(query=query).error is not None, query
+
+        after = SqlQueryTool(database=CHINOOK).run(query="SELECT COUNT(*) FROM Artist").content
+        assert after == before
 
     def test_a_join_query_works_and_truncates_honestly(self) -> None:
         tool = SqlQueryTool(database=CHINOOK, row_cap=3)

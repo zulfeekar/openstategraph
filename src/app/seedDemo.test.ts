@@ -21,9 +21,16 @@ import { seedDemoWorkflow } from './seedDemo';
  * discussion. That is a regression worth a test rather than a comment.
  */
 describe('seedDemoWorkflow', () => {
-  it('does not throw on a fresh workbench with no Chinook nodes registered yet', () => {
+  it('seeds a real document on a fresh workbench, not merely without throwing', () => {
+    // `not.toThrow()` was the whole assertion, and this document is the
+    // fixture the entire e2e suite loads — a seed that quietly did nothing
+    // would pass it (reviews-2026-08-14 ticket 09).
     const workbench = new Workbench();
+
     expect(() => seedDemoWorkflow(workbench)).not.toThrow();
+    expect(workbench.model.nodes().length).toBeGreaterThan(2);
+    expect(workbench.model.edges().length).toBeGreaterThan(0);
+    expect(workbench.model.name.trim()).not.toBe('');
   });
 
   it('seeds a document that actually includes the Chinook tool nodes', () => {

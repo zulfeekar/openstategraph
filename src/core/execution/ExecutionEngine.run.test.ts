@@ -27,6 +27,11 @@ describe('ExecutionEngine.run', () => {
     expect(events).toEqual(['start', 'finish:ok']);
     expect(workbench.model.node(output.id)?.runtime.status).toBe('success');
     expect(workbench.model.node(agent.id)?.runtime.tokens).toBeGreaterThan(0);
+    // The test is named "lands an answer on the sink" and never looked at the
+    // answer — so the engine could write the wrong text, or the question, and
+    // this passed (reviews-2026-08-14 ticket 09).
+    const landed = workbench.model.node(output.id)?.runtime.output ?? '';
+    expect(String(landed).trim()).not.toBe('');
   });
 
   it('a tool wired to the agent is invoked through the engine', async () => {
