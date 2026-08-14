@@ -5,7 +5,11 @@ from __future__ import annotations
 import os
 from typing import Any, Callable, MutableMapping
 
-from openstategraph.providers import credential_env_vars, provider_catalogue
+from openstategraph.providers import (
+    _is_secret,
+    credential_env_vars,
+    provider_catalogue,
+)
 
 #: The Ollama model to use — a **cloud** model, never a local one.
 #:
@@ -97,8 +101,24 @@ def accepted_credential_keys() -> frozenset[str]:
     arbitrary environment variable into the server process. Registering a
     provider is what makes its key forwardable — before ticket 02 this was a
     four-name literal, so a fourth vendor's key was silently dropped.
+
+    **Secrets only — never an address** (reviews-2026-08-14 ticket 01). A
+    provider's `env_vars` legitimately include where it lives as well as how to
+    authenticate: Ollama declares `OLLAMA_HOST` beside `OLLAMA_API_KEY`, and
+    `OLLAMA_ENDPOINT` is optional beside both. Accepting those from a request
+    was a redirection dressed as a fallback — on the documented cloud setup the
+    host is *absent*, so `apply_credentials`' "absent → fill" rule wrote a
+    client-supplied address into `os.environ`, which is process-global, and
+    every later run in that process sent the operator's key and the user's
+    prompt to it.
+
+    A key a client sends can only ever lose to the server's own, so it is
+    harmless. An address is not that kind of value, so it is not forwardable at
+    all. Nothing in the product sends one: the editor's
+    `collectRuntimeCredentials` reads each provider's `runtimeCredentialKey`,
+    which is always a `*_API_KEY`.
     """
-    return credential_env_vars()
+    return frozenset(name for name in credential_env_vars() if _is_secret(name))
 
 
 #: Back-compatible snapshot of :func:`accepted_credential_keys` for callers that

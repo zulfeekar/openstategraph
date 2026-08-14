@@ -81,6 +81,18 @@ def _without_userinfo(value: str) -> str:
 
 
 def _is_secret(name: str) -> bool:
+    """Whether a variable holds a **secret** rather than an address.
+
+    The distinction is load-bearing in two opposite-facing places: a secret
+    must never be *shown* (`key_hint` masks it), and an address must never be
+    *accepted from a client* (`accepted_credential_keys` — a request that
+    could name the endpoint could redirect the server's own key to it).
+
+    Deliberately not exported. It is read across the package by
+    `api/model_resolution`, which is one home for the knowledge rather than
+    two copies of the suffix list — but nothing outside needs it, and a
+    security fix should not widen the public surface as a side effect.
+    """
     return name.upper().endswith(_SECRET_SUFFIXES)
 
 
