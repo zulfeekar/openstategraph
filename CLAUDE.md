@@ -354,7 +354,15 @@ one did, do it on the main checkout and re-link.
 
 This repository uses OpenWiki for recurring code documentation. Start with `openwiki/quickstart.md`, then follow its links to architecture, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
 
-A scheduled OpenWiki GitHub Actions workflow **exists** (`.github/workflows/openwiki-update.yml`) and is intended to refresh the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+<!-- OPENWIKI:END -->
+
+Everything between the OPENWIKI markers above is stamped verbatim by
+`openwiki code --update` on every run — a hand-edit inside the markers does
+not survive the next run, which is why this correction lives outside them.
+The stamped claim that the scheduled workflow "refreshes the repository wiki"
+describes intent, not observed behaviour:
 
 > **It has never run.** This repository has six workflow files and **zero git
 > remotes**, so nothing in `.github/` has ever executed — not this, not the type
@@ -363,5 +371,3 @@ A scheduled OpenWiki GitHub Actions workflow **exists** (`.github/workflows/open
 > page you leave stale stays stale. Treat every sentence in this repository
 > asserting that a gate "runs" or "is enforced" as describing intent, not
 > observed behaviour.
-
-<!-- OPENWIKI:END -->
