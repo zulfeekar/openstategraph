@@ -29,15 +29,13 @@
 import { Err, type Result } from '@core/kernel/Result';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
-import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
+import { ToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
 /** One discovered tool's node type plus the executor that fronts it. */
 export interface DiscoveredToolNode {
   readonly definition: INodeDefinition;
   readonly executor: ReturnType<typeof createToolExecutor>;
 }
-
-class DiscoveredToolNodeModel extends AbstractToolNodeModel {}
 
 /**
  * Builds a node type from one discovered capability.
@@ -60,7 +58,7 @@ export function createDiscoveredToolNode(capability: ToolCapability): Discovered
       keywords: ['discovered', 'tool'],
       defaultSize: { width: 260, height: 140 },
     },
-    DiscoveredToolNodeModel as never,
+    ToolNodeModel as never,
   );
 
   const executor = createToolExecutor(capability.id, {

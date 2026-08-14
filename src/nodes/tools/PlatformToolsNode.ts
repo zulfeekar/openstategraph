@@ -2,7 +2,7 @@ import { Err, type Result } from '@core/kernel/Result';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { FieldSchema } from '@core/model/contracts/fields';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
-import { AbstractToolNodeModel, defineToolNode } from './AbstractToolNode';
+import { ToolNodeModel, defineToolNode } from './AbstractToolNode';
 
 /**
  * The platform + web tool families — generic-tier vocabulary (ticket 67).
@@ -16,7 +16,6 @@ import { AbstractToolNodeModel, defineToolNode } from './AbstractToolNode';
  * load-order hazard `workflowScoped.ts` documents). Generic tier, global
  * registration: every workflow may bind a read-only platform or web tool.
  */
-class PlatformToolNodeModel extends AbstractToolNodeModel {}
 
 function backendOnlyExecutor(id: string, label: string): INodeExecutor {
   return {
@@ -48,7 +47,7 @@ function backendTool(spec: {
         fields: spec.fields ?? [],
         ...(spec.maxInstances != null ? { maxInstances: spec.maxInstances } : {}),
       },
-      PlatformToolNodeModel,
+      ToolNodeModel,
     ),
     executor: backendOnlyExecutor(spec.id, spec.label),
   };

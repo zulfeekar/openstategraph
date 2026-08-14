@@ -5,11 +5,7 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { FieldSchema } from '@core/model/contracts/fields';
 import type { PluginToolCapability, PluginToolField } from '@core/runtime/WorkflowFileClient';
 import { Err, type Result } from '@core/kernel/Result';
-import {
-  AbstractToolNodeModel,
-  createToolExecutor,
-  defineToolNode,
-} from '@nodes/tools/AbstractToolNode';
+import { ToolNodeModel, createToolExecutor, defineToolNode } from '@nodes/tools/AbstractToolNode';
 
 /**
  * Installed-plugin tools become palette cards — register **PK-06**.
@@ -47,8 +43,6 @@ import {
  * executor are remembered and restored when the plugin stops reporting: a
  * blind `unregister` would cost the editor a card it ships itself.
  */
-
-class PluginToolNodeModel extends AbstractToolNodeModel {}
 
 /** What we registered last time, and what each entry displaced. */
 interface Displaced {
@@ -133,7 +127,7 @@ export function createPluginToolNode(capability: PluginToolCapability): {
       defaultSize: { width: 260, height: 140 },
       fields: capability.fields.map(toFieldSchema),
     },
-    PluginToolNodeModel as never,
+    ToolNodeModel as never,
   );
 
   const executor = createToolExecutor(id, {

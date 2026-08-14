@@ -27,8 +27,23 @@ export const TOOL_PORT: IPortDescriptor = {
   description: 'Connect to an agent’s tool bus.',
 };
 
-/** Base for tool nodes. Subclasses add typed accessors for their fields. */
-export abstract class AbstractToolNodeModel extends AbstractNodeModel {}
+/**
+ * The usable default for a tool node — the ladder's **Base**, not an Abstract.
+ *
+ * This was `abstract class AbstractToolNodeModel extends AbstractNodeModel {}`
+ * — not one member — with five equally empty concrete subclasses beneath it.
+ * Six classes and no behaviour (reviews-2026-08-14 ticket 07).
+ *
+ * The rung that was actually wanted is Base: most tool nodes need no typed
+ * accessors, so what they need is a class to *use*, not an abstract one to
+ * extend into emptiness. The two that do add something —
+ * `RedditSearchNodeModel.subreddit`, `ExecuteSqlNodeModel.maxRows` — extend
+ * this, which is what a Concrete is for.
+ *
+ * Not abstract, deliberately: making it abstract is what forced the five
+ * empty subclasses into existence.
+ */
+export class ToolNodeModel extends AbstractNodeModel {}
 
 /**
  * Declares a tool node.

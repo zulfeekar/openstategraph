@@ -3,12 +3,12 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { ExecutionContext, INodeExecutor, IToolExecutor } from '@core/execution/INodeExecutor';
 import type { ToolSpec } from '@core/providers/ILLMProvider';
-import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
+import { ToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
 const FIELD_SUBREDDIT = 'subreddit';
 const FIELD_LIMIT = 'topicLimit';
 
-export class RedditSearchNodeModel extends AbstractToolNodeModel {
+export class RedditSearchNodeModel extends ToolNodeModel {
   get subreddit(): string {
     return this.getText(FIELD_SUBREDDIT)
       .replace(/^\/?r\//, '')

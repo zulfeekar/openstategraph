@@ -84,3 +84,80 @@ class TestNothingBindsAnAnonymousReducer:
             if "Annotated[" not in line:
                 continue
             assert "reducer_for(Reducer." in line, line.strip()
+
+
+class TestTheOtherSideIsNotNeededYet:
+    """"Both sides with a drift test" — and why there is no TypeScript enum.
+
+    Ticket 07 asked for the enum "on both sides". The urgency it gave was
+    about the **document**: *"every stored workflow that gains a reducer
+    reference before the enum exists is a document a second runtime cannot
+    read."*
+
+    No stored workflow has one. `RunState` is compiler-side only —
+    `workflow.json`, `schema.py` and `src/core/` do not mention a reducer
+    anywhere, so nothing in TypeScript has a reducer name to hold. Writing
+    the mirror now would produce exactly what CLAUDE.md's DRY rule forbids:
+    a hand-written TypeScript mirror of a Python contract, with no consumer
+    and nothing pinning the two together.
+
+    So the second side is a **tripwire** rather than a mirror. The moment a
+    reducer name reaches the document contract, this fails and says what to
+    build — which is the protection the ticket actually asked for, at the
+    moment it starts being needed rather than a year before.
+    """
+
+    def test_no_reducer_name_has_reached_the_document_contract(self) -> None:
+        """Checked in schema *positions*, never by grepping for the word.
+
+        The first version of this grepped `docs/openapi.json` for "reducer"
+        and fired on the SSE endpoint's own prose, which explains that the
+        stream folds updates with the same reducers `RunState` declares. A
+        tripwire that trips on its own documentation is a tripwire someone
+        deletes — the same crudeness that made the `contractDrift` pin fire on
+        a query suffix.
+
+        So: property names, enum values and `$defs` keys, which is where a
+        reducer would have to appear to reach a stored document. Prose is
+        prose.
+        """
+        import json
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+
+        def schema_names(node: object) -> list[str]:
+            """Every name a document could be validated against."""
+            found: list[str] = []
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in {"properties", "$defs", "definitions"} and isinstance(value, dict):
+                        found.extend(value)
+                    if key == "enum" and isinstance(value, list):
+                        found.extend(str(entry) for entry in value)
+                    found.extend(schema_names(value))
+            elif isinstance(node, list):
+                for entry in node:
+                    found.extend(schema_names(entry))
+            return found
+
+        published = json.loads((root / "docs" / "openapi.json").read_text())
+        in_contract = [name for name in schema_names(published) if "reducer" in name.lower()]
+
+        # `schema.py` validates the document itself; a reducer would arrive
+        # there as a quoted key, not as a word in a comment.
+        validator = root / "backend" / "openstategraph" / "schema.py"
+        quoted = [
+            line.strip()
+            for line in validator.read_text().splitlines()
+            if '"reducer' in line.lower() or "'reducer" in line.lower()
+        ]
+
+        assert not in_contract and not quoted, (
+            f"A reducer name reached the document contract ({in_contract or quoted}), "
+            "so a stored document can carry one. Build the TypeScript `Reducer` enum "
+            "mirroring `openstategraph.compile.reducers.Reducer`, pin the two with a "
+            "drift test (docs/decisions/typescript-runtime-types.md records why a "
+            "generator was rejected), and delete this test — reviews-2026-08-14 "
+            "ticket 07."
+        )

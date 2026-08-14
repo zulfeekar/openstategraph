@@ -28,13 +28,11 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { ExecutionContext, INodeExecutor, IToolExecutor } from '@core/execution/INodeExecutor';
 import type { ToolSpec } from '@core/providers/ILLMProvider';
-import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
+import { ToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
 /* ================================================================== *
  * Get Table Schema
  * ================================================================== */
-
-export class GetTableSchemaNodeModel extends AbstractToolNodeModel {}
 
 /**
  * Returns the schema for whichever table the **agent** asks about.
@@ -69,7 +67,7 @@ export const getTableSchemaNode: INodeDefinition = defineToolNode(
     defaultSize: { width: 280, height: 160 },
     fields: [],
   },
-  GetTableSchemaNodeModel,
+  ToolNodeModel,
 );
 
 /**
@@ -115,8 +113,6 @@ export const getTableSchemaExecutor: INodeExecutor = createToolExecutor(
  * Get All Tables Info
  * ================================================================== */
 
-export class GetAllTablesNodeModel extends AbstractToolNodeModel {}
-
 /**
  * Returns a list of all tables in the Chinook database.
  */
@@ -132,7 +128,7 @@ export const getAllTablesNode: INodeDefinition = defineToolNode(
     defaultSize: { width: 280, height: 140 },
     fields: [],
   },
-  GetAllTablesNodeModel,
+  ToolNodeModel,
 );
 
 const getAllTablesTool: IToolExecutor = {
@@ -163,7 +159,7 @@ export const getAllTablesExecutor: INodeExecutor = createToolExecutor(
  * Execute SQL Query
  * ================================================================== */
 
-export class ExecuteSqlNodeModel extends AbstractToolNodeModel {
+export class ExecuteSqlNodeModel extends ToolNodeModel {
   get maxRows(): number {
     return this.getNumber('maxRows', 100);
   }
