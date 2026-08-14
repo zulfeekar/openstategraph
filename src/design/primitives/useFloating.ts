@@ -28,8 +28,18 @@ const OPPOSITE: Record<Placement, Placement> = {
   right: 'left',
 };
 
+/** A rectangle, as `getBoundingClientRect` gives one. */
+export interface AnchorRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
 function resolve(
-  anchor: DOMRect,
+  anchor: AnchorRect,
   floating: { width: number; height: number },
   placement: Placement,
   align: Alignment,
@@ -65,27 +75,76 @@ function resolve(
   }
 }
 
-function fitsInViewport(
-  pos: { x: number; y: number },
-  floating: { width: number; height: number },
-  padding: number,
-): boolean {
-  return (
+/**
+ * Where a floating element goes: try the requested side, flip if it does not
+ * fit, then keep it on screen.
+ *
+ * Exported and pure so it can be tested as arithmetic rather than by opening
+ * a menu and looking — `design/` holds no app logic, and this is the only
+ * thing in it with a wrong answer.
+ *
+ * **`clamp` is a named function rather than the obvious one-liner**, because
+ * the one-liner was the bug (canvas-feels-right ticket 02):
+ *
+ *     Math.min(Math.max(value, lo), hi)
+ *
+ * is a clamp only while `lo <= hi`. When the floating element is larger than
+ * the viewport minus padding — a long menu, a short window, or a measurement
+ * taken before layout, when `offsetHeight` is still 0 or wrong — the bounds
+ * invert, `Math.min` wins, and the result is *less than* `lo`: negative, off
+ * the top or left of the screen. The guard written to stop clipping was
+ * producing it. Measured live: a menu at `y = -2`.
+ *
+ * When it genuinely cannot fit, the low bound wins: the popup starts at the
+ * padding edge so its first item is reachable and the rest can scroll. Half
+ * off the top is never the better answer.
+ */
+function clamp(value: number, lo: number, hi: number): number {
+  if (hi < lo) return lo;
+  return Math.min(Math.max(value, lo), hi);
+}
+
+export function placeFloating(
+  anchor: AnchorRect,
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  options: { placement: Placement; align: Alignment; offset: number; padding: number },
+): FloatingPosition {
+  const { placement, align, offset, padding } = options;
+
+  const fits = (pos: { x: number; y: number }): boolean =>
     pos.x >= padding &&
     pos.y >= padding &&
-    pos.x + floating.width <= window.innerWidth - padding &&
-    pos.y + floating.height <= window.innerHeight - padding
-  );
+    pos.x + size.width <= viewport.width - padding &&
+    pos.y + size.height <= viewport.height - padding;
+
+  let used = placement;
+  let next = resolve(anchor, size, used, align, offset);
+
+  if (!fits(next)) {
+    const flipped = resolve(anchor, size, OPPOSITE[used], align, offset);
+    if (fits(flipped)) {
+      used = OPPOSITE[used];
+      next = flipped;
+    }
+  }
+
+  return {
+    x: clamp(next.x, padding, viewport.width - size.width - padding),
+    y: clamp(next.y, padding, viewport.height - size.height - padding),
+    placement: used,
+  };
 }
 
 /**
  * Minimal viewport-aware positioning for tooltips, menus and popovers:
  * measure, try the requested side, flip to the opposite side if it does
- * not fit, then clamp along the cross axis.
+ * not fit, then keep it on screen.
  *
- * Deliberately not a full floating-ui port — the app only ever anchors to
- * elements already inside the viewport, so flip + clamp is sufficient and
- * costs a few hundred bytes instead of 20kB.
+ * Deliberately not a full floating-ui port — flip + clamp is sufficient and
+ * costs a few hundred bytes instead of 20kB. It used to say the app "only
+ * ever anchors to elements already inside the viewport"; the canvas pans and
+ * zooms, so that was never true and `placeFloating` no longer assumes it.
  */
 export function useFloating(
   anchorRef: RefObject<HTMLElement | null>,
@@ -108,20 +167,16 @@ export function useFloating(
     const anchorRect = anchor.getBoundingClientRect();
     const size = { width: floating.offsetWidth, height: floating.offsetHeight };
 
-    let used = placement;
-    let next = resolve(anchorRect, size, used, align, offset);
-
-    if (!fitsInViewport(next, size, padding)) {
-      const flipped = resolve(anchorRect, size, OPPOSITE[used], align, offset);
-      if (fitsInViewport(flipped, size, padding)) {
-        used = OPPOSITE[used];
-        next = flipped;
-      }
-    }
-
-    // Clamp whatever remains out of bounds rather than leaving it clipped.
-    const x = Math.min(Math.max(next.x, padding), window.innerWidth - size.width - padding);
-    const y = Math.min(Math.max(next.y, padding), window.innerHeight - size.height - padding);
+    const {
+      x,
+      y,
+      placement: used,
+    } = placeFloating(
+      anchorRect,
+      size,
+      { width: window.innerWidth, height: window.innerHeight },
+      { placement, align, offset, padding },
+    );
 
     setPosition((prev) =>
       prev && prev.x === x && prev.y === y && prev.placement === used
