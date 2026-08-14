@@ -24,6 +24,39 @@ from fastapi.routing import APIRoute
 from openstategraph.api.main import create_app
 
 
+def api_routes(app: Any) -> list[APIRoute]:
+    """Every `APIRoute` an app serves, whatever FastAPI does with routers.
+
+    Not `[r for r in app.routes if isinstance(r, APIRoute)]`. That works on
+    FastAPI 0.121, where `include_router` copies each route onto the app, and
+    returns **nothing** on 0.141, where the app holds an opaque
+    `_IncludedRouter` wrapper instead. `backend/pyproject.toml` asks for
+    `fastapi>=0.115` with no upper bound, so both are versions this repository
+    actually runs on — found by running the CI floor leg (3.11) in a clean
+    environment, which resolved the newer one (ship-it ticket 49).
+
+    A test that silently compares two empty sets is worse than no test, and
+    that is what the isinstance filter did here.
+    """
+    found: list[APIRoute] = []
+    seen: set[int] = set()
+
+    def walk(routes: Any) -> None:
+        for route in routes or ():
+            if id(route) in seen:
+                continue
+            seen.add(id(route))
+            if isinstance(route, APIRoute):
+                found.append(route)
+                continue
+            inner = getattr(route, "original_router", None)
+            if inner is not None:
+                walk(getattr(inner, "routes", None))
+
+    walk(getattr(app, "routes", None))
+    return found
+
+
 def route_modules() -> list[Any]:
     """Every module under `api/routes/`, imported."""
     from openstategraph.api import routes
@@ -74,7 +107,7 @@ class TestTheDependencyStaysOutOfTheContract:
 
     @pytest.fixture(scope="class")
     def app_routes(self) -> list[APIRoute]:
-        return [r for r in create_app().routes if isinstance(r, APIRoute)]
+        return api_routes(create_app())
 
     def test_no_route_asks_a_client_for_the_services(
         self, app_routes: list[APIRoute]
@@ -153,11 +186,8 @@ class TestNothingSlipsBackIntoTheFactory:
         way."""
         from openstategraph.api.routes import __name__ as routes_package
 
-        served = {
-            route.path
-            for route in create_app().routes
-            if isinstance(route, APIRoute)
-        }
+        served = {route.path for route in api_routes(create_app())}
+        assert served, "no routes found — the walk above is not seeing them"
         from_routers = {
             route.path
             for module in route_modules()

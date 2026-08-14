@@ -134,7 +134,7 @@ closure — are things a consumer of `load_workflow` may never touch**:
 | Declared core dependency | Its own closure | Who actually needs it |
 | --- | --- | --- |
 | `deepagents>=0.7` | **52** dists, including `anthropic`, `google-genai`, `google-auth`, `cryptography`, `langchain-google-genai`, `wcmatch` | only a document containing an `agent.deep` node |
-| `fastapi>=0.115` + `uvicorn>=0.30` | 13 | only the editor's HTTP server (`api/main.py` — the **single** file importing fastapi) |
+| `fastapi>=0.115` + `uvicorn>=0.30` | 13 | only the editor's HTTP server (`api/main.py` and `api/routes/`, `api/deps.py` — the only files importing fastapi; it was one file until reviews-2026-08-14 ticket 15 split the handlers off the app factory) |
 | `mcp>=1.25` | 28, including `PyJWT`, `cryptography`, `jsonschema`, `sse-starlette`, `python-multipart`, `truststore` | only `mcp_server.py`, which already imports `FastMCP` lazily |
 | `langchain-anthropic` + `langchain-openai` + `langchain-ollama` | 34 / 36 / 32 | exactly **one** of the three, whichever the adopter's `model` string names |
 

@@ -42,7 +42,9 @@ file that knows the whole node catalogue is
 | [`abc/`](../../backend/openstategraph/abc) | the entity ladders — agent, router, grader, orchestrator, tool, prompt, middleware slot table |
 | [`compile/workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py) | document → `CompiledPlan` → `StateGraph` |
 | [`compile/node_runtime.py`](../../backend/openstategraph/compile/node_runtime.py) | `RunState` + a builder per node type |
-| [`api/main.py`](../../backend/openstategraph/api/main.py) | FastAPI app: runs, streaming, resume, capabilities, `/chat` |
+| [`api/main.py`](../../backend/openstategraph/api/main.py) | the app factory — middleware, lifespan, and the routers it includes |
+| [`api/routes/`](../../backend/openstategraph/api/routes) | the handlers, one module per subject: `workflows` (19 routes), `runs`, `system`, `providers`, `threads`, `chat_ui`, `demo` |
+| [`api/deps.py`](../../backend/openstategraph/api/deps.py) | how a handler reaches the app's assembly — `Services`, `PrincipalId`, `GraphFactory` |
 | [`api/workflow_store.py`](../../backend/openstategraph/api/workflow_store.py) | file-backed CRUD + `validate_package` |
 | [`api/capability_discovery.py`](../../backend/openstategraph/api/capability_discovery.py) | tools / functions / skills / middlewares discovered per package |
 | [`memory.py`](../../backend/openstategraph/memory.py) | Store, checkpointers, memory tools |
@@ -59,7 +61,10 @@ file that knows the whole node catalogue is
 
 ## HTTP surface
 
-Defined in [`api/main.py`](../../backend/openstategraph/api/main.py):
+Defined across [`api/routes/`](../../backend/openstategraph/api/routes), one
+module per subject; [`api/main.py`](../../backend/openstategraph/api/main.py)
+is the factory that includes them and defines no handler of its own
+(reviews-2026-08-14 ticket 15):
 
 `GET /api/health` · `GET /api/node-contracts` · `GET /api/workflows` ·
 `GET|PUT|DELETE /api/workflows/{slug}`

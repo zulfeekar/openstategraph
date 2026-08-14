@@ -628,9 +628,9 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
 import type { ExecutionContext, IToolExecutor } from '@core/execution/INodeExecutor';
 import type { ToolSpec } from '@core/providers/ILLMProvider';
-import { AbstractToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
+import { ToolNodeModel, createToolExecutor, defineToolNode } from './AbstractToolNode';
 
-export class DiceNodeModel extends AbstractToolNodeModel {
+export class DiceNodeModel extends ToolNodeModel {
   get sides(): number {
     return this.getNumber('sides', 6);
   }
@@ -652,6 +652,15 @@ export const diceNode: INodeDefinition = defineToolNode(
   },
   DiceNodeModel,
 );
+```
+
+`DiceNodeModel` exists only to give `sides` a typed accessor. **A tool with no
+accessors to add passes `ToolNodeModel` itself** rather than declaring an empty
+subclass — that is what the Base rung of the ladder is for, and
+`AbstractToolNode.test.ts` fails a `class X extends ToolNodeModel {}`. Five of
+the shipped tool nodes do exactly that (reviews-2026-08-14 ticket 07).
+
+```ts
 
 const diceTool: IToolExecutor = {
   describeTool(node: AbstractNodeModel): ToolSpec {

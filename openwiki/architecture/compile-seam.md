@@ -77,7 +77,7 @@ Resolved after the registry, by convention: `workflow.subgraph` (`_subgraph`
 any `function.<name>` discovered in the package, and finally a passthrough.
 
 `NodeRuntime` is constructed once per request in `runtime_for()`
-([`api/main.py`](../../backend/openstategraph/api/main.py)) so run, stream and resume
+([`api/routes/runs.py`](../../backend/openstategraph/api/routes/runs.py)) so run, stream and resume
 can never disagree about capabilities. It carries the tool/function
 registries, a `document_loader` and a `package_loader` returning
 `PackageAssets` (a child workflow
