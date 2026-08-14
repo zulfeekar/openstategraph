@@ -53,7 +53,15 @@ export interface INodeEditor {
   add(
     typeId: NodeTypeId,
     at: Point,
-    options?: { data?: Partial<NodeData>; select?: boolean; centre?: boolean },
+    options?: {
+      data?: Partial<NodeData>;
+      select?: boolean;
+      centre?: boolean;
+      /** Step aside when the spot is taken — for placements the user did not
+       *  aim at (a palette click). A drop carries its own point and must not
+       *  use this. See `NodeEditor.add`. */
+      avoidOverlap?: boolean;
+    },
   ): ActionOutcome;
   delete(nodeIds: readonly NodeId[]): ActionOutcome;
   deleteTree(nodeId: NodeId): ActionOutcome;

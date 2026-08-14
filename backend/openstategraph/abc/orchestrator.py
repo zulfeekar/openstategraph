@@ -14,6 +14,8 @@ zero) are not domain knowledge, so they are declared once on the base.
 
 from __future__ import annotations
 
+from openstategraph.messages import content_text
+
 import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
@@ -219,7 +221,10 @@ class BaseOrchestrator(ABC):
             reply = self.model.invoke(
                 [SystemMessage(content=prompt.render()), HumanMessage(content="Label the subtasks.")]
             )
-            raw = reply.content if isinstance(reply.content, str) else str(reply.content)
+            # A repr is one line, so the label split below collapsed every
+            # subtask to the default worker — inside an `except Exception`,
+            # so silently. See `openstategraph.messages`.
+            raw = content_text(reply.content)
         except Exception:
             # A labelling failure must not kill the plan — everything falls
             # to the default worker, which is a working (single-archetype) run.

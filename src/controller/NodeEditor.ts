@@ -12,6 +12,7 @@ import {
 } from '@core/commands/nodeCommands';
 import type { FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { NodeId, NodeTypeId } from '@core/model/contracts/node';
+import { freePositionNear } from '@core/model/placement';
 import {
   failed,
   OK,
@@ -48,7 +49,29 @@ export class NodeEditor implements INodeEditor {
   add(
     typeId: NodeTypeId,
     at: Point,
-    options: { data?: Partial<NodeData>; select?: boolean; centre?: boolean } = {},
+    options: {
+      data?: Partial<NodeData>;
+      select?: boolean;
+      centre?: boolean;
+      /**
+       * Step aside when the requested spot is already taken.
+       *
+       * For placements the user did not *aim*: a palette click names no
+       * point, so without this three clicks stacked three nodes on one
+       * coordinate — one visible card, two buried, and nothing to say so.
+       *
+       * Off by default, because a **drop** carries the point the pointer was
+       * released on and putting the node anywhere else would be wrong.
+       *
+       * Here rather than at the call site: this method owns the convention
+       * that its argument is the node's *centre* and the stored position is
+       * `centre - size / 2`. A caller that cascaded would have to reproduce
+       * that conversion to know what "taken" means — and the first attempt at
+       * this did exactly that, compared centres against top-left corners, and
+       * silently never collided.
+       */
+      avoidOverlap?: boolean;
+    } = {},
   ): ActionOutcome {
     const definition = this.ctx.registry.nodeTypes.get(typeId);
     if (!definition) return failed(`Unknown node type "${typeId}"`);
@@ -65,12 +88,22 @@ export class NodeEditor implements INodeEditor {
     }
 
     const centre = options.centre ?? true;
+    // Compared as centres, which is the space `at` is already in.
+    const requested = options.avoidOverlap
+      ? freePositionNear(
+          at,
+          this.ctx.model.nodes().map((node) => ({
+            x: node.position.x + node.size.width / 2,
+            y: node.position.y + node.size.height / 2,
+          })),
+        )
+      : at;
     const topLeft = centre
       ? {
-          x: at.x - definition.defaultSize.width / 2,
-          y: at.y - definition.defaultSize.height / 2,
+          x: requested.x - definition.defaultSize.width / 2,
+          y: requested.y - definition.defaultSize.height / 2,
         }
-      : at;
+      : requested;
 
     const command = new AddNodeCommand(definition, {
       position: snapPoint(topLeft, CANVAS.snapGrid),

@@ -144,10 +144,10 @@ class TestStreamedContentBlocks:
     skip *empty* messages skipped a full one — and kept walking, onto the
     `HumanMessage`, and returned the user's own question as the agent's answer.
 
-    Two fixes, because two things were wrong. `.text` is the accessor that
-    reads both shapes (LangChain's own frontend guides use it), and the walk
-    now stops at the last human turn: an answer can be missing, but it can
-    never be something the *user* said.
+    Two fixes, because two things were wrong. `_content_text` reads both
+    shapes — joining only the `text` blocks, so a thinking model's reasoning
+    stays out — and the walk now stops at the last human turn: an answer can
+    be missing, but it can never be something the *user* said.
     """
 
     def test_a_streamed_block_list_reads_as_its_text(self) -> None:

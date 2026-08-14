@@ -23,7 +23,6 @@ import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
 import { assembliesFor, sectionSurvivesSearch } from './paletteSearch';
-import { freePositionNear } from '@core/model/placement';
 import './Palette.css';
 
 /** Custom drag type, so canvas drops can tell a palette drag from a file. */
@@ -190,20 +189,7 @@ export function Palette({ onNotify }: PaletteProps) {
   // was released on, and placing the node exactly there is its whole contract.
   const add = (definition: INodeDefinition) => {
     const preferred = paper?.viewportCenter() ?? { x: 120, y: 120 };
-    // Compared as **centres**, in the same space `add` interprets its point.
-    // `NodeEditor.add` treats what it is given as the centre and stores
-    // `centre - size / 2` as the node's top-left, so checking a centre against
-    // stored top-left corners compares two different quantities and never
-    // matches — which is exactly the bug that made the first version of this
-    // cascade do nothing at all.
-    const at = freePositionNear(
-      preferred,
-      controller.model.nodes().map((node) => ({
-        x: node.position.x + node.size.width / 2,
-        y: node.position.y + node.size.height / 2,
-      })),
-    );
-    const outcome = controller.nodes.add(definition.id, at);
+    const outcome = controller.nodes.add(definition.id, preferred, { avoidOverlap: true });
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };
 

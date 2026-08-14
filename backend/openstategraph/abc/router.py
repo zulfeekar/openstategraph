@@ -23,6 +23,8 @@ control of the *shape of the answer*.
 
 from __future__ import annotations
 
+from openstategraph.messages import content_text
+
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
@@ -274,9 +276,10 @@ class BaseRouter(ABC):
                 HumanMessage(content=question),
             ]
         )
-        content = response.content
-        text = content if isinstance(content, str) else str(content)
-        return self.normalise(text)
+        # See `openstategraph.messages`: a stringified block list is a repr,
+        # which matches no branch name and falls back to the default branch
+        # without saying so.
+        return self.normalise(content_text(response.content))
 
     @abstractmethod
     def compile_path_map(self) -> dict[str, str]:

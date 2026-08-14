@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from openstategraph.messages import content_text
+
 import json
 import logging
 from contextlib import suppress
@@ -911,8 +913,12 @@ def _run_frames(
                     )
             elif mode == "messages":
                 message, metadata = payload
-                content = getattr(message, "content", "")
-                if isinstance(content, str) and content:
+                # Block-shaped chunks are what a provider actually streams once
+                # `"messages"` is in `stream_mode`. Gating on `isinstance(str)`
+                # dropped them all: no live text, and the flow diagram never
+                # lit up. See `openstategraph.messages`.
+                content = content_text(getattr(message, "content", ""))
+                if content:
                     raw_name = metadata.get("langgraph_node", "")
                     token_node = node_ids_by_name.get(raw_name, raw_name)
                     kind = "tool" if _is_tool_message(message) else "ai"

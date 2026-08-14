@@ -26,6 +26,8 @@ touch is the output contract — see `SystemPrompt`.
 
 from __future__ import annotations
 
+from openstategraph.messages import content_text
+
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
@@ -231,8 +233,11 @@ class BaseGrader(ABC):
                 HumanMessage(content=candidate),
             ]
         )
-        content = response.content
-        return self.normalise(content if isinstance(content, str) else str(content))
+        # `content_text`, never `str(content)`: a block list stringified to a
+        # Python repr starts with neither `pass` nor `fail`, so a PASS fell
+        # through to "verdict unclear; passing by default" and a FAIL handed
+        # the raw repr to the customer as the reason it was rejected.
+        return self.normalise(content_text(response.content))
 
     @abstractmethod
     def revise_payload(self, verdict: Verdict) -> dict[str, Any]:

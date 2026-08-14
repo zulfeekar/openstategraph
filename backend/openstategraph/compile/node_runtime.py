@@ -296,10 +296,11 @@ def _final_text(messages: list[Any]) -> str:
        `"messages"` to `stream_mode` is enough to switch a settled message
        from `"30"` to `[{"text": "30", "type": "text", "index": 0}]`. The old
        `isinstance(content, str)` test read that as *no text at all*, so the
-       guard meant to skip empty messages skipped a full one. `.text` is the
-       accessor that reads both shapes, and it concatenates only the `text`
-       blocks — so a thinking model's private reasoning, which rides in the
-       same list, stays out of the answer.
+       guard meant to skip empty messages skipped a full one. `_content_text`
+       reads both shapes and joins only the `text` blocks — so a thinking
+       model's private reasoning, which rides in the same list, stays out of
+       the answer. (It does that itself rather than delegating to
+       `message.text`; see its own docstring for why.)
 
     2. **Never walk past the last human turn.** This is the floor, and it is
        about what a failure is *allowed to look like*. With rule 1 broken the
