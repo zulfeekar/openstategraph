@@ -41,15 +41,31 @@ def occupy(port: int = 0) -> socket.socket:
 
 class TestExplicitPort:
     def test_an_explicit_port_is_that_port(self) -> None:
-        held = occupy()
-        free = held.getsockname()[1]
-        held.close()
+        """Retried, because "a port that was free a moment ago" is a race.
 
-        sock = bind_listener("127.0.0.1", free)
-        try:
-            assert sock.getsockname()[1] == free
-        finally:
-            sock.close()
+        The pattern is bind-0, read the number, close, then assert the listener
+        gets *exactly* that number — and any other process, or a parallel
+        pytest worker, taking it in the window fails the assert
+        (reviews-2026-08-14 ticket 10). The behaviour under test is real; the
+        flake is the borrowed port, so a few attempts remove it without
+        weakening the assertion.
+        """
+        last: AssertionError | OSError | None = None
+        for _ in range(5):
+            held = occupy()
+            free = held.getsockname()[1]
+            held.close()
+            try:
+                sock = bind_listener("127.0.0.1", free)
+            except OSError as exc:  # somebody else took it in the window
+                last = exc
+                continue
+            try:
+                assert sock.getsockname()[1] == free
+                return
+            finally:
+                sock.close()
+        raise AssertionError(f"never got a free ephemeral port to bind: {last}")
 
     def test_an_explicit_port_that_is_taken_fails_and_says_what_to_do(self) -> None:
         """Never quietly move to another port: the person who typed `--port

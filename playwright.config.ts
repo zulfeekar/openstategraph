@@ -19,7 +19,11 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:5273',
-    reuseExistingServer: true,
+    // Never in CI. Attaching to whatever is already on :5273 is right on a
+    // developer's machine — the supervised stack is usually up — and wrong on
+    // a runner, where it means the suite could silently pass against a server
+    // that is not the code under test (reviews-2026-08-14 ticket 10).
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
 });

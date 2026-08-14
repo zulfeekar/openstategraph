@@ -192,3 +192,25 @@ def _fresh_process_tool_layer():
     reset_process_tool_layer()
     yield
     reset_process_tool_layer()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_provider_catalogue():
+    """The same rule, for the other process-lifetime cache.
+
+    `providers._CATALOGUE` memoises the registered providers *and* whatever
+    config file was discovered when it was first built. Four test modules
+    reset it; roughly twenty do not, so every module that sets a provider
+    variable inherited whatever an earlier one had built. That is
+    order-dependence by construction — green today only because of collection
+    order (reviews-2026-08-14 ticket 10).
+
+    Global rather than per-module for the reason the tool layer above is: a
+    cache that outlives its test decides what the next test sees, and the next
+    test did not ask.
+    """
+    from openstategraph.providers import reset_provider_catalogue
+
+    reset_provider_catalogue()
+    yield
+    reset_provider_catalogue()

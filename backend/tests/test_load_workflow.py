@@ -212,6 +212,8 @@ class TestImportCost:
             [sys.executable, "-c", source],
             capture_output=True,
             text=True,
+            # A hung child hangs the whole run; CI has no one to notice.
+            timeout=120,
             cwd=str(Path(__file__).resolve().parents[1]),
         )
 
@@ -231,6 +233,8 @@ class TestImportCost:
             [sys.executable, "-c", source],
             capture_output=True,
             text=True,
+            # A hung child hangs the whole run; CI has no one to notice.
+            timeout=120,
             cwd=str(Path(__file__).resolve().parents[1]),
         )
 
@@ -257,6 +261,8 @@ class TestImportCost:
             [sys.executable, "-c", source],
             capture_output=True,
             text=True,
+            # A hung child hangs the whole run; CI has no one to notice.
+            timeout=120,
             cwd=str(Path(__file__).resolve().parents[1]),
         )
 
