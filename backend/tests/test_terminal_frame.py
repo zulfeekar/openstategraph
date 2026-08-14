@@ -465,6 +465,20 @@ class TestTheCustomerSurfaceUsesNamesNotIds:
         # after the step rows were fixed.
         assert 'displayName(d.label)' in self._page()
 
+    def test_auto_is_offered_only_when_the_gateway_exists(self) -> None:
+        # A fresh `pip install` ships no `workflows/`, so `concierge` is not
+        # there — and the picker's first and default entry answered
+        # "no compiled view: 404". `?surface=chat` never lists a hidden
+        # workflow, so the page has to ask for it directly.
+        page = self._page()
+
+        assert "hasConcierge(" in page
+        assert "state.hasAuto" in page
+        assert '/api/workflows/concierge/summary' in page
+
+    def test_an_install_with_nothing_published_says_so(self) -> None:
+        assert "No workflows are published yet" in self._page()
+
     def test_no_raw_node_id_is_concatenated_into_a_trace_row(self) -> None:
         # The exact shape that shipped: `"▸ " + d.node`.
         page = self._page()

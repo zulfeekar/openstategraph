@@ -836,21 +836,48 @@ const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(m
  * removing it is the silent swap again, one step later. */
 function renderPicker(list) {
   const sel = $("wf");
-  const chosen = state.workflow || "concierge";
+  const chosen = state.workflow || (state.hasAuto ? "concierge" : (list[0] && list[0].slug) || "");
   // "Auto" is the hidden concierge gateway (ticket 67): a predefined
-  // router-of-workflows the customer never has to know about.
-  const options = ['<option value="concierge">Auto — let OpenStateGraph route</option>']
-    .concat(list.map((w) => `<option value="${esc(w.slug)}">${esc(w.name)}</option>`));
-  const gone = chosen !== "concierge" && !list.some((w) => w.slug === chosen);
+  // router-of-workflows the customer never has to know about — **when the
+  // install has one**. `surface=chat` never lists it (it is hidden), so the
+  // page cannot infer its absence from the catalogue and used to offer it
+  // unconditionally. On a fresh `pip install`, which ships no `workflows/`,
+  // the picker's first and default entry answered "no compiled view: 404"
+  // (reviews-2026-08-14 ticket 04 / canvas-feels-right ticket 04).
+  const options = (state.hasAuto
+    ? ['<option value="concierge">Auto — let OpenStateGraph route</option>']
+    : []
+  ).concat(list.map((w) => `<option value="${esc(w.slug)}">${esc(w.name)}</option>`));
+  if (options.length === 0) {
+    options.push('<option value="">No workflows are published yet</option>');
+  }
+  const gone = chosen !== "concierge" && chosen !== "" && !list.some((w) => w.slug === chosen);
   if (gone) options.push(`<option value="${esc(chosen)}">${esc(chosen)} — no longer available</option>`);
   sel.innerHTML = options.join("");
   sel.value = chosen;
   return gone;
 }
 
+/** Whether this install actually has the routing gateway behind "Auto".
+ *
+ * One cheap request, once. `summary` answers 404 for a slug that is not on
+ * disk, which is exactly the question — and it is the only way to ask it,
+ * since a hidden workflow never appears in `?surface=chat`. */
+async function hasConcierge() {
+  try {
+    const resp = await fetch("/api/workflows/concierge/summary");
+    if (!resp.ok) return false;
+    const row = await resp.json();
+    return row != null;
+  } catch {
+    return false;
+  }
+}
+
 async function loadWorkflows() {
   const list = await (await fetch("/api/workflows?surface=chat")).json();
-  state.workflow = "concierge";
+  state.hasAuto = await hasConcierge();
+  state.workflow = state.hasAuto ? "concierge" : (list[0] && list[0].slug) || "";
   renderPicker(list);
   $("wf").onchange = async () => {
     state.workflow = $("wf").value; state.doc = null;
