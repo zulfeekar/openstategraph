@@ -1607,7 +1607,10 @@ found everything it looked for.
 ## Watched, not photographed
 
 The docs move; these verdicts do not. `docs/decisions/langchain-doc-pins.json`
-records which version of each path a verdict was made against, and a weekly
+records which version of each path a verdict was made against — bytes plus first
+heading, reproducible in one docs-langchain MCP call, and naming its own
+exclusions rather than omitting them (the 424-byte `langchain/retrieval.mdx`
+stub is present, `"pinned": false`, with the reason). A weekly
 Claude scheduled task refetches, judges whether a change alters a verdict, and
 appends a **dated section below** rather than editing a verdict in place — an
 overwritten verdict loses the argument that produced it. Cadence and prompt:

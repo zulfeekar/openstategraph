@@ -1,0 +1,369 @@
+{
+  "_about": {
+    "what": "Fingerprints of the LangChain/LangGraph documentation pages that docs/decisions/special-agents-2026-08.md was verdicted against. The docs move; the verdicts do not. This file is what lets a reader say which version of each page a verdict was made against, and it is the weekly docs-watch's input.",
+    "watcher": "A weekly Claude scheduled task (.scratch/organisms-first-class/tickets/09-how-often-should-the-docs-watch-run.md). It reads this file, refetches every entry with \"pinned\": true via the docs-langchain MCP, and for each drift judges whether the change alters a verdict. It appends a dated section to special-agents-2026-08.md rather than editing a verdict in place, updates the pins below, and files a map ticket on a verdict-altering change.",
+    "verdict_document": "docs/decisions/special-agents-2026-08.md",
+    "ticket": ".scratch/organisms-first-class/tickets/08-a-pins-manifest-for-every-swept-doc.md",
+    "captured_by": ".scratch/organisms-first-class/research/01-deepagents.md .. 05-concepts.md, each file's \"## Pins\" block. Values were transcribed from those blocks, not refetched — refetching later would pin a different document than the one that was verdicted.",
+    "fingerprint": {
+      "scheme": "bytes + first_heading",
+      "reproduce": "mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain, command: wc -c <path> && head -1 <path>",
+      "bytes": "wc -c of the .mdx as served by the docs-langchain MCP virtual filesystem",
+      "first_heading": "the file's first line, which is the H1 on every swept page",
+      "changed_when": "either field differs from the value recorded here",
+      "not_stored": "the document itself, and no hash — bytes plus H1 detect a change without a copy, and both are readable in one MCP call"
+    },
+    "conventions": {
+      "path": "exactly as passed to the docs-langchain MCP",
+      "read": "ISO date the fingerprint was captured",
+      "sweep_group": "1-5, the ticket 01-05 that read it; null when the path was fingerprinted in passing and no group swept it",
+      "verdict_section": "the heading in the verdict document this pin backs; null when no verdict rests on it",
+      "pinned": "true = the watcher refetches it. false = deliberately unpinned, and \"excluded\" says why. State names its exclusions so nobody re-adds one by accident.",
+      "no_non_finite": "every value here is JSON-expressible; unbounded/absent is null, never Infinity or NaN"
+    },
+    "spot_checked": {
+      "on": "2026-08-14",
+      "paths": [
+        "/oss/python/concepts/products.mdx",
+        "/oss/python/langchain/multi-agent/skills.mdx"
+      ],
+      "result": "both reproduced the recorded bytes and first_heading exactly, so the scheme above is the scheme the research files used"
+    },
+    "counts": {
+      "entries": 35,
+      "pinned": 31,
+      "unpinned": 4
+    }
+  },
+
+  "version_pins": {
+    "stream_events_version": {
+      "value": "v3",
+      "what": "the version= argument every streaming tutorial in the sweep passes to stream_events(...)",
+      "why": "the version our SSE contract would be pinned against if ticket 24 adopts the library's event projection instead of deriving our own",
+      "backs": "Calibration 2 - the async/streaming seam; tickets 21-25"
+    },
+    "deepagents_async_subagents": {
+      "value": "0.5.0 (preview)",
+      "what": "the deepagents release /oss/python/deepagents/async-subagents.mdx documents against",
+      "backs": "### `/oss/python/deepagents/async-subagents.mdx`; ticket 20"
+    },
+    "deepagents_rag_rubric": {
+      "value": ">=0.6.5 (beta)",
+      "what": "the deepagents release the rubric pattern in /oss/python/deepagents/rag.mdx documents against",
+      "backs": "### `/oss/python/deepagents/rag.mdx`"
+    }
+  },
+
+  "pins": {
+    "/oss/python/deepagents/data-analysis.mdx": {
+      "sweep_group": 1,
+      "bytes": 37830,
+      "first_heading": "# Build a data analysis agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/data-analysis.mdx`",
+      "pinned": true
+    },
+    "/oss/python/deepagents/deep-research.mdx": {
+      "sweep_group": 1,
+      "bytes": 21020,
+      "first_heading": "# Build a deep research agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/deep-research.mdx`",
+      "pinned": true
+    },
+    "/oss/python/deepagents/content-builder.mdx": {
+      "sweep_group": 1,
+      "bytes": 31989,
+      "first_heading": "# Build a content builder agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/content-builder.mdx`",
+      "pinned": true
+    },
+    "/oss/python/deepagents/rag.mdx": {
+      "sweep_group": 1,
+      "bytes": 60176,
+      "first_heading": "# Retrieval Augmented Generation (RAG) with Deep Agents",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/rag.mdx`",
+      "pinned": true,
+      "note": "a different file from /oss/python/deepagents/retrieval.mdx, which ticket 36 sweeps"
+    },
+    "/oss/python/deepagents/async-subagents.mdx": {
+      "sweep_group": 1,
+      "bytes": 15595,
+      "first_heading": "# Async subagents",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/async-subagents.mdx`",
+      "pinned": true,
+      "note": "preview-stage mechanism; see version_pins.deepagents_async_subagents"
+    },
+    "/oss/python/deepagents/event-streaming.mdx": {
+      "sweep_group": 1,
+      "bytes": 9041,
+      "first_heading": "# Event streaming",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/deepagents/event-streaming.mdx`",
+      "pinned": true,
+      "note": "streams with version=\"v3\"; see version_pins.stream_events_version"
+    },
+
+    "/oss/python/langchain/deep-agent-from-scratch.mdx": {
+      "sweep_group": 2,
+      "bytes": 38269,
+      "first_heading": "# Build a data analysis agent from scratch",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/deep-agent-from-scratch.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/sql-agent.mdx": {
+      "sweep_group": 2,
+      "bytes": 40486,
+      "first_heading": "# Build a SQL agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/sql-agent.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/voice-agent.mdx": {
+      "sweep_group": 2,
+      "bytes": 20794,
+      "first_heading": "# Build a voice agent with LangChain",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/voice-agent.mdx`",
+      "pinned": true,
+      "note": "backs the duplex-transport non-goal; a change here is the one that could reopen it"
+    },
+    "/oss/python/langchain/retrieval.mdx": {
+      "sweep_group": 2,
+      "bytes": 424,
+      "first_heading": "# Retrieval",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/retrieval.mdx`",
+      "pinned": false,
+      "excluded": "Deliberately unpinned. The page is an H1, a rule and the standard footer - 424 bytes, no content - and its JavaScript twin is byte-identical, so this is an upstream content gap rather than an MCP chunking artifact. Watching it would report \"unchanged\" forever on a page that never said anything. The content it should carry is at /oss/python/deepagents/retrieval.mdx and /oss/python/langchain/knowledge-base.mdx, both entered below; ticket 36 sweeps them. If this page ever grows past 424 bytes it becomes pinnable - a manual check, not the watcher's job."
+    },
+
+    "/oss/python/langchain/multi-agent/index.mdx": {
+      "sweep_group": 3,
+      "bytes": 35958,
+      "first_heading": "# Multi-agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/index.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/multi-agent/subagents.mdx": {
+      "sweep_group": 3,
+      "bytes": 24777,
+      "first_heading": "# Subagents",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/subagents.mdx`",
+      "pinned": true,
+      "note": "carries the subagent-isolation sentences that confirm CLAUDE.md's stance verbatim"
+    },
+    "/oss/python/langchain/multi-agent/handoffs.mdx": {
+      "sweep_group": 3,
+      "bytes": 18848,
+      "first_heading": "# Handoffs",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/handoffs.mdx`",
+      "pinned": true,
+      "note": "the handoffs mechanism argued in ticket 18"
+    },
+    "/oss/python/langchain/multi-agent/handoffs-customer-support.mdx": {
+      "sweep_group": 3,
+      "bytes": 36960,
+      "first_heading": "# Build customer support with handoffs",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/handoffs-customer-support.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/multi-agent/router.mdx": {
+      "sweep_group": 3,
+      "bytes": 6955,
+      "first_heading": "# Router",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/router.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/multi-agent/router-knowledge-base.mdx": {
+      "sweep_group": 3,
+      "bytes": 38633,
+      "first_heading": "# Build a multi-source knowledge base with routing",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/router-knowledge-base.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langchain/multi-agent/skills.mdx": {
+      "sweep_group": 3,
+      "bytes": 5250,
+      "first_heading": "# Skills",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/skills.mdx`",
+      "pinned": true,
+      "note": "progressive disclosure; backs the load_skill tool atom, ticket 28"
+    },
+    "/oss/python/langchain/multi-agent/skills-sql-assistant.mdx": {
+      "sweep_group": 3,
+      "bytes": 47245,
+      "first_heading": "# Build a SQL assistant with on-demand skills",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/multi-agent/skills-sql-assistant.mdx`",
+      "pinned": true
+    },
+
+    "/oss/python/langgraph/graph-api.mdx": {
+      "sweep_group": 4,
+      "bytes": 52181,
+      "first_heading": "# Graph API overview",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/graph-api.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langgraph/functional-api.mdx": {
+      "sweep_group": 4,
+      "bytes": 30916,
+      "first_heading": "# Functional API overview",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/functional-api.mdx`",
+      "pinned": true,
+      "note": "backs the not-a-compile-target settlement; @task survives as ticket 40"
+    },
+    "/oss/python/langgraph/use-subgraphs.mdx": {
+      "sweep_group": 4,
+      "bytes": 41300,
+      "first_heading": "# Subgraphs",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/use-subgraphs.mdx`",
+      "pinned": true,
+      "note": "the doc our mount was calibrated against (Calibration 1)"
+    },
+    "/oss/python/langgraph/workflows-agents.mdx": {
+      "sweep_group": 4,
+      "bytes": 49081,
+      "first_heading": "# Workflows and agents",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/workflows-agents.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langgraph/agentic-rag.mdx": {
+      "sweep_group": 4,
+      "bytes": 26436,
+      "first_heading": "# Build a custom RAG agent with LangGraph",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/agentic-rag.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langgraph/sql-agent.mdx": {
+      "sweep_group": 4,
+      "bytes": 35329,
+      "first_heading": "# Build a custom SQL agent",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/sql-agent.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langgraph/thinking-in-langgraph.mdx": {
+      "sweep_group": 4,
+      "bytes": 31961,
+      "first_heading": "# Thinking in LangGraph",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/thinking-in-langgraph.mdx`",
+      "pinned": true
+    },
+    "/oss/python/langgraph/event-streaming.mdx": {
+      "sweep_group": 4,
+      "bytes": 26296,
+      "first_heading": "# Event streaming",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/event-streaming.mdx`",
+      "pinned": true,
+      "note": "streams with version=\"v3\"; see version_pins.stream_events_version"
+    },
+    "/oss/python/langgraph/streaming.mdx": {
+      "sweep_group": 4,
+      "bytes": 47115,
+      "first_heading": "# Streaming",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langgraph/streaming.mdx`",
+      "pinned": true,
+      "note": "the stream-mode vocabulary tickets 21-25 are sized against"
+    },
+
+    "/oss/python/concepts/products.mdx": {
+      "sweep_group": 5,
+      "bytes": 8748,
+      "first_heading": "# Runtimes, frameworks, and harnesses",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/concepts/products.mdx`",
+      "pinned": true,
+      "note": "THE source of truth for CLAUDE.md's three-tier claim (runtime / framework / harness -> CustomGraphNode / ReactAgentNode / DeepAgentNode). Watch this page, not component-architecture.mdx."
+    },
+    "/oss/python/concepts/providers-and-models.mdx": {
+      "sweep_group": 5,
+      "bytes": 9861,
+      "first_heading": "# Providers and models",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/concepts/providers-and-models.mdx`",
+      "pinned": true
+    },
+    "/oss/python/concepts/memory.mdx": {
+      "sweep_group": 5,
+      "bytes": 27143,
+      "first_heading": "# Memory overview",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/concepts/memory.mdx`",
+      "pinned": true,
+      "note": "backs the live defect in ticket 26 (recall asks for a semantic search the store cannot do)"
+    },
+    "/oss/python/concepts/context.mdx": {
+      "sweep_group": 5,
+      "bytes": 9204,
+      "first_heading": "# Context overview",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/concepts/context.mdx`",
+      "pinned": true,
+      "note": "the typed Runtime.context / context_schema mechanism, ticket 19, and the third lexicon collision"
+    },
+    "/oss/python/langchain/component-architecture.mdx": {
+      "sweep_group": 5,
+      "bytes": 6508,
+      "first_heading": "# Component architecture",
+      "read": "2026-08-14",
+      "verdict_section": "### `/oss/python/langchain/component-architecture.mdx`",
+      "pinned": true,
+      "note": "pinned because group 5 swept it, NOT as the three-tier source - the page contains no runtime/framework/harness distinction at all. Watching it in products.mdx's place would let the three-tier claim rot unobserved."
+    },
+
+    "/oss/python/deepagents/retrieval.mdx": {
+      "sweep_group": null,
+      "bytes": 15713,
+      "first_heading": "# Retrieval",
+      "read": "2026-08-14",
+      "verdict_section": null,
+      "pinned": false,
+      "excluded": "Unswept candidate, not verdicted - no verdict rests on it yet, so there is nothing for the watcher to protect. Ticket 36 sweeps it; the fingerprint is recorded now so that session can tell whether the page moved between the sweep and its own read. Flip to pinned once ticket 36 files a verdict section. Note it is a different file from deepagents/rag.mdx."
+    },
+    "/oss/python/langchain/knowledge-base.mdx": {
+      "sweep_group": null,
+      "bytes": 34329,
+      "first_heading": "# Build a semantic search engine with LangChain",
+      "read": "2026-08-14",
+      "verdict_section": null,
+      "pinned": false,
+      "excluded": "Unswept candidate, not verdicted - same handling as deepagents/retrieval.mdx. Ticket 36 sweeps it; the embeddings/vector-store leg it describes is ticket 26."
+    },
+    "/oss/javascript/langchain/retrieval.mdx": {
+      "sweep_group": null,
+      "bytes": 424,
+      "first_heading": "# Retrieval",
+      "read": "2026-08-14",
+      "verdict_section": null,
+      "pinned": false,
+      "excluded": "Deliberately unpinned, same stub as the Python path - byte-identical at 424 bytes, which is the evidence that the emptiness is an upstream content gap rather than an artifact of how the MCP serves the Python page. Recorded only so that evidence keeps a home."
+    }
+  },
+
+  "not_swept_by_choice": {
+    "/oss/python/langchain/multi-agent/custom-workflow.mdx": "sibling of the group 3 paths, outside ticket 03's list - the omission is deliberate, not a miss",
+    "/oss/python/langchain/multi-agent/subagents-personal-assistant.mdx": "same"
+  }
+}
