@@ -21,11 +21,12 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Annotated, Any, Callable, TypedDict
 
-from langgraph.graph.message import add_messages
 
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.abc.router import Router
+from openstategraph.compile.reducers import RESET as _RESET
+from openstategraph.compile.reducers import Reducer, reducer_for
 from openstategraph.compile.workflow_compiler import ROUTER_TYPE, CompiledPlan
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
 from openstategraph.memory import MemorySettings
@@ -41,83 +42,26 @@ from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effor
 #: only ever *add*, so clearing needs a vocabulary word the reducers
 #: themselves understand; the input node — the one node every turn starts
 #: at, and which a mid-run resume never revisits — emits it.
-RESET = "__turn_reset__"
-
-
-def merge_decisions(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    """Reducer for the decisions channel.
-
-    A named merge rather than last-write-wins, because two nodes can decide in the
-    same superstep during a fan-out and one silently clobbering the other would be
-    invisible. (CLAUDE.md: reducers are a named enum, never arbitrary functions —
-    this is the `merge` member.)
-    """
-    if RESET in right:
-        return {k: v for k, v in right.items() if k != RESET}
-    return {**left, **right}
-
-
-def keep_max(left: int, right: int) -> int:
-    """Reducer for `attempts` — a counter with more than one legitimate writer.
-
-    `_agent` and `_orchestrator` each bump `attempts` for their own retry/
-    replan budget, and both can be live in the same graph (an agent branch's
-    revise loop alongside a dataquery branch's orchestrator). As a bare
-    scalar this is the identical hazard CLAUDE.md already documents for
-    `answer`: safe in every test where only one writer happened to fire per
-    step, until a graph shape lets two fire in the same step and LangGraph
-    raises `InvalidUpdateError: At key 'attempts': Can receive only one value
-    per step`. `max` matches the field's meaning — a budget counter should
-    only ever grow, so the higher of two concurrent writes is correct
-    regardless of which node produced it.
-
-    Turn-start reset: a negative write zeroes the budget (the numeric
-    spelling of `RESET`, keeping this channel `int` end to end — a string
-    marker here broke every consumer that casts). Without it, a thread's
-    second run inherits the first run's count and graders burn through
-    `maxAttempts` before ever retrying.
-    """
-    if right < 0:
-        return 0
-    return max(left, right)
-
-
-def keep_latest_nonempty(left: str, right: str) -> str:
-    """Reducer for `answer` — a scalar with more than one legitimate writer.
-
-    `_agent`, `_format_report_function` and `_output` can each produce a final
-    answer, depending on the graph's shape. As a bare `LastValue` field this
-    looked safe in every hand-built test, because none of them happened to run
-    in the same tick — until a **real** graph (router + orchestrator + tools,
-    two `Send`-dispatched workers with real tool loops) did exactly that and
-    LangGraph raised `InvalidUpdateError: At key 'answer': Can receive only one
-    value per step`.
-    
-    The fix is not to make the collision impossible — two nodes legitimately
-    writing an answer candidate in the same step is a real shape a developer
-    can build — but to make it resolvable: keep whichever write is non-empty,
-    preferring the later one when both are. This is the `merge` reducer member
-    CLAUDE.md requires for any state two nodes might write concurrently; a bare
-    scalar field is only safe for state exactly one node type can ever produce.
-
-    `RESET` clears at turn start — "" can never do it, by this reducer's own
-    design, which is precisely how turn 1's answer leaked into turn 2.
-    """
-    if right == RESET:
-        return ""
-    return right or left
+# The reducers live in `compile/reducers.py` now, as a named enum — CLAUDE.md's
+# portability rule, and the one of the four that was broken. Re-exported here
+# because both names are read across this package and by tests
+# (reviews-2026-08-14 ticket 07).
+RESET = _RESET
+merge_decisions = reducer_for(Reducer.MERGE)
+keep_max = reducer_for(Reducer.MAX)
+keep_latest_nonempty = reducer_for(Reducer.LATEST_NONEMPTY)
 
 
 class RunState(TypedDict, total=False):
     """The shared state schema for a compiled workflow."""
 
-    messages: Annotated[list[Any], add_messages]
+    messages: Annotated[list[Any], reducer_for(Reducer.ADD_MESSAGES)]
     question: str
     #: node id -> branch label chosen. Read by the compiler's `path` functions.
-    decisions: Annotated[dict[str, Any], merge_decisions]
+    decisions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: node id -> that node's textual output, so a downstream node can read it.
-    outputs: Annotated[dict[str, Any], merge_decisions]
-    answer: Annotated[str, keep_latest_nonempty]
+    outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    answer: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
     #: Same hazard, same fix as `answer`: this document alone has four
     #: `_grader` instances (one per intent), each writing `feedback` on
     #: every step — "" on pass, real text on revise. Found live: two
@@ -125,18 +69,18 @@ class RunState(TypedDict, total=False):
     #: `InvalidUpdateError: At key 'feedback': Can receive only one value
     #: per step`, with the raw error then rendered into the chat panel as
     #: if it were the model's own answer.
-    feedback: Annotated[str, keep_latest_nonempty]
-    attempts: Annotated[int, keep_max]
+    feedback: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
+    attempts: Annotated[int, reducer_for(Reducer.MAX)]
     #: orchestrator node id -> the subtasks it planned. Read by the compiler's
     #: fan-out routing function to build the `Send` list.
-    subtasks: Annotated[dict[str, Any], merge_decisions]
+    subtasks: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: task id -> that worker instance's output. Joined by whatever reads it.
     #:
     #: Deliberately **not** keyed by node id: many dynamic worker *instances*
     #: share one static worker *node*, so node id would collide every one of
     #: them onto a single key. The task id — unique per dispatched Send — is
     #: what keeps every instance's result addressable.
-    worker_results: Annotated[dict[str, Any], merge_decisions]
+    worker_results: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: Set only inside a dispatched worker instance, from the Send payload.
     #: Absent everywhere else — a worker cannot see the parent's other state,
     #: only what the orchestrator explicitly packed into its Send (see below).
