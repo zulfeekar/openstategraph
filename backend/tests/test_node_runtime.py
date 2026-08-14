@@ -434,6 +434,23 @@ class TestDegradedInputs:
 
 
 class TestPerNodeModelResolution:
+    @pytest.fixture(autouse=True)
+    def _providers_are_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """These tests are about *routing* a selection to `init_chat_model`,
+        so the providers they name must be configured.
+
+        They used to rely on a key another module leaked into `os.environ` —
+        `test_dotenv.py` writes real provider variables and never restored
+        them, so this class passed in a full run and failed on its own. Once
+        that leak was closed the dependency became visible
+        (reviews-2026-08-14 ticket 10). Without a key, `build_chat_model`
+        returns an `UnconfiguredProvider` and falls back to the shared
+        default, so the fake `init_chat_model` is never reached and the
+        assertion sees an empty call list.
+        """
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-a-real-key")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-only-not-a-real-key")
+
     """`_resolve_model` — found by a TS-schema-vs-Python-factory diff, not
     live: `AgentNode.ts`'s per-card `model` field (and the same select on
     Router/Grader) was fully inert on the backend. `NodeRuntime` only ever

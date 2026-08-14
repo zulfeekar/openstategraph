@@ -214,3 +214,21 @@ def _fresh_provider_catalogue():
     reset_provider_catalogue()
     yield
     reset_provider_catalogue()
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's exported `OPENSTATEGRAPH_CONFIG` is not part of the suite.
+
+    `find_config_file` checks `OPENSTATEGRAPH_CONFIG` before anything else, so
+    a shell that exports it — pointing at a real project's file — silently
+    rewrites the catalogue for every test that does not set its own. Deleted
+    by default; a test that wants one sets it, and `monkeypatch` puts the
+    developer's back afterwards (reviews-2026-08-14 ticket 10).
+
+    The ticket also named "ambient config discovery walks up from cwd". It
+    does not: `find_config_file` looks in `base` only, never in its parents,
+    so a stray file *above* the checkout was never reachable. The exported
+    variable was the real half.
+    """
+    monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)

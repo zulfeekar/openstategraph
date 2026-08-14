@@ -98,6 +98,7 @@ class TestListingIsCheap:
         """Import cost is part of the contract (`loader.py`'s docstring), and
         a catalogue is the thing a service builds at startup. Run in a
         subprocess because this suite has long since imported langgraph."""
+        import os
         import subprocess
         import sys
 
@@ -115,7 +116,15 @@ class TestListingIsCheap:
             capture_output=True,
             text=True,
             cwd=str(tmp_path),
-            env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"},
+            # `PATH` is inherited, not hard-coded. It used to be
+            # "/usr/bin:/bin", which is empty on nix and on some CI images —
+            # so the child could fail to find its own interpreter's tooling
+            # and report an import that never happened
+            # (reviews-2026-08-14 ticket 10).
+            env={
+                "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+                "PATH": os.environ.get("PATH", ""),
+            },
         )
         assert result.returncode == 0, result.stderr
 

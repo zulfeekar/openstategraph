@@ -13,7 +13,10 @@ A closed loop. Good copy pointing at a mechanism that did not exist.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
+
+import pytest
 
 from openstategraph.dotenv import (
     find_env_file,
@@ -83,6 +86,23 @@ class TestInlineComments:
         far more often than it would strip a comment.
         """
         assert parse_env_file("OPENAI_API_KEY=sk-abc#def")["OPENAI_API_KEY"] == "sk-abc#def"
+
+
+@pytest.fixture(autouse=True)
+def _restore_the_environment() -> Iterator[None]:
+    """`load_env_file` writes into the real `os.environ`, so every test here
+    mutates process-global state.
+
+    Each test deletes the one key it is about, which is why this suite has
+    never gone red — but a file with a second key, or a test added without the
+    `delenv`, leaks into whatever runs next, and the failure appears somewhere
+    else (reviews-2026-08-14 ticket 10). Snapshot and restore removes the
+    class rather than the instances.
+    """
+    before = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(before)
 
 
 class TestLoading:

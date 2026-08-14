@@ -50,12 +50,19 @@ test('dragging a node moves it and undo restores it', async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(before.x + before.width / 2 + 120, before.y + 90, { steps: 8 });
   await page.mouse.up();
-  const after = await card.boundingBox();
-  expect(Math.abs((after?.x ?? 0) - before.x)).toBeGreaterThan(40);
+  // Polled, not read once. Both reads used to happen immediately after the
+  // gesture — after `mouse.up()` here and after the undo keystroke below —
+  // and the model→adapter→canvas projection lands on a later frame, so on a
+  // loaded machine the old position is still what the DOM reports
+  // (reviews-2026-08-14 ticket 10). The assertions are unchanged.
+  await expect
+    .poll(async () => Math.abs(((await card.boundingBox())?.x ?? 0) - before.x))
+    .toBeGreaterThan(40);
 
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
-  const restored = await card.boundingBox();
-  expect(Math.abs((restored?.x ?? 0) - before.x)).toBeLessThan(8);
+  await expect
+    .poll(async () => Math.abs(((await card.boundingBox())?.x ?? 0) - before.x))
+    .toBeLessThan(8);
 });
 
 /** The bounding boxes of every card, so a layout can be described. */

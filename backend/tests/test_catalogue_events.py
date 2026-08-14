@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -353,9 +356,23 @@ def _scope(path: str = "/api/events") -> dict:
     }
 
 
-async def _settle(times: int = 5) -> None:
-    """Let queued callbacks (including cross-thread wakeups) run."""
-    for _ in range(times):
+async def _settle_until(ready: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Wait for a cross-thread wakeup to land — for as long as it takes.
+
+    This was `_settle()`: exactly five 5ms sleeps, 25ms total, used as proof
+    that a disconnect had propagated *across threads*. A fixed budget for a
+    cross-thread handoff is flaky by construction — it is either too long
+    (every run pays it) or too short (a loaded CI box goes red for a
+    scheduling delay), and on the machine it was written on it happened to be
+    both correct and invisible (reviews-2026-08-14 ticket 10).
+
+    Polling a predicate instead: a healthy run returns in one tick, and a
+    machine under load gets as long as it needs. The assertion afterwards is
+    unchanged, so a genuine failure still fails — it just takes 5s to say so
+    rather than 25ms.
+    """
+    deadline = time.monotonic() + timeout
+    while not ready() and time.monotonic() < deadline:
         await asyncio.sleep(0.005)
 
 
@@ -450,7 +467,7 @@ class TestTheConnectionCleansUpOnBothEnds:
             await surface.opened()
             during = broadcaster.subscriber_count
             await surface.hang_up()
-            await _settle()
+            await _settle_until(lambda: broadcaster.subscriber_count == 0)
             return during, broadcaster.subscriber_count
 
         assert asyncio.run(scenario()) == (1, 0)
@@ -462,10 +479,18 @@ class TestTheConnectionCleansUpOnBothEnds:
             surface = _Surface(app)
             await surface.opened()
             await surface.hang_up()
-            await _settle()
-            return [
-                repr(t) for t in asyncio.all_tasks() - before if t is not asyncio.current_task()
-            ]
+
+            def leaked() -> set[asyncio.Task[Any]]:
+                return {
+                    task
+                    for task in asyncio.all_tasks() - before
+                    if task is not asyncio.current_task()
+                }
+
+            # A cancelled-but-not-yet-reaped task reports as a leak on a loaded
+            # machine, which is what the fixed 25ms budget used to gamble on.
+            await _settle_until(lambda: not leaked())
+            return [repr(task) for task in leaked()]
 
         assert asyncio.run(scenario()) == []
 
@@ -477,7 +502,7 @@ class TestTheConnectionCleansUpOnBothEnds:
             await leaving.opened()
             await staying.opened()
             await leaving.hang_up()
-            await _settle()
+            await _settle_until(lambda: broadcaster.subscriber_count == 1)
             broadcaster.publish(CatalogueEvent("deleted", "billing", False))
             frame = await staying.next_frame()
             still_connected = broadcaster.subscriber_count
