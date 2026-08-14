@@ -157,8 +157,11 @@ export class PaperController implements IDisposable {
       // from the same `canConnect` that governs the drop; the measurement is
       // recorded in `features/portAffordance.ts`.
       validateMagnet,
-      validateConnection: createConnectionValidator((source, target) =>
-        controller.edges.canConnect(source, target),
+      // The verdict, not a boolean: `explainConnection` keeps the reason the
+      // rule gave so a refusal can be said out loud when the drag ends.
+      validateConnection: createConnectionValidator(
+        (source, target) => controller.edges.explainConnection(source, target),
+        (reason) => this.connection.noteRefusal(reason),
       ),
 
       // ---- embedding ----

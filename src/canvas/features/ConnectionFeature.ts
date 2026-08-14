@@ -1,4 +1,5 @@
 import type { dia } from '@joint/core';
+import { announcementFor } from '@controller/explainConnection';
 import type { PortRef } from '@core/model/contracts/ports';
 import { PaperFeature, type PaperFeatureContext } from './IPaperFeature';
 import {
@@ -40,6 +41,17 @@ export class ConnectionFeature extends PaperFeature {
 
   private marker: IPortMarker | null = null;
   private connecting = false;
+  /**
+   * The reason the last port under the pointer refused, and whether this
+   * gesture ever made a link.
+   *
+   * Recorded rather than announced, because `validateConnection` runs on
+   * every pointer move across every magnet — announcing there would fire a
+   * message per port crossed. `announcementFor` decides what to do with it
+   * once the pointer is released.
+   */
+  private lastRefusal: string | null = null;
+  private connectedThisGesture = false;
 
   /**
    * @param createMarker how the affordance reaches the canvas. Injected so the
@@ -70,13 +82,31 @@ export class ConnectionFeature extends PaperFeature {
 
       const outcome = controller.edges.connect(source, target);
       if (!outcome.ok) this.setRejection(outcome.message ?? 'Invalid connection');
-      else this.setRejection(null);
+      else {
+        this.connectedThisGesture = true;
+        this.setRejection(null);
+      }
     }) as never);
 
-    // A link dropped on empty canvas simply disappears — `linkPinning: false`
-    // already prevents a dangling end, and this clears any stale hint.
-    this.onPaper('link:pointerup', (() => this.setRejection(null)) as never);
-    this.onPaper('blank:pointerup', (() => this.setRejection(null)) as never);
+    // The end of the gesture is where a refusal is finally said out loud.
+    //
+    // It cannot be said earlier: `validateConnection` is consulted on every
+    // pointer move over every magnet, so a drag across a card would fire one
+    // message per port. It must not be said for a *successful* link either —
+    // the edge appearing on the canvas is that feedback — nor for a drag
+    // released over blank canvas, where no rule refused anything.
+    // `announcementFor` holds those three cases.
+    const finish = () => {
+      const say = announcementFor({
+        connected: this.connectedThisGesture,
+        lastRefusal: this.lastRefusal,
+      });
+      this.setRejection(say);
+      this.lastRefusal = null;
+      this.connectedThisGesture = false;
+    };
+    this.onPaper('link:pointerup', finish as never);
+    this.onPaper('blank:pointerup', finish as never);
 
     /* ---------- the connection affordance ---------- */
 
@@ -135,6 +165,16 @@ export class ConnectionFeature extends PaperFeature {
     this.marker?.clear();
   }
 
+  /**
+   * Records why the port currently under the pointer would refuse.
+   *
+   * Written by `createConnectionValidator` on every pointer move. Kept, not
+   * announced — see `finish` above.
+   */
+  noteRefusal(reason: string | null): void {
+    this.lastRefusal = reason;
+  }
+
   private setRejection(reason: string | null): void {
     if (this.rejection === reason) return;
     this.rejection = reason;
@@ -149,7 +189,10 @@ export class ConnectionFeature extends PaperFeature {
  * before features install. Reads the port ids straight off the magnets the
  * adapter tagged, so no lookup table has to be kept in step.
  */
-export function createConnectionValidator(isValid: (source: PortRef, target: PortRef) => boolean) {
+export function createConnectionValidator(
+  explain: (source: PortRef, target: PortRef) => { ok: boolean; reason?: string },
+  noteRefusal: (reason: string | null) => void = () => {},
+) {
   return function validateConnection(
     sourceView: dia.CellView,
     sourceMagnet: SVGElement,
@@ -159,9 +202,18 @@ export function createConnectionValidator(isValid: (source: PortRef, target: Por
     const source = refFromMagnet(sourceView, sourceMagnet);
     const target = refFromMagnet(targetView, targetMagnet);
     // No magnet on one end means the pointer is over a card body or blank
-    // canvas — not a rejection to explain, just not a connection yet.
-    if (!source || !target) return false;
-    return isValid(source, target);
+    // canvas — not a rejection to explain, just not a connection yet. The
+    // recorded reason is cleared so releasing here says nothing.
+    if (!source || !target) {
+      noteRefusal(null);
+      return false;
+    }
+    // The **verdict**, not `verdict.ok`. Returning a bare boolean is what
+    // made every refusal silent: JointJS refuses on `false`, so `link:connect`
+    // never fires and the reason the rule computed is thrown away here.
+    const verdict = explain(source, target);
+    noteRefusal(verdict.ok ? null : (verdict.reason ?? 'That connection is not allowed'));
+    return verdict.ok;
   };
 }
 

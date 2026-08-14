@@ -68,3 +68,64 @@ test('the palette adds a node to the canvas', async ({ page }) => {
     .click();
   await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
 });
+
+test('a refused connection says why', async ({ page }) => {
+  // The defect this guards (reviews-2026-08-14 ticket 03): dragging between
+  // incompatible ports was refused in **silence**. The rule had a sentence
+  // ready — "Text output can't feed a Skill input" — and `validateConnection`
+  // returned a bare boolean, so JointJS refused the link, `link:connect` never
+  // fired, and the reason was thrown away. A refused drag and a successful one
+  // looked identical.
+  //
+  // Deliberately an e2e test: the whole failure lived in the gesture wiring
+  // between JointJS and the controller, which is the one layer no unit test
+  // in this repo can reach.
+  const out = page.locator('[data-port-direction="out"][data-port-id="text"]').first();
+  const wrongIn = page.locator('[data-port-direction="in"][data-port-id="skill"]').first();
+  await expect(out).toBeVisible();
+  await expect(wrongIn).toBeVisible();
+
+  const from = await out.boundingBox();
+  const to = await wrongIn.boundingBox();
+  if (!from || !to) throw new Error('ports are not on screen');
+
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  // Several steps: the paper only starts a link once the pointer leaves the
+  // magnet (`magnetThreshold: 'onleave'`).
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+  await page.mouse.up();
+
+  // The rule's own words, not a generic "invalid connection".
+  await expect(page.locator('.toaster')).toContainText(/can't feed|cannot connect|loop/i);
+
+  // …and the inspector must not claim something was removed. While a link is
+  // being drawn JointJS owns a temporary cell with an id of its own, and
+  // pressing through it used to select that id — so a refused drag reported
+  // "Link removed. That link is no longer in the workflow." about a link that
+  // was never in it.
+  await expect(page.locator('.inspector')).not.toContainText('Link removed');
+});
+
+test('clicking a real link still selects it', async ({ page }) => {
+  // The guard above refuses to select an id the model does not have. This is
+  // the other side of it: a genuine edge must still be selectable, or the
+  // fix for the phantom would have cost the feature.
+  // The midpoint of the drawn path, not the centre of the bounding box — a
+  // link's box is large and mostly empty, so a box-relative click lands on
+  // whatever is behind it (a node, in this document).
+  const at = await page.evaluate(() => {
+    const paths = [...document.querySelectorAll('.joint-link path')] as SVGPathElement[];
+    const path = paths.find((candidate) => candidate.getTotalLength() > 20);
+    if (!path) return null;
+    const mid = path.getPointAtLength(path.getTotalLength() / 2);
+    const ctm = path.getScreenCTM();
+    if (!ctm) return null;
+    return { x: mid.x * ctm.a + mid.y * ctm.c + ctm.e, y: mid.x * ctm.b + mid.y * ctm.d + ctm.f };
+  });
+  if (!at) throw new Error('no link path on screen');
+  await page.mouse.click(at.x, at.y);
+
+  await expect(page.locator('.inspector')).toContainText('Link');
+  await expect(page.locator('.inspector')).not.toContainText('Link removed');
+});

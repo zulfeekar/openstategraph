@@ -11,7 +11,7 @@ import {
 import type { NodeTypeId } from '@core/model/contracts/node';
 import type { PortRef } from '@core/model/contracts/ports';
 import type { EdgeId } from '@core/model/contracts/workflow';
-import type { ConnectionValidator } from '@core/validation/ConnectionValidator';
+import type { ConnectionValidator, ConnectionVerdict } from '@core/validation/ConnectionValidator';
 import { failed, OK, type ActionOutcome, type EditingContext, type IEdgeEditor } from './contracts';
 
 /**
@@ -36,6 +36,19 @@ export class EdgeEditor implements IEdgeEditor {
   /** Asked by the canvas on every pointer move while drawing a link. */
   canConnect(source: PortRef, target: PortRef): boolean {
     return this.validator.canConnect(source, target);
+  }
+
+  /**
+   * The same question, but keeping the answer.
+   *
+   * `canConnect` returns `verdict.ok` and drops `verdict.reason`, and the
+   * canvas handed that bare boolean to JointJS — which refuses the link
+   * outright, so `link:connect` never fires and the rejection channel that
+   * already existed was never reached. Every refusal was therefore silent,
+   * while the rule that refused had a sentence ready to explain it.
+   */
+  explainConnection(source: PortRef, target: PortRef): ConnectionVerdict {
+    return this.validator.validate(source, target);
   }
 
   connect(source: PortRef, target: PortRef): ActionOutcome {

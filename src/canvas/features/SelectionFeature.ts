@@ -45,6 +45,13 @@ export class SelectionFeature extends PaperFeature {
 
     this.onPaper('link:pointerdown', ((view: dia.LinkView, event: dia.Event) => {
       const edgeId = String(view.model.id);
+      // Only a link the **model** has. While a connection is being drawn,
+      // JointJS owns a temporary link cell with an id of its own making, and
+      // pressing through it selected that id — so a refused drag left the
+      // inspector reporting "Link removed. That link is no longer in the
+      // workflow." about a link that was never in it. Selecting something the
+      // document does not contain can only ever produce that message.
+      if (!controller.model.edges().some((edge) => edge.id === edgeId)) return;
       const additive = event.shiftKey || event.metaKey || event.ctrlKey;
       controller.selection.selectEdges([edgeId], additive ? 'toggle' : 'replace');
     }) as never);

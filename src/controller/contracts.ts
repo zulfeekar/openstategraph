@@ -4,6 +4,7 @@ import type { CommandStack } from '@core/commands/CommandStack';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { FieldValue, NodeData } from '@core/model/contracts/fields';
+import type { ConnectionVerdict } from '@core/validation/ConnectionValidator';
 import type { PortRef } from '@core/model/contracts/ports';
 import type { NodeId, NodeTypeId } from '@core/model/contracts/node';
 import type { EdgeId } from '@core/model/contracts/workflow';
@@ -78,6 +79,8 @@ export interface INodeEditor {
 /** Connecting and disconnecting ports. */
 export interface IEdgeEditor {
   canConnect(source: PortRef, target: PortRef): boolean;
+  /** The same question keeping the reason — see `EdgeEditor.explainConnection`. */
+  explainConnection(source: PortRef, target: PortRef): ConnectionVerdict;
   connect(source: PortRef, target: PortRef): ActionOutcome;
   disconnect(edgeIds: readonly EdgeId[]): ActionOutcome;
   setLabel(edgeId: EdgeId, label: string | null): void;
