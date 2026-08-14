@@ -182,3 +182,44 @@ describe('generated node/port catalogue', () => {
     expect(byType.has('team.workflow')).toBe(false);
   });
 });
+
+describe('the two sides of the port-spec version', () => {
+  /**
+   * `PORT_SPEC_SCHEMA_VERSION` here and `SCHEMA_VERSION` in
+   * `compile/node_catalogue.py` are documented as "bumped in lockstep" — by
+   * **comment only**. No test bound them, so the lockstep was a promise
+   * (reviews-2026-08-14 ticket 08).
+   *
+   * The generated artifact is the thing both sides actually read, so it is
+   * what they are pinned through.
+   */
+  it('matches the version stamped into the generated catalogue', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const artifact = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL('../../backend/openstategraph/compile/port_specs.json', import.meta.url),
+        ),
+        'utf8',
+      ),
+    ) as { schema_version?: number };
+
+    expect(artifact.schema_version).toBe(PORT_SPEC_SCHEMA_VERSION);
+  });
+
+  it('matches the version the Python reader requires', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const python = readFileSync(
+      fileURLToPath(
+        new URL('../../backend/openstategraph/compile/node_catalogue.py', import.meta.url),
+      ),
+      'utf8',
+    );
+    const declared = /^SCHEMA_VERSION\s*=\s*(\d+)/m.exec(python);
+
+    expect(declared?.[1], 'node_catalogue.py must declare SCHEMA_VERSION').toBeDefined();
+    expect(Number(declared?.[1])).toBe(PORT_SPEC_SCHEMA_VERSION);
+  });
+});
