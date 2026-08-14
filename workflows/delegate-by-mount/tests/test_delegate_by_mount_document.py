@@ -1,0 +1,122 @@
+"""Two packages behind one classifier, asserted.
+
+Gallery example 13. What a test settles here is the wiring the recorded smoke
+run depends on: two exclusive branches reaching two *different* packages, each
+with its own terminal output, and exactly one mount claiming an outcome —
+the one whose child can enforce it.
+
+That last one is the interesting assertion. `Finding.UNENFORCED_OUTCOME` fires
+when a mount states an outcome and the child does not route a `revise` edge, so
+"this mount loops until its grader passes" is a claim checked against the child
+document rather than against the node type. A mount with no outcome claims
+nothing and is not warned about — which is why `mount-explain` states none.
+
+Whether the classifier routes this particular question correctly is a model
+question; the smoke run records it.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+PACKAGE = Path(__file__).resolve().parents[1]
+ROOT = PACKAGE.parent
+
+
+def document(slug: str) -> dict:
+    envelope = json.loads((ROOT / slug / "workflow.json").read_text())
+    assert envelope["version"] == 1
+    doc = envelope["document"]
+    assert doc["version"] == 3
+    return doc
+
+
+@pytest.fixture(scope="module")
+def doc() -> dict:
+    return document("delegate-by-mount")
+
+
+def mounts(doc: dict) -> dict[str, dict]:
+    return {n["id"]: n for n in doc["nodes"] if n["type"] == "workflow.subgraph"}
+
+
+def closes_a_loop(doc: dict) -> bool:
+    plan = WorkflowCompiler().plan(doc)
+    return any("revise" in branches for branches in plan.conditional.values())
+
+
+def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
+    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+
+
+def test_the_two_branches_reach_two_different_packages(doc: dict) -> None:
+    slugs = {node_id: m["data"]["workflow"] for node_id, m in mounts(doc).items()}
+    assert slugs == {
+        "mount-explain": "chained-summarizer",
+        "mount-note": "evaluator-optimizer",
+    }
+    # Heterogeneous is the point: one class of answer per branch. Two mounts of
+    # ONE package with different overrides is example 12, a different question.
+    assert len(set(slugs.values())) == 2
+
+
+def test_both_delegates_exist_on_disk(doc: dict) -> None:
+    for slug in {m["data"]["workflow"] for m in mounts(doc).values()}:
+        assert (ROOT / slug / "workflow.json").is_file(), slug
+
+
+def test_the_router_reaches_each_mount_and_nothing_else(doc: dict) -> None:
+    plan = WorkflowCompiler().plan(doc)
+    assert plan.conditional["router1"] == {
+        "b-explain": "mount-explain",
+        "b-release-note": "mount-note",
+    }
+
+
+def test_each_branch_owns_its_output(doc: dict) -> None:
+    """Two edges into one `output.formatted` compile, but the capacity rule
+    makes drawing the second *replace* the first, so the graph would not be
+    redrawable (gallery ticket 13). Every example in the twenty avoids it."""
+    plan = WorkflowCompiler().plan(doc)
+    assert sorted(plan.exits) == ["out-explain", "out-note"]
+    targets = [
+        (e["target"]["nodeId"], e["target"]["portId"])
+        for e in doc["edges"]
+        if e["target"]["portId"] == "result"
+    ]
+    assert len(targets) == len(set(targets))
+
+
+def test_only_the_looping_mount_claims_an_outcome(doc: dict) -> None:
+    by_id = mounts(doc)
+    assert by_id["mount-note"]["data"]["outcome"].strip()
+    assert not by_id["mount-explain"]["data"].get("outcome", "").strip()
+    # …and the claim is true of the child, which is what the compiler checks.
+    assert closes_a_loop(document("evaluator-optimizer"))
+    assert not closes_a_loop(document("chained-summarizer"))
+
+
+def test_it_compiles_without_a_warning(doc: dict) -> None:
+    """Including `UNENFORCED_OUTCOME`: an example that ships a warning teaches
+    it."""
+    assert WorkflowCompiler().plan(doc).warnings == []
+
+
+def test_delegation_is_call_and_return_not_a_tool(doc: dict) -> None:
+    """The substitution recorded in the catalogue: a mount cannot be a tool.
+    `workflow.subgraph` has two ports, `input` and `result`, and neither is a
+    `tool` — so no mount reaches an agent's `tools` bus
+    (organisms-first-class 31). This asserts the example stays honest about
+    which mechanism it is showing."""
+    ports = {
+        (e["source"]["portId"], e["target"]["portId"])
+        for e in doc["edges"]
+        if e["source"]["nodeId"] in mounts(doc) or e["target"]["nodeId"] in mounts(doc)
+    }
+    assert all(target != "tools" for _, target in ports)
+    assert "agent.llm" not in {n["type"] for n in doc["nodes"]}

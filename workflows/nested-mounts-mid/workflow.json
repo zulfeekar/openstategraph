@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "name": "Nested Mounts (middle)",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Nested Mounts (middle)",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "The middle level of the three-deep mount chain: it mounts Chained Summarizer and nothing else, so the only thing this document adds is a level."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 200 }
+      },
+      {
+        "id": "mount-inner",
+        "type": "workflow.subgraph",
+        "title": "Chained Summarizer",
+        "data": {
+          "workflow": "chained-summarizer"
+        },
+        "position": { "x": 400, "y": 200 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": { "x": 760, "y": 200 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "mount-inner", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "mount-inner", "portId": "result" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

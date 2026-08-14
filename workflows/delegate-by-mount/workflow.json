@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "name": "Delegate by Mount",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Delegate by Mount",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "Delegation, as far as today's vocabulary reaches: a classifier picks one of two whole packages, and that package answers. A supervisor of packages rather than of agents."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 320 }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "title": "Which package answers this",
+        "data": {
+          "branches": [
+            { "id": "b-explain", "name": "explain" },
+            { "id": "b-release-note", "name": "release_note" }
+          ],
+          "fallback": "explain",
+          "rules": "explain: asks what something is, or asks for an idea to be explained, defined or summarised.\nrelease_note: asks for a release note, changelog entry or announcement about something that was broken and is now fixed."
+        },
+        "position": { "x": 380, "y": 320 }
+      },
+      {
+        "id": "mount-explain",
+        "type": "workflow.subgraph",
+        "title": "Chained Summarizer",
+        "data": {
+          "workflow": "chained-summarizer"
+        },
+        "position": { "x": 760, "y": 180 }
+      },
+      {
+        "id": "mount-note",
+        "type": "workflow.subgraph",
+        "title": "Evaluator / Optimizer",
+        "data": {
+          "workflow": "evaluator-optimizer",
+          "outcome": "Loops until its own grader passes the note."
+        },
+        "position": { "x": 760, "y": 460 }
+      },
+      {
+        "id": "out-explain",
+        "type": "output.formatted",
+        "title": "Explanation",
+        "data": {},
+        "position": { "x": 1120, "y": 180 }
+      },
+      {
+        "id": "out-note",
+        "type": "output.formatted",
+        "title": "Release note",
+        "data": {},
+        "position": { "x": 1120, "y": 460 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "router1", "portId": "question" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-explain" },
+        "target": { "nodeId": "mount-explain", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-release-note" },
+        "target": { "nodeId": "mount-note", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "mount-explain", "portId": "result" },
+        "target": { "nodeId": "out-explain", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "mount-note", "portId": "result" },
+        "target": { "nodeId": "out-note", "portId": "result" }
+      }
+    ]
+  }
+}

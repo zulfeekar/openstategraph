@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "name": "Nested Mounts",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Nested Mounts",
+    "settings": {
+      "model": "ollama:gpt-oss:120b-cloud",
+      "purpose": "Composition depth for its own sake: this document mounts a document that mounts a document. One question goes down three levels and one answer comes back."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 200 }
+      },
+      {
+        "id": "mount-mid",
+        "type": "workflow.subgraph",
+        "title": "Nested Mounts (middle)",
+        "data": {
+          "workflow": "nested-mounts-mid"
+        },
+        "position": { "x": 400, "y": 200 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": { "x": 760, "y": 200 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "mount-mid", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "mount-mid", "portId": "result" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}
