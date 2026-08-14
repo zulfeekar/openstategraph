@@ -90,7 +90,19 @@ sqlite = [
 # LOUDLY, never silently — `memory._open_sqlite_saver` names this line.
 server = [
     "openstategraph[sqlite]",
-    "fastapi>=0.115",
+    # The upper bound is the same policy as `[mcp]` below, and for the same
+    # reason: it is a break we hit, not caution. FastAPI is 0.x, so *minors*
+    # are where it puts breaking changes — 0.141 changed what `include_router`
+    # leaves in `app.routes` (an opaque wrapper rather than a copy of each
+    # route), which broke a test that walked them. Found the same way the
+    # `mcp` break was: installing into a clean 3.11 environment while running
+    # the CI matrix, where this machine's cached 0.121 had been hiding it
+    # (ship-it ticket 50).
+    #
+    # A range for adopters, an exact pin for contributors — see `[dev]`. This
+    # bound is what stops the *next* silent break; the pin is what makes
+    # `docs/openapi.json` reproducible.
+    "fastapi>=0.115,<0.142",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
 ]
@@ -141,6 +153,20 @@ dev = [
     # `langchain-core`, so the stubs are a real dependency of the gate rather
     # than an optional nicety.
     "types-PyYAML",
+    # **Exact, and it is the artifact that requires it.** `docs/openapi.json`
+    # is generated from the app and gated byte-exactly, so it is a build
+    # output — and a build output with an unpinned toolchain is not
+    # reproducible. Two FastAPI versions produce two documents (0.141 adds
+    # `ctx` and `input` to its own `ValidationError` schema), so a range would
+    # leave `generated-openapi` and `test_openapi_contract.py` red or green
+    # depending on what pip resolved that morning (ship-it ticket 50).
+    #
+    # Only contributors and CI pay this; `[server]` keeps a range, so an
+    # adopter is bounded but not pinned. Raising it is a deliberate pull
+    # request: bump here, regenerate the snapshot, and the diff shows exactly
+    # what the upgrade changed about the published contract — which is the
+    # whole reason that file is committed.
+    "fastapi==0.141.1",
 ]
 
 [tool.hatch.build.targets.wheel]

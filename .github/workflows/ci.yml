@@ -84,7 +84,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-      - run: pip install -e "backend[all]"
+      # `[all,dev]`, not `[all]`: the exact FastAPI pin that makes this
+      # artifact reproducible lives in `[dev]`, because the document is a
+      # build output and two FastAPI versions build two documents. Installing
+      # `[all]` alone resolves whatever is newest and this job goes red with
+      # no code change (ship-it ticket 50).
+      - run: pip install -e "backend[all,dev]"
       - run: python3 scripts/generate_openapi.py
       - name: The committed contract must match the app
         run: |

@@ -78,13 +78,35 @@ class TestLeanCore:
     def test_every_extracted_dependency_lives_in_the_extra_that_claims_it(
         self, pyproject
     ) -> None:
-        extras = pyproject["project"]["optional-dependencies"]
-        placement = {
-            requirement_name(r): extra
-            for extra, requirements in extras.items()
-            if extra != "all"
-            for r in requirements
+        # `all` and `dev` are both excluded, for the same reason and the same
+        # reason `test_all_names_every_extra` excludes them: neither is a
+        # *capability*. `all` is a fan-out over the others, and `dev` is the
+        # contributor environment — it is not in `[all]`, so no adopter ever
+        # resolves it and it is not part of the install story this mapping
+        # documents. `[dev]` therefore may legitimately name a distribution a
+        # capability extra also names, at a different constraint: it pins
+        # `fastapi` exactly so `docs/openapi.json` is reproducible, while
+        # `[server]` keeps a range for adopters (ship-it ticket 50, and
+        # `test_openapi_toolchain.py` is what holds those two together).
+        capability_extras = {
+            extra: requirements
+            for extra, requirements in pyproject["project"]["optional-dependencies"].items()
+            if extra not in {"all", "dev"}
         }
+
+        # Built explicitly rather than by comprehension: a dict comprehension
+        # lets a second claim overwrite the first silently, so one distribution
+        # in two capability extras would read as a wrong answer here instead of
+        # as the ambiguity it is.
+        placement: dict[str, str] = {}
+        for extra, requirements in capability_extras.items():
+            for requirement in requirements:
+                name = requirement_name(requirement)
+                assert name not in placement, (
+                    f"{name} is claimed by both [{placement[name]}] and [{extra}] — "
+                    "an extracted dependency has exactly one owning capability"
+                )
+                placement[name] = extra
 
         assert {name: placement.get(name) for name in EXTRACTED} == EXTRACTED
 
