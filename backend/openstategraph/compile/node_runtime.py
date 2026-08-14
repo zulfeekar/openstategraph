@@ -244,24 +244,66 @@ class _DeepAgentAsChatModel:
 
 
 def _final_text(messages: list[Any]) -> str:
-    """The last message with real text, not merely the last message.
+    """What the model said this turn — or "", never something else.
 
     An agent loop can legitimately end on a message with empty content — a
     dangling tool call the loop cut off, or a provider blip mid-stream — and
     `out[-1].content` then records "" as the worker's entire answer (observed
-    live under concurrent fan-out, ticket 61). Walking back to the last
-    non-empty string keeps whatever the agent actually said.
+    live under concurrent fan-out, ticket 61). Walking back keeps whatever the
+    agent actually said.
+
+    **Two rules, and the walk-back is only the first.** The second exists
+    because the first, alone, produced the worst bug this project has had
+    (the-editor-makes-a-real-package ticket 03): `POST /api/runs` answered
+    `49` while `POST /api/runs/stream` answered *the question*, on the same
+    workflow, seconds apart — and both shipped UIs use the streaming endpoint,
+    so every run a person could see was wrong while every run a test made was
+    right.
+
+    1. **Read the text, whatever shape it arrives in.** LangChain's `content`
+       is documented as "loosely-typed, supporting strings and lists of
+       untyped objects", and an Anthropic `AIMessage` in particular "can
+       either be a single string or a list of content blocks". Adding
+       `"messages"` to `stream_mode` is enough to switch a settled message
+       from `"30"` to `[{"text": "30", "type": "text", "index": 0}]`. The old
+       `isinstance(content, str)` test read that as *no text at all*, so the
+       guard meant to skip empty messages skipped a full one. `.text` is the
+       accessor that reads both shapes, and it concatenates only the `text`
+       blocks — so a thinking model's private reasoning, which rides in the
+       same list, stays out of the answer.
+
+    2. **Never walk past the last human turn.** This is the floor, and it is
+       about what a failure is *allowed to look like*. With rule 1 broken the
+       walk continued past the AI message and returned the `HumanMessage` —
+       the user's own question, handed back as the answer. That is the one
+       wrong answer nothing downstream can catch: a grader reads it as a
+       reply, a customer reads it as a reply, and the run reports success. An
+       empty answer is visibly a failure; an echo is a lie. Rule 1 is fixed,
+       and rule 2 means the next thing that breaks upstream degrades loudly
+       instead.
     """
     for message in reversed(messages):
+        # The floor. Anything at or before the current turn's question belongs
+        # to the *conversation*, not to this turn's answer.
+        if getattr(message, "type", None) in ("human", "system"):
+            return ""
         # A message that *requests* tool calls is never the final answer —
         # its content is preamble or echoed arguments. Observed live: a
         # degraded loop ended on a dangling call and the "answer" rendered
         # as {"path": ...} in the customer chat.
         if getattr(message, "tool_calls", None):
             continue
-        content = getattr(message, "content", "")
-        if isinstance(content, str) and content.strip():
-            return content
+        text = getattr(message, "text", None)
+        # `.text` is a property on modern message classes and a plain string
+        # on the hand-rolled stand-ins some tests and shims pass; fall back to
+        # `content` for anything that has neither.
+        if callable(text):
+            text = text()
+        if not isinstance(text, str):
+            content = getattr(message, "content", "")
+            text = content if isinstance(content, str) else ""
+        if text.strip():
+            return text
     return ""
 
 def _text(data: dict[str, Any], key: str, default: str = "") -> str:

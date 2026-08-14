@@ -121,3 +121,105 @@ class TestAnAgentKeepsWhatItSaid:
             {"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}}
         )
         assert update["outputs"]["a1"] == update["answer"] == ANSWER
+
+
+class TestStreamedContentBlocks:
+    """The same extraction, against the shape token streaming actually produces.
+
+    Found by ticket 03, driving the wheel in a browser: `POST /api/runs`
+    answered `49` and `POST /api/runs/stream` answered **the question**, same
+    workflow, same server, seconds apart. Both shipped UIs — the editor's Ask
+    panel and the customer `/chat` — use the streaming endpoint, so every run
+    a person could see was wrong while every run a test made was right.
+
+    The cause is one `isinstance` against a documented union. LangChain's
+    message `content` is "loosely-typed, supporting strings and lists of
+    untyped objects", and an Anthropic `AIMessage` in particular "can either
+    be a single string or a list of content blocks". Adding `"messages"` to
+    `stream_mode` makes the settled AI message arrive in the block form:
+
+        content=[{'text': '30', 'type': 'text', 'index': 0}]
+
+    `isinstance(content, str)` is False for that, so the walk-back designed to
+    skip *empty* messages skipped a full one — and kept walking, onto the
+    `HumanMessage`, and returned the user's own question as the agent's answer.
+
+    Two fixes, because two things were wrong. `.text` is the accessor that
+    reads both shapes (LangChain's own frontend guides use it), and the walk
+    now stops at the last human turn: an answer can be missing, but it can
+    never be something the *user* said.
+    """
+
+    def test_a_streamed_block_list_reads_as_its_text(self) -> None:
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        from openstategraph.compile.node_runtime import _final_text
+
+        messages = [
+            HumanMessage(content="What is 5 * 6? Reply with just the number."),
+            AIMessage(content=[{"text": "30", "type": "text", "index": 0}]),
+        ]
+
+        assert _final_text(messages) == "30"
+
+    def test_multiple_text_blocks_are_joined_in_order(self) -> None:
+        from langchain_core.messages import AIMessage
+
+        from openstategraph.compile.node_runtime import _final_text
+
+        message = AIMessage(
+            content=[
+                {"text": "The genre is ", "type": "text", "index": 0},
+                {"text": "Rock.", "type": "text", "index": 1},
+            ]
+        )
+
+        assert _final_text([message]) == "The genre is Rock."
+
+    def test_a_reasoning_block_is_not_the_answer(self) -> None:
+        # Thinking models put reasoning in the same list. Concatenating it
+        # blind would show a customer the model's private deliberation.
+        from langchain_core.messages import AIMessage
+
+        from openstategraph.compile.node_runtime import _final_text
+
+        message = AIMessage(
+            content=[
+                {"type": "thinking", "thinking": "6 times 5 is 30", "signature": "x"},
+                {"type": "text", "text": "30"},
+            ]
+        )
+
+        assert _final_text([message]) == "30"
+
+    def test_it_never_returns_the_users_own_question(self) -> None:
+        # The failure this ticket found, reduced. Whatever goes wrong upstream,
+        # echoing the question back is the one answer that must never happen:
+        # it is indistinguishable from a real reply, so nothing downstream —
+        # not the grader, not the customer — can tell it failed.
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        from openstategraph.compile.node_runtime import _final_text
+
+        messages = [
+            HumanMessage(content="Which genre earns the most revenue?"),
+            AIMessage(content=""),
+        ]
+
+        assert _final_text(messages) == ""
+
+    def test_it_does_not_reach_back_past_a_human_turn(self) -> None:
+        # A multi-turn thread: an earlier answer is not this turn's answer.
+        # Returning it would be a stale reply presented as a fresh one.
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        from openstategraph.compile.node_runtime import _final_text
+
+        messages = [
+            HumanMessage(content="What is 2 + 2?"),
+            AIMessage(content="4"),
+            HumanMessage(content="And 3 + 3?"),
+            AIMessage(content=""),
+        ]
+
+        assert _final_text(messages) == ""
