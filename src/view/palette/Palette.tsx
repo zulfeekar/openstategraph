@@ -21,7 +21,8 @@ import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
 import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
-import { ASSEMBLIES, type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
+import { type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
+import { assembliesFor, sectionSurvivesSearch } from './paletteSearch';
 import { freePositionNear } from '@core/model/placement';
 import './Palette.css';
 
@@ -87,7 +88,13 @@ export function Palette({ onNotify }: PaletteProps) {
             ...section,
             nodes: section.nodes.filter((definition) => matchesQuery(definition, query)),
           }))
-          .filter((section) => section.nodes.length > 0)
+          // A section survives if it still holds a matching **node type** or a
+          // matching **assembly**. Nodes alone was the test, and it made the
+          // Revision loop unreachable by search: no node type matches "loop"
+          // or "revise", so the whole `compose` section was dropped before its
+          // assemblies were ever consulted — and those two words are exactly
+          // the ones somebody looking for a revision loop types.
+          .filter((section) => sectionSurvivesSearch(section, query))
       : all;
 
     const scopedNodes: INodeDefinition[] = [];
@@ -97,12 +104,22 @@ export function Palette({ onNotify }: PaletteProps) {
       for (const definition of section.nodes) {
         if (definition.scope === 'workflow') scopedNodes.push(definition);
       }
-      if (app.length > 0) rest.push({ ...section, nodes: app });
+      // Assemblies again: a section whose only match is one must survive this
+      // second gate too, or the first filter is undone three lines later —
+      // which is exactly what kept "loop" returning nothing after the first
+      // attempt at this fix.
+      if (app.length > 0 || assembliesFor(section.category.id, query).length > 0) {
+        rest.push({ ...section, nodes: app });
+      }
     }
     return {
       scoped: scopedNodes,
       appSections: rest,
-      matchCount: scopedNodes.length + rest.reduce((n, s) => n + s.nodes.length, 0),
+      // Assemblies count too — a search that finds only an assembly must not
+      // report "no matches" above the thing it just found.
+      matchCount:
+        scopedNodes.length +
+        rest.reduce((n, s) => n + s.nodes.length + assembliesFor(s.category.id, query).length, 0),
     };
     // Recomputed on every render this component takes, including the ones
     // `useSyncExternalStore` above forces — `workbench.registry` itself
@@ -345,22 +362,6 @@ export function Palette({ onNotify }: PaletteProps) {
         ) : null}
       </PanelBody>
     </Panel>
-  );
-}
-
-/**
- * Assemblies belonging to one palette section, filtered by the search box.
- *
- * Hidden entirely while searching unless they match — a filtered palette is a
- * lookup, and an entry that ignores the filter reads as a bug.
- */
-function assembliesFor(categoryId: string, query: string): readonly IAssemblyDefinition[] {
-  const needle = query.trim().toLowerCase();
-  return ASSEMBLIES.filter((assembly) => assembly.category === categoryId).filter(
-    (assembly) =>
-      !needle ||
-      assembly.label.toLowerCase().includes(needle) ||
-      assembly.keywords.some((keyword) => keyword.includes(needle)),
   );
 }
 
