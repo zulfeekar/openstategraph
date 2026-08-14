@@ -304,6 +304,69 @@ describe('RuntimeClient.runStream', () => {
     ],
   ];
 
+  /**
+   * The body contract, asserted on the door the product opens.
+   *
+   * Every one of these was covered on `run()` — which has **no product caller
+   * at all** — while `runStream`, which both shipped UIs use, asserted only
+   * `thread_id` (reviews-2026-08-14 ticket 02). Dropping `workflow_slug` or
+   * `audience` from the stream body cost the editor its tool registry or its
+   * developer channel, and left the suite green.
+   *
+   * Both doors now share `runBody`, so these hold for `run` and `resume` too;
+   * they live here because this is the one a user's keystroke reaches.
+   */
+  const bodySentBy = async (
+    request: Parameters<RuntimeClient['runStream']>[0],
+  ): Promise<Record<string, unknown>> => {
+    let sent = '';
+    const client = new RuntimeClient('http://rt', (_url, init) => {
+      sent = String(init?.body ?? '');
+      return Promise.resolve(streamedResponse(sseBody(FRAMES), 5));
+    });
+    await client.runStream(request, () => {});
+    return JSON.parse(sent) as Record<string, unknown>;
+  };
+
+  it('sends the slug, so the run can bind the workflow’s own tools', async () => {
+    const body = await bodySentBy({ workflow: {}, question: 'q', workflowSlug: 'chinook' });
+
+    expect(body['workflow_slug']).toBe('chinook');
+  });
+
+  it('sends the audience, so a developer gets the developer channel', async () => {
+    const body = await bodySentBy({ workflow: {}, question: 'q', audience: 'developer' });
+
+    expect(body['audience']).toBe('developer');
+  });
+
+  it('sends the step budget under the name the backend reads', async () => {
+    const body = await bodySentBy({ workflow: {}, question: 'q', recursionLimit: 42 });
+
+    expect(body['recursion_limit']).toBe(42);
+  });
+
+  it('sends browser-held credentials', async () => {
+    // Serialized here and asserted nowhere before this: `AskPanel` spreads
+    // `credentialsPatch(...)` into every send, and a key pasted into the
+    // dialog only reaches a run through this field.
+    const body = await bodySentBy({
+      workflow: {},
+      question: 'q',
+      credentials: { OPENAI_API_KEY: 'sk-from-the-browser' },
+    });
+
+    expect(body['credentials']).toEqual({ OPENAI_API_KEY: 'sk-from-the-browser' });
+  });
+
+  it('omits every optional field when it was not given', async () => {
+    // The other half: a key that is always present would make a deployment
+    // with server-side configuration look like one being overridden.
+    const body = await bodySentBy({ workflow: {}, question: 'q' });
+
+    expect(Object.keys(body).sort()).toEqual(['question', 'workflow']);
+  });
+
   it('calls onEvent for every update and token frame, in order', async () => {
     const text = sseBody(FRAMES);
     const client = new RuntimeClient('http://rt', () =>

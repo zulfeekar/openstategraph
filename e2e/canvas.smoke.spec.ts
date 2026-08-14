@@ -69,6 +69,65 @@ test('the palette adds a node to the canvas', async ({ page }) => {
   await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
 });
 
+test('two clicks make two nodes you can both see', async ({ page }) => {
+  // The count-based assertion above cannot see the bug that shipped: three
+  // clicks put three nodes at *exactly* the same coordinate, so a user saw one
+  // card and owned three. `toBeGreaterThan(before)` passes on a perfect stack
+  // (reviews-2026-08-14 ticket 02).
+  await page.getByPlaceholder('Search nodes…').fill('Text Input');
+  const item = page.locator('.palette button[draggable]').first();
+  await item.click();
+  await item.click();
+
+  await expect
+    .poll(async () => page.locator('[data-node-id^="node:input.text"]').count())
+    .toBeGreaterThanOrEqual(2);
+
+  const boxes = await page.locator('[data-node-id^="node:input.text"]').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect();
+      return `${Math.round(box.x)},${Math.round(box.y)}`;
+    }),
+  );
+
+  // Distinct positions, not merely distinct nodes.
+  expect(new Set(boxes).size).toBe(boxes.length);
+});
+
+test('a node dragged from the palette lands where it was dropped', async ({ page }) => {
+  // Drag-and-drop had no coverage at any level — not a unit test, not an e2e
+  // (the existing drag test moves an *existing* node). The drop handler does
+  // real work: `clientToLocal`, the assembly branch, and the splice-insert
+  // decision. A renamed MIME type or an inverted `isPaletteDrag` was
+  // undetectable (reviews-2026-08-14 ticket 02).
+  await page.getByPlaceholder('Search nodes…').fill('Markdown File');
+  const item = page.locator('.palette button[draggable]').first();
+  await expect(item).toBeVisible();
+
+  const before = await page.locator('[data-node-id]').count();
+  const stage = page.locator('.canvas-stage');
+  const target = await stage.boundingBox();
+  if (!target) throw new Error('the canvas is not on screen');
+  // Well inside the stage and away from its edges, so the drop cannot land on
+  // the palette or a panel.
+  const dropAt = { x: target.x + target.width * 0.6, y: target.y + target.height * 0.7 };
+
+  await item.hover();
+  await page.mouse.down();
+  await page.mouse.move(dropAt.x, dropAt.y, { steps: 16 });
+  await page.mouse.up();
+
+  await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
+
+  // Where it was dropped, not wherever the canvas felt like — that is the
+  // whole difference between a drag and a click.
+  const dropped = page.locator('[data-node-id^="node:input.markdown"]').last();
+  const box = await dropped.boundingBox();
+  expect(box).not.toBeNull();
+  expect(Math.abs((box?.x ?? 0) + (box?.width ?? 0) / 2 - dropAt.x)).toBeLessThan(160);
+  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) / 2 - dropAt.y)).toBeLessThan(160);
+});
+
 test('a refused connection says why', async ({ page }) => {
   // The defect this guards (reviews-2026-08-14 ticket 03): dragging between
   // incompatible ports was refused in **silence**. The rule had a sentence

@@ -501,6 +501,35 @@ const describeError = (error: unknown): string => {
   return typeof message === 'string' && message !== '' ? ` (${message})` : '';
 };
 
+/**
+ * The body every run-shaped request sends.
+ *
+ * One builder because there were three, and the copies were not equally
+ * tested: `RuntimeClient.run` had assertions for every key — `audience`,
+ * `workflow_slug`, `recursion_limit`, `credentials` — while `runStream`, the
+ * door **both shipped UIs actually use**, had one. `run` has no product
+ * caller at all (reviews-2026-08-14 ticket 02).
+ *
+ * So dropping a key from the stream body could not fail a test, while the
+ * editor silently lost its tool registry or its developer channel. With one
+ * builder there is one thing to get right and one thing to test.
+ */
+function runBody(request: {
+  model?: string;
+  recursionLimit?: number;
+  workflowSlug?: string;
+  credentials?: Readonly<Record<string, string>>;
+  audience?: string;
+}): Record<string, unknown> {
+  return {
+    ...(request.model ? { model: request.model } : {}),
+    ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
+    ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
+    ...(request.credentials ? { credentials: request.credentials } : {}),
+    ...(request.audience ? { audience: request.audience } : {}),
+  };
+}
+
 export class RuntimeClient implements IRuntimeClient {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
@@ -519,11 +548,7 @@ export class RuntimeClient implements IRuntimeClient {
     const body = {
       workflow: request.workflow,
       question: request.question,
-      ...(request.model ? { model: request.model } : {}),
-      ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
-      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
-      ...(request.credentials ? { credentials: request.credentials } : {}),
-      ...(request.audience ? { audience: request.audience } : {}),
+      ...runBody(request),
       ...(request.threadId ? { thread_id: request.threadId } : {}),
     };
 
@@ -578,11 +603,7 @@ export class RuntimeClient implements IRuntimeClient {
     const body = {
       workflow: request.workflow,
       question: request.question,
-      ...(request.model ? { model: request.model } : {}),
-      ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
-      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
-      ...(request.credentials ? { credentials: request.credentials } : {}),
-      ...(request.audience ? { audience: request.audience } : {}),
+      ...runBody(request),
       ...(request.threadId ? { thread_id: request.threadId } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent, options);
@@ -598,11 +619,7 @@ export class RuntimeClient implements IRuntimeClient {
       workflow: request.workflow,
       decision: request.decision,
       ...(request.feedback ? { feedback: request.feedback } : {}),
-      ...(request.model ? { model: request.model } : {}),
-      ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
-      ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
-      ...(request.credentials ? { credentials: request.credentials } : {}),
-      ...(request.audience ? { audience: request.audience } : {}),
+      ...runBody(request),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent, options);
   }

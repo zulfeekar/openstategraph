@@ -86,6 +86,32 @@ class TestTheGateRefuses:
         response = gated_client.post("/api/runs", json={"document": {}, "question": "hi"})
         assert response.status_code == 401
 
+    def test_the_two_run_doors_the_uis_actually_use_are_gated(
+        self, gated_client: TestClient
+    ) -> None:
+        """`/api/runs` above is not the door a person opens.
+
+        It "cannot show progress and it cannot pause for an approval", as
+        `main.py` says of itself, so the editor's Ask panel and the customer
+        `/chat` both stream — and neither of the two streaming routes was ever
+        asserted against the gate (reviews-2026-08-14 ticket 02). The class
+        below picked `/api/events` as "the cheapest of the three", which left
+        the two that spend money untested.
+
+        These are POST **and** SSE, which is precisely the combination the
+        docstring below warns a naive `BaseHTTPMiddleware` gate leaks on.
+        """
+        streamed = gated_client.post(
+            "/api/runs/stream", json={"workflow": {}, "question": "hi"}
+        )
+        resumed = gated_client.post(
+            "/api/runs/resume",
+            json={"thread_id": "t", "workflow": {}, "decision": "approve"},
+        )
+
+        assert streamed.status_code == 401, streamed.text[:200]
+        assert resumed.status_code == 401, resumed.text[:200]
+
     def test_the_event_stream_is_gated_too(self, gated_client: TestClient) -> None:
         """SSE is where a naive `BaseHTTPMiddleware` gate would either leak or
         hang; `/api/events` is the cheapest of the three to assert on."""
