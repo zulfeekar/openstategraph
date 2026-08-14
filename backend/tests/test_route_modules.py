@@ -110,3 +110,59 @@ class TestTheDependencyStaysOutOfTheContract:
                     continue
                 sub = [d.call for d in route.dependant.dependencies]
                 assert get_services in sub, f"{route.path} declares services but does not depend on it"
+
+
+class TestNothingSlipsBackIntoTheFactory:
+    """The rule, not just this one cleanup.
+
+    A new route is one `@app.get` away from being a closure again, and that is
+    the cheapest thing to write when you are already editing `create_app`.
+    """
+
+    def test_create_app_defines_no_route_handler(self) -> None:
+        import ast
+        from pathlib import Path
+
+        source = Path(
+            "backend/openstategraph/api/main.py"
+        ).resolve()
+        if not source.exists():  # running from the backend/ directory
+            source = Path(__file__).resolve().parents[1] / "openstategraph/api/main.py"
+
+        tree = ast.parse(source.read_text())
+        factory = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "create_app"
+        )
+        nested = [
+            node.name
+            for node in factory.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+
+        assert nested == [], (
+            "define the handler on a router under api/routes/ and reach the app "
+            "through api/deps.Services — a closure here cannot be imported or "
+            "tested without building the whole application"
+        )
+
+    def test_every_route_the_app_serves_comes_from_a_router(self) -> None:
+        """The other direction: the routers really are the whole surface, so
+        the guard above cannot be satisfied by registering routes some third
+        way."""
+        from openstategraph.api.routes import __name__ as routes_package
+
+        served = {
+            route.path
+            for route in create_app().routes
+            if isinstance(route, APIRoute)
+        }
+        from_routers = {
+            route.path
+            for module in route_modules()
+            for route in module.router.routes
+            if isinstance(route, APIRoute)
+        }
+
+        assert served == from_routers, f"not served by {routes_package}"

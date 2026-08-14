@@ -29,7 +29,7 @@ with that app.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
@@ -81,3 +81,20 @@ def get_principal_id(http: Request, services: Services) -> str:
 
 #: The identity a run executes under. Empty string means "nobody named".
 PrincipalId = Annotated[str, Depends(get_principal_id)]
+
+
+def get_graph_factory(http: Request) -> Any:
+    """The demo graph builder this app was constructed with.
+
+    Only `/api/workflows/chinook-assistant/ask` needs it — the hand-built
+    Chinook loop that predates the canvas. It is a *constructor argument*
+    rather than part of `WorkflowServices`, which is why it needs its own way
+    through: a test injects a stub graph here, and `create_app` being a factory
+    is what makes that possible.
+    """
+    factory: Any = http.app.state.graph_factory
+    return factory
+
+
+#: The demo graph builder. See `get_graph_factory`.
+GraphFactory = Annotated[Any, Depends(get_graph_factory)]
