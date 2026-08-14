@@ -16,9 +16,16 @@ TypeScript with no excuse for untested logic.
 | Backend unit | `cd backend && pytest` | [`backend/tests/`](../backend/tests) and `workflows/<slug>/tests/` |
 | Browser E2E | `npx playwright test` | [`e2e/canvas.smoke.spec.ts`](../e2e/canvas.smoke.spec.ts) |
 
-CI runs all three as separate jobs
+CI is *configured* to run all three as separate jobs
 ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), with `ruff` on the
 backend.
+
+> **No GitHub Actions workflow in this repository has ever executed.** The
+> checkout has six workflow files under `.github/workflows/` and **zero git
+> remotes**, so nothing is pushed and nothing is triggered (`CLAUDE.md`).
+> Every gate on this page — and every claim elsewhere in the wiki that a check
+> "runs" or "is enforced" — describes intent. The only checks that have
+> actually run are the ones you run locally.
 
 ## pytest conventions ([`pytest.ini`](../pytest.ini))
 

@@ -32,8 +32,9 @@ builder the compiler can run.
    (`DEFAULT_PORT_SPECS` in
    [`workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py)
    is just `CATALOGUE.port_specs`). There is nothing to hand-write on the Python
-   side, and two gates fail a stale copy — `src/nodes/portSpecs.test.ts` and
-   CI's `generated-port-specs` job. Ports missing from the catalogue do not
+   side, and two gates are meant to fail a stale copy — `src/nodes/portSpecs.test.ts` and
+   CI's `generated-port-specs` job (that CI job has never actually run; see
+   [Testing](../testing.md)). Ports missing from the catalogue do not
    crash; the node compiles as opaque, with control-flow edges only.
 5. If the type should be composable by the Workflow Architect, add it to
    `KNOWN_NODE_TYPES` in
