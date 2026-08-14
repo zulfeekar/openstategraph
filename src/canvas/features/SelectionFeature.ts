@@ -31,6 +31,30 @@ export class SelectionFeature extends PaperFeature {
 
     /* ---------- click selection ---------- */
 
+    // A press on a **field** selects its node, without starting a drag.
+    //
+    // Every on-card control is wrapped in `data-no-drag`, and the paper guard
+    // makes JointJS ignore the whole event so a drag cannot begin inside a
+    // textarea. That is right and stays. The side effect was not chosen:
+    // because the paper never saw the event, `element:pointerdown` below never
+    // fired either, so selection was swallowed along with the drag. On the
+    // seeded demo the first card is 67x52 and its textarea fills almost all of
+    // it, so "click the node" meant "click the field" far more often than not,
+    // and the inspector stayed on the workflow (canvas-feels-right ticket 05).
+    //
+    // Listened for on the container, since the paper has already declined it.
+    // Selection only — the drag guard is a separate question about the same
+    // gesture, and this answers neither for the other.
+    container.addEventListener('pointerdown', (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-no-drag]')) return;
+      const card = target.closest('[data-node-id]');
+      const nodeId = card?.getAttribute('data-node-id');
+      if (!nodeId) return;
+      if (controller.selection.hasNode(nodeId)) return;
+      controller.selectionActions.selectNodes([nodeId]);
+    });
+
     this.onPaper('element:pointerdown', ((view: dia.ElementView, event: dia.Event) => {
       const nodeId = String(view.model.id);
       const additive = event.shiftKey || event.metaKey || event.ctrlKey;

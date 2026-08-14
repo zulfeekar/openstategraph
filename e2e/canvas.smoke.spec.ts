@@ -25,6 +25,23 @@ test('clicking a node selects it and opens its inspector', async ({ page }) => {
   await expect(page.locator('.inspector')).not.toContainText('Diagnostics');
 });
 
+test('clicking a field selects its node', async ({ page }) => {
+  // The gap the header-click fix left behind (canvas-feels-right ticket 05).
+  // Every on-card control is `data-no-drag` so a drag cannot start inside a
+  // textarea — right, and it also swallowed selection, because the paper never
+  // saw the event. On the seeded demo the first card is mostly textarea, so
+  // "click the node" meant "click the field" more often than not and the
+  // inspector never switched.
+  const field = page.locator('[data-node-id] [data-no-drag] textarea').first();
+  await expect(field).toBeVisible();
+  await field.click();
+
+  // Selected: the inspector is about the node, not the workflow.
+  await expect(page.locator('.inspector')).not.toContainText('Diagnostics');
+  // …and still editable, which is what the drag guard is protecting.
+  await expect(field).toBeFocused();
+});
+
 test('dragging a node moves it and undo restores it', async ({ page }) => {
   const card = page.locator('[data-node-id]').first();
   const before = await card.boundingBox();
