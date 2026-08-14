@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Accessibility, Check, CircleAlert, TriangleAlert } from 'lucide-react';
 import { Button, Icon } from '@design/primitives';
+import { assessContrast, type TextSample } from './contrastAudit';
 import { Dialog } from './Dialog';
 import './overlays.css';
 
@@ -124,30 +125,10 @@ function audit(): Finding[] {
       : 'Enabling “reduce motion” in your OS disables all transitions and animations.',
   });
 
-  /* ---- Body text contrast ---- */
   const rootStyles = getComputedStyle(document.documentElement);
-  const text = rootStyles.getPropertyValue('--color-text-primary').trim();
-  const surface = rootStyles.getPropertyValue('--color-bg-surface').trim();
-  const ratio = contrastRatio(text, surface);
-  findings.push(
-    ratio == null
-      ? {
-          severity: 'warn',
-          title: 'Text contrast could not be measured',
-          detail: 'Theme colours are not in a form this check can parse.',
-        }
-      : ratio >= 4.5
-        ? {
-            severity: 'pass',
-            title: `Body text contrast is ${ratio.toFixed(1)}:1`,
-            detail: 'Meets WCAG AA for normal text (4.5:1).',
-          }
-        : {
-            severity: 'fail',
-            title: `Body text contrast is only ${ratio.toFixed(1)}:1`,
-            detail: 'WCAG AA requires 4.5:1 for normal text.',
-          },
-  );
+
+  /* ---- Text contrast, sampled from what is on screen ---- */
+  findings.push(assessContrast(sampleRenderedText()));
 
   /* ---- Focus visibility ---- */
   findings.push({
@@ -215,49 +196,80 @@ export function AccessibilityCheck() {
   );
 }
 
-/* ------------------------------------------------------------------ *
- * WCAG relative-luminance contrast, for the colours the theme resolves to.
- * ------------------------------------------------------------------ */
+/**
+ * Real text, from the rendered page.
+ *
+ * The check this replaces read two CSS variables and generalised — so it
+ * sampled the text *least* likely to fail and called the page accessible
+ * (reviews-2026-08-14 ticket 05). This walks what is actually drawn.
+ *
+ * Deliberately biased toward the small and the quiet: those are where
+ * contrast fails, and a sample of headings proves nothing about a palette
+ * description. One representative per distinct colour/size pairing, so the
+ * report names a kind of text rather than listing four hundred nodes.
+ */
+function sampleRenderedText(): TextSample[] {
+  const samples = new Map<string, TextSample>();
 
-function contrastRatio(a: string, b: string): number | null {
-  const first = luminance(a);
-  const second = luminance(b);
-  if (first == null || second == null) return null;
-  const lighter = Math.max(first, second);
-  const darker = Math.min(first, second);
-  return (lighter + 0.05) / (darker + 0.05);
-}
+  for (const element of document.querySelectorAll<HTMLElement>('body *')) {
+    // Only elements with their own visible words — a wrapper inherits its
+    // child's colour and would double-count it under a useless name.
+    const own = [...element.childNodes].some(
+      (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim().length > 0,
+    );
+    if (!own) continue;
 
-function luminance(color: string): number | null {
-  const rgb = parseColor(color);
-  if (!rgb) return null;
-  const [r, g, b] = rgb.map((channel) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+    const style = getComputedStyle(element);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') {
+      continue;
+    }
+    const background = effectiveBackground(element);
+    if (!background) continue;
 
-function parseColor(color: string): [number, number, number] | null {
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
-  if (hex?.[1]) {
-    const digits =
-      hex[1].length === 3
-        ? hex[1]
-            .split('')
-            .map((char) => char + char)
-            .join('')
-        : hex[1];
-    return [
-      Number.parseInt(digits.slice(0, 2), 16),
-      Number.parseInt(digits.slice(2, 4), 16),
-      Number.parseInt(digits.slice(4, 6), 16),
-    ];
+    const fontSizePx = Number.parseFloat(style.fontSize) || 16;
+    const weight = Number.parseInt(style.fontWeight, 10) || 400;
+    const key = `${style.color}|${background}|${Math.round(fontSizePx)}|${weight >= 700}`;
+    if (samples.has(key)) continue;
+
+    samples.set(key, {
+      label: describe(element, fontSizePx),
+      color: style.color,
+      background,
+      fontSizePx,
+      bold: weight >= 700,
+    });
   }
 
-  const rgb = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(color);
-  if (rgb?.[1] && rgb[2] && rgb[3]) {
-    return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  return [...samples.values()];
+}
+
+/**
+ * The colour actually behind an element.
+ *
+ * `background-color` is `rgba(0, 0, 0, 0)` on nearly everything, so the real
+ * backdrop is whichever ancestor last painted one. Without this walk every
+ * sample would be measured against transparency and the check would be as
+ * fictional as the one it replaces.
+ */
+function effectiveBackground(start: HTMLElement): string | null {
+  let node: HTMLElement | null = start;
+  while (node) {
+    const background = getComputedStyle(node).backgroundColor;
+    const transparent =
+      !background || background === 'transparent' || /,\s*0\s*\)$/.test(background);
+    if (!transparent) return background;
+    node = node.parentElement;
   }
   return null;
+}
+
+/** A name a reader can act on — the class that styles it, not a selector path. */
+function describe(element: HTMLElement, fontSizePx: number): string {
+  const named =
+    element.className && typeof element.className === 'string'
+      ? element.className.split(/\s+/).filter(Boolean).slice(-1)[0]
+      : '';
+  return named
+    ? `${named} (${Math.round(fontSizePx)}px)`
+    : `${element.tagName.toLowerCase()} (${Math.round(fontSizePx)}px)`;
 }
