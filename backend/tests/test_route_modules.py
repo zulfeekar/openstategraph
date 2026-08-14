@@ -1,0 +1,112 @@
+"""Handlers are importable, and the way they reach the app is invisible.
+
+`api/main.py` defined all thirty-two route handlers inside `create_app()`, as
+closures over its locals — including three names unpacked from the very object
+that exists to hold them together (`workflow_store = services.store`, and two
+more). That is the defect ticket 07 found in `NodeRuntime.__init__` wearing a
+different hat, and its cost was that no handler had a name anything could
+import: testing one route meant constructing the whole application
+(reviews-2026-08-14 ticket 15).
+
+Two properties are worth holding, and neither is "the file is shorter".
+"""
+
+from __future__ import annotations
+
+import importlib
+import inspect
+import pkgutil
+from typing import Any
+
+import pytest
+from fastapi.routing import APIRoute
+
+from openstategraph.api.main import create_app
+
+
+def route_modules() -> list[Any]:
+    """Every module under `api/routes/`, imported."""
+    from openstategraph.api import routes
+
+    found = []
+    for info in pkgutil.iter_modules(routes.__path__):
+        found.append(importlib.import_module(f"openstategraph.api.routes.{info.name}"))
+    return found
+
+
+class TestAHandlerHasAName:
+    def test_every_route_module_exposes_a_router(self) -> None:
+        modules = route_modules()
+
+        assert modules, "no route modules found"
+        for module in modules:
+            assert hasattr(module, "router"), module.__name__
+
+    def test_a_handler_can_be_imported_without_building_the_app(self) -> None:
+        """The property the whole split exists for.
+
+        A closure over `create_app`'s locals cannot be imported at all, so
+        every test of every route paid for the entire application — every
+        service, every registry, every dependency.
+        """
+        for module in route_modules():
+            handlers = [
+                route.endpoint
+                for route in module.router.routes
+                if isinstance(route, APIRoute)
+            ]
+            assert handlers, f"{module.__name__} has a router but no routes"
+            for handler in handlers:
+                assert inspect.getmodule(handler) is module
+
+
+class TestTheDependencyStaysOutOfTheContract:
+    """The near-miss this pins.
+
+    `Services` was first declared with `WorkflowServices` imported under
+    `TYPE_CHECKING`, so the annotation was an unresolved forward reference at
+    registration time. FastAPI does not treat that as an error — it takes the
+    parameter for a **query parameter**. `services` would have appeared in the
+    published contract as a query string on every moved route, and the failure
+    mode of a refactor whose whole constraint is "the contract does not
+    change" is worth a test rather than a memory.
+    """
+
+    @pytest.fixture(scope="class")
+    def app_routes(self) -> list[APIRoute]:
+        return [r for r in create_app().routes if isinstance(r, APIRoute)]
+
+    def test_no_route_asks_a_client_for_the_services(
+        self, app_routes: list[APIRoute]
+    ) -> None:
+        offenders = [
+            (route.path, field.name)
+            for route in app_routes
+            for field in (
+                list(route.dependant.query_params)
+                + list(route.dependant.path_params)
+                + list(route.dependant.header_params)
+                + list(route.dependant.cookie_params)
+            )
+            if field.name in {"services", "http", "request"}
+        ]
+
+        assert offenders == [], (
+            "an app-assembly parameter leaked into the request contract — "
+            "the annotation is probably an unresolved forward reference"
+        )
+
+    def test_every_moved_handler_actually_receives_the_services(self) -> None:
+        """The other half: a dependency that resolves to `None` would make
+        every handler fail at run time rather than at registration."""
+        from openstategraph.api.deps import get_services
+
+        for module in route_modules():
+            for route in module.router.routes:
+                if not isinstance(route, APIRoute):
+                    continue
+                takes = "services" in inspect.signature(route.endpoint).parameters
+                if not takes:
+                    continue
+                sub = [d.call for d in route.dependant.dependencies]
+                assert get_services in sub, f"{route.path} declares services but does not depend on it"

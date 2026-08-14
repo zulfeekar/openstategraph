@@ -43,20 +43,29 @@ def sse_paths_of_the_app() -> set[str]:
     """
     import ast
 
-    main = REPO / "backend" / "openstategraph" / "api" / "main.py"
-    tree = ast.parse(main.read_text())
+    api = REPO / "backend" / "openstategraph" / "api"
+    # `main.py` **and** every route module. Two of the three SSE endpoints
+    # moved to `routes/runs.py` when the handlers came out of `create_app`
+    # (reviews-2026-08-14 ticket 15), and a scanner that reads one file would
+    # have reported them as gone rather than as moved — which, for a test
+    # whose job is "no stream is missing from the proxy config", is the
+    # dangerous direction to be wrong in.
+    sources = [api / "main.py", *sorted((api / "routes").glob("*.py"))]
+
     streaming: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        source = ast.get_source_segment(main.read_text(), node) or ""
-        if "text/event-stream" not in source:
-            continue
-        for decorator in node.decorator_list:
-            if isinstance(decorator, ast.Call) and decorator.args:
-                first = decorator.args[0]
-                if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                    streaming.add(first.value)
+    for source_file in sources:
+        text = source_file.read_text()
+        for node in ast.walk(ast.parse(text)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            source = ast.get_source_segment(text, node) or ""
+            if "text/event-stream" not in source:
+                continue
+            for decorator in node.decorator_list:
+                if isinstance(decorator, ast.Call) and decorator.args:
+                    first = decorator.args[0]
+                    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                        streaming.add(first.value)
     return streaming
 
 
