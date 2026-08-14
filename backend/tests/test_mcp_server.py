@@ -149,7 +149,10 @@ class TestStatelessCompile:
         result = artifacts.compile({"version": 2, "nodes": [], "edges": []})
 
         assert result["validated"] is False
-        assert result["findings"]
+        # Named, not merely non-empty: a finding list is what a client's model
+        # reads to repair the document, so "some string came back" is not the
+        # property (reviews-2026-08-14 ticket 09).
+        assert result["findings"] == ["The document needs a non-empty 'nodes' list."]
         assert result["document"] is None
         assert result["mermaid"] == ""
 
@@ -272,7 +275,7 @@ class TestDraftsOnlyWrites:
         result = library.save_draft("bad-one", "Bad One", {"version": 2, "nodes": []})
 
         assert result["saved"] is False
-        assert result["findings"]
+        assert result["findings"] == ["The document needs a non-empty 'nodes' list."]
         assert not (services.store.root / "bad-one").exists()
 
     def test_a_valid_document_is_written_as_an_unpublished_draft(
@@ -328,7 +331,10 @@ class TestDraftsOnlyWrites:
         )
 
         assert result["saved"] is False
-        assert result["findings"]
+        # The refusal must be about the *slug*, not about the document — which
+        # is valid here. A truthy-findings assertion passed either way, so it
+        # could not tell a path guard from an unrelated validation error.
+        assert any("../escape" in finding for finding in result["findings"])
 
 
 class TestLibraryReads:
@@ -366,7 +372,7 @@ class TestLibraryReads:
     ) -> None:
         described = WorkflowLibrary(services).describe("nope")
 
-        assert described["error"]
+        assert "nope" in described["error"]
 
     def test_knowledge_returns_the_topic_index_when_no_topic_is_named(
         self, services: WorkflowServices
@@ -404,7 +410,7 @@ class TestLibraryReads:
 
         result = library.knowledge("one", "nonesuch")
 
-        assert result["error"]
+        assert "nonesuch" in result["error"]
         assert result["topics"] == [{"name": "album", "hint": "Album"}]
 
     def test_plugin_export_reports_the_manifest_and_the_lossy_edges(
@@ -436,12 +442,27 @@ class TestRuns:
         assert result["mermaid"].strip()
 
     def test_it_refuses_an_invalid_document_before_reaching_a_model(
-        self, services: WorkflowServices
+        self, services: WorkflowServices, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """*Before reaching a model* was the claim, and nothing tested it.
+
+        Two truthiness assertions passed whether the refusal came from
+        validation or from a provider error three layers down — and on a
+        machine with no key configured, the second is exactly what a broken
+        order of operations would produce (reviews-2026-08-14 ticket 09). So
+        the model builder is poisoned: reaching it at all is the failure.
+        """
+        import openstategraph.chat_model as chat_model
+
+        def never(*_: Any, **__: Any) -> Any:
+            raise AssertionError("an invalid document reached the model")
+
+        monkeypatch.setattr(chat_model, "build_chat_model", never)
+
         result = WorkflowRuns(services).run(document={"version": 2, "nodes": []}, question="hi")
 
-        assert result["error"]
-        assert result["findings"]
+        assert result["error"] == "The document does not compile."
+        assert result["findings"] == ["The document needs a non-empty 'nodes' list."]
 
     def test_it_runs_a_saved_slug(self, services: WorkflowServices) -> None:
         WorkflowLibrary(services).save_draft("one", "One", _linear_document())
@@ -451,7 +472,10 @@ class TestRuns:
     def test_it_needs_either_a_slug_or_a_document(
         self, services: WorkflowServices
     ) -> None:
-        assert WorkflowRuns(services).run(question="hi")["error"]
+        error = WorkflowRuns(services).run(question="hi")["error"]
+
+        # It must say which two things, or it is not an answer to the caller.
+        assert "slug" in error and "document" in error
 
     def test_the_recursion_limit_is_bounded_server_side(
         self, services: WorkflowServices

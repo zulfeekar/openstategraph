@@ -264,12 +264,24 @@ function applyFamilyRegistration(
     // reach the registry by another route (a direct `upsert` in a test or a
     // seeding path), and one that stays unstamped would quietly reappear
     // among the always-available palette sections.
-    if (shouldBeRegistered && alreadyRegistered && existing.scope !== 'workflow') {
-      registry.nodeTypes.upsert(asWorkflowScoped(definition));
-    } else if (shouldBeRegistered && !alreadyRegistered) {
-      registry.nodeTypes.upsert(asWorkflowScoped(definition));
+    if (shouldBeRegistered) {
+      // One branch, because the cases that used to be separate differed only
+      // in what they skipped, and each skip was a way to be half-registered.
+      // The `alreadyRegistered && scope !== 'workflow'` branch stamped the
+      // scope and never registered the executor; and a definition that
+      // arrived *already* carrying `scope: 'workflow'` matched no branch at
+      // all, so it kept its palette card and got no executor — a node you can
+      // draw and cannot run. The tests could not see either, because they
+      // asked only whether the definition was there
+      // (reviews-2026-08-14 ticket 09).
+      //
+      // Both `upsert` calls are idempotent, so doing them unconditionally is
+      // cheaper than the conditions were, and cannot leave a half state.
+      if (!alreadyRegistered || existing.scope !== 'workflow') {
+        registry.nodeTypes.upsert(asWorkflowScoped(definition));
+      }
       executors.upsert(executor);
-    } else if (!shouldBeRegistered && alreadyRegistered) {
+    } else if (alreadyRegistered) {
       registry.nodeTypes.unregister(definition.id);
       executors.unregister(executor.id);
     }

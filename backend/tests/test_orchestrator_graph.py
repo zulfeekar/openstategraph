@@ -354,7 +354,19 @@ class TestReviseReEntersTheFanOut:
         # generous on purpose, since each lap now costs more supersteps than a
         # single-agent loop (plan -> dispatch -> join -> grade, not just
         # call -> grade).
-        run(document, "impossible", model)
+        final = run(document, "impossible", model)
+
+        # This asserted nothing at all: a "no exception raised" test, whose
+        # sibling above correctly checks `attempts == 3`
+        # (reviews-2026-08-14 ticket 09). Not raising is only half the claim —
+        # a graph that lost its fan-out, or gave up on the first lap, also
+        # fails to raise.
+        assert final["attempts"] == 3
+        assert final["decisions"]["node:route.grader-1"] == "pass"
+        # The fan-out is the part that distinguishes this from its sibling:
+        # one worker result per lap, so the supersteps were spent dispatching
+        # and joining rather than on a degenerate single-node cycle.
+        assert len(final["worker_results"]) == 3
 
     def test_the_graph_structure_declares_exactly_one_fan_out_and_one_cycle(self) -> None:
         """A structural sanity check independent of any run.

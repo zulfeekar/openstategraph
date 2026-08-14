@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /** The seeded demo is the fixture: it loads with no backend and no keys. */
 test.beforeEach(async ({ page }) => {
@@ -58,10 +58,53 @@ test('dragging a node moves it and undo restores it', async ({ page }) => {
   expect(Math.abs((restored?.x ?? 0) - before.x)).toBeLessThan(8);
 });
 
+/** The bounding boxes of every card, so a layout can be described. */
+async function spread(page: Page): Promise<{ x: number; y: number; count: number }> {
+  const boxes = await Promise.all(
+    (await page.locator('[data-node-id]').all()).map((card) => card.boundingBox()),
+  );
+  const seen = boxes.filter((box): box is NonNullable<typeof box> => box !== null);
+  const range = (values: number[]) => Math.max(...values) - Math.min(...values);
+  return {
+    x: range(seen.map((box) => box.x)),
+    y: range(seen.map((box) => box.y)),
+    count: seen.length,
+  };
+}
+
 test('auto-arrange works in both flow directions', async ({ page }) => {
+  // The layout is scrambled first, and this is the part that makes the test
+  // mean anything. It used to assert `expect(horizontal).toBeTruthy()` — that
+  // a card has a bounding box — so an arrange that did nothing passed
+  // (reviews-2026-08-14 ticket 09). Asserting the *shape* of the layout is not
+  // enough on its own either: the seeded demo is already laid out left to
+  // right, so a horizontal check passes without ever clicking Arrange.
+  // Verified: with the click removed, this test fails.
+  const card = page.locator('[data-node-id]').last();
+  const box = await card.boundingBox();
+  if (!box) throw new Error('node card has no box');
+  await page.mouse.move(box.x + box.width / 2, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 700, { steps: 8 });
+  await page.mouse.up();
+  const scrambled = await card.boundingBox();
+  expect((scrambled?.y ?? 0) - box.y).toBeGreaterThan(400);
+
   await page.getByLabel('Arrange automatically').click();
+  // Arrange put the displaced card back in the row.
+  await expect
+    .poll(async () => (await card.boundingBox())?.y ?? 0)
+    .toBeLessThan((scrambled?.y ?? 0) - 300);
   const horizontal = await page.locator('[data-node-id]').first().boundingBox();
   expect(horizontal).toBeTruthy();
+  // What "horizontal" means: the cards are spread further across than down.
+  await expect
+    .poll(async () => {
+      const across = await spread(page);
+      return across.count > 1 && across.x > across.y;
+    })
+    .toBe(true);
+
   await page.getByLabel(/flow direction/i).click();
   // Polled, not read once. The toggle defers `autoLayout.run` into a
   // `requestAnimationFrame` (and `fitToContent` into a second one), so an
@@ -74,6 +117,10 @@ test('auto-arrange works in both flow directions', async ({ page }) => {
       return now!.x !== horizontal!.x || now!.y !== horizontal!.y;
     })
     .toBe(true);
+
+  // And the new direction is genuinely the other one.
+  const down = await spread(page);
+  expect(down.y).toBeGreaterThan(down.x);
 });
 
 test('the palette adds a node to the canvas', async ({ page }) => {

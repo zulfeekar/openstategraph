@@ -14,6 +14,30 @@ import {
  * so every workflow's palette carried them regardless of whether that
  * workflow used them at all.
  */
+/**
+ * What "registered" has to mean for the node to be usable.
+ *
+ * Every assertion in this file was `expect(registry.nodeTypes.get(id))
+ * .toBeDefined()` — that an entry exists under that key, and nothing about
+ * ports, the executor, or the workflow scope, which is what this module is
+ * actually about (reviews-2026-08-14 ticket 09). A registration missing its
+ * executor draws a card that cannot run; one missing the `workflow` scope
+ * leaks into the always-available palette sections, which is the exact bug
+ * `applyFamilyRegistration` re-upserts to prevent.
+ */
+function expectUsable(workbench: Workbench, id: string): void {
+  const definition = workbench.registry.nodeTypes.get(id);
+  expect(definition, `${id} is not registered`).toBeDefined();
+  expect(definition?.scope, `${id} is not workflow-scoped`).toBe('workflow');
+  // `ports` is a function of the node's data, so this calls it — a type that
+  // resolves no ports is a card nothing can be wired to.
+  expect(
+    definition?.ports(definition.create({ position: { x: 0, y: 0 } }).data).length ?? 0,
+    `${id} resolves no ports`,
+  ).toBeGreaterThan(0);
+  expect(workbench.engine.executors.get(id), `${id} has no executor`).toBeDefined();
+}
+
 describe('workflow-scoped node registration', () => {
   const chinookIds = CHINOOK_NODES.map((n) => n.definition.id);
 
@@ -36,7 +60,7 @@ describe('workflow-scoped node registration', () => {
     workbench.model.addNode(created);
 
     for (const id of chinookIds) {
-      expect(workbench.registry.nodeTypes.get(id)).toBeDefined();
+      expectUsable(workbench, id);
     }
   });
 
@@ -67,7 +91,7 @@ describe('workflow-scoped node registration', () => {
     workbench.model.notifyReset();
 
     for (const id of chinookIds) {
-      expect(workbench.registry.nodeTypes.get(id)).toBeDefined();
+      expectUsable(workbench, id);
     }
   });
 
@@ -219,7 +243,7 @@ describe('workflow-scoped node types announce their scope', () => {
       );
       registerDiscoveredCapabilities([], workbench.registry, workbench.engine.executors);
 
-      expect(workbench.registry.nodeTypes.get('tool.chinook-execute-sql')).toBeDefined();
+      expectUsable(workbench, 'tool.chinook-execute-sql');
     });
   });
 });
@@ -276,7 +300,7 @@ describe('registerNodeTypesForRawDocument — the load-order bug', () => {
       workbench.registry,
       workbench.engine.executors,
     );
-    expect(workbench.registry.nodeTypes.get(toolType)).toBeDefined();
+    expectUsable(workbench, toolType);
 
     registerNodeTypesForRawDocument(
       { nodes: [{ id: 'in1', type: 'input.text', data: {}, position: { x: 0, y: 0 } }] },
@@ -319,8 +343,8 @@ describe('registerDiscoveredCapabilities', () => {
       workbench.engine.executors,
     );
 
-    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeDefined();
-    expect(workbench.registry.nodeTypes.get('a/tools.Two')).toBeDefined();
+    expectUsable(workbench, 'a/tools.One');
+    expectUsable(workbench, 'a/tools.Two');
   });
 
   it('unregisters the previous workflow’s capabilities when a new one is opened', () => {
@@ -338,7 +362,7 @@ describe('registerDiscoveredCapabilities', () => {
     );
 
     expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeUndefined();
-    expect(workbench.registry.nodeTypes.get('b/tools.Two')).toBeDefined();
+    expectUsable(workbench, 'b/tools.Two');
   });
 
   it('an empty list clears whatever was registered, without leaving it stranded', () => {
@@ -368,6 +392,6 @@ describe('registerDiscoveredCapabilities', () => {
         workbench.engine.executors,
       );
     }).not.toThrow();
-    expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeDefined();
+    expectUsable(workbench, 'a/tools.One');
   });
 });
