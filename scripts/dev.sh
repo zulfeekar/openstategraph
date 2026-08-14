@@ -179,6 +179,41 @@ cd "$ROOT"
 # and cap the graceful wait so a genuine source edit restarts the server
 # instead of wedging it. A killed stream is a visible, recoverable failure;
 # a server that accepts connections and never answers is not.
+# `.env`, because this script does NOT go through the CLI.
+#
+# `openstategraph serve` calls `load_env_file()`; `uvicorn …main:app` — what
+# this script must run, since only uvicorn offers `--reload` — calls nothing.
+# So the documented dev stack came up with every provider unconfigured while
+# `.env` sat in the repository root, and whether it worked came down to
+# whether the launching shell happened to have exported the keys by hand
+# (the-editor-makes-a-real-package ticket 04). It degraded quietly: nothing
+# errored, `resolve_model` fell back, and answers came from a model nobody
+# chose.
+#
+# Deliberately **the package's own parser**, not `uvicorn --env-file` and not
+# `set -a; . ./.env`. Both of those are a second parser for one file, and this
+# project has already been bitten by exactly that: `.env` here holds
+# `OLLAMA_ENDPOINT = "…"  # Adjust if needed`, and it took a fix to strip the
+# inline comment before the quote. Two parsers means two answers for that line.
+#
+# `shlex.quote` on the way out, and `os.environ` checked on the way in, so a
+# variable already exported still wins — the file is the fallback, never the
+# authority.
+if [ -f .env ]; then
+  eval "$(python3 - <<'LOAD_ENV'
+import os, shlex, sys
+from pathlib import Path
+
+sys.path.insert(0, "backend")
+from openstategraph.dotenv import parse_env_file
+
+for key, value in parse_env_file(Path(".env").read_text(encoding="utf-8")).items():
+    if key not in os.environ:
+        print(f"export {key}={shlex.quote(value)}")
+LOAD_ENV
+)"
+fi
+
 PYTHONPATH="backend:workflows/chinook-assistant" SSL_CERT_FILE="${CERT_FILE}" \
   supervise backend python3 -m uvicorn openstategraph.api.main:app --port 8000 --app-dir backend \
     --reload --reload-dir backend --reload-dir workflows \

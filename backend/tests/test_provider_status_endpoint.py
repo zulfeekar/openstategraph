@@ -159,6 +159,33 @@ class TestTheHint:
         rows = {r["name"]: r for r in _providers(TestClient(create_app()))}
         assert rows["ollama"]["key_hint"] == "http://localhost:11434"
 
+    def test_credentials_embedded_in_a_host_url_do_not_survive(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The exception for URLs has its own exception.
+
+        `OLLAMA_HOST` is shown whole because it is an address, not a secret —
+        and masking it would hide the one thing a developer debugging a mount
+        needs to read. But a URL can carry `user:token@`, which is a secret
+        wearing an address's clothes, and the rule this endpoint exists under
+        is that it reports names and booleans, never values somebody could use.
+
+        Reaching a daemon through an authenticating proxy is the ordinary way
+        this happens; nobody would think of it as putting a key in a variable
+        named `_HOST`.
+        """
+        for name in CREDENTIALS:
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("OLLAMA_HOST", "https://osg:s3cret-token@ollama.internal:11434")
+
+        body = TestClient(create_app()).get("/api/providers").text
+        rows = {r["name"]: r for r in _providers(TestClient(create_app()))}
+
+        assert "s3cret-token" not in body
+        assert "osg:s3cret-token" not in body
+        # Still says where it points, which is the whole reason it is shown.
+        assert rows["ollama"]["key_hint"] == "https://ollama.internal:11434"
+
     def test_nothing_beyond_the_two_characters_survives(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

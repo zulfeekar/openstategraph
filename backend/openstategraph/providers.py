@@ -52,6 +52,34 @@ PROVIDERS_GROUP = "openstategraph.providers"
 _SECRET_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
 
 
+def _without_userinfo(value: str) -> str:
+    """A URL with any `user:password@` removed, or the value unchanged.
+
+    The hint shows a non-secret variable whole, because masking an address
+    hides the only thing worth reading. `OLLAMA_HOST` can carry credentials
+    though — reaching a daemon through an authenticating proxy is the ordinary
+    way that happens, and nobody thinks of it as putting a key in a variable
+    named `_HOST`. So the exception for addresses gets its own exception: the
+    host and port survive, the userinfo does not.
+
+    Deliberately string-level and conservative. Anything that does not parse
+    as a URL with userinfo is returned untouched — this must never mangle a
+    plain `localhost:11434`, which is the overwhelmingly common value.
+    """
+    marker = "://"
+    scheme_at = value.find(marker)
+    if scheme_at == -1:
+        return value
+    rest = value[scheme_at + len(marker) :]
+    # Only userinfo can precede the host, and only up to the first `/`.
+    authority_end = len(rest) if "/" not in rest else rest.index("/")
+    authority = rest[:authority_end]
+    if "@" not in authority:
+        return value
+    host = authority.rsplit("@", 1)[1]
+    return value[: scheme_at + len(marker)] + host + rest[authority_end:]
+
+
 def _is_secret(name: str) -> bool:
     return name.upper().endswith(_SECRET_SUFFIXES)
 
@@ -182,7 +210,7 @@ class ProviderSpec:
             if not value:
                 continue
             if not _is_secret(name):
-                return value
+                return _without_userinfo(value)
             return value[:HINT_PREFIX] + HINT_MASK
         return None
 
