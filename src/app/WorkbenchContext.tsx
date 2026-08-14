@@ -1,4 +1,4 @@
-import { writeOpenWorkflowToDisk } from '@app/diskAutosave';
+import { ensureDiskBaseline, writeOpenWorkflowToDisk } from '@app/diskAutosave';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import {
   createContext,
@@ -408,6 +408,23 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       CLAIM_HEARTBEAT_MS,
     );
 
+    // Tell disk autosave what the file holds, for the one path that never
+    // fetched it: a reload of the workflow already open in this tab restores
+    // the browser draft instead of re-loading from the backend, so nothing
+    // else would ever say what is on disk and the tab would (correctly, but
+    // uselessly) refuse to save for the rest of its life.
+    //
+    // Gated on a document having actually been **restored** for this slug, and
+    // that condition is doing real work rather than being cautious. A page
+    // that seeds the demo instead — no draft to restore — can still find a
+    // slug in `sessionStorage` from a previous visit. Baselining there would
+    // hand autosave a package it is allowed to write while the model holds a
+    // demo, and the next tick would write the demo into that package.
+    const restoredSlug = state.restored ? getOpenSlug() : null;
+    if (restoredSlug) {
+      void ensureDiskBaseline(restoredSlug, (diskClientRef.current ??= new WorkflowFileClient()));
+    }
+
     let timer: ReturnType<typeof setTimeout> | null = null;
     // One complaint per distinct failure, not one per keystroke: autosave runs
     // on every edit, and a full quota would otherwise produce a toast per
@@ -448,7 +465,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
         // the storage ones are — this fires on every edit, and a backend that
         // is down would otherwise raise a toast per second.
         void writeOpenWorkflowToDisk(
-          diskClientRef.current ?? (diskClientRef.current = new WorkflowFileClient()),
+          (diskClientRef.current ??= new WorkflowFileClient()),
           workbench.model,
           workbench.serializer,
           sessionStorage,
@@ -473,7 +490,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       if (timer != null) clearTimeout(timer);
       releaseSession(localStorage, workflowId, writer);
     };
-  }, [controller, workbench, workflowId]);
+  }, [controller, workbench, workflowId, state.restored]);
 
   return state;
 }

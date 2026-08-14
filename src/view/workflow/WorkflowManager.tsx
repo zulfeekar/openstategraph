@@ -23,6 +23,7 @@ import {
   type WorkflowTemplate,
 } from '@core/runtime/WorkflowFileClient';
 import { clearDrillStack } from '@app/drillStack';
+import { rememberDiskDocument } from '@app/diskAutosave';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import './WorkflowManager.css';
 
@@ -244,6 +245,12 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // Storage *and* the address bar — a workflow that has just become real on
     // the backend is linkable from this moment on.
     setOpenSlug(slug);
+    // Autosave refuses to write a package it has no baseline for, so an
+    // explicit save has to leave one behind — otherwise a workflow saved for
+    // the first time here would never autosave again, which is precisely the
+    // moment a developer starts expecting it to (ticket 02). `document` is
+    // what was just written, so it is what disk now holds.
+    rememberDiskDocument(slug, workbench.model.name, document);
     // The minted slug is said out loud on a create, because it is the one
     // thing the user could not have predicted: a second "My Workflow" lands
     // at `my-workflow-k7m3qp`, and silently is how you later wonder which of

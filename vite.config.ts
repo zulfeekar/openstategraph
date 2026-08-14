@@ -3,6 +3,7 @@
 // except `test`, which then fails as an unknown property.
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { DEV_SERVER_WATCH_IGNORED } from './src/app/devServerWatch';
 
 export default defineConfig({
   plugins: [react()],
@@ -13,17 +14,10 @@ export default defineConfig({
   server: {
     port: 5273,
     strictPort: false,
-    watch: {
-      // `workflows/` is **data the editor writes**, not source it is built
-      // from. Since disk autosave landed, every edit updates a file in here —
-      // and with the default watcher that tripped a full page reload, which
-      // reloaded the workflow, which autosaved, which reloaded… The editor
-      // reloaded itself every few seconds with nobody touching it.
-      //
-      // Nothing under `workflows/` is imported by the frontend bundle, so
-      // there is no change here a reload would ever be the right answer to.
-      ignored: ['**/workflows/**'],
-    },
+    // Why this exists, and what broke without it, is recorded beside the
+    // constant. Nothing under `workflows/` is imported by the bundle, so no
+    // change there is one a reload is ever the right answer to.
+    watch: { ignored: [...DEV_SERVER_WATCH_IGNORED] },
   },
   build: { target: 'es2022', sourcemap: true },
 

@@ -109,25 +109,57 @@ function comparable(name: string, document: unknown): string {
 }
 
 /**
- * Record what a freshly-loaded document looked like, so opening it is not an
- * edit.
+ * Record what the file on disk holds, so opening it is not an edit.
  *
- * Seeded from the **round-tripped** form — `serializer.serialize(model)` after
- * the import, not the raw file — because the two are not byte-identical: the
- * file omits defaulted fields and the model materialises them. Comparing
- * against the raw file would therefore report a change on every load and
- * defeat the point. The consequence is one normalising write the first time
- * each package is opened after this shipped, and none afterwards.
+ * Seeded from the **raw document as loaded**, not from the model that was just
+ * built out of it. Those two are not the same thing, and the difference is the
+ * whole reason this function takes a document rather than a `WorkflowModel`:
+ * a model materialises its defaults (`maxRetries: ''`, a router's `branches`)
+ * shortly *after* `importJSON` returns, so a baseline captured from the model
+ * at load time is a snapshot of a state that lasts milliseconds. It matched
+ * neither the file nor the settled model, so every open wrote once — an
+ * identical document with a fresh `savedAt`, forever.
+ *
+ * Seeding from the file makes the comparison converge instead:
+ *
+ * - the **first** open of a package written before defaults were materialised
+ *   differs from the settled model, so it gets one normalising write;
+ * - every open after that finds the file already in the settled form and
+ *   writes nothing.
  *
  * Called *before* any draft is restored: a restored draft is a genuine
- * difference from the file, and is exactly what should reach disk.
+ * difference from the file, and is exactly what should reach it.
  */
-export function rememberDiskDocument(
+export function rememberDiskDocument(slug: string, name: string, document: unknown): void {
+  lastWritten.set(slug, comparable(name, document));
+}
+
+/**
+ * Establish a baseline for a slug the load path did not open.
+ *
+ * There is a second legitimate way a document for a slug reaches the canvas.
+ * On a reload of the workflow already open in this tab, `resolveOpenRequest`
+ * deliberately does **not** re-fetch — it restores this browser's draft for
+ * that slug instead — so nothing ever tells autosave what is on disk, and the
+ * strict rule above would leave the tab silently never saving again.
+ *
+ * Asking the backend is the honest answer, and it is one request per page:
+ * this seeds from the file, so a restored draft that genuinely differs is
+ * written on the next edit, and one that matches is not written at all.
+ *
+ * Does nothing when a baseline already exists, and — importantly — nothing at
+ * all when the fetch fails. A failed read must not become a blind write.
+ */
+export async function ensureDiskBaseline(
   slug: string,
-  model: WorkflowModel,
-  serializer: WorkflowSerializer,
-): void {
-  lastWritten.set(slug, comparable(model.name, serializer.serialize(model)));
+  client: Pick<IWorkflowFileClient, 'load'>,
+): Promise<void> {
+  if (lastWritten.has(slug)) return;
+  const disk = await client.load(slug);
+  if (!disk.ok) return;
+  const document = disk.value as { name?: string };
+  if (lastWritten.has(slug)) return; // a load may have landed while we waited
+  lastWritten.set(slug, comparable(document.name ?? '', disk.value));
 }
 
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */
@@ -161,9 +193,24 @@ export async function writeOpenWorkflowToDisk(
   const slug = diskAutosaveTarget(storage);
   if (!slug) return { kind: 'skipped' };
 
+  // **Never write a package this page has not opened.** The baseline is
+  // recorded by the load path, so its absence means the document in memory did
+  // not come from this slug — and `getOpenSlug()` cannot tell the difference,
+  // because it reads `sessionStorage`, which survives a reload.
+  //
+  // That gap is a race with teeth. On a deep link the autosave listener is
+  // live from mount, while the document arrives over the network some time
+  // later; in between, the model holds the seeded demo (or a restored draft)
+  // and the open slug already names the target package. A load slower than the
+  // autosave debounce would therefore write the *demo* into somebody's
+  // workflow. Requiring the baseline closes that window, and it is the same
+  // condition that stops a reload from rewriting a file nobody edited.
+  const prev = lastWritten.get(slug);
+  if (prev === undefined) return { kind: 'skipped' };
+
   const document = serializer.serialize(model);
   const payload = comparable(model.name, document);
-  if (lastWritten.get(slug) === payload) return { kind: 'unchanged' };
+  if (prev === payload) return { kind: 'unchanged' };
 
   const result = await client.save(slug, model.name, document);
   if (!result.ok) return { kind: 'failed', reason: result.error };

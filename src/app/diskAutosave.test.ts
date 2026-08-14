@@ -78,6 +78,9 @@ describe('writing the open workflow to its package', () => {
   it('sends the slug, the name and the document', async () => {
     const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
     const bench = workbench();
+    // A baseline means "this page opened this package"; without one nothing is
+    // written at all. An empty document stands in for whatever was on disk.
+    rememberDiskDocument('demo', 'whatever was on disk', {});
 
     const outcome = await writeOpenWorkflowToDisk(
       { save } as unknown as Pick<IWorkflowFileClient, 'save'>,
@@ -115,6 +118,7 @@ describe('writing the open workflow to its package', () => {
     // about the editor's own writes.
     recordKnownSavedAt('demo', '2026-08-13T00:00:00Z');
     const bench = workbench();
+    rememberDiskDocument('demo', 'whatever was on disk', {});
 
     await writeOpenWorkflowToDisk(
       { save: async () => Ok(undefined) },
@@ -132,6 +136,7 @@ describe('writing the open workflow to its package', () => {
     // A failed write must not look like a successful one to the watcher.
     recordKnownSavedAt('demo', '2026-08-13T00:00:00Z');
     const bench = workbench();
+    rememberDiskDocument('demo', 'whatever was on disk', {});
 
     const outcome = await writeOpenWorkflowToDisk(
       { save: async () => Err('the disk is full') },
@@ -145,6 +150,45 @@ describe('writing the open workflow to its package', () => {
   });
 });
 
+describe('never write a package this page has not opened', () => {
+  it('skips a slug with no baseline, however loudly sessionStorage names it', async () => {
+    // The race this closes, which is the dangerous one. `getOpenSlug()` reads
+    // sessionStorage, which survives a reload — so on a deep link the open
+    // slug names the target package from the first paint, while the document
+    // itself arrives over the network some time later. In between, the model
+    // holds the seeded demo. A load slower than the autosave debounce would
+    // have written that demo straight into somebody's workflow.
+    const save = vi.fn(async () => Ok(undefined));
+    const bench = new Workbench();
+
+    const outcome = await writeOpenWorkflowToDisk(
+      { save } as unknown as Pick<IWorkflowFileClient, 'save'>,
+      bench.model,
+      bench.serializer,
+      storageWith('someone-elses-package'),
+    );
+
+    expect(outcome).toEqual({ kind: 'skipped' });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('writes once the load has said what is on disk', async () => {
+    const save = vi.fn(async () => Ok(undefined));
+    const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
+    const bench = new Workbench();
+    const storage = storageWith('demo');
+
+    expect(await writeOpenWorkflowToDisk(client, bench.model, bench.serializer, storage)).toEqual({
+      kind: 'skipped',
+    });
+
+    rememberDiskDocument('demo', 'whatever was on disk', {});
+    expect(await writeOpenWorkflowToDisk(client, bench.model, bench.serializer, storage)).toEqual({
+      kind: 'saved',
+    });
+  });
+});
+
 describe('opening a workflow is not an edit', () => {
   // The defect this guards, found in the browser: autosave listens to
   // `controller.onChange`, and a *load* fires that too — so merely opening a
@@ -154,7 +198,7 @@ describe('opening a workflow is not an edit', () => {
   it('does not write a document identical to the one just loaded', async () => {
     const save = vi.fn(async () => Ok(undefined));
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model, bench.serializer);
+    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
 
     const outcome = await writeOpenWorkflowToDisk(
       { save } as unknown as Pick<IWorkflowFileClient, 'save'>,
@@ -171,7 +215,7 @@ describe('opening a workflow is not an edit', () => {
     const save = vi.fn(async () => Ok(undefined));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model, bench.serializer);
+    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
 
     bench.model.setName('Renamed');
     expect(
@@ -191,7 +235,7 @@ describe('opening a workflow is not an edit', () => {
     // documents alone would have missed this entirely.
     const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model, bench.serializer);
+    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
     bench.model.setName('A different name');
 
     const outcome = await writeOpenWorkflowToDisk(
@@ -240,7 +284,7 @@ describe('the write loop', () => {
       },
     } as unknown as WorkflowSerializer;
 
-    rememberDiskDocument('demo', bench.model, remeasuring);
+    rememberDiskDocument('demo', bench.model.name, remeasuring.serialize(bench.model));
     for (let tick = 0; tick < 4; tick += 1) {
       expect(
         await writeOpenWorkflowToDisk(client, bench.model, remeasuring, storageWith('demo')),
@@ -268,7 +312,7 @@ describe('the write loop', () => {
       },
     } as unknown as WorkflowSerializer;
 
-    rememberDiskDocument('demo', bench.model, shuffling);
+    rememberDiskDocument('demo', bench.model.name, shuffling.serialize(bench.model));
     for (let tick = 0; tick < 4; tick += 1) {
       expect(
         await writeOpenWorkflowToDisk(client, bench.model, shuffling, storageWith('demo')),

@@ -13,5 +13,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.generate.config.ts"]
+  // `src/app/devServerWatch.ts` holds the dev server's watch-ignore list, so
+  // the rule has one definition that both this config and a test can read.
+  "include": ["vite.config.ts", "vitest.generate.config.ts", "src/app/devServerWatch.ts"]
 }
