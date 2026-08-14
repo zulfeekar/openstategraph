@@ -155,6 +155,50 @@
         "title": "DeveloperChannelResponse",
         "type": "object"
       },
+      "DuplicateWorkflowRequest": {
+        "additionalProperties": false,
+        "description": "POST /api/workflows/{slug}/duplicate \u2014 ticket 01.\n\nCarries only the new display name, and not the new slug, for the same\nreason `SaveWorkflowRequest` does not: slugs are minted by the backend and\nfrozen (`workflow_store.create`). A client that named its own would be\nback to the collision ticket 20 removed, where a second workflow of the\nsame name silently overwrote the first.\n\nThe name is optional because the obvious default \u2014 \"<original> (copy)\" \u2014\ndepends on the original's name, which only the backend has to hand at that\nmoment.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "DuplicateWorkflowRequest",
+        "type": "object"
+      },
+      "DuplicateWorkflowResponse": {
+        "description": "The copy's minted slug and name, and the slug it came from.\n\nThe slug is the part the caller cannot predict and the part it needs next\n\u2014 to open the copy, or to put it in the address bar.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "source"
+        ],
+        "title": "DuplicateWorkflowResponse",
+        "type": "object"
+      },
       "FunctionCapabilityResponse": {
         "properties": {
           "docstring": {
@@ -2296,6 +2340,59 @@
         "summary": "Tools and functions this workflow may put on a canvas",
         "tags": [
           "Authoring"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/duplicate": {
+      "post": {
+        "description": "Copy the whole package \u2014 `tools/`, `tests/`, `knowledge/`, all of it.\n\n**On the backend because the client cannot do it.** A browser can only\nload the document and create a new workflow from it, which copies\n`workflow.json` and leaves the nodes bound to tools that do not exist\nin the copy \u2014 a failure that surfaces at run time, long after the copy\nlooked successful.\n\nThe copy is a **draft** whatever the original was, and gets a minted\nslug it did not choose; see `WorkflowStore.duplicate` for why each.",
+        "operationId": "duplicate_workflow_api_workflows__slug__duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy a workflow package to a new slug",
+        "tags": [
+          "Catalogue"
         ]
       }
     },

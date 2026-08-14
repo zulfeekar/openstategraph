@@ -346,6 +346,38 @@ class PublishWorkflowRequest(BaseModel):
     published: bool
 
 
+class DuplicateWorkflowRequest(BaseModel):
+    """POST /api/workflows/{slug}/duplicate — ticket 01.
+
+    Carries only the new display name, and not the new slug, for the same
+    reason `SaveWorkflowRequest` does not: slugs are minted by the backend and
+    frozen (`workflow_store.create`). A client that named its own would be
+    back to the collision ticket 20 removed, where a second workflow of the
+    same name silently overwrote the first.
+
+    The name is optional because the obvious default — "<original> (copy)" —
+    depends on the original's name, which only the backend has to hand at that
+    moment.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    name: str | None = Field(default=None, min_length=1)
+
+
+class DuplicateWorkflowResponse(BaseModel):
+    """The copy's minted slug and name, and the slug it came from.
+
+    The slug is the part the caller cannot predict and the part it needs next
+    — to open the copy, or to put it in the address bar.
+    """
+
+    slug: str
+    name: str
+    #: The package this was copied from, unchanged by the operation.
+    source: str
+
+
 class PublishWorkflowResponse(BaseModel):
     slug: str
     published: bool

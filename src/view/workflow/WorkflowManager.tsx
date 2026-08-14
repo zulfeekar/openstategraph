@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileJson, FolderOpen, Globe, GlobeLock, Plus, Save, Trash2, X } from 'lucide-react';
+import { Copy, FileJson, FolderOpen, Globe, GlobeLock, Plus, Save, Trash2, X } from 'lucide-react';
 import {
   Button,
   Field,
@@ -316,6 +316,30 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     [client, onNotify, refreshList],
   );
 
+  const handleDuplicate = useCallback(
+    async (slug: string) => {
+      setBusy(true);
+      // No name argument: the backend defaults to `<original> (copy)`, and it
+      // is the side that already knows the original's name.
+      const outcome = await client.duplicate(slug);
+      setBusy(false);
+      if (!outcome.ok) {
+        onNotify(`Could not duplicate: ${outcome.error}`);
+        return;
+      }
+      // The minted slug is said out loud for the same reason a create says
+      // it: it is the one thing the user could not have predicted, and two
+      // rows now share a very similar name.
+      onNotify(`Copied to: ${outcome.value.name} (${outcome.value.slug})`);
+      // **Deliberately does not open the copy.** Duplicate is most often the
+      // first half of "keep this one, try something on a copy", and swapping
+      // the canvas out from under someone who was mid-thought is the kind of
+      // help nobody asks for. The toast names it; Load opens it.
+      void refreshList();
+    },
+    [client, onNotify, refreshList],
+  );
+
   const handleDelete = useCallback(
     async (slug: string, name: string) => {
       if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
@@ -460,6 +484,16 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                       icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
                     >
                       {wf.published ? 'Unpublish' : 'Publish'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      title={`Copy "${wf.name}" and everything in its folder to a new workflow`}
+                      onClick={() => void handleDuplicate(wf.slug)}
+                      icon={<Icon glyph={Copy} size="xs" />}
+                    >
+                      Duplicate
                     </Button>
                     <Button
                       variant="danger"

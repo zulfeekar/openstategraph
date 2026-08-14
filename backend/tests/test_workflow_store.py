@@ -430,3 +430,123 @@ class TestDescribeIsExistenceNotVisibility:
         # two answers this method exists to keep apart.
         with pytest.raises(InvalidSlugError):
             store.describe("../etc")
+
+
+class TestDuplicate:
+    """A copy of a whole package, at a new slug (ticket 01).
+
+    The owner asked whether duplicate had been built or whether they had
+    misremembered ticketing it. It had not, and there was no ticket for it —
+    the only "Duplicate" in the product copies a *node* on the canvas.
+
+    The de-facto workaround was Load → rename → Save, which mints a fresh slug
+    and so *is* a duplicate. That is the argument for building it explicitly:
+    "I want a copy to diverge from" and "I want to rename this one" are
+    opposite intentions, and one gesture was serving both by accident.
+    """
+
+    def _package(self, store: WorkflowStore, name: str = "Source") -> str:
+        slug = store.create(
+            name=name,
+            document={"version": 1, "name": name, "nodes": [{"id": "n1"}], "edges": []},
+            saved_at="2026-01-01T00:00:00",
+        )
+        return slug
+
+    def test_the_copy_gets_its_own_slug_and_leaves_the_original_alone(
+        self, store: WorkflowStore
+    ) -> None:
+        source = self._package(store)
+
+        copy = store.duplicate(source, name="Source copy", saved_at="2026-02-02T00:00:00")
+
+        assert copy != source
+        # The point of the whole feature: the original is still there. The
+        # workaround it replaces (rename-then-save) reads to some users as a
+        # *move*, and being wrong about that costs them the original.
+        assert store.describe(source) is not None
+        assert store.load(copy) == store.load(source)
+
+    def test_the_copy_carries_the_whole_package_not_just_the_document(
+        self, store: WorkflowStore
+    ) -> None:
+        # Copying `workflow.json` alone produces a workflow whose nodes bind to
+        # capabilities that are not there — and it fails at *run* time, long
+        # after the copy looked like it worked.
+        source = self._package(store)
+        directory = store.directory_for(source)
+        (directory / "tools" / "chinook.py").write_text("def query(): ...\n")
+        # `knowledge/` is not one of the scaffolded directories — it appears
+        # later, when the knowledge feature writes to it. So this also pins
+        # that the copy takes whatever the package has grown, not a fixed list
+        # that would silently drop the next directory somebody adds.
+        (directory / "knowledge").mkdir()
+        (directory / "knowledge" / "album.md").write_text("# Album\n")
+        (directory / "tests" / "test_tools.py").write_text("def test_it(): ...\n")
+
+        copy = store.directory_for(
+            store.duplicate(source, name="Source copy", saved_at="2026-02-02T00:00:00")
+        )
+
+        assert (copy / "tools" / "chinook.py").read_text() == "def query(): ...\n"
+        assert (copy / "knowledge" / "album.md").read_text() == "# Album\n"
+        assert (copy / "tests" / "test_tools.py").read_text() == "def test_it(): ...\n"
+
+    def test_a_copy_of_a_published_workflow_is_a_draft(self, store: WorkflowStore) -> None:
+        # Publishing is a decision about a specific package. Inheriting it puts
+        # something on /chat that nobody chose to put there.
+        source = self._package(store)
+        store.set_published(source, True)
+
+        copy = store.duplicate(source, name="Source copy", saved_at="2026-02-02T00:00:00")
+
+        assert store.describe(copy) is not None
+        assert store.describe(copy).published is False
+        assert store.describe(source).published is True
+
+    def test_the_copy_is_named_what_the_caller_asked_for(self, store: WorkflowStore) -> None:
+        source = self._package(store, name="Chinook Assistant")
+
+        copy = store.duplicate(
+            source, name="Chinook Assistant (copy)", saved_at="2026-02-02T00:00:00"
+        )
+
+        assert store.describe(copy).name == "Chinook Assistant (copy)"
+        assert store.describe(source).name == "Chinook Assistant"
+
+    def test_the_copys_agents_md_names_the_copy(self, store: WorkflowStore) -> None:
+        # Carried over verbatim it would tell a coding agent to open the
+        # *original* slug — a document that describes a different directory.
+        source = self._package(store, name="Chinook Assistant")
+
+        slug = store.duplicate(source, name="Chinook Copy", saved_at="2026-02-02T00:00:00")
+
+        agents = (store.directory_for(slug) / "AGENTS.md").read_text()
+        assert slug in agents
+        assert source not in agents
+
+    def test_python_caches_are_not_copied(self, store: WorkflowStore) -> None:
+        # Bytecode compiled against the original's path. Harmless but noise in
+        # a brand-new package, and it is not source.
+        source = self._package(store)
+        cache = store.directory_for(source) / "__pycache__"
+        cache.mkdir(exist_ok=True)
+        (cache / "tools.cpython-313.pyc").write_bytes(b"\x00")
+
+        copy = store.directory_for(
+            store.duplicate(source, name="Source copy", saved_at="2026-02-02T00:00:00")
+        )
+
+        assert not (copy / "__pycache__").exists()
+
+    def test_duplicating_something_that_does_not_exist_is_an_error(
+        self, store: WorkflowStore
+    ) -> None:
+        with pytest.raises(WorkflowNotFoundError):
+            store.duplicate("no-such-flow", name="Copy", saved_at="2026-02-02T00:00:00")
+
+    def test_a_malformed_source_slug_is_rejected_not_treated_as_missing(
+        self, store: WorkflowStore
+    ) -> None:
+        with pytest.raises(InvalidSlugError):
+            store.duplicate("../etc", name="Copy", saved_at="2026-02-02T00:00:00")

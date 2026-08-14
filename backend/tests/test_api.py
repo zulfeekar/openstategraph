@@ -950,3 +950,91 @@ class TestHealthReportsRealReadiness:
         monkeypatch.setattr(socket.socket, "connect", refuse)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
         assert self._model_configured() is True
+
+
+class TestDuplicateWorkflow:
+    """`POST /api/workflows/{slug}/duplicate` — ticket 01.
+
+    The owner asked whether duplicate had been built. It had not, and the
+    workaround people reached for — Load, rename, Save — mints a fresh slug and
+    so silently *is* a duplicate. Some users expect it to be a **move** and are
+    surprised the original is still there; that ambiguity, not the keystrokes,
+    is why this endpoint exists.
+    """
+
+    @staticmethod
+    def _client(tmp_path: Path) -> TestClient:
+        return TestClient(create_app(workflows_root=tmp_path))
+
+    @staticmethod
+    def _create(client: TestClient, name: str) -> str:
+        created = client.post(
+            "/api/workflows",
+            json={"name": name, "document": {"version": 1, "nodes": [], "edges": []}},
+        )
+        assert created.status_code == 201, created.text
+        return created.json()["slug"]
+
+    def test_it_answers_with_a_new_slug_and_leaves_the_original(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        source = self._create(client, "Chinook Assistant")
+
+        response = client.post(f"/api/workflows/{source}/duplicate", json={})
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["source"] == source
+        assert body["slug"] != source
+        slugs = {row["slug"] for row in client.get("/api/workflows").json()}
+        assert {source, body["slug"]} <= slugs
+
+    def test_the_default_name_says_it_is_a_copy(self, tmp_path: Path) -> None:
+        # Defaulted on the backend because the obvious default depends on the
+        # original's name, which the client would have to fetch to compute.
+        client = self._client(tmp_path)
+        source = self._create(client, "Chinook Assistant")
+
+        body = client.post(f"/api/workflows/{source}/duplicate", json={}).json()
+
+        assert body["name"] == "Chinook Assistant (copy)"
+
+    def test_a_caller_may_name_the_copy(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        source = self._create(client, "Chinook Assistant")
+
+        body = client.post(
+            f"/api/workflows/{source}/duplicate", json={"name": "Chinook Experiment"}
+        ).json()
+
+        assert body["name"] == "Chinook Experiment"
+        assert body["slug"].startswith("chinook-experiment")
+
+    def test_the_copy_of_a_published_workflow_is_a_draft(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        source = self._create(client, "Live")
+        client.post(f"/api/workflows/{source}/publish", json={"published": True})
+
+        copy = client.post(f"/api/workflows/{source}/duplicate", json={}).json()["slug"]
+
+        rows = {row["slug"]: row for row in client.get("/api/workflows").json()}
+        assert rows[copy]["published"] is False
+        assert rows[source]["published"] is True
+
+    def test_the_copy_carries_the_package(self, tmp_path: Path) -> None:
+        client = self._client(tmp_path)
+        source = self._create(client, "With Tools")
+        (tmp_path / source / "tools" / "chinook.py").write_text("def query(): ...\n")
+
+        copy = client.post(f"/api/workflows/{source}/duplicate", json={}).json()["slug"]
+
+        assert (tmp_path / copy / "tools" / "chinook.py").is_file()
+
+    def test_duplicating_a_missing_workflow_is_404(self, tmp_path: Path) -> None:
+        response = self._client(tmp_path).post("/api/workflows/nope/duplicate", json={})
+        assert response.status_code == 404
+
+    def test_a_slug_that_cannot_name_a_directory_is_422(self, tmp_path: Path) -> None:
+        # Kept apart from 404 deliberately: "you asked a malformed question"
+        # and "the package is gone" are different answers.
+        response = self._client(tmp_path).post("/api/workflows/..%2Fetc/duplicate", json={})
+        assert response.status_code in (404, 422)

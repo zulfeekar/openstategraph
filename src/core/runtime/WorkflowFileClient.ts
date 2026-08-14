@@ -1,9 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
-import {
-  formatMountAddress,
-  isInstance,
-  type MountAddress,
-} from '@core/model/MountAddress';
+import { formatMountAddress, isInstance, type MountAddress } from '@core/model/MountAddress';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
@@ -176,6 +172,21 @@ export interface LoadedMount {
   readonly warnings: readonly string[];
 }
 
+/**
+ * What `POST /api/workflows/{slug}/duplicate` answers with (ticket 01).
+ *
+ * The slug is the part a caller cannot predict and the part it needs next, to
+ * open the copy or put it in the address bar. The name comes back too because
+ * the backend defaults it — the obvious "<original> (copy)" depends on the
+ * original's name, which a client would have to fetch to compute.
+ */
+export interface DuplicatedWorkflow {
+  readonly slug: string;
+  readonly name: string;
+  /** The package this was copied from, unchanged by the operation. */
+  readonly source: string;
+}
+
 export interface IWorkflowFileClient {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
@@ -191,6 +202,8 @@ export interface IWorkflowFileClient {
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
   setPublished(slug: string, published: boolean): Promise<Result<void, string>>;
+  /** Copy a whole package to a new slug — see `DuplicatedWorkflow`. */
+  duplicate(slug: string, name?: string): Promise<Result<DuplicatedWorkflow, string>>;
   capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
   compiledGraph(slug: string): Promise<Result<string, string>>;
 }
@@ -539,6 +552,50 @@ export class WorkflowFileClient
    * never rebuilds concierge routing knowledge as a side effect; the backend
    * response carries a note saying it can be rebuilt.
    */
+  /**
+   * Copy a whole package — `tools/`, `tests/`, `knowledge/`, everything.
+   *
+   * The backend does the copying because a browser cannot: a client-side
+   * "load the document, create a new workflow" copies `workflow.json` alone
+   * and leaves the copy's nodes bound to tools that are not in it, which
+   * fails at run time rather than at copy time.
+   *
+   * `name` is optional on purpose — omitted, the backend names it
+   * `<original> (copy)`, which it can do without the client fetching the
+   * original first.
+   */
+  async duplicate(slug: string, name?: string): Promise<Result<DuplicatedWorkflow, string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/duplicate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(name === undefined ? {} : { name }),
+        },
+      );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as Partial<DuplicatedWorkflow>;
+      // The slug is the whole point of the call: without it the copy exists on
+      // disk and the caller cannot name it, which is worse than a clean error.
+      return typeof payload.slug === 'string' && payload.slug !== ''
+        ? Ok({
+            slug: payload.slug,
+            name: typeof payload.name === 'string' ? payload.name : payload.slug,
+            source: typeof payload.source === 'string' ? payload.source : slug,
+          })
+        : Err('The runtime copied the workflow but did not say under which slug.');
+    } catch {
+      return Err('The runtime copied the workflow but its answer could not be read.');
+    }
+  }
+
   async setPublished(slug: string, published: boolean): Promise<Result<void, string>> {
     let response: Response;
     try {

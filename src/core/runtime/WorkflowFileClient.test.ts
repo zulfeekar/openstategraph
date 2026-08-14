@@ -188,6 +188,64 @@ describe('WorkflowFileClient.setPublished', () => {
   });
 });
 
+describe('WorkflowFileClient.duplicate', () => {
+  it('POSTs an empty body so the backend names the copy', async () => {
+    // The default name is `<original> (copy)`, which depends on the original's
+    // name — the backend has it, and a client would have to fetch it first to
+    // say the same thing.
+    const stub = stubFetch(
+      jsonResponse({ slug: 'my-flow-k7m3qp', name: 'My Flow (copy)', source: 'my-flow' }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.duplicate('my-flow');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        slug: 'my-flow-k7m3qp',
+        name: 'My Flow (copy)',
+        source: 'my-flow',
+      });
+    }
+    expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/my-flow/duplicate');
+    expect(stub.calls[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(stub.calls[0]!.init?.body as string)).toEqual({});
+  });
+
+  it('sends a name when the caller supplies one', async () => {
+    const stub = stubFetch(
+      jsonResponse({ slug: 'experiment', name: 'Experiment', source: 'my-flow' }),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    await client.duplicate('my-flow', 'Experiment');
+
+    expect(JSON.parse(stub.calls[0]!.init?.body as string)).toEqual({ name: 'Experiment' });
+  });
+
+  it('fails loudly when the answer carries no slug', async () => {
+    // The copy exists on disk at this point and the caller cannot name it.
+    // Reporting that is better than returning a plausible-looking blank.
+    const stub = stubFetch(jsonResponse({ name: 'My Flow (copy)' }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.duplicate('my-flow');
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports a 404 plainly', async () => {
+    const stub = stubFetch(jsonResponse({ detail: "No workflow named 'x'" }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.duplicate('x');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("No workflow named 'x'");
+  });
+});
+
 describe('WorkflowFileClient.save', () => {
   it('PUTs to the slug-specific path with name and document', async () => {
     const stub = stubFetch(jsonResponse({ slug: 'my-flow', document: {} }));

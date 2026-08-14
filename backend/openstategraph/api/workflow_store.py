@@ -440,6 +440,65 @@ class WorkflowStore:
             # (ticket 15), not something a save silently produces.
             (directory / "AGENTS.md").write_text(_agents_md(name, slug))
 
+    def duplicate(self, slug: str, *, name: str, saved_at: str) -> str:
+        """Copy the whole package at `slug` to a freshly minted slug (ticket 01).
+
+        **A backend operation, because only this side can copy the package.**
+        The client-side alternative — load the document, create a new workflow
+        from it — copies `workflow.json` and nothing else, producing a
+        workflow whose nodes bind to tools that are not there. That fails at
+        *run* time, long after the copy appeared to succeed.
+
+        Three things the copy deliberately does not inherit:
+
+        - **The slug**, which is frozen at creation and is the package's
+          identity. A duplicate is a new package, never a second name for one
+          directory.
+        - **`published`**, because publishing is a decision about a specific
+          package and inheriting it silently puts something on `/chat` that
+          nobody chose to put there. `_write(is_new=True)` marks it a draft.
+        - **`AGENTS.md`**, which names its own slug and would otherwise tell a
+          coding agent to open the original. It is rewritten, not copied.
+
+        Mounts inside the copied document are left exactly as they are: they
+        reference *other* packages by slug, and the copy legitimately shares
+        them.
+
+        The claim on the new directory is `create`'s — `mkdir(exist_ok=False)`
+        walking `_candidate_slugs` — so two duplicates racing for one name
+        cannot land on the same directory. Everything is copied **into** that
+        claimed directory rather than the tree being copied wholesale, because
+        the claim has to come first to be worth anything.
+        """
+        source = self.directory_for(slug)
+        if not (source / "workflow.json").is_file():
+            raise WorkflowNotFoundError(slug)
+        document = self.load(slug)
+
+        for candidate in _candidate_slugs(name):
+            directory = self.directory_for(candidate)
+            try:
+                directory.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                continue
+            shutil.copytree(
+                source,
+                directory,
+                dirs_exist_ok=True,
+                # Bytecode compiled against the original's path: not source,
+                # and noise in a package that is one second old.
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+            # Last, and over whatever was copied: this is what makes the copy a
+            # draft under its own name, and rewrites `AGENTS.md` for the new
+            # slug.
+            self._write(directory, name=name, document=document, saved_at=saved_at, is_new=True)
+            return candidate
+        raise SlugMintingError(
+            f"could not find a free directory for {slugify(name)!r} "
+            f"after {_MINT_ATTEMPTS + 1} attempts"
+        )
+
     def set_published(self, slug: str, published: bool) -> None:
         """Flip the draft→publish flag in place, touching nothing else.
 

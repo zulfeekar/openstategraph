@@ -149,6 +149,8 @@ from openstategraph.api.schemas import (  # noqa: E402
     PluginExportResponse,
     ProviderStatusResponse,
     ProviderVerifyResponse,
+    DuplicateWorkflowRequest,
+    DuplicateWorkflowResponse,
     PublishWorkflowRequest,
     PublishWorkflowResponse,
     ResumeRequest,
@@ -655,6 +657,57 @@ def create_app(
         if summary is None:
             raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}")
         return _summary_response(summary)
+
+    @app.post(
+        "/api/workflows/{slug}/duplicate",
+        response_model=DuplicateWorkflowResponse,
+        summary="Copy a workflow package to a new slug",
+        tags=["Catalogue"],
+    )
+    def duplicate_workflow(slug: str, request: DuplicateWorkflowRequest) -> DuplicateWorkflowResponse:
+        """Copy the whole package — `tools/`, `tests/`, `knowledge/`, all of it.
+
+        **On the backend because the client cannot do it.** A browser can only
+        load the document and create a new workflow from it, which copies
+        `workflow.json` and leaves the nodes bound to tools that do not exist
+        in the copy — a failure that surfaces at run time, long after the copy
+        looked successful.
+
+        The copy is a **draft** whatever the original was, and gets a minted
+        slug it did not choose; see `WorkflowStore.duplicate` for why each.
+        """
+        from datetime import datetime, timezone
+
+        from openstategraph.api.workflow_store import (
+            InvalidSlugError,
+            SlugMintingError,
+            WorkflowNotFoundError,
+        )
+
+        try:
+            existing = workflow_store.describe(slug)
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}")
+
+        # Defaulted here rather than in the client: the obvious name depends on
+        # the original's, and a browser would have to fetch it first to say the
+        # same thing.
+        name = request.name or f"{existing.name} (copy)"
+        try:
+            created = workflow_store.duplicate(slug, name=name, saved_at=datetime.now(timezone.utc).isoformat())
+        except WorkflowNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
+        except InvalidSlugError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except SlugMintingError as exc:
+            raise HTTPException(status_code=507, detail=str(exc)) from exc
+
+        # A new package exists, so the catalogue moved — same reason a create
+        # announces. Announced for the *copy*: the original did not change.
+        announce("saved", created)
+        return DuplicateWorkflowResponse(slug=created, name=name, source=slug)
 
     @app.post(
         "/api/workflows/{slug}/publish",

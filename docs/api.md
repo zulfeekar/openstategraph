@@ -621,6 +621,46 @@ The slug is **frozen at creation**. Renaming a workflow changes the display
 name inside `workflow.json` and never the directory, so every link, mount and
 line of git history keeps resolving.
 
+### Copying — `POST /api/workflows/{slug}/duplicate`
+
+```
+POST /api/workflows/chinook-assistant/duplicate   {}
+  → 200 {"slug": "chinook-assistant-copy-k7m3qp",
+         "name": "Chinook Assistant (copy)",
+         "source": "chinook-assistant"}
+
+POST /api/workflows/chinook-assistant/duplicate   {"name": "Chinook Experiment"}
+  → 200 {"slug": "chinook-experiment", ...}
+```
+
+**Copies the whole package** — `workflow.json` plus `tools/`, `functions/`,
+`skills/`, `tests/`, `data/`, `knowledge/`, whatever else the directory has
+grown. That is why this is a server call and not something a client assembles
+from `GET` + `POST`: the client-side version copies the document alone, and the
+copy's nodes then bind to tools that are not there — a failure that surfaces
+when somebody runs it, not when they copy it.
+
+Three things the copy does not inherit, each deliberate:
+
+- **The slug.** Minted the same way `POST /api/workflows` mints one, and
+  returned for the same reason: it is the part you cannot predict.
+- **`published`.** A copy is always a draft. Publishing is a decision about a
+  specific package, and inheriting it puts something on `/chat` nobody chose to
+  put there.
+- **`AGENTS.md`**, which names its own slug and is rewritten for the copy
+  rather than carried over pointing at the original.
+
+Mounts inside the copied document are left alone: they reference *other*
+packages by slug, and the copy legitimately shares them.
+
+`name` is optional. Omitted, the copy is `<original> (copy)` — defaulted here
+because the default depends on the original's name, which the server already
+has and a client would have to fetch first.
+
+404 if the source does not exist, 422 if the slug cannot name a directory.
+Announces `saved` for the **copy** on `GET /api/events`; the original did not
+change.
+
 ### Checking before writing — `POST /api/workflows/validate`
 
 ```
