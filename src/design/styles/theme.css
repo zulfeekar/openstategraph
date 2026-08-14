@@ -27,9 +27,20 @@
   /* ---------- Text ---------- */
   --color-text-primary: #14171d;
   --color-text-secondary: var(--neutral-600);
-  --color-text-tertiary: var(--neutral-500);
-  --color-text-quaternary: var(--neutral-400);
-  --color-text-placeholder: var(--neutral-400);
+  /* Each one step down the ramp from where it was, and the reason is the
+     same for all three: they were chosen as *shades of quiet* and never
+     measured. On white they were 4.09 and 2.60; on `--color-bg-subtle`,
+     which is where much of this text actually sits, 3.75 and 2.38. WCAG AA
+     asks 4.5 (reviews-2026-08-14 ticket 11).
+
+     Four tiers of grey is one more than a light surface can carry legibly,
+     so quaternary and placeholder now share `--neutral-550` — the lightest
+     step that clears the bar. The hierarchy is still there, it is just
+     narrower than it was, which is the honest trade: a tier nobody can read
+     is not a tier. */
+  --color-text-tertiary: var(--neutral-600);
+  --color-text-quaternary: var(--neutral-550);
+  --color-text-placeholder: var(--neutral-550);
   --color-text-inverse: var(--neutral-0);
   --color-text-link: var(--blue-600);
 
@@ -131,9 +142,13 @@
 
   --color-text-primary: #e8eaee;
   --color-text-secondary: #9aa2b1;
-  --color-text-tertiary: #7d8695;
-  --color-text-quaternary: #626b79;
-  --color-text-placeholder: #5d6673;
+  /* Dark failed harder than light — 3.21 and 2.97 — because a dim grey on a
+     dim ground has nowhere to go. Measured against `--color-bg-subtle`
+     (#1f242d), the *lightest* dark background and therefore the worst case
+     for pale text: 5.35, 4.66, 4.66. */
+  --color-text-tertiary: #8f98a7;
+  --color-text-quaternary: #868f9e;
+  --color-text-placeholder: #868f9e;
   --color-text-inverse: var(--neutral-950);
   --color-text-link: #7aa7f5;
 
@@ -252,9 +267,9 @@
 }
 [data-accent='red'] {
   --accent-solid: var(--red-500);
-  --accent-strong: var(--red-600);
+  --accent-strong: var(--red-700);
   --accent-tint: var(--red-50);
-  --accent-on-tint: var(--red-600);
+  --accent-on-tint: var(--red-700);
 }
 [data-accent='violet'] {
   --accent-solid: var(--violet-500);

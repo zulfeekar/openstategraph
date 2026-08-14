@@ -116,6 +116,11 @@
   --neutral-300: #c7ccd6;
   --neutral-400: #9aa1ae;
   --neutral-500: #767e8c;
+  /* Between 500 and 600, and it exists for a threshold rather than a taste:
+     it is the lightest step that still clears 4.5:1 against `--neutral-75`,
+     the darkest light background text sits on. `--neutral-500` was the
+     quiet-text colour and missed at 3.75:1. */
+  --neutral-550: #68707e;
   --neutral-600: #5a6270;
   --neutral-700: #414855;
   --neutral-800: #2b313c;
@@ -163,6 +168,9 @@
   --red-100: #fee4e2;
   --red-500: #ef4444;
   --red-600: #dc2626;
+  /* `--red-600` as *text* on `--red-50` is 4.44:1 — under the line by a
+     hair, which is the most annoying way to fail. This clears it at 5.28. */
+  --red-700: #c81e1e;
 
   --violet-50: #f5f3ff;
   --violet-100: #ede9fe;

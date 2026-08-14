@@ -51,6 +51,45 @@ function blocks(): { light: string; dark: string } {
   return { light: THEME.slice(0, darkAt), dark: THEME.slice(darkAt) };
 }
 
+describe.each(['light', 'dark'] as const)('quiet text in %s', (scheme) => {
+  const block = () => blocks()[scheme];
+
+  /**
+   * The greys that were never measured.
+   *
+   * `--color-text-tertiary`, `--color-text-quaternary` and
+   * `--color-text-placeholder` were picked as *shades of quiet* — 4.09:1 and
+   * 2.60:1 on white, 3.75:1 and 2.38:1 on the subtle background where much of
+   * this text actually sits (reviews-2026-08-14 ticket 11).
+   *
+   * Checked against the **worst** background each theme offers, not the best:
+   * for light that is the darkest surface, for dark the lightest. Measuring
+   * against white in a light theme is how these passed a check for years
+   * without being legible.
+   */
+  const worstBackground = scheme === 'light' ? '#f4f5f8' : '#1f242d';
+
+  it.each(['--color-text-tertiary', '--color-text-quaternary', '--color-text-placeholder'])(
+    '%s is readable on the least helpful background',
+    (token) => {
+      const colour = tokenIn(block(), token);
+      const ratio = contrastRatio(colour, worstBackground);
+
+      expect(ratio, `${token} = ${colour} on ${worstBackground}`).not.toBeNull();
+      expect(ratio ?? 0, `${token} = ${colour}`).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it('keeps quiet text quieter than body text', () => {
+    // Contrast must not be won by turning every grey into the body colour —
+    // that passes and destroys the hierarchy the greys exist for.
+    const body = contrastRatio(tokenIn(block(), '--color-text-primary'), worstBackground) ?? 0;
+    const quiet = contrastRatio(tokenIn(block(), '--color-text-tertiary'), worstBackground) ?? 0;
+
+    expect(quiet).toBeLessThan(body);
+  });
+});
+
 describe.each(['light', 'dark'] as const)('the primary button in %s', (scheme) => {
   const block = () => blocks()[scheme];
 
