@@ -4,7 +4,7 @@ import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import type { ProviderRegistry } from '@core/providers/ProviderRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
 
-import { CATEGORIES, PORT_TYPES } from './vocabulary';
+import { CATEGORIES, CENSUS_TERMS, PORT_TYPES } from './vocabulary';
 import { withReasoningEffort } from './effortField';
 import { textInputExecutor, textInputNode } from './inputs/TextInputNode';
 import { markdownFileExecutor, markdownFileNode } from './inputs/MarkdownFileNode';
@@ -50,6 +50,7 @@ export function registerNodeCatalogue(
 ): void {
   registry.categories.registerAll(CATEGORIES);
   registry.portTypes.registerAll(PORT_TYPES);
+  registry.censusTerms.registerAll(CENSUS_TERMS);
 
   // Every node family that drives a model is built with the provider
   // registry, because every one of them now offers the shared model

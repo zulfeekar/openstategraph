@@ -1,45 +1,50 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { ICompositionTerm } from './compositionVocabulary';
 import { compositionPurpose, formatComposition, summarizeComposition } from './compositionSummary';
 
-/** A real saved package, read from disk — a hand-written fixture would drift
- * from the document the card actually receives. `chinook-assistant` is the one
- * visible example: a router in front of three agents, the SQL tools and web
- * tools they hold between them, and the grader that closes the analyst's retry
- * loop. It is what the gateway mounts, so it is exactly the document a mount
- * card is handed. (It used to be the smaller `chinook-nl-to-sql`; ticket 10
- * collapsed the two, which is why the counted figures below changed.) */
-const readWorkflow = (slug: string): unknown =>
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(new URL(`../../../workflows/${slug}/workflow.json`, import.meta.url)),
-      'utf8',
-    ),
-  );
+/**
+ * A vocabulary local to this file, because `core/` must not know the
+ * catalogue's words (reviews-2026-08-14 ticket 13).
+ *
+ * The assertions that read a real `workflows/<slug>/workflow.json` and expect
+ * "3 agents · 1 router · 1 grader · 5 tools" moved with the words themselves,
+ * to `src/nodes/censusTerms.test.ts`. They were always testing the vocabulary
+ * rather than the census, and having them here is what made the table look
+ * like it belonged in `core/`.
+ */
+const VOCABULARY: readonly ICompositionTerm[] = [
+  { id: 'agent.', group: 'actor', one: 'agent', many: 'agents' },
+  { id: 'route.grader', group: 'control', one: 'grader', many: 'graders', revisePort: 'revise' },
+  { id: 'workflow.subgraph', group: 'held', one: 'workflow', many: 'workflows' },
+  { id: 'input.', group: 'boundary', one: 'input', many: 'inputs' },
+  { id: 'output.', group: 'boundary', one: 'output', many: 'outputs' },
+  { id: 'annotate.', group: 'ignored', one: 'annotation', many: 'annotations' },
+];
+
+/** Every call in this file counts in the same words. */
+const census = (document: unknown, claimsOutcome?: boolean) =>
+  summarizeComposition(document, {
+    vocabulary: VOCABULARY,
+    ...(claimsOutcome ? { claimsOutcome } : {}),
+  });
 
 describe('summarizeComposition', () => {
-  it('counts the real mounted example into the atomic vocabulary', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
-    expect(summary).not.toBeNull();
-    expect(formatComposition(summary!)).toBe(
-      '3 agents · 1 router · 1 grader · 5 tools — loops until its grader passes',
-    );
-  });
-
   it('accepts a bare document as well as a saved envelope', () => {
-    const envelope = readWorkflow('chinook-assistant') as { document: unknown };
-    expect(summarizeComposition(envelope.document)).toEqual(summarizeComposition(envelope));
+    const document = { nodes: [{ id: 'a', type: 'agent.llm' }] };
+
+    expect(census({ version: 3, name: 'x', document })).toEqual(census(document));
   });
 
-  it('reports the loop it finds, whoever is mounting', () => {
-    // This asserted the opposite: that a `subgraph`-kind mount never claims a
-    // loop even when its child plainly has one, because only a Team was
-    // allowed to say so. Since schema v3 there is one mount type (ticket 16),
-    // and the claim is earned from the *document* rather than granted by the
-    // card — so withholding it here would be hiding a true and useful fact.
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
-    expect(summary?.note).toBe('loops until its grader passes');
+  it('counts a loop where the child earns one', () => {
+    const document = {
+      nodes: [
+        { id: 'a', type: 'agent.llm' },
+        { id: 'g', type: 'route.grader' },
+      ],
+      edges: [{ source: { nodeId: 'g', portId: 'revise' }, target: { nodeId: 'a', portId: 'f' } }],
+    };
+
+    expect(census(document)?.note).toBe('loops until its grader passes');
   });
 
   it('claims no loop when the grader has no revise edge, and says why', () => {
@@ -54,7 +59,7 @@ describe('summarizeComposition', () => {
       ],
       edges: [{ source: { nodeId: 'g', portId: 'pass' }, target: { nodeId: 'o', portId: 'x' } }],
     };
-    expect(summarizeComposition(document, { claimsOutcome: true })).toEqual({
+    expect(census(document, true)).toEqual({
       parts: [
         { label: 'agent', count: 1 },
         { label: 'grader', count: 1 },
@@ -71,7 +76,7 @@ describe('summarizeComposition', () => {
         { id: 'a', type: 'agent.llm' },
       ],
     };
-    expect(formatComposition(summarizeComposition(document)!)).toBe('1 agent');
+    expect(formatComposition(census(document)!)).toBe('1 agent');
   });
 
   it('counts nested mounts as content', () => {
@@ -85,14 +90,14 @@ describe('summarizeComposition', () => {
     // Was `1 team · 2 workflows`. `team.workflow` left the vocabulary with the
     // node type; a child document still carrying the old id has been migrated
     // by `normalize_document` before any card sees it.
-    expect(formatComposition(summarizeComposition(document)!)).toBe('3 workflows');
+    expect(formatComposition(census(document)!)).toBe('3 workflows');
   });
 
   it('returns null for anything without countable content', () => {
-    expect(summarizeComposition(null)).toBeNull();
-    expect(summarizeComposition({ nodes: [] })).toBeNull();
-    expect(summarizeComposition({ nodes: [{ id: 'n', type: 'annotate.note' }] })).toBeNull();
-    expect(summarizeComposition('not a document')).toBeNull();
+    expect(census(null)).toBeNull();
+    expect(census({ nodes: [] })).toBeNull();
+    expect(census({ nodes: [{ id: 'n', type: 'annotate.note' }] })).toBeNull();
+    expect(census('not a document')).toBeNull();
   });
 });
 
@@ -169,7 +174,7 @@ describe('a mount whose child cannot enforce its outcome says so', () => {
   };
 
   it('states the gap rather than omitting the loop note', () => {
-    const summary = summarizeComposition(graderless, { claimsOutcome: true });
+    const summary = census(graderless, true);
     expect(summary?.note).toBeDefined();
     expect(formatComposition(summary!)).toMatch(/no grader|nothing checks/i);
   });
@@ -177,7 +182,7 @@ describe('a mount whose child cannot enforce its outcome says so', () => {
   it('counts a grader that never revises as not closing the loop', () => {
     // The grader is present, so "no grader" would be wrong; what is missing is
     // the `revise` edge that makes it a loop.
-    const summary = summarizeComposition(openLoop, { claimsOutcome: true });
+    const summary = census(openLoop, true);
     expect(summary?.note).toBeDefined();
     expect(formatComposition(summary!)).not.toContain('loops until');
   });
@@ -185,11 +190,6 @@ describe('a mount whose child cannot enforce its outcome says so', () => {
   it('still says nothing of the sort for a plain subgraph mount', () => {
     // Only a Team promises an outcome, so only a Team can fail to keep one.
     // A `workflow.subgraph` mount never claimed a loop in the first place.
-    expect(summarizeComposition(graderless)?.note).toBeUndefined();
-  });
-
-  it('leaves a real looping team exactly as it was', () => {
-    const summary = summarizeComposition(readWorkflow('chinook-assistant'));
-    expect(formatComposition(summary!)).toContain('loops until its grader passes');
+    expect(census(graderless)?.note).toBeUndefined();
   });
 });

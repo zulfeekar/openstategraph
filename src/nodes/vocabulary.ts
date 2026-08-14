@@ -1,5 +1,6 @@
 import type { INodeCategory } from '@core/model/contracts/node';
 import type { IPortTypeDefinition } from '@core/model/contracts/ports';
+import type { ICompositionTerm } from '@core/runtime/compositionVocabulary';
 
 /**
  * The catalogue's shared vocabulary: palette sections and the data types
@@ -150,4 +151,58 @@ export const PORT_TYPES: readonly IPortTypeDefinition[] = [
     accepts: [PORT.result, PORT.text],
     accent: 'green',
   },
+];
+
+/**
+ * The words a mount card counts its child's nodes in.
+ *
+ * These lived in `src/core/runtime/compositionSummary.ts` as a hardcoded
+ * table of node-type ids, so a new node family was invisible in every mount
+ * card until somebody edited `core/` — the one counter-example to open/closed
+ * the system design review found (reviews-2026-08-14 ticket 13). They belong
+ * here for the reason the sections and port types above do: they are the
+ * catalogue's vocabulary, and a plugin adding a family should be able to add
+ * its word with it.
+ *
+ * **The order of this list is not the order on the card.** Each term names a
+ * `group`, and `CENSUS_GROUPS` in `core/` owns the reading order — actors
+ * first, then what closes the loop, then what they hold. Order here decides
+ * only between terms *within* one group, which is why the two agents-and-
+ * orchestrators entries sit together and the tools after them.
+ *
+ * A family is written with its trailing dot (`agent.`) and covers every type
+ * under it; an exact type always wins over its family, whichever appears
+ * first.
+ */
+export const CENSUS_TERMS: readonly ICompositionTerm[] = [
+  // The actors — who does the work.
+  { id: 'orchestrate.supervisor', group: 'actor', one: 'supervisor', many: 'supervisors' },
+  { id: 'orchestrate.worker', group: 'actor', one: 'worker', many: 'workers' },
+  { id: 'agent.', group: 'actor', one: 'agent', many: 'agents' },
+  // What closes the loop.
+  { id: 'route.classifier', group: 'control', one: 'router', many: 'routers' },
+  // `revisePort` is what earns a mount card its "loops until its grader
+  // passes" line. It used to be `type === 'route.grader'` and a literal
+  // `'revise'` inside `core/`, so no other node family could ever close a
+  // loop the card would notice.
+  {
+    id: 'route.grader',
+    group: 'control',
+    one: 'grader',
+    many: 'graders',
+    revisePort: 'revise',
+  },
+  { id: 'human.approval', group: 'control', one: 'approval', many: 'approvals' },
+  // What they hold.
+  { id: 'function.', group: 'held', one: 'function', many: 'functions' },
+  { id: 'tool.', group: 'held', one: 'tool', many: 'tools' },
+  { id: 'workflow.subgraph', group: 'held', one: 'workflow', many: 'workflows' },
+  // The mount's own ports, drawn on the parent canvas — counting them inside
+  // the box would describe the same wire twice.
+  { id: 'input.', group: 'boundary', one: 'input', many: 'inputs' },
+  { id: 'output.', group: 'boundary', one: 'output', many: 'outputs' },
+  // Not machinery at all. Declared rather than omitted: an unregistered type
+  // is *counted* under its family name, so silence would make a note-only
+  // child read as "1 annotate".
+  { id: 'annotate.', group: 'ignored', one: 'annotation', many: 'annotations' },
 ];

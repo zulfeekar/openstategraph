@@ -64,6 +64,7 @@ function overriddenCount(node: NodeBodyProps['node']): number {
 }
 
 function CompositionAnnotation({ node }: NodeBodyProps) {
+  const workbench = useWorkbench();
   const slug = (node.getField<string>('workflow') ?? '').trim();
   const [state, setState] = useState<SlugState>(
     () => CACHE.get(slug)?.settled ?? { status: 'loading' },
@@ -95,7 +96,14 @@ function CompositionAnnotation({ node }: NodeBodyProps) {
   // is worth mentioning — see `CompositionContext`. Read from the node rather
   // than from its type, because since v3 the type no longer distinguishes.
   const claimsOutcome = Boolean((node.getField<string>('outcome') ?? '').trim());
-  const summary = summarizeComposition(state.document, { claimsOutcome });
+  // The words come from the registry, not from `core/` — see
+  // `ModelRegistry.censusTerms` (reviews-2026-08-14 ticket 13). An empty
+  // registry is not a broken card: every type falls back to its family, so
+  // the census reads "1 agent · 3 tool" rather than coming back empty.
+  const summary = summarizeComposition(state.document, {
+    claimsOutcome,
+    vocabulary: workbench.registry.censusTerms.list(),
+  });
   if (!summary) return null;
 
   // What the box achieves, above what is in it. The census is machinery; a

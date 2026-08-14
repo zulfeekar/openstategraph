@@ -19,6 +19,13 @@
  * one-directional compile seam.
  */
 
+import {
+  CENSUS_GROUPS,
+  type ICompositionTerm,
+  countsAsContent,
+  termFor,
+} from './compositionVocabulary';
+
 /** One counted line of the census, already pluralised. */
 export interface CompositionPart {
   readonly label: string;
@@ -46,39 +53,19 @@ export interface CompositionSummary {
 export interface CompositionContext {
   /** True when this mount carries authored `outcome` prose. */
   readonly claimsOutcome?: boolean;
+  /**
+   * The words to count in — see `compositionVocabulary`.
+   *
+   * Passed in rather than imported, because the words belong to the node
+   * families and this module belongs to `core/`
+   * (reviews-2026-08-14 ticket 13). Optional, and an omitted vocabulary is
+   * not a broken one: every type falls back to its family segment, so a
+   * census still reads "1 agent · 1 route · 3 tool" rather than coming back
+   * empty. That is what makes this safe to call from a test that has no app
+   * running, which is most of them.
+   */
+  readonly vocabulary?: readonly ICompositionTerm[];
 }
-
-/**
- * Node type → the word a reader uses for it, singular and plural.
- *
- * Order here *is* the order on the card: the actors first (who does the
- * work), then what closes the loop, then what they hold. Alphabetical or
- * document order would both scramble that reading.
- */
-const VOCABULARY: readonly (readonly [
-  match: (type: string) => boolean,
-  one: string,
-  many: string,
-])[] = [
-  [(t) => t === 'orchestrate.supervisor', 'supervisor', 'supervisors'],
-  [(t) => t === 'orchestrate.worker', 'worker', 'workers'],
-  [(t) => t.startsWith('agent.'), 'agent', 'agents'],
-  [(t) => t === 'route.classifier', 'router', 'routers'],
-  [(t) => t === 'route.grader', 'grader', 'graders'],
-  [(t) => t === 'human.approval', 'approval', 'approvals'],
-  [(t) => t.startsWith('function.'), 'function', 'functions'],
-  [(t) => t.startsWith('tool.'), 'tool', 'tools'],
-  [(t) => t === 'workflow.subgraph', 'workflow', 'workflows'],
-  [(t) => t.startsWith('input.'), 'input', 'inputs'],
-  [(t) => t.startsWith('output.'), 'output', 'outputs'],
-];
-
-/**
- * Entry and exit are the mount's *own* ports, drawn on the parent canvas, so
- * counting them again inside the box would be describing the same wire twice.
- * Annotations are not machinery at all.
- */
-const NOT_CONTENT = new Set(['input', 'inputs', 'output', 'outputs']);
 
 interface DocumentShape {
   readonly nodes?: readonly { readonly id?: unknown; readonly type?: unknown }[];
@@ -143,34 +130,35 @@ export function summarizeComposition(
   const doc = asDocument(document);
   if (!doc) return null;
 
+  const vocabulary = context.vocabulary ?? [];
   const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
-  const counts = new Map<string, number>();
-  const graderIds: string[] = [];
+  const counted = new Map<string, { term: ICompositionTerm; count: number }>();
+  /** Nodes that could close a revision loop, with the port that would do it. */
+  const closers: { id: string; term: ICompositionTerm }[] = [];
 
   for (const node of nodes) {
     const type = typeof node?.type === 'string' ? node.type : '';
     if (!type) continue;
-    if (type === 'route.grader' && typeof node.id === 'string') graderIds.push(node.id);
-    const entry = VOCABULARY.find(([match]) => match(type));
-    if (!entry) continue;
-    counts.set(entry[2], (counts.get(entry[2]) ?? 0) + 1);
+    const term = termFor(type, vocabulary);
+    if (term.revisePort && typeof node.id === 'string') closers.push({ id: node.id, term });
+    if (!countsAsContent(term)) continue;
+    const entry = counted.get(term.id);
+    if (entry) entry.count += 1;
+    else counted.set(term.id, { term, count: 1 });
   }
 
-  const parts: CompositionPart[] = [];
-  for (const [, one, many] of VOCABULARY) {
-    const count = counts.get(many);
-    if (!count) continue;
-    if (NOT_CONTENT.has(many)) continue;
-    parts.push({ label: count === 1 ? one : many, count });
-  }
+  // Group order first — `CENSUS_GROUPS` is the card's reading order — then
+  // the order the terms were registered in, which `Map` preserves.
+  const parts: CompositionPart[] = [...counted.values()]
+    .sort((a, b) => CENSUS_GROUPS.indexOf(a.term.group) - CENSUS_GROUPS.indexOf(b.term.group))
+    .map(({ term, count }) => ({ label: count === 1 ? term.one : term.many, count }));
   if (parts.length === 0) return null;
 
   // A loop is worth stating wherever it exists — it is the most useful thing
   // to know about a mounted document, and it is earned from that document
   // rather than claimed by the card.
-  if (graderIds.some((id) => hasRevise(doc, id))) {
-    return { parts, note: 'loops until its grader passes' };
-  }
+  const looping = closers.find(({ id, term }) => hasRevise(doc, id, term.revisePort!));
+  if (looping) return { parts, note: `loops until its ${looping.term.one} passes` };
 
   // **The gap is stated, not omitted** (ticket 03) — but only where something
   // was promised. A mount that claims no outcome claims nothing, and telling
@@ -181,11 +169,22 @@ export function summarizeComposition(
   // showed an `Expected outcome` the user had written, beside nothing saying
   // it is unchecked. Silence is the same shape as the defect.
   if (!context.claimsOutcome) return { parts };
+  const present = closers[0];
+  if (present) {
+    return {
+      parts,
+      note: `its ${present.term.one} never revises — nothing sends a weak answer back`,
+    };
+  }
+  // Named where the vocabulary has a name to give. With no loop-closing term
+  // registered at all there is no honest word for the missing thing, so the
+  // sentence says only what is true.
+  const closerWord = vocabulary.find((term) => term.revisePort)?.one;
   return {
     parts,
-    note: graderIds.length
-      ? 'its grader never revises — nothing sends a weak answer back'
-      : 'no grader — nothing checks the outcome',
+    note: closerWord
+      ? `no ${closerWord} — nothing checks the outcome`
+      : 'nothing checks the outcome',
   };
 }
 
@@ -195,11 +194,11 @@ export function formatComposition(summary: CompositionSummary): string {
   return summary.note ? `${counts} — ${summary.note}` : counts;
 }
 
-/** A grader only closes a loop if something is wired to its `revise` port. */
-function hasRevise(doc: DocumentShape, graderId: string): boolean {
+/** A loop closes only if something is wired to the node's revise port. */
+function hasRevise(doc: DocumentShape, nodeId: string, revisePort: string): boolean {
   const edges = Array.isArray(doc.edges) ? doc.edges : [];
   return edges.some(
-    (edge) => edge?.source?.nodeId === graderId && edge?.source?.portId === 'revise',
+    (edge) => edge?.source?.nodeId === nodeId && edge?.source?.portId === revisePort,
   );
 }
 

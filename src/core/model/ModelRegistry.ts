@@ -10,6 +10,7 @@ import type {
   NodeTypeId,
 } from './contracts/node';
 import type { IPortDescriptor, IPortTypeDefinition, PortTypeId } from './contracts/ports';
+import type { ICompositionTerm } from '@core/runtime/compositionVocabulary';
 
 /**
  * The vocabulary of the editor: which node types exist, which port types
@@ -23,6 +24,20 @@ export class ModelRegistry {
   readonly nodeTypes = new Registry<INodeDefinition>('nodeTypes');
   readonly portTypes = new Registry<IPortTypeDefinition>('portTypes');
   readonly categories = new Registry<INodeCategory>('nodeCategories');
+  /**
+   * The words a mount card counts a child document's nodes in.
+   *
+   * A registry for the same reason the three above are: these used to be a
+   * hardcoded table inside `core/runtime/compositionSummary.ts`, so a new
+   * node family was invisible in every mount card until somebody edited
+   * `core/` (reviews-2026-08-14 ticket 13). The built-in words are
+   * `CENSUS_TERMS` in `src/nodes/vocabulary.ts`.
+   *
+   * Reading order is **not** registration order — a term names a group and
+   * `CENSUS_GROUPS` owns the order — so a plugin registering late cannot
+   * rearrange the card.
+   */
+  readonly censusTerms = new Registry<ICompositionTerm>('censusTerms');
 
   /**
    * Palette contents: categories in declared order, each with its visible
