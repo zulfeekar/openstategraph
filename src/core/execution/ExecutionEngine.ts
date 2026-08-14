@@ -120,7 +120,7 @@ export class ExecutionEngine {
       // are a compiler, not a runtime, and this is a *handover*, not a second
       // execution path.
       return this.rejectBeforeStart(
-        'This graph has a revise loop, so it runs on the backend runtime.',
+        'This graph has a revision loop, so it runs on the backend runtime.',
         'requires-backend-runtime',
       );
     }

@@ -234,7 +234,7 @@ export const acyclicGraphRule: IWorkflowRule = {
           // passed it"). Only the in-canvas *preview* engine, a sequential
           // DAG walk, cannot follow a cycle, and that is a fact about the
           // preview, not an instruction to the reader.
-          message: `This workflow contains a revise loop (${titles.length} nodes: ${shown}) — Run streams it through the backend, which handles loops; only the in-canvas step preview cannot follow one`,
+          message: `This workflow contains a revision loop (${titles.length} nodes: ${shown}) — Run streams it through the backend, which handles loops; only the in-canvas step preview cannot follow one`,
         },
       ];
     }

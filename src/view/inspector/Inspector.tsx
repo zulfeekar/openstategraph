@@ -274,6 +274,10 @@ function WorkflowInspector({ count }: { count: number }) {
     [controller, version],
   );
 
+  // A canvas with nothing on it has no problems and is not ready — those are
+  // different statements, and the badge used to conflate them.
+  const isEmpty = workbench.model.nodes().length === 0;
+
   const errors = diagnostics.filter((d) => d.severity === 'error');
   const warnings = diagnostics.filter((d) => d.severity === 'warning');
   const infos = diagnostics.filter((d) => d.severity === 'info');
@@ -303,12 +307,19 @@ function WorkflowInspector({ count }: { count: number }) {
               <Badge tone="danger" numeric>
                 {errors.length}
               </Badge>
-            ) : diagnostics.length === 0 ? (
+            ) : diagnostics.length === 0 && !isEmpty ? (
               <Badge tone="success">ready</Badge>
             ) : undefined
           }
         >
-          {diagnostics.length === 0 ? (
+          {isEmpty ? (
+            // "Ready to run" on a canvas with nothing on it is the same class
+            // of false green as the accessibility check's was: technically
+            // "no problems found", and untrue (reviews-2026-08-14 ticket 06).
+            <p className="inspector__description">
+              Nothing to run yet — drag a node in from the palette to start.
+            </p>
+          ) : diagnostics.length === 0 ? (
             <p className="inspector__description">
               Everything checks out — this workflow is ready to run.
             </p>

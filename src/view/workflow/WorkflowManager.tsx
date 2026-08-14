@@ -390,7 +390,18 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                 onValueChange={setTemplate}
                 options={[
                   { value: BLANK_TEMPLATE, label: 'Blank canvas' },
-                  ...templates.map((t) => ({ value: t.name, label: t.name })),
+                  // The catalogue's own one-liner, not the bare slug. Every
+                  // template already ships a `summary` in `index.json` and
+                  // nothing rendered it, so the picker read
+                  // "minimal / loop / routed-qa / team" — and "loop" alone is
+                  // exactly the word the lexicon forbids user-facing, since it
+                  // means two different things (reviews-2026-08-14 ticket 06).
+                  ...templates.map((template) => ({
+                    value: template.name,
+                    label: template.summary
+                      ? `${template.name} — ${template.summary}`
+                      : template.name,
+                  })),
                 ]}
               />
             </Field>
