@@ -2,7 +2,10 @@
 
 **Status: accepted (owner + assistant sweep, 2026-08-09), amended 2026-08-10 by
 ticket 05 — the checkpointer is durable by default and the worker ceiling's
-reason has changed (see "Durability"). Companion to
+reason has changed (see "Durability") — and amended 2026-08-15 by
+install-experience wave 2: the **Store is durable by default too**, and the row
+called *Episodic* is renamed **Semantic**, with episodic recorded as a
+deliberate absence (see the correction below "The four kinds"). Companion to
 `knowledge-architecture.md`; supersedes nothing.**
 
 ## The four kinds
@@ -11,11 +14,51 @@ reason has changed (see "Durability"). Companion to
 | --- | --- | --- | --- |
 | **Context** | checkpointer thread (`thread_id`) — `messages` is the record; turn-scratch (`outputs`/`answer`/`feedback`/`attempts`/`decisions`) is wiped at each turn boundary by the input node's `RESET` update | the graph itself | **yes, by default** (ticket 05); opt out with `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` |
 | **Procedural** | `skills/` (always in the prompt, small) + `knowledge/` (on-demand `knowledge_lookup`, chunked) | developers and build-time trainers | yes — files in git |
-| **Episodic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | **yes, by default** (2026-08-15); opt out with `OPENSTATEGRAPH_MEMORY_PATH=memory`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
+| **Semantic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | **yes, by default** (2026-08-15); opt out with `OPENSTATEGRAPH_MEMORY_PATH=memory`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
 | **Knowledge** | the second brain (see `knowledge-architecture.md`) | builders on the button, **never** runtime agents | yes — files in git |
 
 **Knowledge ≠ memory** stays an invariant: promoting a runtime learning into
 `knowledge/` is a human act.
+
+### Correction, 2026-08-15 — that row said *Episodic*, and it was wrong
+
+Recorded rather than rewritten, because the row was wrong for six days in an
+*accepted* document and a reader who remembers the old word deserves to find
+out what happened to it.
+
+The LangChain docs (`concepts/memory.mdx`) split memory **twice**, and this
+table's four kinds mix the two splits: *short-term* versus *long-term* is a
+split by **recall scope**; semantic / episodic / procedural is the CoALA split
+by **type**, *inside long-term only*. Reading them as one list is how the Store
+ended up labelled with the name of the one kind it is not.
+
+Everything `save_memory` stores is a **fact** — "the user prefers concise
+answers", "chinook revenue sums InvoiceLine amounts". Facts are **semantic**.
+Episodic memory is past agent *actions*, replayed as few-shot examples.
+
+**Episodic is deliberately absent, and that is the fifth row this table does
+not have.** We hold the raw material — thread history in the checkpointer,
+`<package>/evals/*.eval.json` — and no mechanism that turns a past run into a
+prompt-time example. Building one means a trajectory selector and a relevance
+policy running outside any compile, which is a runtime; *we are a compiler, not
+a runtime*. It is absent because it was decided against, not because nobody got
+to it.
+
+The row's remaining word, **Context**, stays: it is this project's house
+vocabulary for the docs' *short-term*, it appears in the state schema and the
+UI, and renaming it would cost more than it explains. Read it as "short-term,
+as the LangChain docs call it".
+
+Two further choices the docs name as alternatives, so that neither reads as
+unbuilt work:
+
+- **Collection-shaped, not profile-shaped.** The docs give both, and say a
+  profile — one continuously-updated JSON document — "can become error-prone as
+  the profile gets larger", while collections give higher recall and are easier
+  for a model to extend. Ours is the shape they recommend.
+- **Hot-path formation, not background.** An agent calls `save_memory`
+  mid-turn. Background formation needs a scheduler, a trigger policy and a
+  rescheduling rule — the same runtime we are not.
 
 ## The spine rule
 

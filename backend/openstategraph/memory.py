@@ -1,20 +1,46 @@
 """The memory system — tickets 65 (research) and 47, implemented.
 
-Three kinds, each mapped to the construct the LangGraph docs prescribe
-(`.scratch/fullstack-langgraph/research/65-memory-system.md`):
+Each kind mapped to the construct the LangGraph docs prescribe
+(`.scratch/fullstack-langgraph/research/65-memory-system.md`).
 
-- **Long-term**: a `Store` injected once at ``compile(store=...)``, namespaced
-  ``("memories", user_email)`` — the docs' canonical user-scoped pattern.
-  ``thread_id``/``session_id`` never appear in a Store namespace; they scope
-  the checkpointer only.
-- **Episodic**: checkpointer threads. **Durable by default** since ticket 05 —
+**The docs split memory twice, and this list keeps the two splits apart** —
+conflating them is what made an earlier version of this docstring read like one
+flat list with the wrong words in it. By *recall scope*: short-term
+(thread-scoped, the checkpointer) versus long-term (namespaced, the Store). By
+*type*, inside long-term only: the CoALA three — semantic (facts), episodic
+(experiences), procedural (instructions).
+
+- **Short-term** (the docs' word; this project's own tables call it *context*):
+  checkpointer threads. **Durable by default** since ticket 05 —
   ``build_checkpointer`` puts one sqlite file under the workflows root, shared
   by every transport, so a paused ``human.approval`` survives the restart the
   dev stack performs on each file save. ``OPENSTATEGRAPH_CHECKPOINT_PATH``
   moves it or (``=memory``) opts out, loudly. A single workflow can still
   claim its own file with ``settings.checkpointer: "sqlite"`` (ticket 47).
+- **Semantic** — long-term **facts**: a `Store` injected once at
+  ``compile(store=...)``, namespaced ``("memories", user_email)`` — the docs'
+  canonical user-scoped pattern. ``thread_id``/``session_id`` never appear in a
+  Store namespace; they scope the checkpointer only. Durable by default too
+  since install-experience wave 2. *Collection*-shaped rather than
+  profile-shaped, which is the docs' own recommendation: a single continuously
+  rewritten JSON profile "can become error-prone as the profile gets larger".
+- **Episodic** — past *experiences*, replayed as few-shot examples: **absent,
+  deliberately**, and the word is here so the absence is findable.
+  This label used to sit on the checkpointer in this docstring and on the Store
+  in `memory-architecture.md`, which is two wrong answers to one question. We
+  hold the raw material — thread history, ``<package>/evals/*.eval.json`` — and
+  no mechanism that turns a past run into a prompt-time example. Building one
+  is a runtime concern (a trajectory selector, a relevance policy), and *we are
+  a compiler, not a runtime*.
 - **Procedural**: skills and Store-held instructions — surfaced through the
-  middleware slot table, not this module (see ticket 66).
+  middleware slot table, not this module (see ticket 66). The read side only:
+  the docs' procedural memory is *self-modifying* (an agent rewriting its own
+  system prompt); ours is authored by humans and lives in git.
+
+Memory formation is **hot-path only** — an agent calls ``save_memory``
+mid-turn. The docs' background alternative needs a scheduler, a trigger policy
+and a rescheduling rule, which is a runtime; another deliberate absence rather
+than a gap.
 
 The two tools here are the docs' recommended surface for agent-driven
 memory: plain LangChain tools that reach the running graph's store through
