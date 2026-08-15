@@ -798,3 +798,110 @@ class TestTheShippedExampleIsReal:
         """Its name is deliberately not one of `CONFIG_FILENAMES` — shipping a
         file that silently becomes everyone's config would be a trap."""
         assert self.EXAMPLE.name not in CONFIG_FILENAMES
+
+
+class TestTheFileCanDeclareAnMcpServer:
+    """`mcp_servers:` — where a server *definition* lives (mcp-connect 02).
+
+    The split this tests is the map's secrets rule made structural: the URL
+    and the variable NAME are committed and reviewable; the value is not here
+    and cannot be, because the walk in `_reject_secrets` runs on the raw
+    document before this schema is ever reached.
+    """
+
+    def _write(self, tmp_path: Path, body: str) -> Path:
+        source = tmp_path / "openstategraph.yaml"
+        source.write_text(f"version: 1\n{body}")
+        return source
+
+    def test_a_declared_server_becomes_a_definition(self, tmp_path: Path) -> None:
+        from openstategraph.config_file import config_mcp_servers
+
+        config = load_config(
+            self._write(
+                tmp_path,
+                "mcp_servers:\n"
+                "  - name: Internal wiki\n"
+                "    url: https://wiki.internal/mcp\n"
+                "    auth:\n"
+                "      kind: header\n"
+                "      header_name: X-WIKI-KEY\n"
+                "      token_env: WIKI_TOKEN\n",
+            )
+        )
+        (server,) = config_mcp_servers(config)
+        assert server.url == "https://wiki.internal/mcp"
+        assert server.auth.header_name == "X-WIKI-KEY"
+        assert server.auth.token_env == "WIKI_TOKEN"
+        assert server.origin == "project"
+
+    def test_the_two_defaults_survive_a_project_adding_one(self, tmp_path: Path) -> None:
+        """Adding a server is not asking to lose the documentation."""
+        from openstategraph.config_file import config_mcp_servers
+        from openstategraph.prebuilt_mcp import mcp_server_catalogue
+
+        config = load_config(
+            self._write(
+                tmp_path, "mcp_servers:\n  - name: Mine\n    url: https://mine.test/mcp\n"
+            )
+        )
+        catalogue = mcp_server_catalogue(config_mcp_servers(config))
+        assert set(catalogue) == {"LangChain docs", "LangChain API reference", "Mine"}
+
+    def test_a_project_entry_shadows_a_default_by_name(self, tmp_path: Path) -> None:
+        from openstategraph.config_file import config_mcp_servers
+        from openstategraph.prebuilt_mcp import mcp_server_catalogue
+
+        config = load_config(
+            self._write(
+                tmp_path,
+                "mcp_servers:\n  - name: LangChain docs\n    url: https://mirror.internal/mcp\n",
+            )
+        )
+        catalogue = mcp_server_catalogue(config_mcp_servers(config))
+        assert catalogue["LangChain docs"].url == "https://mirror.internal/mcp"
+        assert catalogue["LangChain docs"].origin == "project"
+
+    def test_a_pasted_credential_is_refused_by_the_raw_walk(self, tmp_path: Path) -> None:
+        """The file is committed, so a key here is a leaked key."""
+        with pytest.raises(ConfigError) as caught:
+            load_config(
+                self._write(
+                    tmp_path,
+                    "mcp_servers:\n"
+                    "  - name: Vendor\n"
+                    "    url: https://vendor.test/mcp\n"
+                    "    auth:\n"
+                    "      kind: bearer\n"
+                    "      token_env: sk-live-pasted-by-mistake\n",
+                )
+            )
+        assert ".env" in str(caught.value)
+
+    def test_a_token_env_that_is_not_a_variable_name_is_refused(self, tmp_path: Path) -> None:
+        """The prefix walk catches `sk-…`; this catches everything else."""
+        from openstategraph.config_file import config_mcp_servers
+
+        config = load_config(
+            self._write(
+                tmp_path,
+                "mcp_servers:\n"
+                "  - name: Vendor\n"
+                "    url: https://vendor.test/mcp\n"
+                "    auth:\n"
+                "      kind: bearer\n"
+                "      token_env: 9f3a-c81e-not-a-variable\n",
+            )
+        )
+        with pytest.raises(ConfigError) as caught:
+            config_mcp_servers(config)
+        assert "MY_MCP_TOKEN" in str(caught.value)
+
+    def test_an_unknown_key_inside_a_server_is_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ConfigError):
+            load_config(
+                self._write(
+                    tmp_path,
+                    "mcp_servers:\n  - name: Vendor\n    url: https://x/mcp\n    tiemout: 5\n",
+                )
+            )

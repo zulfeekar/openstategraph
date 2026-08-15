@@ -218,6 +218,49 @@ class ProviderConfig(BaseModel):
     label: str | None = None
 
 
+class McpAuthConfig(BaseModel):
+    """How one MCP server is authenticated, as a committed file may say it.
+
+    `token_env` is a variable **name**. Nothing here can hold a value: the
+    raw-document walk above refuses a key-shaped field name and a key-shaped
+    value before this schema is ever reached, and `config_mcp_servers` refuses
+    a `token_env` that is not a plain environment-variable name — which is the
+    shape a pasted credential takes.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: `none` · `bearer` · `header`. OAuth is deliberately absent: `httpx.Auth`
+    #: is a Python object, and portability guardrail 1 forbids host-language
+    #: code in a document. It is a fourth value later, with no format change.
+    kind: str = "none"
+    #: `header` only — the vendor's own header, e.g. `LANGSMITH-API-KEY`.
+    header_name: str | None = None
+    #: **The name, never the value.** That is the entire point of this field.
+    token_env: str | None = None
+
+
+class McpServerConfig(BaseModel):
+    """One MCP server this project can bind, by name, from any workflow.
+
+    The definition lives here rather than in `workflow.json` so a document
+    stays shareable: a document **names** a server, and the project says what
+    that name reaches. Copy a package to a colleague and they supply their own
+    URL and their own credential without editing the canvas.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: What a `tool.mcp` card names. Also how a project shadows a built-in
+    #: default — same name, project wins.
+    name: str
+    url: str
+    #: `streamable_http` (the default) or `sse`. WebSocket cannot carry a
+    #: header and stdio names an executable; neither is offered.
+    transport: str = "streamable_http"
+    auth: McpAuthConfig = McpAuthConfig()
+
+
 class OpenStateGraphConfig(BaseModel):
     """The file's whole schema. `extra="forbid"` is the anti-typo rule.
 
@@ -237,6 +280,10 @@ class OpenStateGraphConfig(BaseModel):
     #: `configured_workflows_dir`.
     workflows_dir: str | None = None
     providers: list[ProviderConfig] = []
+    #: MCP servers a `tool.mcp` node may name. Layered **over** the two
+    #: built-in defaults by name, never instead of them: a project that adds
+    #: one server has not asked to lose the LangChain documentation.
+    mcp_servers: list[McpServerConfig] = []
 
 
 def _pyproject_table(source: Path) -> Any | None:
@@ -620,6 +667,45 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
     return specs
 
 
+def config_mcp_servers(config: OpenStateGraphConfig | None = None) -> list[Any]:
+    """The file's `mcp_servers:`, as `McpServerDefinition`s ready to register.
+
+    Refuses a `token_env` that is not an environment-variable name, using the
+    same rule and the same message shape as `api_key_env` above. That check is
+    not tidiness: the failure it catches is somebody pasting a live key into
+    the field whose label says *name*, and the file it would land in is
+    committed.
+    """
+    from openstategraph.prebuilt_mcp import McpAuth, McpServerDefinition
+
+    settings = config if config is not None else active_config()
+    if settings is None:
+        return []
+
+    servers: list[Any] = []
+    for entry in settings.mcp_servers:
+        token_env = (entry.auth.token_env or "").strip()
+        if token_env and not _ENV_VAR_NAME.match(token_env):
+            raise ConfigError(
+                f"mcp_servers {entry.name!r}: auth.token_env must be an environment variable "
+                f"NAME such as MY_MCP_TOKEN, not a credential."
+            )
+        servers.append(
+            McpServerDefinition(
+                name=entry.name,
+                url=entry.url,
+                transport=entry.transport,
+                auth=McpAuth(
+                    kind=entry.auth.kind,
+                    header_name=(entry.auth.header_name or "").strip(),
+                    token_env=token_env,
+                ),
+                origin="project",
+            )
+        )
+    return servers
+
+
 __all__ = [
     "CONFIG_ENV_VAR",
     "CONFIG_FILENAMES",
@@ -630,9 +716,12 @@ __all__ = [
     "SECRET_VALUE_PREFIXES",
     "SUPPORTED_VERSION",
     "ConfigError",
+    "McpAuthConfig",
+    "McpServerConfig",
     "OpenStateGraphConfig",
     "ProviderConfig",
     "active_config",
+    "config_mcp_servers",
     "config_provider_specs",
     "configured_workflows_dir",
     "find_config_file",
