@@ -16,6 +16,7 @@ import {
   type RunResult,
   type RunStreamEvent,
 } from '@core/runtime/RuntimeClient';
+import type { OpenStreams } from '@core/runtime/OpenStreams';
 import { useController, useWorkbench } from '@app/WorkbenchContext';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
