@@ -286,3 +286,52 @@ def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     reset_active_config()
     yield
     reset_active_config()
+
+
+@pytest.fixture(autouse=True)
+def _release_services_this_test_opened() -> Iterator[None]:
+    """Close every `WorkflowServices` a test built, at that test's teardown.
+
+    Install-experience ticket 11's second half. `create_app()` resolves the
+    checkpointer eagerly — deliberately, so the durability line reaches the
+    operator at startup rather than at the first approval — and there are over
+    a hundred `create_app(` call sites in this suite, none of which close. The
+    suite only escaped the consequence because it opts out of durable defaults
+    at the top of this file: with `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` the
+    handle is an in-memory saver rather than a descriptor. Every test that
+    repoints those variables at a real file — and they exist, because the
+    defaults have to be exercised somewhere — opened one and dropped it.
+
+    **Patching the class, not `create_app`.** Test modules import `create_app`
+    by name at import time, so replacing the module attribute would miss every
+    one of them; the class is looked up at construction. Wrapping `__init__`
+    catches the MCP transport and bare `WorkflowServices(...)` uses too, which
+    are the same leak wearing a different hat.
+
+    Safe against a services object that outlives the test: `close()` is
+    idempotent and both properties are lazy, so a later use resolves a fresh
+    saver rather than a closed one — which is exactly the resurrection
+    behaviour `WorkflowServices.close` documents on itself.
+    """
+    import functools
+    import weakref
+
+    from openstategraph.api.services import WorkflowServices
+
+    original = WorkflowServices.__init__
+    live: list[weakref.ReferenceType[WorkflowServices]] = []
+
+    @functools.wraps(original)
+    def remember(self: WorkflowServices, *args: object, **kwargs: object) -> None:
+        original(self, *args, **kwargs)  # type: ignore[arg-type]
+        live.append(weakref.ref(self))
+
+    WorkflowServices.__init__ = remember  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        WorkflowServices.__init__ = original  # type: ignore[method-assign]
+        for reference in live:
+            services = reference()
+            if services is not None:
+                services.close()

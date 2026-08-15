@@ -299,3 +299,125 @@ class TestAPerWorkflowSaverIsOpenedOnceNotPerRequest:
         services.close()
 
         assert _is_closed(saver)
+
+
+class TestTheServerReleasesWhatItServedWith:
+    """Install-experience ticket 11 — `close()` was implemented and unreachable.
+
+    `single_server_lifespan(services)` took the object and never touched it:
+    its `finally` released the single-server lock and nothing else, there is no
+    shutdown event handler anywhere in the repository, and `cmd_serve` hands
+    the app to uvicorn by import string and closes nothing. Everything above in
+    this file was therefore true of an object no served process ever called.
+    """
+
+    def test_the_lifespan_closes_the_services_it_was_built_with(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from openstategraph.api.main import create_app
+
+        monkeypatch.delenv(CHECKPOINT_PATH_ENV, raising=False)
+        monkeypatch.setenv("OPENSTATEGRAPH_MEMORY_PATH", str(tmp_path / "memory.sqlite"))
+        app = create_app(workflows_root=tmp_path)
+        services = app.state.services
+        # Captured before shutdown: both are lazy properties that would
+        # cheerfully re-open the file this test is asserting was closed.
+        checkpointer = services.checkpointer
+        store = services.memory_store
+        assert not _is_closed(checkpointer), "fixture must open a real sqlite saver"
+        assert not _is_closed(store), "fixture must open a real sqlite store"
+
+        # Entering and leaving `TestClient` runs the app's real lifespan, both
+        # halves — which is the only thing that distinguishes this from calling
+        # `services.close()` by hand and proving nothing.
+        with TestClient(app):
+            pass
+
+        assert _is_closed(checkpointer)
+        assert _is_closed(store)
+
+    def test_a_per_workflow_saver_opened_by_a_run_is_released_too(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The ticket-06 cache is bounded by `close()` and by nothing else."""
+        from fastapi.testclient import TestClient
+
+        from openstategraph.api.main import create_app
+
+        monkeypatch.delenv(CHECKPOINT_PATH_ENV, raising=False)
+        monkeypatch.chdir(tmp_path)
+        app = create_app(workflows_root=tmp_path)
+        services = app.state.services
+        saver = services.checkpointer_for({"checkpointer": "sqlite"}, "billing")
+        assert not _is_closed(saver)
+
+        with TestClient(app):
+            pass
+
+        assert _is_closed(saver)
+
+    def test_the_lock_is_released_even_if_closing_raises(self, tmp_path, monkeypatch) -> None:
+        """The two failures stay separate: a stuck lock outlives the process."""
+        from fastapi.testclient import TestClient
+
+        from openstategraph.api.main import create_app
+        from openstategraph.deployment import SingleServerLock
+        from openstategraph.state_dir import state_dir
+
+        monkeypatch.delenv(CHECKPOINT_PATH_ENV, raising=False)
+        app = create_app(workflows_root=tmp_path)
+
+        def explode() -> None:
+            raise RuntimeError("a saver whose close() raises")
+
+        # Set and removed by hand rather than through `monkeypatch`, which
+        # would restore it at teardown — i.e. after conftest's autouse
+        # release fixture has already called the exploding close.
+        app.state.services.close = explode  # type: ignore[method-assign]
+        with TestClient(app):
+            pass
+        del app.state.services.close
+
+        # Acquirable again: the lock did not survive the failed close.
+        lock = SingleServerLock(state_dir(tmp_path))
+        lock.acquire()
+        lock.release()
+
+
+class TestTheSuiteItselfReleasesWhatItOpens:
+    """The other half of ticket 11: 104 `create_app(` call sites, none closing.
+
+    Pinned across two tests rather than inside one, because the thing under
+    test *is* the teardown — a fixture that closes at the end of a test cannot
+    be observed by that same test. pytest runs a class's tests in definition
+    order, and the first hands the second the object it left open.
+    """
+
+    opened: list[object] = []
+
+    def test_a_test_may_leave_a_durable_services_object_open(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.delenv(CHECKPOINT_PATH_ENV, raising=False)
+        monkeypatch.setenv("OPENSTATEGRAPH_MEMORY_PATH", str(tmp_path / "memory.sqlite"))
+        services = WorkflowServices(tmp_path)
+
+        # The services object is kept alive on purpose — that is the case the
+        # fixture exists for. One that is *dropped* needs nothing from us: the
+        # `SqliteSaver` connection is released on collection, which is the
+        # property `test_production_audit_2026_08_15.py` measures over 25
+        # compile cycles, and it is why the fixture holds weak references.
+        self.opened[:] = [services, services.checkpointer, services.memory_store]
+
+        assert not any(_is_closed(resource) for resource in self.opened[1:])
+        # ...and deliberately no `services.close()`. That omission is the
+        # thing being tested.
+
+    def test_the_previous_tests_handles_were_released_at_its_teardown(self) -> None:
+        assert self.opened, "the test above must run first and leave two handles"
+        assert all(_is_closed(resource) for resource in self.opened[1:]), (
+            "an autouse fixture in conftest.py is meant to close every "
+            "WorkflowServices a test constructs; nothing closed these"
+        )

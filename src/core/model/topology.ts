@@ -72,6 +72,109 @@ export function topologicalOrder(
   return { order, cycle };
 }
 
+/**
+ * Which of `candidates` actually lie **on** a cycle, using only edges
+ * between candidates.
+ *
+ * The companion to `topologicalOrder`, and the reason it needs one:
+ * Kahn's leftover set is every node whose in-degree never reached zero,
+ * which over-includes everything merely *downstream* of a cycle. Narrowing
+ * it by asking "can this node reach itself?" of each member in turn is a
+ * full traversal per member — O(V·(V+E)) precisely when a cycle exists,
+ * which for this product is the ordinary case rather than the exceptional
+ * one (a revision loop is a drawn feature).
+ *
+ * One Tarjan pass answers it for every member at once, in O(V+E): a node is
+ * on a cycle exactly when its strongly-connected component has more than
+ * one member, or when it has an edge to itself. Iterative rather than
+ * recursive — a chain of 1600 nodes is a document someone can draw, and it
+ * is also a 1600-deep call stack.
+ *
+ * Takes a successor *function* rather than an edge list so the caller can
+ * feed it `WorkflowModel.edgesOf` (which reads `AdjacencyIndex`, the
+ * incidence structure that exists for exactly this) without this file
+ * learning what an edge is.
+ */
+export function cyclicMembers(
+  candidates: ReadonlySet<NodeId>,
+  successors: (nodeId: NodeId) => Iterable<NodeId>,
+): Set<NodeId> {
+  // Materialised once, restricted to candidates: `successors` is asked
+  // exactly once per candidate, which is the property the scaling test pins.
+  const outgoing = new Map<NodeId, NodeId[]>();
+  for (const id of candidates) {
+    const next: NodeId[] = [];
+    for (const target of successors(id)) if (candidates.has(target)) next.push(target);
+    outgoing.set(id, next);
+  }
+
+  const index = new Map<NodeId, number>();
+  const lowlink = new Map<NodeId, number>();
+  const onStack = new Set<NodeId>();
+  const stack: NodeId[] = [];
+  const cyclic = new Set<NodeId>();
+  let counter = 0;
+
+  const discover = (id: NodeId): void => {
+    index.set(id, counter);
+    lowlink.set(id, counter);
+    counter += 1;
+    stack.push(id);
+    onStack.add(id);
+  };
+  const lowOf = (id: NodeId): number => lowlink.get(id) ?? 0;
+  const indexOf = (id: NodeId): number => index.get(id) ?? 0;
+
+  for (const root of candidates) {
+    if (index.has(root)) continue;
+    discover(root);
+    // `at` is how far into this node's successors the walk has got — the
+    // resumption point a recursive implementation would keep on the stack.
+    const frames: { readonly id: NodeId; at: number }[] = [{ id: root, at: 0 }];
+
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1];
+      if (!frame) break;
+      const next = outgoing.get(frame.id) ?? [];
+
+      if (frame.at < next.length) {
+        const child = next[frame.at];
+        frame.at += 1;
+        if (child === undefined) continue;
+        if (!index.has(child)) {
+          discover(child);
+          frames.push({ id: child, at: 0 });
+        } else if (onStack.has(child)) {
+          lowlink.set(frame.id, Math.min(lowOf(frame.id), indexOf(child)));
+        }
+        continue;
+      }
+
+      frames.pop();
+      const parent = frames[frames.length - 1];
+      if (parent) lowlink.set(parent.id, Math.min(lowOf(parent.id), lowOf(frame.id)));
+
+      if (lowOf(frame.id) !== indexOf(frame.id)) continue;
+
+      // `frame.id` is the root of a component; everything above it on the
+      // stack is a member.
+      const members: NodeId[] = [];
+      for (;;) {
+        const member = stack.pop();
+        if (member === undefined) break;
+        onStack.delete(member);
+        members.push(member);
+        if (member === frame.id) break;
+      }
+      // A single-member component is a cycle only through a self-edge.
+      const isCycle = members.length > 1 || next.includes(frame.id);
+      if (isCycle) for (const member of members) cyclic.add(member);
+    }
+  }
+
+  return cyclic;
+}
+
 /** The union of every node's rectangle, or `null` for an empty graph. */
 export function bounds(nodes: Iterable<AbstractNodeModel>): Rect | null {
   const rects = [...nodes].map((node) => ({

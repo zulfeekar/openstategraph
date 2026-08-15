@@ -170,6 +170,24 @@ def single_server_lifespan(services: Any) -> Any:
     louder than any log line we could write.
 
     See `openstategraph.deployment` for why the answer is refusal.
+
+    **It is also the shutdown seam** (install-experience ticket 11). This
+    function took the services object and never touched it, so the release
+    machinery `WorkflowServices.close()` implements — the owned checkpointer,
+    every per-workflow saver, the memory store, each guarded by an ownership
+    flag — was reachable from two CLI subcommands and from nothing that serves.
+    For `openstategraph serve` the process was about to exit anyway; the cost
+    was that handles were released at kill time rather than at a defined one.
+
+    Closing here is safe against live runs by construction: an ASGI server
+    runs lifespan *shutdown* after the last request has completed, so no run
+    is still checkpointing against a per-workflow saver when this fires.
+
+    Closed **before** the lock is released, and in its own `try`, so that the
+    two failure modes stay separate: another server must not be told the state
+    directory is free while we still hold sqlite handles into it, and a close
+    that raises must not leave the lock behind for a process that will never
+    come back to release it.
     """
     from contextlib import asynccontextmanager
 
@@ -183,6 +201,10 @@ def single_server_lifespan(services: Any) -> Any:
         try:
             yield
         finally:
+            try:
+                services.close()
+            except Exception:  # pragma: no cover - a saver whose close raises
+                logger.warning("releasing runtime resources failed", exc_info=True)
             lock.release()
 
     return lifespan
