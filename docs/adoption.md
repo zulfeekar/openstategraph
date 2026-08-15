@@ -186,7 +186,7 @@ alias for `--template team`.
 
 ### Or start from a worked example
 
-Twenty-two finished packages ship in the wheel as well — one per pattern the
+Twenty-three finished packages ship in the wheel as well — one per pattern the
 canvas can express, each one validated and smoke-run, each with an `AGENTS.md`
 recording what it actually answered.
 

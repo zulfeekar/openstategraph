@@ -51,6 +51,8 @@ import {
 } from '@view/export/exportWorkflow';
 import { GraphPreview } from '@view/overlays/GraphPreview';
 import { OnboardingHint } from '@view/overlays/OnboardingHint';
+import { ExamplesHint } from '@view/overlays/ExamplesHint';
+import { rememberExamplesShelf } from '@view/workflow/examplesShelf';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import { useEntryQuestion } from './useEntryQuestion';
 import { runIntent } from './runIntent';
@@ -292,16 +294,33 @@ export function TopBar({
               New
             </Button>
           </Tooltip>
-          <Tooltip content="Open, publish or delete a saved workflow" shortcut="Mod+Shift+F">
-            <Button
-              variant="ghost"
-              active={workflowsOpen}
-              icon={<Icon glyph={FileText} size="sm" />}
-              onClick={onWorkflowsToggle}
-            >
-              Workflows
-            </Button>
-          </Tooltip>
+          {/* Anchor for the examples pointer (ticket 23), on the control that
+              actually leads to the shelf — the shelf lives inside this panel,
+              collapsed, and until now nothing on any surface said so. */}
+          <div className="topbar__hint-anchor">
+            <Tooltip content="Open, publish or delete a saved workflow" shortcut="Mod+Shift+F">
+              <Button
+                variant="ghost"
+                active={workflowsOpen}
+                icon={<Icon glyph={FileText} size="sm" />}
+                onClick={onWorkflowsToggle}
+              >
+                Workflows
+              </Button>
+            </Tooltip>
+            <ExamplesHint
+              onBrowseExamples={() => {
+                // Expand the shelf *before* the panel mounts: `WorkflowManager`
+                // reads `examplesShelfStartsOpen` in a `useState` initialiser,
+                // so writing the answer here is what makes one press land on an
+                // open shelf rather than on a closed one to press again. This
+                // is a gesture asking for the examples, which is exactly the
+                // opt-in the wave-3 collapse was written to require.
+                rememberExamplesShelf(true);
+                if (!workflowsOpen) onWorkflowsToggle();
+              }}
+            />
+          </div>
         </div>
 
         <span className="topbar__divider" role="presentation" />

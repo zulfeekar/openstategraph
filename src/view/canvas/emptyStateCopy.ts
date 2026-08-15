@@ -25,6 +25,8 @@
  * stays a projection of them.
  */
 
+import { EXAMPLES_ROUTE } from '@view/workflow/examplesJourney';
+
 /** The one line that teaches the shape. */
 export const EMPTY_CANVAS_TITLE = 'Start with Input → Agent → Output';
 
@@ -41,3 +43,18 @@ export const EMPTY_CANVAS_PATTERN =
  */
 export const EMPTY_CANVAS_HINT =
   'Drag “Starter flow” from the palette for all three, already wired — or drag nodes in one at a time, or press ⌘V to paste.';
+
+/**
+ * The other way in (production-ready ticket 23): don't draw one, take one.
+ *
+ * The gallery was invisible from here. Everything above teaches drawing a flow
+ * from parts, which is the right first lesson and the slower one; a reader who
+ * would rather see a finished flow had no sentence telling them 23 of them are
+ * one panel away. The route is `EXAMPLES_ROUTE` rather than a phrase written
+ * here, so the canvas and the shelf cannot come to call it different things.
+ *
+ * No count in it. This surface has no list to count — `GET /api/examples` is
+ * what knows — and a number typed into copy is exactly how this repository
+ * ended up with prose claiming twenty, twenty-one and twenty-two at once.
+ */
+export const EMPTY_CANVAS_EXAMPLES = `Or start from one that already works: open ${EXAMPLES_ROUTE}, copy one, and the copy is yours to edit and run.`;

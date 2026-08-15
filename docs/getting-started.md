@@ -319,6 +319,56 @@ a run still parked at an approval is marked and points back at the chat, which
 stays the single way to continue one. Runs appear here whenever the backend has
 a checkpointer, which the dev stack configures by default.
 
+## 4b. Or don’t draw one — copy a worked example
+
+**23** finished packages ship inside OpenStateGraph, one per pattern the
+canvas can express. They are the fastest way to see a working flow that is not
+the Chinook Assistant, and the journey to them is three verbs:
+
+> **Browse → copy → it is yours.**
+
+They are **not in your project** until you copy one. They live in the installed
+package, outside your workflows root, which is why they never appear in
+`GET /api/workflows`, in the `/chat` picker, or in the generated project
+knowledge. Taking one is a *copy*, and the copy is **severed**: it is a draft in
+your own `workflows/` from that moment, and upgrading OpenStateGraph never
+reaches back into it. There is no "load an example" and no `eject` — nothing is
+ever borrowed from the gallery.
+
+### In the editor
+
+1. Open **Workflows** in the top bar (or `Mod+Shift+F`).
+2. Scroll to the **Examples** section and press
+   **"23 examples — copy one to make it yours"**. The shelf is collapsed until
+   you ask for it, and it remembers the answer — before you have any workflow of
+   your own, an open gallery would make this panel someone else’s finished work
+   above your nothing.
+3. Press **Copy** on one. `Copy +2` means it mounts other packages and the copy
+   brings them; the button's tooltip names them before it writes anything.
+4. It appears under **Saved Workflows** as a draft. Press **Open**, then **Run**.
+
+On a fresh install a one-time hint on the **Workflows** button points at all of
+this. It appears once, counts dismissal as an answer, and does not come back.
+
+### On the command line
+
+Same three verbs, no editor and no server:
+
+```bash
+openstategraph examples list                     # slug, pattern, one-line purpose
+openstategraph examples copy evaluator-optimizer # …with every package it mounts
+openstategraph run ./workflows/evaluator-optimizer "Write a two-sentence release note."
+```
+
+`examples list` prints them in reading order and marks the ones that mount
+others (`[+1 mounted]`). `copy` writes into your workflows root — `--root` to
+put it elsewhere, `--all` to take the lot after it prints the size. It refuses
+the whole set before writing a byte if a directory would be overwritten (exit
+`1`, nothing written); an unknown slug exits `2` and lists the real ones.
+
+Which example, and how an example differs from a template and from a mount, is
+[On the canvas §6](on-the-canvas.md#6-an-example-is-a-whole-package-and-you-take-a-copy-of-it).
+
 ## 5. Ask it something — `/chat`
 
 <http://localhost:8000/chat> is the customer-facing side: no canvas, just a

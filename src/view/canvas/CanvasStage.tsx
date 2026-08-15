@@ -13,7 +13,12 @@ import {
 import { NodeLayer } from '@view/nodes/NodeLayer';
 import { PALETTE_ASSEMBLY_DRAG_TYPE, PALETTE_DRAG_TYPE } from '@view/palette/Palette';
 import { assemblyById } from '@nodes/assemblies';
-import { EMPTY_CANVAS_HINT, EMPTY_CANVAS_PATTERN, EMPTY_CANVAS_TITLE } from './emptyStateCopy';
+import {
+  EMPTY_CANVAS_EXAMPLES,
+  EMPTY_CANVAS_HINT,
+  EMPTY_CANVAS_PATTERN,
+  EMPTY_CANVAS_TITLE,
+} from './emptyStateCopy';
 import '@canvas/canvas.css';
 
 /**
@@ -294,6 +299,9 @@ function EmptyState() {
       <span className="canvas-empty__title">{EMPTY_CANVAS_TITLE}</span>
       <span className="canvas-empty__pattern">{EMPTY_CANVAS_PATTERN}</span>
       <span className="canvas-empty__hint">{EMPTY_CANVAS_HINT}</span>
+      {/* Ticket 23: and the other way in, which nothing on this canvas used to
+          mention — 23 finished flows are one panel away. */}
+      <span className="canvas-empty__hint">{EMPTY_CANVAS_EXAMPLES}</span>
     </div>
   );
 }

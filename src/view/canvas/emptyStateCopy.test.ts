@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
 import { starterAssembly } from '@nodes/assemblies';
-import { EMPTY_CANVAS_HINT, EMPTY_CANVAS_PATTERN, EMPTY_CANVAS_TITLE } from './emptyStateCopy';
+import {
+  EMPTY_CANVAS_EXAMPLES,
+  EMPTY_CANVAS_HINT,
+  EMPTY_CANVAS_PATTERN,
+  EMPTY_CANVAS_TITLE,
+} from './emptyStateCopy';
 
 /**
  * production-ready ticket 22 asked, first, whether a business rule exists —
@@ -104,7 +109,15 @@ describe('the empty-canvas copy', () => {
   });
 
   it('states a convention, never a rule — because there is no rule', () => {
-    const copy = `${EMPTY_CANVAS_TITLE} ${EMPTY_CANVAS_PATTERN} ${EMPTY_CANVAS_HINT}`;
+    // Ticket 23's line is inside the sweep, not beside it: a fourth string on
+    // the same surface is a fourth chance to tell a beginner something the
+    // validator will contradict.
+    const copy = [
+      EMPTY_CANVAS_TITLE,
+      EMPTY_CANVAS_PATTERN,
+      EMPTY_CANVAS_HINT,
+      EMPTY_CANVAS_EXAMPLES,
+    ].join(' ');
     expect(copy).not.toMatch(/\bmust\b|\bhas to\b|\brequired\b|\bevery flow\b|\balways\b/i);
     // …and hedges explicitly, rather than merely omitting the claim.
     expect(EMPTY_CANVAS_PATTERN).toMatch(/most flows/i);
@@ -119,5 +132,12 @@ describe('the empty-canvas copy', () => {
   it('still offers the two ways in that always existed', () => {
     expect(EMPTY_CANVAS_HINT).toMatch(/one at a time/);
     expect(EMPTY_CANVAS_HINT).toContain('⌘V');
+  });
+
+  it('offers the third way in — take a finished one (ticket 23)', () => {
+    // Drawing from parts is the right first lesson and the slower one. The
+    // gallery was reachable from here by nothing at all.
+    expect(EMPTY_CANVAS_EXAMPLES).toContain('Workflows → Examples');
+    expect(EMPTY_CANVAS_EXAMPLES).toMatch(/copy/i);
   });
 });

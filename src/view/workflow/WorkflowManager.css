@@ -84,3 +84,13 @@
   color: var(--color-text-success, var(--color-text-primary));
   border-color: currentColor;
 }
+
+/* The Examples shelf's own door (ticket 23). Full width and left-aligned so it
+   reads as a row you open rather than as a stray button, and it is the first
+   thing in the section — a signpost below the fold is not a signpost. The
+   collapse itself is unchanged; this only gives it something to say. */
+.workflow-manager__invitation {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}

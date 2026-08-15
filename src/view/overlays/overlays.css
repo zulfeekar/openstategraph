@@ -336,6 +336,15 @@
   animation: toast-in var(--duration-normal) var(--ease-spring);
 }
 
+/* Anchored to a control on the *left* of the toolbar (ticket 23's examples
+   pointer, which hangs off the Workflows button) rather than the right. Same
+   bubble, mirrored, so the two first-run hints cannot both drift toward the
+   same corner. */
+.onboarding-hint--start {
+  right: auto;
+  left: 0;
+}
+
 /* The pointer at the button above it: a hint that floats free reads as a
    toast, not as a label for a specific control. */
 .onboarding-hint::before {
@@ -349,6 +358,11 @@
   border-top: 1px solid var(--color-border-default);
   border-left: 1px solid var(--color-border-default);
   background: var(--color-bg-surface);
+}
+
+.onboarding-hint--start::before {
+  right: auto;
+  left: 14px;
 }
 
 .onboarding-hint__text {

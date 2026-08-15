@@ -46,6 +46,7 @@ import {
   unpublishedMessage,
 } from './consequences';
 import { examplesShelfStartsOpen, rememberExamplesShelf } from './examplesShelf';
+import { examplesShelfToggleLabel } from './examplesJourney';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -585,28 +586,30 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         </PanelSection>
 
         {examples.length > 0 && (
-          <PanelSection
-            heading="Examples"
-            aside={
-              <Button
-                variant="ghost"
-                size="sm"
-                // The count is on the closed header on purpose: the shelf has
-                // to say how much is behind it, or it is a control nobody has
-                // a reason to press.
-                title={
-                  examplesOpen
-                    ? 'Hide the shipped examples'
-                    : `Show the ${examples.length} shipped examples`
-                }
-                aria-expanded={examplesOpen}
-                onClick={toggleExamples}
-                icon={<Icon glyph={examplesOpen ? ChevronDown : ChevronRight} size="xs" />}
-              >
-                {examples.length}
-              </Button>
-            }
-          >
+          <PanelSection heading="Examples">
+            {/* Ticket 23. This used to be the digit `23` on a ghost button in
+                the section's `aside` — which says how much is behind the
+                control and nothing whatever about why anyone would press it,
+                and which had about 40px to say it in. The count stays, because
+                a shelf that will not admit how much it is hiding is a control
+                nobody has a reason to open; what is new is that it is now a
+                sentence with the three verbs in it, across the full width of
+                the panel, where a first-time reader is actually looking. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="workflow-manager__invitation"
+              title={
+                examplesOpen
+                  ? 'Hide the shipped examples'
+                  : `Show the ${examples.length} shipped examples`
+              }
+              aria-expanded={examplesOpen}
+              onClick={toggleExamples}
+              icon={<Icon glyph={examplesOpen ? ChevronDown : ChevronRight} size="xs" />}
+            >
+              {examplesShelfToggleLabel(examples.length, examplesOpen)}
+            </Button>
             <p className="workflow-manager__hint">
               Worked examples that ship inside OpenStateGraph — one per pattern the canvas can
               express. They are <strong>not in this project</strong> until you copy one; a copy is
