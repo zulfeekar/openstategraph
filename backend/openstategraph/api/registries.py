@@ -75,6 +75,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     from openstategraph.extensions import entry_point_tools
     from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
     from openstategraph.prebuilt_email import EMAIL_TOOLS
+    from openstategraph.prebuilt_mcp import MCP_TOOLS
     from openstategraph.prebuilt_platform import PLATFORM_TOOLS
     from openstategraph.prebuilt_session import SESSION_TOOLS
     from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
@@ -122,6 +123,11 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
         # recipient, it takes no arguments, so the model can ask but never
         # claim.
         SESSION_TOOLS,
+        # One card, a whole MCP server's tools (mcp-connect ticket 02). The
+        # only member of this registry that discovers what it contributes over
+        # the network, and therefore the only one that can contribute *none*
+        # and say why — see `McpTool.as_langchain_tools`.
+        MCP_TOOLS,
     ):
         builtin.update({tool.node_type: tool for tool in family})
 

@@ -112,7 +112,18 @@ server = [
 # was therefore blind to it. Same policy as the LangChain pins above: majors
 # are where these projects put breaking changes, so `<2` is a promise, not a
 # guess. Moving to 2.x is a deliberate migration of `mcp_server.py`.
-mcp = ["mcp>=1.25,<2"]
+#
+# `langchain-mcp-adapters` is the other half and rides the same extra: `mcp`
+# alone lets us *be* an MCP server, and this lets a `tool.mcp` node *bind*
+# one. The floor is `>=0.3.0` and it is a measured requirement, not a
+# preference — 0.2.1 raises `ToolException` on a tool error and has no
+# `handle_tool_errors` parameter at all, so on 0.2.x the atom would have to
+# own error conversion to keep this project's errors-are-data rule. On 0.3.2
+# `handle_tool_errors` exists and defaults to True, verified live: a bad
+# argument comes back as `MCP error -32602: …` content rather than an
+# exception. `<0.4` is the same majors-are-where-breaks-live policy as every
+# pin above, applied to a 0.x package at its minor.
+mcp = ["mcp>=1.25,<2", "langchain-mcp-adapters>=0.3.0,<0.4"]
 # Durable state in a database an operations team already backs up
 # (scale-and-adopt ticket 06, `openstategraph/postgres.py`). Opt-in and never a
 # default, so it is an extra rather than part of `[server]`.

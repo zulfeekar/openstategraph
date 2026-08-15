@@ -214,6 +214,30 @@ class BaseTool(ABC):
             args_schema=self.Args,
         )
 
+    def as_langchain_tools(self, warnings: list[str] | None = None) -> list[Any]:
+        """A tool node contributes one tool. An MCP server contributes many.
+
+        **This is the seam the canvas binds through**, and the default is
+        exactly today's behaviour, so no concrete tool in this repository
+        changed when it appeared. Liskov holds trivially: the singular case is
+        the plural case with one element.
+
+        It exists because `tool.mcp` breaks the one-node-one-tool assumption
+        every other atom satisfies — one MCP server offers N tools, discovered
+        at bind time. Expressing that by having the binding loop special-case a
+        node type would have put knowledge of one atom into the compiler; a
+        default method on the base puts it in the one class that needs it.
+
+        `warnings` is the sink for anything that failed to *materialise*. A
+        tool whose discovery needs the network (only `tool.mcp` does) appends a
+        sentence here and returns fewer tools — or none — rather than raising,
+        so a server that is down costs an agent one capability instead of
+        costing the whole compile. `NodeRuntime._bind_tools` passes the list
+        and records each sentence as a `CAPABILITY_FAILED` finding, which is
+        the same channel every other lost capability already travels.
+        """
+        return [self.as_langchain_tool()]
+
     def manifest(self) -> dict[str, Any]:
         """What the editor needs to render this tool as a node.
 

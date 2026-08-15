@@ -305,20 +305,50 @@ ENGINE_ADAPTERS = """A recorded exception: this is a data class the counting rul
     design."""
 
 #: `BaseTool` is six; the leaves carry their own manifest.
-PREBUILT_TOOLS = """A recorded exception, with the shape visible in the sibling that stays under:
-    `BaseTool` is six members, `SqlListTablesTool` is ten, and both tools listed
-    here clear the ceiling only by their own configuration. `SqlQueryTool` is
-    eleven — the tool contract, its four manifest constants (`name`,
-    `description`, `node_type`, `Args`) and `row_cap`.
-    `YouTubeTranscriptTool` is thirteen for the same reason plus three settings
-    (`language`, `allow_auto_captions`, `max_chars`) and one genuinely public
-    method, `resolve`.
+PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base they share:
+    `BaseTool` is **seven** members, and every tool here clears the ceiling only
+    by its own configuration on top of that. `SqlListTablesTool` and
+    `SqlGetSchemaTool` are eleven, `SqlQueryTool` twelve — the tool contract,
+    the four manifest constants (`name`, `description`, `node_type`, `Args`)
+    and, for the last, `row_cap`. `YouTubeTranscriptTool` is fourteen for the
+    same reason plus three settings (`language`, `allow_auto_captions`,
+    `max_chars`) and one genuinely public method, `resolve`.
+
+    **Every count here moved by one on 2026-08-16, and the +1 is the rule
+    working rather than failing.** `as_langchain_tools()` is declared once on
+    `BaseTool` — the plural binding seam `tool.mcp` needs, defaulting to
+    `[self.as_langchain_tool()]` — so it is inherited by all fourteen tools
+    instead of being re-declared on the one that needs it. That is exactly the
+    anti-duplication rule CLAUDE.md states, and a census that counts inherited
+    members will always charge a shared concern to every member of the family.
+    The alternative shapes are worse in ways the ceiling is not measuring: a
+    special case in the compiler's binding loop (one atom's knowledge inside
+    `core`), or a parallel `IMultiTool` interface every consumer would have to
+    check for. Two tools that were sitting exactly *at* ten crossed on the same
+    commit for that one reason, which is why they arrive here together.
 
     Those manifest constants are how a tool declares itself to the editor — they
     are the atom's identity card, and the registry reads them off the class. A
     tool that hid them behind a collaborator would be a tool the node palette
     cannot describe. `resolve` is the one member worth a second look and it has
     a real caller; the rest is declaration, not surface."""
+
+#: Fourteen: the seven-member base, four manifest constants, and three of its own.
+MCP_TOOL = """A recorded exception, and the largest tool in the catalogue for a
+    structural reason rather than a sprawling one. Fourteen is the seven-member
+    `BaseTool` contract, the four manifest constants every atom declares, and
+    exactly three of its own: `definition`, `selected` and `problem` — the
+    server it resolved to, the filter it was given, and why it resolved to
+    nothing. `document_state()` is the fourth and it exists to be *tested*: the
+    map's rule that a document may name a server but never carry a credential
+    needs a seam a test can read, and a rule with no test is a wish.
+
+    The alternative was a collaborator holding the resolution — an
+    `McpBinding` — and it was rejected because it splits nothing: all three
+    fields are written by one method (`configure`) and read by one method
+    (`as_langchain_tools`), so a second object would be a second name for one
+    reason to change. `McpTool` genuinely has one: what it takes to reach an
+    MCP server."""
 
 #: Seventeen behaviour members over seven fields.
 SCORECARD = """A recorded exception, and the one that most looks like a violation. Fourteen
@@ -395,8 +425,11 @@ RECORDED: dict[str, Recorded] = {
     "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
     "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
     "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
-    "prebuilt_sql.SqlQueryTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlGetSchemaTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlListTablesTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlQueryTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(14, PREBUILT_TOOLS),
+    "prebuilt_mcp.McpTool": Recorded(14, MCP_TOOL),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "providers.ProviderSpec": Recorded(15, PROVIDER_SPEC),
     "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),

@@ -1412,6 +1412,34 @@ class NodeRuntime:
         # each tool's own business.
         return configure(data)
 
+    def _bind_tools(self, node_id: str, plan: CompiledPlan) -> list[Any]:
+        """Every LangChain tool the canvas wired to this node.
+
+        Resolved by the *type* of each bound node, so wiring a tool on the
+        canvas is exactly what gives the agent that capability.
+
+        **`extend`, not `append`.** A tool node contributes a *list* — one
+        element for every atom in this repository, N for `tool.mcp`, whose one
+        card carries a whole MCP server. `BaseTool.as_langchain_tools` carries
+        the reasoning; here the consequence is that `last_bound_tools` reports
+        the names actually bound rather than the nodes drawn, which for an MCP
+        server is the more useful of the two.
+
+        Discovery warnings travel the `CAPABILITY_FAILED` channel — the same
+        one a plugin that would not import and a reasoning effort that could
+        not be carried already use, so the sentence reaches the run response,
+        the CLI and `CompiledWorkflow.warnings` with no per-surface plumbing.
+        """
+        lc_tools: list[Any] = []
+        warnings: list[str] = []
+        for tool_node_id in plan.tool_bindings.get(node_id, []):
+            tool = self._bound_tool(tool_node_id)
+            if tool is not None:
+                lc_tools.extend(tool.as_langchain_tools(warnings=warnings))
+        for message in warnings:
+            self.diagnostics.record(Finding.CAPABILITY_FAILED, message)
+        return lc_tools
+
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """An agent-family loop with the tools the canvas bound to it.
 
@@ -1430,13 +1458,7 @@ class NodeRuntime:
         from openstategraph.abc import agent as agent_family
         from langchain_core.messages import HumanMessage
 
-        # Resolved by the *type* of each bound node, so wiring a tool on the
-        # canvas is exactly what gives the agent that capability.
-        lc_tools = []
-        for tool_node_id in plan.tool_bindings.get(node_id, []):
-            tool = self._bound_tool(tool_node_id)
-            if tool is not None:
-                lc_tools.append(tool.as_langchain_tool())
+        lc_tools = self._bind_tools(node_id, plan)
 
         # A store's presence turns on the prebuilt memory tools for every
         # agent (ticket 65) — capability by configuration, no per-workflow
@@ -2207,11 +2229,7 @@ class NodeRuntime:
         """
         from langchain_core.messages import HumanMessage
 
-        lc_tools = []
-        for tool_node_id in plan.tool_bindings.get(node_id, []):
-            tool = self._bound_tool(tool_node_id)
-            if tool is not None:
-                lc_tools.append(tool.as_langchain_tool())
+        lc_tools = self._bind_tools(node_id, plan)
 
         # Workers are agents too: the ambient knowledge rule applies (deduped
         # against an explicitly wired atom, same as `_agent`).
