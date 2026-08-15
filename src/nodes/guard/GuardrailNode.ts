@@ -218,11 +218,16 @@ export const guardrailNode: INodeDefinition = defineNode(
             // Python lambda would kill portability and serialisability in one
             // move, while a pattern is declarative data with a published
             // grammar — the same reason `Reducer` is a name, not a function.
-            kind: 'text',
+            // A paragraph field for a one-line value, deliberately (ticket
+            // 26): a pattern is long, and the alternative to wrapping it is a
+            // box that scrolls sideways through the developer's own regex.
+            kind: 'textarea',
             key: 'detector',
             label: 'Pattern',
             defaultValue: '',
             placeholder: 'only for an entity LangChain has no detector for',
+            minRows: 1,
+            maxRows: 4,
             mono: true,
           },
         ],
@@ -245,6 +250,7 @@ export const guardrailNode: INodeDefinition = defineNode(
         placeholder: 'Leave empty to name the category that was found.',
         defaultValue: '',
         minRows: 2,
+        maxRows: 8,
         onCard: false,
         group: 'Policy',
       },

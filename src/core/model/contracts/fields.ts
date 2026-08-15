@@ -47,10 +47,41 @@ export interface TextFieldSchema extends FieldSchemaBase<string> {
   readonly mono?: boolean;
 }
 
+/**
+ * **The paragraph kind.** A field whose content is prose — rules, criteria, a
+ * refusal message, a note — declares `textarea` and inherits a box that grows
+ * with what is written in it.
+ *
+ * Deliberately *not* a second `paragraph` kind (ticket 26, which offered the
+ * choice). The contract already had this one, seventeen fields already used
+ * it, and a `paragraph` that rendered as a growing textarea beside a
+ * `textarea` that rendered as a growing textarea would be two names for one
+ * piece of knowledge — the duplication the DRY rule names as the defect. What
+ * was missing was not a kind. It was the **ceiling**: growth stopped at a
+ * hard-coded `max-height: 180px` in the card's stylesheet, a number no schema
+ * could see, state or change, so a system prompt and a two-word note were
+ * given the same nine lines and every longer field scrolled inside a slot.
+ *
+ * So the two bounds are declared here, in the one place a node describes its
+ * own configuration, and the stylesheet reads them rather than deciding them.
+ */
 export interface TextAreaFieldSchema extends FieldSchemaBase<string> {
   readonly kind: 'textarea';
   readonly placeholder?: string;
+  /**
+   * Lines reserved before there is anything to show. The floor, not the size:
+   * an empty box this tall says "a paragraph belongs here". Default 2, which
+   * suits a one-sentence field; anything that is genuinely a paragraph should
+   * say 3 or more.
+   */
   readonly minRows?: number;
+  /**
+   * Lines the box may grow to before it starts scrolling. The ceiling exists
+   * because a card is a card — a node that grew to hold a 200-line prompt
+   * would swallow the canvas — but it is per-field, because how much room a
+   * paragraph deserves is a property of the paragraph. Default 12.
+   */
+  readonly maxRows?: number;
   readonly maxLength?: number;
   readonly mono?: boolean;
 }

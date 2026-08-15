@@ -390,9 +390,16 @@
   gap: var(--space-2);
 }
 
+/* Wraps, since ticket 26. A row of three controls divided evenly by `flex: 1`
+ * is fine for two and unusable for three: the Guardrail's rules put an entity,
+ * a strategy and a regular expression on one card-width line, and the pattern
+ * ended up a box about wide enough for `on`. A control has a width below which
+ * it stops being a control, so `min-width` states it and the row takes another
+ * line rather than shrinking past it. */
 .repeatable-group__row {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: var(--space-2);
   padding: var(--space-2);
   border-radius: var(--radius-md);
@@ -401,8 +408,19 @@
 }
 
 .repeatable-group__field {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 9rem;
+  min-width: 9rem;
+}
+
+/* The same micro-label the inspector uses, at row scale — see
+ * `FieldRenderer`: unlabelled controls side by side name nothing. */
+.repeatable-group__label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
 }
 
 .repeatable-group__field input,

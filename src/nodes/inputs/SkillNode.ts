@@ -141,6 +141,7 @@ export const skillNode: INodeDefinition = defineNode(
         placeholder: 'What this skill is for, and when to reach for it.',
         defaultValue: '',
         minRows: 2,
+        maxRows: 8,
       },
       {
         kind: 'textarea',
@@ -152,6 +153,7 @@ export const skillNode: INodeDefinition = defineNode(
         // document has failed the brief even if everything under it works.
         defaultValue: TEMPLATE,
         minRows: 8,
+        maxRows: 24,
       },
     ],
     ports: [

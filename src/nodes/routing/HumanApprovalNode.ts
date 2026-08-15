@@ -44,6 +44,7 @@ export const humanApprovalNode: INodeDefinition = defineNode(
         placeholder: 'OK to publish?',
         defaultValue: '',
         minRows: 2,
+        maxRows: 8,
       },
     ],
     ports: [

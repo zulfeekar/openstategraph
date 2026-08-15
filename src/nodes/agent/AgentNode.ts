@@ -95,6 +95,8 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           label: 'Rubric (self-grading)',
           placeholder: 'e.g. tests pass; cites a figure from the rows; under 200 words',
           defaultValue: '',
+          minRows: 3,
+          maxRows: 10,
           onCard: false,
           group: 'Judgement',
           advanced: true,
@@ -152,6 +154,9 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           label: 'System prompt',
           placeholder: 'e.g. You are a data analyst. Cite figures from the tools.',
           defaultValue: '',
+          // The longest prose the editor holds, so it gets the most room.
+          minRows: 4,
+          maxRows: 20,
           onCard: false,
           group: 'Prompt',
         },

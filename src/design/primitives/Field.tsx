@@ -8,6 +8,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type CSSProperties,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
@@ -190,10 +191,19 @@ interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   mono?: boolean;
   /** Rows to reserve before content forces a grow. */
   minRows?: number;
+  /**
+   * Rows the box may grow to before it scrolls instead (ticket 26).
+   *
+   * Published to CSS as `--textarea-max-rows` rather than measured here: the
+   * stylesheet already owns the line height, and `calc(n * 1lh)` is the same
+   * arithmetic with none of the resynchronising a JS copy would need on every
+   * font or density change.
+   */
+  maxRows?: number;
 }
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
-  { invalid, mono, minRows = 2, className, disabled, value, onChange, ...rest },
+  { invalid, mono, minRows = 2, maxRows = 12, className, disabled, value, onChange, ...rest },
   ref,
 ) {
   const control = useFieldControl({
@@ -201,12 +211,27 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
     invalid,
   });
   const innerRef = useRef<HTMLTextAreaElement | null>(null);
+  /**
+   * A height the developer dragged to, which from then on wins.
+   *
+   * Auto-growth is a default, not a policy: someone reading a long prompt may
+   * want the box taller than its ceiling, and a control that snapped back to
+   * the computed height on the next keystroke would be a resize handle that
+   * does not resize. Once they have said what height they want, this stops
+   * measuring — the same rule the canvas follows when a node is dragged.
+   */
+  const manual = useRef(false);
+  /** The last height *we* applied, so a height we did not apply is theirs. */
+  const applied = useRef<number | null>(null);
 
   const resize = useCallback(() => {
     const el = innerRef.current;
-    if (!el) return;
+    if (!el || manual.current) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    // Read back rather than trusting the write: `max-height` caps it, and the
+    // capped value is what a later observation has to be compared against.
+    applied.current = el.offsetHeight;
   }, []);
 
   // Re-measure on mount and whenever the controlled value changes, so a
@@ -216,8 +241,17 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   useEffect(() => {
     const el = innerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    // A node resize changes the wrap width, which changes the height.
-    const observer = new ResizeObserver(resize);
+    // A node resize changes the wrap width, which changes the height — and a
+    // drag of the grabber changes the height directly. Both arrive here, and
+    // the difference between them is whether the height is the one we left.
+    const observer = new ResizeObserver(() => {
+      const last = applied.current;
+      if (last !== null && Math.abs(el.offsetHeight - last) > 1) {
+        manual.current = true;
+        return;
+      }
+      resize();
+    });
     observer.observe(el);
     return () => observer.disconnect();
   }, [resize]);
@@ -225,6 +259,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   return (
     <div
       className={clsx('input', 'input--textarea', mono && 'input--mono', className)}
+      style={{ '--textarea-max-rows': maxRows } as CSSProperties}
       data-invalid={control.invalid || undefined}
       data-disabled={disabled || undefined}
     >

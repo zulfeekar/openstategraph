@@ -18,6 +18,8 @@ export const OVERRIDES_FIELD: FieldSchema = {
   label: 'Overrides (this mount only)',
   placeholder: '{"grader1": {"criteria": "- stricter for this mount"}}',
   defaultValue: '',
+  minRows: 3,
+  maxRows: 16,
   onCard: false,
   advanced: true,
   hint: 'JSON keyed by child node id. Other mounts keep the package defaults.',

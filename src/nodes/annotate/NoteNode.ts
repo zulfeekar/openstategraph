@@ -45,6 +45,7 @@ export const noteNode: INodeDefinition = defineNode(
         placeholder: 'Markdown supported…',
         defaultValue: '',
         minRows: 3,
+        maxRows: 20,
       },
     ],
     ports: [],

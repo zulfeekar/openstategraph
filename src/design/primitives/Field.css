@@ -159,10 +159,18 @@ label.field > .field__label {
 }
 
 .input--textarea .input__control {
-  /* Auto-grown by the component; overflow guards a pathological paste. */
-  max-height: 180px;
+  /* Auto-grown by the component up to the ceiling its *field* declares
+   * (`TextAreaFieldSchema.maxRows`, published as `--textarea-max-rows`), then
+   * scrolling. It was a flat 180px until ticket 26 — a number in a stylesheet
+   * deciding how much room a system prompt and a two-word note each deserve,
+   * which is a question only the field can answer. The fallback keeps a
+   * `TextArea` used outside the schema behaving as it always did. */
+  max-height: calc(var(--textarea-max-rows, 9) * 1lh);
   overflow-y: auto;
   line-height: var(--line-height-normal);
+  /* Vertical only: a horizontal drag would break out of the card's column
+   * and cannot survive a reload anyway, since a dragged size is not saved. */
+  resize: vertical;
 }
 
 /* ---------- Read-only display row ----------

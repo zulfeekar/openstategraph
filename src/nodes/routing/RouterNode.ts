@@ -208,6 +208,7 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
           placeholder: 'If it mentions revenue or tables → dataquery. A hello → greeting.',
           defaultValue: '',
           minRows: 3,
+          maxRows: 14,
         },
         // On the card, because the rules it modifies are on the card. The
         // switch reaches the rules above and any wired skill — never the

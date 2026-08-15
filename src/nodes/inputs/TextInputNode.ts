@@ -40,6 +40,7 @@ export const textInputNode: INodeDefinition = defineNode(
         placeholder: 'What should the agent do?',
         defaultValue: '',
         minRows: 3,
+        maxRows: 10,
         // No `validate` (ticket 22). An empty entry prompt used to be a
         // blocking `error`, and two of the three shipped workflows opened
         // with one on documents that demonstrably work: `concierge` and

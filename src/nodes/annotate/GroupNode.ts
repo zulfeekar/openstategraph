@@ -54,6 +54,7 @@ export const groupNode: INodeDefinition = defineNode(
         placeholder: 'Markdown — steps, context, reminders…',
         defaultValue: '',
         minRows: 3,
+        maxRows: 16,
       },
     ],
     ports: [],

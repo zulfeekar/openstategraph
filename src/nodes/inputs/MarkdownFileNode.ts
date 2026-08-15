@@ -55,6 +55,7 @@ export const markdownFileNode: INodeDefinition = defineNode(
         placeholder: 'How should the agent behave?',
         defaultValue: '',
         minRows: 3,
+        maxRows: 16,
       },
     ],
     ports: [

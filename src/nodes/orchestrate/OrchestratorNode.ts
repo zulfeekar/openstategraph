@@ -121,6 +121,7 @@ export function createOrchestratorNode(providers: ProviderRegistry): INodeDefini
             'Anything needing SQL goes to the analyst; web lookups go to the researcher.',
           defaultValue: '',
           minRows: 3,
+          maxRows: 14,
           // Off the card, with the switch that modifies it: the card shows a
           // derived intent line, never this text (`skillLayer.ts` — "the mode
           // rides where the rules ride").

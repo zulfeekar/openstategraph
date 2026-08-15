@@ -101,6 +101,8 @@ export const subgraphNode: INodeDefinition = defineNode(
         // mount. Claiming otherwise was ticket 03's defect — a surface
         // presenting a machine-owned promise as configuration.
         placeholder: 'What this workflow is expected to deliver, in your words.',
+        minRows: 3,
+        maxRows: 8,
         hint: 'Shown on the card so a reader knows what this mount is for. It does not constrain the run — enforcement lives in the mounted workflow’s own grader criteria, and the card says so when that grader is missing or never revises.',
         defaultValue: '',
         onCard: true,

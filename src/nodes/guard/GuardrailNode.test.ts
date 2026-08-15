@@ -57,11 +57,16 @@ describe('the policy table is the card', () => {
     expect(resolveOptions(strategy!).map((o) => o.value)).toContain('pass');
   });
 
-  it('takes a custom pattern as text, because a regex is data and a lambda is not', () => {
+  it('takes a custom pattern as typed text, because a regex is data and a lambda is not', () => {
+    // The claim is about *what is stored* — a declarative pattern rather than
+    // a host-language predicate — and it survives the control changing. It is
+    // now a paragraph box (ticket 26): a regex is long, and the alternative to
+    // wrapping it was a slot on the card about wide enough for two characters.
     const detector = (
-      field('policy') as { fields: readonly { key: string; kind: string }[] }
+      field('policy') as { fields: readonly { key: string; kind: string; mono?: boolean }[] }
     ).fields.find((f) => f.key === 'detector');
-    expect(detector?.kind).toBe('text');
+    expect(detector?.kind).toBe('textarea');
+    expect(detector?.mono).toBe(true);
   });
 
   it('lets a developer write the refusal, because that copy is theirs', () => {

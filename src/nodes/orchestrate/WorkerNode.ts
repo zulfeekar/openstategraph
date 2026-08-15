@@ -56,6 +56,8 @@ export function createWorkerNode(providers: ProviderRegistry): INodeDefinition {
           key: 'role',
           label: 'Role',
           placeholder: 'What this worker archetype handles, e.g. "weather and forecast questions"',
+          minRows: 3,
+          maxRows: 10,
           defaultValue: '',
           onCard: false,
           // One string, two audiences (gallery ticket 16). It is shown to the

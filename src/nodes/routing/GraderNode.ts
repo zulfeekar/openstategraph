@@ -125,11 +125,15 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           group: 'Judgement',
           fields: [
             {
-              kind: 'text',
+              // A criterion is a sentence, and the field beside it holding the
+              // same kind of content is already a paragraph (ticket 26).
+              kind: 'textarea',
               key: 'criterion',
               label: 'Criterion',
               placeholder: 'e.g. Cites a figure from the executed rows',
               defaultValue: '',
+              minRows: 2,
+              maxRows: 6,
             },
             { kind: 'toggle', key: 'required', label: 'Required', defaultValue: true },
           ],
@@ -143,6 +147,7 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           placeholder: '- Must name a specific genre, not an artist.',
           defaultValue: '',
           minRows: 3,
+          maxRows: 14,
         },
         // Was `criteriaMode`, declared here and nowhere else. It is the same
         // switch over the same layers — the generalisation only adds a third

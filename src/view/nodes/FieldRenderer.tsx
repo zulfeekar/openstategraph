@@ -127,6 +127,7 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
               value={value}
               placeholder={schema.placeholder}
               minRows={schema.minRows}
+              maxRows={schema.maxRows}
               maxLength={schema.maxLength}
               mono={schema.mono}
               invalid={Boolean(error)}
@@ -157,7 +158,13 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     case 'combobox': {
       return (
         <Field {...common}>
-          <ComboboxField id={id} schema={schema} data={data} onChange={set} />
+          <ComboboxField
+            id={id}
+            schema={schema}
+            value={asString(data[schema.key])}
+            data={data}
+            onChange={set}
+          />
         </Field>
       );
     }
@@ -344,6 +351,14 @@ function RepeatableGroupField({
             <div key={(row.id as string) ?? index} className="repeatable-group__row">
               {schema.fields.map((field) => (
                 <div key={field.key} className="repeatable-group__field">
+                  {/* Named, since ticket 26. Three unlabelled controls in a
+                      row is a puzzle: the Guardrail card showed a combobox, a
+                      select and a monospace box side by side and never said
+                      which was the entity, which the strategy and which the
+                      pattern. */}
+                  {field.label ? (
+                    <span className="repeatable-group__label">{field.label}</span>
+                  ) : null}
                   {field.kind === 'text' && (
                     <TextInput
                       value={asString(row[field.key])}
@@ -357,8 +372,24 @@ function RepeatableGroupField({
                       value={asString(row[field.key])}
                       placeholder={field.placeholder}
                       minRows={field.minRows}
+                      maxRows={field.maxRows}
                       onChange={(e) => updateRow(index, field.key, e.target.value)}
                       mono={field.mono}
+                    />
+                  )}
+                  {/* A row's combobox rendered **nothing at all** until ticket
+                      26 — the case was simply missing from this list, so the
+                      Guardrail's Entity control was an empty gap on the card
+                      and a rule could not be told what it was about. Same
+                      datalist component the switch above uses, so the two
+                      cannot drift. */}
+                  {field.kind === 'combobox' && (
+                    <ComboboxField
+                      id={`${common.htmlFor}-${index}-${field.key}`}
+                      schema={field}
+                      value={asString(row[field.key])}
+                      data={row}
+                      onChange={(val) => updateRow(index, field.key, val)}
                     />
                   )}
                   {field.kind === 'select' && (
@@ -372,6 +403,19 @@ function RepeatableGroupField({
                       value={asString(row[field.key]) || field.defaultValue}
                       onValueChange={(val) => updateRow(index, field.key, val)}
                     />
+                  )}
+                  {/* Missing for the same reason `combobox` was: the Grader's
+                      rubric rows declare a `required` toggle that has never
+                      rendered. */}
+                  {field.kind === 'toggle' && (
+                    <Button
+                      active={asBoolean(row[field.key], field.defaultValue)}
+                      onClick={() =>
+                        updateRow(index, field.key, !asBoolean(row[field.key], field.defaultValue))
+                      }
+                    >
+                      {asBoolean(row[field.key], field.defaultValue) ? 'On' : 'Off'}
+                    </Button>
                   )}
                 </div>
               ))}
@@ -409,12 +453,17 @@ function RepeatableGroupField({
 function ComboboxField({
   id,
   schema,
+  value,
   data,
   onChange,
 }: {
   id: string;
   schema: ComboboxFieldSchema;
-  data: Readonly<NodeData>;
+  /** The current text. Passed in rather than read out of `data`, because a
+   *  repeatable-group row holds its value in the row, not on the node. */
+  value: string;
+  /** What the options are resolved against — the node's data, or the row's. */
+  data: Readonly<NodeData> | Readonly<Record<string, FieldValue>>;
   onChange: (value: string) => void;
 }) {
   useSyncExternalStore(
@@ -434,7 +483,7 @@ function ComboboxField({
         id={id}
         list={listId}
         mono={schema.mono}
-        value={asString(data[schema.key])}
+        value={value}
         placeholder={schema.placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
