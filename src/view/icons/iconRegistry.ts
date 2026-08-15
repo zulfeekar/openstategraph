@@ -17,6 +17,7 @@ import {
   Users,
   FileOutput,
   UserCheck,
+  Archive,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
@@ -47,6 +48,9 @@ const ICONS: Record<string, LucideIcon> = {
   // A shield, like the grader's — they are the two nodes that judge — but
   // alerting rather than checking, because this one can refuse.
   'node-guardrail': ShieldAlert,
+  // A box things are filed into and kept in — the tollbooth records rather
+  // than reasons, so it deliberately borrows no glyph from the agents.
+  'node-memory-segment': Archive,
   'node-orchestrator': Split,
   'node-worker': Users,
   'node-format-report': FileOutput,

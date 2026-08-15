@@ -409,6 +409,50 @@
       ]
     },
     {
+      "type": "memory.segment",
+      "kind": "standard",
+      "category": "memory",
+      "scope": "app",
+      "label": "Memory segment",
+      "description": "Records what crosses it, and hands the segment’s earlier entries to whatever comes next.",
+      "ports": [
+        {
+          "id": "crossing",
+          "direction": "in",
+          "type": "result",
+          "label": "crossing",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "onward",
+          "direction": "out",
+          "type": "result",
+          "label": "onward",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "maxRetries",
+        "retention",
+        "segment",
+        "segmentNote",
+        "timeoutSeconds"
+      ]
+    },
+    {
       "type": "orchestrate.supervisor",
       "kind": "standard",
       "category": "agent",

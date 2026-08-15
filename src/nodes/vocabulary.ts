@@ -16,6 +16,7 @@ export const CATEGORY = {
   tools: 'tools',
   output: 'output',
   agent: 'agent',
+  memory: 'memory',
   compose: 'compose',
   annotate: 'annotate',
 } as const;
@@ -50,6 +51,15 @@ export const CATEGORY = {
  * - **Annotate carries no tier**, and says so instead of borrowing one:
  *   notes and groups are excluded from execution entirely, so they are not
  *   made of anything and nothing is made of them.
+ * - **Memory is its own section, and that is the point.** `memory.segment` is
+ *   a molecule by the same argument `function.format_report` is one: it is a
+ *   deterministic, reasoning-free step that *composes*, so it is not an atom,
+ *   and it brings no nodes, state or loop of its own, so it is not an
+ *   organism. What it is not is *reasoning or control* — a tollbooth decides
+ *   nothing — and every label's tier and wording being load-bearing is the
+ *   first thing `vocabulary.test.ts` asserts. Filing it under the agents'
+ *   heading to avoid adding a section would have made that heading false,
+ *   which is the defect this ordering was written to fix in the first place.
  */
 export const CATEGORIES: readonly INodeCategory[] = [
   {
@@ -84,6 +94,13 @@ export const CATEGORIES: readonly INodeCategory[] = [
     order: 40,
     description:
       'One decision step each — agent, router, grader, guardrail, approval, worker, supervisor, function. A supervisor alone is a molecule; supervisor + workers + join is an organism you draw, not one you drag.',
+  },
+  {
+    id: CATEGORY.memory,
+    label: 'Memory · molecules',
+    order: 45,
+    description:
+      'What a workflow keeps between runs, at the position you draw it. Deterministic and free — nothing here calls a model.',
   },
   {
     id: CATEGORY.compose,
@@ -207,6 +224,10 @@ export const CENSUS_TERMS: readonly ICompositionTerm[] = [
   // be describing a safer workflow than the one it holds.
   { id: 'guard.policy', group: 'control', one: 'guardrail', many: 'guardrails' },
   // What they hold.
+  // A mount card that never mentioned the child's memory would describe a
+  // more forgetful workflow than the one it holds — the same argument that
+  // put `guard.policy` above.
+  { id: 'memory.', group: 'held', one: 'memory segment', many: 'memory segments' },
   { id: 'function.', group: 'held', one: 'function', many: 'functions' },
   { id: 'tool.', group: 'held', one: 'tool', many: 'tools' },
   { id: 'workflow.subgraph', group: 'held', one: 'workflow', many: 'workflows' },

@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "name": "Remembers Across Runs",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Remembers Across Runs",
+    "settings": {
+      "purpose": "One ledger, many runs: a memory segment records every question it sees and hands the earlier ones to the agent, so run two knows what run one said."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        }
+      },
+      {
+        "id": "mem1",
+        "type": "memory.segment",
+        "title": "What you have told me",
+        "data": {
+          "segment": "what-you-told-me",
+          "retention": "20"
+        },
+        "position": {
+          "x": 380,
+          "y": 200
+        }
+      },
+      {
+        "id": "answer1",
+        "type": "agent.llm",
+        "title": "Concierge",
+        "data": {
+          "systemPrompt": "You are handed a block headed '## Memory' listing what this person has told you in earlier conversations, followed by what they have just said. Answer what they just said, using the earlier lines as fact about them. If the block says nothing has crossed yet, say plainly that you have not been told yet rather than guessing. Never mention the block, the segment or the word memory."
+        },
+        "position": {
+          "x": 720,
+          "y": 200
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": {
+          "x": 1060,
+          "y": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "mem1",
+          "portId": "crossing"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "mem1",
+          "portId": "onward"
+        },
+        "target": {
+          "nodeId": "answer1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "answer1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

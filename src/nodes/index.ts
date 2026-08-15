@@ -15,6 +15,11 @@ import { GRADER_TYPE, createGraderNode, graderExecutor } from './routing/GraderN
 import { ROUTER_TYPE, createRouterNode, routerExecutor } from './routing/RouterNode';
 import { humanApprovalExecutor, humanApprovalNode } from './routing/HumanApprovalNode';
 import { GUARDRAIL_TYPE, guardrailExecutor, guardrailNode } from './guard/GuardrailNode';
+import {
+  MEMORY_SEGMENT_TYPE,
+  memorySegmentExecutor,
+  memorySegmentNode,
+} from './memory/MemorySegmentNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
@@ -89,6 +94,10 @@ export function registerNodeCatalogue(
       // routing does — it is part of the editor's grammar, not one
       // workflow's tooling.
       guardrailNode,
+      // What a workflow keeps between runs, at a drawn position. Global for
+      // the same reason routing and policy are: it is grammar, not one
+      // workflow's tooling.
+      memorySegmentNode,
       // Loop/graph engineering: split -> fan-out -> dispatch -> join.
       orchestratorNode,
       workerNode,
@@ -111,6 +120,7 @@ export function registerNodeCatalogue(
     graderExecutor,
     humanApprovalExecutor,
     guardrailExecutor,
+    memorySegmentExecutor,
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
@@ -139,6 +149,7 @@ export const NODE_TYPE = {
   grader: GRADER_TYPE,
   humanApproval: humanApprovalNode.id,
   guardrail: GUARDRAIL_TYPE,
+  memorySegment: MEMORY_SEGMENT_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,
   worker: WORKER_TYPE,
   formatReport: FORMAT_REPORT_TYPE,

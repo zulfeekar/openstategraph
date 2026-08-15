@@ -47,6 +47,7 @@
     { "slug": "web-research-digest", "pattern": "search, fetch, report" },
     { "slug": "support-triage", "pattern": "the long control chain" },
     { "slug": "morning-brief", "pattern": "many sources, one report" },
-    { "slug": "guarded-lookup", "pattern": "one policy, two directions" }
+    { "slug": "guarded-lookup", "pattern": "one policy, two directions" },
+    { "slug": "remembers-across-runs", "pattern": "one ledger, many runs" }
   ]
 }

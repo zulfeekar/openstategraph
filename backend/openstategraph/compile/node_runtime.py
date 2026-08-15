@@ -1010,6 +1010,7 @@ class NodeRuntime:
             "route.grader": self._grader,
             "human.approval": self._human_approval,
             "guard.policy": self._guardrail,
+            "memory.segment": self._memory_segment,
             "orchestrate.supervisor": self._orchestrator,
             "orchestrate.worker": self._worker,
             "function.format_report": self._format_report_function,
@@ -2220,6 +2221,81 @@ class NodeRuntime:
                     f"{node_id}#{task_id}": text if isinstance(text, str) else str(text)
                 },
             }
+
+        return run
+
+    def _memory_segment(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """A tollbooth: what crosses is furnished, recorded and passed onward.
+
+        A **real state-transforming graph node**, and the deterministic half of
+        memory. The other half — a write the *model* decides to make — is
+        `save_memory`, bound to every agent when a store is present, and the
+        atom-forge interview's first redirect is what keeps the two apart. A
+        node whose position on the canvas implies a guarantee the model was
+        free to ignore is the drawn thing that lies.
+
+        ## What makes it a node and not configuration
+
+        It reads and appends a workflow-scoped Store namespace **at a drawn
+        position**, which nothing else in the catalogue does. Everything about
+        the ledger itself lives in `openstategraph.memory_segment`; this
+        factory is state plumbing and nothing else.
+
+        ## The store is fetched at run time, not held from compile time
+
+        `get_store()` reads the store the compiled graph was built with, which
+        is what makes one implementation work identically in a parent and in a
+        mounted child — and a child resolves its *own* `workflow_slug`, so a
+        mount's segments are the mount's, exactly as isolation implies.
+
+        `self.services.store` is deliberately not used: it is the parent's
+        object, and reading it here would make a subgraph's tollbooth write to
+        the wrong ledger in the one case nobody tests by hand.
+
+        ## What it cannot reach, stated rather than implied
+
+        An outbound Guardrail scrubs `outputs`; it does not reach the Store. A
+        segment placed downstream of unredacted content records that content
+        durably, and the redaction that happens later cannot retrieve it. This
+        is the guardrail work's own "a node cannot act on what left before it
+        ran", pointed the other way, and the card says so.
+        """
+        from openstategraph.memory_segment import MemorySegment, parse_retention
+
+        data = node.get("data") or {}
+        segment = MemorySegment(
+            name=_text(data, "segment"),
+            retention=parse_retention(data.get("retention")),
+        )
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A tollbooth placed after a grader, an approval or a guardrail is
+        # reached over a *conditional* edge, which `plan.edges` does not
+        # carry — the same gap `_agent`, `_output` and `_guardrail` close.
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
+
+        def run(state: RunState) -> dict[str, Any]:
+            from langgraph.config import get_store
+
+            from openstategraph.memory import workflow_scope_slug
+
+            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
+            try:
+                store = get_store()
+            except Exception:
+                # No store configured for this run. `MemorySegment.cross`
+                # owns what that means and says it in the one sentence a
+                # model can act on; taking the run down instead would make a
+                # missing optional backend into an outage.
+                store = None
+            crossing = segment.cross(store, workflow_scope_slug(), text=text, node=node_id)
+            # `outputs` only. The node introduces no state key, so there is no
+            # multi-writer question to answer and no reducer to name — the
+            # cheapest way to satisfy that rule is not to need it.
+            return {"outputs": {node_id: crossing.text}}
 
         return run
 

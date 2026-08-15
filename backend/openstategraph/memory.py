@@ -144,8 +144,19 @@ def _user_namespace() -> tuple[str, str] | None:
     return (USER_MEMORY_NAMESPACE, cleaned) if cleaned else None
 
 
-def _workflow_namespace() -> tuple[str, str]:
-    """Findings scoped to the running workflow (its slug rides in config).
+#: What a run that does not know which workflow it is falls back to. One
+#: literal, because two spellings of it would be two workflows.
+UNSAVED_SLUG = "unsaved"
+
+
+def workflow_scope_slug() -> str:
+    """Which workflow a run belongs to, normalised for a Store namespace.
+
+    Public because it is the *scope*, not one namespace built from it:
+    `_workflow_namespace` below and `memory_segment.MemorySegment.namespace`
+    both need the same answer, and two readings of
+    ``configurable["workflow_slug"]`` would be two workflow identities that
+    drift the first time one of them learns to normalise something.
 
     Logged apart for the same reason as `_user_namespace`: "unsaved" reached
     by an unsaved document and "unsaved" reached by config never arriving are
@@ -162,7 +173,12 @@ def _workflow_namespace() -> tuple[str, str]:
     else:
         if not slug:
             _log().debug("run config carries no workflow_slug; scope is 'unsaved'")
-    return ("workflow-memory", slug.strip().lower().replace(".", "_") or "unsaved")
+    return slug.strip().lower().replace(".", "_") or UNSAVED_SLUG
+
+
+def _workflow_namespace() -> tuple[str, str]:
+    """Findings scoped to the running workflow (its slug rides in config)."""
+    return ("workflow-memory", workflow_scope_slug())
 
 
 #: The shared pool — appwide knowledge and cross-workflow findings, exactly

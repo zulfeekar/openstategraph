@@ -14,6 +14,7 @@ import { orchestratorExecutor } from './orchestrate/OrchestratorNode';
 import { workerExecutor } from './orchestrate/WorkerNode';
 import { humanApprovalExecutor } from './routing/HumanApprovalNode';
 import { subgraphExecutor } from './compose/SubgraphNode';
+import { memorySegmentExecutor } from './memory/MemorySegmentNode';
 import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode';
 import {
   executeSqlExecutor,
@@ -104,6 +105,9 @@ describe('honest backend-only refusals', () => {
     ['orchestrator', orchestratorExecutor, 'orchestrate.supervisor'],
     ['worker', workerExecutor, 'orchestrate.worker'],
     ['human approval', humanApprovalExecutor, 'human.approval'],
+    // The one whose silent skip would be hardest to notice: a preview that
+    // skipped it would look successful and would have recorded nothing.
+    ['memory segment', memorySegmentExecutor, 'memory.segment'],
   ];
   for (const [label, executor, type] of cases) {
     it(`${label} refuses in the browser preview`, async () => {
