@@ -23,6 +23,7 @@ import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
 import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './workflow/createNewWorkflow';
 import './AppShell.css';
@@ -96,6 +97,21 @@ export function AppShell() {
   /** A Stop press, handed to the same panel to act on (ticket 10). */
   const [askStopRequest, setAskStopRequest] = useState<{ nonce: number } | null>(null);
   const [backendRunning, setBackendRunning] = useState(false);
+  /**
+   * The abort handle for every stream the Ask panel opens — held **here**,
+   * because the panel is conditionally rendered and closing it is a real
+   * unmount (install-experience ticket 07).
+   *
+   * A run whose handle died with the panel was a run nobody could stop: the
+   * `fetch` stayed open, the reader kept writing into a dead component, and
+   * the unmount reported "not running" so the toolbar retired Stop. The panel
+   * cannot fix that from an unmount effect — React's StrictMode double-mount
+   * makes a cleanup indistinguishable from a close, and Run opens this panel
+   * *and* starts a run, so an abort-on-cleanup killed the run it had just
+   * started (the panel's own comment records that regression). A gesture is
+   * distinguishable, so the abort hangs off the Ask toggle below.
+   */
+  const askStreams = useMemo(() => new OpenStreams(), []);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
@@ -269,14 +285,26 @@ export function AppShell() {
         askOpen={askOpen}
         onAskToggle={() =>
           setAskOpen((value) => {
-            if (value) setAskNotice(null);
+            if (value) {
+              setAskNotice(null);
+              // Closing the panel ends the runs it was showing. The panel is
+              // where a run is watched, answered and continued, and its
+              // transcript goes with it — so a stream left open would write
+              // to nothing a user can ever read while still billing tokens.
+              // Said here rather than in the panel's cleanup for the reason
+              // `askStreams` records.
+              askStreams.abortAll();
+            }
             return !value;
           })
         }
         onRun={runWorkflow}
         // The run lives in the Ask panel, so Stop is a request forwarded to
-        // it — never a second place that knows how to abort.
-        onStop={() => setAskStopRequest({ nonce: Date.now() })}
+        // it — never a second place that knows how to abort. Except when the
+        // panel is not there to receive it: the shell holds the handle, so a
+        // Stop offered while the panel is closed is one that can be delivered
+        // rather than a button that silently does nothing (ticket 07).
+        onStop={() => (askOpen ? setAskStopRequest({ nonce: Date.now() }) : askStreams.abortAll())}
         runInFlight={backendRunning}
       />
 
@@ -309,6 +337,7 @@ export function AppShell() {
                 focusNonce={askFocusNonce}
                 runRequest={askRunRequest}
                 stopRequest={askStopRequest}
+                streams={askStreams}
                 onRunningChange={(running) => {
                   setBackendRunning(running);
                   // Ticket 08: a backend-streamed run has no local engine to

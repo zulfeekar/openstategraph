@@ -221,6 +221,16 @@ export interface AskPanelProps {
   readonly stopRequest?: { readonly nonce: number } | null;
   /** Reports whether a run is streaming, so the toolbar's Run button can say so. */
   readonly onRunningChange?: (running: boolean) => void;
+  /**
+   * Who holds the abort handle for every stream this panel opens.
+   *
+   * Owned by the shell rather than by this component, because this component
+   * is conditionally rendered — closing the panel is a real unmount, and a
+   * handle that dies with the panel is a run nobody can stop
+   * (install-experience ticket 07). The shell aborts on the close *gesture*;
+   * see `OpenStreams` for why an unmount effect cannot do that job.
+   */
+  readonly streams: OpenStreams;
 }
 
 export function AskPanel({
@@ -229,7 +239,8 @@ export function AskPanel({
   runRequest = null,
   stopRequest = null,
   onRunningChange,
-}: AskPanelProps = {}) {
+  streams,
+}: AskPanelProps) {
   const controller = useController();
   const workbench = useWorkbench();
   const [question, setQuestion] = useState('');
@@ -289,24 +300,26 @@ export function AskPanel({
   // overwrite the entry node's `prompt` out from under the paused thread.
   const running = turns.some((turn) => turn.running || turn.pendingApproval);
 
-  /**
-   * The abort handle for each turn that has a stream open, by turn id.
+  /*
+   * The abort handles for this panel's streams live in `streams`, which the
+   * **shell** owns (`OpenStreams`, prop above). They used to be a bare `Map`
+   * in a ref here, and that comment recorded a decision worth keeping half
+   * of: they are deliberately NOT aborted from an unmount effect, because
+   * React's development StrictMode mounts effects twice and the toolbar's Run
+   * both opens this panel and starts a run from a mount effect — so
+   * abort-on-cleanup killed the very run the mount had started, and the turn
+   * said "Stopped by you" before a single node reported.
    *
-   * A ref rather than state: nothing renders from it, and a re-render for a
-   * controller nobody looks at would be pure churn. Entries are deleted the
-   * moment their stream settles, so this map is empty between runs.
-   *
-   * Deliberately NOT aborted on unmount, for two reasons found in that
-   * order. The decisive one is correctness: React's development StrictMode
-   * mounts effects twice, so an abort-on-cleanup killed the very run the
-   * mount had just started — pressing Run produced a turn that said
-   * "Stopped by you" before a single node had reported. The second reason is
-   * that it was the wrong policy anyway: the Chat panel is a toggle, and
-   * hiding a panel is not a request to cancel the work you are watching.
-   * Stop is the only thing that stops a run, which is exactly what a button
-   * called Stop should mean.
+   * What that decision got wrong was the conclusion: it left the handle
+   * *inside* a conditionally rendered component, so closing the panel orphaned
+   * the stream (install-experience ticket 07) — the fetch stayed open, the
+   * reader kept writing into a dead component, and the unmount's "not running"
+   * report retired the only button that could have stopped it. An effect
+   * cleanup cannot tell a close from a remount. The close *gesture* can, and
+   * that is where the abort now hangs (`AppShell`'s Ask toggle). Stop still
+   * means the only deliberate stop; closing the panel you are watching the run
+   * in is now the other one, and it says so by actually ending the run.
    */
-  const aborters = useRef(new Map<string, AbortController>());
 
   const updateTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
     setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
@@ -398,10 +411,11 @@ export function AskPanel({
         readonly error?: string;
       }>,
     ) => {
-      // Created here rather than by each caller, so every stream this panel
-      // opens is stoppable by construction and none can be forgotten.
-      const aborter = new AbortController();
-      aborters.current.set(id, aborter);
+      // Registered here rather than by each caller, so every stream this
+      // panel opens is stoppable by construction and none can be forgotten —
+      // and registered with the *shell's* owner, so closing the panel stops it
+      // too. The caller never holds a controller; it only ever gets a signal.
+      const signal = streams.begin(id);
       // The rules — an empty id leaves what is held alone, a different one
       // rebinds — live in `thread.ts` where they are unit-tested; a thread is
       // a server object, so getting them wrong changes nothing on screen.
@@ -645,10 +659,17 @@ export function AskPanel({
         }
       };
 
-      const outcome = await call(onEvent, aborter.signal);
-      // The stream is settled either way; nothing is left to abort. Dropped
-      // before any of the branches below so no path can leak the entry.
-      aborters.current.delete(id);
+      // The stream is settled either way; nothing is left to abort. In a
+      // `finally` because the comment here used to *claim* "no path can leak
+      // the entry" while sitting outside one — the guarantee was really held
+      // a layer away by `streamFrom` never throwing, with nothing enforcing
+      // it. A stale entry is a Stop that appears to act and does nothing.
+      let outcome: Awaited<ReturnType<typeof call>>;
+      try {
+        outcome = await call(onEvent, signal);
+      } finally {
+        streams.settle(id);
+      }
 
       const stopped = outcome.ok && outcome.value != null && isCancelled(outcome.value);
       // A stop abandons the backlog; a natural ending drains it. See
@@ -737,7 +758,7 @@ export function AskPanel({
       }
       scrollToEnd();
     },
-    [controller, scrollToEnd, updateTurn, workbench],
+    [controller, scrollToEnd, streams, updateTurn, workbench],
   );
 
   const respondToApproval = useCallback(
@@ -894,7 +915,7 @@ export function AskPanel({
   const stop = useCallback(() => {
     const streaming = turns.find((turn) => turn.running);
     if (streaming) {
-      aborters.current.get(streaming.id)?.abort();
+      streams.abort(streaming.id);
       return;
     }
     const paused = turns.find((turn) => turn.pendingApproval);
@@ -906,7 +927,7 @@ export function AskPanel({
       clearPausedNodes('idle');
       updateTurn(paused.id, { pendingApproval: null, stopped: 'paused' });
     }
-  }, [clearPausedNodes, turns, updateTurn]);
+  }, [clearPausedNodes, streams, turns, updateTurn]);
 
   /**
    * Repaints the canvas for a document opened during a run — or after one.
@@ -1040,14 +1061,21 @@ export function AskPanel({
     onRunningChange?.(running);
   }, [running, onRunningChange]);
 
-  // A closed panel reports nothing, so the toolbar must not be left showing a
-  // Stop it can no longer deliver — the panel that owns the abort handle is
-  // gone. Reopening the panel re-reports the truth on its next render.
+  // A closed panel cannot report from its own state — `turns` goes with it —
+  // so the last thing it says is read from the owner that outlives it.
+  //
+  // It used to say `false` unconditionally, and that was the second half of
+  // ticket 07: nothing had been aborted, so the report retired the toolbar's
+  // Stop while a run was still streaming. It is `false` now on the ordinary
+  // path *because* the close gesture aborted first, and if some future path
+  // unmounts this panel with a stream still open it says so instead of
+  // covering for it — the shell holds the handle, so a Stop the toolbar keeps
+  // showing is one it can still deliver.
   const runningChangeRef = useRef(onRunningChange);
   useEffect(() => {
     runningChangeRef.current = onRunningChange;
   }, [onRunningChange]);
-  useEffect(() => () => runningChangeRef.current?.(false), []);
+  useEffect(() => () => runningChangeRef.current?.(streams.hasOpenStream), [streams]);
 
   /**
    * Honours a suggestion: add the node, wire it, say so, ask again.
