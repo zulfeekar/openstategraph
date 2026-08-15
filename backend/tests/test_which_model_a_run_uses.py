@@ -19,6 +19,8 @@ install's default is"*, a document's only way to say it is to omit the field.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from openstategraph.errors import NoProviderInstalled, UnknownProvider
@@ -311,3 +313,93 @@ class TestTheInstanceDefaultIsElected:
         assert resolved == OLLAMA_CLOUD_MODEL
         assert resolved.endswith("-cloud")
         assert "8b" not in resolved
+
+
+# --------------------------------------------------------------------- #
+# The elected default is shown, not guessed (T3)
+# --------------------------------------------------------------------- #
+
+
+class TestTheDefaultIsShown:
+    """*"Why is it not using my key"* has one honest answer, and it is a list.
+
+    `openstategraph providers` printed what each provider reads and whether it
+    is ready — everything except **which one won**, which is the question the
+    reader arrived with.
+    """
+
+    def test_providers_names_the_default_and_why(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from openstategraph.cli import main
+
+        _installed(monkeypatch, "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+
+        assert main(["providers"]) == 0
+        out = capsys.readouterr().out
+
+        assert "default:     anthropic:claude-haiku-4-5" in out
+        # The reason is one sentence; the terminal wraps it, so the assertion
+        # is about the words rather than about where the column ran out.
+        assert "the only provider integration installed, and it is configured" in " ".join(
+            out.split()
+        )
+
+    def test_the_elected_row_is_marked(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The `default:` line and the list must not have to be read together."""
+        from openstategraph.cli import main
+
+        _installed(monkeypatch, "anthropic", "openai")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+
+        assert main(["providers"]) == 0
+        rows = [line for line in capsys.readouterr().out.splitlines() if "(default)" in line]
+        assert len(rows) == 1
+        assert rows[0].startswith("openai")
+
+    def test_nothing_installed_says_every_run_will_fail(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The F2 case — a typo'd extra — read off the command that explains it."""
+        from openstategraph.cli import main
+
+        _installed(monkeypatch)
+        assert main(["providers"]) == 0
+        out = capsys.readouterr().out
+
+        assert "default:     (none)" in out
+        assert "no model provider integration is installed" in out
+        assert "pip install 'openstategraph[anthropic]'" in out
+
+    def test_serve_states_the_default_and_the_root_before_it_binds(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """What Run will actually do, said where nobody scrolls past it.
+
+        A message printed after a server is listening is a message someone
+        scrolls past — `cmd_serve`'s own rule, and the reason the two refusals
+        already live in the pre-bind block.
+        """
+        from openstategraph.cli import startup_facts
+        from openstategraph.workflows_root import WORKFLOWS_ROOT_ENV
+
+        _installed(monkeypatch, "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+        monkeypatch.setenv(WORKFLOWS_ROOT_ENV, str(tmp_path / "flows"))
+
+        facts = startup_facts()
+
+        assert facts[0] == "default model  anthropic:claude-haiku-4-5"
+        assert facts[1] == f"workflows      {tmp_path / 'flows'}"
+
+    def test_serve_says_none_rather_than_raising_with_nothing_installed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`serve` starts on a bare install — it just says what will happen."""
+        from openstategraph.cli import startup_facts
+
+        _installed(monkeypatch)
+        assert startup_facts()[0] == "default model  (none)"

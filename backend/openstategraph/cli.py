@@ -42,6 +42,7 @@ import argparse
 import json
 import os
 import sys
+import textwrap
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
@@ -522,6 +523,34 @@ def no_provider_warning() -> str | None:
     return catalogue.no_provider_message()
 
 
+def startup_facts() -> list[str]:
+    """What Run will actually do, in two lines, before anything is bound.
+
+    The two questions a reader has when a server they just started shows them
+    an editor: *which model will this call*, and *where are my workflows*. Both
+    were answerable only by reading source or by pressing Run and finding out
+    (install-experience T3).
+
+    A function rather than four `print`s inside `cmd_serve`, for the reason the
+    header of this file gives: a command is argument handling plus a call, and
+    a block of formatting inside one is a block of formatting no test reaches
+    without binding a socket.
+
+    Never raises. `resolve_model` refuses an install with no provider, which is
+    correct for a run and wrong here — `serve` is expected to start on a bare
+    install and say what will happen, and `no_provider_warning` has already
+    said the rest.
+    """
+    from openstategraph.providers import provider_catalogue
+    from openstategraph.workflows_root import workflows_root
+
+    default = provider_catalogue().elected_default()
+    return [
+        f"default model  {default.model or '(none)'}",
+        f"workflows      {workflows_root()}",
+    ]
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """The whole product on one origin: editor at `/`, chat at `/chat`, API
     under `/api`. Requires the `[server]` extra.
@@ -565,6 +594,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     providers = no_provider_warning()
     if providers is not None:
         print(providers, file=sys.stderr, flush=True)
+
+    # …and the two facts that answer "what will Run actually do". Not a
+    # warning, so stdout; `flush` for the reason the URLs below flush.
+    for fact in startup_facts():
+        print(fact, flush=True)
 
     try:
         listener = bind_listener(args.host, args.port)
@@ -842,7 +876,18 @@ def cmd_providers(_args: argparse.Namespace) -> int:
 
     catalogue = provider_catalogue()
     config = find_config_file()
+    default = catalogue.elected_default()
     print(f"config file: {config if config else '(none)'}")
+    # The line the list was missing: which provider won, and why. Everything
+    # else here answers "what could work"; only this answers the question the
+    # reader actually arrived with (install-experience T3).
+    print(
+        textwrap.fill(
+            f"default:     {default.model or '(none)'} — {default.reason}",
+            width=88,
+            subsequent_indent=" " * 13,
+        )
+    )
     print()
     for spec in catalogue.list():
         # Three states, not two. "needs a key" on a provider whose integration
@@ -857,7 +902,8 @@ def cmd_providers(_args: argparse.Namespace) -> int:
         else:
             state = "needs a key"
         variables = ", ".join(spec.env_vars) or "(no credential needed)"
-        print(f"{spec.name:<12} {state:<12} {spec.model_string()}")
+        elected = "   (default)" if spec is default.spec else ""
+        print(f"{spec.name:<12} {state:<12} {spec.model_string()}{elected}")
         print(f"{'':<12} reads {variables}; extra 'openstategraph[{spec.extra}]'")
     for warning in catalogue.warnings:
         print(f"warning: {warning}", file=sys.stderr)

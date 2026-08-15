@@ -173,6 +173,20 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **The default is shown rather than guessed at** (install-experience T3).
+  `openstategraph providers` gains a `default:` line naming the elected model
+  *and the reason* — "the only provider integration installed, and it is
+  configured", or "2 integrations installed and configured (anthropic, openai);
+  the first registered wins. Pin one with default_model: in
+  openstategraph.yaml" — and marks the elected row `(default)`. That command's
+  docstring already said the honest answer to *"why is it not using my key"* is
+  a list; the list was missing which one won.
+
+  `openstategraph serve` gains `startup_facts()`, printed in the pre-bind block
+  beside the two existing refusals: the default model and the resolved
+  workflows root. A message printed after a server is listening is a message
+  someone scrolls past.
+
 - **A bare provider prefix is a shorthand, and now it resolves** (workflow-gallery
   ticket 12, install-experience T1). `settings.model: "ollama:"` — the spelling
   the gallery catalogue specified, on the stated belief that it resolved to the
