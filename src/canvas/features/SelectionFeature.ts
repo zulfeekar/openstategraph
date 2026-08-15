@@ -45,7 +45,12 @@ export class SelectionFeature extends PaperFeature {
     // Listened for on the container, since the paper has already declined it.
     // Selection only — the drag guard is a separate question about the same
     // gesture, and this answers neither for the other.
-    container.addEventListener('pointerdown', (event: PointerEvent) => {
+    //
+    // Through `onDom`, like the four registrations on this same element
+    // below: the container is the React-owned stage div, which outlives the
+    // paper, so a raw `addEventListener` here is a listener per canvas
+    // rebuild retaining a whole disposed canvas.
+    this.onDom(container, 'pointerdown', ((event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('[data-no-drag]')) return;
       const card = target.closest('[data-node-id]');
@@ -53,7 +58,7 @@ export class SelectionFeature extends PaperFeature {
       if (!nodeId) return;
       if (controller.selection.hasNode(nodeId)) return;
       controller.selectionActions.selectNodes([nodeId]);
-    });
+    }) as never);
 
     this.onPaper('element:pointerdown', ((view: dia.ElementView, event: dia.Event) => {
       const nodeId = String(view.model.id);

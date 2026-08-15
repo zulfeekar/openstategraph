@@ -19,16 +19,10 @@ import {
 } from './interactionThresholds';
 import { RunFollower } from './follow/RunFollower';
 import type { IPaperFeature, PaperFeatureContext } from './features/IPaperFeature';
-import { PanZoomFeature } from './features/PanZoomFeature';
-import { FrameOnLoadFeature } from './features/FrameOnLoadFeature';
-import { SelectionFeature } from './features/SelectionFeature';
-import { DragCommitFeature } from './features/DragCommitFeature';
-import { SnaplinesFeature } from './features/SnaplinesFeature';
-import { LinkToolsFeature } from './features/LinkToolsFeature';
-import { WaypointCommitFeature } from './features/WaypointCommitFeature';
-import { KeyboardFeature, createDefaultShortcuts, type Shortcut } from './features/KeyboardFeature';
+import { createDefaultFeatures } from './features/defaultFeatures';
+import type { KeyboardFeature, Shortcut } from './features/KeyboardFeature';
 import {
-  ConnectionFeature,
+  type ConnectionFeature,
   createConnectionValidator,
   validateMagnet,
 } from './features/ConnectionFeature';
@@ -84,7 +78,7 @@ export class PaperController implements IDisposable {
 
   private readonly disposables = new DisposableStore();
   private readonly keyboard: KeyboardFeature;
-  private readonly connection = new ConnectionFeature();
+  private readonly connection: ConnectionFeature;
   private gridVisible: boolean;
 
   constructor(
@@ -210,21 +204,11 @@ export class PaperController implements IDisposable {
     syncSnapRadius(this.viewport.zoom);
     this.disposables.addFn(this.viewport.onChange(({ zoom }) => syncSnapRadius(zoom)));
 
-    const panZoom = new PanZoomFeature();
-    this.keyboard = new KeyboardFeature(createDefaultShortcuts(options.shortcuts ?? []));
+    const defaults = createDefaultFeatures({ shortcuts: options.shortcuts });
+    this.keyboard = defaults.keyboard;
+    this.connection = defaults.connection;
 
-    this.installAll([
-      panZoom,
-      new SelectionFeature(panZoom),
-      new DragCommitFeature(),
-      new SnaplinesFeature(),
-      new FrameOnLoadFeature(),
-      this.connection,
-      new LinkToolsFeature(),
-      new WaypointCommitFeature(),
-      this.keyboard,
-      ...(options.features ?? []),
-    ]);
+    this.installAll([...defaults.all, ...(options.features ?? [])]);
 
     // `paper.remove()` takes the surface div with it; the React container it
     // was appended to is left untouched.
