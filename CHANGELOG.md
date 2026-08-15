@@ -5,6 +5,17 @@ The release train's first ride, on the beta repository, to TestPyPI only. The
 candidate carries everything 0.3.0 below describes plus the work landed since
 that section was written:
 
+- **Connect an MCP server** (`tool.mcp`): one card binds every tool a Model
+  Context Protocol server offers onto an agent — pick a registered server by
+  name or configure one inline with a URL, transport, auth type and a per-tool
+  filter. The LangChain documentation and API-reference servers ship as
+  defaults, keyless, so a new project has two working servers with nothing to
+  configure. Server definitions live in `openstategraph.yaml` under
+  `mcp_servers:`; a credential is named by its environment variable and never
+  enters a workflow document. A server that is unreachable, that rejects the
+  credential, or that does not speak MCP costs the agent its tools and says so
+  in the run's warnings — it never fails the compile. Needs
+  `openstategraph[mcp]`.
 - **Twenty-three worked examples ship in the wheel** (`examples list` /
   `examples copy [--all]`) — copy-on-use, provider-neutral, each explained
   with its compiled graph on the site's gallery page.
