@@ -2,19 +2,46 @@
    inside a row that carried two more buttons beside it, so the toolbar's
    surface — its background and its bottom border — stopped short of the
    window and those two controls sat on the canvas colour, reading as
-   floating chrome rather than as part of the toolbar. They are inside it
-   now, and this stretches. */
+   floating chrome rather than as part of the toolbar. They are inside it now,
+   and the row is gone, so the width is simply the shell's cross-axis stretch.
+
+   Ticket 06 spelled that stretch `flex: 1 1 auto`, and ticket 24 is the bill
+   for it: `.app-shell` is a **column**, so `flex-grow` there asks for height.
+   Above 1100px the body's content basis left no free space and nothing
+   showed; below it `AppShell.css` takes both side panels out of flow, the
+   body's basis collapses to the canvas's own content, and the toolbar
+   collected the surplus — 424px tall at a 768px window. `flex: none` is the
+   whole fix for that half; the wrapping below is the other half. */
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  flex: 1 1 auto;
+  /* Rows stack from the top and are sized by their own contents, rather than
+     sharing the bar's height between them. */
+  align-content: flex-start;
+  column-gap: var(--space-2);
+  row-gap: 0;
+  flex: none;
   min-width: 0;
-  height: var(--layout-topbar-height);
+  /* `min-height`, not `height`: one row is the resting state, and a wrapped
+     line is allowed to add exactly one more. */
+  min-height: var(--layout-topbar-height);
   padding-inline: var(--space-3);
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border-default);
   z-index: var(--z-topbar);
+}
+
+/* Deliberate degradation (ticket 24). Below about 1024px the controls no
+   longer fit on one line; before this they overflowed the right edge of a
+   header that has no scroller, which put **Run** — the one button a user
+   comes here to press — off-screen at phone widths with no way to reach it.
+   Wrapping keeps everything reachable and costs one row unit at a time, so
+   the bar's height is always a whole number of rows rather than whatever the
+   tallest control in the wrapped line happens to be. */
+.topbar__brand,
+.topbar__group {
+  min-height: var(--layout-topbar-height);
 }
 
 .topbar__brand {
@@ -70,9 +97,16 @@
   flex: 1 1 auto;
 }
 
-/* Below this width the document name is the first thing to go — the
- * controls all still need to be reachable. */
-@media (max-width: 900px) {
+/* Below this width the document name is the first thing to go — the controls
+ * all still need to be reachable, and the name is on screen twice anyway
+ * (the Inspector's DOCUMENT ▸ NAME field is where it is edited).
+ *
+ * 1100px, not the 900px this said before ticket 24, and the number is not
+ * arbitrary: it is the breakpoint `AppShell.css` already uses to float the
+ * side panels over the canvas, and dropping ~28ch here is what keeps 1024 —
+ * a desktop width — a single toolbar row instead of two. One number, one
+ * meaning: below it, the window is too narrow to show everything at once. */
+@media (max-width: 1100px) {
   .topbar__doc,
   .topbar__brand .topbar__divider {
     display: none;

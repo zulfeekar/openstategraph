@@ -27,11 +27,49 @@ describe('the toolbar', () => {
   it('stretches to the right edge instead of ending mid-window', () => {
     // It used to be `flex: none` inside a row that held two more buttons
     // beside it, so the toolbar's surface stopped short of the window and the
-    // last two controls floated on the canvas background.
-    expect(css).toMatch(/\.topbar\s*\{[^}]*flex:\s*1 1 auto/);
-    expect(css).not.toMatch(/\.topbar\s*\{[^}]*flex:\s*none/);
+    // last two controls floated on the canvas background. Ticket 06 fixed that
+    // by deleting the row — which is what these three assertions pin. Width
+    // now comes from the shell's own cross-axis stretch and needs no `flex`
+    // at all; see the height test below for why asserting `flex: 1 1 auto`
+    // here (as this test did until ticket 24) pinned the bug rather than the
+    // fix.
+    expect(shell).toMatch(/<div className="app-shell">\s*<TopBar/);
     expect(shellCss).not.toContain('app-shell__workflow-btn');
     expect(shell).not.toContain('app-shell__topbar-row');
+  });
+
+  it('never grows along the shell’s main axis, which is vertical', () => {
+    // Ticket 24, the owner's "the top bar is buggy height on smaller screens".
+    // `.app-shell` is `flex-direction: column`, so `flex-grow` on the toolbar
+    // is a claim on **height**, not width. Ticket 06 wrote `flex: 1 1 auto`
+    // meaning "reach the right edge"; below 1100px `AppShell.css` lifts both
+    // side panels out of flow, `.app-shell__body`'s auto basis collapses to
+    // the canvas's own content, and the toolbar duly grew into the free space
+    // it had been told it could have — 424px of it at 768px wide, measured.
+    expect(css).toMatch(/\.topbar\s*\{[^}]*flex:\s*none/);
+    expect(css).not.toMatch(/\.topbar\s*\{[^}]*flex:\s*1 1 auto/);
+  });
+
+  it('degrades by wrapping into whole rows, not by overflowing off-screen', () => {
+    // At 390px the controls ran 741px wide inside a 390px header with no
+    // scroller, so Run — the primary action — was simply off the edge.
+    // Wrapping keeps every control reachable, and pinning each line to the
+    // row token keeps the bar's height a multiple of one row instead of
+    // whatever the tallest control in a wrapped line happens to be.
+    expect(css).toMatch(/\.topbar\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css).toMatch(/\.topbar\s*\{[^}]*min-height:\s*var\(--layout-topbar-height\)/);
+    expect(css).toMatch(
+      /\.topbar__brand,\s*\.topbar__group\s*\{[^}]*min-height:\s*var\(--layout-topbar-height\)/,
+    );
+    // Row gap zero, or every wrapped row would sit a gap-token apart and the
+    // height would stop being a multiple of the row.
+    expect(css).toMatch(/\.topbar\s*\{[^}]*row-gap:\s*0/);
+    // The bar's own height is the token and nothing else — no hand-tuned
+    // pixel value, and in particular no fixed `height`, which is what made a
+    // wrapped row overflow its own bar rather than lengthen it. (Glyph boxes
+    // inside it — the mark, the health dot — are sized in px legitimately;
+    // this looks only at the `.topbar` rule.)
+    expect(css).not.toMatch(/\.topbar\s*\{[^}]*[^-]height:\s*\d+px/);
   });
 
   it('carries New, so creating a workflow is not hidden in a panel', () => {
