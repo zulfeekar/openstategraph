@@ -319,7 +319,9 @@ def memory_preconditions(settings: MemorySettings, *, store: BaseStore | None) -
         "settings.memory declares "
         + ", ".join(s.value for s in settings.scopes)
         + " but no memory store is configured, so nothing is remembered between "
-        "runs. Set OPENSTATEGRAPH_MEMORY_PATH or OPENSTATEGRAPH_POSTGRES_URL."
+        "runs. A store is built by default; this run has none because one was "
+        "opted out of (OPENSTATEGRAPH_MEMORY_PATH=memory) or a caller passed "
+        "store=None."
     ]
 
 
@@ -538,90 +540,6 @@ def memory_ttl() -> TTLConfig | None:
     )
 
 
-def build_store() -> BaseStore:
-    """The process-wide long-term store.
-
-    In-memory by default (the dev tool's honest baseline). Setting
-    ``OPENSTATEGRAPH_MEMORY_PATH=/path/to/memory.sqlite`` opts into a
-    sqlite-backed store so memories survive a restart — the same opt-in
-    shape as ``settings.checkpointer: "sqlite"``, and the same constraint:
-    one uvicorn worker, one connection (``check_same_thread=False`` makes
-    the single shared connection usable across request threads, not across
-    processes). An unusable path degrades loudly to in-memory rather than
-    failing startup.
-
-    ``OPENSTATEGRAPH_POSTGRES_URL`` (ticket 06, the ``[postgres]`` extra) puts
-    the same store in a database instead — the seam this docstring used to
-    promise, now filled. It ranks *below* ``OPENSTATEGRAPH_MEMORY_PATH``
-    because that names one file outright and is therefore the more specific
-    answer; a deployment that set both meant the file. Unlike every other
-    backend here, a broken Postgres **raises** rather than degrading: see
-    `openstategraph.postgres` for why.
-    """
-    import os
-
-    from langgraph.store.memory import InMemoryStore
-
-    from openstategraph import postgres
-
-    raw_path = os.environ.get("OPENSTATEGRAPH_MEMORY_PATH", "").strip()
-    postgres_url = postgres.postgres_url()
-    if not raw_path and postgres_url:
-        return cast("BaseStore", postgres.store(postgres_url))
-    if raw_path:
-        try:
-            import sqlite3
-
-            from langgraph.store.sqlite import SqliteStore
-
-            path = Path(raw_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(
-                path,
-                check_same_thread=False,
-                isolation_level=None,  # autocommit — the store BEGINs itself
-            )
-            store = SqliteStore(conn, ttl=memory_ttl())
-            store.setup()
-            if store.ttl_config is not None:
-                # Nothing expires without a sweeper running; `close_resource`
-                # already knows to stop it before closing the connection.
-                store.start_ttl_sweeper()
-            return store
-        except ImportError:
-            # Same undeclared-dependency trap as `checkpointer_for`: the user
-            # set a path, so they expect memories on disk. Name the extra.
-            from openstategraph._extras import install_hint
-
-            _log().warning(
-                "OPENSTATEGRAPH_MEMORY_PATH=%r asked for a durable store, but "
-                "langgraph-checkpoint-sqlite is not installed — falling back to an "
-                "IN-MEMORY store, so saved memories will NOT survive a restart. "
-                "Install it with: %s",
-                raw_path,
-                install_hint("sqlite"),
-            )
-        except Exception:
-            _log().warning(
-                "OPENSTATEGRAPH_MEMORY_PATH=%r unusable; falling back to an "
-                "IN-MEMORY store, so saved memories will NOT survive a restart.",
-                raw_path,
-                exc_info=True,
-            )
-    if os.environ.get(MEMORY_TTL_ENV, "").strip():
-        # The named-extra degradation shape this module already uses: somebody
-        # asked for expiry and would otherwise never learn they did not get it.
-        # `InMemoryStore`'s constructor takes `index` and nothing else, and a
-        # process that loses every memory on restart has no retention question.
-        _log().warning(
-            "%s is set, but memories are IN-MEMORY and expire only when this "
-            "process ends. Retention needs a durable store: set "
-            "OPENSTATEGRAPH_MEMORY_PATH or OPENSTATEGRAPH_POSTGRES_URL.",
-            MEMORY_TTL_ENV,
-        )
-    return InMemoryStore()
-
-
 #: The deployment's explicit answer for where thread checkpoints live. An
 #: absolute (or cwd-relative) sqlite path, or the literal ``memory`` to opt
 #: OUT of durability on purpose — a stateless container, or a test suite that
@@ -640,6 +558,160 @@ from openstategraph.state_dir import STATE_DIR_NAME as STATE_DIR_NAME  # noqa: F
 from openstategraph.state_dir import state_dir
 
 CHECKPOINT_FILE_NAME = "checkpoints.sqlite"
+
+
+#: The deployment's explicit answer for where long-term memories live. A
+#: sqlite path, or the literal ``memory`` to opt OUT of durability — the same
+#: word, and the same stated-rather-than-silent opt-out, as
+#: `CHECKPOINT_PATH_ENV`. One idea, one spelling: a stateless container should
+#: not have to learn two.
+MEMORY_PATH_ENV = "OPENSTATEGRAPH_MEMORY_PATH"
+
+#: The file the default store opens, beside the checkpointer's, under the same
+#: state directory. Beside, and not inside one database, because the two have
+#: different lifetimes: a deployment may legitimately wipe threads and keep
+#: what it learned, and `close_resource` releases them independently.
+MEMORY_FILE_NAME = "memory.sqlite"
+
+
+def memory_path(workflows_root_dir: Path | str | None = None) -> Path | None:
+    """Where the process-wide store writes, or None for in-memory.
+
+    The exact shape of `checkpoint_path`, and deliberately so: two answers to
+    "where does state go" that resolved differently would be two things to
+    back up, two things to point at a volume, and one of them forgotten.
+    """
+    import os
+
+    raw = os.environ.get(MEMORY_PATH_ENV, "").strip()
+    if raw:
+        if raw.lower() in {IN_MEMORY_CHECKPOINT, ":memory:"}:
+            return None
+        return Path(raw).expanduser()
+    return state_dir(workflows_root_dir) / MEMORY_FILE_NAME
+
+
+def _open_sqlite_store(path: Path, asked_by: str) -> BaseStore | None:
+    """A `SqliteStore` on `path`, or None having said loudly why not.
+
+    One implementation for the default and for an explicitly named file, for
+    the reason `_open_sqlite_saver` states about its own pair: the degradation
+    message is knowledge, and two copies is how one ends up describing a
+    symptom instead of naming the fix.
+    """
+    try:
+        import sqlite3
+
+        from langgraph.store.sqlite import SqliteStore
+    except ImportError:
+        from openstategraph._extras import install_hint
+
+        _log().warning(
+            "%s asked for durable memories, but langgraph-checkpoint-sqlite is not "
+            "installed — falling back to an IN-MEMORY store. Install it with: %s",
+            asked_by,
+            install_hint("sqlite"),
+        )
+        return None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(
+            path,
+            check_same_thread=False,
+            isolation_level=None,  # autocommit — the store BEGINs itself
+        )
+        store = SqliteStore(conn, ttl=memory_ttl())
+        # Eager, exactly as `_open_sqlite_saver` is eager: it is what makes the
+        # file and its tables exist *now*, so the startup line below reports a
+        # location that is true rather than intended.
+        store.setup()
+        if store.ttl_config is not None:
+            # Nothing expires without a sweeper running; `close_resource`
+            # already knows to stop it before closing the connection.
+            store.start_ttl_sweeper()
+        return cast("BaseStore", store)
+    except Exception:
+        _log().warning(
+            "%s requested durable memories at %s, but it could not be opened; "
+            "falling back to an IN-MEMORY store.",
+            asked_by,
+            path,
+            exc_info=True,
+        )
+        return None
+
+
+def build_store(workflows_root_dir: Path | str | None = None) -> BaseStore:
+    """The process-wide long-term store, and the one line that states it.
+
+    **Durable by default** (install-experience wave 2), which is the ticket-05
+    decision applied to the Store's side of the same question. It used to be
+    in-memory unless `MEMORY_PATH_ENV` named a file, and that asymmetry was
+    argued at the time: a lost approval is a correctness bug, lost memories are
+    a quality regression. What changed is the standard. `save_memory` answers
+    *"Remembered (user)."* — a sentence that has to be true after lunch, and on
+    the dev stack, which restarts on every file save, it was not true for the
+    length of one edit.
+
+    Three backends, in one order of specificity, mirroring
+    `build_checkpointer`: `MEMORY_PATH_ENV` names one file — or opts out with
+    ``memory`` — and wins outright; ``OPENSTATEGRAPH_POSTGRES_URL`` is next;
+    the state directory's `memory.sqlite` is the convention underneath both.
+    The opt-out stays on top for the reason it does there: a container that
+    said "no persistence" must not be handed a database because a sibling
+    variable happened to be in the environment.
+
+    **Exactly one line says which one you got**, worded to match the
+    checkpointer's pair — INFO when memories are on disk, WARNING when they are
+    not. Its absence was the more consequential silence of the two, because
+    nothing else in the product ever hinted that a remembered fact was
+    temporary.
+
+    The sqlite constraint is unchanged: one uvicorn worker, one connection
+    (``check_same_thread=False`` makes the single shared connection usable
+    across request threads, not across processes). An unusable path degrades
+    loudly rather than failing startup. Unlike every other backend here, a
+    broken Postgres **raises**: see `openstategraph.postgres` for why.
+    """
+    import os
+
+    from langgraph.store.memory import InMemoryStore
+
+    from openstategraph import postgres
+
+    raw_path = os.environ.get(MEMORY_PATH_ENV, "").strip()
+    path = memory_path(workflows_root_dir)
+    postgres_url = postgres.postgres_url()
+    if not raw_path and postgres_url:
+        store = cast("BaseStore", postgres.store(postgres_url))
+        _log().info("memories persist in the configured Postgres database")
+        return store
+    if path is not None:
+        opened = _open_sqlite_store(
+            path, f"{MEMORY_PATH_ENV}={raw_path!r}" if raw_path else "the default store"
+        )
+        if opened is not None:
+            _log().info("memories persist at %s", path)
+            return opened
+    if os.environ.get(MEMORY_TTL_ENV, "").strip():
+        # The named-extra degradation shape this module already uses: somebody
+        # asked for expiry and would otherwise never learn they did not get it.
+        # `InMemoryStore`'s constructor takes `index` and nothing else, and a
+        # process that loses every memory on restart has no retention question.
+        _log().warning(
+            "%s is set, but memories are IN-MEMORY and expire only when this "
+            "process ends. Retention needs a durable store: unset %s=%s or set "
+            "OPENSTATEGRAPH_POSTGRES_URL.",
+            MEMORY_TTL_ENV,
+            MEMORY_PATH_ENV,
+            IN_MEMORY_CHECKPOINT,
+        )
+    _log().warning(
+        "memories are in-memory and will NOT survive a restart%s",
+        f" ({MEMORY_PATH_ENV}={IN_MEMORY_CHECKPOINT})" if path is None else "",
+    )
+    return InMemoryStore()
+
 
 
 def checkpoint_path(workflows_root_dir: Path | str | None = None) -> Path | None:

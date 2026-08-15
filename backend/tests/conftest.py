@@ -42,6 +42,13 @@ from langchain_core.messages import AIMessage
 # default exercised rather than hidden.
 os.environ.setdefault("OPENSTATEGRAPH_CHECKPOINT_PATH", "memory")
 
+# And the Store, for exactly the same reason and by exactly the same mechanism
+# — since install-experience wave 2 it is durable by default too, so without
+# this the suite would leave `workflows/.openstategraph/memory.sqlite` behind.
+# `test_persisted_memory_store.py` is the suite that is *about* the default and
+# clears this through `monkeypatch`.
+os.environ.setdefault("OPENSTATEGRAPH_MEMORY_PATH", "memory")
+
 #: A predicate over the model's incoming context, and the reply to give.
 RouteRule = tuple[Callable[[str], bool], str]
 

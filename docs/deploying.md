@@ -225,7 +225,14 @@ Precedence, most specific first:
 | `OPENSTATEGRAPH_POSTGRES_URL=...` | That database. |
 | *(nothing)* | sqlite under `state_dir()`. |
 
-The store follows the same shape with `OPENSTATEGRAPH_MEMORY_PATH` on top.
+The store follows the same shape — the same four rows, with
+`OPENSTATEGRAPH_MEMORY_PATH` in the checkpoint variable's place and
+`memory.sqlite` beside `checkpoints.sqlite` in the last one. Since
+install-experience wave 2 the *default* row is the same too: say nothing and
+long-term memories are durable, exactly as approvals are, and one startup line
+says where they landed. Two files rather than one database, because the two
+have different lifetimes — wiping threads while keeping what was learned is a
+thing a deployment legitimately does.
 Unlike every other backend here, an unreachable Postgres **fails startup**
 rather than degrading: nobody sets that variable by accident, and quietly
 writing their approvals to a local file instead is a surprise discovered at

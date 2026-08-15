@@ -482,7 +482,7 @@ constructor is worse than one that is honest about the line.
 | --- | --- | --- | --- |
 | Chat model | `model=` | the document's `settings.model`, else `default_model:` in `openstategraph.yaml`, else the instance default — the provider integration you installed, preferring one whose credential is set (`openstategraph providers` shows which and why). With the key missing you get a stand-in raising `MissingProviderKey` the first time a node uses it, `MissingProviderPackage` when the extra is absent, and `NoProviderInstalled` when no integration is installed at all | a pre-built model object with your own retry, base URL, temperature or gateway |
 | Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
-| Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
+| Long-term memory | `store=` | durable: `<workflows root>/.openstategraph/memory.sqlite`, beside the checkpointer's file (`OPENSTATEGRAPH_MEMORY_PATH` moves it, or `=memory` opts out; `OPENSTATEGRAPH_POSTGRES_URL` puts it in a database) | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
 | Functions | `functions=` | the package's own `functions/` | the same reasons, for `function.*` steps |
 | Middleware | `middleware=` | the package's own `middlewares/`, one file per slot | your existing guardrail/redaction/tracing middleware, contributed by slot name without writing a file into the package |
@@ -523,10 +523,10 @@ person running it:
 OPENSTATEGRAPH_MEMORY_TTL_MINUTES=10080   # seven days; unset means never expire
 ```
 
-It needs a durable store (`OPENSTATEGRAPH_MEMORY_PATH` or
-`OPENSTATEGRAPH_POSTGRES_URL`) and says so loudly if you set it without one —
-an in-process store loses everything on restart, so it has no retention
-question to answer. Expiry deliberately does **not** refresh on read: a stale
+It needs a durable store, which you have by default; it says so loudly if you
+have opted out of one (`OPENSTATEGRAPH_MEMORY_PATH=memory`), because a store
+that loses everything on restart has no retention question to answer. Expiry
+deliberately does **not** refresh on read: a stale
 fact that keeps surfacing in search results would otherwise become immortal
 precisely because it keeps surfacing.
 

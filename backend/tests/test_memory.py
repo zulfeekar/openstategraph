@@ -199,15 +199,22 @@ class TestRetentionIsTheDurableStoresToOffer:
         assert any(MEMORY_TTL_ENV in r.getMessage() for r in caplog.records)
 
     def test_asking_for_retention_without_a_durable_store_is_reported(
-        self, monkeypatch, caplog
+        self, tmp_path, monkeypatch, caplog
     ) -> None:
         # The named-extra degradation shape this module already uses: the user
         # asked for expiry and would otherwise never learn they did not get it.
+        #
+        # The *precondition* moved and the meaning did not. Deleting the path
+        # used to produce an in-memory store; since install-experience wave 2
+        # it produces a durable one, which answers the retention question
+        # perfectly well. The case worth reporting is now the deliberate
+        # opt-out — somebody who asked for expiry and, elsewhere in the same
+        # environment, asked for nothing to be kept at all.
         monkeypatch.setenv(MEMORY_TTL_ENV, "60")
-        monkeypatch.delenv("OPENSTATEGRAPH_MEMORY_PATH", raising=False)
+        monkeypatch.setenv("OPENSTATEGRAPH_MEMORY_PATH", "memory")
         monkeypatch.delenv("OPENSTATEGRAPH_POSTGRES_URL", raising=False)
         with caplog.at_level(logging.WARNING, logger="openstategraph.memory"):
-            build_store()
+            build_store(tmp_path)
         assert any("in-memory" in r.getMessage().lower() and MEMORY_TTL_ENV in r.getMessage()
                    for r in caplog.records)
 
@@ -782,14 +789,25 @@ class TestScopeThreadingAcrossSubgraphs:
 
 
 class TestDurableStore:
-    """OPENSTATEGRAPH_MEMORY_PATH opts the long-term Store into sqlite —
-    memories survive a restart. Default stays in-memory (dev tool). The
-    single-worker constraint applies: one uvicorn worker, one connection."""
+    """OPENSTATEGRAPH_MEMORY_PATH moves the long-term Store, or opts out of it.
 
-    def test_default_is_in_memory(self, monkeypatch) -> None:
+    The **default** is durable since install-experience wave 2 — that half
+    lives in `test_persisted_memory_store.py`, next to the checkpointer's
+    equivalent, because the two now answer one question. What stays here is the
+    variable's own behaviour. The single-worker constraint is unchanged: one
+    uvicorn worker, one connection.
+    """
+
+    def test_the_opt_out_is_the_only_way_back_to_in_memory(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Was `test_default_is_in_memory`, and it asserted the thing this wave
+        reversed. Kept rather than deleted because the *reachability* of an
+        in-memory store still matters — a stateless container must be able to
+        ask for one — it is simply no longer what you get by saying nothing."""
         from openstategraph.memory import build_store
-        monkeypatch.delenv("OPENSTATEGRAPH_MEMORY_PATH", raising=False)
-        assert type(build_store()).__name__ == "InMemoryStore"
+        monkeypatch.setenv("OPENSTATEGRAPH_MEMORY_PATH", "memory")
+        assert type(build_store(tmp_path)).__name__ == "InMemoryStore"
 
     def test_env_path_makes_memories_survive_a_reopen(self, tmp_path, monkeypatch) -> None:
         from openstategraph.memory import build_store

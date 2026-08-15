@@ -11,7 +11,7 @@ reason has changed (see "Durability"). Companion to
 | --- | --- | --- | --- |
 | **Context** | checkpointer thread (`thread_id`) — `messages` is the record; turn-scratch (`outputs`/`answer`/`feedback`/`attempts`/`decisions`) is wiped at each turn boundary by the input node's `RESET` update | the graph itself | **yes, by default** (ticket 05); opt out with `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` |
 | **Procedural** | `skills/` (always in the prompt, small) + `knowledge/` (on-demand `knowledge_lookup`, chunked) | developers and build-time trainers | yes — files in git |
-| **Episodic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | opt-in: `OPENSTATEGRAPH_MEMORY_PATH`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
+| **Episodic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | **yes, by default** (2026-08-15); opt out with `OPENSTATEGRAPH_MEMORY_PATH=memory`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
 | **Knowledge** | the second brain (see `knowledge-architecture.md`) | builders on the button, **never** runtime agents | yes — files in git |
 
 **Knowledge ≠ memory** stays an invariant: promoting a runtime learning into
@@ -132,12 +132,29 @@ nobody has hit.
   `api/main.py`) lost every paused `human.approval` on restart, and the dev
   stack restarts on every file save, so that was a daily loss rather than a
   hosting concern.
-- Store: `OPENSTATEGRAPH_MEMORY_PATH=/path/memory.sqlite` → sqlite-backed
-  `SqliteStore` (autocommit connection, `check_same_thread=False`); unset →
-  `InMemoryStore`. An unusable path degrades loudly to in-memory. Still opt-in,
-  and that asymmetry is deliberate: losing a *paused approval* loses a person's
-  in-flight decision, while losing accumulated memories degrades quality — only
-  the first is a correctness bug.
+- **Store — durable by default too, since 2026-08-15 (install-experience wave
+  2), and this bullet is the amendment.** The resolution order is now the
+  checkpointer's, spelled with the Store's variable:
+  `OPENSTATEGRAPH_MEMORY_PATH` names one file — or opts out with the same word,
+  `memory` — and wins outright; `OPENSTATEGRAPH_POSTGRES_URL` is next;
+  `<state dir>/memory.sqlite` is the convention underneath both (autocommit
+  connection, `check_same_thread=False`). An unusable path degrades loudly to
+  in-memory, and **exactly one startup line states which one you got** —
+  `memories persist at X` at INFO, or `memories are in-memory and will NOT
+  survive a restart` at WARNING.
+
+  > The asymmetry this replaces was argued, not accidental, and the argument
+  > was sound as far as it went: losing a *paused approval* loses a person's
+  > in-flight decision, while losing accumulated memories degrades quality —
+  > only the first is a correctness bug. Two things overturned it. The Store
+  > emitted **no line at all**, so unlike every other degradation in this
+  > module the loss was undiscoverable: `save_memory` answered *"Remembered
+  > (user)."* into a store that died with the process, which is a true
+  > sentence about a fact that would not survive lunch. And the standard moved
+  > — "one line to a working canvas" includes memories surviving the restart
+  > the dev stack performs on every file save. The quality/correctness
+  > distinction still holds; it is no longer a reason to default to the losing
+  > side of it.
 - **Dependency.** The default is sqlite, so `langgraph-checkpoint-sqlite` moved
   onto the `[server]` extra rather than into the core four (it drags
   `aiosqlite` and the `sqlite-vec` binary wheel, which a `load_workflow`

@@ -64,7 +64,6 @@ class WorkflowServices:
         principals: IPrincipals | None = None,
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
-        from openstategraph.memory import build_store
 
         self.store = WorkflowStore(root=workflows_root)
         #: Live catalogue changes — the fan-out behind `GET /api/events`, so an
@@ -82,7 +81,12 @@ class WorkflowServices:
         #: a `build_store()` call hidden in a constructor made the memory half
         #: unreachable — an `InMemoryStore` that looks like it works and loses
         #: every fact on restart.
-        self.memory_store = store if store is not None else build_store()
+        #: Resolved lazily and cached (see the property), for the reason its
+        #: sibling the checkpointer already is: now that the default opens a
+        #: file, merely *constructing* services must not create a state
+        #: directory for a caller who was about to hand us their own store, or
+        #: who never touches memory at all.
+        self._memory_store = store
         #: Ownership, recorded at construction rather than inferred at close.
         #: What we opened, we close; what the caller injected stays theirs and
         #: is still in use after we are done with it. Inferring this later
@@ -122,6 +126,25 @@ class WorkflowServices:
         #: environment named a trusted proxy header, because the value it
         #: replaced was a text box in the browser.
         self.principals = principals if principals is not None else principals_from_env()
+
+    @property
+    def memory_store(self) -> BaseStore:
+        """The one long-term Store every transport compiles against.
+
+        Durable by default since install-experience wave 2 — `build_store`
+        puts it under this services object's own workflows root, beside the
+        checkpointer, and says so in one log line. A caller who passed `store=`
+        owns durability instead, and nothing is opened.
+
+        Built on first ask for the same reason the checkpointer is: the
+        location depends on `self.store.root`, and a constructor that opened a
+        file would make merely *asking for* services a write.
+        """
+        if self._memory_store is None:
+            from openstategraph.memory import build_store
+
+            self._memory_store = build_store(self.store.root)
+        return self._memory_store
 
     @property
     def checkpointer(self) -> BaseCheckpointSaver[Any]:
@@ -187,9 +210,10 @@ class WorkflowServices:
         left a file descriptor open until the process died — langgraph's
         sqlite saver and store have no `close()` of their own.
 
-        Deliberately does **not** touch `self._checkpointer` through the
-        property: resolving it here would open the very file it is about to
-        close.
+        Deliberately does **not** touch `self._checkpointer` or
+        `self._memory_store` through their properties: resolving either here
+        would open the very file it is about to close. Both are lazy now, so
+        this is a rule about two fields rather than one.
         """
         from openstategraph.memory import close_resource
 
@@ -201,9 +225,13 @@ class WorkflowServices:
         for saver in self._workflow_checkpointers.values():
             close_resource(saver)
         self._workflow_checkpointers.clear()
-        if self._owns_memory_store and self.memory_store is not None:
-            close_resource(self.memory_store)
-            self._owns_memory_store = False
+        if self._owns_memory_store and self._memory_store is not None:
+            close_resource(self._memory_store)
+            # Cleared, exactly like the saver above: a second close is a no-op,
+            # and a resurrected use gets a fresh store rather than a closed one
+            # — which is also why `_owns_memory_store` is *not* flipped here.
+            # It records who built the thing, not whether one is open.
+            self._memory_store = None
 
     def __enter__(self) -> "WorkflowServices":
         return self

@@ -277,7 +277,7 @@ core because CLAUDE.md makes it the single source of truth for tool schemas.
 | `[openai]` | `langchain-openai>=1.0,<2` | ~11 | `openai:` |
 | `[ollama]` | `langchain-ollama>=1.0,<2` | ~7 | `ollama:` — the default, so the quickstart names it |
 | `[deep]` | `deepagents>=0.7,<1` | ~26 | a document containing an `agent.deep` node |
-| `[sqlite]` | `langgraph-checkpoint-sqlite>=3.1` | ~2 | `settings.checkpointer: "sqlite"` and `OPENSTATEGRAPH_MEMORY_PATH` |
+| `[sqlite]` | `langgraph-checkpoint-sqlite>=3.1` | ~2 | durable threads **and** durable memories — both are the default now, so this rides on `[server]` too |
 | `[server]` | `fastapi>=0.115`, `uvicorn>=0.30`, `python-multipart` | ~13 | the editor's HTTP API and `/chat` |
 | `[mcp]` | `mcp>=1.25` | ~24 | the MCP transport |
 | `[all]` | every extra above | — | the current behaviour, for anyone upgrading |
