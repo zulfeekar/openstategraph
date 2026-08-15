@@ -62,6 +62,10 @@ _BLOCK_HEADER = (
     "# belongs in .env. `enabled: false` removes a built-in default.\n"
 )
 
+#: The header's own lines, so a rewrite can recognise and replace the copy it
+#: wrote rather than stacking another one on top of it.
+_HEADER_LINES = frozenset(f"{line}\n" for line in _BLOCK_HEADER.splitlines())
+
 
 def writable_config_path(root: Path | str | None = None) -> Path:
     """Where a write would land — which may not exist yet.
@@ -249,6 +253,11 @@ def _rendered_yaml(text: str, entries: list[McpServerConfig]) -> str:
             ):
                 index += 1
             if not replaced:
+                # Drop the header this module wrote last time, or a second
+                # copy of it lands above the block on every save — found by
+                # writing twice, which is what a panel does.
+                while out and out[-1] in _HEADER_LINES:
+                    out.pop()
                 out.append(block)
                 replaced = True
             continue

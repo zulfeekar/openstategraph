@@ -78,6 +78,14 @@ class TestTheFileSurvives:
             ("Internal docs", "https://mcp.example.test/mcp", "sse", "project")
         ]
 
+    def test_the_block_s_own_header_is_written_once_not_once_per_save(self, config: Path) -> None:
+        """Found in the live walk, on the second Save press of the session."""
+        upsert_mcp_server(entry())
+        upsert_mcp_server(entry("Another", url="https://other.example.test/mcp"))
+
+        after = config.read_text(encoding="utf-8")
+        assert after.count("# MCP servers this project can bind") == 1
+
     def test_a_second_save_of_the_same_name_replaces_rather_than_duplicates(
         self, config: Path
     ) -> None:

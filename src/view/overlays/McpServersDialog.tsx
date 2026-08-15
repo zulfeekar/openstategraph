@@ -180,7 +180,13 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
                     // a count proves something answered, the names prove it is
                     // the server you meant.
                     `${verdict.tools.length} tool${verdict.tools.length === 1 ? '' : 's'}: ${verdict.tools.join(', ')}`
-                  : `${describeMcpStatus(verdict.status).detail} ${verdict.message}`.trim()}
+                  : // The runtime's own sentence, and the badge's only when
+                    // there is none. Concatenating both printed "Nothing
+                    // answered at that address." twice, because the runtime's
+                    // message IS the taxonomy sentence — and where it differs
+                    // it is the more specific of the two ("within 15
+                    // seconds", "Connected, but the MCP handshake failed").
+                    verdict.message || describeMcpStatus(verdict.status).detail}
               </p>
             ) : null}
 
