@@ -64,6 +64,16 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 #: Accepted names, in search order. YAML first — see the module docstring.
+#:
+#: **Seam, unbuilt: `pyproject.toml [tool.openstategraph]`.** The owner has
+#: named it a valid carrier, and the full order it joins is
+#: `CLI flag > environment > openstategraph.yaml > pyproject.toml`, so it is
+#: the *last* file consulted rather than another entry in this tuple: a project
+#: with both should get the dedicated file, and the `[tool.…]` table is the
+#: fallback for a project that would rather not add one. Nothing reads it
+#: today, and a name in this tuple that nothing reads would be worse than the
+#: gap. It belongs with the upward walk (install-experience T7), which is where
+#: "which file, found from where" stops being one line.
 CONFIG_FILENAMES = ("openstategraph.yaml", "openstategraph.yml", "openstategraph.json")
 
 #: Points at a config file directly, wherever it lives.
