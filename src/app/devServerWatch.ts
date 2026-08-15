@@ -19,5 +19,16 @@
  * Lives here rather than inline in `vite.config.ts` so the rule has one
  * definition and a test can hold it to it — the config file itself is outside
  * the app's TypeScript project and cannot be imported from a test.
+ *
+ * **One known exception, accepted with eyes open:** `seedDemo.ts` imports
+ * `workflows/chinook-assistant/workflow.json`, so in dev (and only in dev —
+ * ticket 41 gated the seed out of production builds) that one file is both a
+ * build input and watch-ignored. Editing it on disk therefore shows a stale
+ * canvas until a manual reload. That trade is deliberate, not an oversight:
+ * the seed document is exactly the document the dev editor opens and
+ * autosaves into, so watching it would recreate the write → reload →
+ * autosave → write loop described above for the most-edited file in the
+ * repository. A manual reload after an out-of-editor edit is the cheap side
+ * of that trade. (workflow-gallery follow-up to ticket 41.)
  */
 export const DEV_SERVER_WATCH_IGNORED: readonly string[] = ['**/workflows/**'];

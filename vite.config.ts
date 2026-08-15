@@ -15,8 +15,9 @@ export default defineConfig({
     port: 5273,
     strictPort: false,
     // Why this exists, and what broke without it, is recorded beside the
-    // constant. Nothing under `workflows/` is imported by the bundle, so no
-    // change there is one a reload is ever the right answer to.
+    // constant — including the one deliberate exception (seedDemo's dev-only
+    // import of the chinook-assistant document, knowingly stale-on-disk-edit,
+    // because watching it would recreate the autosave reload loop).
     watch: { ignored: [...DEV_SERVER_WATCH_IGNORED] },
   },
   build: { target: 'es2022', sourcemap: true },

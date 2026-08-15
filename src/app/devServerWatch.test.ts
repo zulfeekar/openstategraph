@@ -21,11 +21,30 @@ import { DEV_SERVER_WATCH_IGNORED } from './devServerWatch';
  * the package looked like it was oscillating on its own. Ticket 05 was filed
  * against the card. The card was innocent.
  *
- * Nothing under `workflows/` is imported by the frontend bundle, so there is
- * no change there that a reload is ever the right answer to.
+ * One file under `workflows/` IS imported by the dev bundle — `seedDemo.ts`
+ * pulls in `chinook-assistant/workflow.json` — and it stays ignored anyway,
+ * because it is also the file dev autosave writes: watching it would close
+ * the loop again. The exception is documented beside the constant; the second
+ * test below holds the two files to each other so neither half can go stale
+ * alone.
  */
 describe('the dev server watcher', () => {
   it('ignores the directory the editor writes to', () => {
     expect(DEV_SERVER_WATCH_IGNORED.some((pattern) => pattern.includes('workflows'))).toBe(true);
+  });
+
+  it('documents the one build input it knowingly leaves stale', async () => {
+    const { readFileSync } = await import('node:fs');
+    const seed = readFileSync(new URL('./seedDemo.ts', import.meta.url), 'utf8');
+    const rule = readFileSync(new URL('./devServerWatch.ts', import.meta.url), 'utf8');
+
+    const seedImportsWorkflow = /from '..\/..\/workflows\//.test(seed);
+    if (seedImportsWorkflow) {
+      // The exception exists, so the rule's docstring must name it.
+      expect(rule).toContain('seedDemo');
+    } else {
+      // The import is gone — delete the exception paragraph and this branch.
+      expect(rule).not.toContain('seedDemo');
+    }
   });
 });
