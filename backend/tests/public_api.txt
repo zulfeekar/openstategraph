@@ -16,6 +16,7 @@ openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, descript
 openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(**kwargs: 'Any') -> 'None'
 openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.BaseGuardrail = class(ABC)(*, rules: 'Sequence[GuardrailRule | Mapping[str, Any]]' = (), refusal: 'str' = '') -> 'None'
+openstategraph.abc.BaseNodeFamily = class(ABC)()
 openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.BaseTool = class(ABC)()
@@ -29,11 +30,13 @@ openstategraph.abc.GuardrailRule = dataclass(object) fields(entity,strategy,dete
 openstategraph.abc.IAgent = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IGrader = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IGuardrail = class(Protocol)(*args, **kwargs)
+openstategraph.abc.INodeFamily = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IOrchestrator = class(Protocol)(*args, **kwargs)
 openstategraph.abc.IRouter = class(Protocol)(*args, **kwargs)
 openstategraph.abc.ITool = class(Protocol)(*args, **kwargs)
 openstategraph.abc.MiddlewareSlotTable = class(object)(order: 'Sequence[str]' = ()) -> 'None'
 openstategraph.abc.NoArgs = class(BaseModel)() -> None
+openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan,services,diagnostics,upstream_text,resolve_model)
 openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'None'
 openstategraph.abc.Redaction = dataclass(object) fields(entity,strategy,count)
@@ -62,9 +65,11 @@ openstategraph.extensions.DISABLE_PLUGINS_ENV = str
 openstategraph.extensions.Discovered = dataclass(object) fields(values,warnings,sources)
 openstategraph.extensions.ENTRY_POINT_GROUPS = tuple
 openstategraph.extensions.KNOWLEDGE_BUILDERS_GROUP = str
+openstategraph.extensions.NODE_FAMILIES_GROUP = str
 openstategraph.extensions.PROVIDERS_GROUP = str
 openstategraph.extensions.TOOLS_GROUP = str
 openstategraph.extensions.entry_point_knowledge_builders = def() -> 'Discovered'
+openstategraph.extensions.entry_point_node_families = def() -> 'Discovered'
 openstategraph.extensions.entry_point_providers = def() -> 'Discovered'
 openstategraph.extensions.entry_point_tools = def() -> 'Discovered'
 openstategraph.extensions.plugins_enabled = def() -> 'bool'

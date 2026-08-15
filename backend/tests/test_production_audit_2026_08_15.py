@@ -15,14 +15,18 @@ that decays silently:
 
 2. **An unregistered node family is reported, not swallowed.** The editor's
    half of "extend by registering" holds (walked in
-   `src/core/extendability.test.ts`). The compiler's half does **not**:
-   `NodeRuntime._builders` is a private dict literal, so a node family the
-   engine has never heard of resolves to `_passthrough` — it compiles, it runs,
-   and it does nothing. See `docs/decisions/production-audit-2026-08-15.md`
-   §"Extendability" and install-experience ticket 08. Until that is a registry,
-   the single thing standing between a plugin author and a silent no-op is
-   `validate_document` naming the type. This pins that sentence, so the gap can
-   never degrade from *reported* to *silent* while the ticket is open.
+   `src/core/extendability.test.ts`). The compiler's half **now does too**:
+   ticket 08 made contributed families an entry-point group and left the
+   built-in table un-shadowable, and `tests/test_node_families.py` is that
+   seam's own pin.
+
+   What stays here is the case that has no owner — a node type *nothing*
+   implements, registered or built-in. The ticket asked the honest question
+   (should it still be a silent `_passthrough`?) and answered no twice over:
+   `validate_document` names the type, and the step itself says it produced
+   nothing rather than forwarding the question and looking like it worked.
+   Both are pinned below, because "reported" is exactly the property that
+   decays to "silent" without anyone noticing.
 """
 
 from __future__ import annotations
@@ -105,6 +109,35 @@ class TestRepeatedCompilationReleasesEverythingItOpened:
         )
 
 
+def _unregistered_family_document() -> dict[str, Any]:
+    """in -> a node type nothing implements -> out.
+
+    `analyse.sentiment` is the audit's own example and is deliberately not
+    registered anywhere: `tests/test_node_families.py` fakes a distribution
+    that contributes it, and this file is about the case where nobody does.
+    """
+    return {
+        "version": 1,
+        "name": "audit",
+        "settings": {},
+        "nodes": [
+            {"id": "in1", "type": "input.text", "data": {}, "position": {"x": 0, "y": 0}},
+            {"id": "s1", "type": "analyse.sentiment", "data": {}, "position": {"x": 200, "y": 0}},
+            {"id": "o1", "type": "output.formatted", "data": {}, "position": {"x": 400, "y": 0}},
+        ],
+        "edges": [
+            {
+                "source": {"nodeId": "in1", "portId": "text"},
+                "target": {"nodeId": "s1", "portId": "prompt"},
+            },
+            {
+                "source": {"nodeId": "s1", "portId": "result"},
+                "target": {"nodeId": "o1", "portId": "text"},
+            },
+        ],
+    }
+
+
 class TestAnUnregisteredNodeFamilyIsNamedRatherThanSwallowed:
     """The compiler's builder table is not a registry — so say so, loudly."""
 
@@ -117,38 +150,34 @@ class TestAnUnregisteredNodeFamilyIsNamedRatherThanSwallowed:
         assert runtime.builder_for("function.anything").__name__ == "_discovered_function"
         assert runtime.builder_for("workflow.subgraph").__name__ == "_subgraph"
 
-        # A node family the engine has never heard of. This is the gap: it does
-        # not raise, it does not warn here — it quietly does nothing.
+        # A node type nothing implements — no built-in, no registered family.
+        # Still total, still the passthrough, and the passthrough is the loud
+        # one: see `test_the_skipped_step_says_so` below.
         assert runtime.builder_for("analyse.sentiment").__name__ == "_passthrough"
+
+    def test_the_skipped_step_says_so_instead_of_forwarding_the_question(self) -> None:
+        """Asked "what is 2+2?", a document with one unrecognised node used to
+        answer "what is 2+2?" — which is what made the gap invisible."""
+        from openstategraph.compile.diagnostics import Finding
+        from openstategraph.compile.node_runtime import NodeRuntime
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        document = _unregistered_family_document()
+        runtime = NodeRuntime(model=None)
+        plan = WorkflowCompiler().plan(document)
+
+        step = runtime.factory(document)("s1", document["nodes"][1], plan)
+        update = step({"question": "what is 2+2?", "outputs": {"in1": "what is 2+2?"}})
+
+        assert ("analyse.sentiment", "s1") in runtime.diagnostics.subjects(
+            Finding.UNKNOWN_NODE_TYPE
+        )
+        assert "produced nothing" in update["outputs"]["s1"]
 
     def test_validate_document_names_the_unregistered_type(self) -> None:
         from openstategraph.validation import validate_document
 
-        document = {
-            "version": 1,
-            "name": "audit",
-            "settings": {},
-            "nodes": [
-                {"id": "in1", "type": "input.text", "data": {}, "position": {"x": 0, "y": 0}},
-                {
-                    "id": "s1",
-                    "type": "analyse.sentiment",
-                    "data": {},
-                    "position": {"x": 200, "y": 0},
-                },
-                {"id": "o1", "type": "output.formatted", "data": {}, "position": {"x": 400, "y": 0}},
-            ],
-            "edges": [
-                {
-                    "source": {"nodeId": "in1", "portId": "text"},
-                    "target": {"nodeId": "s1", "portId": "prompt"},
-                },
-                {
-                    "source": {"nodeId": "s1", "portId": "result"},
-                    "target": {"nodeId": "o1", "portId": "text"},
-                },
-            ],
-        }
+        document = _unregistered_family_document()
 
         valid, findings = validate_document(document)
 

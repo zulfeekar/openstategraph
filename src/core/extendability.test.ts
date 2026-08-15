@@ -15,14 +15,15 @@
  * `core/` module it had to modify, and adding these three took no edit to any
  * file under `src/core/`.
  *
- * **Deliberately the editor half only.** The compiler half does *not* hold for
- * a new node *family* — `NodeRuntime._builders` (`backend/openstategraph/
- * compile/node_runtime.py:928`) is a private dict literal, not a registry, and
- * an unregistered family compiles to `_passthrough`. That gap is recorded in
- * `docs/decisions/production-audit-2026-08-15.md` and ticketed
- * (install-experience 08); the backend side of this walk is pinned in
- * `backend/tests/test_production_audit_2026_08_15.py`, which asserts the
- * *reporting* so the gap can never become silent.
+ * **Deliberately the editor half only** — but the compiler half now holds too.
+ * When this walk was written it did not: `NodeRuntime._builders` was a private
+ * dict literal, not a registry, so a node *family* the compiler had never
+ * heard of compiled to `_passthrough` — it ran and did nothing. Install-
+ * experience ticket 08 made contributed families the
+ * `openstategraph.node_families` entry-point group, with the built-in table
+ * un-shadowable; that half is walked in `backend/tests/test_node_families.py`,
+ * and `backend/tests/test_production_audit_2026_08_15.py` keeps pinning the
+ * case nothing implements, which still reports itself rather than forwarding.
  */
 import { describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';

@@ -29,9 +29,11 @@ from openstategraph.extensions import (
     DISABLE_PLUGINS_ENV,
     ENTRY_POINT_GROUPS,
     KNOWLEDGE_BUILDERS_GROUP,
+    NODE_FAMILIES_GROUP,
     PROVIDERS_GROUP,
     TOOLS_GROUP,
     entry_point_knowledge_builders,
+    entry_point_node_families,
     entry_point_providers,
     entry_point_tools,
     reset_entry_point_cache,
@@ -102,7 +104,7 @@ def install(monkeypatch: pytest.MonkeyPatch, *entry_points: FakeEntryPoint) -> N
 
 
 class TestTheGroupNamesAreTheContract:
-    def test_they_are_the_three_we_published(self) -> None:
+    def test_they_are_the_four_we_published(self) -> None:
         """A third party writes these strings into their own pyproject.toml, so
         renaming one silently un-registers every plugin that ever shipped."""
         from openstategraph.extensions import PROVIDERS_GROUP
@@ -110,7 +112,13 @@ class TestTheGroupNamesAreTheContract:
         assert TOOLS_GROUP == "openstategraph.tools"
         assert KNOWLEDGE_BUILDERS_GROUP == "openstategraph.knowledge_builders"
         assert PROVIDERS_GROUP == "openstategraph.providers"
-        assert ENTRY_POINT_GROUPS == (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)
+        assert NODE_FAMILIES_GROUP == "openstategraph.node_families"
+        assert ENTRY_POINT_GROUPS == (
+            TOOLS_GROUP,
+            KNOWLEDGE_BUILDERS_GROUP,
+            PROVIDERS_GROUP,
+            NODE_FAMILIES_GROUP,
+        )
 
 
 class TestAToolFromAnInstalledDistribution:
@@ -396,6 +404,7 @@ class TestDiscoveryIsResolvedOncePerProcess:
             (entry_point_tools, TOOLS_GROUP),
             (entry_point_knowledge_builders, KNOWLEDGE_BUILDERS_GROUP),
             (entry_point_providers, PROVIDERS_GROUP),
+            (entry_point_node_families, NODE_FAMILIES_GROUP),
         ],
     )
     def test_every_group_scans_the_environment_at_most_once(
@@ -432,14 +441,16 @@ class TestDiscoveryIsResolvedOncePerProcess:
         entry_point_tools()
         entry_point_knowledge_builders()
         entry_point_providers()
-        assert len(scanned) == 3
+        entry_point_node_families()
+        assert len(scanned) == 4
 
         reset_process_tool_layer()
 
         entry_point_tools()
         entry_point_knowledge_builders()
         entry_point_providers()
-        assert len(scanned) == 6
+        entry_point_node_families()
+        assert len(scanned) == 8
 
     def test_faking_a_plugin_after_discovery_has_already_run_still_works(
         self, monkeypatch: pytest.MonkeyPatch

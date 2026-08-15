@@ -35,6 +35,23 @@ KNOWN_NODE_TYPES = frozenset({
 KNOWN_PREFIXES = ("tool.", "function.")
 
 
+def known_node_types() -> frozenset[str]:
+    """The built-ins **plus whatever an installed distribution registered**.
+
+    The frozenset above is the compiler's own table, mirrored as data and
+    pinned against it. This function is the same question asked of the process
+    that is actually running: a node family contributed through the
+    `openstategraph.node_families` entry-point group compiles and runs
+    (install-experience ticket 08), and validation that still called its type
+    unknown would report a defect that no longer exists — which is the same
+    "extend by registering" failure one layer up, in the sentence a user reads.
+    """
+    from openstategraph.compile.node_families import discovered_node_families
+
+    registered, _warnings = discovered_node_families()
+    return KNOWN_NODE_TYPES | registered.types()
+
+
 class ValidateArgs(BaseModel):
     model_config = {"extra": "forbid"}
     document: str = Field(
@@ -72,9 +89,10 @@ class ValidateWorkflowTool(BaseTool):
         nodes = document.get("nodes")
         if not isinstance(nodes, list) or not nodes:
             return ToolResult.failure("The document needs a non-empty 'nodes' list.")
+        known = known_node_types()
         for node in nodes:
             node_type = str(node.get("type", ""))
-            if node_type not in KNOWN_NODE_TYPES and not node_type.startswith(KNOWN_PREFIXES):
+            if node_type not in known and not node_type.startswith(KNOWN_PREFIXES):
                 problems.append(f"unknown node type '{node_type}' on '{node.get('id')}'")
 
         try:

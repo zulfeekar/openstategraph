@@ -73,13 +73,14 @@ nothing in either call to explain the difference.
 
 ### The entry-point group names are the least reversible thing here
 
-`"openstategraph.tools"` and `"openstategraph.knowledge_builders"` are written
+`"openstategraph.tools"`, `"openstategraph.knowledge_builders"`,
+`"openstategraph.providers"` and `"openstategraph.node_families"` are written
 into a **third party's** `pyproject.toml`. Renaming one does not break a build
 or raise an import error — it silently stops their plugin from registering, in
 their users' installs, and the first symptom is a workflow that answers less
 well than it looks. So the strings are pinned by a test that asserts the
 literals, not merely their existence, and they move only under the deprecation
-policy below (both groups read for at least one minor release).
+policy below (an old group is read for at least one minor release).
 
 `backend/tests/public_api.txt` is the machine-readable form, and
 `backend/tests/test_public_api.py` fails when it drifts. That is deliberately a

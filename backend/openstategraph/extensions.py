@@ -86,8 +86,28 @@ KNOWLEDGE_BUILDERS_GROUP = "openstategraph.knowledge_builders"
 #: default model — the same built-in < third-party order tools follow.
 PROVIDERS_GROUP = "openstategraph.providers"
 
+#: Node families: an `openstategraph.abc.BaseNodeFamily` concrete (class or
+#: instance), or an iterable of them. A family declares the document `type` it
+#: serves and how to build that node's step — the compiler-side answer to
+#: "extend by registering", added by install-experience ticket 08 after a walk
+#: found that a node *family* was the one archetype that still required an
+#: edit to `compile/node_runtime.py`.
+#:
+#: Loaded *after* the built-ins and unable to shadow one, which is the
+#: opposite of the tools rule above and deliberately so: a bundled tool is a
+#: capability, replaceable by definition, while a built-in node family is part
+#: of what a document *means*. `input.text` resolving to somebody else's code
+#: would change the behaviour of every workflow in the venv, including the
+#: ones that never heard of the plugin.
+NODE_FAMILIES_GROUP = "openstategraph.node_families"
+
 #: Every group this framework reads. Nothing else is a supported seam.
-ENTRY_POINT_GROUPS = (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)
+ENTRY_POINT_GROUPS = (
+    TOOLS_GROUP,
+    KNOWLEDGE_BUILDERS_GROUP,
+    PROVIDERS_GROUP,
+    NODE_FAMILIES_GROUP,
+)
 
 #: Set to `1`/`true`/`yes` to load nothing from the environment's entry points.
 DISABLE_PLUGINS_ENV = "OPENSTATEGRAPH_DISABLE_PLUGINS"
@@ -267,6 +287,15 @@ def entry_point_providers() -> Discovered:
     return _cached(PROVIDERS_GROUP, _discover_providers)
 
 
+def entry_point_node_families() -> Discovered:
+    """Node families contributed by installed distributions.
+
+    `values` is a populated `compile.node_families.NodeFamilyRegistry`.
+    Resolved once per process, and shared read-only — see `entry_point_tools`.
+    """
+    return _cached(NODE_FAMILIES_GROUP, _discover_node_families)
+
+
 def _discover_tools() -> Discovered:
     """`{node_type: tool instance}` contributed by installed distributions.
 
@@ -386,6 +415,41 @@ def _discover_knowledge_builders() -> Discovered:
     return Discovered(values=builders, warnings=warnings)
 
 
+def _discover_node_families() -> Discovered:
+    """Node families contributed by installed distributions.
+
+    The same jail and the same honesty as tools, with the registry rather than
+    this function deciding what may be registered: a claim on a reserved
+    prefix, a second distribution claiming one node type, and an object that
+    is not a family all come back as one sentence naming who to go and fix.
+    Built-in families are not consulted here at all — `NodeRuntime` owns that
+    refusal, because it is the object that holds the built-in table.
+    """
+    from openstategraph.compile.node_families import NodeFamilyRegistry
+
+    registry = NodeFamilyRegistry()
+    loaded, warnings = _load_group(NODE_FAMILIES_GROUP)
+    for entry_point, obj in loaded:
+        for candidate in _each(obj):
+            try:
+                family = candidate() if isinstance(candidate, type) else candidate
+            except Exception as exc:
+                warnings.append(
+                    _skipped(
+                        entry_point,
+                        NODE_FAMILIES_GROUP,
+                        f"constructing {getattr(candidate, '__name__', candidate)!r} raised "
+                        f"{type(exc).__name__}: {exc}",
+                    )
+                )
+                continue
+            refusal = registry.register(family, source=_distribution_of(entry_point))
+            if refusal is not None:
+                logger.warning(refusal)
+                warnings.append(refusal)
+    return Discovered(values=registry, warnings=warnings)
+
+
 def _discover_providers() -> Discovered:
     """`ProviderSpec`s contributed by installed distributions.
 
@@ -424,10 +488,12 @@ __all__ = [
     "DISABLE_PLUGINS_ENV",
     "ENTRY_POINT_GROUPS",
     "KNOWLEDGE_BUILDERS_GROUP",
+    "NODE_FAMILIES_GROUP",
     "PROVIDERS_GROUP",
     "TOOLS_GROUP",
     "Discovered",
     "entry_point_knowledge_builders",
+    "entry_point_node_families",
     "entry_point_providers",
     "entry_point_tools",
     "plugins_enabled",

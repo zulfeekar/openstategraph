@@ -226,6 +226,36 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **A node family is contributed, not merged** (install-experience ticket 08).
+  `openstategraph.node_families` joins the entry-point groups, and
+  `openstategraph.abc` gains the ladder that fills it — `INodeFamily`,
+  `BaseNodeFamily`, `NodeBuildContext`. An installed distribution can add a
+  node *family* — the third archetype, after tools and providers — without
+  editing `compile/node_runtime.py`.
+
+  This closes the compiler half of CLAUDE.md's **O**. The editor half already
+  held: a brand-new node type reaches the palette, the serializer, the executor
+  lookup and the connection rules by registration alone. The compiler's builder
+  table was a private dict literal, so a family the engine had never heard of
+  resolved to the passthrough builder — it compiled, it ran, and it did
+  nothing.
+
+  Two asymmetries with the tools group, both deliberate. A bundled **tool** may
+  be replaced by a plugin, because a tool is a capability; a built-in **family**
+  may not, because it is part of what a document *means* — `input.text`
+  resolving to somebody else's code would change every workflow in the venv,
+  including the ones that never heard of the plugin. And `function.*` /
+  `workflow.*` are reserved against a plugin for the reason `extensions`
+  already refuses an `openstategraph.functions` group: those bind to names
+  written in the *document*, which belongs to the package.
+
+  A family sees `NodeBuildContext` — this node's id and entry, the plan, the
+  runtime's collaborators, and callables for upstream text and model
+  resolution — never `NodeRuntime`, which is a compiler internal with no
+  stability guarantee. A type nothing implements still degrades to the
+  passthrough, which reports itself: the run says the step produced nothing
+  instead of forwarding the question and looking like it worked.
+
 - **The default is shown rather than guessed at** (install-experience T3).
   `openstategraph providers` gains a `default:` line naming the elected model
   *and the reason* — "the only provider integration installed, and it is

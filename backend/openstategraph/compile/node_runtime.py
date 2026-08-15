@@ -26,7 +26,9 @@ from typing import Annotated, Any, Callable, Literal, TypedDict
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
+from openstategraph.abc.node_family import INodeFamily, NodeBuildContext
 from openstategraph.compile.graph_names import GraphNames
+from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
@@ -999,6 +1001,14 @@ class NodeRuntime:
         #: They were two attributes here, always handed to `RunPathResolver`
         #: together and read defensively (reviews-2026-08-14 ticket 07).
         self.names = GraphNames()
+        #: The built-in families: the node types **this build implements
+        #: itself**. A literal table of bound methods on purpose, and
+        #: consulted before anything installed, because these are what a
+        #: document's types *mean* — `input.text` resolving to somebody else's
+        #: code would change every workflow in the venv, including the ones
+        #: that never heard of the plugin. Contributed families live in
+        #: `compile/node_families.py` and are consulted after this and after
+        #: the two conventions; see `builder_for`.
         self._builders: dict[str, Callable[..., Any]] = {
             "input.text": self._input,
             # NOT `_input`. A skill source is a *static text source*, not the
@@ -1016,6 +1026,22 @@ class NodeRuntime:
             "function.format_report": self._format_report_function,
             "output.formatted": self._output,
         }
+        #: The families installed distributions contributed, and what failed
+        #: to install. Resolved once per process by `extensions`' cache, so
+        #: this costs a dict lookup per runtime rather than a `sys.path` walk.
+        self._families, family_warnings = discovered_node_families()
+        for shadowed in sorted(self._families.types() & set(self._builders)):
+            # Reported here rather than at discovery because this is the object
+            # that holds the built-in table, and reported at all because the
+            # alternative — a family that registered cleanly and is never
+            # built — is the exact silence this seam exists to end.
+            family_warnings.append(
+                f'{self._families.source_of(shadowed)} contributes node type "{shadowed}", '
+                "which this build implements itself. The built-in is used; that family "
+                "will never be built."
+            )
+        for warning in family_warnings:
+            self.diagnostics.record(Finding.CAPABILITY_FAILED, warning)
 
     def factory(
         self, document: dict[str, Any]
@@ -1061,6 +1087,21 @@ class NodeRuntime:
         "which factory runs for this node type?" for every type in the
         catalogue without a hand-kept second list.
         `backend/tests/test_data_key_contract.py` does exactly that.
+
+        Four sources, in a fixed order, and the order is the policy:
+
+        1. the **built-ins**, so nothing installed can change what a shipped
+           document's node types mean;
+        2. `workflow.subgraph` and `function.*`, the two conventions, which
+           are the compiler's own and are reserved against a plugin;
+        3. **registered families** — the `openstategraph.node_families`
+           entry-point group (install-experience ticket 08);
+        4. `_passthrough`, for a type nothing implements, which reports itself
+           rather than quietly forwarding.
+
+        A pure lookup, with no side effect: `test_data_key_contract.py`
+        enumerates it over the whole catalogue, and a diagnostic recorded here
+        would report node types nobody wired.
         """
         builder = self._builders.get(node_type)
         if builder is not None:
@@ -1072,7 +1113,47 @@ class NodeRuntime:
             return self._subgraph
         if node_type.startswith("function."):
             return self._discovered_function
+        family = self._families.get(node_type)
+        if family is not None:
+            return self._family_builder(family)
         return self._passthrough
+
+    def _family_builder(self, family: INodeFamily) -> Callable[..., Any]:
+        """Adapt a registered family to the `(node_id, node, plan)` factory.
+
+        The adapter exists so that a family sees `NodeBuildContext` — a small,
+        named, published object — instead of this class, which is a compiler
+        internal with no stability guarantee and 2,000 lines of it.
+
+        A family whose `build` raises is reported and degraded to
+        `_passthrough`, never allowed to fail the compile: a plugin's bug must
+        cost that node, not the whole document. That is `errors.py`'s rule
+        applied one layer out from where `_passthrough` applies it.
+        """
+
+        def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+            upstream = [src for src, dst in plan.edges if dst == node_id]
+            context = NodeBuildContext(
+                node_id=node_id,
+                node=node,
+                plan=plan,
+                services=self.services,
+                diagnostics=self.diagnostics,
+                upstream_text=lambda state: _upstream_text(state, upstream),  # type: ignore[arg-type]
+                resolve_model=self._resolve_model,
+            )
+            try:
+                return family.build(context)
+            except Exception as exc:
+                self.diagnostics.record(
+                    Finding.CAPABILITY_FAILED,
+                    f'The node family for "{family.node_type}" '
+                    f"({self._families.source_of(family.node_type)}) failed to build "
+                    f'node "{node_id}": {type(exc).__name__}: {exc}',
+                )
+                return self._passthrough(node_id, node, plan)
+
+        return build
 
     def _resolve_model(self, data: dict[str, Any]) -> Any:
         """This node's own model, falling back to the graph's shared default.

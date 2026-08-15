@@ -387,15 +387,47 @@ class Ping(BaseTool):
 TOOLS = [Ping]        # a list — or `= Ping`, or `= Ping()`. All three work.
 ```
 
-A second group exists for the knowledge layer, with the same rules:
+Three more groups exist, with the same rules:
 
 ```toml
 [project.entry-points."openstategraph.knowledge_builders"]
 acme = "acme_osg_knowledge:AcmeBuilder"   # an IKnowledgeBuilder concrete
+
+[project.entry-points."openstategraph.providers"]
+acme = "acme_osg_provider:SPEC"           # a ProviderSpec
+
+[project.entry-points."openstategraph.node_families"]
+sentiment = "acme_osg:SentimentFamily"    # a BaseNodeFamily concrete
 ```
 
-Those two group names — `openstategraph.tools` and
-`openstategraph.knowledge_builders` — are **Tier 1**: they are covered by
+The last of those is how you ship a **node family** — a new archetype on the
+canvas rather than a new capability inside an existing one:
+
+```python
+from openstategraph.abc import BaseNodeFamily, NodeBuildContext
+
+class SentimentFamily(BaseNodeFamily):
+    node_type = "analyse.sentiment"
+
+    def respond(self, text: str, context: NodeBuildContext) -> str:
+        return "positive" if ":)" in text else "negative"
+```
+
+`context` is what your family may see of the compiler: this node's id and its
+saved card (`context.data`), the compiled plan, the runtime's collaborators,
+and two callables — `upstream_text(state)` for what the node before yours
+produced, `resolve_model(data)` for this node's own model. Override `build`
+instead of `respond` when one string in and one string out is not enough.
+
+**A built-in family cannot be shadowed**, which is the one place the plugin
+order below is reversed. A bundled *tool* is a capability and replacing it is
+what installing a plugin is for; a built-in *family* is part of what a document
+*means*, so `input.text` resolving to your code would change every workflow in
+the venv, including the ones that never heard of your package. Claiming one is
+reported against your distribution and ignored — as is claiming a `function.*`
+or `workflow.*` type, which are the compiler's own.
+
+Those four group names are **Tier 1**: they are covered by
 [the stability contract](stability.md) exactly like `load_workflow` is, because
 they live in *your* `pyproject.toml` and a rename would un-register your plugin
 silently, in your users' installs.

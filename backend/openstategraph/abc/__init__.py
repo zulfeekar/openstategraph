@@ -27,9 +27,10 @@ from here, because *this* name is the one covered by the stability contract in
 
 **What is here and what is not.** Every name below is a ladder an adopter
 legitimately subclasses or constructs — a tool, a router, a grader, a
-guardrail, an agent node, an orchestrator — plus the two collaborators those
-ladders compose
-(`SystemPrompt`, `MiddlewareSlotTable`). The registries are **not** here and
+guardrail, an agent node, an orchestrator, a **node family** — plus the
+collaborators those ladders compose
+(`SystemPrompt`, `MiddlewareSlotTable`, `NodeBuildContext`). The registries
+are **not** here and
 are not public: entry points are the supported extension seam precisely so the
 registry objects stay free to change shape.
 
@@ -59,6 +60,7 @@ from openstategraph.abc.guardrail import (
     Screening,
 )
 from openstategraph.abc.middleware import MiddlewareSlotTable
+from openstategraph.abc.node_family import BaseNodeFamily, INodeFamily, NodeBuildContext
 from openstategraph.abc.orchestrator import (
     Archetype,
     BaseOrchestrator,
@@ -76,6 +78,7 @@ __all__ = [
     "BaseAgentNode",
     "BaseGrader",
     "BaseGuardrail",
+    "BaseNodeFamily",
     "BaseOrchestrator",
     "BaseRouter",
     "BaseTool",
@@ -89,11 +92,13 @@ __all__ = [
     "IAgent",
     "IGrader",
     "IGuardrail",
+    "INodeFamily",
     "IOrchestrator",
     "IRouter",
     "ITool",
     "MiddlewareSlotTable",
     "NoArgs",
+    "NodeBuildContext",
     "Orchestrator",
     "ReactAgentNode",
     "Redaction",
