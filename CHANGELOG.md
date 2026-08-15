@@ -160,7 +160,24 @@ finally read by code. Wayfinder tickets 02–04;
   never a setting — there is no `applyToInput`/`applyToOutput` control.
 
   A new `redactions` state key carries what each guardrail did as
-  `{entity, strategy, count}`. Counts and entity types, never values.
+  `{entity, strategy, count}`. Counts and entity types, never values, and
+  `DeveloperChannelResponse` gains a `redactions` field to publish them —
+  the developer learns three emails left the answer, and the customer
+  learns nothing, because a redaction that shows its work is not one.
+
+- **`[bastion]` — prompt-injection screening, opt-in and never in `[all]`**
+  (guardrails ticket 04, `docs/decisions/injection-screening.md`). A workflow
+  asks for it with `settings.injectionScreening`; the compiler fills the
+  `injection-screening` slot — first in `AbstractAgentNode.SLOT_ORDER`,
+  because `before_*` hooks run first to last — on every agent in the
+  document.
+
+  It is out of `[all]` deliberately: `bastion-prompt-protection` is
+  AGPL-3.0-or-later, and an adopter who typed the convenient install line
+  would be taking a licence position they never chose. It also brings a local
+  ONNX model (`onnxruntime`, `huggingface-hub`, `numpy`, `tokenizers`) into a
+  four-package dependency floor. Asked for and absent, the run proceeds and
+  the developer channel names the exact pip command in one line.
 
 - **The worked examples ship in the wheel** (workflow-gallery ticket 07,
   closing canvas-feels-right 04). Twenty-one finished packages — one per

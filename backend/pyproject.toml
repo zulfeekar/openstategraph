@@ -134,6 +134,22 @@ postgres = [
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
 ]
+# Prompt-injection and jailbreak screening, from a third party
+# (guardrails ticket 04, `openstategraph/injection.py`,
+# `docs/decisions/injection-screening.md`).
+#
+# **Deliberately absent from `[all]`, and that is the load-bearing line here.**
+# `bastion-prompt-protection` is AGPL-3.0-or-later, so an adopter who typed the
+# convenient install line would be taking a licence position they never chose.
+# It also brings a local ONNX model — `onnxruntime`, `huggingface-hub`,
+# `numpy`, `tokenizers` — into a product whose dependency floor is four
+# packages and whose install proof fits in a clean venv.
+#
+# `[all]` therefore means "everything this project can decide for you", not
+# "everything that exists". A workflow opts in with
+# `settings.injectionScreening`, and a run that asked for it without the extra
+# says so in one line rather than failing.
+bastion = ["bastion-prompt-protection>=1.3,<2"]
 all = [
     "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres]",
 ]

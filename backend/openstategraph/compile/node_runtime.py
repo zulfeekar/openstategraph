@@ -35,6 +35,7 @@ from openstategraph.compile.workflow_compiler import (
     CompiledPlan,
     failure_marker,
 )
+from openstategraph import injection
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
 from openstategraph.memory import MemorySettings
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
@@ -866,6 +867,10 @@ class NodeRuntime:
         #: tool factory (e.g. `tool.chinook-execute-sql`'s row cap) reads a
         #: per-node config value rather than only ever seeing its type.
         self._nodes: dict[str, dict[str, Any]] = {}
+        #: The document's own `settings`, populated by `factory()`. Empty
+        #: until then, so a runtime built and never handed a document reads
+        #: as "asked for nothing" rather than raising.
+        self._settings: dict[str, Any] = {}
         #: What the compiler noticed and could not resolve — unresolved
         #: tools and functions, unknown node types, mounts whose outcome
         #: nothing enforces, capabilities that failed to load.
@@ -950,6 +955,10 @@ class NodeRuntime:
             n["id"]: str(n.get("type", "")) for n in document.get("nodes", [])
         }
         self._nodes = {n["id"]: n for n in document.get("nodes", [])}
+        #: The document's own settings — graph-assembly concerns, not node
+        #: ones. `injectionScreening` reads from here for the same reason the
+        #: checkpointer and the memory settings do.
+        self._settings = document.get("settings") or {}
         # Declared here rather than in each `_router`/`_grader`/`_input`
         # builder: a bound-only or unreachable control node never reaches a
         # builder, and it would still be able to stream if the graph later
@@ -1311,6 +1320,23 @@ class NodeRuntime:
         def agent_for(skill: str) -> Any:
             if skill not in built:
                 contributions: dict[str, Any] = dict(self.services.workflow_middleware)
+                # Prompt-injection screening, if this workflow asked for it and
+                # the extra is installed (guardrails ticket 04). A *workflow*
+                # setting rather than a field on this card: the dangerous
+                # injection arrives mid-loop in a tool result, so it reaches
+                # every agent or none, and a per-agent checkbox would be the
+                # duplication the Guardrail node exists to abolish. Absent, the
+                # run proceeds and the developer channel says so in one line —
+                # refusing to run because an optional extra is missing would
+                # turn a dependency gap into an outage.
+                screening, screening_gap = injection.contribution(
+                    requested=injection.requested(self._settings)
+                )
+                contributions.update(screening)
+                if screening_gap is not None:
+                    self.diagnostics.record(
+                        Finding.CAPABILITY_FAILED, screening_gap.message
+                    )
                 if _text(data, "rubric").strip() and model is not None:
                     # deepagents' own LLM-as-judge (beta, >=0.6.5): a grader
                     # sub-agent inside the agent, iterating until the rubric

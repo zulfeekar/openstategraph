@@ -59,6 +59,12 @@ class AbstractAgentNode(ABC):
     #: never say "position 3". Slots the base does not know about flatten
     #: after these, in first-set order.
     SLOT_ORDER: ClassVar[tuple[str, ...]] = (
+        # First, and the position is the whole argument: `before_*` hooks run
+        # first to last, so screening placed anywhere else would run after
+        # another middleware had already acted on the injected text. Optional
+        # — the slot is only ever filled when a workflow asked for it and the
+        # extra is installed (`openstategraph.injection`).
+        "injection-screening",
         "skills",
         "filesystem",
         "subagents",

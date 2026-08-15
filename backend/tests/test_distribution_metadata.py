@@ -110,13 +110,26 @@ class TestLeanCore:
 
         assert {name: placement.get(name) for name in EXTRACTED} == EXTRACTED
 
-    def test_all_names_every_extra(self, pyproject) -> None:
+    def test_all_names_every_extra_it_may_decide_for_you(self, pyproject) -> None:
         """`[all]` is the upgrade path for anyone on today's behaviour — if it
-        misses an extra, they lose a capability on upgrade and never see why."""
+        misses an extra, they lose a capability on upgrade and never see why.
+
+        `[bastion]` is the one exclusion, and it is named here rather than
+        allowed to slip out silently, because that is the whole value of this
+        test. `bastion-prompt-protection` is **AGPL-3.0-or-later**: including
+        it would mean an adopter who typed the convenient install line took a
+        licence position they never chose, which is a worse surprise than a
+        capability they have to ask for. It also brings a local ONNX model.
+
+        So `[all]` means "everything this project can decide for you", not
+        "everything that exists" — and a second extra wanting out of `[all]`
+        has to argue its way into this set (guardrails ticket 04,
+        `docs/decisions/injection-screening.md`).
+        """
         extras = pyproject["project"]["optional-dependencies"]
         named = set(re.findall(r"\[([^\]]+)\]", " ".join(extras["all"]))[0].split(","))
 
-        assert named == set(extras) - {"all", "dev"}
+        assert named == set(extras) - {"all", "dev", "bastion"}
 
 
 class TestDistributionIdentity:
