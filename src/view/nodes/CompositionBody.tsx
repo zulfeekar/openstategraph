@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { SlugCache } from '@core/runtime/SlugCache';
 import {
   compositionPurpose,
   formatComposition,
@@ -66,9 +67,7 @@ function overriddenCount(node: NodeBodyProps['node']): number {
 function CompositionAnnotation({ node }: NodeBodyProps) {
   const workbench = useWorkbench();
   const slug = (node.getField<string>('workflow') ?? '').trim();
-  const [state, setState] = useState<SlugState>(
-    () => CACHE.get(slug)?.settled ?? { status: 'loading' },
-  );
+  const [state, setState] = useState<SlugState>(() => CACHE.settled(slug) ?? { status: 'loading' });
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -150,9 +149,7 @@ function CompositionAnnotation({ node }: NodeBodyProps) {
  * opens one.
  */
 function GraphPeek({ slug }: { slug: string }) {
-  const [state, setState] = useState<PeekState>(
-    () => PEEKS.get(slug)?.settled ?? { status: 'loading' },
-  );
+  const [state, setState] = useState<PeekState>(() => PEEKS.settled(slug) ?? { status: 'loading' });
 
   useEffect(() => {
     let live = true;
@@ -279,11 +276,6 @@ type SlugState =
   | { status: 'missing' }
   | { status: 'unreachable' };
 
-interface CacheEntry {
-  readonly inFlight: Promise<SlugState>;
-  settled?: SlugState;
-}
-
 /**
  * One fetch per slug, shared by every card referencing it.
  *
@@ -292,31 +284,24 @@ interface CacheEntry {
  * re-renders on every drag. The in-flight promise is cached, not just the
  * result, so concurrent mounts coalesce into one request.
  *
- * A failure to *reach* the runtime is cached only until the next slug change:
- * it is not a fact about the document, so it must not stick.
+ * `SlugCache` owns when an entry dies, and now genuinely does what the
+ * comment here used to claim: a failure to *reach* the runtime is not a fact
+ * about the document and is dropped immediately; a saved package drops the
+ * slug it names; and the whole thing is bounded. Before that, "cached only
+ * until the next slug change" described an eviction that existed nowhere.
  */
-const CACHE = new Map<string, CacheEntry>();
+const CACHE = new SlugCache<SlugState>('composition.document', {
+  keep: (state) => state.status !== 'unreachable',
+});
 
 function resolveSlug(slug: string): Promise<SlugState> {
-  const existing = CACHE.get(slug);
-  if (existing) return existing.inFlight;
-
-  const inFlight = new WorkflowFileClient().loadIfPresent(slug).then((result): SlugState => {
-    if (!result.ok) {
-      CACHE.delete(slug);
-      return { status: 'unreachable' };
-    }
+  return CACHE.resolve(slug, async (): Promise<SlugState> => {
+    const result = await new WorkflowFileClient().loadIfPresent(slug);
+    if (!result.ok) return { status: 'unreachable' };
     return result.value == null
       ? { status: 'missing' }
       : { status: 'ready', document: result.value };
   });
-
-  const entry: CacheEntry = { inFlight };
-  CACHE.set(slug, entry);
-  void inFlight.then((settled) => {
-    entry.settled = settled;
-  });
-  return inFlight;
 }
 
 /* ================================================================== *
@@ -326,35 +311,30 @@ function resolveSlug(slug: string): Promise<SlugState> {
 type PeekState =
   { status: 'loading' } | { status: 'ready'; svg: string } | { status: 'failed'; message: string };
 
-interface PeekEntry {
-  readonly inFlight: Promise<PeekState>;
-  settled?: PeekState;
-}
-
 /**
- * Same coalescing contract as `CACHE`, for a much more expensive answer: the
- * backend has to *compile* the workflow, and Mermaid has to lay it out. A card
- * re-renders on every drag, so without this an expanded peek would recompile
- * the child's graph continuously while its parent card was being moved.
+ * Same contract as `CACHE`, for a much more expensive answer: the backend has
+ * to *compile* the workflow, and Mermaid has to lay it out. A card re-renders
+ * on every drag, so without this an expanded peek would recompile the child's
+ * graph continuously while its parent card was being moved.
  *
- * A failure is not cached — a compile that failed because the backend was
- * down must retry on the next expand rather than stick as a fact.
+ * The rendered SVG is the heaviest thing either card body holds, which is why
+ * the bound matters here more than anywhere: a failure is dropped at once, a
+ * save drops the slug, and beyond that the ceiling is `SlugCache`'s.
  */
-const PEEKS = new Map<string, PeekEntry>();
+const PEEKS = new SlugCache<PeekState>('composition.peek', {
+  keep: (state) => state.status !== 'failed',
+  // Lower than the default: an SVG per slug, and a peek is only rendered
+  // while its card is expanded, so few are ever wanted at once.
+  limit: 8,
+});
 
 /** Monotonic, so two cards on one canvas never share a Mermaid element id. */
 let peekSequence = 0;
 
 function resolvePeek(slug: string): Promise<PeekState> {
-  const existing = PEEKS.get(slug);
-  if (existing) return existing.inFlight;
-
-  const inFlight = (async (): Promise<PeekState> => {
+  return PEEKS.resolve(slug, async (): Promise<PeekState> => {
     const outcome = await new WorkflowFileClient().compiledGraph(slug);
-    if (!outcome.ok) {
-      PEEKS.delete(slug);
-      return { status: 'failed', message: outcome.error };
-    }
+    if (!outcome.ok) return { status: 'failed', message: outcome.error };
     try {
       const mermaid = (await import('mermaid')).default;
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
@@ -364,18 +344,10 @@ function resolvePeek(slug: string): Promise<PeekState> {
       );
       return { status: 'ready', svg };
     } catch (error) {
-      PEEKS.delete(slug);
       return {
         status: 'failed',
         message: `could not draw this graph: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
-  })();
-
-  const entry: PeekEntry = { inFlight };
-  PEEKS.set(slug, entry);
-  void inFlight.then((settled) => {
-    entry.settled = settled;
   });
-  return inFlight;
 }

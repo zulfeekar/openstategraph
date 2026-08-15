@@ -1,4 +1,4 @@
-import type { ICatalogueEvents, IWorkflowFileClient } from './WorkflowFileClient';
+import type { CatalogueChange, ICatalogueEvents, IWorkflowFileClient } from './WorkflowFileClient';
 
 /**
  * Which workflow slugs exist, answerable **synchronously**.
@@ -72,8 +72,17 @@ export class WorkflowCatalogue {
    * Returns an unsubscribe. Failures are swallowed — an editor that cannot
    * reach the backend still has to let a developer type a slug, and a picker
    * that throws during a render is worse than a picker with nothing in it.
+   *
+   * `onChange` forwards the raw change to the caller before the refresh. This
+   * object cares only about the slug *list*, but the event carries which slug
+   * moved, and the editor holds exactly one `/api/events` subscription on
+   * purpose (`workflowFileWatch.ts`) — so anything else that needs to know a
+   * package changed is handed it here rather than opening a second one.
    */
-  syncFrom(client: IWorkflowFileClient & Partial<ICatalogueEvents>): () => void {
+  syncFrom(
+    client: IWorkflowFileClient & Partial<ICatalogueEvents>,
+    onChange?: (change: CatalogueChange) => void,
+  ): () => void {
     const refresh = () => {
       void client
         .list()
@@ -93,7 +102,10 @@ export class WorkflowCatalogue {
     // opens — so a client without it still gets the one read above.
     const watch = client.watchCatalogue;
     if (typeof watch !== 'function') return () => {};
-    return watch.call(client, () => refresh());
+    return watch.call(client, (change) => {
+      onChange?.(change);
+      refresh();
+    });
   }
 }
 

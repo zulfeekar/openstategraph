@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { invalidateSlug } from '@core/runtime/SlugCache';
 import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import { WorkflowFileClient, type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 
@@ -97,10 +98,16 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
   // hook is already mounted once for the life of the editor and already holds
   // a client — a second subscription to `/api/events` would be a second thing
   // to reconnect and a second place to get the base URL wrong.
+  //
+  // The same event retires what the card bodies cached about that slug — its
+  // document, its compiled peek, its schema. They are per-slug caches with no
+  // clock of their own (`SlugCache`), and this is the one place the editor
+  // learns that a package moved, which is the same reason the catalogue sync
+  // lives here.
   useEffect(() => {
     const client = clientRef.current;
     if (!client) return;
-    return workflowCatalogue.syncFrom(client);
+    return workflowCatalogue.syncFrom(client, (change) => invalidateSlug(change.slug));
   }, []);
 
   useEffect(() => {

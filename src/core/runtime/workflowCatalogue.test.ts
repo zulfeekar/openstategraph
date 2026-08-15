@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Ok, type Result } from '@core/kernel/Result';
 import { WorkflowCatalogue, type WorkflowChoice } from './workflowCatalogue';
+import type { CatalogueChange } from './WorkflowFileClient';
 
 /**
  * production-ready ticket 05.
@@ -19,16 +20,17 @@ const row = (slug: string, name: string) => ({ slug, name });
 
 const clientReturning = (...pages: (readonly { slug: string; name: string }[])[]) => {
   let call = 0;
-  const watchers: (() => void)[] = [];
+  const watchers: ((change: CatalogueChange) => void)[] = [];
   return {
     list: vi.fn(async (): Promise<Result<readonly WorkflowChoice[], string>> =>
       Ok(pages[Math.min(call++, pages.length - 1)] ?? []),
     ),
-    watchCatalogue: (onChange: () => void) => {
+    watchCatalogue: (onChange: (change: CatalogueChange) => void) => {
       watchers.push(onChange);
       return () => {};
     },
-    fire: () => watchers.forEach((w) => w()),
+    fire: (slug = 'a') =>
+      watchers.forEach((w) => w({ reason: 'saved', slug, surfaceVisible: true })),
   };
 };
 
@@ -118,5 +120,21 @@ describe('the workflow catalogue', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(catalogue.list()).toHaveLength(1);
+  });
+
+  it('forwards the change itself, so one subscription serves more than this list', async () => {
+    // The event names the slug that moved; this object cares only about the
+    // slug *set*. The per-slug card caches need the name, and the editor
+    // deliberately holds exactly one `/api/events` subscription — so the
+    // change is handed on rather than a second one being opened.
+    const catalogue = new WorkflowCatalogue();
+    const client = clientReturning([row('a', 'A')]);
+    const seen: string[] = [];
+
+    catalogue.syncFrom(client as never, (change) => seen.push(change.slug));
+    await vi.waitFor(() => expect(catalogue.list()).toHaveLength(1));
+
+    client.fire('chinook-assistant');
+    expect(seen).toEqual(['chinook-assistant']);
   });
 });

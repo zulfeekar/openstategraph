@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { WorkflowFileClient, type SqlSource } from '@core/runtime/WorkflowFileClient';
+import { SlugCache } from '@core/runtime/SlugCache';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import type { NodeBodyProps } from './nodeBodyRegistry';
 import './SqlSchemaBody.css';
@@ -30,7 +31,7 @@ import './SqlSchemaBody.css';
 export function SqlSchemaBody(_props: NodeBodyProps) {
   const slug = openSlug();
   const [state, setState] = useState<SchemaState>(() =>
-    slug ? (CACHE.get(slug)?.settled ?? { status: 'loading' }) : { status: 'loading' },
+    slug ? (CACHE.settled(slug) ?? { status: 'loading' }) : { status: 'loading' },
   );
   const [open, setOpen] = useState<string | null>(null);
 
@@ -132,37 +133,27 @@ type SchemaState =
   | { status: 'ready'; sources: readonly SqlSource[] }
   | { status: 'failed'; message: string };
 
-interface CacheEntry {
-  readonly inFlight: Promise<SchemaState>;
-  settled?: SchemaState;
-}
-
 /**
  * One request per slug, shared by every schema card on the canvas.
  *
- * A failure is not cached: an unreachable runtime is not a fact about the
- * document, so it must retry rather than stick.
+ * `SlugCache`, the same construct `CompositionBody` uses, and for the same
+ * reason it is a construct rather than a third map: a failure is not cached
+ * (an unreachable runtime is not a fact about the document), a saved package
+ * drops what was cached about it, and the whole thing is bounded. A schema is
+ * discovered from the package's own files, so a save is exactly the moment
+ * this answer can stop being true.
  */
-const CACHE = new Map<string, CacheEntry>();
+const CACHE = new SlugCache<SchemaState>('sql.schema', {
+  keep: (state) => state.status !== 'failed',
+});
 
 function resolveSchema(slug: string): Promise<SchemaState> {
-  const existing = CACHE.get(slug);
-  if (existing) return existing.inFlight;
-
-  const inFlight = new WorkflowFileClient().sqlSchema(slug).then((result): SchemaState => {
-    if (!result.ok) {
-      CACHE.delete(slug);
-      return { status: 'failed', message: result.error };
-    }
-    return { status: 'ready', sources: result.value };
+  return CACHE.resolve(slug, async (): Promise<SchemaState> => {
+    const result = await new WorkflowFileClient().sqlSchema(slug);
+    return result.ok
+      ? { status: 'ready', sources: result.value }
+      : { status: 'failed', message: result.error };
   });
-
-  const entry: CacheEntry = { inFlight };
-  CACHE.set(slug, entry);
-  void inFlight.then((settled) => {
-    entry.settled = settled;
-  });
-  return inFlight;
 }
 
 function openSlug(): string | null {
