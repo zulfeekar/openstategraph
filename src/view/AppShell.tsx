@@ -16,6 +16,7 @@ import { CanvasStage } from './canvas/CanvasStage';
 import { Minimap } from './minimap/Minimap';
 import { ShortcutsDrawer } from './overlays/ShortcutsDrawer';
 import { CredentialsDialog } from './overlays/CredentialsDialog';
+import { McpServersDialog } from './overlays/McpServersDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
@@ -113,6 +114,7 @@ export function AppShell() {
    */
   const askStreams = useMemo(() => new OpenStreams(), []);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [mcpServersOpen, setMcpServersOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
   /* ---------------- theme ---------------- */
@@ -278,6 +280,7 @@ export function AppShell() {
         inspectorOpen={inspectorOpen}
         onInspectorToggle={() => setInspectorOpen((value) => !value)}
         onOpenCredentials={() => setCredentialsOpen(true)}
+        onOpenMcpServers={() => setMcpServersOpen(true)}
         onNotify={onNotify}
         onNewWorkflow={() => void startNewWorkflow()}
         onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
@@ -360,6 +363,7 @@ export function AppShell() {
       </div>
 
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
+      {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}
       <Toaster toasts={toasts} onDismiss={dismiss} />
     </div>
   );

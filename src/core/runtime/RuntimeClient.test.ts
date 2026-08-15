@@ -1068,3 +1068,111 @@ describe('the terminal frame keeps the parent and its mounts apart (ticket 40)',
     expect(result.value.nested).toEqual({ outputs: {}, decisions: {} });
   });
 });
+
+/**
+ * The MCP registry (mcp-connect ticket 03).
+ *
+ * Three routes, one property worth pinning above all others: **no request
+ * this client makes has anywhere to put a credential**. The panel collects a
+ * variable NAME, the server resolves it from its own environment, and the
+ * test below is what keeps that true when somebody adds a field.
+ */
+describe('RuntimeClient and the MCP registry', () => {
+  const SERVERS = [
+    {
+      name: 'LangChain docs',
+      url: 'https://docs.langchain.com/mcp',
+      transport: 'streamable_http',
+      auth: { kind: 'none', headerName: '', tokenEnv: '' },
+      origin: 'built-in',
+      credentialConfigured: true,
+    },
+  ];
+
+  it('lists what the project can bind', async () => {
+    const stub = stubFetch(jsonResponse(SERVERS));
+    const result = await new RuntimeClient('http://rt', stub.fetch).mcp.servers();
+
+    expect(stub.calls[0]).toBe('http://rt/api/mcp/servers');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.origin).toBe('built-in');
+    expect(result.value[0]?.credentialConfigured).toBe(true);
+  });
+
+  it('posts a variable name and never a value', async () => {
+    const stub = stubFetch(jsonResponse(SERVERS));
+    await new RuntimeClient('http://rt', stub.fetch).mcp.save({
+      name: 'Internal docs',
+      url: 'https://mcp.example.test/mcp',
+      transport: 'sse',
+      auth: { kind: 'bearer', headerName: '', tokenEnv: 'MY_MCP_TOKEN' },
+    });
+
+    const sent = JSON.parse(stub.bodies[0]!) as Record<string, unknown>;
+    expect(sent['transport']).toBe('sse');
+    expect(sent['auth']).toEqual({ kind: 'bearer', headerName: '', tokenEnv: 'MY_MCP_TOKEN' });
+    // The whole secrets rule, as one assertion: there is no key in the body a
+    // credential could be in, so a paste into the field lands in `tokenEnv`
+    // and is refused by the validator and by the loader, not shipped.
+    expect(Object.keys(sent).sort()).toEqual(['auth', 'name', 'transport', 'url']);
+  });
+
+  it('escapes a server name with a space in it', async () => {
+    const stub = stubFetch(jsonResponse([]));
+    await new RuntimeClient('http://rt', stub.fetch).mcp.remove('LangChain docs');
+
+    expect(stub.calls[0]).toBe('http://rt/api/mcp/servers/LangChain%20docs');
+  });
+
+  it('returns the server’s own refusal rather than a generic one', async () => {
+    const stub = stubFetch(
+      jsonResponse({ detail: 'auth.token_env must be an environment variable NAME' }, 400),
+    );
+    const result = await new RuntimeClient('http://rt', stub.fetch).mcp.save({
+      name: 'Vendor',
+      url: 'https://vendor.test/mcp',
+      transport: 'streamable_http',
+      auth: { kind: 'bearer', headerName: '', tokenEnv: 'sk-live' },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('environment variable NAME');
+  });
+
+  it('reads a verdict back with its tool names', async () => {
+    const stub = stubFetch(
+      jsonResponse({
+        status: 'live',
+        message: 'Docs by LangChain answered with 3 tools.',
+        serverName: 'Docs by LangChain',
+        serverVersion: '1.0.0',
+        tools: ['search_docs_by_lang_chain', 'submit_feedback'],
+        elapsedSeconds: 0.86,
+      }),
+    );
+    const result = await new RuntimeClient('http://rt', stub.fetch).mcp.validate({
+      server: 'LangChain docs',
+    });
+
+    expect(stub.calls[0]).toBe('http://rt/api/mcp/validate');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('live');
+    expect(result.value.tools).toEqual(['search_docs_by_lang_chain', 'submit_feedback']);
+  });
+
+  it('treats an unrecognised status as “not an MCP server” rather than as live', async () => {
+    // A status this client does not know is a server it cannot vouch for, and
+    // the failing badge is the safe direction to round towards.
+    const stub = stubFetch(jsonResponse({ status: 'something-new', message: 'hm' }));
+    const result = await new RuntimeClient('http://rt', stub.fetch).mcp.validate({
+      url: 'https://vendor.test/mcp',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('not_mcp');
+  });
+});

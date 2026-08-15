@@ -23,10 +23,16 @@ import { describe, expect, it } from 'vitest';
  */
 const REPO = new URL('../../../', import.meta.url);
 const openapi = JSON.parse(readFileSync(fileURLToPath(new URL('docs/openapi.json', REPO)), 'utf8'));
-const client = readFileSync(
-  fileURLToPath(new URL('src/core/runtime/RuntimeClient.ts', REPO)),
-  'utf8',
-);
+/**
+ * The client, plus its collaborators — the pin is on the *seam*, not on one
+ * file. `McpRegistryClient` was split out of `RuntimeClient` for the public
+ * surface ceiling (mcp-connect ticket 03), and a pin that watched only the
+ * file the routes used to live in would have gone quiet at exactly the moment
+ * four new endpoints appeared.
+ */
+const client = ['RuntimeClient.ts', 'McpRegistryClient.ts']
+  .map((name) => readFileSync(fileURLToPath(new URL(`src/core/runtime/${name}`, REPO)), 'utf8'))
+  .join('\n');
 
 /** Every path the client builds, as a template with `{}` for interpolations. */
 function pathsCalledByTheClient(): string[] {

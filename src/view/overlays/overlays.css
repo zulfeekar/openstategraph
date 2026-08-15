@@ -388,3 +388,15 @@
 .onboarding-hint__close:hover {
   color: var(--color-text-primary);
 }
+
+/* ---------- MCP servers ---------- */
+
+/* One row's verbs, on their own line: Validate, Edit and Delete are three
+   different weights of action and reading them as a sentence beside the URL
+   made Delete look like part of the address. */
+.mcp-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}

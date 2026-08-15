@@ -12,6 +12,7 @@ import {
   PanelLeft,
   PanelRight,
   Play,
+  Plug,
   Plus,
   Grid2x2,
   Redo2,
@@ -68,6 +69,13 @@ interface TopBarProps {
   inspectorOpen: boolean;
   onInspectorToggle: () => void;
   onOpenCredentials: () => void;
+  /**
+   * The MCP server registry (mcp-connect ticket 03).
+   *
+   * Beside the key, because it is the same class of question: what does this
+   * *project* have available, as opposed to what does this document say.
+   */
+  onOpenMcpServers: () => void;
   onNotify: (message: string) => void;
   /**
    * Start a new workflow (ticket 06).
@@ -119,6 +127,7 @@ export function TopBar({
   inspectorOpen,
   onInspectorToggle,
   onOpenCredentials,
+  onOpenMcpServers,
   onNotify,
   onNewWorkflow,
   onWorkflowsToggle,
@@ -455,6 +464,17 @@ export function TopBar({
             </Tooltip>
             <OnboardingHint onOpenCredentials={onOpenCredentials} />
           </div>
+
+          {/* A peer of the key, and reached the same way: both dialogs
+              describe what this project can reach, and neither is a property
+              of the document on the canvas. */}
+          <Tooltip content="MCP servers this project can bind" multiline>
+            <IconButton
+              label="MCP servers"
+              icon={<Icon glyph={Plug} size="md" />}
+              onClick={onOpenMcpServers}
+            />
+          </Tooltip>
 
           {/* Wrapped, because a `disabled` button fires no pointer events and
               the tooltip is the entire explanation of why it is disabled. */}

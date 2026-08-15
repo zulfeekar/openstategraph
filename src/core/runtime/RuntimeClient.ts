@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import { McpRegistryClient } from './McpRegistryClient';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
@@ -556,7 +557,18 @@ export class RuntimeClient implements IRuntimeClient {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
-  ) {}
+  ) {
+    this.mcp = new McpRegistryClient(baseUrl, fetchImpl);
+  }
+
+  /**
+   * Which MCP servers this project can bind, and whether one answers.
+   *
+   * A collaborator rather than four more methods here — CLAUDE.md's rule for
+   * a class at its ceiling, and the honest split besides: the run seam and a
+   * project-level registry change for different reasons.
+   */
+  readonly mcp: McpRegistryClient;
 
   /**
    * The base said out loud. Same-origin resolves to an empty prefix, which is
@@ -972,7 +984,7 @@ function asPastRun(row: Record<string, unknown>): PastRun {
  * Each of these is a distinct, likely situation with a distinct fix, so
  * collapsing them into one message would waste the information the server sent.
  */
-async function describeFailure(response: Response): Promise<string> {
+export async function describeFailure(response: Response): Promise<string> {
   const detail = await readDetail(response);
   if (response.status === 503) {
     return detail || 'No model is configured on the runtime.';
