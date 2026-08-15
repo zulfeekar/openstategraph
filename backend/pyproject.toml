@@ -213,6 +213,20 @@ select = ["E9", "F"]
 [tool.mypy]
 python_version = "3.11"
 files = ["openstategraph"]
+# The shipped gallery's own code, not ours (workflow-gallery ticket 07).
+# `openstategraph/examples/<slug>/` is a *workflow package* that happens to
+# live inside this distribution so a wheel carries it — its `tests/`, `tools/`
+# and `functions/` are written in the adopter's idiom, and they are exactly
+# what the docs tell an adopter their package should look like. Holding them to
+# the framework's strict gate would mean either annotating twenty example test
+# suites into something no adopter's package resembles, or weakening the gate
+# for the framework itself. `examples/__init__.py` — the catalogue, which IS
+# ours — stays inside `files` and is checked.
+#
+# Ruff is deliberately NOT scoped away: its `E9,F` set catches undefined names
+# and unused imports, which are real defects in shipped example code and cost
+# nothing to keep clean.
+exclude = "^openstategraph/examples/[^/]+/"
 # Vendor SDKs behind extras (mcp, deepagents, the provider packages, certifi)
 # are not installed in every environment this runs in; a missing stub must not
 # be the thing that fails the gate.

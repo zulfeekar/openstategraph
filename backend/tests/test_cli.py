@@ -304,6 +304,78 @@ class TestTemplates:
             assert cli.main(["validate", str(tmp_path / name)]) == cli.EXIT_OK
 
 
+class TestExamples:
+    """`openstategraph examples` — the documented route to the shipped gallery
+    (workflow-gallery ticket 07). The catalogue and the copy are tested in
+    `test_examples.py`; what belongs here is the command line over them, and
+    the two exit codes a script has to be able to tell apart."""
+
+    def test_list_prints_every_example_with_the_pattern_it_shows(self, capsys) -> None:
+        from openstategraph import examples
+
+        code = cli.main(["examples", "list"])
+
+        assert code == cli.EXIT_OK
+        printed = capsys.readouterr().out
+        # Derived, never a hand-kept copy: a second list here is the drift the
+        # templates catalogue already refuses to allow.
+        for example in examples.catalogue():
+            assert example.slug in printed
+            assert example.pattern in printed
+
+    def test_copy_writes_the_package_and_says_where(self, tmp_path: Path, capsys) -> None:
+        code = cli.main(["examples", "copy", "chained-summarizer", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_OK
+        assert (tmp_path / "chained-summarizer" / "workflow.json").is_file()
+        assert str(tmp_path / "chained-summarizer") in capsys.readouterr().out
+
+    def test_copy_brings_the_packages_it_mounts_and_names_them(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        code = cli.main(["examples", "copy", "nested-mounts", "--root", str(tmp_path)])
+        printed = capsys.readouterr().out
+
+        assert code == cli.EXIT_OK
+        assert "nested-mounts-mid" in printed and "chained-summarizer" in printed
+        for slug in ("nested-mounts", "nested-mounts-mid", "chained-summarizer"):
+            assert (tmp_path / slug / "workflow.json").is_file()
+
+    def test_what_it_copies_is_a_package_the_cli_can_validate(self, tmp_path: Path) -> None:
+        """The end-to-end claim: an example that does not survive `copy` +
+        `validate` is worse than no example."""
+        cli.main(["examples", "copy", "nested-mounts", "--root", str(tmp_path)])
+
+        assert cli.main(["validate", str(tmp_path / "nested-mounts")]) == cli.EXIT_OK
+
+    def test_an_unknown_example_exits_two_and_names_the_real_ones(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Exit 2, like an unknown `--template`: a typo is a usage error, and
+        CI must be able to tell it from a copy that failed."""
+        code = cli.main(["examples", "copy", "wishful", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_USAGE
+        assert "chained-summarizer" in capsys.readouterr().err
+        assert list(tmp_path.iterdir()) == []
+
+    def test_copying_over_an_existing_package_is_refused(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        (tmp_path / "chained-summarizer").mkdir()
+
+        code = cli.main(["examples", "copy", "chained-summarizer", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_FAILURE
+        assert "already exists" in capsys.readouterr().err
+
+    def test_examples_needs_a_subcommand(self) -> None:
+        with pytest.raises(SystemExit) as caught:
+            cli.main(["examples"])
+
+        assert caught.value.code == cli.EXIT_USAGE
+
+
 class TestKnowledge:
     def test_list_prints_topics_with_their_hints(self, package: Path, capsys) -> None:
         (package / "knowledge").mkdir()

@@ -143,6 +143,40 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **The worked examples ship in the wheel** (workflow-gallery ticket 07,
+  closing canvas-feels-right 04). Twenty-one finished packages — one per
+  pattern the canvas can express, each validated and smoke-run — now live at
+  `openstategraph/examples/`, package data beside `openstategraph/templates/`,
+  so `pip install openstategraph` carries them. `scripts/clean_install_proof.sh`
+  asserts three of them are in the built wheel and copies two out of it,
+  because nothing in the test suite can see the artifact.
+
+  - `openstategraph examples list` prints the gallery in reading order — slug,
+    the pattern it demonstrates, and the package's own one-line purpose.
+  - `openstategraph examples copy <slug>` writes it into `./workflows`
+    (`--root` to change that), **with every package it mounts**: three of them
+    mount others and a copy that left one behind would arrive broken.
+  - `GET /api/examples` and `POST /api/examples/{slug}/copy` are the same
+    catalogue and the same copy, for the editor's new **Workflows → Examples**
+    shelf. The copy is server-side for the reason `duplicate` is: an example is
+    a package, and a browser that imported only its document would produce
+    nodes bound to tools that are not there.
+
+  **They are not under your workflows root, and that is the design.** A
+  template is *rendered*; an example is **copied whole** and severed on copy —
+  a later `pip install -U` never reaches back into it. They are never *mounted*
+  where they lie, because a mount is a live reference and a live reference into
+  `site-packages` is a workflow that changes when you upgrade something else.
+  The location is also the visibility rule: `platform_list_workflows`, the
+  generated project-knowledge doc and the `/chat` picker cannot see the gallery
+  however its envelope is flagged, so no new `example:` state was needed. Once
+  copied, `published: false` finally means what it says — your draft, published
+  when you choose.
+
+  Wheel cost, measured: **3,707,242 bytes against 3,115,178 before** (+578 KiB,
+  +19%), of which 436 KiB is `sql-qa`'s Chinook database and 121 KiB is the
+  other twenty packages together.
+
 - **A mounted workflow can be addressed, opened and configured as an
   *instance*** (ship-it ticket 42). Per-instance state has been correct since
   mount overrides shipped — a package is a class, a mount node is an instance

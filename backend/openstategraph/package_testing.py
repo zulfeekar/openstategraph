@@ -12,7 +12,7 @@ ticket 10, follow-up (a)) sketched an `assert_run_shape(result, decisions=…,
 attempts=…, sections=…)`, on the expectation that a package's fixture would
 grade a run. It does not, and should not. Every gallery example's smoke run is
 recorded in its `AGENTS.md` because a real run costs cloud tokens, and a run
-driven by a stubbed model asserts the stub — `workflows/chained-summarizer`'s
+driven by a stubbed model asserts the stub — `examples/chained-summarizer`'s
 own test file calls that theatre, correctly. So the mechanical, free,
 reproducible half is what a package test takes, and the model-dependent half
 stays a recorded observation. The helper is named for what it actually does.

@@ -720,15 +720,18 @@ calls and nothing else.
 
 ## 4. A whole client, in one file
 
-`docs/examples/minimal-client.html` is a complete chat client — list, load,
-stream, approve, done — in about sixty lines. Save it, serve it, use it:
+A complete chat client — list, load, stream, approve, done — in about sixty
+lines. **The whole file is printed below**, because a reader who installed the
+wheel has these docs and not this repository; in a checkout it is also
+`docs/examples/minimal-client.html`. Save it, serve it, use it:
 
 ```bash
 openstategraph serve --port 8000                      # terminal 1
 OPENSTATEGRAPH_ALLOWED_ORIGINS=http://localhost:8765 \
   openstategraph serve --port 8000                    # ...or this, see CORS below
 
-cd docs/examples && python3 -m http.server 8765       # terminal 2
+# terminal 2 — from wherever you saved it (in a checkout: cd docs/examples)
+python3 -m http.server 8765
 open http://localhost:8765/minimal-client.html
 ```
 

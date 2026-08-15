@@ -1036,6 +1036,84 @@ class TestTemplates:
         assert any(n.get("title") == "Payments Lead" for n in team["document"]["nodes"])
 
 
+class TestExamples:
+    """`GET /api/examples` and `POST /api/examples/{slug}/copy` — the editor's
+    Examples shelf (workflow-gallery ticket 07).
+
+    The shelf reads the same catalogue as `openstategraph examples list`, and
+    taking one is a **server-side copy** rather than a document import: an
+    example is a package, and a browser that imported only its document would
+    produce nodes bound to tools that are not there.
+    """
+
+    @pytest.fixture
+    def project(self, tmp_path: Path) -> TestClient:
+        """A client whose workflows root is empty and disposable — a copy test
+        that wrote into this repository's own `workflows/` would be a test that
+        edits the checkout."""
+        return TestClient(create_app(workflows_root=tmp_path))
+
+    def test_it_offers_exactly_what_the_cli_offers(self, project: TestClient) -> None:
+        from openstategraph import examples
+
+        response = project.get("/api/examples")
+
+        assert response.status_code == 200
+        assert [e["slug"] for e in response.json()] == list(examples.slugs())
+
+    def test_each_entry_says_what_it_is_and_what_it_costs(self, project: TestClient) -> None:
+        entries = {e["slug"]: e for e in project.get("/api/examples").json()}
+
+        assert entries["chained-summarizer"]["pattern"] == "prompt chaining"
+        assert entries["chained-summarizer"]["summary"]
+        assert entries["nested-mounts"]["requires"] == [
+            "nested-mounts",
+            "nested-mounts-mid",
+            "chained-summarizer",
+        ]
+
+    def test_the_gallery_is_not_in_the_users_workflow_list(self, project: TestClient) -> None:
+        """The point of the home: no flag hides these, their location does."""
+        assert project.get("/api/workflows").json() == []
+
+    def test_copying_one_puts_it_and_its_mounts_in_the_project(
+        self, project: TestClient, tmp_path: Path
+    ) -> None:
+        response = project.post("/api/examples/nested-mounts/copy")
+
+        assert response.status_code == 201, response.text
+        assert response.json() == {
+            "slug": "nested-mounts",
+            "copied": ["nested-mounts", "nested-mounts-mid", "chained-summarizer"],
+        }
+        for slug in response.json()["copied"]:
+            assert (tmp_path / slug / "workflow.json").is_file()
+
+    def test_a_copy_then_shows_up_as_the_users_own_draft(self, project: TestClient) -> None:
+        project.post("/api/examples/chained-summarizer/copy")
+
+        rows = {row["slug"]: row for row in project.get("/api/workflows").json()}
+        assert "chained-summarizer" in rows
+        assert rows["chained-summarizer"]["published"] is False
+
+    def test_an_unknown_example_is_a_404_that_names_the_real_ones(
+        self, project: TestClient
+    ) -> None:
+        response = project.post("/api/examples/no-such-example/copy")
+
+        assert response.status_code == 404
+        assert "chained-summarizer" in response.json()["detail"]
+
+    def test_copying_twice_is_refused_rather_than_overwriting(
+        self, project: TestClient
+    ) -> None:
+        assert project.post("/api/examples/chained-summarizer/copy").status_code == 201
+        second = project.post("/api/examples/chained-summarizer/copy")
+
+        assert second.status_code == 409
+        assert "chained-summarizer" in second.json()["detail"]
+
+
 class TestHealthReportsRealReadiness:
     """`model_configured` used to be the literal `True`.
 

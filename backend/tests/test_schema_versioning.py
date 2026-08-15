@@ -65,10 +65,18 @@ class TestTheShapesThatArriveToday:
             normalize_document("{not json")
 
     def test_every_workflow_in_this_repo_still_loads(self) -> None:
-        """The guard is worthless if it refuses our own committed documents."""
-        root = Path(__file__).resolve().parents[2] / "workflows"
-        manifests = sorted(root.glob("*/workflow.json"))
-        assert manifests, "no workflow packages found — this test would pass vacuously"
+        """The guard is worthless if it refuses our own committed documents.
+
+        Both homes: this project's `workflows/` and the gallery that ships as
+        package data (workflow-gallery ticket 07). The shipped one matters
+        *more*, not less — a schema bump that a checkout tolerates and an
+        installed wheel refuses is the version of this bug an adopter meets.
+        """
+        repo = Path(__file__).resolve().parents[2]
+        manifests = sorted(
+            (repo / "workflows").glob("*/workflow.json")
+        ) + sorted((repo / "backend" / "openstategraph" / "examples").glob("*/workflow.json"))
+        assert len(manifests) > 20, "the sweep found almost nothing — it would pass vacuously"
 
         for manifest in manifests:
             document = normalize_document(json.loads(manifest.read_text()))

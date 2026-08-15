@@ -626,6 +626,77 @@ describe('WorkflowFileClient.templates', () => {
   });
 });
 
+describe('WorkflowFileClient.examples', () => {
+  const entry = {
+    slug: 'nested-mounts',
+    name: 'Nested Mounts',
+    summary: 'Composition depth for its own sake.',
+    pattern: 'composition depth',
+    requires: ['nested-mounts', 'nested-mounts-mid', 'chained-summarizer'],
+  };
+
+  it('reads the shipped gallery, and what each example will cost to take', async () => {
+    const stub = stubFetch(jsonResponse([entry]));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.examples();
+
+    expect(stub.calls[0]?.url).toBe('http://rt/api/examples');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([entry]);
+  });
+
+  it('treats an example that names no dependencies as needing only itself', async () => {
+    const stub = stubFetch(jsonResponse([{ slug: 'chained-summarizer' }]));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.examples();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.requires).toEqual(['chained-summarizer']);
+  });
+
+  it('reports a backend too old to know the endpoint rather than throwing', async () => {
+    const stub = stubFetch(jsonResponse({ detail: 'Not Found' }, 404));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    expect((await client.examples()).ok).toBe(false);
+  });
+});
+
+describe('WorkflowFileClient.copyExample', () => {
+  it('posts to the example and returns every slug the copy wrote', async () => {
+    const stub = stubFetch(
+      jsonResponse({ slug: 'nested-mounts', copied: ['nested-mounts', 'nested-mounts-mid'] }, 201),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.copyExample('nested-mounts');
+
+    expect(stub.calls[0]?.url).toBe('http://rt/api/examples/nested-mounts/copy');
+    expect(stub.calls[0]?.init?.method).toBe('POST');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual(['nested-mounts', 'nested-mounts-mid']);
+  });
+
+  it('surfaces the refusal when a package of that name is already there', async () => {
+    const stub = stubFetch(jsonResponse({ detail: 'already exists' }, 409));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.copyExample('chained-summarizer');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('already exists');
+  });
+
+  it('refuses to report a copy it cannot name', async () => {
+    const stub = stubFetch(jsonResponse({ slug: 'x', copied: [] }, 201));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    expect((await client.copyExample('x')).ok).toBe(false);
+  });
+});
+
 describe('WorkflowFileClient.sqlSchema', () => {
   it('reads the tables the wired database actually has', async () => {
     const stub = stubFetch(

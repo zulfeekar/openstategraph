@@ -19,6 +19,7 @@ import { getOpenAddress } from '@app/openAddress';
 import { isInstance } from '@core/model/MountAddress';
 import {
   WorkflowFileClient,
+  type WorkflowExample,
   type WorkflowSummary,
   type WorkflowTemplate,
 } from '@core/runtime/WorkflowFileClient';
@@ -87,6 +88,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   // down or too old costs the picker, never the blank canvas.
   const [templates, setTemplates] = useState<readonly WorkflowTemplate[]>([]);
   const [template, setTemplate] = useState(BLANK_TEMPLATE);
+  // The shipped gallery (workflow-gallery ticket 07). A separate shelf from
+  // "Saved Workflows" on purpose: these are not in this project, they live in
+  // the installed package, and they appear in the list above only once the
+  // user has taken a copy. Empty is legitimate, exactly as for templates.
+  const [examples, setExamples] = useState<readonly WorkflowExample[]>([]);
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
@@ -117,6 +123,16 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     if (!open) return;
     void client.templates('New Workflow').then((outcome) => {
       if (outcome.ok) setTemplates(outcome.value);
+    });
+  }, [open, client]);
+
+  // The gallery, same policy: fetched when the panel opens, silent on failure.
+  // No `name` argument, because nothing is rendered into an example — it is
+  // copied byte for byte, which is what makes its own AGENTS.md true of it.
+  useEffect(() => {
+    if (!open) return;
+    void client.examples().then((outcome) => {
+      if (outcome.ok) setExamples(outcome.value);
     });
   }, [open, client]);
 
@@ -340,6 +356,33 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     [client, onNotify, refreshList],
   );
 
+  // Taking an example is a **copy**, and the copy is severed: from here it is
+  // an ordinary package of this project's, and a later `pip install -U` does
+  // not reach back into it. The backend does the copying because an example is
+  // a package — tests, knowledge, eval fixture, database — and importing its
+  // document alone would leave every tool binding pointing at nothing.
+  const handleCopyExample = useCallback(
+    async (example: WorkflowExample) => {
+      setBusy(true);
+      const outcome = await client.copyExample(example.slug);
+      setBusy(false);
+      if (!outcome.ok) {
+        onNotify(`Could not copy ${example.name}: ${outcome.error}`);
+        return;
+      }
+      const extra = outcome.value.length - 1;
+      onNotify(
+        extra > 0
+          ? `Copied: ${example.name} — with ${extra} package(s) it mounts. It is a draft in your workflows.`
+          : `Copied: ${example.name} — a draft in your workflows.`,
+      );
+      // Same reasoning as Duplicate: it does not swap the canvas out from
+      // under someone mid-thought. The row is in the list above, with Load.
+      void refreshList();
+    },
+    [client, onNotify, refreshList],
+  );
+
   const handleDelete = useCallback(
     async (slug: string, name: string) => {
       if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
@@ -518,6 +561,46 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
             </ul>
           )}
         </PanelSection>
+
+        {examples.length > 0 && (
+          <PanelSection heading="Examples">
+            <p className="workflow-manager__hint">
+              Worked examples that ship inside OpenStateGraph — one per pattern the canvas can
+              express. They are <strong>not in this project</strong> until you copy one; a copy is
+              yours from then on, a draft in <code>workflows/</code> that a later upgrade never
+              touches. Same thing on the command line:{' '}
+              <code>openstategraph examples copy &lt;slug&gt;</code>.
+            </p>
+            <ul className="workflow-manager__list">
+              {examples.map((example) => (
+                <li key={example.slug} className="workflow-manager__item">
+                  <div className="workflow-manager__info">
+                    <Icon glyph={FileJson} size="sm" />
+                    <span className="workflow-manager__name" title={example.summary}>
+                      {example.name}
+                    </span>
+                    <span className="workflow-manager__badge">{example.pattern}</span>
+                  </div>
+                  <div className="workflow-manager__actions">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      // What it will write, said before it writes it: three of
+                      // these mount other examples and a copy brings them.
+                      title={`Copies ${example.requires.join(', ')} into workflows/`}
+                      onClick={() => void handleCopyExample(example)}
+                      icon={<Icon glyph={Copy} size="xs" />}
+                    >
+                      Copy
+                      {example.requires.length > 1 ? ` +${example.requires.length - 1}` : ''}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </PanelSection>
+        )}
       </PanelBody>
     </Panel>
   );

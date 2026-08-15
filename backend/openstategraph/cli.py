@@ -273,6 +273,48 @@ def cmd_new(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_examples_list(args: argparse.Namespace) -> int:
+    """The shipped gallery — `openstategraph.examples`, printed.
+
+    The same catalogue the editor's Examples shelf reads over
+    `GET /api/examples`, so the two can never offer different galleries.
+    """
+    from openstategraph import examples
+
+    width = max(len(slug) for slug in examples.slugs())
+    for example in examples.catalogue():
+        extra = len(example.requires()) - 1
+        also = f"  [+{extra} mounted]" if extra else ""
+        print(f"{example.slug.ljust(width)}  {example.pattern}{also}")
+        print(f"{' ' * width}  {example.summary}")
+    return EXIT_OK
+
+
+def cmd_examples_copy(args: argparse.Namespace) -> int:
+    """`scaffold.copy_example` — the copy that severs it.
+
+    An example is not mounted where it lies (it lies in `site-packages`); it is
+    copied into the caller's own workflows directory and is theirs from then
+    on. `openstategraph.examples` explains why that is the only honest option.
+    """
+    from openstategraph import examples
+    from openstategraph.scaffold import ScaffoldError, copy_example
+
+    root = Path(args.root).expanduser().resolve() if args.root else Path.cwd() / "workflows"
+    try:
+        written = copy_example(root, args.slug)
+    except examples.UnknownExampleError as exc:
+        return _usage(str(exc))
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    print(f"{args.slug} copied: {written[0]}")
+    for path in written[1:]:
+        print(f"  also copied (it is mounted): {path.name}")
+    print(f'next: openstategraph run {written[0]} "your question"')
+    return EXIT_OK
+
+
 def cmd_knowledge_build(args: argparse.Namespace) -> int:
     """`api.knowledge_build.run_build` — the same path the editor's button uses."""
     from openstategraph.api.knowledge_build import UnknownSourceError, resolve_build_model, run_build
@@ -631,6 +673,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     new.add_argument("--root", help="where to create it (default: ./workflows)")
     new.set_defaults(handler=cmd_new)
+
+    # The gallery ships in the wheel as package data (gallery ticket 07) and is
+    # deliberately NOT under the workflows root, so it needs a command of its
+    # own rather than another `--template`: a template is rendered, an example
+    # is copied whole — tests, knowledge, database and all.
+    example_group = subparsers.add_parser(
+        "examples", help="the worked examples that ship with OpenStateGraph"
+    )
+    example_commands = example_group.add_subparsers(dest="examples_command", required=True)
+
+    example_list = example_commands.add_parser(
+        "list", help="print the examples and what each one demonstrates"
+    )
+    example_list.set_defaults(handler=cmd_examples_list)
+
+    example_copy = example_commands.add_parser(
+        "copy", help="copy one into your workflows directory, mounts included"
+    )
+    # No `choices`: the gallery has twenty-one entries and argparse would print
+    # all of them on every usage error. `examples.get` raises with the list.
+    example_copy.add_argument("slug", help="see `openstategraph examples list`")
+    example_copy.add_argument("--root", help="where to copy it (default: ./workflows)")
+    example_copy.set_defaults(handler=cmd_examples_copy)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
     thread_commands = threads.add_subparsers(dest="threads_command", required=True)

@@ -153,6 +153,44 @@ export interface IWorkflowTemplates {
 }
 
 /**
+ * One worked example shipped inside the distribution (workflow-gallery ticket
+ * 07) — a **package**, not a document, which is the difference from
+ * `WorkflowTemplate`.
+ *
+ * There is no `document` field here on purpose. An example carries its tests,
+ * its knowledge store, its eval fixture and (for `sql-qa`) a database; a
+ * canvas that imported the document alone would produce nodes bound to tools
+ * that do not exist in the result. So taking one is a copy the backend
+ * performs, and `requires` says beforehand which directories that will write.
+ */
+export interface WorkflowExample {
+  readonly slug: string;
+  readonly name: string;
+  /** One line, the package's own `settings.purpose`. */
+  readonly summary: string;
+  /** What shape it demonstrates — "revision loop", "orchestrator-worker". */
+  readonly pattern: string;
+  /** This slug first, then every package it mounts, transitively. */
+  readonly requires: readonly string[];
+}
+
+/**
+ * The shipped gallery, read over HTTP — its own interface for the same reason
+ * `IWorkflowTemplates` is one: a consumer that only ever loads documents has
+ * no business declaring methods about examples it never asks for.
+ *
+ * The examples are **not** in `list()`. They live outside the workflows root,
+ * so they cannot pollute the user's own catalogue however they are flagged;
+ * copying one is what puts a package in it, and from that moment it is an
+ * ordinary draft of theirs.
+ */
+export interface IWorkflowExamples {
+  examples(): Promise<Result<readonly WorkflowExample[], string>>;
+  /** Resolves with every slug written, the requested one first. */
+  copyExample(slug: string): Promise<Result<readonly string[], string>>;
+}
+
+/**
  * One mounted **instance**, as it actually runs — ticket 42.
  *
  * `document` is the child package with this mount's `data.overrides` already
@@ -249,7 +287,7 @@ export interface EventSourceLike {
 export type EventSourceFactory = (url: string) => EventSourceLike;
 
 export class WorkflowFileClient
-  implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates
+  implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates, IWorkflowExamples
 {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
@@ -392,6 +430,75 @@ export class WorkflowFileClient
       );
     } catch {
       return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * The shipped gallery.
+   *
+   * Failure degrades the same way `templates` does — an Examples shelf is a
+   * shortcut, and a backend too old to know the endpoint must cost a user the
+   * shelf, never anything they already have.
+   */
+  async examples(): Promise<Result<readonly WorkflowExample[], string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/examples`);
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as unknown[];
+      return Ok(
+        payload.map((entry) => {
+          const record = entry as Record<string, unknown>;
+          return {
+            slug: asString(record['slug']),
+            name: asString(record['name']),
+            summary: asString(record['summary']),
+            pattern: asString(record['pattern']),
+            requires: Array.isArray(record['requires'])
+              ? record['requires'].map(asString)
+              : [asString(record['slug'])],
+          };
+        }),
+      );
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * Copy one example, and everything it mounts, into this project.
+   *
+   * The backend does the copying because a package is more than its document;
+   * the same reason `duplicate` is a server route. What comes back is every
+   * slug that landed, so the caller can refresh its list and open the first.
+   */
+  async copyExample(slug: string): Promise<Result<readonly string[], string>> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/examples/${encodeURIComponent(slug)}/copy`,
+        { method: 'POST' },
+      );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as Record<string, unknown>;
+      const copied = Array.isArray(payload['copied']) ? payload['copied'].map(asString) : [];
+      // Without the slugs the copy exists on disk and the caller cannot name
+      // it — the same failure `duplicate` refuses to paper over.
+      return copied.length > 0
+        ? Ok(copied)
+        : Err('The runtime copied the example but did not say under which slug.');
+    } catch {
+      return Err('The runtime copied the example but its answer could not be read.');
     }
   }
 

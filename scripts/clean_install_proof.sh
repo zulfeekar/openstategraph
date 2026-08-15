@@ -135,11 +135,21 @@ LISTING="$(python3 -m zipfile -l "$WHEEL")"
 # `templates/` is package data too (scale-and-adopt ticket 04): the whole point
 # of shipping starting points is that someone who never cloned this repository
 # has one, so a wheel without them is a wheel whose `--template` flag lies.
+#
+# `examples/` is the same claim for the gallery (workflow-gallery ticket 07,
+# closing canvas-feels-right 04). Three entries, and each is a different way the
+# package data can go missing: the index the catalogue is read from, a document,
+# and `sql-qa`'s 1 MB database — the one file big enough that somebody will
+# eventually be tempted to exclude it, at which point the only example with a
+# machine-gradable eval stops working on arrival.
 for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
                 "compile/port_specs.json" "static/editor/index.html" \
                 "templates/index.json" "templates/minimal/workflow.json" \
                 "templates/minimal/AGENTS.md" "templates/routed-qa/workflow.json" \
-                "templates/team/workflow.json"; do
+                "templates/team/workflow.json" \
+                "examples/index.json" "examples/chained-summarizer/workflow.json" \
+                "examples/chained-summarizer/AGENTS.md" \
+                "examples/sql-qa/data/Chinook_Sqlite.sqlite"; do
   printf '%s\n' "$LISTING" | grep -qF "$required" \
     || { echo "the wheel is missing package data it must ship: $required"; exit 1; }
 done
@@ -197,6 +207,38 @@ for template in $(run openstategraph new --list-templates | awk '{print $1}'); d
     || { echo "the $template template scaffolded no AGENTS.md"; exit 1; }
   echo "    $template  ok"
 done
+
+# Gallery ticket 07. The templates prove a *rendered* starting point survives
+# the wheel; this proves a whole **package** does — and it is a different claim,
+# because an example carries tests, a knowledge store, an eval fixture and a
+# database, none of which a document import would bring. `nested-mounts` is the
+# one to copy: it is three deep, so a copy that forgot a dependency produces a
+# document whose mount cannot resolve, and `validate` says so.
+echo "==> the shipped examples list, copy with their mounts, and validate"
+run openstategraph examples list | head -4
+run openstategraph examples copy nested-mounts
+for slug in nested-mounts nested-mounts-mid chained-summarizer; do
+  test -f "$PROJECT/workflows/$slug/workflow.json" \
+    || { echo "copying nested-mounts left out $slug"; exit 1; }
+  run openstategraph validate "workflows/$slug" >/dev/null
+done
+echo "    nested-mounts + 2 mounted packages, all VALID"
+
+# The copy is what makes an example runnable, and this is the sharpest case:
+# `sql-qa`'s three tools jail their database path inside the workflows root, so
+# the package is inert where it ships and live once copied. If that ever stops
+# being true, it will be because someone widened the jail into site-packages.
+run openstategraph examples copy sql-qa
+run python -c "
+from openstategraph import examples
+from openstategraph.prebuilt_sql import _resolve_database
+
+assert 'site-packages' in str(examples.DATA), examples.DATA
+resolved = _resolve_database('sql-qa/data/Chinook_Sqlite.sqlite')
+assert resolved is not None, 'the copied database is refused by the jail'
+assert 'site-packages' not in str(resolved), resolved
+print('    sql-qa copied, and its database opens from the project ->', resolved.name)
+"
 
 echo "==> a real package, copied whole, resolving its own tools"
 # The one visible example. It used to bind no Chinook tool at all — it mounted

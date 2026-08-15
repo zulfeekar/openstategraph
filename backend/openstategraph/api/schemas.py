@@ -317,6 +317,45 @@ class TemplateResponse(BaseModel):
     document: dict[str, Any]
 
 
+class ExampleResponse(BaseModel):
+    """One entry of `GET /api/examples` — workflow-gallery ticket 07.
+
+    The editor's Examples shelf and `openstategraph examples list` read the
+    **same** catalogue (`openstategraph.examples`); this endpoint is the seam,
+    not a second list.
+
+    **No `document`, and that is the difference from `TemplateResponse`.** A
+    template is a document, so shipping it inline lets the canvas import a
+    starting point in one call. An example is a *package* — tests, knowledge
+    store, eval fixture, and in one case a SQLite database — so a client that
+    imported the document alone would produce a workflow whose tools resolve to
+    nothing, which is precisely the failure `POST /api/workflows/{slug}/
+    duplicate` exists to avoid. Taking an example is therefore a copy the
+    server performs; `requires` says up front what that will cost.
+    """
+
+    slug: str
+    name: str
+    summary: str
+    #: The catalogue's label for the shape it demonstrates ("revision loop").
+    pattern: str
+    #: This slug first, then every package it mounts, transitively — exactly
+    #: the directories a copy will write.
+    requires: list[str]
+
+
+class CopyExampleResponse(BaseModel):
+    """What `POST /api/examples/{slug}/copy` wrote.
+
+    `copied` is every slug that landed in the workflows root, the requested one
+    first. It is a list rather than a single slug because three examples mount
+    others and a copy that left a dependency behind would be broken on arrival.
+    """
+
+    slug: str
+    copied: list[str]
+
+
 class WorkflowSummaryResponse(BaseModel):
     slug: str
     name: str

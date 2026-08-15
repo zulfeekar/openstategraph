@@ -137,9 +137,65 @@ def new_team(root: Path | str, slug: str, outcome: str | None = None) -> Path:
     return new_package(root, slug, template="team", outcome=outcome)
 
 
+def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
+    """Copy a shipped example, and everything it mounts, into `root`.
+
+    Gallery ticket 07. The counterpart to `new_package`: a template is
+    *rendered* into a new package, an example is **copied** verbatim into one.
+    Returns the directories written, the requested example first.
+
+    Three things this does not do, each on purpose:
+
+    - **No rename.** A package's directory name is its frozen identity and a
+      mounting document addresses it by that name, so `nested-mounts` copied as
+      `my-mounts` would still be looking for `nested-mounts-mid`. The slug
+      travels with the package.
+    - **No substitution.** An example has no placeholders; it is the document
+      that was actually smoke-run, and rewriting it would break the claim its
+      `AGENTS.md` makes.
+    - **No edit of the envelope.** `published: false` is copied through, and in
+      the user's own root it finally means what it says: this is your draft,
+      publish it when you choose.
+
+    Raises `examples.UnknownExampleError` for a slug that is not in the
+    gallery, and `ScaffoldError` when any directory it would write already
+    exists — checked for the *whole* set before the first byte is written, so a
+    refusal never leaves half a dependency chain behind.
+    """
+    from openstategraph import examples
+
+    needed = examples.get(slug).requires()
+    root = Path(root)
+    targets = [(name, root / name) for name in needed]
+
+    clashes = [str(path) for _, path in targets if path.exists()]
+    if clashes:
+        raise ScaffoldError(
+            f"{', '.join(clashes)} already exists — "
+            f"copying {slug} would overwrite it, so nothing was written"
+        )
+
+    root.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    try:
+        for name, path in targets:
+            shutil.copytree(
+                examples.get(name).directory,
+                path,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+            written.append(path)
+    except Exception:
+        for path in written:
+            shutil.rmtree(path, ignore_errors=True)
+        raise
+    return tuple(written)
+
+
 __all__ = [
     "ScaffoldError",
     "SLUG_PATTERN",
+    "copy_example",
     "new_package",
     "new_team",
     "new_workflow",

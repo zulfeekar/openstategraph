@@ -346,6 +346,8 @@ openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not 
 openstategraph graph ./workflows/chinook-assistant      # Mermaid text, no network
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new --list-templates                     # what you can start from
+openstategraph examples list                            # the worked examples in the wheel
+openstategraph examples copy evaluator-optimizer        # take one; the copy is yours
 ```
 
 The templates ship inside the package, so they are there on a machine that
@@ -357,6 +359,16 @@ picker offers the same three:
 | `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
 | `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
 | `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere with the `Workflow` card — "team" is a package shape, not a node type |
+
+Beside the templates sit the **examples**: twenty-one finished packages, one
+per pattern the canvas can express, shipped in the same wheel and listed by
+`openstategraph examples list` (or the editor's **Workflows → Examples**
+shelf). The difference is what you get: a template is rendered into an
+empty-ish package for you to fill; an example is copied whole — tests,
+knowledge store, eval fixture and all — because it is the package that was
+actually built and run. They are not in your project until you copy one, and
+the copy is severed: upgrading OpenStateGraph never reaches back into it.
+See [On the canvas §6](on-the-canvas.md#6-an-example-is-a-whole-package-and-you-take-a-copy-of-it).
 
 An unknown name exits `2` and lists the valid ones. `--team` still works as a
 deprecated alias for `--template team`. Each scaffolded package gets an

@@ -155,6 +155,40 @@ Every scaffolded package carries an `AGENTS.md` that names what was created and
 the next step for that particular shape. `--team` still works as a deprecated
 alias for `--template team`.
 
+### Or start from a worked example
+
+Twenty-one finished packages ship in the wheel as well — one per pattern the
+canvas can express, each one validated and smoke-run, each with an `AGENTS.md`
+recording what it actually answered.
+
+```bash
+openstategraph examples list                  # the gallery, simplest first
+openstategraph examples copy evaluator-optimizer
+openstategraph run workflows/evaluator-optimizer "Write a two-sentence release note."
+```
+
+A template is *rendered* into an empty-ish package for you to fill. An example
+is **copied whole** — its tests, its knowledge store, its eval fixture, and for
+`sql-qa` a 1 MB database — because it is the package that was really built and
+run, and rewriting it would make its recorded results untrue.
+
+Two consequences worth knowing before you rely on either:
+
+- **They are not in your project until you copy one.** They live inside the
+  installed package, so they never appear in `openstategraph run`'s reach, in
+  the `/chat` picker, or to a workflow that asks the platform what exists.
+  `sql-qa` will not even open its own database where it ships — the SQL tools
+  jail every path inside your workflows root, which is exactly the point.
+- **The copy is yours and stays yours.** It is severed on copy: a later
+  `pip install -U openstategraph` never reaches back into it. That is also why
+  an example is never *mounted* where it lies — a mount is a live reference, and
+  a live reference into `site-packages` is a workflow that changes when you
+  upgrade something else.
+
+Three of them mount other examples, so a copy brings those too; the command
+names them as it writes them. The editor's **Workflows → Examples** shelf is the
+same catalogue, over `GET /api/examples`.
+
 From then on you are editing files in **your** fork:
 
 ```
@@ -268,6 +302,8 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
 | `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
 | `openstategraph new --list-templates` | the templates and one line on what each is for |
+| `openstategraph examples list` | the twenty-one worked examples in the wheel, in reading order: slug, the pattern it demonstrates, and its one-line purpose |
+| `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; an existing directory exits **1** and nothing is written |
 | `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
 | `openstategraph threads list\|show` | past runs the checkpointer stored, newest first; `show` replays one checkpoint by checkpoint without re-running it |
 | `openstategraph providers` | which model providers are registered, whether each is configured, its default model, the environment variable it reads and the extra it needs. The first thing to run when a model call fails |

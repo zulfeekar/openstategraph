@@ -128,6 +128,28 @@
         "title": "CompiledGraphResponse",
         "type": "object"
       },
+      "CopyExampleResponse": {
+        "description": "What `POST /api/examples/{slug}/copy` wrote.\n\n`copied` is every slug that landed in the workflows root, the requested one\nfirst. It is a list rather than a single slug because three examples mount\nothers and a copy that left a dependency behind would be broken on arrival.",
+        "properties": {
+          "copied": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Copied",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "copied"
+        ],
+        "title": "CopyExampleResponse",
+        "type": "object"
+      },
       "DeveloperChannelResponse": {
         "description": "What only a workflow editor may see \u2014 see `api/audience.py`.\n\nOne object rather than loose fields, because \"developer-only\" is the\nproperty they share and it should be visible in the contract: a reader of\nthis schema can tell at a glance which half of a run is guidance about the\nworkflow and which half is the answer to the question.",
         "properties": {
@@ -197,6 +219,43 @@
           "source"
         ],
         "title": "DuplicateWorkflowResponse",
+        "type": "object"
+      },
+      "ExampleResponse": {
+        "description": "One entry of `GET /api/examples` \u2014 workflow-gallery ticket 07.\n\nThe editor's Examples shelf and `openstategraph examples list` read the\n**same** catalogue (`openstategraph.examples`); this endpoint is the seam,\nnot a second list.\n\n**No `document`, and that is the difference from `TemplateResponse`.** A\ntemplate is a document, so shipping it inline lets the canvas import a\nstarting point in one call. An example is a *package* \u2014 tests, knowledge\nstore, eval fixture, and in one case a SQLite database \u2014 so a client that\nimported the document alone would produce a workflow whose tools resolve to\nnothing, which is precisely the failure `POST /api/workflows/{slug}/\nduplicate` exists to avoid. Taking an example is therefore a copy the\nserver performs; `requires` says up front what that will cost.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "requires": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requires",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "summary",
+          "pattern",
+          "requires"
+        ],
+        "title": "ExampleResponse",
         "type": "object"
       },
       "FunctionCapabilityResponse": {
@@ -1492,6 +1551,75 @@
         "summary": "Catalogue changes, live (SSE)",
         "tags": [
           "Catalogue"
+        ]
+      }
+    },
+    "/api/examples": {
+      "get": {
+        "description": "The gallery, in reading order \u2014 the same list `openstategraph examples\nlist` prints, from the same catalogue.\n\nReads package data only. These are **not** the caller's workflows and never\nappear in `GET /api/workflows`: they are not under the workflows root, so\nno customer surface, platform tool or `/chat` picker can see them until one\nhas been copied (gallery ticket 33).",
+        "operationId": "list_examples_api_examples_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExampleResponse"
+                  },
+                  "title": "Response List Examples Api Examples Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The worked examples that ship with OpenStateGraph",
+        "tags": [
+          "Authoring"
+        ]
+      }
+    },
+    "/api/examples/{slug}/copy": {
+      "post": {
+        "description": "Copy the example, and every package it mounts, into the workflows root.\n\nThe copy severs it: from here it is an ordinary package of the adopter's,\na draft until they publish it, and a later `pip install -U` does not reach\nback into it. `openstategraph.examples` records why an example is never\nmounted where it lies.\n\n404 for a slug the gallery does not have, 409 when a directory of that name\nis already there \u2014 refused for the whole set before anything is written,\nso a conflict never leaves half a dependency chain on disk.",
+        "operationId": "copy_example_route_api_examples__slug__copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyExampleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy an example into this project's workflows",
+        "tags": [
+          "Authoring"
         ]
       }
     },

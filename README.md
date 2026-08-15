@@ -160,14 +160,22 @@ such command in a bare checkout. Without installing at all, every command
 below is also `PYTHONPATH=backend python3 -m openstategraph.cli …`.
 
 ```bash
-pip install -e "backend[ollama]"      # or the built wheel, from anywhere
+pip install -e "backend[ollama]"      # a checkout; or the built wheel, from anywhere
 
-openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
-openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not compile
-openstategraph graph ./workflows/chinook-assistant      # Mermaid text, no network call
+openstategraph examples list                            # 21 worked examples, in the wheel
+openstategraph examples copy sql-qa                     # take one — the copy is yours
+openstategraph run ./workflows/sql-qa "How many customers are in the database?"
+openstategraph validate ./workflows/sql-qa              # exit 1 if it will not compile
+openstategraph graph ./workflows/sql-qa                 # Mermaid text, no network call
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new my-qa --template routed-qa           # or: --list-templates
 ```
+
+Those work from a wheel on a machine that has never seen this repository: the
+examples ship *inside* the install, and `examples copy` puts one in your own
+`workflows/`. `workflows/chinook-assistant` below is this checkout's larger
+showcase and stays here rather than in the wheel — `sql-qa` is the same idea
+over the platform's generic SQL atoms, which is why the gallery has it.
 
 The lean core is deliberately four packages, so every one of those commands
 prints one warning: the checkpointer fell back to memory because

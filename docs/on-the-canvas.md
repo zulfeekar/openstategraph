@@ -175,6 +175,43 @@ copy-paste; the other is a live reference.
 
 ---
 
+## 6. An example is a whole package, and you take a copy of it
+
+`openstategraph examples list`, or the **Examples** shelf in the Workflows
+panel, shows twenty-one worked examples — one per pattern the canvas can
+express. They ship *inside* OpenStateGraph, not inside your project, which is
+why they never appear in your workflow list, in `/chat`, or to a workflow that
+asks the platform what exists. Until you take one, they are not yours.
+
+```
+openstategraph examples copy evaluator-optimizer
+openstategraph run workflows/evaluator-optimizer "Write a two-sentence release note."
+```
+
+An example is on the **copy** side of the table above, and for a plain reason:
+those files live inside the installed package. A mount is a live reference, so
+mounting one would mean your workflow quietly changing on your next
+`pip install -U`, pointing at a folder you cannot edit. Copying severs it — the
+copy is an ordinary package of yours, a draft until you publish it, and nothing
+upstream reaches back into it.
+
+Three examples mount others, so a copy brings those too (`nested-mounts` writes
+three folders). The command says which before it writes them.
+
+| | Original | If the original changes later |
+| --- | --- | --- |
+| **Mount a workflow** | a package you can open and edit | **every instance changes** |
+| **Start from a template** | a starter document | nothing changes — severed on use |
+| **Copy an example** | a whole package inside the install | nothing changes — severed on copy |
+
+Where a template differs: a template is *rendered* (your name goes into it) and
+gives you empty `tools/` and `tests/` directories to fill. An example is copied
+byte for byte, already full — its tests, its knowledge store, its eval fixture,
+and for `sql-qa` a database — because it is the package that was actually built
+and run, and its `AGENTS.md` records what it answered.
+
+---
+
 ## Glossary
 
 The words this product uses, and what each one must not be mistaken for.
@@ -189,6 +226,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the budget runs out | an agent's internal tool-calling |
 | **step budget** | supersteps a run may take | "max retries" or "iterations" |
 | **template** | a starting document; produces a workflow and stops existing | a node type; a live link |
+| **example** | a finished package shipped in the install; you take a **copy** | one of your workflows; something you mount |
 | **organism** | a whole assembly — drawn or mounted | only the things you can drag |
 
 ---
