@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gallery — twenty-one examples, each with the graph it compiles to</title>
-<meta name="description" content="Twenty-one finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
+<title>Gallery — twenty-two examples, each with the graph it compiles to</title>
+<meta name="description" content="Twenty-two finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
 <meta name="color-scheme" content="light dark" />
-<meta property="og:title" content="OpenStateGraph gallery — twenty-one examples, each with its compiled graph" />
+<meta property="og:title" content="OpenStateGraph gallery — twenty-two examples, each with its compiled graph" />
 <meta property="og:description" content="Prompt chaining to a three-deep mount to a two-provider flagship. Every diagram is draw_mermaid() output from the real compiler, rendered on your machine." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='1.8'%3E%3Cpath d='M10 10h4M10 22h4M18 16h4'/%3E%3C/g%3E%3Cg fill='%23fafafa'%3E%3Ccircle cx='9' cy='10' r='2.4'/%3E%3Ccircle cx='9' cy='22' r='2.4'/%3E%3Ccircle cx='23' cy='16' r='2.4'/%3E%3C/g%3E%3C/svg%3E" />
@@ -297,12 +297,13 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
   <div class="hero">
     <div class="wrap">
       <span class="eyebrow">The gallery</span>
-      <h1>Twenty-one examples, each with the graph it compiles to</h1>
+      <h1>Twenty-two examples, each with the graph it compiles to</h1>
       <p class="lede">
         Every pattern the node catalogue can express, built as a finished package: a straight
         line, three kinds of loop, a mount three documents deep, a guardrail that reads
-        opposite ways depending on which side of the agent it sits, and a flagship that reads a
-        live YouTube transcript and hands it to Claude. All twenty-one are
+        opposite ways depending on which side of the agent it sits, a workflow that remembers
+        what it was told across two separate runs, and a flagship that reads a live YouTube
+        transcript and hands it to Claude. All twenty-two are
         <code>validate</code>-clean and were smoke-run for real — the answers on this page are
         recorded, not imagined.
       </p>
@@ -404,12 +405,13 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Contents</span>
-        <h2>Five batches, in teaching order</h2>
+        <h2>Six batches, in teaching order</h2>
         <p>
           Not alphabetical: the straight line first, then routing, then the loops, then
           composition, then the ones that reach the open world and spend the most tokens, then
           the one instance of a rule that reads two different ways depending on which side of
-          the agent it sits. This is the order <code>openstategraph examples list</code> prints.
+          the agent it sits, and last the one whose interesting moment happens between two runs
+          rather than inside one. This is the order <code>openstategraph examples list</code> prints.
         </p>
       </div>
       <div class="toc">
@@ -457,6 +459,12 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
           <h3>E · Guarded</h3>
           <ol>
             <li><a href="#guarded-lookup"><span class="num">21</span>Guarded Lookup</a></li>
+          </ol>
+        </div>
+        <div>
+          <h3>F · Memory</h3>
+          <ol>
+            <li><a href="#remembers-across-runs"><span class="num">22</span>Remembers Across Runs</a></li>
           </ol>
         </div>
       </div>
@@ -1745,6 +1753,88 @@ wf = <span class="f">load_workflow</span>(<span class="s">"workflows/chained-sum
     </div>
   </section>
 
+  <!-- ══════════════════ BATCH F ═════════════════════════ -->
+  <section id="batch-f">
+    <div class="wrap">
+      <div class="batch-head">
+        <span class="eyebrow">Batch F</span>
+        <h2>Memory — the one whose point is between two runs</h2>
+        <p>
+          Every other example on this page is interesting inside a single run. This one is
+          interesting <em>between</em> two: a node drawn on the wire records what crosses it and
+          hands the ledger to whatever comes next, so a second run in a brand-new thread already
+          knows what the first one was told.
+        </p>
+      </div>
+
+      <!-- 22 -->
+      <article class="ex" id="remembers-across-runs">
+        <div class="ex-head">
+          <span class="n">22</span>
+          <h3>Remembers Across Runs <span class="muted" style="font-weight:400">· <code>remembers-across-runs</code></span></h3>
+          <span class="tag">one ledger, many runs</span>
+        </div>
+        <div class="ex-body">
+          <figure class="fig">
+            <div class="mmd"><!--mmd:remembers-across-runs--><svg role="img" id="dremembers-across-runs" width="100%" xmlns="http://www.w3.org/2000/svg" class="flowchart" viewBox="0 0 320.09375 462.78125" role="graphics-document document" aria-roledescription="flowchart-v2"><g><marker id="dremembers-across-runs_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></path></marker><g class="root"><g class="clusters"></g><g class="edgePaths"><path d="M44.195,40.797L44.195,65.797L44.195,86.797" id="dremembers-across-runs-L___start___in1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dremembers-across-runs_flowchart-v2-pointEnd)"></path><path d="M44.195,289.188L44.195,314.188L44.195,335.188" id="dremembers-across-runs-L_answer1_out1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dremembers-across-runs_flowchart-v2-pointEnd)"></path><path d="M44.195,123.594L44.195,148.594L44.195,169.594" id="dremembers-across-runs-L_in1_mem1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dremembers-across-runs_flowchart-v2-pointEnd)"></path><path d="M44.195,206.391L44.195,231.391L44.195,252.391" id="dremembers-across-runs-L_mem1_answer1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dremembers-across-runs_flowchart-v2-pointEnd)"></path><path d="M44.195,371.984L44.195,396.984L44.195,417.984" id="dremembers-across-runs-L_out1___end___0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dremembers-across-runs_flowchart-v2-pointEnd)"></path></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="dremembers-across-runs-flowchart-__start__-0" transform="translate(44.1953125, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-36.1953125" y="-16.3984375" width="72.390625" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-28.1953125, -8.3984375)"><rect></rect><foreignObject width="56.390625" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__start__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-answer1-1" transform="translate(44.1953125, 272.7890625)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-35.1953125" y="-16.3984375" width="70.390625" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-27.1953125, -8.3984375)"><rect></rect><foreignObject width="54.390625" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>answer1</p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-in1-2" transform="translate(44.1953125, 107.1953125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-16.734375" y="-16.3984375" width="33.46875" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-8.734375, -8.3984375)"><rect></rect><foreignObject width="17.46875" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>in1</p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-mem1-3" transform="translate(44.1953125, 189.9921875)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-27.2265625" y="-16.3984375" width="54.453125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-19.2265625, -8.3984375)"><rect></rect><foreignObject width="38.453125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>mem1</p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-out1-4" transform="translate(44.1953125, 355.5859375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-22.046875" y="-16.3984375" width="44.09375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-14.046875, -8.3984375)"><rect></rect><foreignObject width="28.09375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>out1</p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-__default_error_handler__-5" transform="translate(221.2421875, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-90.8515625" y="-16.3984375" width="181.703125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-82.8515625, -8.3984375)"><rect></rect><foreignObject width="165.703125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__default_error_handler__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="dremembers-across-runs-flowchart-__end__-6" transform="translate(44.1953125, 438.3828125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-33.40625" y="-16.3984375" width="66.8125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-25.40625, -8.3984375)"><rect></rect><foreignObject width="50.8125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__end__</p><p></p></span></div></foreignObject></g></g></g></g></g><defs><filter id="dremembers-across-runs-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><defs><filter id="dremembers-across-runs-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><linearGradient id="dremembers-across-runs-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="hsl(var(--border))" stop-opacity="1"></stop><stop offset="100%" stop-color="hsl(239.5275590551, 60%, 39.8039215686%)" stop-opacity="1"></stop></linearGradient></svg><!--/mmd:remembers-across-runs--></div>
+            <figcaption>Four nodes in a straight line — and the memory node is <em>on</em> the line, which is the whole mechanism.</figcaption>
+          </figure>
+          <div class="ex-prose">
+            <h4>The pattern</h4>
+            <p>
+              A <code>memory.segment</code> node sits between the question and the agent. Every
+              time flow reaches it, it does three things in this order: <strong>furnishes</strong>
+              the entries the segment already holds into what flows onward, <strong>records</strong>
+              what just arrived, verbatim, and passes both on. Furnish before record, deliberately
+              — the other order hands the agent its own question back inside the block it is
+              reading, which looks like a duplicate and is really a lie about when the line was
+              written. Wire the same node off to one side and it records nothing, because nothing
+              crosses it. Position <em>is</em> the mechanism.
+            </p>
+
+            <h4>Behind the scenes</h4>
+            <p>
+              The ledger is keyed by the segment's name (<code>what-you-told-me</code>) and by the
+              workflow, in the durable Store — not the checkpointer, which is the thing that
+              carries a conversation and is exactly what this example does without. Two tollbooths
+              carrying the same name are <strong>one</strong> ledger, read and appended at both
+              positions. <code>retention</code> is <code>20</code>: bounded on purpose, because
+              this package gets copied into somebody's own workflows root and grows in their
+              Store. Blank means unbounded and is perfectly legal; a shipped example is the wrong
+              place to demonstrate it.
+            </p>
+            <p class="sub">
+              True and worth knowing: <strong>no model is reachable from the write path</strong>,
+              so a crossing costs zero tokens — by construction, not by discipline. And the card
+              deliberately shows no entry count: the ledger is server-side, so a card cannot know
+              its size before a run. It shows the name and the retention, both true with nothing
+              having happened, and the count is furnished by the run itself.
+            </p>
+
+            <h4>Use it</h4>
+            <div class="codeblock">
+              <div class="pane-bar">terminal · two runs, two different threads</div>
+<pre><code><span class="p">$</span> openstategraph examples copy remembers-across-runs
+<span class="p">$</span> openstategraph run ./workflows/remembers-across-runs <span class="s">"My favourite composer is Sibelius, and I always take my coffee black."</span> --thread-id run-one
+<span class="p">$</span> openstategraph run ./workflows/remembers-across-runs <span class="s">"Who is my favourite composer, and how do I take my coffee?"</span> --thread-id a-completely-different-thread</code></pre>
+            </div>
+            <dl class="qa">
+              <dt>Run 1 · empty ledger</dt>
+              <dd><em>“Thanks for sharing!”</em></dd>
+              <dt>Run 2 · a thread that has never seen run 1</dt>
+              <dd><em>“Your favourite composer is Sibelius, and you always take your coffee black.”</em></dd>
+            </dl>
+            <p class="sub">
+              The thread ids differ, so the checkpointer holds nothing from run 1. Everything the
+              second answer knows arrived in the block the memory node furnished. Recorded
+              2026-08-15 on <code>ollama:gpt-oss:120b-cloud</code>.
+            </p>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
   <!-- ── AFTER ────────────────────────────────────────────────── -->
   <section id="after">
     <div class="wrap">
@@ -1844,6 +1934,8 @@ answer = wf.<span class="f">ask</span>(<span class="s">"How many customers are i
           <li><a href="#batch-b">Loops</a></li>
           <li><a href="#batch-c">Composition</a></li>
           <li><a href="#batch-d">Real world</a></li>
+          <li><a href="#batch-e">Guarded</a></li>
+          <li><a href="#batch-f">Memory</a></li>
         </ul>
       </div>
     </div>
