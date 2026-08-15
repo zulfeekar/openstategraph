@@ -26,19 +26,14 @@ import {
 import { clearDrillStack } from '@app/drillStack';
 import { rememberDiskDocument } from '@app/diskAutosave';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
+import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './createNewWorkflow';
+import {
+  deleteConfirmation,
+  deletedMessage,
+  publishedMessage,
+  unpublishedMessage,
+} from './consequences';
 import './WorkflowManager.css';
-
-/**
- * The picker's "no template" option — the editor's original behaviour, kept as
- * the default here on purpose.
- *
- * It is **not** a template, which is why it is a sentinel rather than a fourth
- * entry in the catalogue: `openstategraph new` scaffolds a package that must
- * run, so its default is `minimal`; the canvas can hold an empty document
- * perfectly well, and someone who opens this panel to start drawing should not
- * have three nodes appear under their cursor.
- */
-const BLANK_TEMPLATE = 'blank';
 
 interface WorkflowManagerProps {
   open: boolean;
@@ -151,45 +146,32 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   }, [open, client, refreshList]);
 
   const handleNewWorkflow = useCallback(async () => {
-    const name = newName.trim() || `Workflow ${new Date().getFullYear()}`;
-    // Fetched before anything is cleared: a failed fetch must leave the canvas
-    // exactly as it was, not empty and templateless.
-    let starting: unknown = null;
-    if (template !== BLANK_TEMPLATE) {
-      setBusy(true);
-      const outcome = await client.templates(name);
-      setBusy(false);
-      const chosen = outcome.ok ? outcome.value.find((t) => t.name === template) : undefined;
-      if (!chosen) {
-        onNotify(`Could not load the ${template} template — nothing was changed.`);
-        return;
-      }
-      starting = chosen.document;
-    }
+    // The same guard the toolbar's New uses, and for the same reason: this
+    // replaces the open document, and a never-saved one exists nowhere else.
+    const warning = discardWarning({
+      name: workbench.model.name,
+      nodeCount: workbench.model.nodeCount,
+      saved: getOpenSlug() !== null,
+    });
+    if (warning !== null && !confirm(warning)) return;
 
-    controller.document.clear();
-    if (starting !== null) {
-      // The template's own document, imported exactly as a saved workflow
-      // would be. Nothing records which template it was: a template is a
-      // scaffold input, so from here on this is just a document.
-      controller.document.importJSON(JSON.stringify(starting));
+    setBusy(true);
+    // The act itself is `createNewWorkflow`, shared with the toolbar — the
+    // panel keeps only what is its own: the busy state, the toast, the form.
+    const outcome = await createNewWorkflow({ name: newName, template }, controller, client);
+    setBusy(false);
+    if (!outcome.ok) {
+      onNotify(outcome.error);
+      return;
     }
-    controller.document.setName(name);
-    // A fresh workflow has no slug yet — the next save asks the backend to
-    // mint one. The URL loses its `w=` with it: an unsaved document is not on
-    // the backend, so there is nothing a link could open.
-    clearOpenSlug();
-    // Same reasoning as a manual load: a brand-new document is not "inside"
-    // anything, so there is nothing to go back to.
-    clearDrillStack();
     onNotify(
-      template === BLANK_TEMPLATE
-        ? `Created new workflow: ${name}`
-        : `Created new workflow: ${name} (from ${template})`,
+      outcome.value.template === null
+        ? `Created new workflow: ${outcome.value.name}`
+        : `Created new workflow: ${outcome.value.name} (from ${outcome.value.template})`,
     );
     setNewName('');
     onClose();
-  }, [client, controller, newName, template, onNotify, onClose]);
+  }, [client, controller, workbench, newName, template, onNotify, onClose]);
 
   // Two different acts wearing one button (ticket 20). Saving a workflow this
   // tab already holds a slug for overwrites that package. Saving one it does
@@ -319,11 +301,9 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       const outcome = await client.setPublished(slug, published);
       setBusy(false);
       if (outcome.ok) {
-        onNotify(
-          published
-            ? `Published: ${name} — now visible in /chat. Rebuild knowledge to update Auto routing.`
-            : `Unpublished: ${name} — back to draft, hidden from /chat.`,
-        );
+        // The wording is `consequences.ts`, shared and tested: what changed,
+        // not merely which state it landed in.
+        onNotify(published ? publishedMessage(name) : unpublishedMessage(name));
         void refreshList();
       } else {
         onNotify(`Could not ${published ? 'publish' : 'unpublish'}: ${outcome.error}`);
@@ -384,8 +364,10 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   );
 
   const handleDelete = useCallback(
-    async (slug: string, name: string) => {
-      if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    async (slug: string, name: string, published: boolean) => {
+      // What is lost, before it is lost — a workflow is a folder of real
+      // files, and "published" adds a consequence a draft does not have.
+      if (!confirm(deleteConfirmation(name, published))) return;
       const outcome = await client.remove(slug);
       if (outcome.ok) {
         // Deleting the workflow this tab has open also takes it out of the
@@ -394,7 +376,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         // deliberately.
         if (getOpenSlug() === slug) clearOpenSlug();
         forgetKnownSavedAt(slug);
-        onNotify(`Deleted: ${name}`);
+        onNotify(deletedMessage(name));
         void refreshList();
       } else {
         onNotify(`Could not delete: ${outcome.error}`);
@@ -522,18 +504,29 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                     </span>
                   </div>
                   <div className="workflow-manager__actions">
+                    {/* **Open**, not "Load" (ticket 06). This is a list of
+                        workflows and the verb for picking one is the verb the
+                        owner's QA pass used; "load" describes what the editor
+                        does, from the editor's point of view. */}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => void handleLoad(wf.slug)}
                       icon={<Icon glyph={FolderOpen} size="xs" />}
                     >
-                      Load
+                      Open
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       disabled={busy}
+                      // The rule taught where the verb is, rather than after
+                      // the fact: a draft never appears in /chat.
+                      title={
+                        wf.published
+                          ? 'Back to draft — out of the /chat picker. Nothing is deleted.'
+                          : 'Put it in the /chat picker for customers. It is a draft until you do.'
+                      }
                       onClick={() => void handleSetPublished(wf.slug, wf.name, !wf.published)}
                       icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
                     >
@@ -549,12 +542,19 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                     >
                       Duplicate
                     </Button>
+                    {/* Labelled, like the other three. The one destructive
+                        verb in the row was the only one wearing no word —
+                        a bare bin icon beside three captioned buttons reads
+                        as decoration until it is pressed once. */}
                     <Button
                       variant="danger"
                       size="sm"
-                      onClick={() => void handleDelete(wf.slug, wf.name)}
+                      title={`Delete "${wf.name}" and everything in its folder`}
+                      onClick={() => void handleDelete(wf.slug, wf.name, wf.published)}
                       icon={<Icon glyph={Trash2} size="xs" />}
-                    />
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </li>
               ))}

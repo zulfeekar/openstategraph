@@ -1,8 +1,15 @@
+/* Full width, to the right edge (ticket 06). It used to be `flex: none`
+   inside a row that carried two more buttons beside it, so the toolbar's
+   surface — its background and its bottom border — stopped short of the
+   window and those two controls sat on the canvas colour, reading as
+   floating chrome rather than as part of the toolbar. They are inside it
+   now, and this stretches. */
 .topbar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
   height: var(--layout-topbar-height);
   padding-inline: var(--space-3);
   background: var(--color-bg-surface);

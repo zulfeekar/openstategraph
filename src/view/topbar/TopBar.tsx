@@ -2,14 +2,17 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   Download,
   FileJson,
+  FileText,
   Image as ImageIcon,
   KeyRound,
+  MessageSquareText,
   Moon,
   MoveVertical,
   Network,
   PanelLeft,
   PanelRight,
   Play,
+  Plus,
   Grid2x2,
   Redo2,
   Square,
@@ -65,6 +68,20 @@ interface TopBarProps {
   onOpenCredentials: () => void;
   onNotify: (message: string) => void;
   /**
+   * Start a new workflow (ticket 06).
+   *
+   * The toolbar owns the *button* and nothing else: what a new workflow costs
+   * and what it does is `createNewWorkflow`, shared with the Workflows panel,
+   * so promoting the affordance did not fork the act.
+   */
+  onNewWorkflow: () => void;
+  /** Route to the workflow list — open, unpublish, delete, publish, save. */
+  onWorkflowsToggle: () => void;
+  workflowsOpen: boolean;
+  /** The chat panel, which is where a run is watched. */
+  onAskToggle: () => void;
+  askOpen: boolean;
+  /**
    * Starts a real backend run of the question the Input node holds
    * (ticket 03). The shell owns it because running means *showing* the run in
    * the Ask panel, and the panel's thread is the shell's state, not the
@@ -101,6 +118,11 @@ export function TopBar({
   onInspectorToggle,
   onOpenCredentials,
   onNotify,
+  onNewWorkflow,
+  onWorkflowsToggle,
+  workflowsOpen,
+  onAskToggle,
+  askOpen,
   onRun,
   onStop,
   runInFlight,
@@ -256,6 +278,33 @@ export function TopBar({
             {workbench.model.name}
           </span>
         </div>
+
+        {/* The document group — ticket 06's owner pass. Create New and the
+            workflow list were both reachable only from inside the Workflows
+            panel, which is a panel nobody knows is there; these are the two
+            controls a user who has just drawn something needs, so they sit in
+            the first place anybody looks. Neither one *does* anything here:
+            New calls the same `createNewWorkflow` the panel calls, and
+            Workflows opens the panel itself. */}
+        <div className="topbar__group">
+          <Tooltip content="Start a new workflow" multiline>
+            <Button variant="ghost" icon={<Icon glyph={Plus} size="sm" />} onClick={onNewWorkflow}>
+              New
+            </Button>
+          </Tooltip>
+          <Tooltip content="Open, publish or delete a saved workflow" shortcut="Mod+Shift+F">
+            <Button
+              variant="ghost"
+              active={workflowsOpen}
+              icon={<Icon glyph={FileText} size="sm" />}
+              onClick={onWorkflowsToggle}
+            >
+              Workflows
+            </Button>
+          </Tooltip>
+        </div>
+
+        <span className="topbar__divider" role="presentation" />
 
         <div className="topbar__group">
           <Tooltip content="Toggle palette" shortcut={shortcutText('Mod+B')}>
@@ -437,6 +486,18 @@ export function TopBar({
                 {runInFlight ? 'Stop' : 'Run'}
               </Button>
             </span>
+          </Tooltip>
+
+          {/* Asking the workflow a question, in the toolbar rather than
+              floating beside it — it was one of the two buttons that used to
+              live outside the header and made it stop short of the window. */}
+          <Tooltip content="Ask the workflow" shortcut="Mod+Shift+K">
+            <IconButton
+              label="Ask the workflow"
+              icon={<Icon glyph={MessageSquareText} size="md" />}
+              active={askOpen}
+              onClick={onAskToggle}
+            />
           </Tooltip>
 
           <Tooltip content="Export or import">

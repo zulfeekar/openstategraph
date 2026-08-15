@@ -6,16 +6,6 @@
   background: var(--color-bg-canvas);
 }
 
-.app-shell__topbar-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.app-shell__workflow-btn {
-  padding-right: var(--space-2);
-}
-
 .app-shell__body {
   display: flex;
   flex: 1 1 auto;

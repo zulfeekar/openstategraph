@@ -58,8 +58,12 @@
   color: var(--color-text-secondary);
 }
 
+/* Four labelled verbs in a 320px panel: they wrap rather than run off the
+   edge. Delete used to be an unlabelled bin and fitted; the word is worth
+   more than the single row (ticket 06). */
 .workflow-manager__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
 }
 

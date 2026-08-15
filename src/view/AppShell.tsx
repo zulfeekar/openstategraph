@@ -22,8 +22,9 @@ import { WorkflowManager } from './workflow/WorkflowManager';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
-import { FileText, MessageSquareText } from 'lucide-react';
-import { IconButton, Icon, Tooltip } from '@design/primitives';
+import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { getOpenSlug } from '@app/openWorkflow';
+import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './workflow/createNewWorkflow';
 import './AppShell.css';
 
 const THEME_STORAGE_KEY = 'openstategraph.theme';
@@ -41,6 +42,9 @@ export function AppShell() {
   const paper = usePaperController();
   useController();
   const { toasts, notify, dismiss } = useToaster();
+  // Only the toolbar's New needs it here; the Workflows panel keeps its own,
+  // because it is mounted and unmounted with the panel.
+  const workflowFiles = useMemo(() => new WorkflowFileClient(), []);
 
   // Enable auto-save and auto-load for the current workflow
   // Restores this tab's workflow, then keeps it saved. One hook, because
@@ -219,53 +223,62 @@ export function AppShell() {
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
 
+  /**
+   * The toolbar's **New** (ticket 06).
+   *
+   * A blank canvas, deliberately: the panel's picker exists for starting from
+   * a template, and a toolbar button that opened a form would be the buried
+   * affordance again with an extra step. The *act* is `createNewWorkflow`,
+   * the one the panel calls — this is a gesture, not a second implementation.
+   */
+  const startNewWorkflow = useCallback(async () => {
+    const warning = discardWarning({
+      name: workbench.model.name,
+      nodeCount: workbench.model.nodeCount,
+      saved: getOpenSlug() !== null,
+    });
+    if (warning !== null && !window.confirm(warning)) return;
+    const outcome = await createNewWorkflow(
+      { name: '', template: BLANK_TEMPLATE },
+      workbench.controller,
+      workflowFiles,
+    );
+    notify(
+      outcome.ok
+        ? `New workflow: ${outcome.value.name} — an empty canvas. Rename it in the inspector, then Save to give it a folder.`
+        : outcome.error,
+    );
+  }, [workbench, workflowFiles, notify]);
+
   return (
     <div className="app-shell">
-      <div className="app-shell__topbar-row">
-        <TopBar
-          theme={theme}
-          onThemeChange={setTheme}
-          showGrid={showGrid}
-          onGridChange={setShowGrid}
-          paletteOpen={paletteOpen}
-          onPaletteToggle={() => setPaletteOpen((value) => !value)}
-          inspectorOpen={inspectorOpen}
-          onInspectorToggle={() => setInspectorOpen((value) => !value)}
-          onOpenCredentials={() => setCredentialsOpen(true)}
-          onNotify={onNotify}
-          onRun={runWorkflow}
-          // The run lives in the Ask panel, so Stop is a request forwarded to
-          // it — never a second place that knows how to abort.
-          onStop={() => setAskStopRequest({ nonce: Date.now() })}
-          runInFlight={backendRunning}
-        />
-        <div className="app-shell__workflow-btn">
-          {/* A button as well as a shortcut: asking the workflow a question is
-              the primary action, and a chord nobody can guess is not
-              discoverable. */}
-          <Tooltip content="Ask the workflow" shortcut="Mod+Shift+K">
-            <IconButton
-              label="Ask the workflow"
-              icon={<Icon glyph={MessageSquareText} size="md" />}
-              onClick={() =>
-                setAskOpen((value) => {
-                  if (value) setAskNotice(null);
-                  return !value;
-                })
-              }
-              active={askOpen}
-            />
-          </Tooltip>
-          <Tooltip content="Manage workflows" shortcut="Mod+Shift+F">
-            <IconButton
-              label="Manage workflows"
-              icon={<Icon glyph={FileText} size="md" />}
-              onClick={() => setWorkflowManagerOpen((value) => !value)}
-              active={workflowManagerOpen}
-            />
-          </Tooltip>
-        </div>
-      </div>
+      <TopBar
+        theme={theme}
+        onThemeChange={setTheme}
+        showGrid={showGrid}
+        onGridChange={setShowGrid}
+        paletteOpen={paletteOpen}
+        onPaletteToggle={() => setPaletteOpen((value) => !value)}
+        inspectorOpen={inspectorOpen}
+        onInspectorToggle={() => setInspectorOpen((value) => !value)}
+        onOpenCredentials={() => setCredentialsOpen(true)}
+        onNotify={onNotify}
+        onNewWorkflow={() => void startNewWorkflow()}
+        onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
+        workflowsOpen={workflowManagerOpen}
+        askOpen={askOpen}
+        onAskToggle={() =>
+          setAskOpen((value) => {
+            if (value) setAskNotice(null);
+            return !value;
+          })
+        }
+        onRun={runWorkflow}
+        // The run lives in the Ask panel, so Stop is a request forwarded to
+        // it — never a second place that knows how to abort.
+        onStop={() => setAskStopRequest({ nonce: Date.now() })}
+        runInFlight={backendRunning}
+      />
 
       <div className="app-shell__body">
         {paletteOpen ? <Palette onNotify={onNotify} /> : null}
