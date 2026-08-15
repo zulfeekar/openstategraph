@@ -184,6 +184,10 @@ export async function loadWorkflowIntoEditor(
   const outcome = await client.load(slug);
   if (!outcome.ok) return Err(outcome.error);
 
+  // Recorded before the try so the catch can restore it — the catch is the
+  // one reader, and a declaration inside the try is invisible from there.
+  const leaving = { slug: getOpenSlug(), address: getOpenAddress() };
+
   try {
     // Hand-authored cards first, discovery second, and the order is the whole
     // fix for ticket 32. `registerDiscoveredCapabilities` declines to mint a
@@ -234,7 +238,6 @@ export async function loadWorkflowIntoEditor(
     //
     // The rule it appears to break — never name a workflow that failed to open
     // — is honoured by the `catch` below, which puts back whatever was open.
-    const leaving = { slug: getOpenSlug(), address: getOpenAddress() };
     workbench.controller.document.leaveInstance();
     clearOpenAddress();
     setOpenSlug(slug);
