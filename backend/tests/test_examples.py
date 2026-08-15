@@ -35,7 +35,7 @@ from openstategraph.scaffold import ScaffoldError, copy_example
 from openstategraph.workflows_root import workflows_root
 
 #: The gallery is twenty examples plus one middle level (catalogue row 11).
-GALLERY_SIZE = 21
+GALLERY_SIZE = 22
 
 
 def digest(path: Path) -> str:

@@ -46,6 +46,7 @@
     { "slug": "sql-qa", "pattern": "text-to-SQL over a real database" },
     { "slug": "web-research-digest", "pattern": "search, fetch, report" },
     { "slug": "support-triage", "pattern": "the long control chain" },
-    { "slug": "morning-brief", "pattern": "many sources, one report" }
+    { "slug": "morning-brief", "pattern": "many sources, one report" },
+    { "slug": "guarded-lookup", "pattern": "one policy, two directions" }
   ]
 }

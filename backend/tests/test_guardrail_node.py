@@ -165,6 +165,10 @@ class TestABlockedMessageTakesAVisibleWire:
         final = graph.invoke({"question": f"my card is {CARD}"})
 
         assert "agent1" not in final["outputs"]
+        # And it is not left lying in the input node's echo either. A block
+        # reaches further than a redaction on purpose: `redact` means the
+        # reader must not see it, `block` means this workflow must not hold
+        # it — including in a checkpointed trace that outlives the run.
         assert CARD not in str(final["outputs"])
 
     def test_an_unwired_blocked_port_still_refuses_rather_than_leaking(self) -> None:
@@ -202,6 +206,32 @@ class TestTheScrubReachesEverySettledSurface:
         # `email -> pass` inbound: the input node's echo is untouched, which
         # is the whole point of the row being there.
         assert final["outputs"]["in1"] == f"look up {EMAIL}"
+
+    def test_the_outbound_guard_leaves_the_user_s_own_question_alone(self) -> None:
+        """Found by the live smoke run, not by reasoning.
+
+        The first version scrubbed **every** `outputs` entry, so `guard-out`
+        rewrote `outputs["in1"]` — the echo of the question — to
+        `What plan is [REDACTED_EMAIL] on…`, in a document whose inbound card
+        says `email → pass`. Two things were wrong with that. It protects
+        nobody: ticket 02's own asymmetry is that inbound PII is the user's
+        own and they typed it. And it destroys the evidence that the machine
+        ever received the true address, which is the one thing this whole
+        design is about.
+
+        So the scrub covers entries written by nodes that **produced new
+        text**. An input echoes, a router forwards, a guard rewrites — none of
+        them invent, and none of them is what an outbound policy exists to
+        catch. That is the same set the unguarded-exit check uses, and it is
+        "position is the scope" holding for the trace as well as the wire.
+        """
+        graph = build(guarded_document(), answer=f"Her address is {EMAIL}.")
+        final = graph.invoke({"question": f"look up {EMAIL}"})
+
+        assert final["outputs"]["in1"] == f"look up {EMAIL}"
+        assert final["outputs"]["guard-in"] == f"look up {EMAIL}"
+        # …while the thing the agent produced is scrubbed.
+        assert EMAIL not in final["outputs"]["agent1"]
 
 
 class TestWhatARedactionLeavesBehind:

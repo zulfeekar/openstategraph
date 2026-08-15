@@ -1694,6 +1694,14 @@ class NodeRuntime:
         conditional_upstream = [
             src for src, dests in plan.conditional.items() if node_id in dests.values()
         ]
+        #: The nodes whose `outputs` entry this guard may rewrite — see the
+        #: scrub below. Resolved once, at build time, because the document's
+        #: types do not change during a run.
+        producers = {
+            candidate
+            for candidate, node_type in self._types.items()
+            if node_type.startswith(_PRODUCES_CONTENT)
+        }
 
         def run(state: RunState) -> dict[str, Any]:
             text = _upstream_text(state, upstream + conditional_upstream) or state.get(
@@ -1736,13 +1744,33 @@ class NodeRuntime:
             # moment the blocked text is the *model's* answer, which is the
             # outbound instance of this very node. One rule, both outcomes.
 
-            # Everything already settled, brought into line with the policy.
-            # Only the entries the policy actually changes are written, so a
-            # guard finding nothing costs one key.
+            # What is already settled, brought into line with the policy.
+            # Only the entries it actually changes are written, so a guard
+            # finding nothing costs one key.
+            #
+            # **How far the scrub reaches depends on the verdict, and the
+            # scope was found by a live run rather than reasoned about.**
+            # Scrubbing every entry made an outbound guard rewrite
+            # `outputs["in1"]` — the echo of the user's own question — to
+            # `[REDACTED_EMAIL]`, in a document whose inbound card says
+            # `email → pass`. That protects nobody (ticket 02's asymmetry:
+            # inbound PII is the user's own, they typed it) and it destroys
+            # the evidence that the machine ever received the true address,
+            # which is the whole thing this design is for.
+            #
+            # So a transforming rule covers what was **produced** — an input
+            # echoes, a router forwards, a guard rewrites; none of them
+            # invent, and none is what an outbound policy exists to catch.
+            # A **block** covers everything, because the two say different
+            # things: `redact` means the reader must not see it, and `block`
+            # means this workflow must not hold it at all — including in a
+            # checkpointed trace that outlives the run.
+            reach = (state.get("outputs") or {}).items()
             scrubbed = {
                 key: screened
-                for key, value in (state.get("outputs") or {}).items()
-                if isinstance(value, str)
+                for key, value in reach
+                if (screening.blocked or key in producers)
+                and isinstance(value, str)
                 and (screened := guardrail.screen(value).text) != value
             }
             if scrubbed:
