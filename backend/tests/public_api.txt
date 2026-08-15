@@ -44,6 +44,7 @@ openstategraph.errors.DocumentError = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.GENERIC_FAILURE_MESSAGE = str
 openstategraph.errors.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
 openstategraph.errors.MissingProviderKey = class(CredentialError)(...)
+openstategraph.errors.MissingProviderPackage = class(OpenStateGraphError,ImportError)(...)
 openstategraph.errors.OpenStateGraphError = class(Exception)(...)
 openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
 openstategraph.errors.ProviderRefusedCredential = class(CredentialError)(...)
@@ -65,13 +66,15 @@ openstategraph.providers.ENV_EXAMPLE_END = str
 openstategraph.providers.OPTIONAL_ENV_VARS = dict
 openstategraph.providers.PROVIDERS_GROUP = str
 openstategraph.providers.ProviderCatalogue = dataclass(object) fields(_specs,warnings)
-openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label)
+openstategraph.providers.ProviderGap = dataclass(object) fields(spec,missing_package,missing_key)
+openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module)
 openstategraph.providers.builtin_specs = def() -> 'tuple[ProviderSpec, ...]'
 openstategraph.providers.credential_env_vars = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'frozenset[str]'
 openstategraph.providers.env_example_section = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'str'
 openstategraph.providers.load_provider_catalogue = def() -> 'ProviderCatalogue'
 openstategraph.providers.missing_key_diagnosis = def(model_string: 'str') -> 'str | None'
 openstategraph.providers.provider_catalogue = def() -> 'ProviderCatalogue'
+openstategraph.providers.provider_readiness = def(model_string: 'str') -> 'ProviderGap | None'
 openstategraph.providers.reset_provider_catalogue = def() -> 'None'
 openstategraph.schema.MIGRATIONS = dict
 openstategraph.schema.MIN_SUPPORTED_VERSION = int

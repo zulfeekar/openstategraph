@@ -38,7 +38,7 @@ their own process.
 | `[anthropic]` / `[openai]` / `[ollama]` | a `model` string starting `anthropic:` / `openai:` / `ollama:` |
 | `[deep]` | a document containing an `agent.deep` node |
 | `[sqlite]` | `settings.checkpointer: "sqlite"`, or `OPENSTATEGRAPH_MEMORY_PATH` |
-| `[server]` | the editor's HTTP API (`openstategraph.api.main`) |
+| `[server]` | the editor's HTTP API (`openstategraph.api.main`) — the **web layer only**, so pair it with a provider extra (`[server,ollama]`) or the editor opens onto workflows it cannot run |
 | `[mcp]` | the MCP transport (`openstategraph.mcp_server`) |
 | `[all]` | everything above — what a checkout of this repo wants |
 | `[dev]` | contributors (pytest, ruff) |

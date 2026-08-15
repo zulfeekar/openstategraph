@@ -310,7 +310,7 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph env-example` | print the provider block of `.env.example` — names only, never values — to redirect into your own `.env` |
 | `openstategraph knowledge list <package>` | the second brain's topics, their one-line hints, and each doc's owner and stale badge (`--knowledge-dir` to look elsewhere, which drops the badges — a store outside the package has no source to recompute) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
-| `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server]` |
+| `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server,ollama]` — `[server]` is the web layer and carries **no** model integration, so an install without a provider extra serves an editor that cannot run anything, and says so before it binds |
 | `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
 
 Exit codes are fixed, because they are what CI consumes: **0** success, **1**
@@ -480,7 +480,7 @@ constructor is worse than one that is honest about the line.
 
 | Collaborator | Parameter | Default when omitted | When you'd override |
 | --- | --- | --- | --- |
-| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY`/`OLLAMA_HOST` → Ollama **cloud**; with none of them, a stand-in that raises `MissingProviderKey` the first time a node uses it) | a pre-built model object with your own retry, base URL, temperature or gateway |
+| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY`/`OLLAMA_HOST` → Ollama **cloud**; with none of them, a stand-in that raises `MissingProviderKey` the first time a node uses it — and `MissingProviderPackage`, the same way, when the provider's extra is not installed) | a pre-built model object with your own retry, base URL, temperature or gateway |
 | Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
 | Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
@@ -594,6 +594,10 @@ things you asked for is how a list that matters gets ignored.
   never call a model still runs. (Until providers-and-credentials ticket 02
   Ollama needed nothing here; that was ambient daemon credentials, not a
   keyless provider.)
+  A provider whose **integration package** is not installed takes the same
+  path and raises `MissingProviderPackage`, whose message is the `pip install`
+  line. Both gaps are checked together and reported in one sentence, so
+  setting the key does not reveal the extra one run later.
 - **`knowledge_dir`** — where the package's second brain is read from.
   Convention (`<package>/knowledge`) stays the default, because
   discovery-by-convention is why this function takes one argument. Override it

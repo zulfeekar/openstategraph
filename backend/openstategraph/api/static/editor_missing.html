@@ -93,8 +93,11 @@ npm run build</pre>
       </ul>
 
       <footer>
-        Installing from PyPI instead? <code>pip install "openstategraph[server]"</code>
+        Installing from PyPI instead? <code>pip install "openstategraph[server,ollama]"</code>
         ships the built editor inside the wheel, so this page never appears there.
+        The provider extra is not decoration: <code>[server]</code> is the web
+        layer and carries no model integration, so without one the editor opens
+        and nothing it draws can run.
       </footer>
     </main>
   </body>

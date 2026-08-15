@@ -37,9 +37,12 @@ a fork to change one string.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from dataclasses import dataclass, field
 from typing import Mapping
+
+from openstategraph._extras import install_hint
 
 #: Providers: a `ProviderSpec`, or an iterable of them. See the module
 #: docstring for the `pyproject.toml` stanza a plugin author writes.
@@ -159,6 +162,18 @@ class ProviderSpec:
     #: Human-facing name for messages. Defaults to `name`.
     label: str = ""
 
+    #: The module `init_chat_model` imports to reach this vendor —
+    #: `langchain_ollama` for Ollama. Declared rather than derived from `extra`,
+    #: because deriving it is right for the bundled three and wrong for anyone
+    #: else: `langchain-nvidia-ai-endpoints` is not `langchain_nvidia`.
+    #:
+    #: Empty means **we cannot pre-check this provider**, and that is a
+    #: supported answer rather than a gap — see `is_installed`. Everything the
+    #: readiness check does depends on this being honest, so a spec that
+    #: declares nothing gets `init_chat_model`'s own ImportError, which names
+    #: the package it actually failed on (workflow-gallery ticket 38).
+    integration_module: str = ""
+
     def __post_init__(self) -> None:
         if not self.name or ":" in self.name or "/" in self.name:
             raise ValueError(f"provider name {self.name!r} must be a bare identifier")
@@ -207,6 +222,27 @@ class ProviderSpec:
         if not self.requires_key:
             return True
         return any(str(source.get(name) or "").strip() for name in self.env_vars)
+
+    def is_installed(self) -> bool:
+        """Whether this provider's integration package is importable.
+
+        `find_spec`, not `import_module`: this is asked on the path of every
+        run and on `openstategraph providers`, and importing three vendor SDKs
+        to discover that all three are present would undo the lean core the
+        extras exist to protect.
+
+        **True for a provider that declares no `integration_module`.** The
+        question this answers is "do we know of a reason this cannot work",
+        and for an undeclared module we do not — so the honest answer is to
+        step aside and let `init_chat_model` fail with the package name it
+        actually reached for.
+        """
+        if not self.integration_module:
+            return True
+        try:
+            return importlib.util.find_spec(self.integration_module) is not None
+        except (ImportError, ValueError):  # pragma: no cover - a broken parent package
+            return False
 
     def key_hint(self, env: Mapping[str, str] | None = None) -> str | None:
         """A glance at what configured this, or `None` when nothing did.
@@ -270,11 +306,86 @@ class ProviderSpec:
         """
         if not self.env_vars:  # pragma: no cover - keyless providers never fail this way
             return f'Provider "{self.name}" needs no key.'
-        variables = " or ".join(self.env_vars)
         return (
             f'Provider "{self.name}" has no credential — '
-            f"set {variables} in .env (see .env.example)."
+            f"set {self.credential_variables} in .env (see .env.example)."
         )
+
+    @property
+    def credential_variables(self) -> str:
+        """Every variable that would configure this, as one readable phrase.
+
+        The knowledge — *any one of `env_vars` is enough* — is stated once
+        here, so the two messages that quote it cannot come to disagree about
+        whether a developer running their own daemon also needs a cloud key.
+        """
+        return " or ".join(self.env_vars)
+
+    @property
+    def install_hint(self) -> str:
+        """The exact `pip install` line for this provider's integration."""
+        return install_hint(self.extra)
+
+    def missing_package_message(self) -> str:
+        """The exact fix when the integration package is absent (ticket 38).
+
+        Written to sit beside `missing_key_message` in the same voice and on
+        the same one line — the two are the same event from the reader's seat
+        ("I cannot talk to my model"), and the vendor's own
+        `Initializing ChatOllama requires…` sentence is dropped rather than
+        appended, exactly as `credential_error_from` drops a vendor's 401 text.
+        """
+        return (
+            f'Provider "{self.name}" integration is not installed — '
+            f"{self.install_hint}."
+        )
+
+    def readiness(self, env: Mapping[str, str] | None = None) -> "ProviderGap | None":
+        """Everything standing between this provider and a model call.
+
+        `None` when nothing does. Both checks are evaluated, never
+        short-circuited: the whole of ticket 38 is that answering with the
+        first wall you hit sends a developer round the loop once per wall.
+        """
+        gap = ProviderGap(
+            spec=self,
+            missing_package=not self.is_installed(),
+            missing_key=self.requires_key and not self.is_configured(env),
+        )
+        return gap if gap.missing_package or gap.missing_key else None
+
+
+@dataclass(frozen=True)
+class ProviderGap:
+    """Why a provider cannot be called on this machine, as one sentence.
+
+    A value, not an exception: `providers.py` is the catalogue and knows the
+    *copy*, while `chat_model` is the seam that decides what to raise. Keeping
+    the two apart is why importing the provider list still costs four stdlib
+    modules.
+    """
+
+    spec: ProviderSpec
+    missing_package: bool
+    missing_key: bool
+
+    @property
+    def message(self) -> str:
+        """One line, naming every fix — never the first one discovered.
+
+        The combined form leads with the package, because that is the wall
+        that survives setting a variable, and a reader who fixes in that order
+        never sees this message twice.
+        """
+        if self.missing_package and self.missing_key:
+            return (
+                f'Provider "{self.spec.name}" is not ready — its integration is not '
+                f"installed ({self.spec.install_hint}) and it has no credential "
+                f"(set {self.spec.credential_variables} in .env)."
+            )
+        if self.missing_package:
+            return self.spec.missing_package_message()
+        return self.spec.missing_key_message()
 
 
 @dataclass
@@ -373,6 +484,7 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             label="Anthropic",
             default_model="claude-haiku-4-5",
             extra="anthropic",
+            integration_module="langchain_anthropic",
             env_vars=("ANTHROPIC_API_KEY",),
             aliases=("claude",),
         ),
@@ -381,6 +493,7 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             label="OpenAI",
             default_model="gpt-4.1-mini",
             extra="openai",
+            integration_module="langchain_openai",
             env_vars=("OPENAI_API_KEY",),
             aliases=("azure_openai",),
         ),
@@ -395,6 +508,7 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             # here, so a local model must be named explicitly to be used.
             default_model="gpt-oss:120b-cloud",
             extra="ollama",
+            integration_module="langchain_ollama",
             # **Two ways to be configured, and `is_configured`'s `any()` gives
             # the rule for free.** `OLLAMA_API_KEY` alone reaches the cloud via
             # `OLLAMA_ENDPOINT`; `OLLAMA_HOST` alone reaches a local or
@@ -591,12 +705,25 @@ def missing_key_diagnosis(model_string: str) -> str | None:
     return spec.missing_key_message()
 
 
+def provider_readiness(model_string: str) -> ProviderGap | None:
+    """Everything missing for the provider a model string names, else `None`.
+
+    The superset of `missing_key_diagnosis`, and the one `build_chat_model`
+    asks. `None` for an unknown prefix, for the same reason that one gives:
+    `init_chat_model` already names the package it could not import, and a
+    confidently wrong install line is worse than saying nothing.
+    """
+    spec = provider_catalogue().for_model(model_string)
+    return None if spec is None else spec.readiness()
+
+
 __all__ = [
     "ENV_EXAMPLE_BEGIN",
     "ENV_EXAMPLE_END",
     "OPTIONAL_ENV_VARS",
     "PROVIDERS_GROUP",
     "ProviderCatalogue",
+    "ProviderGap",
     "ProviderSpec",
     "builtin_specs",
     "credential_env_vars",
@@ -604,5 +731,6 @@ __all__ = [
     "load_provider_catalogue",
     "missing_key_diagnosis",
     "provider_catalogue",
+    "provider_readiness",
     "reset_provider_catalogue",
 ]

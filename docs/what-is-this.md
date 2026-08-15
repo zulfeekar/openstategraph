@@ -179,7 +179,8 @@ name:
 [anthropic] [openai] [ollama]   one provider — you need exactly one
 [deep]                          only a document with an agent.deep node
 [sqlite]                        durable threads (settings.checkpointer)
-[server]                        the editor's HTTP API — never on your path
+[server]                        the editor's HTTP API — never on your path,
+                                and no provider: pair it, [server,ollama]
 [mcp]                           the MCP transport
 [all]                           everything, for a checkout
 ```

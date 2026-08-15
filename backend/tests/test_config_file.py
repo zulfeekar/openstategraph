@@ -290,6 +290,7 @@ providers:
             "endpoint_env",
             "default_endpoint",
             "label",
+            "integration_module",
         }
         declared = {field.name for field in dataclasses.fields(ProviderSpec)}
         assert declared == carried, (

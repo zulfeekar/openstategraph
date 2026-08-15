@@ -143,6 +143,24 @@ class MissingProviderKey(CredentialError):
     """
 
 
+class MissingProviderPackage(OpenStateGraphError, ImportError):
+    """A model names a provider whose LangChain integration is not installed.
+
+    The *other* wall in front of a model call, and deliberately **not** a
+    `CredentialError`: setting a variable cannot fix it and `pip` cannot fix a
+    missing key, so a caller handling one has nothing useful to do about the
+    other. What they share is a shape, not a family — both are refusals this
+    framework writes itself, in one line, at the moment a model is used
+    (workflow-gallery ticket 38).
+
+    `ImportError` is kept as a base for the reason every class in this module
+    keeps the builtin it used to be: this arrived as a bare ImportError out of
+    `init_chat_model`, `cli.main` catches ImportError to exit 3 on a missing
+    extra, and an adopter's `except ImportError` around `load_workflow` keeps
+    working unchanged.
+    """
+
+
 class ProviderRefusedCredential(CredentialError):
     """A credential was read, sent, and rejected by the vendor.
 
@@ -166,6 +184,7 @@ __all__ = [
     "DocumentError",
     "InvalidPackageName",
     "MissingProviderKey",
+    "MissingProviderPackage",
     "OpenStateGraphError",
     "PackageNotFound",
     "ProviderRefusedCredential",

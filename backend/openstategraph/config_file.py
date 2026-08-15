@@ -398,6 +398,12 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
                 endpoint_env=base.endpoint_env if base else (),
                 default_endpoint=base.default_endpoint if base else "",
                 label=entry.label or (base.label if base else ""),
+                # Inherited and not declarable: a file adjusting a built-in
+                # must keep its pre-flight check (workflow-gallery ticket 38),
+                # while a provider the file invents has no integration module
+                # we could name — and `""` is the supported answer for that,
+                # meaning "let `init_chat_model` report the package it missed".
+                integration_module=base.integration_module if base else "",
             )
         )
     return specs

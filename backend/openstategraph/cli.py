@@ -491,6 +491,35 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def no_provider_warning() -> str | None:
+    """One line when this install can serve the product and run none of it.
+
+    Workflow-gallery ticket 37: `[server]` is fastapi, uvicorn and sqlite, and
+    contains no provider integration — a defensible boundary (folding one in
+    would choose a vendor for everyone) that was, until this, **invisible
+    until the first Run button**. The knowledge to say so already existed:
+    `openstategraph providers` prints the extra per provider, so this asks the
+    same catalogue rather than hard-coding a list.
+
+    `None` when *any* provider integration is importable. The threshold is
+    deliberately "none at all" rather than "not the one this document names":
+    a serve command has no document in front of it, and a warning that fired
+    for an Anthropic-only install serving an Ollama example would fire on
+    every correct install too.
+    """
+    from openstategraph.providers import provider_catalogue
+
+    specs = provider_catalogue().list()
+    if not specs or any(spec.is_installed() for spec in specs):
+        return None
+    lines = [spec.install_hint for spec in specs]
+    choices = lines[0] if len(lines) == 1 else ", ".join(lines[:-1]) + f" or {lines[-1]}"
+    return (
+        "no model provider integration is installed, so every run will fail — "
+        f"{choices}, then start again"
+    )
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """The whole product on one origin: editor at `/`, chat at `/chat`, API
     under `/api`. Requires the `[server]` extra.
@@ -503,10 +532,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     number, because that is the only way `--port 0` can print the URL it landed
     on *before* the server starts talking.
 
-    Two refusals happen before anything is bound (scale-and-adopt ticket 06),
-    because a message printed after a server is listening is a message someone
-    scrolls past: more than one worker is refused outright, and an
-    unauthenticated bind to a non-loopback address is warned about by name.
+    Three things are said before anything is bound (scale-and-adopt ticket 06,
+    workflow-gallery ticket 37), because a message printed after a server is
+    listening is a message someone scrolls past: more than one worker is
+    refused outright, an unauthenticated bind to a non-loopback address is
+    warned about by name, and an install with no provider integration is told
+    that every run will fail before it is handed three working URLs.
     """
     from openstategraph import deployment
 
@@ -525,6 +556,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
     exposure = auth.exposure_warning(args.host)
     if exposure is not None:
         print(exposure, file=sys.stderr, flush=True)
+
+    # The third thing said before anything is bound, and the same rule: the
+    # documented install carries a provider extra, and an install that lost it
+    # must not discover that fact one Run button at a time (ticket 37).
+    providers = no_provider_warning()
+    if providers is not None:
+        print(providers, file=sys.stderr, flush=True)
 
     try:
         listener = bind_listener(args.host, args.port)
@@ -734,7 +772,8 @@ def build_parser() -> argparse.ArgumentParser:
     listing.set_defaults(handler=cmd_knowledge_list)
 
     serve = subparsers.add_parser(
-        "serve", help="run the editor, the chat surface and the API (needs [server])"
+        "serve",
+        help="run the editor, the chat surface and the API (needs [server] plus a provider extra)",
     )
     serve.add_argument(
         "--host",
@@ -804,7 +843,17 @@ def cmd_providers(_args: argparse.Namespace) -> int:
     print(f"config file: {config if config else '(none)'}")
     print()
     for spec in catalogue.list():
-        state = "ready" if spec.is_configured() else "needs a key"
+        # Three states, not two. "needs a key" on a provider whose integration
+        # is absent sent a reader to fix the wrong thing, and then round again
+        # for the real one — the round trip workflow-gallery ticket 38 exists
+        # to end, in the surface it named as already doing this correctly.
+        gap = spec.readiness()
+        if gap is None:
+            state = "ready"
+        elif gap.missing_package:
+            state = "needs its extra"
+        else:
+            state = "needs a key"
         variables = ", ".join(spec.env_vars) or "(no credential needed)"
         print(f"{spec.name:<12} {state:<12} {spec.model_string()}")
         print(f"{'':<12} reads {variables}; extra 'openstategraph[{spec.extra}]'")

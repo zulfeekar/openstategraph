@@ -31,8 +31,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from openstategraph.errors import MissingProviderKey, ProviderRefusedCredential
-from openstategraph.providers import missing_key_diagnosis, provider_catalogue
+from openstategraph.errors import (
+    MissingProviderKey,
+    MissingProviderPackage,
+    OpenStateGraphError,
+    ProviderRefusedCredential,
+)
+from openstategraph.providers import provider_catalogue, provider_readiness
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from langchain_core.language_models import BaseChatModel
@@ -56,7 +61,7 @@ def model_kwargs(model_name: str) -> dict[str, Any]:
 
 
 class UnconfiguredProvider:
-    """Stands in for a model whose provider has no credential.
+    """Stands in for a model this machine cannot call, whatever is missing.
 
     **Why a stand-in rather than raising immediately.** A workflow with no
     model-calling node runs fine with no credentials at all, and that is a
@@ -64,22 +69,34 @@ class UnconfiguredProvider:
     API key. Raising at construction took it away, because every run builds a
     model before it knows whether any node will ask for one.
 
-    So the rule is: *a credential is required at the moment a model is used,
-    not at the moment one is built*. Any attribute access raises, which covers
+    So the rule is: *a provider is required at the moment a model is used, not
+    at the moment one is built*. Any attribute access raises, which covers
     `invoke`, `stream`, `bind_tools`, `with_structured_output` and anything
     else a node reaches for, while a run that never touches it is unaffected.
+
+    **The error is a parameter, and that is workflow-gallery ticket 38.** A
+    missing *credential* and a missing *integration package* are the same
+    event from the reader's seat and used to arrive by different mechanisms —
+    one deferred to first use, the other a LangChain traceback out of
+    `load_workflow`. Both come through here now, so fixing the first cannot
+    change the shape of the second.
     """
 
-    __slots__ = ("_diagnosis",)
+    __slots__ = ("_diagnosis", "_error")
 
-    def __init__(self, diagnosis: str) -> None:
+    def __init__(
+        self,
+        diagnosis: str,
+        error: type[OpenStateGraphError] = MissingProviderKey,
+    ) -> None:
         self._diagnosis = diagnosis
+        self._error = error
 
     def __getattr__(self, name: str) -> Any:
-        raise MissingProviderKey(self._diagnosis)
+        raise self._error(self._diagnosis)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        raise MissingProviderKey(self._diagnosis)
+        raise self._error(self._diagnosis)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<UnconfiguredProvider: {self._diagnosis}>"
@@ -88,18 +105,27 @@ class UnconfiguredProvider:
 def build_chat_model(model_name: str) -> "BaseChatModel":
     """`provider:model` in, a callable model out — or an error that says why.
 
-    When the named provider has no credential this returns an
-    `UnconfiguredProvider`, which raises `MissingProviderKey` on first use
-    rather than at construction — see that class for why. A missing
-    integration package is re-raised as an `ImportError` naming the extra.
+    **One pre-flight check, both walls.** A provider that has no credential
+    *or* no integration package comes back as an `UnconfiguredProvider`
+    carrying one line that names every fix, and raising on first use rather
+    than at construction — see that class for why. Ticket 38: these were two
+    checks in a fixed order, so a developer who set the key discovered the
+    extra only on the next run, as a 34-line LangChain traceback.
+
+    The `except` below is now the **undetectable** case only: a provider that
+    declares no `integration_module`, or an integration that imports and then
+    fails on something of its own. `init_chat_model`'s own error names the
+    package it actually reached for, which is more than we could guess, so it
+    is kept and our install line appended.
     """
     from langchain.chat_models import init_chat_model
 
     from openstategraph._extras import provider_extra_hint
 
-    diagnosis = missing_key_diagnosis(model_name)
-    if diagnosis:
-        return UnconfiguredProvider(diagnosis)  # type: ignore[return-value]
+    gap = provider_readiness(model_name)
+    if gap is not None:
+        error = MissingProviderPackage if gap.missing_package else MissingProviderKey
+        return UnconfiguredProvider(gap.message, error)  # type: ignore[return-value]
 
     try:
         return cast("BaseChatModel", init_chat_model(model_name, **model_kwargs(model_name)))
@@ -108,7 +134,7 @@ def build_chat_model(model_name: str) -> "BaseChatModel":
         # installed *us*, not `langchain-anthropic`, so name our install line
         # rather than leaving them to map a package to an extra.
         hint = provider_extra_hint(model_name)
-        raise ImportError(
+        raise MissingProviderPackage(
             f"{exc} — model {model_name!r} needs its provider integration"
             + (f": {hint}" if hint else "")
         ) from exc

@@ -233,6 +233,72 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Fixed
 
+- **The documented install for `serve` could not run a single workflow**
+  (workflow-gallery ticket 37 — the headline finding of ticket 08's
+  install-it-like-a-customer run). `docs/adoption.md` said `serve` "Needs
+  `openstategraph[server]`"; a clean venv following that line got fastapi,
+  uvicorn, python-multipart and sqlite, and **no provider integration at
+  all**, so every Run button and every `openstategraph run` failed on the
+  install the documentation prescribed. `[all]` ran the same example in 4.6 s,
+  so the software worked and the advertised install did not.
+
+  `[server]` keeps meaning the web layer. Folding `[ollama]` into it was the
+  obvious alternative and is rejected on the record: it picks a vendor for
+  every adopter, bills an Anthropic user for an Ollama SDK, and does not
+  remove the wall — it moves it to whoever chose differently, since the
+  failure is per-*document*, not per-install. What changes is everything that
+  tells a reader what to type:
+
+  - every pasteable install line naming `[server]` now names a provider extra
+    (`docs/adoption.md`'s command table, the `editor_missing.html` footer);
+    the quickstarts already said `[server,ollama]` and are unchanged.
+  - `tests/test_documented_install.py` holds the rule mechanically — *any
+    installable reference resolving to `server` must also resolve to a
+    provider integration* — against the extras graph in `pyproject.toml` and
+    the `settings.model` the shipped examples actually declare, so the two
+    sides cannot drift. It also pins the rejected option: no provider extra is
+    reachable from `[server]`.
+  - `openstategraph serve` prints a one-line warning **before it binds**, next
+    to the worker and exposure refusals, when no provider integration is
+    importable at all — the gap used to be invisible until the first run.
+  - `openstategraph providers` gained a third state, `needs its extra`, so it
+    stops telling a reader to set a key that is not what is missing.
+
+- **Doing what the credential message said made the error worse**
+  (workflow-gallery ticket 38, found by installing the wheel like a customer
+  in ticket 08). Two checks guard a model call — *is there a credential* and
+  *is the provider integration installed* — and the credential gate
+  short-circuited ahead of the import, so the second wall could only ever be
+  discovered second. With no key you got one clear line; you set the key, and
+  the same command answered with a 34-line LangChain traceback through
+  `init_chat_model` → `_import_module`, raised out of `load_workflow` where
+  the library path has nothing to catch it.
+
+  `ProviderSpec` now declares its `integration_module`, `is_installed()`
+  pre-checks it with `find_spec` (no import, so the lean core stays lean), and
+  `ProviderSpec.readiness()` evaluates **both** gaps and returns a
+  `ProviderGap` whose `message` names every fix in one sentence — never the
+  first wall hit. `build_chat_model` asks it once and returns the existing
+  `UnconfiguredProvider` stand-in for either gap, so a missing extra now
+  fails at first *use*, in our voice, on one line, exactly as a missing key
+  does. `openstategraph graph` can draw a document whose provider is not
+  installed again, for the same reason.
+
+  - **`errors.MissingProviderPackage`** — new, and deliberately *not* a
+    `CredentialError`: `pip` cannot fix a missing key and a variable cannot
+    fix a missing package. It keeps `ImportError` as a base, so `cli.main`'s
+    exit-3 handling and an adopter's `except ImportError` are unchanged.
+  - **`providers.ProviderGap` and `providers.provider_readiness`** — the
+    superset of `missing_key_diagnosis`, which stays.
+  - A provider declaring **no** `integration_module` is never pre-checked:
+    `langchain-nvidia-ai-endpoints` is not `langchain_nvidia`, so deriving the
+    module from the extra would be right for the bundled three and wrong for
+    everyone else. Those still get `init_chat_model`'s own ImportError, which
+    names the package it actually reached for, with our install line appended.
+    A config file that adjusts a built-in inherits its module rather than
+    blanking it — the field-by-field rebuild in `config_provider_specs` is
+    pinned by a test for exactly that reason.
+
 - **An unknown node type degraded silently, and its docstring said otherwise.**
   A document containing a type this build has no factory for — say the typo
   `agent.react` for the real `agent.llm` — ran to completion, and because the
