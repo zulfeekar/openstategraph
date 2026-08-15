@@ -82,6 +82,13 @@ the canvas preview's default model is `Mock · Offline`, a deterministic
 simulator that exercises the real execution path (it requests a tool, then
 answers from the tool's result).
 
+> **Only in a checkout.** The seed is `workflows/chinook-assistant/workflow.json`,
+> which exists here and does not exist in a `pip install` — so a wheel install
+> opens on a blank canvas instead, with the templates and the examples shelf in
+> the Workflows drawer. Shipping the demo inside the bundle was
+> workflow-gallery ticket 41: a customer met a 13-node graph they had not made
+> and could not run.
+
 ## 3. Models and credentials
 
 There are two separate model paths, and conflating them is the most common
