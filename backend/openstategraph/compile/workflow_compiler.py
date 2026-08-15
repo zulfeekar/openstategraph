@@ -60,6 +60,13 @@ WORKER_TYPE = "orchestrate.worker"
 #: human decision, the same node-decides/edge-dispatches split as the router
 #: and the grader — see the conditional-edge handling below.
 HUMAN_APPROVAL_TYPE = "human.approval"
+#: Guardrails ticket 01: applies a PII/content policy to whatever passes
+#: through it and dispatches on the outcome — `allowed` continues, `blocked`
+#: takes a wire of its own to an Output carrying the refusal. Same
+#: node-decides/edge-dispatches split, and the labels are the literal port ids
+#: for the same reason the approval's are: `blocked` does not loop back the
+#: way a grader's `revise` does, it takes a different deliberately-wired path.
+GUARDRAIL_TYPE = "guard.policy"
 
 #: The port type that marks a fan-out declaration rather than control flow or a
 #: capability binding. An edge landing on a `worker`-typed port means "this is
@@ -517,6 +524,19 @@ class WorkflowCompiler:
             # would misdescribe what actually happens on this edge.
             if src_type == HUMAN_APPROVAL_TYPE:
                 label = src_port_id if (src_port_id := src.get("portId", "")) else "approved"
+                plan.conditional.setdefault(src_id, {})[label] = dst_id
+                has_outgoing.add(src_id)
+                has_incoming.add(dst_id)
+                in_control_flow.update((src_id, dst_id))
+                continue
+
+            # --- the guardrail: allowed continues, blocked takes its own wire
+            # Labels are the literal port ids, like the approval's: a blocked
+            # message goes *forward* to an Output carrying a refusal, so it is
+            # neither a grader's `revise` (which returns upstream and is the
+            # only thing a cycle may close on) nor an ordinary edge.
+            if src_type == GUARDRAIL_TYPE:
+                label = src.get("portId", "") or "allowed"
                 plan.conditional.setdefault(src_id, {})[label] = dst_id
                 has_outgoing.add(src_id)
                 has_incoming.add(dst_id)

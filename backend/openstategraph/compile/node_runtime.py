@@ -77,6 +77,18 @@ class RunState(TypedDict, total=False):
     #: if it were the model's own answer.
     feedback: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
     attempts: Annotated[int, reducer_for(Reducer.MAX)]
+    #: guardrail node id -> what its policy did, as `{entity, strategy,
+    #: count}` rows. **Counts and entity types, never values** — the whole
+    #: point of the channel is that a developer can see "3 emails redacted
+    #: from this answer" without the answer's readers seeing the three emails
+    #: (guardrails ticket 03). `abc.guardrail.Redaction` has no field that
+    #: could hold one.
+    #:
+    #: A map with a named reducer from the day it exists, not after the first
+    #: `InvalidUpdateError`: an inbound and an outbound guard are two writers
+    #: of one key by construction, and a `Send` fan-out can schedule two in
+    #: one superstep. That is exactly the hazard `answer` demonstrated live.
+    redactions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: orchestrator node id -> the subtasks it planned. Read by the compiler's
     #: fan-out routing function to build the `Send` list.
     subtasks: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
@@ -909,6 +921,7 @@ class NodeRuntime:
             "route.classifier": self._router,
             "route.grader": self._grader,
             "human.approval": self._human_approval,
+            "guard.policy": self._guardrail,
             "orchestrate.supervisor": self._orchestrator,
             "orchestrate.worker": self._worker,
             "function.format_report": self._format_report_function,
@@ -1587,6 +1600,128 @@ class NodeRuntime:
                 "feedback": feedback,
                 "outputs": {node_id: candidate},
             }
+
+        return run
+
+    def _guardrail(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """Applies a PII/content policy, and decides `allowed` or `blocked`.
+
+        A **real state-transforming graph node**, not middleware and not a
+        degenerate agent. Ticket 01 asked whether `PIIMiddleware`'s detection
+        is separable, and it is: `RedactionRule` is public, its resolved form
+        applies to a plain string, so `abc.guardrail` borrows every detector
+        and every strategy from the library without importing an agent.
+
+        ## Position is the scope, and this is where that stops being a slogan
+
+        There is no `apply_to_input` / `apply_to_output` flag here, and there
+        must never be one — the map settled that the canvas already says which
+        direction an instance is, and a flag that can disagree with the wire
+        is the `advisor`/`audience` defect again (`api/audience.py`). What
+        makes an outbound instance behave differently is not configuration: it
+        is that by the time it runs there is a settled `answer` and a
+        populated `outputs` map for its policy to reach, and an inbound one
+        has neither. One behaviour; the wire decides the consequence.
+
+        ## Why it scrubs more than its own output
+
+        `outputs` is not private state. `api/audience.py`'s table puts
+        `decisions` / `outputs` on the **customer's** `done` frame — they are
+        facts about their own turn — and every surface renders the map per
+        node. So an outbound guard that rewrote only its own text would hand
+        a customer a clean answer beside `outputs["agent-sql"]` carrying the
+        59 real addresses `SELECT Email FROM Customer` returned. Scrubbing
+        every entry it can see is not spooky action: it is this node doing
+        exactly what its card says, at the confluence, which is the same
+        argument `_output`'s never-blank floor makes.
+
+        ## What it cannot reach, stated rather than implied
+
+        `token` frames. The agent streams its prose while it is still typing
+        and this node runs afterwards, so the live wire is already past. That
+        is not a gap to paper over here — LangChain draws the identical line
+        and answers the second half with `PIIMiddleware(apply_to_output=True)`,
+        whose stream transformer sits *inside* the agent. Middleware on the
+        agent base, never a node; see `.scratch/guardrails/map.md`.
+        """
+        from openstategraph.abc.guardrail import Guardrail
+
+        data = node.get("data") or {}
+        raw_policy = data.get("policy")
+        policy = [row for row in raw_policy if isinstance(row, dict)] if isinstance(
+            raw_policy, list
+        ) else []
+        guardrail = Guardrail(rules=policy, refusal=_text(data, "blockedMessage"))
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A guard placed after another guard, a grader or an approval arrives
+        # over a *conditional* edge, which `plan.edges` does not carry — the
+        # same situation `_output` and `_subgraph` already handle.
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
+
+        def run(state: RunState) -> dict[str, Any]:
+            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
+            try:
+                screening = guardrail.screen(text)
+            except ValueError as exc:
+                # A table naming a strategy nobody implements, or a custom
+                # entity with no pattern. Reported as this node's output
+                # rather than raised: a card that claims a protection it
+                # cannot deliver must be loud (`errors.py`), and taking the
+                # whole run down would be a denial of service written by a
+                # typo. It is deliberately NOT passed through — a guardrail
+                # that fails open is the one failure mode worse than noisy.
+                return {
+                    "decisions": {node_id: "blocked"},
+                    "outputs": {node_id: failure_marker(node_id, str(exc))},
+                }
+
+            update: dict[str, Any] = {
+                "decisions": {node_id: "blocked" if screening.blocked else "allowed"},
+                "outputs": {node_id: screening.text},
+            }
+            if screening.redactions:
+                update["redactions"] = {
+                    node_id: [
+                        {"entity": r.entity, "strategy": r.strategy, "count": r.count}
+                        for r in screening.redactions
+                    ]
+                }
+            if not screening.changed:
+                return update
+
+            # A block scrubs exactly as a redaction does, and that was found
+            # by a test rather than reasoned about: stopping at "the offending
+            # text does not continue" left `outputs["in1"]` — the input node's
+            # own echo — carrying the card number onto the customer's `done`
+            # frame. Harmless when the customer typed it and a disclosure the
+            # moment the blocked text is the *model's* answer, which is the
+            # outbound instance of this very node. One rule, both outcomes.
+
+            # Everything already settled, brought into line with the policy.
+            # Only the entries the policy actually changes are written, so a
+            # guard finding nothing costs one key.
+            scrubbed = {
+                key: screened
+                for key, value in (state.get("outputs") or {}).items()
+                if isinstance(value, str)
+                and (screened := guardrail.screen(value).text) != value
+            }
+            if scrubbed:
+                update["outputs"] = {**scrubbed, **update["outputs"]}
+            # Written **only** when there is already an answer to correct.
+            # `answer` is `keep_latest_nonempty`, so writing it unconditionally
+            # would make an inbound guard announce the user's own question as
+            # the run's answer on any path where the agent produced nothing.
+            settled = str(state.get("answer") or "")
+            if settled:
+                corrected = guardrail.screen(settled).text
+                if corrected != settled:
+                    update["answer"] = corrected
+            return update
 
         return run
 

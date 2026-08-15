@@ -83,7 +83,7 @@ export const CATEGORIES: readonly INodeCategory[] = [
     label: 'Reasoning & control · molecules',
     order: 40,
     description:
-      'One decision step each — agent, router, grader, approval, worker, supervisor, function. A supervisor alone is a molecule; supervisor + workers + join is an organism you draw, not one you drag.',
+      'One decision step each — agent, router, grader, guardrail, approval, worker, supervisor, function. A supervisor alone is a molecule; supervisor + workers + join is an organism you draw, not one you drag.',
   },
   {
     id: CATEGORY.compose,
@@ -201,6 +201,11 @@ export const CENSUS_TERMS: readonly ICompositionTerm[] = [
     revisePort: 'revise',
   },
   { id: 'human.approval', group: 'control', one: 'approval', many: 'approvals' },
+  // Control, not reasoning: a guardrail calls no model. It is here because
+  // it *decides* — `allowed` or `blocked` — which is what this group counts,
+  // and because a mount card that never mentioned the child's policy would
+  // be describing a safer workflow than the one it holds.
+  { id: 'guard.policy', group: 'control', one: 'guardrail', many: 'guardrails' },
   // What they hold.
   { id: 'function.', group: 'held', one: 'function', many: 'functions' },
   { id: 'tool.', group: 'held', one: 'tool', many: 'tools' },

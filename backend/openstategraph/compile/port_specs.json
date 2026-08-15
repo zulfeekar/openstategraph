@@ -209,6 +209,62 @@
       ]
     },
     {
+      "type": "guard.policy",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Guardrail",
+      "description": "Applies a PII policy to whatever passes through, and refuses what it must.",
+      "ports": [
+        {
+          "id": "content",
+          "direction": "in",
+          "type": "result",
+          "label": "content",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "allowed",
+          "direction": "out",
+          "type": "result",
+          "label": "allowed",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "blocked",
+          "direction": "out",
+          "type": "result",
+          "label": "blocked",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "blockedMessage",
+        "maxRetries",
+        "policy",
+        "policyNote",
+        "timeoutSeconds"
+      ]
+    },
+    {
       "type": "human.approval",
       "kind": "standard",
       "category": "agent",

@@ -26,8 +26,9 @@ from here, because *this* name is the one covered by the stability contract in
 `docs/stability.md`.
 
 **What is here and what is not.** Every name below is a ladder an adopter
-legitimately subclasses or constructs — a tool, a router, a grader, an agent
-node, an orchestrator — plus the two collaborators those ladders compose
+legitimately subclasses or constructs — a tool, a router, a grader, a
+guardrail, an agent node, an orchestrator — plus the two collaborators those
+ladders compose
 (`SystemPrompt`, `MiddlewareSlotTable`). The registries are **not** here and
 are not public: entry points are the supported extension seam precisely so the
 registry objects stay free to change shape.
@@ -49,6 +50,14 @@ from openstategraph.abc.agent import (
     agent_node_for_tier,
 )
 from openstategraph.abc.grader import BaseGrader, Grader, IGrader, Verdict
+from openstategraph.abc.guardrail import (
+    BaseGuardrail,
+    Guardrail,
+    GuardrailRule,
+    IGuardrail,
+    Redaction,
+    Screening,
+)
 from openstategraph.abc.middleware import MiddlewareSlotTable
 from openstategraph.abc.orchestrator import (
     Archetype,
@@ -66,6 +75,7 @@ __all__ = [
     "Archetype",
     "BaseAgentNode",
     "BaseGrader",
+    "BaseGuardrail",
     "BaseOrchestrator",
     "BaseRouter",
     "BaseTool",
@@ -74,8 +84,11 @@ __all__ = [
     "DeepAgentNode",
     "Field",
     "Grader",
+    "Guardrail",
+    "GuardrailRule",
     "IAgent",
     "IGrader",
+    "IGuardrail",
     "IOrchestrator",
     "IRouter",
     "ITool",
@@ -83,7 +96,9 @@ __all__ = [
     "NoArgs",
     "Orchestrator",
     "ReactAgentNode",
+    "Redaction",
     "Router",
+    "Screening",
     "Subtask",
     "SystemPrompt",
     "ToolField",

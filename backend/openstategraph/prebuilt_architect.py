@@ -26,7 +26,7 @@ from openstategraph.abc.tool import BaseTool, ToolResult
 #: them against each other.
 KNOWN_NODE_TYPES = frozenset({
     "input.text", "input.markdown", "input.skill", "agent.llm", "route.classifier",
-    "route.grader", "human.approval", "orchestrate.supervisor",
+    "route.grader", "human.approval", "guard.policy", "orchestrate.supervisor",
     "orchestrate.worker", "function.format_report", "output.formatted",
     "workflow.subgraph",
 })

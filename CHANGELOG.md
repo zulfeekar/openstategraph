@@ -143,6 +143,25 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **A Guardrail node, and the guardrail ladder behind it** (guardrails tickets
+  01–04). `openstategraph.abc` gains `IGuardrail`, `BaseGuardrail`,
+  `Guardrail`, `GuardrailRule`, `Redaction` and `Screening`; the editor gains
+  a `guard.policy` node type that compiles to a real state-transforming graph
+  step plus a conditional edge — `allowed` continues, `blocked` takes its own
+  wire to an Output carrying a refusal.
+
+  Every detector and all four transforming strategies are **LangChain's own**,
+  reached through the public `RedactionRule`; this project writes no PII regex.
+  `pass` is a fifth strategy and is ours, because on a canvas an entity nobody
+  wrote a rule for and an entity somebody deliberately allowed must not look
+  the same: a user gives an email address to look up a customer, so email
+  *inbound* passes while the same email *outbound* is redacted. The unit of
+  policy is `entity × direction`, and **direction is where you put the node**,
+  never a setting — there is no `applyToInput`/`applyToOutput` control.
+
+  A new `redactions` state key carries what each guardrail did as
+  `{entity, strategy, count}`. Counts and entity types, never values.
+
 - **The worked examples ship in the wheel** (workflow-gallery ticket 07,
   closing canvas-feels-right 04). Twenty-one finished packages — one per
   pattern the canvas can express, each validated and smoke-run — now live at

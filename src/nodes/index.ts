@@ -14,6 +14,7 @@ import { redditSearchExecutor, redditSearchNode } from './tools/RedditSearchNode
 import { GRADER_TYPE, createGraderNode, graderExecutor } from './routing/GraderNode';
 import { ROUTER_TYPE, createRouterNode, routerExecutor } from './routing/RouterNode';
 import { humanApprovalExecutor, humanApprovalNode } from './routing/HumanApprovalNode';
+import { GUARDRAIL_TYPE, guardrailExecutor, guardrailNode } from './guard/GuardrailNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
@@ -84,6 +85,10 @@ export function registerNodeCatalogue(
       routerNode,
       graderNode,
       humanApprovalNode,
+      // Policy, as a step you can see. Ships globally for the same reason
+      // routing does — it is part of the editor's grammar, not one
+      // workflow's tooling.
+      guardrailNode,
       // Loop/graph engineering: split -> fan-out -> dispatch -> join.
       orchestratorNode,
       workerNode,
@@ -105,6 +110,7 @@ export function registerNodeCatalogue(
     routerExecutor,
     graderExecutor,
     humanApprovalExecutor,
+    guardrailExecutor,
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
@@ -132,6 +138,7 @@ export const NODE_TYPE = {
   router: ROUTER_TYPE,
   grader: GRADER_TYPE,
   humanApproval: humanApprovalNode.id,
+  guardrail: GUARDRAIL_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,
   worker: WORKER_TYPE,
   formatReport: FORMAT_REPORT_TYPE,

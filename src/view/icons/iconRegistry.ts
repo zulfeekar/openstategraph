@@ -11,6 +11,7 @@ import {
   Blocks,
   GitBranch,
   ShieldCheck,
+  ShieldAlert,
   Split,
   RefreshCw,
   Users,
@@ -43,6 +44,9 @@ const ICONS: Record<string, LucideIcon> = {
   'node-router': GitBranch,
   'node-grader': ShieldCheck,
   'node-human-approval': UserCheck,
+  // A shield, like the grader's — they are the two nodes that judge — but
+  // alerting rather than checking, because this one can refuse.
+  'node-guardrail': ShieldAlert,
   'node-orchestrator': Split,
   'node-worker': Users,
   'node-format-report': FileOutput,
