@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -192,10 +193,193 @@ def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
     return tuple(written)
 
 
+# --------------------------------------------------------------------- #
+# The project — install-experience T6
+# --------------------------------------------------------------------- #
+
+#: The one package `init` writes, and the name is the same word the editor's
+#: `assembly.starter` palette item and `starter_document()` already use. They
+#: agree in substance — all three are input → agent → output — so this is a
+#: convergence rather than a third meaning (design collision C9).
+STARTER_SLUG = "starter"
+
+
+@dataclass(frozen=True)
+class InitResult:
+    """What `init_project` made, and what it found already there.
+
+    Both halves, because `--force` **adds**: it never deletes and never
+    overwrites a file it did not write, so "created" and "left alone" are
+    different sentences the command has to be able to print truthfully.
+    """
+
+    #: The project directory — the thing the user named.
+    directory: Path
+    #: `<directory>/openstategraph.yaml`.
+    config: Path
+    #: `<directory>/.gitignore`.
+    gitignore: Path
+    #: The workflows root inside it — `workflows/` unless renamed.
+    workflows: Path
+    #: `<workflows>/starter`, or `None` when the starter was not asked for.
+    starter: Path | None
+    #: Exactly the paths this call wrote. Anything above and not in here was
+    #: already on disk and was left untouched.
+    created: frozenset[Path]
+    #: Whether the directory existed and was empty — case two, which is a
+    #: success with a sentence rather than a refusal.
+    reused_empty: bool
+
+
+def _existing_directory_refusal(target: Path, label: str) -> str | None:
+    """The four cases of install-experience design §2.3, or `None` to proceed.
+
+    Two refusals, and they must never collapse into one sentence: an existing
+    OpenStateGraph project sends the reader to `serve`, while somebody else's
+    directory sends them to a different name. A single "directory exists"
+    message would answer neither.
+
+    The confirmation is `--force`, a flag, and it appears **inside** the
+    refusal so it is never something to go and look up. Not a prompt: exit
+    codes are this CLI's API for CI, and a command that blocks on stdin hangs
+    a CI job.
+    """
+    if not target.exists():
+        return None
+    if not target.is_dir():
+        return f"{label} exists and is not a directory. Nothing was written."
+
+    from openstategraph.config_file import CONFIG_FILENAMES
+
+    for name in CONFIG_FILENAMES:
+        if (target / name).is_file():
+            return (
+                f"{label}/{name} is already there — this is already an\n"
+                f"OpenStateGraph project, and nothing was written.\n"
+                f"  open it:      cd {label} && openstategraph serve\n"
+                f"  start again:  openstategraph init {label} --force"
+            )
+
+    entries = list(target.iterdir())
+    if entries:
+        count = len(entries)
+        noun = "file" if count == 1 else "files"
+        return (
+            f"{label}/ already exists and has {count} {noun} in it. Nothing was written.\n"
+            f"  pick another name:  openstategraph init {label}_2\n"
+            f"  use it anyway:      openstategraph init {label} --force\n"
+            f"--force adds openstategraph.yaml, .gitignore and workflows/ to {label}/ and\n"
+            f"overwrites nothing that is already there."
+        )
+    return None
+
+
+def init_project(
+    directory: Path | str,
+    *,
+    label: str | None = None,
+    workflows_dir: str = "workflows",
+    force: bool = False,
+    starter: bool = True,
+) -> InitResult:
+    """Make `directory` an OpenStateGraph project. The third writer here.
+
+    install-experience T6, and the honest substitute for a syntax pip cannot
+    parse: an extra is a bare identifier, so `openstategraph[directory:'x']`
+    does not parse, and `openstategraph[x]` installs successfully while doing
+    nothing at all. The directory a user wants to name is named by a command.
+
+    Writes a commented `openstategraph.yaml`, a `.gitignore`, the workflows
+    root, and `workflows/starter/` from the `minimal` template — the template
+    that pins no model, so the first package an adopter owns runs on whatever
+    provider extra they installed.
+
+    **It never writes `.env`.** A generator that emits a credential file is a
+    generator whose output someone commits; the caller prints how to make one
+    instead. The `.gitignore` names it all the same, so the rule is in place
+    before the user creates it by hand.
+
+    `label` is the directory as the *user spelled it*, for the refusals — a
+    message about `my_demo/` is one they can act on; a message about
+    `/private/var/folders/…/my_demo` is one they have to decode.
+
+    Raises `ScaffoldError` for the two existing-directory refusals unless
+    `force`, which waives only the "not empty" precondition — never the
+    standing refusal to overwrite a file it did not write.
+    """
+    from openstategraph.config_file import CONFIG_FILENAMES, render_config_file, render_gitignore
+
+    target = Path(directory).expanduser()
+    name = label if label is not None else str(directory)
+
+    if not force:
+        refusal = _existing_directory_refusal(target, name)
+        if refusal is not None:
+            raise ScaffoldError(refusal)
+    elif target.exists() and not target.is_dir():
+        # `--force` is consent to use a directory that has things in it, not
+        # consent to delete a file standing where the directory should be.
+        raise ScaffoldError(f"{name} exists and is not a directory. Nothing was written.")
+
+    reused_empty = target.is_dir() and not any(target.iterdir())
+    target.mkdir(parents=True, exist_ok=True)
+
+    created: list[Path] = []
+    config = target / CONFIG_FILENAMES[0]
+    if not config.exists():
+        elected = _elected_model()
+        config.write_text(render_config_file(workflows_dir=workflows_dir, default_model=elected))
+        created.append(config)
+
+    gitignore = target / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(render_gitignore())
+        created.append(gitignore)
+
+    root = target / workflows_dir
+    root.mkdir(parents=True, exist_ok=True)
+
+    package: Path | None = None
+    if starter:
+        package = root / STARTER_SLUG
+        if not package.exists():
+            new_package(root, STARTER_SLUG, template=templates.DEFAULT_TEMPLATE)
+            created.append(package)
+
+    return InitResult(
+        directory=target,
+        config=config,
+        gitignore=gitignore,
+        workflows=root,
+        starter=package,
+        created=frozenset(created),
+        reused_empty=reused_empty,
+    )
+
+
+def _elected_model() -> str | None:
+    """The instance default's model string, for the generated file's comment.
+
+    Best-effort and deliberately so: `init` must work on a machine with no
+    provider integration at all — that is one of the states it exists to
+    explain — so a catalogue that cannot answer produces a generic example
+    rather than a failure.
+    """
+    try:
+        from openstategraph.providers import provider_catalogue
+
+        return provider_catalogue().elected_default().model
+    except Exception:  # pragma: no cover - a catalogue that cannot load
+        return None
+
+
 __all__ = [
+    "InitResult",
     "ScaffoldError",
     "SLUG_PATTERN",
+    "STARTER_SLUG",
     "copy_example",
+    "init_project",
     "new_package",
     "new_team",
     "new_workflow",

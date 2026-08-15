@@ -466,6 +466,94 @@ def configured_workflows_dir() -> Path | None:
     return (base / Path(config.workflows_dir or "").expanduser()).expanduser().resolve()
 
 
+def render_config_file(
+    *, workflows_dir: str = "workflows", default_model: str | None = None
+) -> str:
+    """The `openstategraph.yaml` `openstategraph init` writes (T6).
+
+    **Commented, by the owner's decision.** The generated file is the first
+    thing a person opens in a project they just made, and a bare `version: 1`
+    teaches nothing about what may go in it — while a comment that sits beside
+    the line it explains is the entire reason this file is YAML rather than
+    JSON (see the module docstring).
+
+    **`default_model:` is written commented out, and that is the substance
+    rather than a formatting choice.** An uncommented pin would make the new
+    project's first run depend on this machine's installed integration
+    *forever*, which is exactly the inference-outranks-intent defect T4 removed
+    one rung further up. Omitted, the project inherits the instance default —
+    the provider integration you installed — which is what makes
+    `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
+    The elected model is named in the comment so uncommenting it is one edit.
+
+    **No credential can appear here**, and not by care: nothing in this
+    function reads one. `default_model` is a model id and `workflows_dir` is a
+    path. `tests/test_init_project.py` runs `looks_like_a_secret` over every
+    line it produces.
+    """
+    example = default_model or "anthropic:claude-haiku-4-5"
+    return f"""\
+# OpenStateGraph — this project's committed configuration.
+#
+# ---------------------------------------------------------------------------
+# NO SECRETS. EVER. This file is committed, so a key here is a leaked key.
+# The loader does not merely discourage that — it REFUSES to load a file
+# containing a key-shaped field name (api_key, token, secret, ...) or a
+# key-shaped value (sk-..., ghp_..., AIza...).
+#
+# Name the variable, never the value:      api_key_env: ANTHROPIC_API_KEY
+# Put the value in .env, which .gitignore already covers.
+# `openstategraph env-example` prints every variable, names only.
+# ---------------------------------------------------------------------------
+#
+# This file is found by walking UP from wherever you ran the command to the
+# git root, so it still applies from inside {workflows_dir}/<slug>/.
+
+version: 1
+
+# The model used when nothing more specific asked for one.
+#
+# Left commented on purpose: with no line here the project inherits whatever
+# provider integration is installed, which is what makes
+# `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
+# Uncomment to pin this project to one model — a written statement outranks a
+# credential that merely happens to be exported on somebody's machine.
+#
+# default_model: {example}
+
+# Where <slug>/workflow.json packages live. Relative to THIS file, never to
+# the directory you happen to be standing in.
+workflows_dir: {workflows_dir}
+
+# providers:
+#   - name: anthropic
+#     default_model: claude-haiku-4-5
+#     api_key_env: ANTHROPIC_API_KEY
+#
+# See openstategraph.example.yaml in the repository for the full form,
+# including declaring a provider this framework has never heard of.
+"""
+
+
+#: The ignore rules `init` writes. `.env` is first and is the reason the file
+#: exists at all: `init` deliberately does **not** write a `.env` (a generator
+#: that emits a credential file is a generator whose output someone commits),
+#: so the ignore rule has to already be there when the user makes one by hand
+#: from the printed instructions.
+GITIGNORE_LINES = (
+    "# OpenStateGraph",
+    ".env",
+    "workflows/.openstategraph/",
+    "**/.openstategraph/",
+    "__pycache__/",
+)
+
+
+def render_gitignore() -> str:
+    """The `.gitignore` `openstategraph init` writes."""
+    return "\n".join(GITIGNORE_LINES) + "\n"
+
+
 _ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -535,6 +623,7 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
 __all__ = [
     "CONFIG_ENV_VAR",
     "CONFIG_FILENAMES",
+    "GITIGNORE_LINES",
     "PYPROJECT_FILENAME",
     "PYPROJECT_TABLE",
     "SECRET_FIELD_NAMES",
@@ -549,5 +638,7 @@ __all__ = [
     "find_config_file",
     "load_config",
     "looks_like_a_secret",
+    "render_config_file",
+    "render_gitignore",
     "reset_active_config",
 ]

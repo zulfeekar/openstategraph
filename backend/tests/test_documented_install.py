@@ -207,6 +207,31 @@ class TestTheDocumentedInstallCanRunSomething:
             f"editor, the chat surface and no way to run anything: {offenders}"
         )
 
+    def test_the_serving_quickstart_names_the_command_that_makes_a_project(self) -> None:
+        """install-experience T6, pinned for the same reason as everything else
+        in this module: this prose is load-bearing.
+
+        The pasteable sequence is three lines and each carries a different half
+        of the mental model — the extra names the vendor, `init` names the
+        directory, and the starter is already in it. A quickstart that installs
+        `[server]` and goes straight to `serve` drops the middle one, and the
+        reader lands on an empty canvas in a directory nobody chose.
+        """
+        offenders = []
+        for relative in ("README.md", "docs/adoption.md"):
+            lines = (ROOT / relative).read_text().splitlines()
+            for number, line in enumerate(lines, start=1):
+                if "openstategraph serve" not in line or "`" in line:
+                    continue
+                window = lines[max(0, number - 4) : number]
+                if not any("openstategraph init" in near for near in window):
+                    offenders.append(f"{relative}:{number}")
+
+        assert offenders == [], (
+            "a pasteable `openstategraph serve` with no `openstategraph init` above it "
+            f"sends a reader to a directory they never chose: {offenders}"
+        )
+
     def test_the_provider_extras_are_not_in_server(self, extras: dict[str, list[str]]) -> None:
         """The decision, recorded as a test rather than only as prose.
 

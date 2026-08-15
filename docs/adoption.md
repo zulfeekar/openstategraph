@@ -40,6 +40,7 @@ built editor now ships as package data.
 
 ```bash
 pip install "openstategraph[server,ollama]"
+openstategraph init my_demo && cd my_demo
 openstategraph serve --open
 ```
 
@@ -56,9 +57,37 @@ publishing is what connects them: you draft on the canvas, click Publish, and
 the workflow becomes visible in `/chat`. A draft never appears there. (The
 whole rule is in *The publish story*, below.)
 
-The workflows directory is `./workflows` under wherever you ran the command —
-so `openstategraph new my-thing` and then `serve` in the same folder shows your
-own package on the canvas. `OPENSTATEGRAPH_WORKFLOWS_ROOT` points it elsewhere.
+### The project directory and the workflows root are two different nouns
+
+`openstategraph init my_demo` makes **the project directory** — yours, named by
+you, and the only command that creates one. Nothing creates a project
+implicitly: `serve` in an unconfigured directory tells you what to run rather
+than scattering a `workflows/` folder somewhere you did not choose.
+
+Inside it is **the workflows root**, `workflows/`, which holds
+`<slug>/workflow.json` packages. That name is a convention nobody types
+(`--workflows-dir flows` renames it and every surface follows, because every
+surface asks the same resolver). The project is what you name; `workflows` is
+plural because it holds many.
+
+`init` writes three things and prints a fourth:
+
+| | |
+| --- | --- |
+| `openstategraph.yaml` | commented, no secrets, `workflows_dir:` set. Found by walking **up** from wherever you run a command to the git root — so it still applies from inside `workflows/starter/`. `pyproject.toml [tool.openstategraph]` carries the same keys if you would rather not add a file; a project with both gets the dedicated file. |
+| `.gitignore` | `.env` first, because the next thing you make is a `.env`. |
+| `workflows/starter/` | the smallest workflow that runs, pinning no model. `--empty` skips it. |
+| *(printed, never written)* | the `.env` variable names. A generator that emits a credential file is a generator whose output someone commits. |
+
+If the directory already exists, `init` refuses and names both ways forward —
+another name, or `--force`, which waives only the "not empty" precondition and
+still overwrites nothing it did not write. The confirmation is a flag rather
+than a prompt because exit codes are this CLI's API for CI, and a command that
+blocks on stdin hangs a CI job.
+
+`OPENSTATEGRAPH_WORKFLOWS_ROOT` points the workflows root elsewhere, and beats
+the file, for the reason it always did: the file is committed and shared, the
+environment is the machine in front of you.
 
 ### Ports — what each form means
 

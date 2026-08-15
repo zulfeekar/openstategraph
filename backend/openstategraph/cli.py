@@ -299,6 +299,77 @@ def cmd_new(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    """`openstategraph init [dir]` — the one command that creates a project.
+
+    install-experience T6. `pip install openstategraph[directory:'my_demo']`
+    is not a thing pip can parse, so the directory a user wants to name is
+    named here. Nothing creates a project implicitly: `serve` in an
+    unconfigured directory prints what to run rather than scattering a
+    `workflows/` folder somewhere nobody chose.
+
+    It is also where story one is first *shown* — the extra chose the vendor,
+    the key is the only thing left, and the message names it.
+    """
+    from openstategraph.config_file import reset_active_config
+    from openstategraph.providers import provider_catalogue
+    from openstategraph.scaffold import ScaffoldError, init_project
+
+    label = args.directory or "."
+    try:
+        result = init_project(
+            label,
+            label=label,
+            workflows_dir=args.workflows_dir,
+            force=args.force,
+            starter=not args.empty,
+        )
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    if result.reused_empty:
+        print(f"{label}/ exists and is empty — using it")
+
+    def state(path: Path) -> str:
+        return "" if path in result.created else "   (already there — left alone)"
+
+    print(f"created {result.directory}{os.sep}")
+    print(f"  {result.config.name:<22}  workflows_dir: {args.workflows_dir}{state(result.config)}")
+    print(f"  {'.gitignore':<22}  .env, .openstategraph/{state(result.gitignore)}")
+    if result.starter is not None:
+        where = f"{args.workflows_dir}/{result.starter.name}/"
+        print(f"  {where:<22}  the smallest workflow that runs{state(result.starter)}")
+    print()
+
+    # The generated config was written before this process had any chance to
+    # read one; the project it just made is the project the rest of this
+    # command should be describing.
+    reset_active_config()
+    default = provider_catalogue().elected_default()
+    print(
+        textwrap.fill(
+            f"default model: {default.model or '(none)'} — {default.reason}",
+            width=88,
+            subsequent_indent=" " * 15,
+        )
+    )
+    print()
+    print("no .env was written — a generated credential file is a committed one waiting")
+    print(f"to happen. Create {label}/.env yourself; .gitignore already covers it:")
+    for spec in provider_catalogue().list():
+        for variable in spec.env_vars:
+            print(f"  {variable}=")
+    print("  (openstategraph env-example prints the full block, names only)")
+    print()
+    print("next:")
+    if label != ".":
+        print(f"  cd {label}")
+    print("  openstategraph serve --open")
+    if result.starter is not None:
+        print(f'  openstategraph run {args.workflows_dir}/{result.starter.name} "hello"')
+    return EXIT_OK
+
+
 def cmd_examples_list(args: argparse.Namespace) -> int:
     """The shipped gallery — `openstategraph.examples`, printed.
 
@@ -746,6 +817,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="expand subgraph internals (default: on)",
     )
     graph.set_defaults(handler=cmd_graph)
+
+    # The only command that creates a project, and the substitute for the one
+    # thing the install line cannot carry — see `cmd_init`.
+    init = subparsers.add_parser(
+        "init", help="make a directory an OpenStateGraph project (default: this one)"
+    )
+    init.add_argument(
+        "directory",
+        nargs="?",
+        help="the project directory, yours to name (default: the current one)",
+    )
+    init.add_argument(
+        "--workflows-dir",
+        dest="workflows_dir",
+        default="workflows",
+        help="what to call the packages folder inside it (default: workflows)",
+    )
+    init.add_argument(
+        "--empty",
+        action="store_true",
+        help="skip workflows/starter/, for a repository that already has packages",
+    )
+    # A flag, not a prompt: exit codes are this CLI's API for CI, and a command
+    # that blocks on stdin hangs a CI job. It is named inside the refusal it
+    # answers, so it is never something to go and look up.
+    init.add_argument(
+        "--force",
+        action="store_true",
+        help="use a directory that already has things in it; overwrites nothing",
+    )
+    init.set_defaults(handler=cmd_init)
 
     new = subparsers.add_parser("new", help="scaffold a workflow package from a template")
     # Optional so `--list-templates` can stand alone; `cmd_new` supplies the

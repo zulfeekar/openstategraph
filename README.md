@@ -68,8 +68,18 @@ wheel, a four-package core, eight named extras, `py.typed`, and an
 
 ```bash
 pip install "openstategraph[server,ollama]"   # ← after the first PyPI release
+openstategraph init my_demo && cd my_demo     # your project, named by you
 openstategraph serve --open                   # canvas at /, customer chat at /chat
 ```
+
+Three lines, and each one carries a different half of the mental model: **the
+extra names the vendor, `init` names the directory, and the starter is already
+in it.** `init` writes a commented `openstategraph.yaml`, a `.gitignore` and
+`workflows/starter/` — the smallest workflow that runs, pinning no model, so it
+runs on whichever provider extra you installed. It never writes a `.env`; it
+prints the variable names and leaves the file to you. Existing directory? It
+refuses and tells you both ways forward (`--force` uses it anyway and
+overwrites nothing).
 
 **The wheel carries the canvas.** The built editor ships as package data
 (2.7 MB of a 2.9 MB wheel), so `serve` starts one process that serves the
