@@ -512,7 +512,13 @@ No `audience` here, and that is the point: a chat client omits it and gets
 See "Audience" above for what a `"developer"` run additionally receives.
 
 `workflow_slug` is optional and additive: it layers the tools that live in that
-workflow's own `tools/` folder over the defaults. `thread_id` is optional too —
+workflow's own `tools/` folder over the defaults. It must be a **slug this
+deployment has**, though — it also names the workflow's memory namespace and,
+for a document with `settings.checkpointer: "sqlite"`, its checkpoint file. A
+value that is not a slug is a `422` (the pattern is published in
+`openapi.json`); a slug naming no installed workflow is a `404`, which is the
+answer to "did my package install?" and not something to work around by
+omitting the field. `thread_id` is optional too —
 the server invents one and reports it back on the terminal frame — but a
 client that sends a *second* question should pass the first one's `threadId`,
 or the second question opens its own conversation and cannot refer back to the

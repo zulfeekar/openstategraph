@@ -2,9 +2,51 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, WithJsonSchema
+
+from openstategraph.api.workflow_store import SLUG_PATTERN, is_slug
+
+
+def _must_be_a_slug(value: str) -> str:
+    if not is_slug(value):
+        raise ValueError(
+            f"{value!r} is not a workflow slug (lowercase letters, digits and hyphens)"
+        )
+    return value
+
+
+#: A slug as it arrives from a client, refused at validation if it is not one.
+#:
+#: Install-experience ticket 06. This value reached
+#: `state_dir(root) / f"checkpoints-{slug}.sqlite"`, so an unvalidated one let
+#: a caller choose where this process created a file — the class `7754d13`
+#: closed on `credentials`, surviving on a second field. Validated **here**,
+#: at the field, rather than at each of the three run endpoints, for the
+#: reason `extra="forbid"` is set here too: a rule stated on the contract is
+#: inherited by every transport that validates against it, and cannot be
+#: forgotten by the fourth endpoint somebody adds.
+#:
+#: Rejected, never coerced. `slugify("../etc")` returns a perfectly good slug,
+#: and running *something else* than what the caller named is how a workflow
+#: quietly binds another package's tools.
+#:
+#: Enforced by `is_slug` (the store's own rule) and *published* as
+#: `SLUG_PATTERN`, so `docs/openapi.json` says out loud what a client may
+#: send. The two are pinned to each other by a test rather than left to agree
+#: by inspection.
+WorkflowSlug = Annotated[
+    str,
+    AfterValidator(_must_be_a_slug),
+    WithJsonSchema(
+        {
+            "type": "string",
+            "pattern": SLUG_PATTERN,
+            "description": "A workflow slug: lowercase letters, digits and single hyphens.",
+        }
+    ),
+]
 
 
 class HealthResponse(BaseModel):
@@ -186,9 +228,15 @@ class RunRequest(BaseModel):
     session_id: str | None = None
     #: The open workflow's slug, when the client knows it. Tools discovered
     #: in that workflow's own `tools/` folder are layered over the defaults,
-    #: so a document can bind the tools that live beside it. Optional and
-    #: additive — omitting it runs with the default registry, never a crash.
-    workflow_slug: str | None = None
+    #: so a document can bind the tools that live beside it. Optional —
+    #: omitting it runs with the default registry, never a crash.
+    #:
+    #: **Not additive any more when it is wrong** (ticket 06): a value that is
+    #: not a slug is a 422 here, and a slug naming no package on disk is a 404
+    #: at the endpoint. Both used to be accepted — the first as an unhandled
+    #: `InvalidSlugError` 500, the second as a 200 that silently created
+    #: `checkpoints-<whatever-you-sent>.sqlite`.
+    workflow_slug: WorkflowSlug | None = None
     #: Who this run is for. `developer` additionally gets the `developer`
     #: channel on the `done` frame (authoring warnings, capability
     #: suggestions) and gives every agent the advisor context block that lets
@@ -235,8 +283,9 @@ class ResumeRequest(BaseModel):
     #: this class forbids extras, so a client that echoes the slug on resume
     #: (as ours does) would otherwise be rejected 422 and every approval
     #: would die at validation. A resumed run must also bind the *same*
-    #: tool set as the run it resumes.
-    workflow_slug: str | None = None
+    #: tool set as the run it resumes — and, since ticket 06, satisfy the same
+    #: grammar: a resume reaches the same per-workflow saver the run did.
+    workflow_slug: WorkflowSlug | None = None
     #: Same as `RunRequest.audience`, and it must exist on BOTH models for the
     #: same reason `workflow_slug` does: this model forbids extras, so the
     #: editor — which declares its audience on every send — would 422 on every

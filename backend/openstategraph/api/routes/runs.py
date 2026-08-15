@@ -50,6 +50,56 @@ from openstategraph.schema import normalize_document
 router = APIRouter()
 
 
+def _known_slug(services: Any, slug: str | None) -> str | None:
+    """The slug this run may use — or a 404 before anything is built from it.
+
+    The second half of install-experience ticket 06. `RunRequest.workflow_slug`
+    is a slug by then (the field validates its grammar), but a *well-formed*
+    slug naming no package was accepted and used: it scoped tool discovery to
+    a directory that did not exist, keyed the memory Store's namespace, and —
+    with `settings.checkpointer: "sqlite"` in the caller's own document —
+    created `checkpoints-<whatever-you-sent>.sqlite` and left one permanent
+    entry, holding one open descriptor, in
+    `WorkflowServices._workflow_checkpointers`, whose only eviction is
+    `close()`. Fifty requests, fifty files, against a soft `RLIMIT_NOFILE` of
+    256 on macOS.
+
+    That is what makes this the *bound* on that cache rather than an eviction
+    policy: an entry can only exist for a package that exists on disk, so the
+    key domain is the store's own contents. An LRU would have been the other
+    option and is the wrong one here — an evicted entry has to be closed to
+    release the descriptor, and closing a saver a run is still checkpointing
+    against fails that run.
+
+    Existence is asked **here** and not in `checkpointer_for`, because "do I
+    know this workflow?" is a question with a status code, and a services
+    object that answered it would also be answering it for `load_workflow`
+    and for tests that legitimately name a package they never wrote.
+
+    Mirrors `threads.savers_for`, which has always refused to open a saver for
+    a slug the store cannot load — except that a *listing* degrades (the
+    threads may be in the shared saver) where a *run* refuses, since a run
+    under a name the server does not have binds nothing it was drawn with.
+    """
+    from openstategraph.api.workflow_store import InvalidSlugError
+
+    if not slug:
+        return None
+    try:
+        known = services.store.describe(slug) is not None
+    except InvalidSlugError:  # pragma: no cover - the field already refused it
+        known = False
+    if not known:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No workflow named {slug!r} in this deployment. "
+                "Omit `workflow_slug` to run the document with the default tools."
+            ),
+        )
+    return slug
+
+
 @router.post(
     "/api/runs",
     response_model=RunResponse,
@@ -80,6 +130,9 @@ def run_workflow(
     from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
+    # Before the document is compiled or a model built: a slug this
+    # deployment does not have is a 404, not a directory it goes looking for.
+    slug = _known_slug(services, request.workflow_slug)
     # Browser-held keys, applied only where the server has none — see
     # `apply_credentials` for why the server's own env always wins.
     apply_credentials(request.credentials)
@@ -93,7 +146,7 @@ def run_workflow(
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     audience = resolve_audience(request.audience)
-    runtime = services.runtime_for(request.workflow_slug, document, model, audience=audience)
+    runtime = services.runtime_for(slug, document, model, audience=audience)
 
     # The same thread this endpoint's request has always declared, and
     # until now dropped on the floor. `RunRequest` carried `thread_id`,
@@ -116,9 +169,7 @@ def run_workflow(
             # no persisted `messages`, no antecedent, the same defect with
             # a config attached. The streaming endpoint already compiles
             # this way, from the same per-workflow cache.
-            checkpointer=services.checkpointer_for(
-                document.get("settings"), request.workflow_slug
-            ),
+            checkpointer=services.checkpointer_for(document.get("settings"), slug),
             store=services.memory_store,
         )
         final = graph.invoke(
@@ -129,7 +180,7 @@ def run_workflow(
                     "thread_id": thread_id,
                     "session_id": request.session_id or "",
                     "user_email": principal_id,
-                    "workflow_slug": request.workflow_slug or "",
+                    "workflow_slug": slug or "",
                 },
             },
         )
@@ -270,6 +321,8 @@ def run_workflow_stream(
     from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
+    # Same gate as `/api/runs`, and before the same work — see `_known_slug`.
+    slug = _known_slug(services, request.workflow_slug)
     # Browser-held keys, fallback-only (see `apply_credentials`).
     apply_credentials(request.credentials)
     model = build_chat_model(
@@ -279,16 +332,14 @@ def run_workflow_stream(
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     audience = resolve_audience(request.audience)
-    runtime = services.runtime_for(request.workflow_slug, document, model, audience=audience)
+    runtime = services.runtime_for(slug, document, model, audience=audience)
 
     try:
         graph = compiler.build(
             document,
             RunState,
             runtime.factory(document),
-            checkpointer=services.checkpointer_for(
-                document.get("settings"), request.workflow_slug
-            ),
+            checkpointer=services.checkpointer_for(document.get("settings"), slug),
             store=services.memory_store,
         )
     except Exception as exc:
@@ -305,7 +356,7 @@ def run_workflow_stream(
             "thread_id": thread_id,
             "session_id": request.session_id or "",
             "user_email": principal_id,
-            "workflow_slug": request.workflow_slug or "",
+            "workflow_slug": slug or "",
         },
     }
     graph_input = {
@@ -376,6 +427,9 @@ def resume_workflow_stream(
     from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
+    # A resume binds the same package the run it continues did, so it is
+    # gated the same way — see `_known_slug`.
+    slug = _known_slug(services, request.workflow_slug)
     # Browser-held keys, fallback-only (see `apply_credentials`).
     apply_credentials(request.credentials)
     model = build_chat_model(
@@ -385,16 +439,14 @@ def resume_workflow_stream(
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     audience = resolve_audience(request.audience)
-    runtime = services.runtime_for(request.workflow_slug, document, model, audience=audience)
+    runtime = services.runtime_for(slug, document, model, audience=audience)
 
     try:
         graph = compiler.build(
             document,
             RunState,
             runtime.factory(document),
-            checkpointer=services.checkpointer_for(
-                document.get("settings"), request.workflow_slug
-            ),
+            checkpointer=services.checkpointer_for(document.get("settings"), slug),
             store=services.memory_store,
         )
     except Exception as exc:
@@ -407,7 +459,7 @@ def resume_workflow_stream(
             "thread_id": request.thread_id,
             "session_id": request.session_id or "",
             "user_email": principal_id,
-            "workflow_slug": request.workflow_slug or "",
+            "workflow_slug": slug or "",
         },
     }
     resume_value: dict[str, Any] = {"decision": request.decision}

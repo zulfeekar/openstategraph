@@ -86,6 +86,37 @@ def slugify(name: str) -> str:
     return slug or "workflow"
 
 
+#: The same grammar as :func:`is_slug`, written the one way a *published*
+#: contract can carry it. `is_slug` is derived from `slugify` and so cannot be
+#: serialised; a JSON Schema `pattern` can, and `docs/openapi.json` is where a
+#: third-party client learns why its request was refused.
+#:
+#: Two spellings of one rule is exactly what this module's own comments warn
+#: about — so this one is **published, never enforced**, and
+#: `test_a_run_request_cannot_name_a_file.py` pins it to `is_slug` over a
+#: corpus rather than trusting them to stay equal. Same device as
+#: `RuntimeClient.ts`: a hand-mirror is allowed when a drift test holds it.
+SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
+def is_slug(value: str) -> bool:
+    """Can this string name a package directory under the workflows root?
+
+    The grammar :meth:`WorkflowStore.directory_for` has always enforced, given
+    a name of its own so a *transport* can ask the same question before it
+    builds anything (install-experience ticket 06). It was previously
+    expressible only by calling `directory_for` and catching
+    `InvalidSlugError` — which is why the run endpoints, whose slug reached
+    `f"checkpoints-{slug}.sqlite"`, did not ask at all.
+
+    A predicate, deliberately, rather than a second regex: `slugify` is the
+    only definition of what a slug looks like, and a value is a slug exactly
+    when `slugify` leaves it alone. Two spellings of one grammar is how a
+    validator and the thing it guards drift apart.
+    """
+    return bool(value) and value == slugify(value) and "/" not in value and "\\" not in value
+
+
 def _candidate_slugs(name: str) -> Iterator[str]:
     """The bare slug first, then disambiguated variants of it.
 
@@ -229,7 +260,7 @@ class WorkflowStore:
         from outside the class would be the wrong kind of coupling for a
         genuinely reusable operation.
         """
-        if not slug or slug != slugify(slug) or "/" in slug or "\\" in slug:
+        if not is_slug(slug):
             raise InvalidSlugError(f"{slug!r} is not a valid workflow slug")
         candidate = (self.root / slug).resolve()
         if candidate.parent != self.root.resolve():

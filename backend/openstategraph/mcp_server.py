@@ -660,6 +660,21 @@ class WorkflowRuns:
         if slug is None and document is None:
             return {"error": "Pass either a saved `slug` or an inline `document`."}
 
+        if document is not None and slug is not None:
+            # An inline document *and* a slug: the slug still binds that
+            # package's tools, memory namespace and per-workflow saver, so it
+            # is gated exactly as `routes/runs._known_slug` gates the HTTP
+            # body (install-experience ticket 06). Only this combination was
+            # ungated — a bare `slug` goes through `_load`, which has always
+            # refused an unknown one.
+            from openstategraph.api.workflow_store import InvalidSlugError
+
+            try:
+                if self._services.store.describe(str(slug)) is None:
+                    return {"error": f"No workflow named {slug!r}"}
+            except InvalidSlugError as exc:
+                return {"error": str(exc)}
+
         if document is not None:
             try:
                 resolved = normalize_document(document)

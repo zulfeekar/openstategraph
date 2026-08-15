@@ -169,6 +169,12 @@ class TestTheDeclaredFieldsReachTheRun:
         ticket 01). It used to be sent here and asserted below; it is the one
         field a client must not be able to set, because it keys a per-person
         memory namespace. See the test that follows.
+
+        The slug sent here was `"echo"` — a name matching the document, and
+        no package anywhere. That is a 404 since install-experience ticket 06,
+        which is the point of that ticket: a run naming a workflow this
+        deployment does not have was scoping tools, memory and a sqlite file
+        to a directory that did not exist. It names a real package now.
         """
         seen: dict[str, Any] = {}
         from openstategraph.compile import workflow_compiler
@@ -195,14 +201,14 @@ class TestTheDeclaredFieldsReachTheRun:
                 "question": "hi",
                 "thread_id": "t-1",
                 "session_id": "s-1",
-                "workflow_slug": "echo",
+                "workflow_slug": "chinook-assistant",
             },
         )
 
         configurable = (seen.get("config") or {}).get("configurable") or {}
         assert configurable.get("thread_id") == "t-1"
         assert configurable.get("session_id") == "s-1"
-        assert configurable.get("workflow_slug") == "echo"
+        assert configurable.get("workflow_slug") == "chinook-assistant"
 
     def test_a_client_cannot_name_the_person_the_run_is_for(
         self, client: TestClient

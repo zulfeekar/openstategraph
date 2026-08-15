@@ -881,6 +881,8 @@
           "workflow_slug": {
             "anyOf": [
               {
+                "description": "A workflow slug: lowercase letters, digits and single hyphens.",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
                 "type": "string"
               },
               {
@@ -979,6 +981,8 @@
           "workflow_slug": {
             "anyOf": [
               {
+                "description": "A workflow slug: lowercase letters, digits and single hyphens.",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
                 "type": "string"
               },
               {

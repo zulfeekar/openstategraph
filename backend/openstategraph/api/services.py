@@ -102,6 +102,15 @@ class WorkflowServices:
         #: slug -> the saver `settings.checkpointer: "sqlite"` opened for it.
         #: Always ours, by construction: an entry only exists when this object
         #: opened a per-workflow file.
+        #:
+        #: **Bounded by the store, not by a cap** (ticket 06). It has no
+        #: eviction short of `close()`, and each entry holds an open sqlite
+        #: descriptor — so what keeps it finite has to be the *key domain*:
+        #: the key is always a slug (the guard in `checkpointer_for`), and the
+        #: run endpoints 404 a slug naming no package before they reach here,
+        #: so entries are bounded by the packages on disk. An LRU was the
+        #: alternative and is worse: evicting means closing, and closing a
+        #: saver a live run is checkpointing against fails that run.
         self._workflow_checkpointers: dict[str, BaseCheckpointSaver[Any]] = {}
         # Copied, not aliased: a caller's dict must not become live state that
         # a later mutation of theirs changes mid-run.
@@ -146,8 +155,18 @@ class WorkflowServices:
         file are two locks guarding nothing.
         """
         from openstategraph.memory import checkpointer_for
+        from openstategraph.api.workflow_store import InvalidSlugError, is_slug
 
         key = slug or ""
+        if key and not is_slug(key):
+            # The last mile of install-experience ticket 06. The transports
+            # validate the slug where it enters — but this is the method that
+            # turns one into `checkpoints-<slug>.sqlite`, and it is reachable
+            # from MCP and from `load_workflow` as well as from HTTP, so the
+            # rule is restated by the code that would break it. Raising, not
+            # coercing: `slugify` would happily turn `../etc` into a fine slug
+            # and open somebody else's file.
+            raise InvalidSlugError(f"{slug!r} is not a valid workflow slug")
         if key in self._workflow_checkpointers:
             return self._workflow_checkpointers[key]
         resolved = checkpointer_for(
