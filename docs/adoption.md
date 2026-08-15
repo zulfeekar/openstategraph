@@ -231,6 +231,14 @@ which one it got (`approvals persist at …` or `approvals are in-memory and
 will NOT survive a restart`); `OPENSTATEGRAPH_CHECKPOINT_PATH` moves it, or
 `=memory` opts out.
 
+If your project already runs its own LangGraph checkpointer or store, we
+**never go looking for it** — reuse is explicit, always: pass the object
+(`load_workflow(…, checkpointer=…, store=…)`) or set the variable
+(`OPENSTATEGRAPH_CHECKPOINT_PATH`, `OPENSTATEGRAPH_MEMORY_PATH`,
+`OPENSTATEGRAPH_POSTGRES_URL`). When you do neither, we create our own,
+announce where it lives, and touch nothing of yours. The reasoning is
+recorded in `docs/decisions/memory-architecture.md`.
+
 One worker, and a second one is **refused at startup** rather than warned
 about: `SqliteSaver` and `SqliteStore` are single-process by their own
 documentation (a per-instance `threading.Lock`, which two processes do not

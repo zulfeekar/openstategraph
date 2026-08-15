@@ -338,3 +338,25 @@ supervisor). Long threads opt into `SummarizationMiddleware` via the agent's
 - Unstamped app-scope writes — every deposit names its workflow.
 - Forwarding LangGraph's internal `configurable` keys (`__*`, `checkpoint*`)
   into a mounted child's config.
+
+## Addendum (2026-08-15): why reuse is explicit and detection is refused
+
+An adopter's existing checkpointer or store is never auto-adopted, for three
+reasons, each independently sufficient:
+
+1. **There is nothing to detect.** LangGraph publishes no discovery API — a
+   saver is an object in someone's process, so "detect" could only mean
+   sniffing filenames, which is the daemon-guessing mistake in new dress.
+2. **Guessing wrong risks corruption.** `SqliteSaver`'s write lock is
+   per-instance — two OS processes do not share it — so auto-opening a live
+   file someone else's process holds is exactly the unsupported two-process
+   configuration this document already refuses at startup. We will not
+   auto-open what we cannot prove is idle, and we do not guess.
+3. **Thread ids would collide.** `thread_id` is one flat namespace
+   (`checkpoint_ns` separates subgraphs, not applications), so sharing a
+   saver with the host application means two programs minting ids in one
+   space — collisions would be silent and the corrupted history would be
+   the adopter's.
+
+Reuse therefore has exactly two doors, both explicit: pass the object, or set
+the variable. Creation is the default and is announced on startup.
