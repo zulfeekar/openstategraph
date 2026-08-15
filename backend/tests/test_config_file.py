@@ -85,6 +85,165 @@ class TestTheFileIsFound:
         assert find_config_file(tmp_path / "elsewhere") == path
 
 
+class TestTheSearchWalksUp:
+    """install-experience T7 — the file is found from a subdirectory.
+
+    After `openstategraph init my_demo`, the next thing a developer does is
+    `cd my_demo/workflows/starter` and run something. Looking in `Path.cwd()`
+    only made their own `openstategraph.yaml` invisible from there, and the
+    `Path.cwd()/"workflows"` fallback then resolved somewhere new. Every
+    comparable tool walks up; the bound is the git root, because that is what
+    "my project" means and it cannot pick up a stray `$HOME` file.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)
+
+    def test_a_parent_directory_is_searched(self, tmp_path: Path) -> None:
+        path = write(tmp_path, "version: 1\n")
+        deep = tmp_path / "workflows" / "starter"
+        deep.mkdir(parents=True)
+        assert find_config_file(deep) == path
+
+    def test_the_nearest_file_wins(self, tmp_path: Path) -> None:
+        write(tmp_path, "version: 1\n")
+        inner = tmp_path / "inner"
+        inner.mkdir()
+        nearer = write(inner, "version: 1\n")
+        assert find_config_file(inner) == nearer
+
+    def test_the_walk_stops_at_the_git_root(self, tmp_path: Path) -> None:
+        """A file above the repository is somebody else's project."""
+        write(tmp_path, "version: 1\n")
+        project = tmp_path / "project"
+        (project / ".git").mkdir(parents=True)
+        deep = project / "workflows"
+        deep.mkdir()
+        assert find_config_file(deep) is None
+
+    def test_the_git_root_itself_is_still_searched(self, tmp_path: Path) -> None:
+        """Stopping *at* `.git` means including it — that is the project root."""
+        project = tmp_path / "project"
+        (project / ".git").mkdir(parents=True)
+        path = write(project, "version: 1\n")
+        deep = project / "workflows" / "starter"
+        deep.mkdir(parents=True)
+        assert find_config_file(deep) == path
+
+    def test_the_explicit_pointer_still_outranks_the_search(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        write(tmp_path, "version: 1\n")
+        elsewhere = write(tmp_path, "version: 1\n", name="custom.yaml")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(elsewhere))
+        assert find_config_file(tmp_path) == elsewhere
+
+
+class TestPyprojectIsAConfigCarrier:
+    """install-experience T7 — `[tool.openstategraph]`, the seam named at
+    `CONFIG_FILENAMES` and now built.
+
+    Precedence: CLI flag > environment > `openstategraph.yaml` >
+    `pyproject.toml`. It is the *last* carrier consulted rather than another
+    entry in `CONFIG_FILENAMES`, because a project with both should get the
+    dedicated file and the `[tool.…]` table is for a project that would rather
+    not add one.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)
+
+    def test_a_tool_table_is_found(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            '[tool.openstategraph]\nversion = 1\ndefault_model = "anthropic:x"\n',
+            name="pyproject.toml",
+        )
+        assert find_config_file(tmp_path) == path
+
+    def test_it_loads_the_table_and_nothing_else(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            '[project]\nname = "mine"\n\n'
+            '[tool.openstategraph]\ndefault_model = "anthropic:claude-haiku-4-5"\n'
+            'workflows_dir = "flows"\n',
+            name="pyproject.toml",
+        )
+        config = load_config(path)
+        assert config.default_model == "anthropic:claude-haiku-4-5"
+        assert config.workflows_dir == "flows"
+
+    def test_a_pyproject_without_our_table_is_not_a_config_file(self, tmp_path: Path) -> None:
+        """Otherwise every Python project would acquire an empty config that
+        shadows the real one an ancestor directory holds."""
+        write(tmp_path, '[project]\nname = "mine"\n', name="pyproject.toml")
+        assert find_config_file(tmp_path) is None
+
+    def test_the_dedicated_file_wins_in_the_same_directory(self, tmp_path: Path) -> None:
+        dedicated = write(tmp_path, "version: 1\n")
+        write(tmp_path, "[tool.openstategraph]\nversion = 1\n", name="pyproject.toml")
+        assert find_config_file(tmp_path) == dedicated
+
+    def test_a_nearer_pyproject_beats_a_further_yaml(self, tmp_path: Path) -> None:
+        """One walk, and the first directory holding *any* carrier wins — the
+        same "nearest project" answer the dedicated file gets."""
+        write(tmp_path, "version: 1\n")
+        inner = tmp_path / "inner"
+        inner.mkdir()
+        nearer = write(inner, "[tool.openstategraph]\nversion = 1\n", name="pyproject.toml")
+        assert find_config_file(inner) == nearer
+
+    def test_a_secret_is_refused_here_too(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            '[tool.openstategraph]\napi_key = "whatever"\n',
+            name="pyproject.toml",
+        )
+        with pytest.raises(ConfigError, match="api_key"):
+            load_config(path)
+
+    def test_an_unknown_key_is_refused_here_too(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            '[tool.openstategraph]\ndefault_modle = "anthropic:x"\n',
+            name="pyproject.toml",
+        )
+        with pytest.raises(ConfigError, match="unknown field"):
+            load_config(path)
+
+    def test_workflows_dir_resolves_against_the_project_root(self, tmp_path: Path) -> None:
+        """The same rule the dedicated file follows: relative to the file that
+        said it, never to whatever directory the process started in."""
+        from openstategraph.config_file import configured_workflows_dir
+
+        write(
+            tmp_path,
+            '[tool.openstategraph]\nworkflows_dir = "flows"\n',
+            name="pyproject.toml",
+        )
+        deep = tmp_path / "a" / "b"
+        deep.mkdir(parents=True)
+        import os
+
+        cwd = Path.cwd()
+        os.chdir(deep)
+        try:
+            reset_active_config()
+            assert configured_workflows_dir() == (tmp_path / "flows").resolve()
+        finally:
+            os.chdir(cwd)
+            reset_active_config()
+
+    def test_unparseable_toml_is_not_our_file(self, tmp_path: Path) -> None:
+        """A broken `pyproject.toml` in an ancestor is not ours to refuse to
+        start over — discovery has to parse it to know whether it declares us,
+        and one that cannot be parsed declares nothing."""
+        write(tmp_path, "[tool.openstategraph\nbroken", name="pyproject.toml")
+        assert find_config_file(tmp_path) is None
+
+
 class TestItIsSchemaValidated:
     def test_a_minimal_file_loads(self, tmp_path: Path) -> None:
         config = load_config(write(tmp_path, "version: 1\n"))
@@ -559,7 +718,7 @@ class TestEnvExampleParity:
         assert text[start:end] == env_example_section()
 
     def test_a_provider_reachable_two_ways_does_not_call_both_required(self) -> None:
-        """"Required" is a lie when either variable on its own is enough.
+        """ "Required" is a lie when either variable on its own is enough.
 
         Ollama takes `OLLAMA_API_KEY` *or* `OLLAMA_HOST`
         (providers-and-credentials ticket 02). A developer reading two lines

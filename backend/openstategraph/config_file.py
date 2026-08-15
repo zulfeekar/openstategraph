@@ -18,6 +18,13 @@ would have to live somewhere else and rot separately. `openstategraph.json` is
 accepted all the same — `json` is stdlib, and nobody should be forced into YAML
 to use this.
 
+**Two carriers, one reader.** The dedicated file is the canonical one;
+`pyproject.toml [tool.openstategraph]` carries the same schema for a project
+that would rather not add a file. They are found by one upward walk from the
+working directory to the git root — see `find_config_file` — and parsed by one
+`load_config`, so there is no second reader anywhere and no second precedence
+rule to disagree with this one.
+
 **Secrets are excluded by construction, not by convention.** Two independent
 rules, because either alone is insufficient:
 
@@ -65,16 +72,25 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 #: Accepted names, in search order. YAML first — see the module docstring.
 #:
-#: **Seam, unbuilt: `pyproject.toml [tool.openstategraph]`.** The owner has
-#: named it a valid carrier, and the full order it joins is
-#: `CLI flag > environment > openstategraph.yaml > pyproject.toml`, so it is
-#: the *last* file consulted rather than another entry in this tuple: a project
-#: with both should get the dedicated file, and the `[tool.…]` table is the
-#: fallback for a project that would rather not add one. Nothing reads it
-#: today, and a name in this tuple that nothing reads would be worse than the
-#: gap. It belongs with the upward walk (install-experience T7), which is where
-#: "which file, found from where" stops being one line.
+#: `pyproject.toml` is deliberately **not** in this tuple, and is consulted
+#: after it — see `PYPROJECT_FILENAME`.
 CONFIG_FILENAMES = ("openstategraph.yaml", "openstategraph.yml", "openstategraph.json")
+
+#: `pyproject.toml [tool.openstategraph]` — a first-class carrier, and the
+#: *last* one consulted in a directory. The full order is
+#: `CLI flag > environment > openstategraph.yaml > pyproject.toml`: a project
+#: with both should get the dedicated file, and the `[tool.…]` table is for a
+#: project that would rather not add one.
+#:
+#: It is not another entry in `CONFIG_FILENAMES` because it is not another
+#: name for the same thing — the table has to be *found inside* the file, and a
+#: `pyproject.toml` with no `[tool.openstategraph]` in it is not a config file
+#: at all. Treating it as one would give every Python project an empty config
+#: that shadows the real one an ancestor directory holds.
+PYPROJECT_FILENAME = "pyproject.toml"
+
+#: The table this project owns inside `pyproject.toml`.
+PYPROJECT_TABLE = "openstategraph"
 
 #: Points at a config file directly, wherever it lives.
 CONFIG_ENV_VAR = "OPENSTATEGRAPH_CONFIG"
@@ -223,11 +239,76 @@ class OpenStateGraphConfig(BaseModel):
     providers: list[ProviderConfig] = []
 
 
+def _pyproject_table(source: Path) -> Any | None:
+    """`[tool.openstategraph]` out of a `pyproject.toml`, or `None`.
+
+    `None` for a file that does not declare us **and** for a file that cannot
+    be parsed: discovery has to read the file to know whether it is a carrier
+    at all, and an ancestor's broken `pyproject.toml` is not ours to refuse to
+    start over. Once the file *is* chosen, `load_config` parses it again and a
+    syntax error there is reported normally — the difference is whether we were
+    ever asked.
+    """
+    try:
+        import tomllib
+
+        with source.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tool = data.get("tool")
+    if not isinstance(tool, dict) or PYPROJECT_TABLE not in tool:
+        return None
+    return tool[PYPROJECT_TABLE]
+
+
+def _carrier_in(directory: Path) -> Path | None:
+    """The config file this one directory holds, dedicated name first."""
+    for name in CONFIG_FILENAMES:
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    pyproject = directory / PYPROJECT_FILENAME
+    if pyproject.is_file() and _pyproject_table(pyproject) is not None:
+        return pyproject
+    return None
+
+
+def _search_path(base: Path) -> list[Path]:
+    """`base` and each parent, stopping **at** the git root — inclusive.
+
+    The git root is what "my project" means, and it is the bound that cannot
+    pick up a stray `openstategraph.yaml` in `$HOME` and apply it to every
+    project on the machine (design collision C6). In a directory that is not a
+    git repository the walk runs to the filesystem root, which is the only
+    other honest answer: there is nothing else to ask.
+    """
+    directories: list[Path] = []
+    for directory in (base, *base.parents):
+        directories.append(directory)
+        if (directory / ".git").exists():
+            break
+    return directories
+
+
 def find_config_file(root: Path | str | None = None) -> Path | None:
     """The config file to use, or `None` — which is the normal case.
 
     `OPENSTATEGRAPH_CONFIG` wins over the search, so a deployment can point at
     a file outside the project without moving it.
+
+    Otherwise the search **walks upward** from `root` (default: the working
+    directory) to the git root, and the first directory holding any carrier
+    wins — the dedicated file if that directory has one, else its
+    `pyproject.toml [tool.openstategraph]`. One walk, so "nearest project wins"
+    is one rule rather than two that can disagree: a nearer `pyproject.toml`
+    beats a further `openstategraph.yaml`, because it is a nearer project.
+
+    Before install-experience T7 this looked in `Path.cwd()` only, so after
+    `init my_demo` a developer who did the obvious next thing — `cd
+    my_demo/workflows/starter` — had their own config silently invisible.
     """
     explicit = os.environ.get(CONFIG_ENV_VAR, "").strip()
     if explicit:
@@ -235,15 +316,37 @@ def find_config_file(root: Path | str | None = None) -> Path | None:
         return path if path.is_file() else None
 
     base = Path(root).expanduser() if root is not None else Path.cwd()
-    for name in CONFIG_FILENAMES:
-        candidate = base / name
-        if candidate.is_file():
-            return candidate
+    if not base.is_absolute():
+        base = Path.cwd() / base
+    for directory in _search_path(base):
+        found = _carrier_in(directory)
+        if found is not None:
+            return found
     return None
 
 
 def _parse(source: Path) -> Any:
     """Text to a plain structure, with a parse error that names file and line."""
+    if source.suffix.lower() == ".toml":
+        # A `pyproject.toml` belongs to the project, not to us: everything
+        # outside `[tool.openstategraph]` is somebody else's, and the schema
+        # below would refuse all of it as unknown fields. So the *table* is the
+        # document, and the rest of this module never learns the difference.
+        import tomllib
+
+        try:
+            with source.open("rb") as handle:
+                data = tomllib.load(handle)
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"{source}: invalid TOML: {exc}") from exc
+        table = data.get("tool", {}).get(PYPROJECT_TABLE) if isinstance(data, dict) else None
+        if table is None:
+            raise ConfigError(
+                f"{source}: no [tool.{PYPROJECT_TABLE}] table — that is the only part of a "
+                f"pyproject.toml this project reads."
+            )
+        return table
+
     text = source.read_text()
     if source.suffix.lower() == ".json":
         try:
@@ -432,6 +535,8 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
 __all__ = [
     "CONFIG_ENV_VAR",
     "CONFIG_FILENAMES",
+    "PYPROJECT_FILENAME",
+    "PYPROJECT_TABLE",
     "SECRET_FIELD_NAMES",
     "SECRET_VALUE_PREFIXES",
     "SUPPORTED_VERSION",

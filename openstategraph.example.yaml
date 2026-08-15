@@ -4,6 +4,12 @@
 # OPENSTATEGRAPH_CONFIG at it anywhere) and edit. This file is meant to be
 # committed and read: by a person, by a coding agent, and in review.
 #
+# It is found by walking UP from wherever you ran the command to the git root,
+# so `cd workflows/starter && openstategraph run .` still sees your project's
+# file. If you would rather not add a file at all, the same keys go in
+# `pyproject.toml` under `[tool.openstategraph]` — a project with both gets
+# this one.
+#
 # ---------------------------------------------------------------------------
 # NO SECRETS. EVER. This file is committed, so a key here is a leaked key.
 # The loader does not merely discourage that — it REFUSES to load a file
