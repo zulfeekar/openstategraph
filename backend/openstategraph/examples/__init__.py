@@ -1,4 +1,4 @@
-"""The shipped gallery — twenty worked examples, and the middle of a chain.
+"""The shipped gallery — the worked examples, and the middle of a chain.
 
 **Tier 2, provisional** (`docs/stability.md`): importable and documented, may
 change in a minor release with a changelog note. The *command line* over it —

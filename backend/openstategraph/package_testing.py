@@ -1,8 +1,8 @@
 """What every workflow package's `tests/` directory was writing by hand.
 
 `docs/adoption.md` promises each package a `tests/` directory holding "real
-tests, not decoration", and twenty-two of them now exist. Read together they
-turned out to share a spine, re-typed file by file: load `workflow.json`, check
+tests, not decoration", and most of the gallery now has one. Read together
+they turned out to share a spine, re-typed file by file: load `workflow.json`, check
 the envelope is version 1 and the document version 3, pin the model, then look
 up a node or compare an edge set. This module is that spine, extracted once.
 
@@ -73,10 +73,10 @@ def load_document(package: Path | str) -> dict[str, Any]:
 
     The two version assertions are the reason this is a function and not a
     one-line `json.loads`. They are what stops a test suite from silently
-    grading a format it no longer speaks, and twenty files each wrote them out
-    — so each one also had to remember to. Failures name the package, because
-    a bare `assert envelope["version"] == 1` in a shared helper would name
-    none of the twenty-two callers.
+    grading a format it no longer speaks, and each package's own test file
+    used to write them out by hand — so each one also had to remember to.
+    Failures name the package, because a bare `assert envelope["version"] ==
+    1` in a shared helper would name none of its callers.
     """
     package = Path(package)
     envelope: dict[str, Any] = json.loads((package / "workflow.json").read_text())

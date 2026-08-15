@@ -162,7 +162,7 @@ below is also `PYTHONPATH=backend python3 -m openstategraph.cli …`.
 ```bash
 pip install -e "backend[ollama]"      # a checkout; or the built wheel, from anywhere
 
-openstategraph examples list                            # 21 worked examples, in the wheel
+openstategraph examples list                            # the worked examples, in the wheel
 openstategraph examples copy sql-qa                     # take one — the copy is yours
 openstategraph run ./workflows/sql-qa "How many customers are in the database?"
 openstategraph validate ./workflows/sql-qa              # exit 1 if it will not compile

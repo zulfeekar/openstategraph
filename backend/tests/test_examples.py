@@ -1,6 +1,6 @@
 """The gallery, as an adopter meets it — workflow-gallery ticket 07.
 
-The twenty examples (plus `nested-mounts-mid`, which exists only to be the
+The shipped examples (plus `nested-mounts-mid`, which exists only to be the
 middle of a three-deep chain) were staged in `workflows/` while they were being
 built. They are not the adopter's workflows, so that is the wrong home for them
 in a distribution: `workflows/` is *the user's* directory, resolved from their
@@ -34,7 +34,7 @@ from openstategraph import examples
 from openstategraph.scaffold import ScaffoldError, copy_example
 from openstategraph.workflows_root import workflows_root
 
-#: The gallery is twenty examples plus one middle level (catalogue row 11).
+#: The gallery is twenty-one examples plus one middle level (catalogue row 11).
 GALLERY_SIZE = 22
 
 

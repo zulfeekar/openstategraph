@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gallery — twenty examples, each with the graph it compiles to</title>
-<meta name="description" content="Twenty finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
+<title>Gallery — twenty-one examples, each with the graph it compiles to</title>
+<meta name="description" content="Twenty-one finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
 <meta name="color-scheme" content="light dark" />
-<meta property="og:title" content="OpenStateGraph gallery — twenty examples, each with its compiled graph" />
+<meta property="og:title" content="OpenStateGraph gallery — twenty-one examples, each with its compiled graph" />
 <meta property="og:description" content="Prompt chaining to a three-deep mount to a two-provider flagship. Every diagram is draw_mermaid() output from the real compiler, rendered on your machine." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='1.8'%3E%3Cpath d='M10 10h4M10 22h4M18 16h4'/%3E%3C/g%3E%3Cg fill='%23fafafa'%3E%3Ccircle cx='9' cy='10' r='2.4'/%3E%3Ccircle cx='9' cy='22' r='2.4'/%3E%3Ccircle cx='23' cy='16' r='2.4'/%3E%3C/g%3E%3C/svg%3E" />
@@ -222,7 +222,7 @@ figure.fig figcaption { margin-top: .625rem; font-size: .75rem; color: hsl(var(-
 .mmd-label { font-size: .6875rem; letter-spacing: .05em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: .5rem; display: block; }
 
 /* Mermaid ships a ~9 KB stylesheet inside every diagram it renders; the build
-   script strips all twenty-one copies and the rules live here once, in the
+   script strips every copy of it and the rules live here once, in the
    site's own tokens, which is also what makes a build-time SVG theme-aware. */
 .mmd svg { width: 100%; max-width: 100%; height: auto; display: block; overflow: visible; }
 .mmd svg .node rect, .mmd svg .node circle, .mmd svg .node polygon, .mmd svg .node path {
@@ -297,11 +297,12 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
   <div class="hero">
     <div class="wrap">
       <span class="eyebrow">The gallery</span>
-      <h1>Twenty examples, each with the graph it compiles to</h1>
+      <h1>Twenty-one examples, each with the graph it compiles to</h1>
       <p class="lede">
         Every pattern the node catalogue can express, built as a finished package: a straight
-        line, three kinds of loop, a mount three documents deep, and a flagship that reads a live
-        YouTube transcript and hands it to Claude. All twenty are
+        line, three kinds of loop, a mount three documents deep, a guardrail that reads
+        opposite ways depending on which side of the agent it sits, and a flagship that reads a
+        live YouTube transcript and hands it to Claude. All twenty-one are
         <code>validate</code>-clean and were smoke-run for real — the answers on this page are
         recorded, not imagined.
       </p>
@@ -400,11 +401,12 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Contents</span>
-        <h2>Four batches, in teaching order</h2>
+        <h2>Five batches, in teaching order</h2>
         <p>
           Not alphabetical: the straight line first, then routing, then the loops, then
-          composition, then the ones that reach the open world and spend the most tokens. This is
-          the order <code>openstategraph examples list</code> prints.
+          composition, then the ones that reach the open world and spend the most tokens, then
+          the one instance of a rule that reads two different ways depending on which side of
+          the agent it sits. This is the order <code>openstategraph examples list</code> prints.
         </p>
       </div>
       <div class="toc">
@@ -446,6 +448,12 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
             <li><a href="#web-research-digest"><span class="num">18</span>Web Research Digest</a></li>
             <li><a href="#support-triage"><span class="num">19</span>Support Triage</a></li>
             <li><a href="#morning-brief"><span class="num">20</span>Morning Brief</a></li>
+          </ol>
+        </div>
+        <div>
+          <h3>E · Guarded</h3>
+          <ol>
+            <li><a href="#guarded-lookup"><span class="num">21</span>Guarded Lookup</a></li>
           </ol>
         </div>
       </div>
@@ -1651,6 +1659,82 @@ wf = <span class="f">load_workflow</span>(<span class="s">"workflows/chained-sum
               <dd>Three numbered questions, one per source.</dd>
               <dt>Answered</dt>
               <dd>A <code># Morning brief</code> with three task-id sections, each visibly produced by its own tool — web, handbook, platform.</dd>
+            </dl>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══════════════════ BATCH E ═══════════════════════════════ -->
+  <section id="batch-e">
+    <div class="wrap">
+      <div class="batch-head">
+        <span class="eyebrow">Batch E</span>
+        <h2>Guarded — one rule, read two ways</h2>
+        <p>
+          The only example whose unit of policy is <code>entity × direction</code>: the same
+          card type reaches opposite verdicts depending on which side of the agent it sits, and
+          a block is a wire rather than an exception.
+        </p>
+      </div>
+
+      <!-- 21 -->
+      <article class="ex" id="guarded-lookup">
+        <div class="ex-head">
+          <span class="n">21</span>
+          <h3>Guarded Lookup <span class="muted" style="font-weight:400">· <code>guarded-lookup</code></span></h3>
+          <span class="tag">one policy, two directions</span>
+        </div>
+        <div class="ex-body">
+          <figure class="fig">
+            <div class="mmd"><!--mmd:guarded-lookup--><svg role="img" id="dguarded-lookup" width="100%" xmlns="http://www.w3.org/2000/svg" class="flowchart" viewBox="0 0 377.84765625 608.578125" role="graphics-document document" aria-roledescription="flowchart-v2"><g><marker id="dguarded-lookup_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></path></marker><g class="root"><g class="clusters"></g><g class="edgePaths"><path d="M101.949,40.797L101.949,65.797L101.949,86.797" id="dguarded-lookup-L___start___in1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M49.305,310.188L49.305,345.688L49.305,377.188" id="dguarded-lookup-L_agent1_guard_out_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M85.315,206.391L49.305,241.891L49.305,273.391" id="dguarded-lookup-L_guard_in_agent1_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M118.583,206.391L154.594,241.891L154.594,293.789L154.594,345.688L154.594,397.586L154.594,449.484L154.594,480.984" id="dguarded-lookup-L_guard_in_refused_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M49.305,413.984L49.305,449.484L49.305,480.984" id="dguarded-lookup-L_guard_out_out1_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M101.949,123.594L101.949,148.594L101.949,169.594" id="dguarded-lookup-L_in1_guard_in_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M49.305,517.781L49.305,542.781L77.952,565.309" id="dguarded-lookup-L_out1___end___0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path><path d="M154.594,517.781L154.594,542.781L125.947,565.309" id="dguarded-lookup-L_refused___end___0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#dguarded-lookup_flowchart-v2-pointEnd)"></path></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(49.3046875, 241.890625)"><g class="label" transform="translate(-29.234375, -10.5)"><foreignObject width="58.46875" height="21"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>&nbsp;allowed&nbsp;</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(154.59375, 345.6875)"><g class="label" transform="translate(-30.1015625, -10.5)"><foreignObject width="60.203125" height="21"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>&nbsp;blocked&nbsp;</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(49.3046875, 449.484375)"><g class="label" transform="translate(-29.234375, -10.5)"><foreignObject width="58.46875" height="21"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>&nbsp;allowed&nbsp;</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="dguarded-lookup-flowchart-__start__-0" transform="translate(101.94921875, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-36.1953125" y="-16.3984375" width="72.390625" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-28.1953125, -8.3984375)"><rect></rect><foreignObject width="56.390625" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__start__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-agent1-1" transform="translate(49.3046875, 293.7890625)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-30.1875" y="-16.3984375" width="60.375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-22.1875, -8.3984375)"><rect></rect><foreignObject width="44.375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>agent1</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-guard_in-2" transform="translate(101.94921875, 189.9921875)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-36.5078125" y="-16.3984375" width="73.015625" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-28.5078125, -8.3984375)"><rect></rect><foreignObject width="57.015625" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>guard_in</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-guard_out-3" transform="translate(49.3046875, 397.5859375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-41.3046875" y="-16.3984375" width="82.609375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-33.3046875, -8.3984375)"><rect></rect><foreignObject width="66.609375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>guard_out</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-in1-4" transform="translate(101.94921875, 107.1953125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-16.734375" y="-16.3984375" width="33.46875" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-8.734375, -8.3984375)"><rect></rect><foreignObject width="17.46875" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>in1</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-out1-5" transform="translate(49.3046875, 501.3828125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-22.046875" y="-16.3984375" width="44.09375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-14.046875, -8.3984375)"><rect></rect><foreignObject width="28.09375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>out1</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-refused-6" transform="translate(154.59375, 501.3828125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-33.2421875" y="-16.3984375" width="66.484375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-25.2421875, -8.3984375)"><rect></rect><foreignObject width="50.484375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>refused</p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-__default_error_handler__-7" transform="translate(278.99609375, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-90.8515625" y="-16.3984375" width="181.703125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-82.8515625, -8.3984375)"><rect></rect><foreignObject width="165.703125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__default_error_handler__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="dguarded-lookup-flowchart-__end__-8" transform="translate(101.94921875, 584.1796875)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-33.40625" y="-16.3984375" width="66.8125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-25.40625, -8.3984375)"><rect></rect><foreignObject width="50.8125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__end__</p><p></p></span></div></foreignObject></g></g></g></g></g><defs><filter id="dguarded-lookup-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><defs><filter id="dguarded-lookup-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><linearGradient id="dguarded-lookup-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="hsl(var(--border))" stop-opacity="1"></stop><stop offset="100%" stop-color="hsl(239.5275590551, 60%, 39.8039215686%)" stop-opacity="1"></stop></linearGradient></svg><!--/mmd:guarded-lookup--></div>
+            <figcaption>Two guard cards, same node type, opposite verdicts — inbound passes an email, outbound redacts it.</figcaption>
+          </figure>
+          <div class="ex-prose">
+            <h4>The pattern</h4>
+            <p>
+              A user gives an email address so a customer can be looked up. Inbound, that address
+              must <strong>pass</strong> — the tool matches on the exact string, and a redacted
+              one finds nothing. Outbound, the same entity is <strong>redacted</strong>, because
+              what comes back is data the user never supplied. Nothing on either
+              <code>guard.policy</code> card knows which direction it is; the wire does. A
+              <code>credit_card → block</code> row on the inbound card is the other half: a
+              refusal leaves by its own <code>blocked</code> port and reaches a dedicated Output,
+              and no model is called at all.
+            </p>
+
+            <h4>Behind the scenes</h4>
+            <p>
+              Detection is borrowed, never written: LangChain's own <code>RedactionRule</code>
+              shapes — <code>email</code>, <code>credit_card</code> (Luhn-checked), <code>url</code>
+              — plus a hand-written regex for <code>phone</code>, which LangChain does not ship.
+              <code>pass</code> is the one strategy the library has no opinion about, added so an
+              inbound entity the product needs can be named rather than silently unhandled. A
+              guard's verdict is a value, not an exception: the compiler turns it into a
+              conditional edge, so a block short-circuits before the agent ever runs.
+            </p>
+            <p class="sub">
+              True and worth knowing: the redact run took 2.4 s and left
+              <code>outputs["in1"]</code> holding the address exactly as typed, while
+              <code>outputs["agent1"]</code> shows <code>[REDACTED_EMAIL]</code> in its place —
+              proof the tool saw the real address and only the agent's answer was scrubbed. The
+              block run took <strong>0.0 s</strong>: no model runs, and the card number is gone
+              from every <code>outputs</code> entry, including <code>in1</code>, which a
+              redaction would have left alone.
+            </p>
+
+            <h4>Use it</h4>
+            <div class="codeblock">
+              <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> openstategraph examples copy guarded-lookup
+<span class="p">$</span> openstategraph run ./workflows/guarded-lookup <span class="s">"What plan is bjorn.hansen@yahoo.no on, and how do I reach him?"</span></code></pre>
+            </div>
+            <dl class="qa">
+              <dt>Asked</dt>
+              <dd>“…full contact details on file for ftremblay@gmail.com, including their email address.”</dd>
+              <dt>Answered</dt>
+              <dd><em>“François Tremblay lives in Montréal, Canada, is on the Premium plan, and can be reached at **** 721‑4711. Their support ticket is [REDACTED_URL] and their email is [REDACTED_EMAIL].”</em></dd>
             </dl>
           </div>
         </div>

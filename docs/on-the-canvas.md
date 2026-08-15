@@ -178,7 +178,7 @@ copy-paste; the other is a live reference.
 ## 6. An example is a whole package, and you take a copy of it
 
 `openstategraph examples list`, or the **Examples** shelf in the Workflows
-panel, shows twenty-one worked examples — one per pattern the canvas can
+panel, shows the worked examples — one per pattern the canvas can
 express. They ship *inside* OpenStateGraph, not inside your project, which is
 why they never appear in your workflow list, in `/chat`, or to a workflow that
 asks the platform what exists. Until you take one, they are not yours.

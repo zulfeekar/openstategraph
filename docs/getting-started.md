@@ -367,8 +367,8 @@ picker offers the same three:
 | `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
 | `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere with the `Workflow` card — "team" is a package shape, not a node type |
 
-Beside the templates sit the **examples**: twenty-one finished packages, one
-per pattern the canvas can express, shipped in the same wheel and listed by
+Beside the templates sit the **examples**: finished packages, one per pattern
+the canvas can express, shipped in the same wheel and listed by
 `openstategraph examples list` (or the editor's **Workflows → Examples**
 shelf). The difference is what you get: a template is rendered into an
 empty-ish package for you to fill; an example is copied whole — tests,
