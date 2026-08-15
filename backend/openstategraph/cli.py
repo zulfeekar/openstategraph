@@ -397,6 +397,13 @@ def cmd_examples_copy(args: argparse.Namespace) -> int:
     from openstategraph import examples
     from openstategraph.scaffold import ScaffoldError, copy_example
 
+    if args.all and args.slug:
+        return _usage(f"copy {args.slug} or copy --all, not both — they ask for different things")
+    if not args.all and not args.slug:
+        return _usage("examples copy needs a slug, or --all (see `openstategraph examples list`)")
+    if args.all:
+        return _copy_every_example(args)
+
     root = _write_root(args)
     try:
         written = copy_example(root, args.slug)
@@ -412,9 +419,58 @@ def cmd_examples_copy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _copy_every_example(args: argparse.Namespace) -> int:
+    """`examples copy --all` — install-experience T8.
+
+    There is no `eject` verb, and there will not be one: `examples copy` is
+    already eject semantics — take a finished package out of the wheel into
+    your project, severed — and a second word for one act is the defect
+    CLAUDE.md carries two worked cases of. What the story genuinely asked for
+    and did not exist is the *plural*, and this is it.
+
+    The size and count preamble prints **before** the writer is called, so a
+    1 MB database is announced rather than discovered.
+    """
+    from openstategraph.scaffold import ScaffoldError, copy_all_examples, gallery_footprint
+
+    root = _write_root(args)
+    footprint = gallery_footprint()
+    print(
+        textwrap.fill(
+            f"this copies all {footprint.packages} examples into {root} — about "
+            f"{footprint.human}, of which {footprint.largest_name} is "
+            f"{footprint.largest_human}.",
+            width=88,
+            break_on_hyphens=False,
+        )
+    )
+
+    try:
+        written = copy_all_examples(root)
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    print(f"copied {len(written)} examples into {root}")
+    print(
+        textwrap.fill(
+            ", ".join(path.name for path in written),
+            width=88,
+            initial_indent="  ",
+            subsequent_indent="  ",
+            break_on_hyphens=False,
+        )
+    )
+    print(f'next: openstategraph run {written[0]} "your question"')
+    return EXIT_OK
+
+
 def cmd_knowledge_build(args: argparse.Namespace) -> int:
     """`api.knowledge_build.run_build` — the same path the editor's button uses."""
-    from openstategraph.api.knowledge_build import UnknownSourceError, resolve_build_model, run_build
+    from openstategraph.api.knowledge_build import (
+        UnknownSourceError,
+        resolve_build_model,
+        run_build,
+    )
     from openstategraph.schema import normalize_document
 
     package = Path(args.package).expanduser().resolve()
@@ -480,8 +536,7 @@ def cmd_knowledge_list(args: argparse.Namespace) -> int:
         from openstategraph.knowledge import PackageKnowledge
 
         entries = [
-            (e.name, e.hint, "")
-            for e in PackageKnowledge(package, knowledge_dir=override).topics()
+            (e.name, e.hint, "") for e in PackageKnowledge(package, knowledge_dir=override).topics()
         ]
     else:
         from openstategraph.api import knowledge_curation
@@ -726,9 +781,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         # browser's connection queues rather than being refused.
         webbrowser.open(urls["editor"])
 
-    uvicorn.Server(
-        uvicorn.Config("openstategraph.api.main:app", host=args.host, port=port)
-    ).run(sockets=[listener])
+    uvicorn.Server(uvicorn.Config("openstategraph.api.main:app", host=args.host, port=port)).run(
+        sockets=[listener]
+    )
     return EXIT_OK
 
 
@@ -894,7 +949,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # No `choices`: the gallery has twenty-one entries and argparse would print
     # all of them on every usage error. `examples.get` raises with the list.
-    example_copy.add_argument("slug", help="see `openstategraph examples list`")
+    # Optional so `--all` can stand alone; `cmd_examples_copy` supplies the
+    # usage error argparse would otherwise give, with the same exit code.
+    example_copy.add_argument("slug", nargs="?", help="see `openstategraph examples list`")
+    example_copy.add_argument(
+        "--all",
+        action="store_true",
+        help="copy every example, all-or-nothing; prints the size first",
+    )
     example_copy.add_argument(
         "--root", help="where to copy it (default: the project's workflows root)"
     )
@@ -1051,6 +1113,7 @@ def cmd_env_example(_args: argparse.Namespace) -> int:
 
 
 from openstategraph.dotenv import load_env_file
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     """The entry point. Returns the exit code rather than calling `sys.exit`,

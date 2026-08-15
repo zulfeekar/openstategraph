@@ -224,9 +224,7 @@ class TestTemplates:
     invent. The catalogue itself is tested in `test_templates.py`; what belongs
     here is the *command line* over it, including the two exit codes."""
 
-    def test_the_default_is_minimal_so_a_first_run_is_one_model_call(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_default_is_minimal_so_a_first_run_is_one_model_call(self, tmp_path: Path) -> None:
         cli.main(["new", "my-flow", "--root", str(tmp_path)])
         document = json.loads((tmp_path / "my-flow" / "workflow.json").read_text())["document"]
 
@@ -291,9 +289,7 @@ class TestTemplates:
         assert code == cli.EXIT_USAGE
         assert not (tmp_path / "a-team").exists()
 
-    def test_every_template_scaffolds_a_package_the_cli_can_validate(
-        self, tmp_path: Path
-    ) -> None:
+    def test_every_template_scaffolds_a_package_the_cli_can_validate(self, tmp_path: Path) -> None:
         """The end-to-end claim, through the commands rather than the API: a
         template that does not survive `new` + `validate` is worse than none."""
         from openstategraph import templates
@@ -359,15 +355,51 @@ class TestExamples:
         assert "chained-summarizer" in capsys.readouterr().err
         assert list(tmp_path.iterdir()) == []
 
-    def test_copying_over_an_existing_package_is_refused(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_copying_over_an_existing_package_is_refused(self, tmp_path: Path, capsys) -> None:
         (tmp_path / "chained-summarizer").mkdir()
 
         code = cli.main(["examples", "copy", "chained-summarizer", "--root", str(tmp_path)])
 
         assert code == cli.EXIT_FAILURE
         assert "already exists" in capsys.readouterr().err
+
+    def test_copy_all_says_what_it_costs_before_it_costs_it(self, tmp_path: Path, capsys) -> None:
+        """install-experience T8. The size line prints **before** writing,
+        because a 1 MB database landing in somebody's repository unannounced is
+        a surprise this project otherwise refuses."""
+        from openstategraph import examples
+
+        code = cli.main(["examples", "copy", "--all", "--root", str(tmp_path)])
+        printed = capsys.readouterr().out
+
+        assert code == cli.EXIT_OK
+        assert str(len(examples.slugs())) in printed
+        assert "MB" in printed or "KB" in printed
+        for slug in examples.slugs():
+            assert (tmp_path / slug / "workflow.json").is_file()
+
+    def test_copy_all_refuses_the_whole_set_on_one_clash(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "sql-qa").mkdir()
+
+        code = cli.main(["examples", "copy", "--all", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_FAILURE
+        assert "sql-qa" in capsys.readouterr().err
+        assert [path.name for path in tmp_path.iterdir()] == ["sql-qa"]
+
+    def test_copy_all_with_a_slug_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
+        """Exit 2: asking for one *and* all of them is not a copy that failed,
+        it is a command line that means two things."""
+        code = cli.main(["examples", "copy", "sql-qa", "--all", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_USAGE
+        assert list(tmp_path.iterdir()) == []
+
+    def test_copy_with_neither_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
+        code = cli.main(["examples", "copy", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_USAGE
+        assert list(tmp_path.iterdir()) == []
 
     def test_examples_needs_a_subcommand(self) -> None:
         with pytest.raises(SystemExit) as caught:
@@ -386,9 +418,7 @@ class TestKnowledge:
         assert code == cli.EXIT_OK
         assert "- invoice — One row per sale." in capsys.readouterr().out
 
-    def test_list_names_the_owner_and_badges_a_moved_source(
-        self, package: Path, capsys
-    ) -> None:
+    def test_list_names_the_owner_and_badges_a_moved_source(self, package: Path, capsys) -> None:
         """Ownership and staleness are on disk; a terminal can now read them.
 
         Both facts were recorded from the first build and surfaced only by the
@@ -489,7 +519,12 @@ class TestKnowledge:
         monkeypatch.setattr(
             knowledge_build,
             "run_build",
-            lambda *a, **k: {"written": ["invoice"], "skipped": [], "collisions": [], "warnings": []},
+            lambda *a, **k: {
+                "written": ["invoice"],
+                "skipped": [],
+                "collisions": [],
+                "warnings": [],
+            },
         )
 
         code = cli.main(["knowledge", "build", str(package)])
@@ -572,7 +607,9 @@ class TestUsage:
 
 
 class TestCwdIndependence:
-    def test_every_path_comes_from_the_arguments(self, package: Path, tmp_path, monkeypatch) -> None:
+    def test_every_path_comes_from_the_arguments(
+        self, package: Path, tmp_path, monkeypatch
+    ) -> None:
         """A command that only works inside the checkout is a command an
         adopter cannot use."""
         elsewhere = tmp_path / "elsewhere"
@@ -637,9 +674,7 @@ class TestServe:
 
         assert os.environ["OPENSTATEGRAPH_SERVE_STATIC"] == "0"
 
-    def test_an_explicit_port_that_is_taken_fails_with_the_way_out(
-        self, served, capsys
-    ) -> None:
+    def test_an_explicit_port_that_is_taken_fails_with_the_way_out(self, served, capsys) -> None:
         held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         held.bind(("127.0.0.1", 0))
         held.listen(1)
@@ -655,9 +690,7 @@ class TestServe:
         assert "--port 0" in error
         assert "sockets" not in served  # nothing was started
 
-    def test_no_port_flag_never_fails_because_8000_is_busy(
-        self, served, monkeypatch
-    ) -> None:
+    def test_no_port_flag_never_fails_because_8000_is_busy(self, served, monkeypatch) -> None:
         held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         held.bind(("127.0.0.1", 0))
         held.listen(1)

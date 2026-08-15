@@ -198,6 +198,19 @@ upstream reaches back into it.
 Three examples mount others, so a copy brings those too (`nested-mounts` writes
 three folders). The command says which before it writes them.
 
+`openstategraph examples copy --all` takes the lot — all-or-nothing, so one
+folder already in the way means nothing is written, and the size and count are
+printed *before* the first byte, because one of these examples ships a 1 MB
+database.
+
+**The verb is `copy`, and there is no `eject`.** They would be two names for
+one act: taking a finished package out of the install and into your project,
+severed. And half of "eject" would be a lie — in the ecosystem the word borrows
+from, ejecting is the hidden thing leaving the framework for good, while these
+files stay exactly where they were, read-only and replaced on your next
+upgrade. **A package is a definition. A template creates one. A mount
+instantiates one. An example is a finished package you take a copy of.**
+
 | | Original | If the original changes later |
 | --- | --- | --- |
 | **Mount a workflow** | a package you can open and edit | **every instance changes** |

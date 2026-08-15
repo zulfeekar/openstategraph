@@ -193,6 +193,104 @@ def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
     return tuple(written)
 
 
+@dataclass(frozen=True)
+class GalleryFootprint:
+    """What taking the whole gallery costs, measured before it is taken.
+
+    install-experience T8. The size is announced rather than discovered:
+    `sql-qa` ships a 1 MB sqlite database, and a megabyte landing in somebody's
+    repository unannounced is the kind of surprise this project refuses
+    everywhere else.
+    """
+
+    #: How many packages `copy_all_examples` would write.
+    packages: int
+    #: Their total size on disk.
+    bytes: int
+    #: The single largest file, relative to the gallery root — derived, so the
+    #: day it stops being the Chinook database this still tells the truth.
+    largest_name: str
+    largest_bytes: int
+
+    @property
+    def human(self) -> str:
+        """`1.2 MB`. Decimal, because that is what a filesystem reports."""
+        return _human_bytes(self.bytes)
+
+    @property
+    def largest_human(self) -> str:
+        return _human_bytes(self.largest_bytes)
+
+
+def _human_bytes(count: int) -> str:
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f} MB"
+    if count >= 1_000:
+        return f"{count / 1_000:.0f} KB"
+    return f"{count} bytes"
+
+
+def gallery_footprint() -> GalleryFootprint:
+    """Measure the shipped gallery. Reads sizes, opens nothing."""
+    from openstategraph import examples
+
+    total = 0
+    largest: tuple[str, int] = ("", 0)
+    for path in examples.DATA.rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        size = path.stat().st_size
+        total += size
+        if size > largest[1]:
+            largest = (str(path.relative_to(examples.DATA)), size)
+    return GalleryFootprint(
+        packages=len(examples.slugs()),
+        bytes=total,
+        largest_name=largest[0],
+        largest_bytes=largest[1],
+    )
+
+
+def copy_all_examples(root: Path | str) -> tuple[Path, ...]:
+    """Copy every shipped example into `root`. install-experience T8.
+
+    The plural of `copy_example`, and it inherits every one of that function's
+    rules rather than inventing new ones: no rename, no substitution, no
+    envelope edit, and **all-or-nothing over the whole set** — one clash
+    anywhere and not a byte is written, because a half-copied gallery is a
+    directory the next attempt then refuses to touch.
+
+    The transitive closure is already handled: a mounted package is in the
+    catalogue too, so copying the catalogue copies every mount by definition.
+    """
+    from openstategraph import examples
+
+    root = Path(root)
+    targets = [(slug, root / slug) for slug in examples.slugs()]
+    clashes = [str(path) for _, path in targets if path.exists()]
+    if clashes:
+        raise ScaffoldError(
+            f"{', '.join(clashes)} already exists — "
+            f"copying every example would overwrite it, so nothing was written"
+        )
+
+    root.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    try:
+        for slug, path in targets:
+            shutil.copytree(
+                examples.get(slug).directory,
+                path,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+            written.append(path)
+    except Exception:
+        for path in written:
+            shutil.rmtree(path, ignore_errors=True)
+        raise
+    return tuple(written)
+
+
 # --------------------------------------------------------------------- #
 # The project — install-experience T6
 # --------------------------------------------------------------------- #
@@ -374,11 +472,14 @@ def _elected_model() -> str | None:
 
 
 __all__ = [
+    "GalleryFootprint",
     "InitResult",
     "ScaffoldError",
     "SLUG_PATTERN",
     "STARTER_SLUG",
+    "copy_all_examples",
     "copy_example",
+    "gallery_footprint",
     "init_project",
     "new_package",
     "new_team",

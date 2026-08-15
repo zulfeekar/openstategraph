@@ -196,3 +196,64 @@ class TestCopyingSeversIt:
         before = digest(source)
         copy_example(tmp_path, "chained-summarizer")
         assert digest(source) == before
+
+
+class TestCopyingAllOfThem:
+    """`examples copy --all` — install-experience T8.
+
+    The one thing story three genuinely asked for that did not exist. The verb
+    stays `copy`: `eject` would be a second name for one act, and the lexicon
+    sentence it would falsify is already published — *an example is a finished
+    package you take a copy of*.
+
+    Every rule is inherited rather than invented: all-or-nothing over the whole
+    set before the first byte, exactly what `copy_example` already does for a
+    mount closure; no rename, no substitution, no envelope edit.
+    """
+
+    def test_it_copies_the_whole_catalogue(self, tmp_path: Path) -> None:
+        from openstategraph.scaffold import copy_all_examples
+
+        written = copy_all_examples(tmp_path)
+
+        assert {path.name for path in written} == set(examples.slugs())
+        for path in written:
+            assert (path / "workflow.json").is_file()
+
+    def test_one_clash_anywhere_writes_nothing_at_all(self, tmp_path: Path) -> None:
+        """All-or-nothing over the *whole set*, not per package. A half-copied
+        gallery is a directory the next attempt then refuses to touch."""
+        from openstategraph.scaffold import copy_all_examples
+
+        (tmp_path / "sql-qa").mkdir()
+
+        with pytest.raises(ScaffoldError) as excinfo:
+            copy_all_examples(tmp_path)
+
+        assert "sql-qa" in str(excinfo.value)
+        assert [path.name for path in tmp_path.iterdir()] == ["sql-qa"]
+
+    def test_the_footprint_is_known_before_anything_is_written(self) -> None:
+        """A 1 MB database landing in somebody's repository unannounced is a
+        surprise this project otherwise refuses, so the command can say what it
+        costs *before* it costs it."""
+        from openstategraph.scaffold import gallery_footprint
+
+        footprint = gallery_footprint()
+
+        assert footprint.packages == len(examples.slugs())
+        assert footprint.bytes > 0
+        assert footprint.largest_name and footprint.largest_bytes > 0
+        assert footprint.largest_bytes <= footprint.bytes
+
+    def test_the_footprint_names_the_biggest_file(self) -> None:
+        """Derived, never a hand-kept fact: today it is the Chinook database,
+        and the day it is not, this still tells the truth."""
+        from openstategraph.scaffold import gallery_footprint
+
+        biggest = max(
+            (path for path in examples.DATA.rglob("*") if path.is_file()),
+            key=lambda path: path.stat().st_size,
+        )
+
+        assert gallery_footprint().largest_name == str(biggest.relative_to(examples.DATA))
