@@ -116,3 +116,22 @@ exists and where it goes, that the rubric demands sources *and* forgives a
 quoted failure, and that a refused host comes back `not ok` with a readable
 message and never as an empty success. The refusal test needs no network: the
 SSRF guard resolves the name locally and stops before a socket is opened.
+
+## It resists both fixture formats, and the reason is the network
+
+`tests/` asserts the document and the SSRF refusal — both free and both
+reproducible. The digest itself is neither.
+
+"What changed in the most recent Python release" has a different correct answer
+every few months, so an `evals/*.eval.json` would commit a reference output
+with a shelf life, and `refusal_accuracy` in particular becomes noise the
+moment a verdict can turn on whether a fetch succeeded — the exact failure
+`docs/evaluation.md` records against the old `u04` weather case. A shape
+assertion over a run is worse here than elsewhere, because **the network
+failure is part of the expectation**: the row's real acceptance test is that a
+refused host surfaces as a readable tool error rather than a silent stub, and a
+fixture that stubbed the network to make itself deterministic would delete the
+thing being tested.
+
+Hence the failure run above is recorded beside the working one. See
+`docs/evaluation.md` §"Grading during a run vs grading a dataset".

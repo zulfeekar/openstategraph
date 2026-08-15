@@ -11,10 +11,15 @@ refuses that document; this test refuses it earlier and says why.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
+
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+    node_of,
+)
 
 from openstategraph.abc.orchestrator import archetype_key
 
@@ -23,30 +28,17 @@ PACKAGE = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def document() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
-
-
-def _node(document: dict, node_id: str) -> dict:
-    return next(n for n in document["nodes"] if n["id"] == node_id)
+    return load_document(PACKAGE)
 
 
 def _workers(document: dict) -> list[dict]:
     return [n for n in document["nodes"] if n["type"] == "orchestrate.worker"]
 
 
-def test_the_model_is_pinned_to_ollama_cloud(document: dict) -> None:
-    # The catalogue asked for the bare `ollama:` prefix, on the belief that it
-    # resolves to OLLAMA_CLOUD_MODEL. It does not — `resolve_model` returns any
-    # truthy request verbatim, and `init_chat_model("ollama:")` fails with an
-    # empty model name (gallery ticket 12). Until that lands, the pin is what
-    # the three packages that already shipped use, and it keeps the gallery on
-    # Ollama cloud on a machine where ANTHROPIC_API_KEY would otherwise win the
-    # no-request fallback.
-    assert document["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(document: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(document)
 
 
 def test_two_worker_archetypes_with_distinct_dispatch_keys(document: dict) -> None:
@@ -92,4 +84,4 @@ def test_the_join_fans_in_because_candidate_is_the_one_unlimited_input(document:
 
 
 def test_the_supervisor_may_plan_more_than_two_subtasks(document: dict) -> None:
-    assert _node(document, "lead1")["data"]["maxSubtasks"] >= 2
+    assert node_of(document, "lead1")["data"]["maxSubtasks"] >= 2

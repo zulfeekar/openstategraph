@@ -17,23 +17,21 @@ question; the smoke run records it.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import assert_document_shape, load_document
 
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parent
 
 
 def document(slug: str) -> dict:
-    envelope = json.loads((ROOT / slug / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    doc = envelope["document"]
-    assert doc["version"] == 3
-    return doc
+    """A sibling package's document, by slug. Composition examples read
+    more than their own file, which is the point of them."""
+    return load_document(ROOT / slug)
 
 
 @pytest.fixture(scope="module")
@@ -50,8 +48,10 @@ def closes_a_loop(doc: dict) -> bool:
     return any("revise" in branches for branches in plan.conditional.values())
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_the_two_branches_reach_two_different_packages(doc: dict) -> None:

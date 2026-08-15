@@ -18,13 +18,13 @@ question, already recorded there.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.api.mount_resolution import resolve_mount_document
 from openstategraph.api.workflow_store import WorkflowStore
+from openstategraph.package_testing import assert_document_shape, load_document
 
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parent
@@ -38,11 +38,9 @@ MOUNT_PATH = ("mount-mid", "mount-inner")
 
 
 def document(slug: str) -> dict:
-    envelope = json.loads((ROOT / slug / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    doc = envelope["document"]
-    assert doc["version"] == 3
-    return doc
+    """A sibling package's document, by slug. Composition examples read
+    more than their own file, which is the point of them."""
+    return load_document(ROOT / slug)
 
 
 @pytest.fixture(scope="module")
@@ -58,12 +56,12 @@ def mount_slugs(doc: dict) -> dict[str, str]:
     }
 
 
-def test_the_model_is_pinned_to_ollama_cloud() -> None:
-    # Gallery ticket 12: the bare `ollama:` prefix does not resolve, and
-    # omitting the field lets a machine with ANTHROPIC_API_KEY win the
-    # no-request fallback. Both levels pin.
+def test_the_baseline_every_package_shares() -> None:
+    """Both levels this package ships, since a chain is only as pinned as its
+    weakest link. The third is `chained-summarizer`, which asserts its own.
+    `openstategraph.package_testing` owns the reasons for each check."""
     for slug in CHAIN[:2]:
-        assert document(slug)["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+        assert_document_shape(document(slug))
 
 
 def test_each_level_is_input_mount_output_and_nothing_else() -> None:

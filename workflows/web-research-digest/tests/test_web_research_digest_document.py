@@ -18,12 +18,15 @@ it — is what the two recorded smoke runs in `AGENTS.md` are for.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 from openstategraph.prebuilt_web import WEB_TOOLS
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -35,11 +38,7 @@ UNREACHABLE = "https://127.0.0.1/changelog"
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -47,8 +46,10 @@ def web_tools() -> dict:
     return {tool.name: tool for tool in WEB_TOOLS}
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_both_web_atoms_are_on_the_one_agent(doc: dict) -> None:
@@ -78,10 +79,6 @@ def test_the_grader_can_send_it_back(doc: dict) -> None:
     """
     plan = WorkflowCompiler().plan(doc)
     assert plan.conditional["grader1"] == {"revise": "digest1", "pass": "out1"}
-
-
-def test_it_compiles_without_a_warning(doc: dict) -> None:
-    assert WorkflowCompiler().plan(doc).warnings == []
 
 
 def test_the_rubric_demands_a_source_and_forgives_a_failure(doc: dict) -> None:

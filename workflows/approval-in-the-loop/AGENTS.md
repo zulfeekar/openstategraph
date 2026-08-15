@@ -84,3 +84,21 @@ openstategraph threads show smoke-approval-1 --workflows-root workflows
 
 The resumed stream accumulates its terminal frame from the frames of *that
 segment*, so everything before the pause is missing from it. Gallery ticket 25.
+
+## It resists both fixture formats, and the reason is the interrupt
+
+`tests/` here asserts the **document** — the cycle, the ports, the pin — the
+same as every other package, through `openstategraph.package_testing`. What it
+does not do, and must not, is assert the **answer**.
+
+This example has no answer until a person supplies one. The run pauses at
+`human.approval` and what ships depends on what the reviewer typed, so an
+`evals/*.eval.json` has nothing to hold a reference output *of* — the gold
+column would be a decision, not a result — and a shape assertion over a
+completed run would have to script the person first, at which point it grades
+the script. Both formats measure the stub.
+
+The approve and reject paths are therefore driven through the HTTP API by hand
+and **recorded in the smoke run above**, which is the honest place for a fact
+that needs a human in it. See `docs/evaluation.md` §"Grading during a run vs
+grading a dataset" for why that is a third category rather than a gap.

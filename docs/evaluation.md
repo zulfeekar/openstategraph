@@ -10,6 +10,78 @@ command:
 openstategraph eval ./workflows/chinook-assistant
 ```
 
+## Grading during a run vs grading a dataset
+
+Two things in this system judge an answer, they share almost all their
+machinery, and confusing them is the most common way to misread everything
+below. A `route.grader` node judges one candidate mid-run. `openstategraph
+eval` judges a whole dataset offline. Same judge — **different consumer,
+different clock**:
+
+> A grader's verdict is an **edge**. `pass` or `revise`, consumed by the graph,
+> acted on in milliseconds, spent immediately.
+>
+> An eval's verdict is a **destination**. A scorecard, consumed by a human or a
+> CI gate, kept and diffed against the next one.
+
+The code says it more precisely than prose can. `BaseGrader.grade()` runs its
+deterministic checks first and only then asks a model
+(`backend/openstategraph/abc/grader.py`); `runner._grade()` runs deterministic
+checks — recover the SQL, execute the gold query — and never asks a model at
+all (`backend/openstategraph/evaluation/runner.py`). Both end in a fixed
+verdict vocabulary. They are the same function at two time scales.
+
+### Which half of the field we actually hold
+
+The industry vocabulary splits evaluators twice: **offline** (pointed at a
+dataset, reference outputs available) vs **online** (pointed at live runs, no
+references), and **LLM-judge** vs **deterministic code**. We occupy one
+diagonal of that square, on purpose:
+
+| | Deterministic code | LLM judge |
+| --- | --- | --- |
+| **Offline** — a committed dataset | ✅ `openstategraph eval` — execution accuracy | ❌ rejected, with a named trigger: [Should we add an LLM judge?](#should-we-add-an-llm-judge) |
+| **Online** — a live run | ❌ no trace store, so nothing to point one at | ✅ `route.grader`, `RubricMiddleware` — and it *steers* the run rather than observing it |
+
+Both blanks are decisions rather than oversights, and they are not the same
+decision. The offline judge is refused below. The online *monitor* is missing
+because we have no tracing project to aim one at — which is also why the
+scorecard's `cost` is usually `null` (`NO_COST_SIGNAL`). Everything the eval
+vocabulary offers that we lack — online evaluation, backtesting, experiment
+comparison, per-run token cost — is downstream of that one absent capability,
+not of an eval feature we skipped.
+
+The in-graph judge has no equivalent on the other side of that table, and the
+difference is worth naming: a hosted judge observes a run from outside and
+writes a score; ours sits on an edge and changes where the run goes next.
+
+### The third thing, which grades nothing
+
+A package's `tests/` directory is neither of the above and is easy to mistake
+for the first. It asserts the **document and its compiled plan** — the wiring,
+the ports, the model pin, a warning-free assembly — via
+`openstategraph.package_testing`. It calls no model, costs nothing, and runs on
+every `pytest`.
+
+| | asserts | costs | when |
+| --- | --- | --- | --- |
+| `route.grader` | a candidate answer, in-graph | a model call | every run |
+| `openstategraph eval` | a dataset of known answers | a model call per case | deliberately |
+| `<package>/tests/` | the document and its plan | nothing | every `pytest` |
+
+That split is why nineteen of the twenty gallery packages carry a `tests/` file
+and only `sql-qa` carries an `evals/` directory: a shape is an **assertion**
+(binary, no reference corpus needed), while an answer's quality is a **metric**
+(fuzzy, useful in relative terms). Three packages resist even the assertion and
+say so in their own `AGENTS.md` — `approval-in-the-loop` (the answer does not
+exist until a person supplies one), `youtube-trend-digest` (the correct answer
+changes daily) and `web-research-digest` (the network failure *is* the
+expectation). For those, a recorded smoke run is the honest artifact.
+
+**Eval is not a third axis.** It is the same judgement machinery pointed at a
+dataset instead of at a run, so there is no eval node on the canvas and there
+should not be one. CLAUDE.md's lexicon carries the one-line version.
+
 ## The metric: execution accuracy
 
 **Execution accuracy (EX)** runs the generated SQL and the gold SQL against the
@@ -238,4 +310,5 @@ prompt and model version committed — becomes worth its cost.
 | `backend/openstategraph/evaluation/recovery.py` | recovering the SQL from an answer written for a human |
 | `backend/openstategraph/evaluation/scoring.py` | verdicts, the scorecard, and what it does not claim |
 | `backend/openstategraph/evaluation/runner.py` | the loop, over `load_workflow` — no second execution path |
+| `backend/openstategraph/package_testing.py` | the third thing above: what a package's `tests/` asserts about its document, shared by all of them |
 | `scripts/refresh_eval_expectations.py` | regenerate the committed rows |

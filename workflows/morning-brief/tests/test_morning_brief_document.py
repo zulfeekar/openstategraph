@@ -24,7 +24,6 @@ cross-reference resolvable.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -32,6 +31,10 @@ import pytest
 from openstategraph.abc.orchestrator import Orchestrator, archetype_key
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 from openstategraph.knowledge import PackageKnowledge
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -45,11 +48,7 @@ SMOKE_QUESTION = (
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -62,12 +61,10 @@ def knowledge() -> PackageKnowledge:
     return PackageKnowledge(PACKAGE)
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
-
-
-def test_it_compiles_without_a_warning(plan) -> None:
-    assert plan.warnings == []
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_three_workers_fan_out_from_one_supervisor(plan) -> None:

@@ -20,23 +20,22 @@ in `AGENTS.md`.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -44,8 +43,10 @@ def plan(doc: dict):
     return WorkflowCompiler().plan(doc)
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_every_control_molecule_is_present(doc: dict) -> None:
@@ -63,10 +64,6 @@ def test_three_desks_are_three_exclusive_branches(plan) -> None:
         "b-technical": "a-technical",
         "b-account": "a-account",
     }
-
-
-def test_it_compiles_without_a_warning(plan) -> None:
-    assert plan.warnings == []
 
 
 def test_the_run_has_two_ends(plan) -> None:

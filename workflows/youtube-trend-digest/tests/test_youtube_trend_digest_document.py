@@ -26,12 +26,12 @@ the one thing a test must not pretend to know.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import assert_document_shape, load_document
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -41,11 +41,7 @@ SYNTHESIS_MODEL = "anthropic/claude-haiku-4-5"
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -53,12 +49,11 @@ def plan(doc: dict):
     return WorkflowCompiler().plan(doc)
 
 
-def test_the_workflow_default_is_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
-
-
-def test_it_compiles_without_a_warning(plan) -> None:
-    assert plan.warnings == []
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """The *workflow default* is the pin; the paid node's override is asserted
+    separately below, and the two spellings are the trap this file exists for.
+    `openstategraph.package_testing` owns the reasons for each check."""
+    assert_document_shape(doc)
 
 
 def test_the_chain_is_find_then_read_then_synthesise(plan) -> None:

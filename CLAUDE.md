@@ -168,6 +168,7 @@ reads, so the user-facing words are fixed:
 | **Template** | a starting document; it produces a workflow and stops existing | a node type; a reusable definition |
 | **Package** | the reusable definition — `workflows/<slug>/`, the thing a mount points at | a PyPI distribution, in user-facing copy |
 | **Instance** | one mount of a package, carrying its own `data.overrides` | a copy of the package |
+| **Eval** | grading a workflow **offline** against a committed dataset of questions whose answers are known — `openstategraph eval`, `<package>/evals/*.eval.json` | the grader node's in-run judgement, which routes rather than scores |
 | *(internal only)* the loop | `create_agent` / ReAct | anything in UI copy |
 
 #### "Template" also meant two things, and this settles it
@@ -203,6 +204,18 @@ answer to "how do I add a feedback loop" is two edges rather than a different
 tool. The genuine *outer* loop of that framing — retry and stopping policy
 around the whole thing — is `retry_policy` / `timeout` / `set_node_defaults`,
 graph-assembly parameters that live on the workflow (see below), never a node.
+
+**Eval is not a third axis.** Graph and loop are two shapes of one substrate —
+both are drawn, and both compile into the `StateGraph`. An eval is neither
+drawn nor compiled: it is the same judgement machinery pointed at a dataset
+instead of at a run. A grader's verdict is an **edge** (`pass`/`revise`,
+consumed by the graph); an eval's verdict is a **destination** (a scorecard,
+consumed by a human or a CI gate). Same judge, different consumer, different
+clock. So there is no eval node, and there should not be one — the dataset is a
+package file, and if the editor ever surfaces an eval it is a panel, not a node.
+`docs/evaluation.md` §"Grading during a run vs grading a dataset" carries the
+long version, including the third thing that is neither: a package's `tests/`,
+which asserts the *document* and calls no model at all.
 
 ### Agent type is a developer choice, and it mirrors the library's own layering
 

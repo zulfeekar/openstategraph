@@ -9,10 +9,16 @@ figures that exist nowhere but in it.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
+
+from openstategraph.package_testing import (
+    assert_document_shape,
+    edges_of,
+    load_document,
+    node_of,
+)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -27,30 +33,17 @@ TOPICS = {
 
 @pytest.fixture(scope="module")
 def document() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
-def _node(document: dict, node_id: str) -> dict:
-    return next(n for n in document["nodes"] if n["id"] == node_id)
-
-
-def _edges(document: dict) -> set[tuple[str, str, str, str]]:
-    return {
-        (e["source"]["nodeId"], e["source"]["portId"], e["target"]["nodeId"], e["target"]["portId"])
-        for e in document["edges"]
-    }
-
-
-def test_the_model_is_pinned_to_ollama_cloud(document: dict) -> None:
-    assert document["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(document: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(document)
 
 
 def test_the_cycle_re_enters_retrieval_not_generation(document: dict) -> None:
-    assert _edges(document) == {
+    assert edges_of(document) == {
         ("in1", "text", "rewrite1", "prompt"),
         ("rewrite1", "result", "retrieve1", "prompt"),
         ("know1", "tool", "retrieve1", "tools"),
@@ -75,7 +68,7 @@ def test_the_revise_edge_lands_on_a_node_that_is_not_the_candidates_producer(
 def test_the_rewriter_is_upstream_of_the_retriever(document: dict) -> None:
     """`agent.prompt` is `maxConnections: 1`, so the retriever's prompt IS the
     rewritten question. A rewriter beside the retriever could hand it nothing."""
-    assert ("rewrite1", "result", "retrieve1", "prompt") in _edges(document)
+    assert ("rewrite1", "result", "retrieve1", "prompt") in edges_of(document)
 
 
 def test_the_rewriter_is_told_to_translate_answer_feedback_into_a_question(
@@ -84,7 +77,7 @@ def test_the_rewriter_is_told_to_translate_answer_feedback_into_a_question(
     """The condition attached to organisms-37's 'yes': a grader writes about an
     answer, and a node on a `feedback` port must be told to turn that into a
     different question. Without this the edge is legal and mismatched."""
-    prompt = _node(document, "rewrite1")["data"]["systemPrompt"].lower()
+    prompt = node_of(document, "rewrite1")["data"]["systemPrompt"].lower()
     assert "ask a different question" in prompt
 
 
@@ -94,7 +87,7 @@ def test_the_knowledge_store_holds_exactly_the_topics_both_prompts_name(
     on_disk = {p.stem for p in (PACKAGE / "knowledge").glob("*.md")}
     assert on_disk == TOPICS
     for node_id in ("rewrite1", "retrieve1"):
-        body = _node(document, node_id)["data"]["systemPrompt"]
+        body = node_of(document, node_id)["data"]["systemPrompt"]
         for topic in TOPICS:
             assert topic in body, f"{node_id} does not name {topic}"
 
@@ -121,19 +114,19 @@ def test_the_retriever_is_forbidden_from_answering_from_memory(document: dict) -
     """Northwind Robotics is fictional, so a plausible answer with no quoted
     figure is an invented one. This is the sentence that makes the grader's
     grounding rule enforceable rather than hopeful."""
-    prompt = _node(document, "retrieve1")["data"]["systemPrompt"].lower()
+    prompt = node_of(document, "retrieve1")["data"]["systemPrompt"].lower()
     assert "you have no memory of it" in prompt
     assert "the handbook does not say" in prompt
 
 
 def test_the_grader_treats_a_non_answer_as_a_failure(document: dict) -> None:
-    criteria = _node(document, "grader1")["data"]["criteria"].lower()
+    criteria = node_of(document, "grader1")["data"]["criteria"].lower()
     assert "'the handbook does not say' is a failure" in criteria
-    assert _node(document, "grader1")["data"]["rulesMode"] == "extend"
+    assert node_of(document, "grader1")["data"]["rulesMode"] == "extend"
 
 
 def test_the_budget_buys_whole_laps(document: dict) -> None:
     """Both agents increment the one graph-wide `attempts` counter, so a lap
     here costs two. An odd ceiling would strand half a lap. Gallery ticket 21."""
-    cap = int(_node(document, "grader1")["data"]["maxAttempts"])
+    cap = int(node_of(document, "grader1")["data"]["maxAttempts"])
     assert cap >= 4 and cap % 2 == 0

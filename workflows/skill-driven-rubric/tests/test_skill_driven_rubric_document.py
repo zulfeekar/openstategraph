@@ -19,12 +19,15 @@ Whether the model obeys the skill is a model question. The control run in
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -36,19 +39,17 @@ READERS = ("write1", "grader1")
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 def by_id(doc: dict) -> dict[str, dict]:
     return {n["id"]: n for n in doc["nodes"]}
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_there_is_exactly_one_skill_source(doc: dict) -> None:
@@ -114,7 +115,3 @@ def test_the_loop_is_bounded(doc: dict) -> None:
     """`maxAttempts` is a ceiling on the graph-wide `attempts` counter, not a
     per-grader budget (gallery ticket 21). One grader, so here they coincide."""
     assert int(by_id(doc)["grader1"]["data"]["maxAttempts"]) >= 2
-
-
-def test_it_compiles_without_a_warning(doc: dict) -> None:
-    assert WorkflowCompiler().plan(doc).warnings == []

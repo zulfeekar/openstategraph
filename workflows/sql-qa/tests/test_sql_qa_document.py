@@ -22,12 +22,15 @@ What is deliberately *not* asserted is the answer's prose. That is what
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 from openstategraph.evaluation.dataset import load_dataset
 from openstategraph.prebuilt_sql import _resolve_database
 
@@ -40,11 +43,7 @@ SQL_ATOMS = ("tool.sql-list-tables", "tool.sql-get-schema", "tool.sql-query")
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -52,8 +51,10 @@ def dataset():
     return load_dataset(PACKAGE / "evals" / "sql-qa.eval.json")
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_it_is_the_generic_atoms_not_the_chinook_ones(doc: dict) -> None:
@@ -71,10 +72,6 @@ def test_it_is_the_generic_atoms_not_the_chinook_ones(doc: dict) -> None:
 def test_all_three_atoms_are_on_the_one_agent(doc: dict) -> None:
     plan = WorkflowCompiler().plan(doc)
     assert plan.tool_bindings == {"answer1": ["t-tables", "t-schema", "t-query"]}
-
-
-def test_it_compiles_without_a_warning(doc: dict) -> None:
-    assert WorkflowCompiler().plan(doc).warnings == []
 
 
 def test_every_atom_points_at_a_database_the_jail_will_open(doc: dict) -> None:

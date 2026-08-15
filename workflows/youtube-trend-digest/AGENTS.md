@@ -185,3 +185,22 @@ overrides the model and in the slash form while the document uses the colon
 form, that both TREND/TRANSCRIPT blocks are named on both sides of the seam,
 and that the reader is told never to write a transcript it was not given. No
 model is called and no packet leaves the machine.
+
+## It resists both fixture formats, and the reason is the calendar
+
+`tests/` asserts the document, as everywhere. It cannot assert the answer, and
+neither format would fix that.
+
+An `evals/*.eval.json` needs a reference output that stays true. This
+workflow's correct answer is *today's* trending video and a quotation from a
+transcript that did not exist last week — a gold row committed this morning is
+a wrong assertion tomorrow, and the test that fails would be reporting the
+calendar rather than a regression. A shape assertion over a completed run has
+the same defect one level up: it would pin that a video was named, which a
+stubbed search satisfies without the network ever having answered.
+
+So the acceptance test is external reachability, run deliberately and written
+down above — including the run where `web-search` refused for two hours, which
+is the kind of finding a fixture would have converted into a red test with no
+information in it. See `docs/evaluation.md` §"Grading during a run vs grading a
+dataset".

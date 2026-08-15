@@ -19,7 +19,6 @@ Whether the model reads what it fetched is what the smoke run and its
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -27,6 +26,10 @@ import pytest
 
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 from openstategraph.knowledge import PackageKnowledge
+from openstategraph.package_testing import (
+    assert_document_shape,
+    load_document,
+)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -37,11 +40,7 @@ SMOKE_FACTS = ("every 20 years", "below 70 %")
 
 @pytest.fixture(scope="module")
 def doc() -> dict:
-    envelope = json.loads((PACKAGE / "workflow.json").read_text())
-    assert envelope["version"] == 1
-    document = envelope["document"]
-    assert document["version"] == 3
-    return document
+    return load_document(PACKAGE)
 
 
 @pytest.fixture(scope="module")
@@ -51,8 +50,10 @@ def knowledge() -> PackageKnowledge:
     return PackageKnowledge(PACKAGE)
 
 
-def test_the_model_is_pinned_to_ollama_cloud(doc: dict) -> None:
-    assert doc["settings"]["model"] == "ollama:gpt-oss:120b-cloud"
+def test_the_baseline_every_package_shares(doc: dict) -> None:
+    """Model pin, unique ids, no dangling edge, and a warning-free
+    plan — `openstategraph.package_testing` owns the reasons."""
+    assert_document_shape(doc)
 
 
 def test_it_is_four_nodes_no_loop_no_router(doc: dict) -> None:
@@ -74,10 +75,6 @@ def test_there_is_exactly_one_knowledge_node(doc: dict) -> None:
     """`maxInstances: 1`, as a document can state it."""
     knowledge_nodes = [n for n in doc["nodes"] if n["type"] == "tool.knowledge-lookup"]
     assert len(knowledge_nodes) == 1
-
-
-def test_it_compiles_without_a_warning(doc: dict) -> None:
-    assert WorkflowCompiler().plan(doc).warnings == []
 
 
 class TestTheStoreIsThePackage:
