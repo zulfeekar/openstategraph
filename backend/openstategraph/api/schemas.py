@@ -194,6 +194,30 @@ class McpServerResponse(BaseModel):
     )
 
 
+class McpServerWriteRequest(BaseModel):
+    """`POST /api/mcp/servers` — register one server in the project's config.
+
+    The same four facts `McpServerResponse` carries back, minus the two the
+    server owns: `origin` is decided by which file the entry lives in, and
+    `credentialConfigured` is read from this process's environment. An editor
+    that could post either would be an editor that could claim a built-in was
+    a project entry.
+
+    `auth` is the same `McpAuthPayload` the validate route takes, so the
+    "there is no field a credential fits in" property is one schema and not
+    two that could diverge.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(
+        description="What a `tool.mcp` card names. Replaces an entry of the same name."
+    )
+    url: str
+    transport: str = Field(default="streamable_http", description="`streamable_http` or `sse`.")
+    auth: McpAuthPayload = McpAuthPayload()
+
+
 class McpValidateRequest(BaseModel):
     """`POST /api/mcp/validate` — check one server, configured or inline.
 

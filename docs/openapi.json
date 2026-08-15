@@ -586,6 +586,41 @@
         "title": "McpServerResponse",
         "type": "object"
       },
+      "McpServerWriteRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/mcp/servers` \u2014 register one server in the project's config.\n\nThe same four facts `McpServerResponse` carries back, minus the two the\nserver owns: `origin` is decided by which file the entry lives in, and\n`credentialConfigured` is read from this process's environment. An editor\nthat could post either would be an editor that could claim a built-in was\na project entry.\n\n`auth` is the same `McpAuthPayload` the validate route takes, so the\n\"there is no field a credential fits in\" property is one schema and not\ntwo that could diverge.",
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/McpAuthPayload",
+            "default": {
+              "headerName": "",
+              "kind": "none",
+              "tokenEnv": ""
+            }
+          },
+          "name": {
+            "description": "What a `tool.mcp` card names. Replaces an entry of the same name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "transport": {
+            "default": "streamable_http",
+            "description": "`streamable_http` or `sse`.",
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "McpServerWriteRequest",
+        "type": "object"
+      },
       "McpValidateRequest": {
         "additionalProperties": false,
         "description": "`POST /api/mcp/validate` \u2014 check one server, configured or inline.\n\nEither name a registered server, or post a URL. Naming one that is not\nregistered is an error rather than a silent fall-through to the URL: the\ntwo mean different things and answering the wrong one is how a developer\nends up validating a server they are not about to bind.",
@@ -1821,6 +1856,97 @@
           }
         },
         "summary": "Which MCP servers this project can bind",
+        "tags": [
+          "Operations"
+        ]
+      },
+      "post": {
+        "description": "Write `mcp_servers:` in `openstategraph.yaml`, by name.\n\n**The comments around it survive**, which is not a nicety for this file:\nit is YAML precisely so the reasoning can sit beside the line it applies\nto, and a whole-document rewrite would delete all of it on the first Save\npress. `config_edit` replaces the one block and leaves every other byte.\n\n**The loader is the only judge of what may be written.** A `token_env`\nholding a pasted key is refused by re-reading the file through\n`load_config` \u2014 the same walk that refuses one on read \u2014 and the previous\nbytes go back. There is no second copy of the secret rules here to drift.\n\nAnswers with the whole list, not the entry: the panel's next question is\nalways \"what is registered now\", and a route that answers it saves a\nround trip and removes the state where the two disagree.",
+        "operationId": "save_mcp_server_api_mcp_servers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpServerWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerResponse"
+                  },
+                  "title": "Response Save Mcp Server Api Mcp Servers Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register one MCP server in this project's config file",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/mcp/servers/{name}": {
+      "delete": {
+        "description": "Delete a project entry, or tombstone a built-in default.\n\nThe two defaults are not declared by any file, so removing one has no line\nto delete: it writes `enabled: false`, which the catalogue honours. That\nis the honest version of a Delete button that is offered on every row \u2014\nthe alternative, hiding it on the two rows a new project actually has,\nmakes the first two entries the only undeletable ones.",
+        "operationId": "delete_mcp_server_api_mcp_servers__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerResponse"
+                  },
+                  "title": "Response Delete Mcp Server Api Mcp Servers  Name  Delete",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove one MCP server from this project",
         "tags": [
           "Operations"
         ]

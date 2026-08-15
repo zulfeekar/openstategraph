@@ -11,6 +11,7 @@ so the schema has no field for one and two tests below say so.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,6 +20,7 @@ from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from openstategraph.api.main import create_app
+from openstategraph.config_file import CONFIG_ENV_VAR, reset_active_config
 from openstategraph import prebuilt_mcp
 from openstategraph.prebuilt_mcp import (
     STATUS_AUTH_REQUIRED,
@@ -180,3 +182,101 @@ class TestTheSecretsRule:
             },
         )
         assert "sk-live-secret-value" not in response.text
+
+
+class TestRegistering:
+    """`POST`/`DELETE /api/mcp/servers` — the write half ticket 03 added.
+
+    `54497b3` shipped the registry read-only, which was correct for a card
+    that only *names* a server and is a panel that cannot add one. Every test
+    here points the loader at a temporary file: nothing writes the checkout's
+    own `openstategraph.yaml`.
+    """
+
+    @pytest.fixture
+    def project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        path = tmp_path / "openstategraph.yaml"
+        path.write_text("version: 1\n", encoding="utf-8")
+        monkeypatch.setenv(CONFIG_ENV_VAR, str(path))
+        reset_active_config()
+        yield path
+        reset_active_config()
+
+    def test_a_saved_server_appears_in_the_list_the_panel_reads(
+        self, client: TestClient, project: Path
+    ) -> None:
+        saved = client.post(
+            "/api/mcp/servers",
+            json={"name": "Internal docs", "url": "https://mcp.example.test/mcp"},
+        )
+        assert saved.status_code == 200
+
+        names = {entry["name"]: entry for entry in client.get("/api/mcp/servers").json()}
+        assert names["Internal docs"]["origin"] == "project"
+        # Adding one has not cost the project the two it started with.
+        assert "LangChain docs" in names
+
+    def test_the_response_is_the_whole_list_so_the_panel_needs_no_second_call(
+        self, client: TestClient, project: Path
+    ) -> None:
+        body = client.post(
+            "/api/mcp/servers",
+            json={"name": "Internal docs", "url": "https://mcp.example.test/mcp"},
+        ).json()
+        assert {entry["name"] for entry in body} >= {"Internal docs", "LangChain docs"}
+
+    def test_a_pasted_credential_is_refused_with_the_loader_s_own_message(
+        self, client: TestClient, project: Path
+    ) -> None:
+        response = client.post(
+            "/api/mcp/servers",
+            json={
+                "name": "Vendor",
+                "url": "https://vendor.test/mcp",
+                "auth": {"kind": "bearer", "tokenEnv": "sk-live-abc123"},
+            },
+        )
+        assert response.status_code == 400
+        assert "sk-live-abc123" not in project.read_text(encoding="utf-8")
+
+    def test_the_write_schema_has_no_field_a_credential_fits_in(
+        self, client: TestClient, project: Path
+    ) -> None:
+        response = client.post(
+            "/api/mcp/servers",
+            json={
+                "name": "Vendor",
+                "url": "https://vendor.test/mcp",
+                "auth": {"kind": "bearer", "token": "sk-x"},
+            },
+        )
+        assert response.status_code == 422
+
+    def test_a_project_entry_is_deleted_outright(
+        self, client: TestClient, project: Path
+    ) -> None:
+        client.post(
+            "/api/mcp/servers",
+            json={"name": "Internal docs", "url": "https://mcp.example.test/mcp"},
+        )
+        body = client.delete("/api/mcp/servers/Internal docs").json()
+
+        assert "Internal docs" not in {entry["name"] for entry in body}
+
+    def test_a_built_in_default_is_deletable_like_any_other_row(
+        self, client: TestClient, project: Path
+    ) -> None:
+        """A list whose first two rows are the only undeletable ones reads as a bug."""
+        body = client.delete("/api/mcp/servers/LangChain docs").json()
+
+        names = {entry["name"] for entry in body}
+        assert "LangChain docs" not in names
+        assert "LangChain API reference" in names
+        assert "enabled: false" in project.read_text(encoding="utf-8")
+
+    def test_deleting_a_name_nobody_registered_is_a_404(
+        self, client: TestClient, project: Path
+    ) -> None:
+        response = client.delete("/api/mcp/servers/Nonesuch")
+        assert response.status_code == 404
+        assert "Nonesuch" in response.json()["detail"]

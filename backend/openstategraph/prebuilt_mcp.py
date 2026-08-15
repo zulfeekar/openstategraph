@@ -161,6 +161,13 @@ class McpServerDefinition:
     auth: McpAuth = field(default_factory=McpAuth)
     #: Where this entry came from, for the panel: `built-in` or `project`.
     origin: str = "built-in"
+    #: `False` is a **tombstone**: a project entry that removes the server it
+    #: names rather than defining one. It exists because the two defaults are
+    #: not declared by any file, so "delete this row" has no line to delete —
+    #: and a list whose first two rows are the only undeletable ones reads as
+    #: a bug rather than as a policy. Never reaches a payload: the catalogue
+    #: drops it, so nothing downstream can see a server that is not there.
+    enabled: bool = True
 
     def as_payload(self) -> dict[str, Any]:
         """What the API hands the editor. Names and booleans, never a value."""
@@ -216,7 +223,9 @@ def mcp_server_catalogue(
     catalogue = {server.name: server for server in DEFAULT_MCP_SERVERS}
     for server in configured or ():
         catalogue[server.name] = server
-    return catalogue
+    # Layer first, then drop: a tombstone has to be able to remove a built-in
+    # it is standing on top of, which is the only case it exists for.
+    return {name: server for name, server in catalogue.items() if server.enabled}
 
 
 # --------------------------------------------------------------------- #

@@ -259,6 +259,12 @@ class McpServerConfig(BaseModel):
     #: header and stdio names an executable; neither is offered.
     transport: str = "streamable_http"
     auth: McpAuthConfig = McpAuthConfig()
+    #: `false` removes the server this entry names — including a built-in
+    #: default, which no file declares and which therefore cannot be removed
+    #: by deleting a line. A tombstone rather than a hidden Delete button: the
+    #: decision is recorded where a colleague reading the file can see it, and
+    #: undoing it is deleting one line.
+    enabled: bool = True
 
 
 class OpenStateGraphConfig(BaseModel):
@@ -701,6 +707,7 @@ def config_mcp_servers(config: OpenStateGraphConfig | None = None) -> list[Any]:
                     token_env=token_env,
                 ),
                 origin="project",
+                enabled=entry.enabled,
             )
         )
     return servers
