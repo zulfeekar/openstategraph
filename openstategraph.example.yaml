@@ -17,18 +17,28 @@
 # Precedence, lowest to highest — every adjacent pair is covered by a test in
 # backend/tests/test_config_file.py::TestPrecedence:
 #
-#   this file  <  environment  <  workflow settings.model
-#              <  a node's own model  <  the caller's model= argument
+#   instance default  <  this file  <  workflow settings.model
+#                     <  a node's own model  <  the caller's model= argument
 #
-# The one that surprises people: the ENVIRONMENT BEATS THIS FILE. This file is
-# committed and shared; the environment is the machine in front of you. A
-# colleague's committed default must never silently outrank the key you set
-# for your own run.
+# The one that surprises people: A CREDENTIAL IN YOUR ENVIRONMENT DOES NOT
+# BEAT THIS FILE. Having ANTHROPIC_API_KEY exported for some other tool is a
+# fact about your machine, not a request about this project, and it used to
+# silently move every run off the model named below.
+#
+# What the environment DOES still beat this file for is anything that says
+# what to do rather than what exists — OPENSTATEGRAPH_WORKFLOWS_ROOT, and
+# OPENSTATEGRAPH_<PROVIDER>_MODEL, which changes the model of whichever
+# provider wins. That is the original reasoning, kept where it holds: this
+# file is committed and shared, the environment is the machine in front of
+# you, and a colleague's committed choice must not outrank yours.
 
 version: 1
 
-# The model used when no environment credential names a provider and nothing
-# more specific was asked for. Full `provider:model` form.
+# The model used when nothing more specific was asked for. Full
+# `provider:model` form, or a bare prefix — `ollama:` and `ollama` both mean
+# that provider's own default. Omit the key entirely to inherit the instance
+# default: the provider integration you have installed, which is what makes
+# `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
 default_model: ollama:gpt-oss:120b-cloud
 
 providers:

@@ -171,6 +171,22 @@ finally read by code. Wayfinder tickets 02–04;
   returning a model name nobody can call. `OLLAMA_CLOUD_MODEL` stays exported;
   nothing reaches Ollama by *not* choosing any more.
 
+- **A statement of intent outranks an inference** (install-experience T4,
+  grill item G3). The precedence chain's bottom pair reverses: it was
+  `config file < environment`, and a credential merely *present* in the
+  environment beat a `default_model:` written down for the project — so
+  exporting `ANTHROPIC_API_KEY` for an unrelated tool silently moved every run
+  off the model the project had chosen. It now reads
+  `instance default < config file < settings.model < node < caller`, and the
+  config file's `default_model:` is expanded through the same spelling rule as
+  everything else, so `default_model: anthropic` works.
+
+  A carve-out, not a reversal of "the environment beats the file": a credential
+  is a fact about what you have, while `OPENSTATEGRAPH_WORKFLOWS_ROOT` and
+  `OPENSTATEGRAPH_<PROVIDER>_MODEL` say what to do and still win.
+  `test_config_file.py::TestPrecedence` carries the flipped pair with the
+  reasoning rewritten at the test rather than deleted.
+
 ### Added
 
 - **The default is shown rather than guessed at** (install-experience T3).

@@ -403,3 +403,89 @@ class TestTheDefaultIsShown:
 
         _installed(monkeypatch)
         assert startup_facts()[0] == "default model  (none)"
+
+
+# --------------------------------------------------------------------- #
+# A statement of intent outranks an inference (T4)
+# --------------------------------------------------------------------- #
+
+
+class TestIntentOutranksInference:
+    """Two inferences used to outrank two statements, and both are flipped.
+
+    A credential is a fact about *what you have*, not a request about what to
+    use. So `default_model:` — which somebody wrote for this project, on
+    purpose — outranks the mere presence of a key, and an integration you
+    installed outranks a key you did not know was exported.
+
+    This does **not** reverse "the environment beats the file" in general.
+    `OPENSTATEGRAPH_WORKFLOWS_ROOT` still beats `workflows_dir:`, and
+    `OPENSTATEGRAPH_<PROVIDER>_MODEL` is unaffected — it is consumed inside
+    `ProviderSpec.model_string` and modifies whichever provider wins.
+    """
+
+    def _config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+        from openstategraph.config_file import reset_active_config
+        from openstategraph.providers import reset_provider_catalogue
+
+        path = tmp_path / "openstategraph.yaml"
+        path.write_text(text)
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(path))
+        reset_provider_catalogue()
+        reset_active_config()
+
+    def test_a_declared_default_beats_a_credential_that_merely_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from openstategraph.api.model_resolution import resolve_model
+
+        self._config(tmp_path, monkeypatch, "version: 1\ndefault_model: ollama:custom\n")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+
+        assert resolve_model(None) == "ollama:custom"
+
+    def test_the_declared_default_is_spelled_the_same_way_as_everything_else(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One spelling rule, every carrier — the config file included."""
+        from openstategraph.api.model_resolution import resolve_model
+
+        self._config(tmp_path, monkeypatch, "version: 1\ndefault_model: anthropic\n")
+        assert resolve_model(None) == "anthropic:claude-haiku-4-5"
+
+    def test_an_installed_integration_beats_a_key_for_one_that_is_not(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The design's reproduction, run forward.
+
+        `[openai]` installed, a stale `ANTHROPIC_API_KEY` left over from
+        another tool. The product elected Anthropic and then told the reader
+        to install `[anthropic]` — the opposite of the extra they chose, with
+        their own working install sitting right there.
+        """
+        from openstategraph.api.model_resolution import resolve_model
+        from openstategraph.providers import provider_readiness
+
+        _installed(monkeypatch, "openai")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-stale")
+
+        resolved = resolve_model(None)
+        assert resolved.startswith("openai:")
+
+        gap = provider_readiness(resolved)
+        advice = "" if gap is None else gap.message
+        assert "anthropic" not in advice, (
+            "the elected default sent the reader to a vendor they did not install"
+        )
+        assert "openstategraph[anthropic]" not in advice
+
+    def test_a_workflows_root_variable_still_beats_the_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The general rule is untouched; only the model default is carved out."""
+        from openstategraph.workflows_root import WORKFLOWS_ROOT_ENV, workflows_root
+
+        self._config(tmp_path, monkeypatch, "version: 1\nworkflows_dir: from_file\n")
+        monkeypatch.setenv(WORKFLOWS_ROOT_ENV, str(tmp_path / "from_env"))
+
+        assert workflows_root() == tmp_path / "from_env"

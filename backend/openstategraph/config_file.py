@@ -33,13 +33,23 @@ not say where to put it instead just gets worked around.
 **Precedence**, lowest to highest, and each adjacent pair is pinned in
 `tests/test_config_file.py::TestPrecedence`:
 
-    config file  <  environment  <  workflow settings.model  <  node's own
+    instance default  <  this file  <  workflow settings.model  <  node's own
     model  <  caller's `model=` argument
 
-The reasoning behind the one that surprises people: **environment beats the
-file** because the file is committed and shared, while the environment is the
-machine in front of you. A colleague's committed default must never silently
-outrank the key you set for your own run.
+**The environment is not one rung of that ladder, and that is the subtlety.**
+It enters in two different roles, which used to be conflated:
+
+- A **credential** (`ANTHROPIC_API_KEY`) is a fact about what this machine
+  has. It feeds the *instance default* — `ProviderCatalogue.elected_default`
+  elects among the integrations that are installed — and it sits at the
+  bottom, below `default_model:` here. Until install-experience T4 it sat
+  above, so exporting a key for an unrelated tool silently moved every run off
+  the model this file names. A credential is not a request.
+- A **direction** (`OPENSTATEGRAPH_WORKFLOWS_ROOT`,
+  `OPENSTATEGRAPH_<PROVIDER>_MODEL`) says what to do, and still beats this
+  file, for the reason it always did: the file is committed and shared, while
+  the environment is the machine in front of you. A colleague's committed
+  default must never silently outrank a choice you made for your own run.
 """
 
 from __future__ import annotations

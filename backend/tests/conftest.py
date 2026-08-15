@@ -15,7 +15,7 @@ about the library, and five copies is how one of them ends up wrong.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Iterator
 
 import os
 
@@ -217,7 +217,7 @@ def _fresh_provider_catalogue():
 
 
 @pytest.fixture(autouse=True)
-def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """A developer's exported `OPENSTATEGRAPH_CONFIG` is not part of the suite.
 
     `find_config_file` checks `OPENSTATEGRAPH_CONFIG` before anything else, so
@@ -230,5 +230,17 @@ def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> None:
     does not: `find_config_file` looks in `base` only, never in its parents,
     so a stray file *above* the checkout was never reachable. The exported
     variable was the real half.
+
+    **The memoised config is dropped on both sides too**, which the catalogue
+    fixture above has always done and this one did not. `config_file._ACTIVE`
+    is a process-lifetime cache exactly like `providers._CATALOGUE`, so a test
+    that pointed `OPENSTATEGRAPH_CONFIG` at its own file left that file's
+    `default_model:` deciding for every later test that did not set one — the
+    same order-dependence, one module along.
     """
+    from openstategraph.config_file import reset_active_config
+
     monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)
+    reset_active_config()
+    yield
+    reset_active_config()

@@ -106,6 +106,20 @@ def resolve_model(requested: str | None) -> str:
     who the instance default *is* belongs to
     `ProviderCatalogue.elected_default`, which is the one place that decides.
 
+    **A statement of intent outranks an inference** (install-experience T4).
+    The bottom pair used to read the other way round — a credential merely
+    *present* in the environment beat a `default_model:` somebody had written
+    down for the project — so exporting an unrelated key silently changed
+    which model a committed workflow used. A credential is a fact about what
+    you have, not a request about what to use.
+
+    This is a carve-out, not a reversal of "the environment beats the file".
+    `OPENSTATEGRAPH_WORKFLOWS_ROOT` still beats `workflows_dir:`, and
+    `OPENSTATEGRAPH_<PROVIDER>_MODEL` is untouched — it is consumed inside
+    `ProviderSpec.model_string` and modifies whichever provider wins, so
+    "which vendor" and "which of that vendor's models" stay separate
+    questions.
+
     **A request is expanded, not merely echoed** (install-experience T1). See
     `expand_model_reference`: `"ollama:"` and `"anthropic"` are the same
     request as their provider's default, and until it existed they reached the
@@ -123,23 +137,18 @@ def resolve_model(requested: str | None) -> str:
     if expanded is not None:
         return expanded
 
-    default = provider_catalogue().elected_default()
-
-    # 1. A credential actually present on this machine names a provider, and
-    #    outranks a file a colleague committed.
-    if default.configured and default.model:
-        return default.model
-
-    # 2. The config file's own default, if it declares one.
+    # 1. The config file's declared default. Somebody wrote it for this
+    #    project, on purpose; expanded like every other spelling.
     from openstategraph.config_file import active_config
 
     settings = active_config()
     if settings is not None and settings.default_model:
-        return settings.default_model
+        declared = expand_model_reference(settings.default_model)
+        if declared is not None:
+            return declared
 
-    # 3. An installed integration with no credential yet is still the answer:
-    #    the extra chose the vendor, and the wall it hits names that vendor's
-    #    own variable rather than listing three strangers.
+    # 2. The elected instance default — what is installed, and configured.
+    default = provider_catalogue().elected_default()
     if default.model:
         return default.model
 

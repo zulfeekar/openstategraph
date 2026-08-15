@@ -6,8 +6,9 @@ Ticket 03. Three separable promises, tested separately:
    error naming the file and the field rather than a stack trace;
 2. a secret can never be in it — not "should not be", *rejected*;
 3. the precedence chain is exactly
-   `config file < environment < workflow settings.model < node's own model
-   < caller's model= argument`, and every adjacent pair is pinned.
+   `instance default < this file < workflow settings.model < node's own model
+   < caller's model= argument`, and every adjacent pair is pinned. The bottom
+   pair reversed with install-experience T4 — see `TestPrecedence`.
 """
 
 from __future__ import annotations
@@ -305,7 +306,20 @@ providers:
 
 
 class TestPrecedence:
-    """config file < environment < workflow settings.model < node < caller."""
+    """instance default < config file < settings.model < node < caller.
+
+    The bottom pair was the other way round until install-experience T4, and
+    the reversal is the whole of grill item G3: a credential merely *present*
+    in the environment used to outrank a `default_model:` somebody had written
+    down for the project, so exporting an unrelated key silently changed which
+    model a committed workflow ran on.
+
+    It is a carve-out, not a reversal of "the environment beats the file". A
+    credential is a fact about what you have; `default_model:` is a request.
+    Everything else keeps the old direction — `OPENSTATEGRAPH_WORKFLOWS_ROOT`
+    still beats `workflows_dir:`, and `OPENSTATEGRAPH_<PROVIDER>_MODEL` is
+    consumed inside `model_string` and modifies whichever provider wins.
+    """
 
     @pytest.fixture(autouse=True)
     def _no_ambient_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -339,18 +353,30 @@ class TestPrecedence:
         self._with_config(tmp_path, monkeypatch, "version: 1\ndefault_model: ollama:custom\n")
         assert resolve_model(None) == "ollama:custom"
 
-    def test_environment_beats_the_config_file(
+    def test_the_config_file_beats_a_credential_that_merely_exists(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Flipped by T4 (G3), and this test carries the reason it flipped.
+
+        It used to assert the opposite — *"a credential in the environment
+        names a provider, and that outranks a file a colleague committed"* —
+        which reads well until you notice what a key actually is. Exporting
+        `ANTHROPIC_API_KEY` for some other tool is not a statement about this
+        project's model, and it silently moved every run off the model the
+        project had written down.
+
+        The colleague argument survives where it belongs: it is why the
+        *environment* still wins for `OPENSTATEGRAPH_WORKFLOWS_ROOT` and for
+        `OPENSTATEGRAPH_<PROVIDER>_MODEL`, both of which say what to do rather
+        than what exists.
+        """
         from openstategraph.api.model_resolution import resolve_model
 
         self._with_config(tmp_path, monkeypatch, "version: 1\ndefault_model: ollama:custom\n")
         assert resolve_model(None) == "ollama:custom"
 
-        # A credential in the environment names a provider, and that outranks
-        # a file a colleague committed.
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
-        assert resolve_model(None).startswith("anthropic:")
+        assert resolve_model(None) == "ollama:custom"
 
     def test_environment_beats_the_config_file_for_the_model_too(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
