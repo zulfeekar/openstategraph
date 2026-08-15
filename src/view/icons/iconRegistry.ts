@@ -19,6 +19,7 @@ import {
   UserCheck,
   Archive,
   Workflow,
+  Plug,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -55,6 +56,10 @@ const ICONS: Record<string, LucideIcon> = {
   'node-worker': Users,
   'node-format-report': FileOutput,
   'node-discovered-tool': Wrench,
+  // A plug, because that is exactly what an MCP node is: one card that
+  // connects a whole external server's tools onto an agent. Deliberately
+  // not a wrench — a wrench is *a* tool, and this one is a socket for N.
+  'node-mcp': Plug,
   'node-subgraph': Workflow,
   // An assembly, not a node type — the palette's only non-node entry, and the
   // glyph says what it does rather than what it is: the answer comes back

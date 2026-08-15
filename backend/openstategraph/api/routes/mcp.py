@@ -17,6 +17,8 @@ map's secrets rule expressed as a schema rather than as a convention.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, HTTPException
 
 from openstategraph.api.schemas import (
@@ -25,6 +27,10 @@ from openstategraph.api.schemas import (
     McpValidateRequest,
     McpValidateResponse,
 )
+
+if TYPE_CHECKING:  # `prebuilt_mcp` imports the adapters lazily; keep it off the
+    # import path of a server that never validates a connection.
+    from openstategraph.prebuilt_mcp import McpAuth
 
 router = APIRouter()
 
@@ -82,7 +88,6 @@ def validate_mcp(request: McpValidateRequest) -> McpValidateResponse:
     """
     from openstategraph.config_file import ConfigError, config_mcp_servers
     from openstategraph.prebuilt_mcp import (
-        McpAuth,
         McpServerDefinition,
         TRANSPORTS,
         mcp_server_catalogue,
@@ -121,7 +126,7 @@ def validate_mcp(request: McpValidateRequest) -> McpValidateResponse:
     return McpValidateResponse(**validate_mcp_server(definition).as_payload())
 
 
-def _auth_of(payload: McpAuthPayload):  # noqa: ANN202 — McpAuth, imported lazily
+def _auth_of(payload: McpAuthPayload) -> "McpAuth":
     from openstategraph.prebuilt_mcp import McpAuth
 
     return McpAuth(

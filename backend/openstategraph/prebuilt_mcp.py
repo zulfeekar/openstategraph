@@ -51,7 +51,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
@@ -112,6 +112,19 @@ MCP_TIMEOUT_SECONDS = 15.0
 #: A POSIX environment variable name. The field wants a name; this is how we
 #: tell a name from the key somebody pasted into it by mistake.
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _looks_like_a_secret(value: str) -> bool:
+    """Reuses the config loader's own list rather than keeping a second one.
+
+    Imported at the call site because `config_file` imports Pydantic and this
+    module is deliberately importable without much; the alternative — a copy
+    of fourteen vendor prefixes — is the duplicated *knowledge* the DRY rule
+    is about, and it would go stale in exactly one direction.
+    """
+    from openstategraph.config_file import looks_like_a_secret
+
+    return looks_like_a_secret(value)
 
 
 # --------------------------------------------------------------------- #
@@ -231,7 +244,11 @@ def resolve_auth_headers(
             f"no environment variable to read the credential from. None of its tools are "
             f"available for this run."
         )
-    if not _ENV_NAME.match(name):
+    # Two checks, because one is provably not enough: `ghp_aaaa…` is a legal
+    # environment-variable name *and* a GitHub token, so the shape check
+    # accepted it until a test tried it. The prefix list is the same one the
+    # config loader refuses a committed file over.
+    if not _ENV_NAME.match(name) or _looks_like_a_secret(name):
         return {}, (
             f'MCP server "{server_name}" needs the *name* of an environment variable holding '
             f"its credential, not the credential itself. Put the value in .env and name the "
@@ -427,7 +444,13 @@ def _discover_tools(
     """
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
-    client = MultiServerMCPClient({definition.name: definition.connection(headers)})
+    # `cast`, not a TypedDict of our own: `Connection` is a union of four
+    # library shapes, and building one here would put a vendor type in our
+    # vocabulary — which the portability guardrails forbid. The dict is
+    # correct by construction (`url` + `transport`, both required keys of
+    # `StreamableHttpConnection`), and the seam is one line.
+    connections = cast(Any, {definition.name: definition.connection(headers)})
+    client = MultiServerMCPClient(connections)
     return asyncio.run(asyncio.wait_for(client.get_tools(server_name=definition.name), timeout))
 
 

@@ -886,6 +886,42 @@
       ]
     },
     {
+      "type": "tool.mcp",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "MCP server",
+      "description": "Binds every tool a Model Context Protocol server offers onto an agent — the LangChain docs, an internal service, anything that speaks MCP over HTTP.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "authHeaderName",
+        "authKind",
+        "authTokenEnv",
+        "maxRetries",
+        "mcpNote",
+        "server",
+        "timeoutSeconds",
+        "tools",
+        "transport",
+        "url"
+      ]
+    },
+    {
       "type": "tool.platform-describe-workflow",
       "kind": "standard",
       "category": "tools",

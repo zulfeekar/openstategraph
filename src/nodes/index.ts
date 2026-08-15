@@ -36,6 +36,7 @@ import {
 } from './orchestrate/FormatReportNode';
 import { subgraphExecutor, subgraphNode } from './compose/SubgraphNode';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
+import { MCP_SERVER_TYPE, mcpServerExecutor, mcpServerNode } from './tools/McpServerNode';
 
 /**
  * The catalogue's single registration point.
@@ -104,6 +105,10 @@ export function registerNodeCatalogue(
       formatReportNode,
       subgraphNode,
       ...PLATFORM_TOOL_NODES.map((entry) => entry.definition),
+      // One card, a whole MCP server's tools. Global rather than
+      // workflow-scoped: which servers exist is a property of the project,
+      // so a node that names one is grammar every document can use.
+      mcpServerNode,
       formattedOutputNode,
       groupNode,
       noteNode,
@@ -126,6 +131,7 @@ export function registerNodeCatalogue(
     formatReportExecutor,
     subgraphExecutor,
     ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
+    mcpServerExecutor,
     formattedOutputExecutor,
   ]);
 }
@@ -150,6 +156,7 @@ export const NODE_TYPE = {
   humanApproval: humanApprovalNode.id,
   guardrail: GUARDRAIL_TYPE,
   memorySegment: MEMORY_SEGMENT_TYPE,
+  mcpServer: MCP_SERVER_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,
   worker: WORKER_TYPE,
   formatReport: FORMAT_REPORT_TYPE,
