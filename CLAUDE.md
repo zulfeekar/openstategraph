@@ -6,6 +6,8 @@ Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph 
 
 **Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
 
+**Before building a new module — a tool atom, a node family, a guard, a memory construct — run `skills/atom-forge/`.** It is the agent-agnostic repo skill (plain markdown, no Claude-specific tooling) that interviews the developer across eight dimensions, runs the honesty gates, scores the 10/10 readiness card, and only then builds through the pipeline in `docs/building-an-atom.md`.
+
 ---
 
 ## Non-negotiables

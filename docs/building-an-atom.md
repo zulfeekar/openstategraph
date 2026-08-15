@@ -19,6 +19,10 @@ Atoms sort first, organisms last; the test asserts that ordering, so the
 palette cannot drift from the vocabulary. **This page is about adding to the
 first row: a tool.**
 
+> An agent can run this process end to end via
+> [`skills/atom-forge`](../skills/atom-forge/SKILL.md) — the interview that
+> settles what the atom *is* before this page's pipeline builds it.
+
 An atom has two halves that meet at a single seam:
 
 | Half | Lives in | Owns |
