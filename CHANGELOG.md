@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0rc1 — unreleased
+
+The release train's first ride, on the beta repository, to TestPyPI only. The
+candidate carries everything 0.3.0 below describes plus the work landed since
+that section was written:
+
+- **Twenty-three worked examples ship in the wheel** (`examples list` /
+  `examples copy [--all]`) — copy-on-use, provider-neutral, each explained
+  with its compiled graph on the site's gallery page.
+- **`openstategraph init [dir]`** creates a project: a commented
+  `openstategraph.yaml`, a `.gitignore`, a runnable starter; config is found
+  by one upward walk to the git root, with `pyproject.toml
+  [tool.openstategraph]` as an equal carrier.
+- **The install's one provider extra becomes the instance default** — the
+  elected default asks what is *installed* before what is configured, and
+  says which provider won and why.
+- **Memory means it**: summarization actually fires (0.8 of context, 100k
+  fallback), the long-term store is durable by default and announces where it
+  lives, and the new `memory.segment` node remembers across threads at a
+  drawn position.
+- **A Guardrail node** carries PII policy at a drawn position — inbound
+  passes for the machine while humans see redaction; blocks take a visible
+  path; injection screening stays an optional, licence-gated extra.
+- **The production audit closed**: no leaks in the compile seam, the compiler
+  linear to ~900 nodes, the god-class ceiling enforced by test in both
+  languages, and the two blockers it found (a run request that could name a
+  file; a closable panel that orphaned its run) fixed.
+
 ## 0.3.0 — unreleased
 
 Packaging OpenStateGraph as a framework somebody else can install: an honest
