@@ -152,7 +152,7 @@ class TestOneSeam:
 
         monkeypatch.delenv(MEMORY_PATH_ENV, raising=False)
         mine = InMemoryStore()
-        services = WorkflowServices(tmp_path, store=mine)
+        services = WorkflowServices(tmp_path, memory_store=mine)
         assert services.memory_store is mine
         assert not (tmp_path / STATE_DIR_NAME / MEMORY_FILE_NAME).exists()
 
@@ -173,7 +173,7 @@ class TestOneSeam:
 
             conn = Connection()
 
-        services = WorkflowServices(tmp_path, store=Borrowed())  # type: ignore[arg-type]
+        services = WorkflowServices(tmp_path, memory_store=Borrowed())  # type: ignore[arg-type]
         services.close()
         assert closed == []
 

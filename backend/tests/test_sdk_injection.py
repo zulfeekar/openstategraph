@@ -188,7 +188,7 @@ class TestTheStoreIsTheCallersToSupply:
     def test_the_injected_object_is_used_as_is_not_copied(self, tmp_path: Path) -> None:
         sentinel = InMemoryStore()
 
-        services = WorkflowServices(tmp_path, store=sentinel)
+        services = WorkflowServices(tmp_path, memory_store=sentinel)
 
         assert services.memory_store is sentinel
 
@@ -314,8 +314,12 @@ class TestTheAssemblyPointStaysSingular:
         # inside `load_workflow` beside the services object, which is exactly
         # the second wiring path this test exists to forbid. None here means
         # "this caller did not pass one" — the services default then applies.
+        # `memory_store` is the internal keyword since install-experience
+        # ticket 12; `load_workflow(store=)` is the public one and is
+        # unchanged. That the two differ is the point of the rename — the
+        # attribute `services.store` is the *filesystem* store.
         assert seen == {
-            "store": store,
+            "memory_store": store,
             "checkpointer": None,
             "tools": {"tool.demo-echo": tool},
             "functions": {"function.shout": fn},

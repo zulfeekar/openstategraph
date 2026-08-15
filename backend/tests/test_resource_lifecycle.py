@@ -108,7 +108,7 @@ class TestInjectedResourcesStayTheCallers:
         from langgraph.store.memory import InMemoryStore
 
         mine = InMemoryStore()
-        services = WorkflowServices(tmp_path, store=mine)
+        services = WorkflowServices(tmp_path, memory_store=mine)
 
         services.close()
 

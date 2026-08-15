@@ -473,7 +473,7 @@ class TestAgentsAreMemoryCapable:
     def test_agents_bind_the_memory_tools_when_a_store_exists(self) -> None:
         from openstategraph.compile.node_runtime import NodeRuntime
 
-        runtime = NodeRuntime(model=None, store=InMemoryStore())
+        runtime = NodeRuntime(model=None, memory_store=InMemoryStore())
         node = {"id": "a1", "type": "agent.llm", "data": {}}
         runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
         assert {"save_memory", "search_memory"} <= set(runtime.last_bound_tools)
@@ -498,7 +498,7 @@ class TestAgentsAreMemoryCapable:
         """
         from openstategraph.api.services import WorkflowServices
 
-        services = WorkflowServices(tmp_path, store=InMemoryStore())
+        services = WorkflowServices(tmp_path, memory_store=InMemoryStore())
         document = {
             "version": 2, "name": "declared", "nodes": [], "edges": [],
             "settings": {"memory": {"scopes": ["workflow"]}},
@@ -710,7 +710,7 @@ class TestScopeThreadingAcrossSubgraphs:
         runtime = NodeRuntime(
             document_loader={"child-flow": self.CHILD}.__getitem__,
             functions={"function.probe": probe},
-            store=store,
+            memory_store=store,
         )
         document = self._parent(node_type)
         graph = WorkflowCompiler().build(
@@ -759,7 +759,7 @@ class TestScopeThreadingAcrossSubgraphs:
         }
         runtime = NodeRuntime(
             functions={"function.probe": lambda text: save.invoke({"fact": "parent fact", "scope": "workflow"})},
-            store=store,
+            memory_store=store,
         )
         graph = WorkflowCompiler().build(document, RunState, runtime.factory(document), store=store)
         graph.invoke({"question": "q", "attempts": 0, "decisions": {}, "outputs": {}},
@@ -778,7 +778,7 @@ class TestScopeThreadingAcrossSubgraphs:
         runtime = NodeRuntime(
             document_loader={"child-flow": self.CHILD}.__getitem__,
             functions={"function.probe": lambda text: save.invoke({"fact": "prefers metric"})},
-            store=store,
+            memory_store=store,
         )
         document = self._parent()
         graph = WorkflowCompiler().build(document, RunState, runtime.factory(document), store=store)

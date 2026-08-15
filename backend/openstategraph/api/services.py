@@ -38,11 +38,21 @@ from openstategraph.api.workflow_store import WorkflowStore
 class WorkflowServices:
     """Store + memory + the one runtime construction every transport shares.
 
-    Every collaborator here is the caller's to supply. `store`, `tools`,
-    `functions` and `middleware` are the injection seam behind
+    Every collaborator here is the caller's to supply. `memory_store`,
+    `tools`, `functions` and `middleware` are the injection seam behind
     `load_workflow`'s parameters of the same names; omitting one keeps the
     behaviour that existed before the parameter did (an env-driven
     `build_store()`, and discovery alone for capabilities).
+
+    **`memory_store`, not `store`** (install-experience ticket 12). The
+    keyword used to be `store=` while `self.store` is the filesystem
+    `WorkflowStore` set sixteen lines below it, so `WorkflowServices(root,
+    store=X)` did not set `.store` — the class was self-inconsistent before
+    any caller was involved. Renamed outright rather than shimmed: this class
+    is Tier 3 and `docs/stability.md` names it among the things that are
+    deliberately *not* public, so a compatibility keyword here would be a
+    promise we have said we are not making. `load_workflow(store=)` **is**
+    public and keeps its spelling.
 
     **Injection is the most specific source, so it wins.** The registry order
     is built-in < plugin < package-local < caller: the filesystem describes
@@ -56,7 +66,7 @@ class WorkflowServices:
         self,
         workflows_root: Any = None,
         *,
-        store: BaseStore | None = None,
+        memory_store: BaseStore | None = None,
         checkpointer: BaseCheckpointSaver[Any] | None = None,
         tools: dict[str, Any] | None = None,
         functions: dict[str, Any] | None = None,
@@ -86,13 +96,13 @@ class WorkflowServices:
         #: file, merely *constructing* services must not create a state
         #: directory for a caller who was about to hand us their own store, or
         #: who never touches memory at all.
-        self._memory_store = store
+        self._memory_store = memory_store
         #: Ownership, recorded at construction rather than inferred at close.
         #: What we opened, we close; what the caller injected stays theirs and
         #: is still in use after we are done with it. Inferring this later
         #: (say, "close it if it has a `.conn`") would close a caller's own
         #: sqlite saver and break the process that lent it to us.
-        self._owns_memory_store = store is None
+        self._owns_memory_store = memory_store is None
         #: Thread checkpoints — what makes a `human.approval` pause resumable
         #: (ticket 05). It lives here, beside its sibling the memory Store,
         #: because this is the assembly point every transport already shares:
@@ -133,7 +143,8 @@ class WorkflowServices:
 
         Durable by default since install-experience wave 2 — `build_store`
         puts it under this services object's own workflows root, beside the
-        checkpointer, and says so in one log line. A caller who passed `store=`
+        checkpointer, and says so in one log line. A caller who passed
+        `memory_store=`
         owns durability instead, and nothing is opened.
 
         Built on first ask for the same reason the checkpointer is: the
@@ -354,30 +365,34 @@ class WorkflowServices:
         capability_warnings.extend(memory_preconditions(declared, store=self.memory_store))
         if warnings is not None:
             warnings.extend(capability_warnings)
-        store = self.store
+        # Named for what it is. It was `store = self.store` seventeen lines
+        # above `store=self.memory_store`, in one function body — the
+        # collision ticket 12 was opened for, in the class every transport
+        # goes through.
+        packages = self.store
 
         runtime = NodeRuntime(
             services=RuntimeServices(
                 model=model,
                 tools=tools,
                 functions=self.function_registry_for(slug),
-                document_loader=lambda child_slug: normalize_document(store.load(child_slug)),
+                document_loader=lambda child_slug: normalize_document(packages.load(child_slug)),
                 package_loader=lambda child_slug: PackageAssets(
                     tools=self.tool_registry_for(child_slug),
                     functions=self.function_registry_for(child_slug),
-                    skills_context=discover_skills(store.directory_for(child_slug)),
+                    skills_context=discover_skills(packages.directory_for(child_slug)),
                     workflow_middleware=self.middleware_for(child_slug),
                     # A routed child seeks ITS OWN second brain, never the
                     # parent's — the same isolation as skills (ticket 67).
-                    knowledge_dir=store.directory_for(child_slug),
+                    knowledge_dir=packages.directory_for(child_slug),
                 ),
-                store=self.memory_store,
+                memory_store=self.memory_store,
                 memory=declared,
-                skills_context=(discover_skills(store.directory_for(slug)) if slug else ""),
+                skills_context=(discover_skills(packages.directory_for(slug)) if slug else ""),
                 workflow_middleware=self.middleware_for(slug),
                 # Ambient knowledge seeking: a non-empty knowledge/ under the
                 # open package auto-binds the lookup tool to every agent.
-                knowledge_package_dir=(store.directory_for(slug) if slug else None),
+                knowledge_package_dir=(packages.directory_for(slug) if slug else None),
                 knowledge_dir_override=knowledge_dir,
                 advisor_catalog=(
                     suggestible_tool_catalog(tools)

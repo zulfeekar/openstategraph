@@ -25,7 +25,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
+
+if TYPE_CHECKING:
+    # Types only. Named rather than `Any` because this is the seam where the
+    # two meanings of "store" meet: `BaseStore` is long-term memory, and the
+    # filesystem `WorkflowStore` — the other thing that word means one module
+    # over — passes every runtime check this parameter used to have
+    # (install-experience ticket 12).
+    from langgraph.store.base import BaseStore
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
@@ -593,7 +601,7 @@ class WorkflowCompiler:
         *,
         compile_graph: bool = True,
         checkpointer: Any = None,
-        store: Any = None,
+        store: 'BaseStore | None' = None,
     ) -> Any:
         """Assembles the graph.
 
@@ -607,6 +615,13 @@ class WorkflowCompiler:
         `None` by default — a graph with no human-in-the-loop node has
         nothing to checkpoint, and passing one unconditionally would give
         every run persisted state it never asked for.
+
+        `store` keeps its name and gains a type. The name because it is handed
+        straight to LangGraph's own `compile(store=)` on the last line of this
+        method, and a second spelling at the last hop would be one more place
+        the two vocabularies can disagree; the type because this is where
+        `WorkflowServices.store` (the filesystem one) could arrive by a
+        one-token edit and pass every check downstream.
         """
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}

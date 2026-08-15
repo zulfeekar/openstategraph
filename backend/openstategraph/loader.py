@@ -445,7 +445,10 @@ def load_workflow(
     # go in here rather than into a second wiring path beside it.
     services = WorkflowServices(
         directory.parent,
-        store=store,
+        # The public parameter is `store=` and stays that way — it is in
+        # `public_api.txt`, so renaming it would break an adopter's call. The
+        # *internal* keyword says which store it is (ticket 12).
+        memory_store=store,
         checkpointer=checkpointer,
         tools=tools,
         functions=functions,

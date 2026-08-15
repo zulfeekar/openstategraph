@@ -20,8 +20,14 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Annotated, Any, Callable, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Literal, TypedDict
 
+if TYPE_CHECKING:
+    # Types only — `from __future__ import annotations` keeps langgraph's
+    # store out of this module's import graph, the pattern `loader.py`
+    # established. The name is what matters here: `BaseStore` is the memory
+    # store, never the filesystem `WorkflowStore` (ticket 12).
+    from langgraph.store.base import BaseStore
 
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
@@ -695,14 +701,25 @@ class RuntimeServices:
     #: to `{}` on the way in, so the stored object never holds one — and
     #: while these were declared optional, every read inside the class had to
     #: be written as though it might be (reviews-2026-08-14 ticket 07).
-    #: `document_loader`, `package_loader` and `store` stay optional because
-    #: for those, absent genuinely means something: no subgraph resolution,
-    #: no memory.
+    #: `document_loader`, `package_loader` and `memory_store` stay optional
+    #: because for those, absent genuinely means something: no subgraph
+    #: resolution, no memory.
     tools: ToolRegistry = field(default_factory=dict)
     functions: dict[str, Any] = field(default_factory=dict)
     document_loader: Callable[[str], dict[str, Any]] | None = None
     package_loader: Callable[[str], 'PackageAssets'] | None = None
-    store: Any = None
+    #: Long-term memory — LangGraph's `BaseStore`, what `compile(store=)` is
+    #: given and what the prebuilt `save_memory`/`search_memory` tools write
+    #: to. **Named `memory_store`, and typed, on purpose** (install-experience
+    #: ticket 12): it was `store: Any`, one word from `WorkflowServices.store`
+    #: (the filesystem `WorkflowStore`, packages on disk), and the statement
+    #: `store = services.store` appeared verbatim in this file and in
+    #: `mcp_server.py` meaning opposite objects. `Any` made swapping them a
+    #: one-token edit mypy accepted, the downstream guard is a bare
+    #: `is not None`, and the two classes share exactly one method name
+    #: (`delete`, different arity) — so the failure surfaced at run time,
+    #: inside LangGraph, naming no code of ours.
+    memory_store: 'BaseStore | None' = None
     #: What the document's `settings.memory` declared (ticket 03). The
     #: default is every scope enabled, so a document with no block behaves
     #: exactly as it did before the block existed.
@@ -874,7 +891,7 @@ class NodeRuntime:
         functions: dict[str, Any] | None = None,
         document_loader: Callable[[str], dict[str, Any]] | None = None,
         package_loader: Callable[[str], 'PackageAssets'] | None = None,
-        store: Any = None,
+        memory_store: 'BaseStore | None' = None,
         memory: MemorySettings | None = None,
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
@@ -890,7 +907,7 @@ class NodeRuntime:
             functions = services.functions
             document_loader = services.document_loader
             package_loader = services.package_loader
-            store = services.store
+            memory_store = services.memory_store
             memory = services.memory
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
@@ -918,7 +935,7 @@ class NodeRuntime:
             functions=functions or {},
             document_loader=document_loader,
             package_loader=package_loader,
-            store=store,
+            memory_store=memory_store,
             memory=memory or MemorySettings(),
             skills_context=skills_context,
             workflow_middleware=dict(workflow_middleware or {}),
@@ -1341,7 +1358,7 @@ class NodeRuntime:
     def _attach_ambient_knowledge(self, lc_tools: list[Any]) -> None:
         """Ambient knowledge seeking — capability by configuration.
 
-        The exact mirror of the memory rule above (`self.services.store is not None`
+        The exact mirror of the memory rule above (`self.services.memory_store is not None`
         → memory tools): when this workflow package's `knowledge/` directory
         is non-empty, the knowledge-lookup tool is bound to every agent and
         worker with no Knowledge atom wired. The atom remains the visible
@@ -1424,7 +1441,7 @@ class NodeRuntime:
         # A store's presence turns on the prebuilt memory tools for every
         # agent (ticket 65) — capability by configuration, no per-workflow
         # wiring, matching the minimum-viable-prebuilt rule.
-        if self.services.store is not None:
+        if self.services.memory_store is not None:
             from openstategraph.memory import memory_tools
 
             lc_tools.extend(memory_tools(self.services.memory))
@@ -2329,7 +2346,7 @@ class NodeRuntime:
         mounted child — and a child resolves its *own* `workflow_slug`, so a
         mount's segments are the mount's, exactly as isolation implies.
 
-        `self.services.store` is deliberately not used: it is the parent's
+        `self.services.memory_store` is deliberately not used: it is the parent's
         object, and reading it here would make a subgraph's tollbooth write to
         the wrong ledger in the one case nobody tests by hand.
 
@@ -2568,7 +2585,7 @@ class NodeRuntime:
                         functions={**self.services.functions, **child_assets.functions},
                         document_loader=self.services.document_loader,
                         package_loader=self.services.package_loader,
-                        store=self.services.store,
+                        memory_store=self.services.memory_store,
                         skills_context=child_assets.skills_context,
                         workflow_middleware=child_assets.workflow_middleware or {},
                         # The child's OWN knowledge, never the parent's —
@@ -2589,7 +2606,7 @@ class NodeRuntime:
                     child_document,
                     RunState,
                     child_factory,
-                    store=self.services.store,
+                    store=self.services.memory_store,
                 )
                 # Inherited *upwards*, unlike everything else about a child
                 # runtime, and deliberately: the child's frames ride the

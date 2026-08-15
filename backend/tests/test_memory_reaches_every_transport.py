@@ -184,3 +184,50 @@ class TestAFactSavedOverHttpLandsInThatStore:
 
         saved = [item.value["fact"] for item in store.search(("memories", "ada@example_com"))]
         assert saved == ["the invoice run is monthly"]
+
+
+class TestTheSeamIsTypedRatherThanAny:
+    """The rename's other half: the swap is now a mypy error, not a runtime one.
+
+    `RuntimeServices.store`, `NodeRuntime(store=)` and
+    `WorkflowCompiler.build(store=)` were all `Any`, and mypy is configured
+    `files = ["openstategraph"]`, so nothing in the package would have objected
+    to `store=self.store`. These assertions fail if either half regresses — the
+    name coming back, or the type going back to `Any`.
+    """
+
+    def test_the_runtime_services_field_is_named_and_typed_for_memory(self) -> None:
+        from dataclasses import fields
+
+        from openstategraph.compile.node_runtime import RuntimeServices
+
+        declared = {f.name: str(f.type) for f in fields(RuntimeServices)}
+
+        assert "store" not in declared, (
+            "`RuntimeServices.store` is back. One object's `.store` must not "
+            "mean the filesystem WorkflowStore in api/ and a BaseStore here."
+        )
+        assert "BaseStore" in declared["memory_store"]
+
+    def test_the_compilers_store_parameter_names_the_base_store(self) -> None:
+        import inspect
+
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        annotation = inspect.signature(WorkflowCompiler.build).parameters["store"].annotation
+
+        assert "BaseStore" in str(annotation), (
+            "`build(store=)` is the last hop before LangGraph's own "
+            "`compile(store=)`; typed `Any` it accepts a WorkflowStore, which "
+            "then binds save_memory to every agent and fails inside langgraph."
+        )
+
+    def test_the_runtime_keyword_says_which_store_it_wants(self) -> None:
+        import inspect
+
+        from openstategraph.compile.node_runtime import NodeRuntime
+
+        parameters = inspect.signature(NodeRuntime.__init__).parameters
+
+        assert "store" not in parameters
+        assert "BaseStore" in str(parameters["memory_store"].annotation)
