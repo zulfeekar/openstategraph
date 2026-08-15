@@ -20,12 +20,16 @@ from openstategraph.providers import (
 #: same workflow on `gpt-oss:120b-cloud` wrote a correct two-join `GROUP BY` and
 #: answered in 23s.
 #:
-#: So a bare `ollama:` fallback must resolve to cloud. Anyone wanting a local
-#: model has to name it explicitly in the request, which is the right amount of
-#: friction for a choice that changes the result this much.
+#: So `ollama:` resolves to cloud wherever it is written. Anyone wanting a
+#: local model has to name it explicitly in the request, which is the right
+#: amount of friction for a choice that changes the result this much.
 #:
-#: Kept as a name because it is imported elsewhere; the value now comes from
-#: the Ollama `ProviderSpec` so there is one place to change it.
+#: **This is a name, not a fallback** (install-experience T2). It used to be
+#: the literal `resolve_model` returned when nothing else matched, which named
+#: Ollama whatever you had installed; the default is elected now
+#: (`ProviderCatalogue.elected_default`) and nothing reaches Ollama by *not*
+#: choosing. Kept exported because it is imported elsewhere; the value belongs
+#: to the Ollama `ProviderSpec` so there is one place to change it.
 OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
 
 
@@ -92,48 +96,39 @@ def resolve_model(requested: str | None) -> str:
     **Precedence** (ticket 03), lowest to highest, pinned pair by pair in
     `tests/test_config_file.py::TestPrecedence`::
 
-        config file < environment < workflow settings.model
-                    < node's own model < caller's `model=` argument
+        instance default < config file < workflow settings.model
+                         < node's own model < caller's `model=` argument
 
     The top three collapse into `requested` before they reach here — call
     sites spell it `request.model or workflow_default_model(document)`, and
     the node layer overrides afterwards in `NodeRuntime._resolve_model`. What
-    this function owns is the bottom two: environment, then config file, then
-    the keyless fallback.
-
-    **Ollama is still the default *name*, and that is all this decides.**
-    Naming a model is cheap and total; whether it can be *called* is
-    `chat_model.build_chat_model`'s question, and since
-    providers-and-credentials ticket 02 the answer needs `OLLAMA_API_KEY` or
-    `OLLAMA_HOST`.
-
-    Until that ticket this docstring said Ollama "authenticates from its own
-    local credentials", offered as reassurance that zero configuration worked.
-    It was true, and it was the defect: those credentials belonged to a
-    logged-in local daemon and could not be read, moved or revoked from an
-    environment — and on a machine without that daemon the "working model with
-    zero configuration" was a connection refused.
-
-    This never falls back to a *local* model — see `OLLAMA_CLOUD_MODEL` — and
-    an explicit `model` argument still always wins, so a surprise provider is
-    only possible by asking for one.
+    this function owns is the bottom two, and it owns only **which of them**:
+    who the instance default *is* belongs to
+    `ProviderCatalogue.elected_default`, which is the one place that decides.
 
     **A request is expanded, not merely echoed** (install-experience T1). See
     `expand_model_reference`: `"ollama:"` and `"anthropic"` are the same
-    request as their provider's default, and until this they reached the
+    request as their provider's default, and until it existed they reached the
     vendor SDK verbatim (workflow-gallery ticket 12).
+
+    **Nothing installed raises rather than answering.** Until T2 the last line
+    here was `os.getenv("OPENSTATEGRAPH_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL`,
+    which named Ollama whatever you had installed — and the "keyless fallback"
+    branch above it, described in this docstring as *"so a developer with no
+    credentials at all still gets a working model"*, had been unreachable since
+    providers-and-credentials 02 made all three providers require a key. Both
+    are gone: a model name nobody can call is not an answer.
     """
     expanded = expand_model_reference(requested)
     if expanded is not None:
         return expanded
 
-    catalogue = provider_catalogue()
+    default = provider_catalogue().elected_default()
 
-    # 1. Environment. A credential actually present on this machine names a
-    #    provider, and outranks a file a colleague committed.
-    for spec in catalogue.list():
-        if spec.requires_key and spec.is_configured():
-            return spec.model_string()
+    # 1. A credential actually present on this machine names a provider, and
+    #    outranks a file a colleague committed.
+    if default.configured and default.model:
+        return default.model
 
     # 2. The config file's own default, if it declares one.
     from openstategraph.config_file import active_config
@@ -142,13 +137,15 @@ def resolve_model(requested: str | None) -> str:
     if settings is not None and settings.default_model:
         return settings.default_model
 
-    # 3. The keyless fallback — Ollama cloud, so a developer with no
-    #    credentials at all still gets a working model.
-    for spec in catalogue.list():
-        if not spec.requires_key:
-            return spec.model_string()
+    # 3. An installed integration with no credential yet is still the answer:
+    #    the extra chose the vendor, and the wall it hits names that vendor's
+    #    own variable rather than listing three strangers.
+    if default.model:
+        return default.model
 
-    return os.getenv("OPENSTATEGRAPH_OLLAMA_MODEL") or OLLAMA_CLOUD_MODEL
+    from openstategraph.errors import NoProviderInstalled
+
+    raise NoProviderInstalled(default.reason)
 
 
 def accepted_credential_keys() -> frozenset[str]:

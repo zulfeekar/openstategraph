@@ -54,6 +54,24 @@ def _no_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+def _elected_variable() -> str:
+    """The credential the *instance default* provider reads, on this machine.
+
+    These tests assert the shape of a credential failure, never a vendor. Since
+    install-experience T2 the instance default is **elected** from what is
+    installed rather than falling through to a hard-coded Ollama literal, so
+    naming `OLLAMA_API_KEY` here would pin a machine instead of a property —
+    and on an install where Ollama is not a candidate it would go green for the
+    wrong reason, which is the defect the class below already records once.
+    """
+    from openstategraph.providers import provider_catalogue
+
+    spec = provider_catalogue().elected_default().spec
+    assert spec is not None, "no provider integration is installed in this checkout"
+    assert spec.primary_env_var is not None
+    return spec.primary_env_var
+
+
 def _run(audience: str = "developer") -> dict:
     response = TestClient(create_app()).post(
         "/api/runs",
@@ -73,9 +91,10 @@ class TestTheDiagnosisReachesTheDeveloperChannel:
         )
 
     def test_it_names_the_provider_and_a_variable_to_set(self) -> None:
+        variable = _elected_variable()
         text = " ".join(_run()["developer"]["warnings"])
-        assert "ollama" in text.lower()
-        assert "OLLAMA_API_KEY" in text
+        assert variable in text
+        assert variable.split("_")[0].lower() in text.lower()
 
     def test_it_names_the_node_that_failed(self) -> None:
         """A workflow has many nodes; "something failed" is not actionable."""
@@ -118,7 +137,7 @@ class TestBothDoorsReportIt:
             json={"workflow": DOCUMENT, "question": "what is 2+2?", "audience": "developer"},
         )
         assert response.status_code == 200
-        assert "OLLAMA_API_KEY" in response.text
+        assert _elected_variable() in response.text
         # Our copy, not the exception's repr.
         assert "MissingProviderKey:" not in response.text
 
@@ -224,28 +243,29 @@ class TestWhatACustomerSees:
 
     def test_that_sentence_names_no_variable_provider_or_file(self) -> None:
         answer = _run(audience="customer")["answer"]
-        for leak in ("OLLAMA", "API_KEY", ".env", "ollama", "MissingProviderKey"):
+        for leak in (_elected_variable(), "API_KEY", ".env", "MissingProviderKey"):
             assert leak not in answer
 
     def test_the_failure_marker_does_not_reach_a_customer_through_outputs(self) -> None:
         """`outputs` is rendered per node on every surface — same seam as `answer`."""
         outputs = _run(audience="customer")["outputs"]
         joined = " ".join(str(v) for v in outputs.values())
-        assert "OLLAMA_API_KEY" not in joined
+        assert _elected_variable() not in joined
         assert ".env" not in joined
         assert "failed after retries" not in joined
 
     def test_a_developer_still_gets_the_whole_thing(self) -> None:
         """Redaction is for the audience that cannot act, not for everyone."""
         outputs = _run(audience="developer")["outputs"]
-        assert any("OLLAMA_API_KEY" in str(v) for v in outputs.values())
+        variable = _elected_variable()
+        assert any(variable in str(v) for v in outputs.values())
 
     def test_the_streaming_door_agrees_on_both_counts(self) -> None:
         response = TestClient(create_app()).post(
             "/api/runs/stream",
             json={"workflow": DOCUMENT, "question": "what is 2+2?", "audience": "customer"},
         )
-        assert "OLLAMA_API_KEY" not in response.text
+        assert _elected_variable() not in response.text
         assert "could not finish" in response.text
 
     def test_a_healthy_run_is_untouched(self) -> None:

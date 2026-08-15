@@ -141,6 +141,36 @@ finally read by code. Wayfinder tickets 02–04;
   this tree, so "no saved document carries it" is not a condition anything
   here can check.
 
+### Changed — breaking
+
+- **The instance default is elected from what is installed, in one place**
+  (install-experience T2). `resolve_model(None)` and
+  `ProviderCatalogue.default_spec()` were two implementations of one rule and
+  they **disagreed on the same machine** — `ollama:gpt-oss:120b-cloud` versus
+  `None` — with the carefully-reasoned copy, `default_spec`, having no
+  production caller at all. Neither asked `is_installed()`, so both could elect
+  a provider that cannot be imported: an `[openai]` install with a stale
+  `ANTHROPIC_API_KEY` exported by another tool elected Anthropic and then told
+  the reader to `pip install 'openstategraph[anthropic]'`.
+
+  `default_spec()` is replaced by `ProviderCatalogue.elected_default()`, which
+  returns the new `ProviderDefault` — the provider, the model string, whether
+  it is configured, and the **reason**, because `openstategraph providers`
+  prints it. `is_installed()` is candidacy (a hard filter), `is_configured()`
+  is the election, registration order is the tiebreak, and a provider that is
+  installed but has no key yet still wins: the extra chose the vendor, so the
+  one remaining wall names *their* variable instead of listing three
+  strangers. The rule `default_spec` carried — a configured provider beats a
+  keyless one whatever the order — is kept, not collapsed.
+
+  Two things are **deleted rather than narrowed**: the "keyless fallback" branch
+  (unreachable since providers-and-credentials 02 made all three providers
+  require a key) and the terminal `OLLAMA_CLOUD_MODEL` literal that named Ollama
+  whatever you had installed. With no integration installed at all,
+  `resolve_model` now raises the new `errors.NoProviderInstalled` instead of
+  returning a model name nobody can call. `OLLAMA_CLOUD_MODEL` stays exported;
+  nothing reaches Ollama by *not* choosing any more.
+
 ### Added
 
 - **A bare provider prefix is a shorthand, and now it resolves** (workflow-gallery

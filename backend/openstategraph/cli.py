@@ -506,18 +506,20 @@ def no_provider_warning() -> str | None:
     a serve command has no document in front of it, and a warning that fired
     for an Anthropic-only install serving an Ollama example would fire on
     every correct install too.
+
+    The sentence itself belongs to the catalogue
+    (`ProviderCatalogue.no_provider_message`), because three surfaces print it
+    — this warning, the `default:` line of `openstategraph providers`, and
+    `resolve_model`'s `NoProviderInstalled` — and three copies of a sentence
+    is three chances to fix two of them.
     """
     from openstategraph.providers import provider_catalogue
 
-    specs = provider_catalogue().list()
+    catalogue = provider_catalogue()
+    specs = catalogue.list()
     if not specs or any(spec.is_installed() for spec in specs):
         return None
-    lines = [spec.install_hint for spec in specs]
-    choices = lines[0] if len(lines) == 1 else ", ".join(lines[:-1]) + f" or {lines[-1]}"
-    return (
-        "no model provider integration is installed, so every run will fail — "
-        f"{choices}, then start again"
-    )
+    return catalogue.no_provider_message()
 
 
 def cmd_serve(args: argparse.Namespace) -> int:

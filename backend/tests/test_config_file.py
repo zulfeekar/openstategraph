@@ -318,12 +318,24 @@ class TestPrecedence:
         reset_provider_catalogue()
         reset_active_config()
 
-    def test_config_beats_the_built_in_fallback(
+    def test_config_beats_the_elected_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from openstategraph.api.model_resolution import resolve_model
+        """A written default outranks an install nobody configured.
 
-        assert resolve_model(None) == "ollama:gpt-oss:120b-cloud"
+        The first assertion used to be the literal `ollama:gpt-oss:120b-cloud`,
+        which was `resolve_model`'s terminal fallback — a vendor named whatever
+        you had installed. install-experience T2 deleted that line and elects
+        the default from the installed integrations instead, so what this
+        compares against is the election rather than a constant.
+        """
+        from openstategraph.api.model_resolution import resolve_model
+        from openstategraph.providers import provider_catalogue
+
+        elected = provider_catalogue().elected_default()
+        assert elected.configured is False, "this pair is about the unconfigured case"
+        assert resolve_model(None) == elected.model
+
         self._with_config(tmp_path, monkeypatch, "version: 1\ndefault_model: ollama:custom\n")
         assert resolve_model(None) == "ollama:custom"
 

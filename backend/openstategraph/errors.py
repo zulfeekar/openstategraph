@@ -161,6 +161,28 @@ class MissingProviderPackage(OpenStateGraphError, ImportError):
     """
 
 
+class NoProviderInstalled(OpenStateGraphError, ImportError):
+    """Nothing this install can call a model with, asked before a run starts.
+
+    The sibling of `MissingProviderPackage`: that one is *this* model's
+    provider missing, this one is **every** provider missing, which is a
+    different sentence — there is no vendor to name, only a choice of install
+    lines. It is the state a bare `pip install openstategraph` leaves, and also
+    the state a typo'd extra leaves, because pip warns and exits 0 for an extra
+    a distribution does not declare.
+
+    Raised by `resolve_model` when nothing was asked for and there is no
+    candidate to elect. Returning a model name instead would hand back a
+    provider that cannot be imported and let the failure surface as a vendor
+    traceback three layers down — the round trip workflow-gallery ticket 38
+    exists to end.
+
+    `ImportError` for the reason `MissingProviderPackage` keeps it: `cli.main`
+    catches ImportError to exit 3 on a missing extra, and an adopter's
+    `except ImportError` around `load_workflow` keeps working unchanged.
+    """
+
+
 class UnknownProvider(OpenStateGraphError, ValueError):
     """A model reference names a prefix, and the prefix names nothing.
 
@@ -202,6 +224,7 @@ __all__ = [
     "InvalidPackageName",
     "MissingProviderKey",
     "MissingProviderPackage",
+    "NoProviderInstalled",
     "OpenStateGraphError",
     "PackageNotFound",
     "ProviderRefusedCredential",

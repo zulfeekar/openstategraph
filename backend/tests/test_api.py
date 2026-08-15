@@ -107,24 +107,32 @@ class TestModelResolution:
     def test_an_explicit_model_wins(self) -> None:
         assert resolve_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
 
-    def test_no_configuration_defaults_to_ollama_cloud_not_an_error(
+    def test_no_configuration_still_names_a_model_rather_than_erroring(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Ollama stays the *named* default when nothing else is configured.
+        """A machine with no credential at all still gets a name.
 
-        What changed with providers-and-credentials ticket 02 is what happens
-        next, not this: resolving a name is still cheap and total, but building
-        that model now needs `OLLAMA_API_KEY` or `OLLAMA_HOST`. The old
-        docstring here claimed Ollama "authenticates from its own local
-        credentials rather than an env var this process needs to see" — which
-        was true, and was the defect: those credentials were a logged-in
-        daemon's, unreadable and unrevocable from the environment.
+        **Which** name changed with install-experience T2 and this test
+        changed with it. It used to assert `OLLAMA_CLOUD_MODEL`, because the
+        last line of `resolve_model` was that literal — Ollama was the answer
+        whatever you had installed, which is exactly the defect that ticket
+        names. The default is elected from the *installed* integrations now,
+        so on a checkout with all three importable and none configured it is
+        the first registered candidate.
+
+        The property this test has always been about survives unchanged:
+        resolving a name is cheap and total, and whether that model can be
+        *called* is `build_chat_model`'s question, not this one's.
         """
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
+        from openstategraph.providers import provider_catalogue
+
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
         monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
 
-        assert resolve_model(None) == OLLAMA_CLOUD_MODEL
+        elected = provider_catalogue().elected_default()
+        assert elected.configured is False
+        assert resolve_model(None) == elected.model
 
     def test_it_picks_up_an_anthropic_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
@@ -140,9 +148,16 @@ class TestModelResolution:
     def test_ollama_resolves_to_a_cloud_model_never_a_local_one(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """The standing rule, asserted where Ollama can now actually win.
+
+        Ollama used to be reached by *not* choosing, so this needed no key.
+        Since T2 it is elected like any other provider, so the key is what puts
+        it in front of the election — the rule it guards is untouched.
+        """
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
         monkeypatch.delenv("OPENSTATEGRAPH_OLLAMA_MODEL", raising=False)
+        monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
 
         resolved = resolve_model(None)
 
@@ -159,6 +174,7 @@ class TestModelResolution:
     ) -> None:
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
             monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
         monkeypatch.setenv("OPENSTATEGRAPH_OLLAMA_MODEL", "ollama:gpt-oss:20b-cloud")
         assert resolve_model(None) == "ollama:gpt-oss:20b-cloud"
 

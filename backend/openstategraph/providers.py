@@ -388,13 +388,35 @@ class ProviderGap:
         return self.spec.missing_key_message()
 
 
+@dataclass(frozen=True)
+class ProviderDefault:
+    """Which provider a run uses when nothing named one, **and why**.
+
+    A value rather than a bare `ProviderSpec | None`, because the reason is
+    read as often as the answer: `openstategraph providers` prints it, and it
+    is the difference between *"why is it not using my key"* answered and
+    guessed at. The sentence is composed once, here, so the CLI cannot invent
+    a second wording (install-experience T2/T3).
+    """
+
+    #: The elected provider, or `None` when no integration is installed.
+    spec: ProviderSpec | None
+    #: The full `provider:model` string, or `None` with no election.
+    model: str | None
+    #: One clause, lower case, no full stop — it is printed after a dash.
+    reason: str
+    #: Whether the elected provider can be **called** right now. False is a
+    #: real election: the extra chose the vendor and only the key is missing.
+    configured: bool = False
+
+
 @dataclass
 class ProviderCatalogue:
     """Every known provider, in registration order.
 
-    Order is meaningful only among providers that *require* a key: see
-    `default_spec`, which deliberately does not let a keyless fallback win by
-    merely having registered earlier.
+    Order is the documented tiebreak, and it is meaningful only among
+    providers that are installed *and* equally configured — see
+    `elected_default`.
     """
 
     _specs: dict[str, ProviderSpec] = field(default_factory=dict)
@@ -450,25 +472,104 @@ class ProviderCatalogue:
         """`{model prefix: extra}` for every provider and every alias."""
         return {prefix: spec.extra for spec in self._specs.values() for prefix in spec.prefixes}
 
-    def default_spec(self, env: Mapping[str, str] | None = None) -> ProviderSpec | None:
+    def install_choices(self) -> str:
+        """Every `pip install` line that would give this install a provider.
+
+        One phrase, one owner. `cli.no_provider_warning`, `elected_default`'s
+        no-candidate reason and `resolve_model`'s refusal all print it, and
+        three copies of a sentence is three chances to fix two of them.
+        """
+        lines = [spec.install_hint for spec in self._specs.values()]
+        if not lines:
+            return "(no provider is registered at all)"
+        return lines[0] if len(lines) == 1 else ", ".join(lines[:-1]) + f" or {lines[-1]}"
+
+    def no_provider_message(self) -> str:
+        """The one sentence for an install that can run nothing at all."""
+        return (
+            "no model provider integration is installed, so every run will fail — "
+            f"{self.install_choices()}, then start again"
+        )
+
+    def elected_default(self, env: Mapping[str, str] | None = None) -> ProviderDefault:
         """The provider to use when nothing more specific was asked for.
 
-        Two passes, and the second is the reason this is not a one-liner: a
-        *configured* key-requiring provider always beats a keyless fallback,
-        whatever the registration order. Ollama registers third and needs no
-        key, so a single ordered scan would let it shadow every plugin that
-        registers after it — a fourth vendor would be unreachable by default
-        no matter how correctly its key was set, which is precisely the
-        closedness this ticket exists to remove.
+        **The one rule, in the one place** (install-experience T2). Until this,
+        `resolve_model` reimplemented the choice and this method carried the
+        reasoning with no production caller — on a bare machine one answered
+        `ollama:gpt-oss:120b-cloud` and the other answered `None`.
+
+        Two signals, in different roles, and neither alone:
+
+        - `is_installed()` is **candidacy**, a hard filter. Electing a
+          provider that cannot be imported is electing a failure we have
+          already detected — and, worse, sending the reader to a `pip install`
+          line for a vendor they did not choose. An `[openai]` install with a
+          stale `ANTHROPIC_API_KEY` exported by some other tool used to be told
+          to install `[anthropic]`.
+        - `is_configured()` is the **election**, ranking the candidates.
+          Installed-only would ignore a key that is actually present.
+        - Registration order is the **tiebreak**, as `builtin_specs` documents.
+
+        Three passes, and the middle one is the rule this method has always
+        carried: a *configured* key-requiring provider beats a keyless one
+        whatever the order, or a keyless plugin registered early would make
+        every later vendor unreachable by default however correctly its key was
+        set. A keyless provider in turn beats a candidate that is installed and
+        **not** configured, because it can actually be called.
+
+        The last pass is what makes the install line a mental model:
+        `pip install 'openstategraph[anthropic]'` with no key at all still
+        elects Anthropic, so the single remaining wall names *their* vendor's
+        variable instead of listing three strangers.
         """
-        specs = self.list()
-        for spec in specs:
-            if spec.requires_key and spec.is_configured(env):
-                return spec
-        for spec in specs:
-            if not spec.requires_key:
-                return spec
-        return None
+        candidates = [spec for spec in self._specs.values() if spec.is_installed()]
+        if not candidates:
+            return ProviderDefault(None, None, self.no_provider_message())
+
+        ready = [spec for spec in candidates if spec.is_configured(env)]
+        keyed = [spec for spec in ready if spec.requires_key]
+        elected = keyed[0] if keyed else (ready[0] if ready else candidates[0])
+        return ProviderDefault(
+            spec=elected,
+            model=elected.model_string(env),
+            reason=_default_reason(candidates, ready, elected),
+            configured=any(spec is elected for spec in ready),
+        )
+
+
+def _default_reason(
+    candidates: list[ProviderSpec],
+    ready: list[ProviderSpec],
+    elected: ProviderSpec,
+) -> str:
+    """Why that provider, in one clause a person can act on.
+
+    Four shapes, because four situations need different next steps: nothing to
+    do, set a key, or stop the tiebreak from deciding for you. The
+    more-than-one cases name the alternatives, because a default nobody can
+    see is the *"why is it not using my key"* question this text exists to
+    pre-empt.
+    """
+    installed = len(candidates)
+    configured = any(spec is elected for spec in ready)
+    if not configured:
+        variables = elected.credential_variables or "its credential"
+        if installed == 1:
+            return f"the only provider integration installed; set {variables} to use it"
+        return (
+            f"{installed} integrations installed and none configured; "
+            f"set {variables} to use {elected.name}"
+        )
+    if installed == 1:
+        return "the only provider integration installed, and it is configured"
+    if len(ready) == 1:
+        return f"the only one of {installed} installed integrations that is configured"
+    names = ", ".join(spec.name for spec in ready)
+    return (
+        f"{len(ready)} integrations installed and configured ({names}); the first "
+        "registered wins. Pin one with default_model: in openstategraph.yaml"
+    )
 
 
 def builtin_specs() -> tuple[ProviderSpec, ...]:
@@ -723,6 +824,7 @@ __all__ = [
     "OPTIONAL_ENV_VARS",
     "PROVIDERS_GROUP",
     "ProviderCatalogue",
+    "ProviderDefault",
     "ProviderGap",
     "ProviderSpec",
     "builtin_specs",
