@@ -34,6 +34,8 @@ running a build. The class below is the hatchling adapter and nothing else.
 from __future__ import annotations
 
 import os
+import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +86,55 @@ STALE = (
 _SOURCE_SUFFIXES = (".ts", ".tsx", ".css", ".html")
 
 
-def editor_is_stale(dist: Path, src: Path) -> bool:
+#: What makes a glob a *test* glob rather than any other glob in those configs.
+#:
+#: The discriminator is the safety property, not a convenience. `vite.config.ts`
+#: also carries `coverage.include` (`src/core/**`, `src/controller/**`) — real
+#: bundle inputs, in the same file, one array away. Taking one of those for an
+#: exclusion would hide the entire core from the staleness walk: a false
+#: negative, which is the side `editor_is_stale` says is unacceptable to pay.
+#: A glob naming `*.test.*`, `*.spec.*` or `*.stories.*` cannot be a bundle
+#: input, whichever array it was found in.
+_TEST_FILE_MARKERS = (".test.", ".spec.", ".stories.")
+
+
+def bundle_excluded_globs(repo_root: Path) -> tuple[str, ...]:
+    """The globs naming files `vite build` cannot put in the bundle.
+
+    Read out of the vitest configs (`vite*.config.ts`) rather than kept here as
+    a second list of suffixes. The JavaScript side already declares what a test
+    file is — `include: ['src/**/*.test.ts']` and the generator's
+    `['src/nodes/portSpecs.emit.spec.ts']` — and two lists of the same fact
+    drift the first time either side adds a convention.
+
+    Empty when there is no config to read, which excludes nothing: not knowing
+    is a reason to compare more files, never fewer.
+    """
+    globs: list[str] = []
+    for config in sorted(repo_root.glob("vite*.config.ts")):
+        try:
+            source = config.read_text(encoding="utf-8")
+        except OSError:  # pragma: no cover — unreadable config, compare everything
+            continue
+        for quoted in re.findall(r"""['"]([^'"\n]+)['"]""", source):
+            leaf = quoted.rsplit("/", 1)[-1]
+            if any(marker in leaf for marker in _TEST_FILE_MARKERS) and quoted not in globs:
+                globs.append(quoted)
+    return tuple(globs)
+
+
+@lru_cache(maxsize=None)
+def _glob_pattern(glob: str) -> re.Pattern[str]:
+    escaped = re.escape(glob)
+    body = escaped.replace(r"\*\*/", "(?:[^/]+/)*").replace(r"\*\*", ".*").replace(r"\*", "[^/]*")
+    return re.compile(f"{body}$")
+
+
+def _is_excluded(relative: str, globs: tuple[str, ...]) -> bool:
+    return any(_glob_pattern(glob).match(relative) for glob in globs)
+
+
+def editor_is_stale(dist: Path, src: Path, repo_root: Path | None = None) -> bool:
     """Whether `dist/` predates the sources it was supposed to be built from.
 
     Modification times, not hashes: the question is "did somebody edit the
@@ -97,15 +147,34 @@ def editor_is_stale(dist: Path, src: Path) -> bool:
     `False` when there is no source tree at all — a wheel built from our own
     sdist has package data and no `src/`, and refusing there would break every
     downstream repackager over a check that cannot apply.
+
+    **Only files the bundle can contain are compared.** Test files are `.ts`,
+    `vitest` collects them and Vite never bundles them, so touching one cannot
+    change a byte of what the wheel ships — yet it used to demand
+    `npm run build`, and did, at `HEAD`, over
+    `src/nodes/guard/GuardrailNode.test.ts`. That is the harmless direction of
+    the asymmetry above, and it is still the expensive one: a gate that is red
+    for a reason nobody believes is a gate people clear with a reflex rebuild,
+    and then it is checking nothing. `bundle_excluded_globs` narrows the input;
+    the rule is unchanged.
     """
     index = dist / "index.html"
     if not index.is_file() or not src.is_dir():
         return False
 
+    root = repo_root if repo_root is not None else src.parent
+    excluded = bundle_excluded_globs(root)
+
     built = index.stat().st_mtime
     for path in src.rglob("*"):
         if path.suffix in _SOURCE_SUFFIXES and path.is_file():
-            if path.stat().st_mtime > built:
+            if path.stat().st_mtime <= built:
+                continue
+            try:
+                relative = path.relative_to(root).as_posix()
+            except ValueError:  # pragma: no cover — src outside the repo root
+                return True
+            if not _is_excluded(relative, excluded):
                 return True
     return False
 
