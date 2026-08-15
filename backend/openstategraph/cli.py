@@ -32,8 +32,11 @@ and `openstategraph run ./my-workflow "…"` is the demo.
 
 Every command works from any working directory: paths come from the arguments
 and are resolved against the caller's cwd, and nothing is relative to a
-checkout. `new` writes to `./workflows` by convention, overridable with
-`--root`.
+checkout. The commands that *create* packages — `new` and `examples copy` —
+write to `workflows_root()`, the same directory every reader resolves, with
+`--root` as the explicit override that rule already puts on top. They used to
+spell `Path.cwd() / "workflows"` themselves, which is the same answer only when
+the project happens to use the convention and you happen to be standing in it.
 """
 
 from __future__ import annotations
@@ -238,6 +241,28 @@ def cmd_graph(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _write_root(args: argparse.Namespace) -> Path:
+    """Where a command that *creates* a package puts it (install-experience T5).
+
+    `--root` first, because it is the explicit argument the project-wide
+    precedence rule already puts at the top; otherwise the same question every
+    reader asks, answered by the same function — `workflows_root()`.
+
+    Until this, `new` and `examples copy` each spelled
+    `Path.cwd() / "workflows"` instead. So in a project with `workflows_dir:`
+    set, or with `OPENSTATEGRAPH_WORKFLOWS_ROOT` exported, the first thing an
+    adopter scaffolded landed where `serve` does not look, and the product
+    answered *"No workflows exist yet."* with their package right there — the
+    exact failure `workflows_root.py` exists to have ended, reintroduced by the
+    two commands that create things.
+    """
+    from openstategraph.workflows_root import workflows_root
+
+    if getattr(args, "root", None):
+        return Path(args.root).expanduser().resolve()
+    return workflows_root()
+
+
 def cmd_new(args: argparse.Namespace) -> int:
     """`openstategraph.scaffold` — the same function `scripts/new_workflow.py`
     calls, so the two can never produce different packages.
@@ -265,7 +290,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         print("note: --team is deprecated; use --template team", file=sys.stderr)
 
     template = args.template or ("team" if args.team else templates.DEFAULT_TEMPLATE)
-    root = Path(args.root).expanduser().resolve() if args.root else Path.cwd() / "workflows"
+    root = _write_root(args)
     try:
         target = new_package(root, args.slug, template=template, name=args.name)
     except ScaffoldError as exc:
@@ -301,7 +326,7 @@ def cmd_examples_copy(args: argparse.Namespace) -> int:
     from openstategraph import examples
     from openstategraph.scaffold import ScaffoldError, copy_example
 
-    root = Path(args.root).expanduser().resolve() if args.root else Path.cwd() / "workflows"
+    root = _write_root(args)
     try:
         written = copy_example(root, args.slug)
     except examples.UnknownExampleError as exc:
@@ -745,7 +770,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="deprecated alias for --template team",
     )
-    new.add_argument("--root", help="where to create it (default: ./workflows)")
+    new.add_argument("--root", help="where to create it (default: the project's workflows root)")
     new.set_defaults(handler=cmd_new)
 
     # The gallery ships in the wheel as package data (gallery ticket 07) and is
@@ -768,7 +793,9 @@ def build_parser() -> argparse.ArgumentParser:
     # No `choices`: the gallery has twenty-one entries and argparse would print
     # all of them on every usage error. `examples.get` raises with the list.
     example_copy.add_argument("slug", help="see `openstategraph examples list`")
-    example_copy.add_argument("--root", help="where to copy it (default: ./workflows)")
+    example_copy.add_argument(
+        "--root", help="where to copy it (default: the project's workflows root)"
+    )
     example_copy.set_defaults(handler=cmd_examples_copy)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")

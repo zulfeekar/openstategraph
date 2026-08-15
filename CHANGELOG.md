@@ -187,6 +187,19 @@ finally read by code. Wayfinder tickets 02–04;
   `test_config_file.py::TestPrecedence` carries the flipped pair with the
   reasoning rewritten at the test rather than deleted.
 
+### Fixed — `new` and `examples copy` write where the project says
+
+- **The two commands that create packages bypassed the workflows-root
+  resolver** (install-experience T5). Both spelled
+  `Path(args.root)… if args.root else Path.cwd() / "workflows"`, so in a
+  project with `workflows_dir:` set, or with `OPENSTATEGRAPH_WORKFLOWS_ROOT`
+  exported, `openstategraph new my-thing` wrote to `./workflows/my-thing` and
+  `openstategraph serve` then showed an empty project — the *"No workflows
+  exist yet."* failure `workflows_root.py` exists to have ended, reintroduced
+  by the first two commands an adopter reaches for. Both now call
+  `workflows_root()`; `--root` still wins, because it is the explicit argument
+  that precedence rule already puts on top.
+
 ### Added
 
 - **The default is shown rather than guessed at** (install-experience T3).
