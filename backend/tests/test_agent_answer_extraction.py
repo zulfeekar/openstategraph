@@ -34,6 +34,8 @@ import pytest
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import any_chat_model
+
 
 def _message(content: str, tool_calls: list[dict[str, Any]] | None = None) -> Any:
     return SimpleNamespace(content=content, tool_calls=tool_calls or [], type="ai")
@@ -53,7 +55,7 @@ def _agent_answer(monkeypatch: pytest.MonkeyPatch, messages: list[Any]) -> str:
 
     document = {"nodes": [{"id": "a1", "type": "agent.llm", "data": {}}], "edges": []}
     plan = CompiledPlan(nodes=["a1"], edges=[], conditional={})
-    runtime = NodeRuntime(model=SimpleNamespace(name="stub"))
+    runtime = NodeRuntime(model=any_chat_model())
     run = runtime.factory(document)("a1", document["nodes"][0], plan)
     return run({"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}})[
         "answer"
@@ -116,7 +118,7 @@ class TestAnAgentKeepsWhatItSaid:
         monkeypatch.setattr(agent_family, "agent_node_for_tier", lambda _t: StubTier)
         document = {"nodes": [{"id": "a1", "type": "agent.llm", "data": {}}], "edges": []}
         plan = CompiledPlan(nodes=["a1"], edges=[], conditional={})
-        runtime = NodeRuntime(model=SimpleNamespace(name="stub"))
+        runtime = NodeRuntime(model=any_chat_model())
         update = runtime.factory(document)("a1", document["nodes"][0], plan)(
             {"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}}
         )

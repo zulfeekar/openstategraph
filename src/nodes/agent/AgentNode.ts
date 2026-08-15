@@ -103,10 +103,25 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           // LangChain's prebuilt SummarizationMiddleware (ticket 66): when
           // the conversation bloats, older turns are summarized by the
           // model and the recent tail kept verbatim.
+          //
+          // **On by default** (owner, 2026-08-15). Off meant "we have
+          // summarization" was true of a feature no default install ever
+          // used — and the middleware it switched on was built with no
+          // trigger, so even turning it on got nothing. The threshold lives
+          // where the toggle becomes middleware, in the compiler
+          // (`node_runtime.SUMMARIZE_FRACTION` / `SUMMARIZE_TOKENS`), never
+          // here: a number on the card would be a second place to say it.
+          //
+          // Flipping a default does **not** rewrite existing documents.
+          // `defaultsFrom` materialises every default into `data`, so an
+          // agent saved before today carries a literal `false` and keeps it;
+          // the backend reads *absent* as on and an explicit `false` as off.
+          // Opening a document must never change what it does — the same
+          // rule `withMigratedRulesMode` states in `skillLayer`.
           kind: 'toggle',
           key: 'summarize',
           label: 'Summarize long context',
-          defaultValue: false,
+          defaultValue: true,
           onCard: false,
           group: 'Context',
           advanced: true,

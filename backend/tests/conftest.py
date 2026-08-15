@@ -46,6 +46,25 @@ os.environ.setdefault("OPENSTATEGRAPH_CHECKPOINT_PATH", "memory")
 RouteRule = tuple[Callable[[str], bool], str]
 
 
+def any_chat_model() -> GenericFakeChatModel:
+    """*A* model, for a test that needs one and does not care which.
+
+    `object()` and `SimpleNamespace(name="stub")` used to serve here, and
+    stopped being enough when summarization became on by default: building an
+    agent now constructs `SummarizationMiddleware`, which asks the model for
+    `_llm_type` (to tune its token counter) and for `profile` (to decide
+    whether a fractional trigger is even expressible). Those are questions
+    only a real chat model can answer — and in production the model always is
+    one, either a `BaseChatModel` or the `UnconfiguredProvider` stand-in,
+    never a bare object. The sentinel was a fiction the compiler had simply
+    never called.
+
+    Answers nothing: these tests stub the agent tier, so the model is reached
+    for its *shape*, never for a reply.
+    """
+    return GenericFakeChatModel(messages=iter([]))
+
+
 class RespondingModel(GenericFakeChatModel):
     """Answers by matching a **predicate** over the incoming message, not call order.
 

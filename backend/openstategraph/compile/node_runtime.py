@@ -17,9 +17,10 @@ from __future__ import annotations
 import copy
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Annotated, Any, Callable, TypedDict
+from typing import Annotated, Any, Callable, Literal, TypedDict
 
 
 from openstategraph.abc.grader import Grader
@@ -578,6 +579,79 @@ def _replaces_rules(data: dict[str, Any]) -> bool:
     second setting: `rulesMode` wins wherever both appear.
     """
     return (_text(data, "rulesMode") or _text(data, "criteriaMode")) == "replace"
+
+
+#: The share of a model's own context window at which it summarizes. The
+#: owner's number (2026-08-15); the library's own opinionated stack —
+#: deepagents' — uses 0.85, so this is the more conservative of the two.
+SUMMARIZE_FRACTION = 0.8
+
+#: The absolute threshold, for every model that cannot answer the fraction.
+#: `fraction` resolves against `model.profile["max_input_tokens"]`, which only
+#: exists where the integration package ships profile data — and our standing
+#: default provider does not: `ChatOllama(model="gpt-oss:120b-cloud").profile`
+#: is `None`, verified on this machine. A fraction-only trigger would never
+#: fire on the default install, which is this feature's own bug repeated one
+#: layer up.
+#:
+#: 100,000 rather than deepagents' 170,000 fallback: that number is chosen for
+#: frontier context windows, and on the models this product actually defaults
+#: to the provider would refuse the call long before it was reached.
+SUMMARIZE_TOKENS = 100_000
+
+
+def _summarize_trigger(model: Any) -> list[Any]:
+    """The OR list this model can actually be given.
+
+    **The fraction clause is omitted when the model has no profile, and that is
+    not an optimisation — it is the difference between working and raising.**
+    The research for this wave read `_should_summarize`, which treats an
+    unavailable profile as a clause that is simply not met, and concluded a
+    plain `[("fraction", 0.8), ("tokens", N)]` was safe everywhere. It is not:
+    `SummarizationMiddleware.__init__` (langchain 1.3.14) validates first and
+    raises `ValueError` when any clause names `fraction` and the profile is
+    absent — so the constant that was meant to close this bug would instead
+    have failed the compile of every agent on the default provider.
+
+    The intent is unchanged and the shape is the library's own: the fraction
+    fires where a profile exists, the absolute fires everywhere else. Only the
+    layer that enforces it moved, from evaluation to construction.
+
+    Profile detection mirrors the library's own `_get_profile_limits` rather
+    than guessing, so the two cannot disagree about what "has a profile" means.
+    """
+    trigger: list[Any] = []
+    try:
+        profile = getattr(model, "profile", None)
+    except Exception:  # pragma: no cover - integrations may raise on access
+        profile = None
+    if isinstance(profile, Mapping) and isinstance(profile.get("max_input_tokens"), int):
+        trigger.append(("fraction", SUMMARIZE_FRACTION))
+    trigger.append(("tokens", SUMMARIZE_TOKENS))
+    return trigger
+
+#: How much survives. The library's own default, pinned rather than inherited:
+#: what "keeps its recent tail" means is behaviour a user notices, and a
+#: library default that moved would move it silently. Message-counted on
+#: purpose — a `fraction` here would need the same model profile the trigger
+#: cannot rely on.
+SUMMARIZE_KEEP: tuple[Literal["messages"], int] = ("messages", 20)
+
+
+def _summarizes(data: dict[str, Any]) -> bool:
+    """Whether this agent manages its own context. **Default: yes.**
+
+    Absent means on, which is the owner's decision of 2026-08-15 and is what
+    makes the 22 shipped examples — none of which mentions the key — summarize
+    at all. An explicit `false` still means off, and that is not a rounding
+    error: the editor materialises every field default into `data`, so a
+    document saved before the default flipped carries a literal
+    `"summarize": false`. Reading absent-as-on and false-as-off keeps the
+    promise `withMigratedRulesMode` states on the TypeScript side — opening a
+    document must never change what it does.
+    """
+    value = data.get("summarize")
+    return True if value is None else bool(value)
 
 
 @dataclass(frozen=True)
@@ -1353,13 +1427,32 @@ class NodeRuntime:
                     contributions["rubric"] = RubricMiddleware(
                         model=model, max_iterations=3
                     )
-                if data.get("summarize") and model is not None:
+                if _summarizes(data) and model is not None:
                     # LangChain's own prebuilt, never hand-rolled (ticket 66):
                     # summarizes older turns when the context bloats, keeping
                     # the recent tail verbatim.
+                    #
+                    # Built **here** and never on `AbstractAgentNode`, which
+                    # only declares the slot. A base-filled slot would need a
+                    # model at construction (`resolve_model()` may legitimately
+                    # return `None`), would reach `CustomGraphNode`, which has
+                    # no composition to receive — and would *downgrade*
+                    # `DeepAgentNode`: `create_deep_agent` already carries a
+                    # tuned `SummarizationMiddleware`, and a `middleware=`
+                    # instance whose `.name` matches a built-in replaces that
+                    # default in place. This is the compiler, which is the one
+                    # place this node type's config becomes middleware.
                     from langchain.agents.middleware import SummarizationMiddleware
 
-                    contributions["summarization"] = SummarizationMiddleware(model=model)
+                    contributions["summarization"] = SummarizationMiddleware(
+                        model=model,
+                        # A *list*, and that is load-bearing: the library reads
+                        # a tuple as one threshold and a list as OR across
+                        # several. A tuple of tuples is accepted and means
+                        # something else entirely.
+                        trigger=_summarize_trigger(model),
+                        keep=SUMMARIZE_KEEP,
+                    )
                 tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
                 built[skill] = tier_cls(
                     name=f"agent_{node_id}",

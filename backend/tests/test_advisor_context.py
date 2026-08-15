@@ -26,6 +26,8 @@ from openstategraph.api.registries import suggestible_tool_catalog
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import any_chat_model
+
 
 class TestTheCatalogue:
     def test_it_lists_web_search_with_its_own_description(self) -> None:
@@ -61,7 +63,7 @@ class _RecordingNode(ReactAgentNode):
 
 def _prompt_for(**services_kwargs: object) -> str:
     _RecordingNode.built.clear()
-    runtime = NodeRuntime(services=RuntimeServices(model=object(), **services_kwargs))  # type: ignore[arg-type]
+    runtime = NodeRuntime(services=RuntimeServices(model=any_chat_model(), **services_kwargs))  # type: ignore[arg-type]
     node = {"id": "agent-analyst", "type": "agent.llm", "data": {"systemPrompt": "Be terse."}}
     run = runtime._agent("agent-analyst", node, CompiledPlan())
     run(RunState(question="q"))  # type: ignore[typeddict-item]

@@ -21,6 +21,8 @@ from openstategraph.abc.agent import ReactAgentNode
 from openstategraph.abc.orchestrator import Orchestrator
 from openstategraph.skills import SkillDocument, has_frontmatter, skill_text
 
+from conftest import any_chat_model
+
 CONTRACT = "ALWAYS ANSWER WITH ONE WORD."
 PREAMBLE = "You are a thing."
 
@@ -276,7 +278,7 @@ class TestTheCompilePathWiresIt:
         node = {**self.AGENT, "data": {**self.AGENT["data"], **data}}
         plan = CompiledPlan()
         plan.skill_bindings = {"a1": ["md1"]}
-        runtime = NodeRuntime(model=object(), skills_context="House style.")
+        runtime = NodeRuntime(model=any_chat_model(), skills_context="House style.")
         run = runtime.factory({"nodes": [node], "edges": []})("a1", node, plan)
         run(RunState(question="q", outputs={"md1": skill}))  # type: ignore[typeddict-item]
         return captured
@@ -354,7 +356,7 @@ class TestTheWorkerComposesLikeEveryOtherPromptedNode:
         node = {**self.WORKER, "data": {**self.WORKER["data"], **data}}
         plan = CompiledPlan()
         plan.skill_bindings = {"w1": ["md1"]}
-        runtime = NodeRuntime(model=object(), skills_context="House style.")
+        runtime = NodeRuntime(model=any_chat_model(), skills_context="House style.")
         run = runtime.factory({"nodes": [node], "edges": []})("w1", node, plan)
         run(
             RunState(  # type: ignore[typeddict-item]

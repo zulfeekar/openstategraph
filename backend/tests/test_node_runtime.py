@@ -579,7 +579,9 @@ class TestConversationMemory:
         import langchain.agents as agents_module
         monkeypatch.setattr(agents_module, "create_agent", lambda **kw: FakeAgent())
 
-        runtime = NodeRuntime(model=object())
+        # A real fake model, not `object()`: this harness builds an agent, and
+        # an agent now composes summarization, which interrogates the model.
+        runtime = NodeRuntime(model=GenericFakeChatModel(messages=iter([])))
         node = {"id": "a1", "type": "agent.llm", "data": {}}
         run = runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
         update = run(RunState(question="second question", messages=state_messages))  # type: ignore[typeddict-item]
