@@ -35,7 +35,11 @@ export class OrchestratorNodeModel extends AbstractNodeModel {
     return this.getNumber(FIELD_MAX_SUBTASKS, DEFAULT_MAX_SUBTASKS);
   }
 
-  /** The one part of the supervisor's prompt the developer writes. */
+  /**
+   * The one part of the supervisor's prompt the developer writes — and the
+   * switch between the two decomposition strategies: empty keeps the free
+   * deterministic splitter, anything here buys a planning call.
+   */
   get rules(): string {
     return this.getText(FIELD_RULES);
   }
@@ -44,10 +48,12 @@ export class OrchestratorNodeModel extends AbstractNodeModel {
 /**
  * Splits one instruction into a bounded list of subtasks and fans them out.
  *
- * Mirrors `IOrchestrator -> BaseOrchestrator -> Orchestrator`
- * (`backend/openstategraph/abc/orchestrator.py`) — decomposition is deterministic by
- * default (numbered lists, semicolons, "and"), so this node works with no
- * model configuration at all. It never runs the subtasks itself: the
+ * Mirrors `IOrchestrator -> BaseOrchestrator -> {Orchestrator,
+ * PlanningOrchestrator}` (`backend/openstategraph/abc/orchestrator.py`).
+ * Decomposition is deterministic (numbered lists, semicolons, "and") until
+ * *Planning rules* are written, so this node works with no model
+ * configuration at all and pays for a planning call only when a developer
+ * asked for one. It never runs the subtasks itself: the
  * `workers` port is a **fan-out declaration**, not control flow, matching
  * `WorkflowCompiler`'s `worker`-typed port category. An edge from `workers`
  * becomes `add_conditional_edges(...) -> Send(...)` in the compiled graph,
@@ -56,7 +62,10 @@ export class OrchestratorNodeModel extends AbstractNodeModel {
  *
  * `feedback` closes the same loop the Grader's `revise` output opens: a
  * rejected attempt re-enters the orchestrator, which replans rather than
- * merely retrying, and — critically — plans under a fresh generation so its
+ * merely retrying — the rejection is passed *into* the split, so a supervisor
+ * with planning rules can come back with a different division of labour
+ * rather than the same one re-dispatched (gallery ticket 23) — and,
+ * critically, plans under a fresh generation so its
  * subtask ids never collide with the rejected attempt's
  * (`backend/tests/test_orchestrator.py`, "a later generation never reuses an
  * earlier one's ids").
@@ -88,26 +97,28 @@ export function createOrchestratorNode(providers: ProviderRegistry): INodeDefini
           // the instruction author to self-limit.
           format: (value) => `· ${value} max`,
         },
-        // The supervisor drives a model too — one call, to label each subtask
-        // with the worker archetype that should run it — so it composes a
-        // prompt and takes the same skill layer as the other four. What a
-        // skill here can change is *who* gets a subtask; the split itself
-        // stays deterministic.
+        // The supervisor drives a model too, so it composes a prompt and takes
+        // the same skill layer as the other four. Writing rules here is what
+        // *turns the planning call on* — see the placeholder's note below.
         {
           kind: 'textarea',
           key: FIELD_RULES,
-          label: 'Dispatch rules',
+          label: 'Planning rules',
           // Rules *only*: `BaseOrchestrator.PREAMBLE` and `OUTPUT_CONTRACT` are
           // locked on the Python base and are deliberately not fields.
           //
-          // The placeholder names dispatch rather than decomposition on
-          // purpose. This text rides `Orchestrator.rules`, which reaches the
-          // one model call a supervisor makes — labelling each subtask with the
-          // worker archetype that should run it. The split itself is
-          // deterministic (numbered lists, semicolons, "and"), so no rule here
-          // can change *how many* subtasks there are, only who gets them.
+          // **This text now steers the split as well as the dispatch**
+          // (gallery ticket 15). It used to reach the archetype-*labelling*
+          // call alone, so the shipped `team` template's "Split the task into
+          // the smallest set of independent subtasks." changed nothing at all
+          // and the field was labelled for the only job it could do. With
+          // rules written here the supervisor makes one planning call; with
+          // the field empty it keeps the deterministic splitter (numbered
+          // lists, semicolons, "and"), which is free and reproducible and is
+          // still the right answer for a punctuated brief.
           placeholder:
-            'Anything needing SQL goes to the analyst. Web lookups go to the researcher.',
+            'Split the brief into independent subtasks a worker can answer alone. ' +
+            'Anything needing SQL goes to the analyst; web lookups go to the researcher.',
           defaultValue: '',
           minRows: 3,
           // Off the card, with the switch that modifies it: the card shows a

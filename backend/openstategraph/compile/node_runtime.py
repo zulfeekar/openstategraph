@@ -23,7 +23,7 @@ from typing import Annotated, Any, Callable, TypedDict
 
 
 from openstategraph.abc.grader import Grader
-from openstategraph.abc.orchestrator import Orchestrator
+from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
@@ -1601,17 +1601,15 @@ class NodeRuntime:
 
         data = node.get("data") or {}
         cap = int(data.get("maxSubtasks") or 8)
-        # The model is for archetype labelling (ticket 37's hybrid routing);
-        # decomposition itself stays deterministic. With one wired archetype
-        # no labelling call is ever made, so the pre-archetype shape costs
-        # nothing extra.
+        # The model makes up to two calls: the plan itself, where the card
+        # carries rules (ticket 15), and archetype labelling where more than
+        # one worker is wired (ticket 37's hybrid routing). A rule-less card
+        # with one archetype still makes neither, which is what keeps the
+        # deterministic path free.
         supervisor_model = self._resolve_model(data)
-        # The supervisor's rules and its wired skill shape the one model call
-        # it makes — assigning each subtask to a worker archetype. The split
-        # itself stays deterministic, so a skill here cannot change *how many*
-        # subtasks there are, only *who* gets them.
-        def orchestrator_for(skill: str) -> Orchestrator:
-            return Orchestrator(
+
+        def planner_for(skill: str) -> BaseOrchestrator:
+            return orchestrator_for(
                 max_subtasks=cap,
                 # `"rules"`, not `"instruction"`. `instruction` is this node's
                 # input *port* id (`src/nodes/orchestrate/OrchestratorNode.ts`),
@@ -1627,7 +1625,6 @@ class NodeRuntime:
                 model=supervisor_model,
             )
 
-        orchestrator = orchestrator_for("")
         # The wired worker archetypes, in edge order — the same roster the
         # compiler's dispatch map is built from, keyed by the same
         # `archetype_key`, so a label the planning prompt offered is exactly
@@ -1683,9 +1680,22 @@ class NodeRuntime:
                 feedback = ""
             generation = state.get("attempts", 0)
             skill = _wired_skill(state, skills, self._nodes)
-            planner = orchestrator_for(skill) if skill else orchestrator
+            # Rebuilt per run rather than once at compile time: the wired skill
+            # text can vary by run, and `notes` below is a per-run sink that
+            # must not be shared between two concurrent runs of one graph.
+            planner = planner_for(skill)
+            notes: list[str] = []
             subtasks = planner.plan(
-                instruction, generation=generation, archetypes=archetypes
+                instruction,
+                generation=generation,
+                archetypes=archetypes,
+                # Into the plan, not appended after it (ticket 23). A
+                # deterministic splitter ignores it and behaves exactly as it
+                # always has; a model-driven one can come back with a
+                # different division of labour, which is the only thing that
+                # makes this port's name true.
+                feedback=feedback,
+                notes=notes,
             )
             if feedback:
                 # Refines every subtask the *original* instruction split
@@ -1718,9 +1728,15 @@ class NodeRuntime:
                     )
                     for t in subtasks
                 ]
+            planned = f"Planned {len(subtasks)} subtask(s)."
             return {
                 "subtasks": {node_id: [t.model_dump() for t in subtasks]},
-                "outputs": {node_id: f"Planned {len(subtasks)} subtask(s)."},
+                # The ceiling's casualties ride the node's own output because
+                # that is the run-time channel every surface already renders:
+                # `.warnings` is materialised at load time on the library path
+                # (`loader.load_workflow`), so nothing a *run* discovers can
+                # reach it without a new state key. Silence was the bug.
+                "outputs": {node_id: " ".join([planned, *notes])},
                 "attempts": generation + 1,
             }
 

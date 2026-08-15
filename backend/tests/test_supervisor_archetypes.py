@@ -339,16 +339,16 @@ class TestArchetypeDescriptionsAreNeverBlind:
             description = "Country facts for any nation."
 
         captured: list[Any] = []
-        real = runtime_module.Orchestrator
+        real = runtime_module.orchestrator_for
 
-        class SpyOrchestrator(real):  # type: ignore[misc, valid-type]
-            def plan(self, instruction, generation=0, archetypes=None):  # type: ignore[no-untyped-def]
-                captured.extend(archetypes or [])
+        class SpyOrchestrator:
+            def plan(self, instruction, **kwargs):  # type: ignore[no-untyped-def]
+                captured.extend(kwargs.get("archetypes") or [])
                 return []
 
         document["nodes"].append(node("t-api", "tool.api"))
         document["edges"].append(edge("t-api", "tool", "w-countries", "tools"))
-        runtime_module.Orchestrator = SpyOrchestrator
+        runtime_module.orchestrator_for = lambda **_kwargs: SpyOrchestrator()
         try:
             # Only the supervisor step is run: the roster is assembled in its
             # factory closure, and invoking the whole graph would drag in the
@@ -359,7 +359,7 @@ class TestArchetypeDescriptionsAreNeverBlind:
             step = runtime.factory(document)("orch1", supervisor, plan)
             step(RunState(question="anything"))  # type: ignore[typeddict-item]
         finally:
-            runtime_module.Orchestrator = real
+            runtime_module.orchestrator_for = real
 
         described = {a.key: a.description for a in captured}
         assert described["weather-worker"] == "Forecasts only — never country facts."

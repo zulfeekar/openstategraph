@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from openstategraph.messages import content_text
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
@@ -28,6 +29,8 @@ from openstategraph.abc.prompt import SystemPrompt
 #: subagents. Bounding here is cheaper and more reliable than trusting the
 #: instruction author or a model to self-limit.
 MAX_SUBTASKS = 8
+
+logger = logging.getLogger(__name__)
 
 
 def archetype_slug(text: str) -> str:
@@ -58,6 +61,7 @@ def archetype_key(node: dict[str, Any]) -> str:
     """
     title = str(node.get("title") or "").strip()
     return archetype_slug(title) if title else str(node.get("id") or "")
+
 
 
 class Archetype(BaseModel):
@@ -94,7 +98,15 @@ class Subtask(BaseModel):
 class IOrchestrator(Protocol):
     """The contract consumers depend on."""
 
-    def plan(self, instruction: str) -> list[Subtask]: ...
+    def plan(
+        self,
+        instruction: str,
+        *,
+        generation: int = 0,
+        archetypes: list["Archetype"] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
+    ) -> list[Subtask]: ...
 
 
 class BaseOrchestrator(ABC):
@@ -135,8 +147,16 @@ class BaseOrchestrator(ABC):
         self.model = model
 
     @abstractmethod
-    def split(self, instruction: str) -> list[str]:
-        """Turns one instruction into raw subtask strings. The extension point."""
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        """Turns one instruction into raw subtask strings. The extension point.
+
+        `feedback` is a grader's rejection of the *previous* plan's results,
+        and it is passed **into** the split rather than folded in afterwards
+        (ticket 23). A deterministic implementation ignores it — a regex
+        cannot act on a critique — and a model-driven one re-plans with it,
+        which is what makes the supervisor's `feedback` port mean what its
+        name says.
+        """
 
     #: The labelling call's machinery — locked, like every output contract.
     #: The literal phrase "one archetype key per line" is load-bearing: tests
@@ -189,7 +209,7 @@ class BaseOrchestrator(ABC):
                 # Match on the fragment itself, never the appended parent
                 # context — the context names the whole request and would
                 # make every fragment "mention" every archetype in it.
-                text = task.instruction.split("(part of the request:")[0].lower()
+                text = task.instruction.split(CONTEXT_PREFIX)[0].lower()
                 match = next(
                     (
                         a.key
@@ -227,7 +247,7 @@ class BaseOrchestrator(ABC):
             raw = content_text(reply.content)
         except Exception:
             # A labelling failure must not kill the plan — everything falls
-            # to the default worker, which is a working (single-archetype) run.
+            # to the default worker, which is a working (single-archetype)
             return ["" for _ in subtasks]
 
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
@@ -248,8 +268,18 @@ class BaseOrchestrator(ABC):
         *,
         generation: int = 0,
         archetypes: list[Archetype] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
     ) -> list[Subtask]:
         """Splits, bounds, and ids. Subclasses should not need to override this.
+
+        `notes` is an optional sink for what the caller should tell someone
+        about — the same shape `api/registries.runtime_warnings` uses. Today
+        it carries exactly one thing, and it is a bug this signature exists to
+        close: hitting `maxSubtasks` used to be a silent `pieces[:cap]`, so a
+        three-part brief could ship a three-section report with its third part
+        never planned at all. A caller that passes no sink still gets the log
+        line.
 
         `generation` is folded into every id so that **replanning never reuses
         an id from an earlier attempt**. Found by running a real revise loop:
@@ -260,7 +290,7 @@ class BaseOrchestrator(ABC):
         key. The caller (the orchestrator node) passes its own attempt count;
         this class has no notion of "which attempt" on its own.
         """
-        pieces = [p.strip() for p in self.split(instruction) if p.strip()]
+        pieces = [p.strip() for p in self.split(instruction, feedback) if p.strip()]
         # Never zero subtasks: an instruction that does not split is still one
         # unit of work, not a dead end.
         if not pieces:
@@ -279,7 +309,7 @@ class BaseOrchestrator(ABC):
         if len(pieces) > 1:
             pieces = [
                 piece if len(piece.split()) >= 3
-                else f"{piece} (part of the request: {instruction.strip()})"
+                else f"{piece} {CONTEXT_SUFFIX.format(instruction.strip())}"
                 for piece in pieces
             ]
         seen: set[str] = set()
@@ -292,6 +322,16 @@ class BaseOrchestrator(ABC):
         pieces = deduped
 
         truncated = pieces[: self.max_subtasks]
+        if len(pieces) > len(truncated):
+            dropped = len(pieces) - len(truncated)
+            note = (
+                f"Planned {len(pieces)} subtasks but Max subtasks is "
+                f"{self.max_subtasks} — the last {dropped} were dropped and never "
+                "ran. Raise Max subtasks, or write a shorter brief."
+            )
+            logger.warning("%s", note)
+            if notes is not None:
+                notes.append(note)
         prefix = f"task-{generation}-" if generation else "task-"
         subtasks = [
             Subtask(id=f"{prefix}{i + 1}", instruction=text) for i, text in enumerate(truncated)
@@ -305,6 +345,55 @@ class BaseOrchestrator(ABC):
         return subtasks
 
 
+#: Ordered so a numbered list is tried before falling back to conjunctions —
+#: "1. X and Y" should split into two numbered items, not further on "and".
+_NUMBERED = re.compile(r"(?:^|\n)\s*\d+[.)]\s*")
+_SEMICOLON = re.compile(r"\s*;\s*")
+_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+
+#: How a fragment carries what it was cut out of. One spelling, because three
+#: places share it: a conjunction fragment, a numbered list's preamble, and
+#: `label()`, which must match on the fragment and never on the context it
+#: carries — the context names the whole request, so every fragment would
+#: otherwise "mention" every archetype in it.
+CONTEXT_PREFIX = "(part of the request:"
+CONTEXT_SUFFIX = CONTEXT_PREFIX + " {0})"
+
+
+def deterministic_split(instruction: str) -> list[str]:
+    """Separators an instruction author would naturally use, tried in order.
+
+    A module function rather than a method because two classes need it: the
+    deterministic `Orchestrator` *is* this, and `PlanningOrchestrator` falls
+    back to it when the planning call cannot be made or comes back unusable.
+
+    **A leading summary above a numbered list is context, not a task**
+    (ticket 15, batch B). `re.split` hands back whatever precedes the first
+    numbered item as piece #1, so a brief written the way anyone writes one
+    planned one subtask too many — and with `maxSubtasks` set to the list's
+    own length, the ceiling then dropped the *last real item*. Observed live:
+    a three-part brief whose judgement step never ran, in a report that had
+    its three sections and looked complete. The summary is attached to every
+    item instead of discarded, because a `Send` payload carries only the
+    subtask text and the judgement item is unanswerable without it.
+    """
+    match = _NUMBERED.search(instruction)
+    if match:
+        parts = _NUMBERED.split(instruction)
+        head = parts[0].strip()
+        items = [p.strip() for p in parts[1:] if p.strip()]
+        if not items:
+            return [instruction]
+        if head:
+            return [f"{item} {CONTEXT_SUFFIX.format(head)}" for item in items]
+        return items
+    if ";" in instruction:
+        return _SEMICOLON.split(instruction)
+    if _AND.search(instruction):
+        return _AND.split(instruction)
+    return [instruction]
+
+
 class Orchestrator(BaseOrchestrator):
     """The default: deterministic decomposition, no model required.
 
@@ -314,34 +403,138 @@ class Orchestrator(BaseOrchestrator):
     own guidance: "keep control model-driven only where a rule cannot express the
     decision," and decomposing a punctuated list is exactly a rule's job.
 
-    A model-driven subclass is a legitimate extension (override `split` to call
-    `self.model`), and gets the bounding and fallback for free.
+    **It is no longer the only strategy, and that is ticket 15's substance.**
+    Splitting English on the literal word "and" splits grammar, not tasks:
+    "two arguments for and against daily standups" became "…two arguments
+    for" and "against daily standups", and the worker handed the first
+    fragment asked the user what they meant. Deciding what the independent
+    units of an English request *are* is a judgement, so a card that writes
+    rules gets `PlanningOrchestrator` and a card that writes none keeps this,
+    free and reproducible. The "and" branch survives here rather than being
+    removed because removing it would silently halve the subtask count of
+    every rule-less package that relies on it today; it is the last resort of
+    the zero-token path, not the product's answer to ordinary prose.
     """
 
-    #: Ordered so a numbered list is tried before falling back to conjunctions —
-    #: "1. X and Y" should split into two numbered items, not further on "and".
-    _NUMBERED = re.compile(r"(?:^|\n)\s*\d+[.)]\s*")
-    _SEMICOLON = re.compile(r"\s*;\s*")
-    _AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        # `feedback` is deliberately unread: a regex cannot act on a critique,
+        # and an earlier attempt to make it "notice" one — by joining it onto
+        # the instruction with a semicolon — turned the grader's rejection
+        # text into its own dispatched subtask (see `_orchestrator`).
+        return deterministic_split(instruction)
 
-    def split(self, instruction: str) -> list[str]:
-        if self._NUMBERED.search(instruction):
-            return [p for p in self._NUMBERED.split(instruction) if p.strip()]
-        if ";" in instruction:
-            return self._SEMICOLON.split(instruction)
-        if self._AND.search(instruction):
-            return self._AND.split(instruction)
-        return [instruction]
+
+class PlanningOrchestrator(BaseOrchestrator):
+    """One planning call, in the same shape every other model-driven node uses.
+
+    The base already declared `PREAMBLE` and `OUTPUT_CONTRACT` for exactly
+    this call and nothing ever made it — the class docstring's own invitation
+    ("override `split` to call `self.model`") is what this is. So there is no
+    new prompt machinery here: the locked halves were already written, the
+    developer's `rules` are the one editable layer, and the contract renders
+    last so "explain your reasoning" cannot countermand the output shape.
+
+    Structured output is the line-per-subtask contract rather than a schema
+    parameter, matching Router and Grader: it is the shape every provider in
+    the picker can hold, and CLAUDE.md records what happens when a model
+    cannot hold `response_format`.
+
+    Degrades rather than fails. A planning call that raises, or comes back
+    empty, falls back to `deterministic_split` — an orchestrator that plans
+    nothing is a dead run, and the deterministic path is a working, honest,
+    zero-token answer.
+    """
+
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        if self.model is None:
+            return deterministic_split(instruction)
+
+        context = [f"Plan at most {self.max_subtasks} subtasks."]
+        if feedback:
+            # Ticket 23: the rejection reaches the *plan*, not just each
+            # subtask's text. It is the only thing that can change the
+            # division of labour between one lap and the next.
+            context.append(
+                "A previous attempt at this work was rejected. Plan differently "
+                f"in light of it:\n{feedback}"
+            )
+        prompt = self.system_prompt().with_context(*context)
+
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            reply = self.model.invoke(
+                [
+                    SystemMessage(content=prompt.render()),
+                    HumanMessage(content=instruction),
+                ]
+            )
+            raw = content_text(reply.content)
+        except Exception:
+            logger.warning("planning call failed; falling back to the deterministic split")
+            return deterministic_split(instruction)
+
+        pieces = [_unlisted(line) for line in raw.splitlines()]
+        pieces = [piece for piece in pieces if piece]
+        return pieces or deterministic_split(instruction)
+
+
+#: A leading list marker on a planned subtask. The contract forbids numbering,
+#: and models emit it anyway — stripping it here is cheaper than a re-ask, and
+#: leaving it in would put "1." inside the instruction a worker is handed.
+_LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+
+
+def _unlisted(line: str) -> str:
+    return _LIST_MARKER.sub("", line).strip().strip("\"'`")
+
+
+def orchestrator_for(
+    *,
+    max_subtasks: int = MAX_SUBTASKS,
+    rules: str = "",
+    skill: str = "",
+    replace_rules: bool = False,
+    model: Any = None,
+) -> BaseOrchestrator:
+    """The one place configuration chooses a decomposition strategy.
+
+    Two rules, and both are about not charging for something nobody asked
+    for. A card with **authored rules** (typed inline or wired as a skill)
+    is a card whose developer wrote planning prose, and until ticket 15 that
+    prose reached only the archetype-labelling call — so the shipped `team`
+    template's "Split the task into the smallest set of independent
+    subtasks." changed nothing whatsoever. It now drives a planning call.
+    A card with **no** rules keeps the deterministic splitter, which is free,
+    reproducible, and good at the punctuated lists it was written for.
+
+    No model, no planning call: the deterministic path is what "works with no
+    model configured at all" means for this node, and it is not negotiable
+    away by a rules string.
+    """
+    authored = bool((rules or "").strip() or (skill or "").strip())
+    cls = PlanningOrchestrator if authored and model is not None else Orchestrator
+    return cls(
+        max_subtasks=max_subtasks,
+        rules=rules,
+        skill=skill,
+        replace_rules=replace_rules,
+        model=model,
+    )
 
 
 __all__ = [
     "Archetype",
     "BaseOrchestrator",
+    "CONTEXT_SUFFIX",
     "Field",
     "IOrchestrator",
     "MAX_SUBTASKS",
     "Orchestrator",
+    "PlanningOrchestrator",
     "Subtask",
     "archetype_key",
     "archetype_slug",
+    "deterministic_split",
+    "orchestrator_for",
 ]

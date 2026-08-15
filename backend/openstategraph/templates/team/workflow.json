@@ -10,7 +10,7 @@
       "title": "{{name}} Lead",
       "data": {
         "maxSubtasks": 3,
-        "rules": "Split the task into the smallest set of independent subtasks."
+        "rules": "Split the task into the smallest set of independent subtasks. Each one must be answerable on its own, by a worker who sees only that sentence."
       },
       "position": { "x": 360, "y": 200 }
     },

@@ -14,9 +14,9 @@ Gallery example 20. What is settled here without a model:
   (gallery ticket 16) — it describes the worker to the *supervisor's* labelling
   call. The `skill` port is the only way to tell a worker how to answer, and
   this document uses one skill for all three.
-- **The splitter.** The smoke question is a bare numbered list because
-  `_NUMBERED` splits on `(?:^|\\n)` and would otherwise make a preamble line
-  into subtask #1 (gallery ticket 15). That is pinned against the real regex.
+- **The splitter.** The smoke question is a bare numbered list, and a preamble
+  line above one is now carried as context rather than planned as subtask #1
+  (gallery ticket 15). That is pinned against the real splitter.
 
 The store's own contract is checked too: every topic reachable, every
 cross-reference resolvable.
@@ -146,16 +146,20 @@ class TestTheSplitterSurvivesTheSmokeQuestion:
             "Which workflows exist on this platform?",
         ]
 
-    def test_a_preamble_line_would_have_cost_a_subtask(self, doc: dict) -> None:
-        """Why the question is a bare list. `_NUMBERED` splits on `(?:^|\\n)`,
-        so a summary line above the list becomes subtask #1 — and with
-        `maxSubtasks` at the list's own length the last real item is then
-        dropped without a word. Gallery ticket 15."""
+    def test_a_preamble_line_costs_no_subtask_and_is_carried_as_context(
+        self, doc: dict
+    ) -> None:
+        """It used to cost one. `_NUMBERED` splits on `(?:^|\\n)`, so a summary
+        line above the list became subtask #1 — and with `maxSubtasks` at the
+        list's own length the last real item was then dropped without a word.
+        The summary is context now, attached to every item because a `Send`
+        payload carries nothing else. Gallery ticket 15."""
         with_preamble = "Give me a three-source brief.\n" + SMOKE_QUESTION
         parts = Orchestrator().split(with_preamble)
-        assert parts[0] == "Give me a three-source brief."
         cap = next(n for n in doc["nodes"] if n["id"] == "lead1")["data"]["maxSubtasks"]
-        assert len(parts) > cap, "the preamble would have pushed item 3 past the cap"
+        assert len(parts) == cap, "the preamble must not cost a subtask"
+        assert parts[0].startswith("What changed in the most recent Python release?")
+        assert all("Give me a three-source brief." in part for part in parts)
 
 
 class TestTheHandbookIsThePackage:

@@ -23,7 +23,8 @@
         "type": "orchestrate.supervisor",
         "title": "Planner",
         "data": {
-          "maxSubtasks": 3
+          "maxSubtasks": 3,
+          "rules": "Split the request into independent subtasks, each answerable on its own by a worker who sees only that one sentence and nothing else. Never cut a sentence in half: \"arguments for and against X\" is two subtasks, one per stance, and each names X in full."
         },
         "position": { "x": 380, "y": 220 }
       },

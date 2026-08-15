@@ -61,6 +61,16 @@ def test_every_worker_describes_its_role(document: dict) -> None:
     assert all(w["data"].get("role") for w in _workers(document))
 
 
+def test_the_supervisor_writes_planning_rules_not_only_dispatch_rules(document: dict) -> None:
+    """Gallery ticket 15: `rules` reached the archetype-labelling call alone,
+    so the planning prose on this card changed nothing and the catalogue's
+    brief — no numbered list, no semicolon, no "and" — planned one subtask.
+    Rules now drive a planning call; emptying this field puts the regex back."""
+    rules = node_of(document, "lead1")["data"].get("rules") or ""
+    assert rules.strip()
+    assert "subtask" in rules.lower()
+
+
 def test_both_workers_are_dispatched_and_both_join(document: dict) -> None:
     worker_ids = {w["id"] for w in _workers(document)}
     dispatched = {

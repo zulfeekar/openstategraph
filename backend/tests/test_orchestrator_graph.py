@@ -388,3 +388,106 @@ class TestReviseReEntersTheFanOut:
         # The worker has no static incoming edge — it exists only to be
         # dispatched — so it must not appear as a graph entry point.
         assert "node:orchestrate.worker-1" not in plan.entry
+
+
+# --------------------------------------------------------------------------- #
+# THE SUBSYSTEM'S THREE CONTRACTS: who plans, what a worker is told, and what
+# the run records about either (gallery tickets 15, 16 and 17).
+# --------------------------------------------------------------------------- #
+
+
+def archetype_document(**supervisor: Any) -> dict[str, Any]:
+    """Two wired archetypes, so labelling and dispatch are both exercised."""
+    return {
+        "version": 1,
+        "name": "archetype-proof",
+        "nodes": [
+            node("in1", "input.text"),
+            node("lead1", "orchestrate.supervisor", maxSubtasks=3, **supervisor),
+            {
+                **node("research1", "orchestrate.worker", default=True, role="Finds facts."),
+                "title": "Researcher",
+            },
+            {
+                **node("write1", "orchestrate.worker", role="Writes finished prose."),
+                "title": "Writer",
+            },
+            node("join1", "function.format_report", reportTitle="Report"),
+            node("out1", "output.formatted"),
+        ],
+        "edges": [
+            edge("in1", "text", "lead1", "instruction"),
+            edge("lead1", "workers", "research1", "dispatch"),
+            edge("lead1", "workers", "write1", "dispatch"),
+            edge("research1", "result", "join1", "candidate"),
+            edge("write1", "result", "join1", "candidate"),
+            edge("join1", "report", "out1", "result"),
+        ],
+    }
+
+
+class TestThePlanIsModelDrivenWhereRulesSaySo:
+    """Gallery ticket 15. A regex over English splits grammar, not tasks."""
+
+    def test_a_supervisor_with_rules_plans_with_the_model(self) -> None:
+        model = RespondingModel(
+            [
+                (
+                    lambda c: "You are an orchestrator" in c,
+                    "Give two arguments in favour of daily standups.\n"
+                    "Give two arguments against daily standups.",
+                ),
+                (lambda c: "supervisor assigning" in c, "researcher\nwriter"),
+            ],
+            default="an answer",
+        )
+        document = archetype_document(rules="Split the brief by stance.")
+
+        final = run(document, "Give me two arguments for and against daily standups.", model)
+
+        planned = [t["instruction"] for t in final["subtasks"]["lead1"]]
+        assert planned == [
+            "Give two arguments in favour of daily standups.",
+            "Give two arguments against daily standups.",
+        ]
+
+    def test_a_supervisor_with_no_rules_never_calls_a_planner(self) -> None:
+        # The zero-token path stays the default: a card that says nothing must
+        # not start paying for a planning call.
+        model = RespondingModel([(lambda c: "supervisor assigning" in c, "researcher")], "x")
+        document = archetype_document()
+
+        run(document, "count the invoices; count the tracks", model)
+
+        assert not any("You are an orchestrator" in call for call in model.calls)
+
+    def test_the_rules_reach_the_planning_call(self) -> None:
+        model = RespondingModel([], default="one subtask only")
+        document = archetype_document(rules="Never plan more than one subtask.")
+
+        run(document, "anything at all", model)
+
+        planning = [c for c in model.calls if "You are an orchestrator" in c]
+        assert planning and "Never plan more than one subtask." in planning[0]
+
+
+class TestTheCeilingIsNoLongerASilentSlice:
+    """Gallery ticket 15's batch-B facet: `maxSubtasks` dropped work silently."""
+
+    def test_a_truncated_plan_says_so_in_the_supervisors_own_output(self) -> None:
+        model = RespondingModel([], default="an answer")
+        document = orchestrator_graph_document(max_subtasks=2)
+
+        final = run(document, "one thing; two things; three things; four things", model)
+
+        planned = final["outputs"]["node:orchestrate.supervisor-1"]
+        assert "dropped" in planned
+        assert "Planned 2 subtask(s)." in planned
+
+    def test_a_plan_that_fits_says_only_what_it_planned(self) -> None:
+        model = RespondingModel([], default="an answer")
+        document = orchestrator_graph_document(max_subtasks=8)
+
+        final = run(document, "one thing; two things", model)
+
+        assert final["outputs"]["node:orchestrate.supervisor-1"] == "Planned 2 subtask(s)."

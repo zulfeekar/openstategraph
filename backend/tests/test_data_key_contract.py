@@ -318,18 +318,23 @@ class TestTheSupervisorsRulesAreWritable:
         captured: list[str] = []
 
         class _Spy:
-            def __init__(self, **kwargs: Any) -> None:
-                captured.append(kwargs["rules"])
-
             def plan(self, *_args: Any, **_kwargs: Any) -> list[Any]:
                 return []
 
-        monkey = node_runtime.Orchestrator
-        node_runtime.Orchestrator = _Spy  # type: ignore[misc]
+        def _spy_for(**kwargs: Any) -> Any:
+            captured.append(kwargs["rules"])
+            return _Spy()
+
+        # The planner is built inside the step, not in the factory: the wired
+        # skill text can vary by run, and the per-run notes sink must not be
+        # shared between two runs of one graph (ticket 15).
+        monkey = node_runtime.orchestrator_for
+        node_runtime.orchestrator_for = _spy_for  # type: ignore[misc]
         try:
-            runtime.builder_for("orchestrate.supervisor")("sup", node, CompiledPlan())
+            step = runtime.builder_for("orchestrate.supervisor")("sup", node, CompiledPlan())
+            step({"question": "anything"})
         finally:
-            node_runtime.Orchestrator = monkey  # type: ignore[misc]
+            node_runtime.orchestrator_for = monkey  # type: ignore[misc]
 
         assert captured and captured[0] == "Send anything numeric to the analyst."
 

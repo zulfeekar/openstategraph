@@ -61,14 +61,19 @@ def test_the_smoke_question_can_produce_two_subtasks(document: dict) -> None:
     assert node_of(document, "lead1")["data"]["maxSubtasks"] >= 2
 
 
-def test_the_supervisor_carries_no_rules_because_they_would_be_inert(document: dict) -> None:
-    # `Orchestrator.split` is a regex over numbered lists, semicolons and the
-    # literal word "and" — the decomposition is deterministic and no prose can
-    # steer it. `rules` shapes only the archetype-labelling call, and with one
-    # archetype wired `label()` short-circuits before making it. So a rules
-    # string here would read like a planning instruction and change nothing;
-    # AGENTS.md says so, and this keeps a future edit honest (gallery ticket 15).
-    assert not node_of(document, "lead1")["data"].get("rules")
+def test_the_supervisor_carries_the_rules_that_turn_planning_on(document: dict) -> None:
+    # The inverse of what this asserted until gallery ticket 15 landed. Rules
+    # here used to be inert — `Orchestrator.split` was a regex over numbered
+    # lists, semicolons and the literal word "and", and `rules` reached only
+    # the archetype-labelling call, which with one archetype wired never
+    # happens at all. The recorded smoke question is the demonstration: "two
+    # arguments for and against daily standups" split on the word "and" into
+    # "Give me two arguments for", and the worker handed that fragment asked
+    # the user what they meant. Rules now drive a planning call, so an empty
+    # field here would silently restore the regex and that answer.
+    rules = node_of(document, "lead1")["data"].get("rules") or ""
+    assert rules.strip(), "empty rules put the deterministic splitter back"
+    assert "for and against" in rules, "the recorded failure is the rule's own example"
 
 
 def test_the_report_title_is_authored(document: dict) -> None:
