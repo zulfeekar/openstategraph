@@ -56,7 +56,12 @@ export const CATEGORIES: readonly INodeCategory[] = [
     id: CATEGORY.inputs,
     label: 'Inputs · atoms',
     order: 10,
-    description: 'Sources. No logic, nothing upstream.',
+    // The "which node comes first?" cue (ticket 22), in the smallest honest
+    // form: a hedge, because nothing makes a flow begin here — an Agent's
+    // `prompt` accepts a `result` as readily as a `text`, so a mounted
+    // workflow or a worker can open a graph just as well. "Usually" is the
+    // whole difference between a cue and a false rule.
+    description: 'Sources. No logic, nothing upstream — usually where a flow starts.',
   },
   {
     id: CATEGORY.tools,
@@ -68,7 +73,10 @@ export const CATEGORIES: readonly INodeCategory[] = [
     id: CATEGORY.output,
     label: 'Output · atoms',
     order: 30,
-    description: 'Sinks. One input, no decision.',
+    // The other half of the cue, hedged for the other reason: `has-output`
+    // asks whether *anything* is terminal, not whether one of these exists,
+    // so a flow ending at an Agent is legitimate and warns about nothing.
+    description: 'Sinks. One input, no decision — usually where a flow ends.',
   },
   {
     id: CATEGORY.agent,

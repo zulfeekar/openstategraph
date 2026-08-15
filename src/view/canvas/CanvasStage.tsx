@@ -12,7 +12,8 @@ import {
 } from '@app/WorkbenchContext';
 import { NodeLayer } from '@view/nodes/NodeLayer';
 import { PALETTE_ASSEMBLY_DRAG_TYPE, PALETTE_DRAG_TYPE } from '@view/palette/Palette';
-import { assemblyById } from '@nodes/assemblies/revisionLoop';
+import { assemblyById } from '@nodes/assemblies';
+import { EMPTY_CANVAS_HINT, EMPTY_CANVAS_PATTERN, EMPTY_CANVAS_TITLE } from './emptyStateCopy';
 import '@canvas/canvas.css';
 
 /**
@@ -286,8 +287,13 @@ function EmptyState() {
       <span className="canvas-empty__art">
         <Icon glyph={Workflow} size="xl" />
       </span>
-      <span className="canvas-empty__title">Start with a node</span>
-      <span className="canvas-empty__hint">Drag one in from the palette, or press ⌘V to paste</span>
+      {/* Ticket 22: the empty canvas teaches the first flow. The words are
+          `emptyStateCopy`, where they can be tested and held to what the
+          validator actually enforces — "Start with a node" said nothing about
+          *which* node, which is the only question a first-time user has. */}
+      <span className="canvas-empty__title">{EMPTY_CANVAS_TITLE}</span>
+      <span className="canvas-empty__pattern">{EMPTY_CANVAS_PATTERN}</span>
+      <span className="canvas-empty__hint">{EMPTY_CANVAS_HINT}</span>
     </div>
   );
 }

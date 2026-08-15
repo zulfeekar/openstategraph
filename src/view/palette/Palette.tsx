@@ -21,7 +21,7 @@ import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
 import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
-import { type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
+import { type IAssemblyDefinition } from '@nodes/assemblies';
 import { assembliesFor, sectionSurvivesSearch } from './paletteSearch';
 import './Palette.css';
 

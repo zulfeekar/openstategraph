@@ -507,9 +507,22 @@
   color: var(--color-text-secondary);
 }
 
+/* The line that teaches the pattern. Wider measure than the hint and centred:
+   it is a sentence to read, not a caption to glance at (ticket 22). */
+.canvas-empty__pattern {
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+  max-width: 46ch;
+  text-align: center;
+  text-wrap: balance;
+}
+
 .canvas-empty__hint {
   font: var(--type-caption);
   color: var(--color-text-tertiary);
+  max-width: 52ch;
+  text-align: center;
+  text-wrap: balance;
 }
 
 /* A run's flowing-dash animation is a motion effect; honour the user's

@@ -1,4 +1,4 @@
-import type { ClipboardFragment } from '@controller/ClipboardService';
+import type { IAssemblyDefinition } from './contract';
 import { GRADER_TYPE } from '../routing/GraderNode';
 import { CATEGORY } from '../vocabulary';
 
@@ -6,45 +6,6 @@ import { CATEGORY } from '../vocabulary';
 // shared model picker), so its id comes from the one table that names every
 // type rather than from a second literal here.
 const AGENT_TYPE = 'agent.llm';
-
-/**
- * A wired assembly you drag onto the canvas you are already working in.
- *
- * **Not a node type**, and that is the whole point. A `Loop` node would compile
- * to nothing new — recorded in the organism-taxonomy research, in the `loop`
- * template's ticket, and in `templates/index.json` — because a loop is a
- * *cycle in the graph*, not a box around one. What drops here is ordinary
- * nodes and ordinary edges; afterwards the document is indistinguishable from
- * one drawn by hand, which is what keeps `workflow.json` portable.
- *
- * **Not a template, either.** A template produces a whole new document and
- * stops existing (`--template loop`, the editor's *Start from* picker). This
- * adds to a document that already exists. Ticket 01 shipped the first and its
- * own notes claimed the second; ticket 21 is the correction.
- *
- * The tier is **organism** — an assembly of molecules. Ticket 14 established
- * that organisms are the only tier obtainable two ways, *drawn or dragged*,
- * and dragging one had only ever meant mounting a package. This is the other
- * half of that rule.
- */
-export interface IAssemblyDefinition {
-  readonly id: string;
-  readonly label: string;
-  readonly description: string;
-  readonly iconId: string;
-  /** Which palette section it appears in. */
-  readonly category: string;
-  readonly keywords: readonly string[];
-  /**
-   * The nodes and edges to insert, in the clipboard's own fragment shape.
-   *
-   * Deliberately the same type a copy produces: inserting an assembly *is* a
-   * paste of a canned fragment, so it inherits id remapping, edge rewiring,
-   * instance caps and the single undoable command rather than growing a
-   * second mechanism beside them.
-   */
-  readonly fragment: ClipboardFragment;
-}
 
 export const REVISION_LOOP_ASSEMBLY_ID = 'assembly.revision-loop';
 
@@ -123,19 +84,3 @@ export const revisionLoopAssembly: IAssemblyDefinition = {
     ],
   },
 };
-
-/**
- * The assemblies the palette offers.
- *
- * One entry, deliberately. A general "insert a wired assembly" mechanism with
- * fan-out + join and router + branches to follow was considered and declined:
- * the second and third entries are speculative until somebody asks for them,
- * and `CLAUDE.md` is explicit about not paying for an extension point before
- * there is a second case. It is a list so that adding one is a data change.
- */
-export const ASSEMBLIES: readonly IAssemblyDefinition[] = [revisionLoopAssembly];
-
-/** The assembly a palette drag names, or `null` for an unknown id. */
-export function assemblyById(id: string): IAssemblyDefinition | null {
-  return ASSEMBLIES.find((assembly) => assembly.id === id) ?? null;
-}

@@ -52,6 +52,9 @@ const ICONS: Record<string, LucideIcon> = {
   // glyph says what it does rather than what it is: the answer comes back
   // round (ticket 21).
   'assembly-revision-loop': RefreshCw,
+  // The other assembly (ticket 22): three nodes in a row, which is exactly
+  // what the starter is.
+  'assembly-starter': Workflow,
   'port-feedback': ShieldCheck,
 
   // Port types

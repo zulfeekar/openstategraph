@@ -1,6 +1,6 @@
 import { matchesQuery } from '@core/model/ModelRegistry';
 import type { INodeDefinition } from '@core/model/contracts/node';
-import { ASSEMBLIES, type IAssemblyDefinition } from '@nodes/assemblies/revisionLoop';
+import { ASSEMBLIES, type IAssemblyDefinition } from '@nodes/assemblies';
 
 /**
  * Assemblies belonging to one palette section, filtered by the search box.

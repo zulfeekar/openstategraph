@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
 import { CATEGORY } from '../vocabulary';
-import {
-  ASSEMBLIES,
-  assemblyById,
-  REVISION_LOOP_ASSEMBLY_ID,
-  revisionLoopAssembly,
-} from './revisionLoop';
+import { ASSEMBLIES, assemblyById } from './index';
+import { REVISION_LOOP_ASSEMBLY_ID, revisionLoopAssembly } from './revisionLoop';
 
 /**
  * production-ready ticket 21 — a revision loop in one drag.
@@ -66,10 +62,11 @@ describe('the revision loop assembly', () => {
     expect(Number(grader?.data?.['maxAttempts'])).toBeGreaterThan(0);
   });
 
-  it('offers exactly one assembly, and it is this one', () => {
-    // A general insert mechanism was declined: the second and third entries
-    // are speculative until somebody asks for them.
-    expect(ASSEMBLIES).toEqual([revisionLoopAssembly]);
+  it('is one of the assemblies the palette offers', () => {
+    // It was the only one until ticket 22 added the starter — which is how
+    // ticket 21 said a second entry should arrive: because somebody asked,
+    // as a data change to this list rather than a new mechanism.
+    expect(ASSEMBLIES).toContain(revisionLoopAssembly);
   });
 });
 
