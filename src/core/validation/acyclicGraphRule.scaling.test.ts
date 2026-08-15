@@ -5,8 +5,10 @@ import {
   LOOPABLE_TYPE,
   makeWorkbench,
   registerLoopableType,
-  type Workbench,
 } from '@core/testing/fixtures';
+
+/** Named from the fixture, so this file adds no import of its own. */
+type Workbench = ReturnType<typeof makeWorkbench>;
 import { cyclicMembers } from '@core/model/topology';
 import type { NodeId } from '@core/model/contracts/node';
 import { acyclicGraphRule } from './WorkflowValidator';
@@ -105,6 +107,26 @@ describe('cycle membership is computed once, not once per candidate', () => {
         ({ up: ['a'], a: ['b'], b: ['a', 'down'], down: [] })[id as 'up' | 'a' | 'b' | 'down'],
     );
     expect([...cyclic].sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('the findings are unchanged by the faster membership test', () => {
+  it('names the cycle members only, in the order the leftover set holds them', () => {
+    // The behaviour the old per-member DFS existed to get right, and which
+    // the SCC pass has to reproduce exactly: `d` and everything after it is
+    // in Kahn's leftover set (blocked by a dependency that never finished)
+    // and is *not* in the loop. The notice names three nodes, anchors to the
+    // first, and is `info` because `c → d` is a way out.
+    const workbench = graphWithCycleAtTheHead(6);
+    const [notice, ...rest] = acyclicGraphRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+    expect(rest).toEqual([]);
+    expect(notice?.severity).toBe('info');
+    expect(notice?.code).toBe('escapable-loop');
+    expect(notice?.message).toContain('3 nodes');
+    expect(notice?.nodeId).toBe(workbench.model.nodes()[0]?.id);
   });
 });
 

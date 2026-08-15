@@ -2,33 +2,9 @@ import { Registry, type IIdentifiable } from '@core/kernel/Registry';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import { validateFields } from '@core/model/contracts/fields';
+import { cyclicMembers } from '@core/model/topology';
 import type { NodeId } from '@core/model/contracts/node';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
-
-/** True if a path exists from `start` back to itself, staying within `candidates`. */
-function canReachSelf(
-  model: WorkflowModel,
-  candidates: ReadonlySet<NodeId>,
-  start: NodeId,
-): boolean {
-  const stack: NodeId[] = [start];
-  const visited = new Set<NodeId>();
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current == null) continue;
-    for (const edge of model.edgesOf(current)) {
-      if (edge.source.nodeId !== current) continue;
-      const next = edge.target.nodeId;
-      if (!candidates.has(next)) continue;
-      if (next === start) return true;
-      if (!visited.has(next)) {
-        visited.add(next);
-        stack.push(next);
-      }
-    }
-  }
-  return false;
-}
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'info';
 
@@ -191,9 +167,24 @@ export const acyclicGraphRule: IWorkflowRule = {
     // the escape look absent. A node is truly *in* the cycle only if a
     // path exists from it back to itself using edges between other members
     // of the leftover set.
+    //
+    // Answered for the whole set in **one** pass rather than one traversal
+    // per member. The over-inclusion above is deliberate and stays; what
+    // was wrong was the price of narrowing it, O(V·(V+E)) exactly when a
+    // cycle exists — and a cycle is a feature here, not an accident (the
+    // audit of 2026-08-15 measured 48 ms on 800 nodes, inside the render
+    // that every node drag causes). `cyclicMembers` is Tarjan: a node is on
+    // a cycle iff its SCC has more than one member, or it has a self-edge.
+    // Same membership, same order, same messages — pinned by this rule's
+    // existing cases and by `acyclicGraphRule.scaling.test.ts`.
     const candidates = new Set(blocked);
-    const cycle = blocked.filter((start) => canReachSelf(model, candidates, start));
-    const inCycle = new Set(cycle);
+    const inCycle = cyclicMembers(candidates, (nodeId) =>
+      model
+        .edgesOf(nodeId)
+        .filter((edge) => edge.source.nodeId === nodeId)
+        .map((edge) => edge.target.nodeId),
+    );
+    const cycle = blocked.filter((nodeId) => inCycle.has(nodeId));
     const hasEscape = cycle.some((nodeId) =>
       model
         .edgesOf(nodeId)
