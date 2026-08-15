@@ -125,6 +125,7 @@ from openstategraph.api.sse_contract import (  # noqa: E402, F401  (re-exported)
 from openstategraph.api.routes import chat_ui as chat_ui_routes  # noqa: E402
 from openstategraph.api.routes import demo as demo_routes  # noqa: E402
 from openstategraph.api.routes import examples as example_routes  # noqa: E402
+from openstategraph.api.routes import mcp as mcp_routes  # noqa: E402
 from openstategraph.api.routes import providers as providers_routes  # noqa: E402
 from openstategraph.api.routes import runs as runs_routes  # noqa: E402
 from openstategraph.api.routes import system as system_routes  # noqa: E402
@@ -311,6 +312,7 @@ def create_app(
     app.include_router(chat_ui_routes.router)
     app.include_router(demo_routes.router)
     app.include_router(example_routes.router)
+    app.include_router(mcp_routes.router)
     app.include_router(providers_routes.router)
     app.include_router(runs_routes.router)
     app.include_router(system_routes.router)

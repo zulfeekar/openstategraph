@@ -156,6 +156,80 @@ class ProviderVerifyResponse(BaseModel):
     )
 
 
+class McpAuthPayload(BaseModel):
+    """How a server is authenticated — **the variable name, never the value**.
+
+    This model is the reason the panel can be honest. There is no field here
+    a credential could travel in, so the question "did the editor just POST a
+    token to the server" has one answer and it is no: the browser never has
+    one, because the value lives in the server's own environment and is read
+    at bind time by name.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    kind: str = Field(default="none", description="`none`, `bearer` or `header`.")
+    headerName: str = Field(
+        default="", description="`header` only — the vendor's own header name."
+    )
+    tokenEnv: str = Field(
+        default="",
+        description="The NAME of the environment variable holding the credential.",
+    )
+
+
+class McpServerResponse(BaseModel):
+    """One registered server, as the editor may show it."""
+
+    name: str
+    url: str
+    transport: str
+    auth: McpAuthPayload
+    origin: str = Field(description="`built-in` for the two defaults, `project` for a config entry.")
+    credentialConfigured: bool = Field(
+        description=(
+            "Whether the named variable is set on this server. Presence, not validity — "
+            "only a handshake can tell you the second, which is what /validate is for."
+        )
+    )
+
+
+class McpValidateRequest(BaseModel):
+    """`POST /api/mcp/validate` — check one server, configured or inline.
+
+    Either name a registered server, or post a URL. Naming one that is not
+    registered is an error rather than a silent fall-through to the URL: the
+    two mean different things and answering the wrong one is how a developer
+    ends up validating a server they are not about to bind.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    server: str = Field(default="", description="A registered server by name.")
+    url: str = Field(default="", description="Inline: the server's URL.")
+    transport: str = Field(default="streamable_http", description="`streamable_http` or `sse`.")
+    auth: McpAuthPayload = McpAuthPayload()
+
+
+class McpValidateResponse(BaseModel):
+    """The handshake's verdict, and the tool names it found.
+
+    `tools` is what a developer actually wants from a validate button: the
+    count and the names are the proof the thing has a tool surface, which is
+    what a `tool.mcp` node will bind. `initialize` alone would prove only
+    that something answered.
+    """
+
+    status: str = Field(
+        description="`live`, `unreachable`, `auth_required` or `not_mcp` — never a stack trace."
+    )
+    message: str
+    serverName: str = ""
+    serverVersion: str = ""
+    tools: list[str] = Field(default_factory=list)
+    elapsedSeconds: float = 0.0
+
+
 class ValidateRequest(BaseModel):
     """`POST /api/workflows/validate` — check the posted document.
 

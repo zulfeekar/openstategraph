@@ -520,6 +520,148 @@
         "title": "KnowledgeTopicStatusResponse",
         "type": "object"
       },
+      "McpAuthPayload": {
+        "additionalProperties": false,
+        "description": "How a server is authenticated \u2014 **the variable name, never the value**.\n\nThis model is the reason the panel can be honest. There is no field here\na credential could travel in, so the question \"did the editor just POST a\ntoken to the server\" has one answer and it is no: the browser never has\none, because the value lives in the server's own environment and is read\nat bind time by name.",
+        "properties": {
+          "headerName": {
+            "default": "",
+            "description": "`header` only \u2014 the vendor's own header name.",
+            "title": "Headername",
+            "type": "string"
+          },
+          "kind": {
+            "default": "none",
+            "description": "`none`, `bearer` or `header`.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "tokenEnv": {
+            "default": "",
+            "description": "The NAME of the environment variable holding the credential.",
+            "title": "Tokenenv",
+            "type": "string"
+          }
+        },
+        "title": "McpAuthPayload",
+        "type": "object"
+      },
+      "McpServerResponse": {
+        "description": "One registered server, as the editor may show it.",
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/McpAuthPayload"
+          },
+          "credentialConfigured": {
+            "description": "Whether the named variable is set on this server. Presence, not validity \u2014 only a handshake can tell you the second, which is what /validate is for.",
+            "title": "Credentialconfigured",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "description": "`built-in` for the two defaults, `project` for a config entry.",
+            "title": "Origin",
+            "type": "string"
+          },
+          "transport": {
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "transport",
+          "auth",
+          "origin",
+          "credentialConfigured"
+        ],
+        "title": "McpServerResponse",
+        "type": "object"
+      },
+      "McpValidateRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/mcp/validate` \u2014 check one server, configured or inline.\n\nEither name a registered server, or post a URL. Naming one that is not\nregistered is an error rather than a silent fall-through to the URL: the\ntwo mean different things and answering the wrong one is how a developer\nends up validating a server they are not about to bind.",
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/McpAuthPayload",
+            "default": {
+              "headerName": "",
+              "kind": "none",
+              "tokenEnv": ""
+            }
+          },
+          "server": {
+            "default": "",
+            "description": "A registered server by name.",
+            "title": "Server",
+            "type": "string"
+          },
+          "transport": {
+            "default": "streamable_http",
+            "description": "`streamable_http` or `sse`.",
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "Inline: the server's URL.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "title": "McpValidateRequest",
+        "type": "object"
+      },
+      "McpValidateResponse": {
+        "description": "The handshake's verdict, and the tool names it found.\n\n`tools` is what a developer actually wants from a validate button: the\ncount and the names are the proof the thing has a tool surface, which is\nwhat a `tool.mcp` node will bind. `initialize` alone would prove only\nthat something answered.",
+        "properties": {
+          "elapsedSeconds": {
+            "default": 0.0,
+            "title": "Elapsedseconds",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "serverName": {
+            "default": "",
+            "title": "Servername",
+            "type": "string"
+          },
+          "serverVersion": {
+            "default": "",
+            "title": "Serverversion",
+            "type": "string"
+          },
+          "status": {
+            "description": "`live`, `unreachable`, `auth_required` or `not_mcp` \u2014 never a stack trace.",
+            "title": "Status",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "McpValidateResponse",
+        "type": "object"
+      },
       "MountDocumentResponse": {
         "description": "One **instance** of a mounted workflow, as that instance actually runs.\n\nA package is a class and a mount node is an instance of it: the mount\ncarries `data.overrides`, which are merged onto a copy of the package at\ncompile time and never written back. Two mounts of one package therefore\nrun two different documents, and this is how a client asks for one of them\nrather than for the shared definition.\n\n`slug` is the **class** \u2014 the package the instance is of \u2014 because\ncapabilities, knowledge, the SQL schema and the palette all belong to the\npackage and a client still asks about those by slug. `mount_path` is the\nchain of mount node ids that identifies *which* instance, and the two\ntogether are what the editor's address bar spells `root/mount-id`.\n\n`warnings` carries the merge's own loud-but-not-fatal reports \u2014 an\noverride naming a child node id that does not exist runs the package\ndefault and says so, rather than refusing to open.",
         "properties": {
@@ -1653,6 +1795,74 @@
           }
         },
         "summary": "Liveness, and whether a model name can be resolved",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/mcp/servers": {
+      "get": {
+        "description": "The two built-in defaults, with the project's own layered over by name.\n\nBoth defaults are public and keyless \u2014 the LangChain documentation and the\nLangChain API reference \u2014 so a brand-new project has two working servers\nwithout configuring anything. A project entry sharing a name replaces the\ndefault it names and leaves the other alone.",
+        "operationId": "mcp_servers_api_mcp_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerResponse"
+                  },
+                  "title": "Response Mcp Servers Api Mcp Servers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Which MCP servers this project can bind",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/mcp/validate": {
+      "post": {
+        "description": "`initialize` + `list_tools`, wrapped in a 15-second ceiling.\n\n**It never refuses to answer.** Every outcome is a verdict with a status\nthe panel can render as a badge \u2014 that is the map's decision that\nvalidation *saves* with a live/unreachable/auth-required badge rather than\nblocking a developer who is mid-typing.\n\nThe ceiling is not caution. `DEFAULT_STREAMABLE_HTTP_SSE_READ_TIMEOUT` is\n**300 seconds**, so a server that accepts a connection and then says\nnothing would hold this request open for five minutes.\n\nMeasured against the public docs server: 0.86 s for both round trips.",
+        "operationId": "validate_mcp_api_mcp_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpValidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shake hands with one MCP server, and list what it offers",
         "tags": [
           "Operations"
         ]
