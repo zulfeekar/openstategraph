@@ -29,20 +29,25 @@ worker rather than being trusted — dispatching work to the wrong specialist on
 a model's say-so is a silent wrong answer. An unlabelled subtask degrades to
 the default the same way, and that degradation is part of the demo.
 
-`role` is what the labelling call is shown as the archetype's description. It is
-**not** the worker's system prompt — a worker's own behaviour comes from a
-wired `input.skill`, or from the built-in tool directive when tools are bound.
-Gallery ticket 16.
+`role` is what the labelling call is shown as the archetype's description
+**and** context in that worker's own system prompt (gallery ticket 16, fixed):
+one string, two audiences, which is right because they describe the same
+thing. It is context rather than a rules layer, so a wired `input.skill` — or
+`rulesMode: replace` — customises behaviour without deleting the worker's
+identity.
 
 ## Read this before you judge the output
 
-**Decomposition is a regex, not a plan.** `Orchestrator.split` tries a numbered
-list, then semicolons, then the literal word **and**, then gives up and treats
-the whole brief as one subtask. The supervisor's `rules` cannot change that —
-`rules` reaches the labelling call only. And a worker receives its subtask text
-and nothing else, because a `Send` payload does not inherit the parent's state.
+**Decomposition is a plan now, because this card writes rules** (gallery
+ticket 15). It used to be a regex — a numbered list, then semicolons, then the
+literal word **and**, then the whole brief as one subtask — and the
+supervisor's `rules` reached the *labelling* call only, so the planning prose
+on this card changed nothing. Rules now drive one planning call; a card that
+leaves the field empty keeps the free deterministic splitter.
 
-The consequence is visible in every run below, and it is gallery ticket 15.
+A worker still receives its subtask text and nothing else, because a `Send`
+payload does not inherit the parent's state. That is why the rules ask for
+self-contained subtasks rather than fragments.
 
 ## Smoke run
 
@@ -53,16 +58,44 @@ openstategraph run workflows/archetype-orchestrator-report \
   "Plan a 30-minute onboarding session for a new engineer."
 ```
 
-Recorded 2026-08-14 on `ollama:gpt-oss:120b-cloud`, ~15s. It produced a good
-`# Onboarding plan` — a full timed agenda — but **it did not demonstrate what
-this example is for**, and the catalogue's expected shape is not met:
+**Before (2026-08-14, batch A, `ollama:gpt-oss:120b-cloud`, ~15s).** It
+produced a good `# Onboarding plan` — a full timed agenda — but **it did not
+demonstrate what this example is for**, and the catalogue's expected shape was
+not met:
 
 - The brief contains no numbered list, no semicolon and no "and", so the
   splitter returned **one** subtask. One subtask cannot come from two roles.
-- `decisions` is `{}`. The archetype label is written into `state["subtasks"]`
-  and is **not** surfaced in a run result at all — no `decisions` entry, no
-  `subtasks` key. Which worker ran is currently unobservable from the CLI.
-  Gallery ticket 17.
+- `decisions` was `{}`. The archetype label was written into
+  `state["subtasks"]` and surfaced in a run result nowhere at all — no
+  `decisions` entry, no `subtasks` key. Which worker ran was unobservable from
+  the CLI. Gallery ticket 17.
+
+**After (2026-08-15, tickets 15 + 17, same model, ~13s).** Both roles run and
+the result says which:
+
+```
+task-1  researcher  compile essential onboarding topics, required materials …
+task-2  writer      draft a 30-minute onboarding agenda with time slots …
+task-3  writer      draft a concise welcome email …
+
+decisions  {"lead1#task-1": "researcher", "lead1#task-2": "writer",
+            "lead1#task-3": "writer"}
+outputs    in1, lead1, worker-research#task-1, worker-write#task-2,
+           worker-write#task-3, join1, out1
+```
+
+The catalogue's expected shape for example 5 — "`decisions` shows the
+archetype label per subtask" — is met and is now assertable; `tests/` asserts
+it.
+
+**Two of three post-fix runs labelled; one collapsed every subtask onto the
+default worker.** Same document, same model, same question. The labelling call
+is one model call and it is allowed to come back unusable — what changed is
+that it is no longer *silent*: an unrecognised label logs the label it could
+not place, a failed call logs that it failed, and `decisions` writes
+`"researcher (default)"` rather than `"researcher"` so the run result
+distinguishes a choice from a fallback. That distinction is the half of ticket
+17 a run result could not express before.
 
 Two control runs, same package, same day:
 

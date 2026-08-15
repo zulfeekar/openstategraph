@@ -37,24 +37,24 @@ A subtask that died renders as a named gap rather than vanishing.
 
 ## Read this before you edit the Planner
 
-**Decomposition is deterministic, and no prose can steer it.**
-`Orchestrator.split` is a regex, tried in this order:
+**Rules on the supervisor are the switch between two decompositions**
+(gallery ticket 15). Leave the field empty and `Orchestrator.split` is a regex,
+tried in this order:
 
 1. a numbered list (`1.` / `1)`), else
 2. semicolons, else
 3. the literal word **and**, else
 4. the whole instruction as one subtask.
 
-The supervisor's `rules` field shapes only the *archetype-labelling* call — and
-with one archetype wired, `label()` short-circuits before making it. So `rules`
-here would read like a planning instruction and change nothing, which is why
-this package leaves it empty and `tests/` keeps it that way. Gallery ticket 15
-carries the gap.
+Free, reproducible, and good at a punctuated brief. Write rules and the
+supervisor makes one planning call instead, which is what this package now
+does — because the recorded smoke question is precisely what a regex cannot
+handle, and the rules field carries that question's own failure as its example.
 
-The same applies to the worker's `role`: it is the archetype *description* the
-supervisor is shown when labelling, never the worker's own system prompt
-(gallery ticket 16). To shape how a worker answers, wire an `input.skill` to
-its `skill` port — that is gallery example 14.
+The worker's `role` is now **both** the archetype description the supervisor
+labels against and context in the worker's own system prompt (gallery ticket
+16), so what is typed there changes how the worker answers. The rules layer
+above it is still a wired `input.skill` — that is gallery example 14.
 
 **A worker sees its subtask text and nothing else** — not the original request,
 not the other subtasks. A `Send` payload does not inherit the parent's state.
@@ -69,19 +69,27 @@ openstategraph run workflows/parallel-workers-join \
   "Give me two arguments for and against daily standups."
 ```
 
-Recorded 2026-08-14 on `ollama:gpt-oss:120b-cloud`, ~9s. The **shape** is
-exactly as specified: a `# Standup arguments` heading and exactly two `###`
-sections, `task-1` then `task-2`.
-
-The **content** shows the splitter honestly. That question splits on " and "
-into "Give me two arguments for" and "against daily standups", so `task-1` is
-unanswerable on its own and the worker said so:
+**Before (2026-08-14, batch A, `ollama:gpt-oss:120b-cloud`, ~9s).** The
+**shape** was exactly as specified — a `# Standup arguments` heading and two
+`###` sections — and the **content** showed the splitter honestly. The
+question split on " and " into "Give me two arguments for" and "against daily
+standups", so `task-1` was unanswerable on its own and the worker said so:
 
 > ### task-1
 > I'm not sure what you'd like arguments about — could you let me know the
 > specific topic or claim you'd like two arguments for?
 
-That is not a wiring fault and it is not fixable from this package. It is what
-a regex splitter does to ordinary English, and it is recorded here rather than
-hidden behind a question chosen to flatter it. Semicolons or a numbered list
-give clean subtasks today.
+**After (2026-08-15, gallery ticket 15, same model, ~9s).** The planner is a
+model call now, and it plans the two stances:
+
+| id | instruction | archetype |
+| --- | --- | --- |
+| `task-1` | Provide two arguments in favor of daily standups. | `analyst` |
+| `task-2` | Provide two arguments against daily standups. | `analyst` |
+
+Two `###` sections again, but each is two real arguments — alignment and
+faster issue resolution for the first, fragmented deep work for the second —
+and neither worker asks the user anything. `decisions` carries
+`{"lead1#task-1": "analyst", "lead1#task-2": "analyst"}` and `outputs` carries
+`worker1#task-1` / `worker1#task-2`, so every dispatched instance is
+addressable from the run result (gallery ticket 17).

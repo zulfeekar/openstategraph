@@ -51,24 +51,41 @@ conversation. Two consequences this package is shaped around:
 
 Both belong to gallery ticket 15.
 
-## The feedback edge re-dispatches; it does not re-plan
+## The feedback edge re-plans, and this is where that was fixed
 
-`Orchestrator.split` is deterministic on the instruction, and the instruction
-does not change between laps. So a rejected report is re-planned into **exactly
-the same subtasks**, with the grader's feedback appended to each one's text.
-The workers get another go; the division of labour cannot change, however
-precisely the grader names what is wrong with it. Gallery ticket 23.
+It used not to. `Orchestrator.split` was deterministic on an instruction that
+did not change between laps, so a rejected report was re-planned into **exactly
+the same subtasks** with the grader's feedback appended to each one's text: the
+workers got another go and the division of labour could not change, however
+precisely the grader named what was wrong with it. Gallery ticket 23.
+
+Fixed by gallery ticket 15's planning call plus one change of order — the
+rejection is passed *into* `split(instruction, feedback)` rather than folded in
+after it. This document's supervisor carries rules, so its plan is a model call
+and the rejection reaches it. Live, 2026-08-15, three laps: lap 3's third
+subtask read
+
+> Judge which deployment approach is safer to operate, **beginning the response
+> with a sentence that names the chosen approach**, then explain the reasons …
+
+— the grader's structural complaint, folded into the *plan* rather than
+appended to it. A supervisor with no rules keeps the old behaviour exactly: the
+deterministic splitter ignores the feedback argument, by design and documented,
+because a regex handed a critique turns it into more work to split.
 
 `maxAttempts: 3` — and the supervisor is the only node here that increments
 `attempts`, so on this graph one lap does cost one attempt.
 
-## The worker's `role` is not read by the worker
+## The worker's `role` is read by the worker
 
-It reaches the supervisor's archetype-labelling call and nothing else, so
-"six lines at most" on the card does not shorten anything — the recorded run's
-sections are far longer. With one worker wired, labelling short-circuits and
-the field is inert entirely. Gallery ticket 16; the card text is kept as the
-statement of intent it will become once that lands.
+It used to reach the supervisor's archetype-labelling call and nothing else, so
+"six lines at most" on the card shortened nothing and the recorded run's
+sections were far longer. With one worker wired, labelling short-circuits, so
+the field was inert entirely. Gallery ticket 16, fixed: `role` is context in
+the worker's own prompt now. Live, 2026-08-15, same card text — the three
+sections came back at **6, 6 and 4 lines**, each naming a failure mode, who is
+on the hook and what recovery costs. The card text was written as a statement
+of intent and is now a statement of behaviour.
 
 ## Smoke run
 

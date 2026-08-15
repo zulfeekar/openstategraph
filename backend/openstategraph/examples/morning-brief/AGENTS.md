@@ -20,21 +20,28 @@ Distinct from example 5, whose archetypes differ by *role* rather than by
 capability, and from example 18, which is one agent looping over tools rather
 than several each owning one.
 
-## The question is a bare numbered list, and that is load-bearing
+## The question is a bare numbered list, and it no longer has to be
 
-`Orchestrator.split` tries `_NUMBERED = (?:^|\n)\s*\d+[.)]\s*` first. A summary
-line above the list becomes **subtask #1**, and with `maxSubtasks: 3` the third
-real item is then dropped without a word — gallery ticket 15's second facet,
-found by a batch B control run. So the smoke question is three numbered lines
-and nothing else. `tests/` pins both halves: the split this question produces,
-and the one the preamble version would have.
+`Orchestrator.split` tries `_NUMBERED = (?:^|\n)\s*\d+[.)]\s*` first, and a
+summary line above the list used to become **subtask #1** — with
+`maxSubtasks: 3` the third real item was then dropped without a word, gallery
+ticket 15's second facet, found by a batch B control run. Fixed: a leading
+summary is carried into every item as context instead of planned as work, and
+hitting the ceiling now says so in the supervisor's own output. The smoke
+question is still three numbered lines, because that is what the *recorded*
+run asked; `tests/` pins the fix rather than the workaround.
 
-## A worker cannot be told how to answer, so the skill does it
+This document's supervisor also carries `rules`, so its plan is a model call
+now (ticket 15) — a bare numbered list is the case the deterministic splitter
+was already good at, and the rules keep the labelling honest either way.
 
-`orchestrate.worker` declares no prompt field, and `role` is read by the
-*supervisor's* labelling call, not by the worker (gallery ticket 16). A
-`systemPrompt` typed onto a worker card would be silently inert. The only lever
-is the `skill` port — so one `input.skill` fans out to all three workers, since
+## A worker has two levers now: its role and its skill
+
+`orchestrate.worker` declares no prompt field, but `role` is context in the
+worker's own system prompt as well as the archetype description the supervisor
+labels against (gallery ticket 16, fixed). A `systemPrompt` typed onto a worker
+card is still silently inert. The rules layer above the role is the `skill`
+port — so one `input.skill` fans out to all three workers, since
 `input.skill.skill` is `maxConnections: null` and each worker's `skill` input
 takes one.
 
@@ -94,15 +101,20 @@ gate invisible to the project knowledge catalogue that is built from the same
 predicate. Whether an example ships published belongs to ticket 07 (examples
 ship in the wheel); the fact that it currently does not is gallery ticket 33.
 
-### Re-confirmed live, not re-filed
+### Finding 3 — `decisions` was `{}`, and now is not
 
-`decisions` came back `{}`. Three subtasks were labelled and dispatched to
-three different workers — the sections prove it, because each one used a tool
-only its worker holds — and **which archetype ran is nowhere in the result**.
-That is gallery ticket 17, seen again on the graph that most needs it: with
-heterogeneous *capabilities* rather than heterogeneous roles, "which worker
-took this" is the difference between an answer from the handbook and an answer
-from the open web.
+The recorded run's `decisions` came back empty. Three subtasks were labelled
+and dispatched to three different workers — the sections proved it, because
+each one used a tool only its worker holds — and **which archetype ran was
+nowhere in the result**. That was gallery ticket 17, seen on the graph that
+most needs it: with heterogeneous *capabilities* rather than heterogeneous
+roles, "which worker took this" is the difference between an answer from the
+handbook and an answer from the open web.
+
+Fixed. A run now carries `decisions["lead1#task-1"] = "worker-handbook"` per
+subtask and an `outputs["worker-handbook#task-1"]` entry per dispatched
+instance, so the archetype and the node that ran it are both readable from a
+`--json` run without re-deriving anything.
 
 ## The handbook is the package
 

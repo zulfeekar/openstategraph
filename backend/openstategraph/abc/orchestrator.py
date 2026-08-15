@@ -19,6 +19,7 @@ from openstategraph.messages import content_text
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
@@ -62,6 +63,24 @@ def archetype_key(node: dict[str, Any]) -> str:
     title = str(node.get("title") or "").strip()
     return archetype_slug(title) if title else str(node.get("id") or "")
 
+
+def default_worker_node(worker_nodes: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    """Where an unlabelled or unrecognised subtask lands.
+
+    Declared here, once, because two layers need the same answer and had it
+    written twice: the compiler builds the fan-out router's fallback
+    destination, and the orchestrator node records *which archetype actually
+    ran* a subtask (ticket 17) — and a run result that disagreed with the
+    dispatch would be worse than no record at all.
+
+    Exactly one default is the validated shape (`singleDefaultWorkerRule`);
+    the first card claiming it wins here so a mis-authored document still
+    runs, and with none claimed the first wired archetype is the default.
+    """
+    for node in worker_nodes:
+        if (node.get("data") or {}).get("default"):
+            return node
+    return worker_nodes[0] if worker_nodes else None
 
 
 class Archetype(BaseModel):
@@ -248,6 +267,11 @@ class BaseOrchestrator(ABC):
         except Exception:
             # A labelling failure must not kill the plan — everything falls
             # to the default worker, which is a working (single-archetype)
+            # run. It was also completely silent, which is the half of
+            # ticket 17 the run result cannot fix: a whole plan collapsing
+            # onto the default worker looked identical whether the model
+            # chose it or the call never happened.
+            logger.warning("archetype labelling failed; every subtask falls to the default worker")
             return ["" for _ in subtasks]
 
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
@@ -257,7 +281,12 @@ class BaseOrchestrator(ABC):
             if candidate in valid:
                 labels.append(candidate)
             else:
-                labels.append(by_name.get(candidate, ""))
+                resolved = by_name.get(candidate, "")
+                if not resolved:
+                    logger.warning(
+                        "archetype label %r matches no wired worker; using the default", line
+                    )
+                labels.append(resolved)
         # A short reply pads with the default; a long one was truncated above.
         labels.extend("" for _ in range(len(subtasks) - len(labels)))
         return labels
@@ -535,6 +564,7 @@ __all__ = [
     "Subtask",
     "archetype_key",
     "archetype_slug",
+    "default_worker_node",
     "deterministic_split",
     "orchestrator_for",
 ]

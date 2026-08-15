@@ -73,6 +73,33 @@ def test_the_supervisor_writes_planning_rules_not_only_dispatch_rules(document: 
     assert "subtask" in rules.lower()
 
 
+def test_a_run_records_which_archetype_took_each_subtask(document: dict) -> None:
+    """Gallery ticket 17, and the catalogue's expected shape for example 5 —
+    "`decisions` shows the archetype label per subtask" — which described
+    something the runtime did not produce until it did.
+
+    Offline: with no model the planner is the deterministic splitter and
+    labelling falls back to name-mention, so this asserts the *record*, not a
+    model's judgement. An unlabelled subtask still names the archetype it
+    actually reached, and says it got there by default.
+    """
+    from openstategraph.compile.node_runtime import NodeRuntime
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+    runtime = NodeRuntime(model=None)
+    plan = WorkflowCompiler().plan(document)
+    step = runtime.factory(document)("lead1", node_of(document, "lead1"), plan)
+
+    update = step(
+        {"question": "Research what a new engineer needs; write the onboarding agenda."}
+    )
+
+    assert set(update["decisions"]) == {"lead1#task-1", "lead1#task-2"}
+    assert all(value for value in update["decisions"].values()), (
+        "a blank value records nothing — an unlabelled subtask names the default"
+    )
+
+
 def test_both_workers_are_dispatched_and_both_join(document: dict) -> None:
     worker_ids = {w["id"] for w in _workers(document)}
     dispatched = {

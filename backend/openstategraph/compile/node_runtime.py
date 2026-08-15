@@ -1597,7 +1597,11 @@ class NodeRuntime:
         reading exactly what this writes — the same node-decides /
         edge-dispatches split as the router and the grader.
         """
-        from openstategraph.abc.orchestrator import Archetype, archetype_key
+        from openstategraph.abc.orchestrator import (
+            Archetype,
+            archetype_key,
+            default_worker_node,
+        )
 
         data = node.get("data") or {}
         cap = int(data.get("maxSubtasks") or 8)
@@ -1630,8 +1634,16 @@ class NodeRuntime:
         # `archetype_key`, so a label the planning prompt offered is exactly
         # a key the fan-out router can resolve.
         archetypes = []
-        for worker_id in plan.fan_out.get(node_id, []):
-            worker_node = self._nodes.get(worker_id) or {}
+        worker_nodes = [
+            {**(self._nodes.get(worker_id) or {}), "id": worker_id}
+            for worker_id in plan.fan_out.get(node_id, [])
+        ]
+        # Which archetype an unlabelled subtask actually reaches, resolved by
+        # the same function the compiler's fan-out router uses, so the record
+        # this node writes (ticket 17) cannot disagree with the dispatch.
+        default_key = archetype_key(default_worker_node(worker_nodes) or {})
+        for worker_node in worker_nodes:
+            worker_id = str(worker_node.get("id") or "")
             worker_data = worker_node.get("data") or {}
             # A labelling model can only route what it can see: with no
             # `role` set, describe the worker by the tools actually bound to
@@ -1728,9 +1740,32 @@ class NodeRuntime:
                     )
                     for t in subtasks
                 ]
+            # Which archetype each subtask was dispatched to (ticket 17). A
+            # run of a two-archetype supervisor — a node whose entire
+            # behaviour is a *choice* — used to return `decisions: {}`, so the
+            # one thing it decided was the one thing nowhere in the result.
+            #
+            # `<node id>#<task id>`, flat and string-valued, because that is
+            # what `decisions` is at the run/stream seam (`dict[str, str]`, in
+            # Pydantic and in `RuntimeClient.ts`): a nested map here would be
+            # a contract change on both. `#` and not `/` — a `/` in one of
+            # these maps already means a *mount path* (`RunResult.nested`),
+            # and one separator cannot mean two things.
+            #
+            # An unlabelled subtask records the archetype it actually reached
+            # *and* says it got there by default, so the case ticket 17 calls
+            # unobservable — a label the model invented, validated away, and
+            # collapsed onto the default worker — reads differently from a
+            # label the model chose.
+            dispatch = {
+                f"{node_id}#{task.id}": task.archetype
+                or (f"{default_key} (default)" if default_key else "(default)")
+                for task in subtasks
+            }
             planned = f"Planned {len(subtasks)} subtask(s)."
             return {
                 "subtasks": {node_id: [t.model_dump() for t in subtasks]},
+                "decisions": dispatch,
                 # The ceiling's casualties ride the node's own output because
                 # that is the run-time channel every surface already renders:
                 # `.warnings` is materialised at load time on the library path
@@ -1883,7 +1918,17 @@ class NodeRuntime:
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
             text = _final_text(out)
-            return {"worker_results": {task_id: text if isinstance(text, str) else str(text)}}
+            return {
+                "worker_results": {task_id: text if isinstance(text, str) else str(text)},
+                # Which worker node ran which subtask (ticket 17). Every
+                # dispatched instance shares one node id, so the task id is
+                # what keeps them apart — the same reason `worker_results` is
+                # keyed that way. Separate from `worker_results` because that
+                # map is the join's input and this is the run's record.
+                "outputs": {
+                    f"{node_id}#{task_id}": text if isinstance(text, str) else str(text)
+                },
+            }
 
         return run
 

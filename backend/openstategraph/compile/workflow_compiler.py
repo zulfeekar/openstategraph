@@ -30,7 +30,7 @@ from typing import Any, Callable, Mapping
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
-from openstategraph.abc.orchestrator import archetype_key
+from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 
@@ -657,17 +657,13 @@ class WorkflowCompiler:
             for worker_id in worker_ids:
                 worker_node = nodes.get(worker_id) or {}
                 archetype_map.setdefault(archetype_key(worker_node), safe_name(worker_id))
-            # Exactly one default is the validated shape; the first card
-            # claiming it wins here so a mis-authored document still runs,
-            # and with none claimed the first wired archetype is the default.
-            default_worker = next(
-                (
-                    w
-                    for w in worker_ids
-                    if ((nodes.get(w) or {}).get("data") or {}).get("default")
-                ),
-                worker_ids[0],
+            # Exactly one default is the validated shape; the rule itself is
+            # `default_worker_node`, shared with the orchestrator node so the
+            # dispatch and the record of it (ticket 17) cannot disagree.
+            chosen = default_worker_node(
+                [{**(nodes.get(w) or {}), "id": w} for w in worker_ids]
             )
+            default_worker = str((chosen or {}).get("id") or worker_ids[0])
             builder.add_conditional_edges(
                 safe_name(orchestrator_id),
                 self._fan_out_router(orchestrator_id, archetype_map, safe_name(default_worker)),

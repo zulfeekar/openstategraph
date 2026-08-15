@@ -504,6 +504,51 @@ class TestAWorkerIsToldItsRole:
         assert any("Finds facts." in call for call in model.calls)
 
 
+class TestTheRunRecordsWhichArchetypeRan:
+    """Gallery ticket 17: `decisions` was `{}` for the one node whose whole
+    behaviour is a choice."""
+
+    def test_every_dispatched_subtask_names_its_archetype(self) -> None:
+        model = RespondingModel(
+            [(lambda c: "supervisor assigning" in c, "researcher\nwriter")],
+            default="an answer",
+        )
+        document = archetype_document()
+
+        final = run(document, "find the facts; write the summary", model)
+
+        assert final["decisions"]["lead1#task-1"] == "researcher"
+        assert final["decisions"]["lead1#task-2"] == "writer"
+
+    def test_an_unlabelled_subtask_names_the_default_and_says_it_defaulted(self) -> None:
+        # A label the model invented is validated away and collapses onto the
+        # default worker, by design. That it happened must still be readable.
+        model = RespondingModel(
+            [(lambda c: "supervisor assigning" in c, "archivist")], default="an answer"
+        )
+        document = archetype_document()
+
+        final = run(document, "find the facts", model)
+
+        assert final["decisions"]["lead1#task-1"] == "researcher (default)"
+
+    def test_each_worker_instances_own_answer_is_in_outputs(self) -> None:
+        model = RespondingModel(
+            [
+                (lambda c: "supervisor assigning" in c, "researcher\nwriter"),
+                (lambda c: "find the facts" in c, "the facts"),
+                (lambda c: "write the summary" in c, "the summary"),
+            ],
+            default="x",
+        )
+        document = archetype_document()
+
+        final = run(document, "find the facts; write the summary", model)
+
+        assert final["outputs"]["research1#task-1"] == "the facts"
+        assert final["outputs"]["write1#task-2"] == "the summary"
+
+
 class TestTheCeilingIsNoLongerASilentSlice:
     """Gallery ticket 15's batch-B facet: `maxSubtasks` dropped work silently."""
 
