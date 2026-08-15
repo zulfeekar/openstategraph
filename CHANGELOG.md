@@ -233,6 +233,38 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Fixed
 
+- **A fresh install opened onto someone else's demo** (workflow-gallery ticket
+  41). `pip install`, `openstategraph serve`, open the editor: the canvas was
+  a 13-node, 17-link **Chinook Assistant** — a document absent from
+  `/api/workflows` (which returned `[]`), absent from the examples catalogue,
+  and absent from the wheel; it existed only as a string inside the built SPA
+  bundle. Around it, the palette's THIS WORKFLOW section advertised three
+  atoms for a database the install does not ship, DIAGNOSTICS reported on its
+  revision loop, and the save button read **Save Chinook Assistant** — an
+  invitation to adopt a graph the customer had not made and could not run.
+
+  `main.tsx` now seeds only under `import.meta.env.DEV`. A shipped build opens
+  on the empty canvas the Workflows drawer already offers and describes as
+  `Blank canvas`, with the START FROM templates and ticket 07's EXAMPLES shelf
+  beside it — documents whose provenance a customer can see.
+
+  It is **gated rather than deleted** because in a checkout the same document
+  is honest and load-bearing: `workflows/chinook-assistant/workflow.json` is on
+  disk and in `/api/workflows`, `e2e/canvas.smoke.spec.ts` loads it as its
+  fixture (against `npm run dev`, where the guard is true), and several canvas
+  tuning constants cite measurements of it. Because the guard is a build-time
+  literal, the document is dropped from the bundle rather than merely unused —
+  `Chinook Assistant` went from 6 occurrences in the shipped chunk to **0**,
+  and `src/app/seedDemo.test.ts` asserts both the guard and the built assets.
+
+  The Chinook palette atoms needed no separate change: they are a
+  workflow-scoped family that registers only when the open document uses one,
+  so with no seed the section renders its own "no tools of its own yet" state.
+  `ChinookDatabaseNode.ts` itself stays in the bundle — ~8 strings of dead
+  weight — deliberately: gating the family too would make any hand-written
+  document referencing `tool.chinook-*` load with those nodes silently
+  dropped, which is worse than the weight.
+
 - **The documented install for `serve` could not run a single workflow**
   (workflow-gallery ticket 37 — the headline finding of ticket 08's
   install-it-like-a-customer run). `docs/adoption.md` said `serve` "Needs

@@ -1,6 +1,10 @@
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Workbench } from './Workbench';
 import { seedDemoWorkflow } from './seedDemo';
+
+const repoRoot = join(__dirname, '..', '..');
 
 /**
  * `seedDemoWorkflow` runs at app startup, before any React tree exists —
@@ -19,6 +23,14 @@ import { seedDemoWorkflow } from './seedDemo';
  * seeded a routerless graph for the whole life of the previous map, so the
  * owner was looking at a canvas that did not contain the thing under
  * discussion. That is a regression worth a test rather than a comment.
+ *
+ * **What it is no longer.** Workflow-gallery ticket 41: this document is the
+ * *checkout's* fixture, not the product's first screen. A `pip install`
+ * opened onto it — 13 nodes named "Chinook Assistant", absent from
+ * `/api/workflows` and from the examples catalogue, existing only as a string
+ * in the shipped bundle, with a Save button inviting the customer to adopt
+ * it. `main.tsx` now seeds only under `import.meta.env.DEV`, and the last
+ * describe block below is what holds that.
  */
 describe('seedDemoWorkflow', () => {
   it('seeds a real document on a fresh workbench, not merely without throwing', () => {
@@ -70,5 +82,59 @@ describe('seedDemoWorkflow', () => {
     seedDemoWorkflow(workbench);
 
     expect(workbench.controller.history.canUndo).toBe(false);
+  });
+});
+
+/**
+ * Ticket 41's own assertions: the seed is a development fixture, and a
+ * shipped build must carry no trace of it.
+ *
+ * Two tests, because they fail for different reasons and only one of them can
+ * run everywhere. The source gate is the *cause* and runs on every `npm test`;
+ * the bundle assertion is the *claim the ticket makes* and needs a build to
+ * have happened, so it says so rather than passing vacuously.
+ */
+describe('the shipped bundle carries no example document', () => {
+  it('leaves a shipped build on an empty, neutrally-named canvas', () => {
+    // What `main.tsx` produces when the guard is false. Not "a different
+    // document" — no document, which is the `Blank canvas` the Workflows
+    // drawer already offers and explains, with the START FROM templates and
+    // the EXAMPLES shelf beside it.
+    const workbench = new Workbench();
+
+    expect(workbench.model.nodes()).toHaveLength(0);
+    expect(workbench.model.edges()).toHaveLength(0);
+    // A generic name the customer can account for, not a package name they
+    // have never heard of. The Save button reads "Save AI Workflow", which is
+    // an offer to name their own thing rather than to adopt someone else's.
+    expect(workbench.model.name).toBe('AI Workflow');
+  });
+
+  it('seeds only under import.meta.env.DEV', () => {
+    // Read rather than executed: `main.tsx` mounts React against a real DOM
+    // and this suite runs in node. What matters is structural anyway — the
+    // guard has to be a build-time literal for the document to be dropped
+    // from the bundle at all, so a runtime check would prove nothing.
+    const main = readFileSync(join(repoRoot, 'src', 'main.tsx'), 'utf8');
+    const guarded = /if \(import\.meta\.env\.DEV\) \{\s*\n\s*seedDemoWorkflow\(workbench\);/;
+
+    expect(main).toContain('seedDemoWorkflow(workbench)');
+    expect(main).toMatch(guarded);
+    expect(main.match(/seedDemoWorkflow\(workbench\)/g)).toHaveLength(1);
+  });
+
+  it('leaves no workflow document inside the built assets', () => {
+    const assets = join(repoRoot, 'dist', 'assets');
+    // `dist/` is a build output, not a checked-in file. A missing one means
+    // this claim has not been checked, which is not the same as it holding —
+    // and the wheel cannot be built without it (backend/hatch_build.py), so
+    // the artifact a customer installs has always been through this.
+    expect(existsSync(assets), 'run `npm run build` first — dist/ is missing').toBe(true);
+
+    const offenders = readdirSync(assets)
+      .filter((name) => name.endsWith('.js'))
+      .filter((name) => readFileSync(join(assets, name), 'utf8').includes('Chinook Assistant'));
+
+    expect(offenders).toEqual([]);
   });
 });

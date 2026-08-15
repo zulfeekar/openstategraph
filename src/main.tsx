@@ -18,7 +18,28 @@ import { ErrorBoundary } from '@view/ErrorBoundary';
 let workbench: ReturnType<typeof createWorkbench>;
 try {
   workbench = createWorkbench();
-  seedDemoWorkflow(workbench);
+  // **The seed is a property of this checkout, not of the product**
+  // (workflow-gallery ticket 41). A `pip install` opened onto a 13-node
+  // "Chinook Assistant" nobody had asked for: absent from `/api/workflows`,
+  // absent from the examples catalogue, present only as a string inside the
+  // built bundle — and offering to Save itself. A first impression the
+  // customer could not account for.
+  //
+  // It is gated rather than deleted because in a *checkout* the same document
+  // is honest and load-bearing: `workflows/chinook-assistant/workflow.json`
+  // is on disk and in `/api/workflows`, the e2e suite loads it as its fixture
+  // (`e2e/canvas.smoke.spec.ts`, run against `npm run dev`, where this is
+  // true), and several canvas tuning constants cite measurements of it.
+  //
+  // A shipped build opens on the empty canvas the Workflows drawer already
+  // offers and describes as `Blank canvas`, with the START FROM templates and
+  // the EXAMPLES shelf beside it — every one of them a document whose
+  // provenance the customer can see. `import.meta.env.DEV` is a literal at
+  // build time, so this also takes the document *out of the bundle*, which is
+  // what `seedDemo.test.ts` asserts.
+  if (import.meta.env.DEV) {
+    seedDemoWorkflow(workbench);
+  }
   workbench.warmUp();
 } catch (error) {
   const el = document.getElementById('root');
