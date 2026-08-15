@@ -50,14 +50,16 @@ __all__ = [
 
 #: The model every gallery package pins, in the workflow-level colon form.
 #:
-#: Two things make this a pin rather than a default. A bare `ollama:` prefix
-#: does **not** resolve to `OLLAMA_CLOUD_MODEL` — `resolve_model` returns any
-#: truthy request verbatim and `init_chat_model("ollama:")` fails on the empty
-#: model name (gallery ticket 12) — and omitting the field entirely lets a
+#: One thing makes this a pin rather than a default: omitting the field lets a
 #: machine that happens to have `ANTHROPIC_API_KEY` win the no-request
 #: fallback, which would silently move the gallery off Ollama cloud. CLAUDE.md
 #: also forbids treating a *local* model's behaviour as representative, so the
 #: `-cloud` suffix is load-bearing rather than decorative.
+#:
+#: Until install-experience T1 there was a second reason, and it is now
+#: **false**: a bare `ollama:` prefix did not resolve, because `resolve_model`
+#: returned any truthy request verbatim and `init_chat_model("ollama:")` failed
+#: on the empty model name (gallery ticket 12, closed). It expands now.
 GALLERY_MODEL = "ollama:gpt-oss:120b-cloud"
 
 #: `(source node, source port, target node, target port)` — an edge flattened

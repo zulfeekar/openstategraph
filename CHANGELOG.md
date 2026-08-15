@@ -143,6 +143,25 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Added
 
+- **A bare provider prefix is a shorthand, and now it resolves** (workflow-gallery
+  ticket 12, install-experience T1). `settings.model: "ollama:"` — the spelling
+  the gallery catalogue specified, on the stated belief that it resolved to the
+  cloud default — reached `init_chat_model` verbatim, and the run died at the
+  first model-driven node on *"String should have at least 1 character"*, as a
+  node **warning**, so the CLI exited 0 with an empty answer.
+
+  `api.model_resolution.expand_model_reference` now owns how a model reference
+  is spelled: `"ollama:"` and `"ollama"` become `ollama:gpt-oss:120b-cloud`,
+  `"claude:"` becomes `anthropic:claude-haiku-4-5`, and expansion goes through
+  `ProviderSpec.model_string()` so no second table of defaults exists.
+
+  A prefix with an **empty** model name that nothing registered is refused by
+  the new `errors.UnknownProvider`, which names it and lists the prefixes that
+  do exist. An **unprefixed** model name is deliberately *not* refused —
+  `init_chat_model` resolves an unambiguous one itself (`"gpt-5.5"` → OpenAI),
+  and refusing it would put back the narrowing `providers.py` was written to
+  remove.
+
 - **A Guardrail node, and the guardrail ladder behind it** (guardrails tickets
   01–04). `openstategraph.abc` gains `IGuardrail`, `BaseGuardrail`,
   `Guardrail`, `GuardrailRule`, `Redaction` and `Screening`; the editor gains

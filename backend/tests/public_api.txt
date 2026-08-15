@@ -55,6 +55,7 @@ openstategraph.errors.OpenStateGraphError = class(Exception)(...)
 openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
 openstategraph.errors.ProviderRefusedCredential = class(CredentialError)(...)
 openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
+openstategraph.errors.UnknownProvider = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.extensions.DISABLE_PLUGINS_ENV = str
 openstategraph.extensions.Discovered = dataclass(object) fields(values,warnings,sources)

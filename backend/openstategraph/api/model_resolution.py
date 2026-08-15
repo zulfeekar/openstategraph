@@ -29,6 +29,57 @@ from openstategraph.providers import (
 OLLAMA_CLOUD_MODEL = "ollama:gpt-oss:120b-cloud"
 
 
+def expand_model_reference(requested: str | None) -> str | None:
+    """One written model reference, in full — or `None` for "nothing was asked".
+
+    Axis B of install-experience ticket 01: **how a model reference is
+    spelled**, decided in one place so a document, a request and a config file
+    cannot come to disagree about what `"ollama:"` means.
+
+    | Written | Resolves to |
+    | --- | --- |
+    | *(absent, or blank)* | `None` — the caller elects the instance default |
+    | `"anthropic"` | `anthropic:claude-haiku-4-5` |
+    | `"ollama:"` | `ollama:gpt-oss:120b-cloud` |
+    | `"anthropic:claude-opus-4-1"` | itself |
+    | `"gpt-4o"` | itself — `init_chat_model` infers the provider |
+    | `"nosuchvendor:"` | `UnknownProvider`, naming it |
+
+    Expansion goes through `ProviderSpec.model_string()`, which already knows
+    each provider's default *and* its `OPENSTATEGRAPH_<PROVIDER>_MODEL`
+    override — so this creates no second table of defaults. An alias
+    (`claude:`, `azure_openai:`) is a prefix and expands to the provider that
+    owns it.
+
+    **A prefix with an empty model name is refused; an unprefixed name is
+    not.** The asymmetry is the whole judgement here. `"nosuchvendor:"` names
+    no model, so nothing downstream can rescue it and the honest answer is a
+    refusal that says which providers exist. `"gpt-4o"` is a model name
+    LangChain resolves on its own, and refusing it would re-narrow the open
+    provider set `providers.py` was written to open.
+    """
+    text = (requested or "").strip()
+    if not text:
+        return None
+
+    prefix, colon, model = text.partition(":")
+    if colon and model.strip():
+        return text  # fully spelled — ours to pass on, not to interpret
+
+    spec = provider_catalogue().for_prefix(prefix)
+    if spec is not None:
+        return spec.model_string()
+    if colon:
+        from openstategraph.errors import UnknownProvider
+
+        registered = ", ".join(sorted(provider_catalogue().extras_by_prefix())) or "(none)"
+        raise UnknownProvider(
+            f'Unknown provider "{prefix}" — {text!r} names no model, and no registered '
+            f"provider answers to that prefix. Registered prefixes: {registered}."
+        )
+    return text  # a bare model name; init_chat_model resolves an unambiguous one
+
+
 def resolve_model(requested: str | None) -> str:
     """Picks a model, preferring an explicit request.
 
@@ -66,9 +117,15 @@ def resolve_model(requested: str | None) -> str:
     This never falls back to a *local* model — see `OLLAMA_CLOUD_MODEL` — and
     an explicit `model` argument still always wins, so a surprise provider is
     only possible by asking for one.
+
+    **A request is expanded, not merely echoed** (install-experience T1). See
+    `expand_model_reference`: `"ollama:"` and `"anthropic"` are the same
+    request as their provider's default, and until this they reached the
+    vendor SDK verbatim (workflow-gallery ticket 12).
     """
-    if requested:
-        return requested
+    expanded = expand_model_reference(requested)
+    if expanded is not None:
+        return expanded
 
     catalogue = provider_catalogue()
 

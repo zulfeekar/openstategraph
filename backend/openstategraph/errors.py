@@ -161,6 +161,23 @@ class MissingProviderPackage(OpenStateGraphError, ImportError):
     """
 
 
+class UnknownProvider(OpenStateGraphError, ValueError):
+    """A model reference names a prefix, and the prefix names nothing.
+
+    Raised only where the reference cannot be rescued downstream: a **trailing
+    colon** (`"nosuchvendor:"`) is a provider with an empty model name, and an
+    empty model name is refused by every vendor SDK after a round trip that
+    names none of this.
+
+    Deliberately **not** raised for an unprefixed model name. `init_chat_model`
+    resolves an unambiguous one itself (`"gpt-5.5"` → OpenAI), and
+    `providers.py` exists because our own enumerations were narrower than the
+    library's — so refusing what we do not recognise would put that narrowing
+    back. `ValueError` is kept as a base because that is what a bad model
+    string used to arrive as.
+    """
+
+
 class ProviderRefusedCredential(CredentialError):
     """A credential was read, sent, and rejected by the vendor.
 
@@ -189,5 +206,6 @@ __all__ = [
     "PackageNotFound",
     "ProviderRefusedCredential",
     "SchemaVersionError",
+    "UnknownProvider",
     "WorkflowPackageError",
 ]
