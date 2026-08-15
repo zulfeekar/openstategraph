@@ -161,6 +161,28 @@ export interface DeveloperChannel {
    * this type deliberately does not pretend to have made it.
    */
   readonly suggestion: Readonly<Record<string, unknown>> | null;
+  /**
+   * What each Guardrail node removed from this run: counts and entity types,
+   * **never values**.
+   *
+   * A redaction the machinery performs silently is its own defect for whoever
+   * is debugging the answer, and showing what was removed would recreate the
+   * leak in the surface people read most often. This is the middle: the
+   * developer learns three emails left the answer at `guard-out`, and nobody
+   * learns which three.
+   */
+  readonly redactions: readonly GuardrailRedaction[];
+}
+
+/** One entry of `DeveloperChannel.redactions`. There is no value field. */
+export interface GuardrailRedaction {
+  /** The Guardrail node that acted, by canvas id. */
+  readonly node: string;
+  /** `email`, `credit_card`, or whatever the policy named. */
+  readonly entity: string;
+  /** `redact` | `mask` | `hash` | `block`. */
+  readonly strategy: string;
+  readonly count: number;
 }
 
 /**
@@ -1030,11 +1052,25 @@ function asDeveloperChannel(value: unknown): DeveloperChannel | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const suggestion = record['suggestion'];
+  const redactions = record['redactions'];
   return {
     warnings: Array.isArray(record['warnings']) ? record['warnings'].map(asString) : [],
     suggestion:
       typeof suggestion === 'object' && suggestion !== null && !Array.isArray(suggestion)
         ? (suggestion as Record<string, unknown>)
         : null,
+    // Copied field by field rather than cast: this is a hand mirror of a
+    // Pydantic model, and a row the backend later widens must not arrive here
+    // carrying something this type promises it never holds.
+    redactions: Array.isArray(redactions)
+      ? redactions
+          .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+          .map((row) => ({
+            node: asString(row['node']),
+            entity: asString(row['entity']),
+            strategy: asString(row['strategy']),
+            count: typeof row['count'] === 'number' ? row['count'] : 0,
+          }))
+      : [],
   };
 }

@@ -16,6 +16,7 @@ from openstategraph.api.audience import (  # noqa: E402
     Audience,
     DeveloperChannel,
     clean_output as _clean_output,
+    redaction_report,
     split_suggestion,
 )
 from openstategraph.developer_channel import ProseGuard  # noqa: E402
@@ -735,6 +736,11 @@ def _run_frames(
     #: collisions (ticket 40).
     nested_decisions: dict[str, str] = {}
     nested_outputs: dict[str, str] = {}
+    #: Guardrail node id -> what its policy did. Accumulated exactly as
+    #: `decisions` is, and flat rather than split by mount depth: a redaction
+    #: inside a mounted child is still a redaction from this run's answer, and
+    #: the developer reading it wants the total, not a tree.
+    redactions: dict[str, Any] = {}
     attempts = 0
     # One guard per streamed text — per node, per message kind — because each
     # is its own sequence of chunks and a shared tail would splice two
@@ -838,6 +844,13 @@ def _run_frames(
                             # shape of leak this whole seam exists to remove.
                             key(k): str(_clean_output(str(v)))
                             for k, v in (update.get("outputs") or {}).items()
+                            if k != RESET
+                        }
+                    )
+                    redactions.update(
+                        {
+                            key(k): v
+                            for k, v in (update.get("redactions") or {}).items()
                             if k != RESET
                         }
                     )
@@ -1125,6 +1138,7 @@ def _run_frames(
         # the truth — see the same promotion in `api/main.py` (ticket 04).
         + failures,
         suggestion=suggestion,
+        redactions=redaction_report(redactions),
     )
 
     # A step failed and no answer was produced; see `RUN_FAILED_ANSWER` for

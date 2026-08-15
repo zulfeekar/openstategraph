@@ -231,7 +231,7 @@ class TestADeveloperGetsItOnTheChannelInstead:
         body["audience"] = "developer"
         done = _done(client.post("/api/runs/stream", json=body).text)
 
-        assert done["developer"] == {"warnings": [], "suggestion": None}
+        assert done["developer"] == {"warnings": [], "suggestion": None, "redactions": []}
 
 
 class TestTheBlockingEndpointIsNotTheWayAround:
@@ -477,7 +477,7 @@ class TestTheChannelShape:
     def test_a_developer_payload_names_the_channel(self) -> None:
         channel = DeveloperChannel(warnings=["w"], suggestion=None)
         assert channel.payload(Audience.DEVELOPER) == {
-            "developer": {"warnings": ["w"], "suggestion": None}
+            "developer": {"warnings": ["w"], "suggestion": None, "redactions": []}
         }
 
 

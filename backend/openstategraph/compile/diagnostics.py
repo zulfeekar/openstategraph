@@ -73,6 +73,25 @@ class Finding(str, Enum):
     #: wrote is not here" is one question, and answering half of it in a server
     #: log they never open is how the original bug survived.
     CAPABILITY_FAILED = "capability_failed"
+    #: An Output node with no guardrail anywhere upstream of it, **in a
+    #: document that has one somewhere else** (guardrails ticket 02).
+    #:
+    #: The condition is deliberately the *inconsistent* case, not the absent
+    #: one. Ticket 02 weighed making the outbound guard something Output just
+    #: does — impossible to forget, and invisible, and a second job for a node
+    #: that has one. It chose the node, on the condition that its absence be
+    #: loud; this is that condition, scoped by the rule stated at the top of
+    #: this module. Warning every document that has no guardrail would fire on
+    #: all twenty-one shipped examples and on every workflow anyone has drawn,
+    #: and "a warning a user cannot act on is a warning they learn to skip".
+    #:
+    #: What this catches is the realistic mistake instead: somebody added a
+    #: second Output later, wired it straight off the agent, and the answer
+    #: reaching the user down *that* path never meets the policy the document
+    #: says it has. The asymmetry ticket 02 argued from is why it is worth a
+    #: sentence at all — a missing inbound guard is a missed block, a missing
+    #: outbound one is a disclosure.
+    UNGUARDED_EXIT = "unguarded_exit"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -108,6 +127,12 @@ _SENTENCES: dict[Finding, str] = {
     ),
     Finding.OVERRIDE_PROBLEM: "Mount override — {0}",
     Finding.CAPABILITY_FAILED: "{0}",
+    Finding.UNGUARDED_EXIT: (
+        'Output "{0}" has no guardrail upstream of it, but this workflow has one on '
+        "another path — so an answer that leaves this way is never checked against the "
+        "policy the rest of the document keeps. Wire a Guardrail before it, or delete "
+        "the one that suggests it should be there."
+    ),
 }
 
 

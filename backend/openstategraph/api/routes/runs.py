@@ -22,6 +22,7 @@ from fastapi.responses import StreamingResponse
 from openstategraph.api.audience import (
     DeveloperChannel,
     clean_output,
+    redaction_report,
     resolve as resolve_audience,
     split_suggestion,
 )
@@ -181,6 +182,7 @@ def run_workflow(
         # an empty developer channel (ticket 04).
         + node_failure_warnings(raw_outputs),
         suggestion=suggestion,
+        redactions=redaction_report(final.get("redactions")),
     )
     developer = channel.payload(audience).get("developer")
 

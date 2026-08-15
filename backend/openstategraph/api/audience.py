@@ -74,6 +74,7 @@ developer-only by their own convention.
 | capability suggestions | developer | proposes an edit to a workflow the customer cannot edit |
 | `runtime_warnings` — unbound tools, unresolved functions/subgraphs, mount overrides, discovery failures | developer | authoring diagnostics, naming node ids and tool types; a customer can act on none of it |
 | plan warnings | developer | same: findings about the document as an artifact |
+| guardrail `redactions` — counts and entity types per node, never values | developer | a customer must not be told what was removed from their own answer, and the developer needs to know the machinery rewrote it |
 | `mermaid` | **both** | `/chat` renders it as its live flow diagram, and `GET /api/workflows/{slug}/graph` already serves it to that page. Moving it here while leaving that endpoint open would be theatre, and it is topology, not guidance. |
 | `decisions` / `outputs` / `attempts` | **both** | facts about *this run*, which is the customer's own turn. `/chat`'s trace already shows them frame by frame. |
 | a `token` frame's **text** | depends — see `AnswerChannel` | the reply is the customer's; a tool payload, a branch name, a verdict and the echoed question are not. The *frame* still goes to both, emptied and marked `withheld`, because it is the only one that says where a run is mid-node. |
@@ -98,6 +99,7 @@ from typing import Any
 # `compile/` cannot import `api/` without inverting the layering. Re-exported
 # here (rather than left to each caller to find) because this module is where
 # every *transport* caller already reaches for the split.
+from openstategraph.compile.reducers import RESET
 from openstategraph.developer_channel import split_suggestion as split_suggestion
 
 #: Deployment ceiling. Set to `customer` on a process that serves only the
@@ -164,6 +166,40 @@ def clean_output(value: Any) -> Any:
         return value
     prose, _ = split_suggestion(value)
     return prose
+
+
+def redaction_report(state_value: Any) -> list[dict[str, Any]]:
+    """`state["redactions"]` flattened into the channel's shape.
+
+    The runtime keys its rows by node id because that is what a merge reducer
+    needs; a reader wants a flat list with the node named on each row. One
+    declaration here for the reason `clean_output` is here: **both** run
+    endpoints owe it, and ticket 15 measured what a private copy costs when
+    only one of two doors applies the rule.
+
+    Defensive about the shape rather than trusting it — this reads a state
+    key that a mounted child, a stub graph or an older checkpoint may not
+    have written at all — and it copies only the four fields it knows, so a
+    future row carrying more cannot widen the channel by accident.
+    """
+    if not isinstance(state_value, dict):
+        return []
+    report: list[dict[str, Any]] = []
+    for node_id, rows in state_value.items():
+        if node_id == RESET or not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            report.append(
+                {
+                    "node": str(node_id),
+                    "entity": str(row.get("entity", "")),
+                    "strategy": str(row.get("strategy", "")),
+                    "count": int(row.get("count", 0) or 0),
+                }
+            )
+    return report
 
 
 @dataclass(frozen=True)
@@ -238,6 +274,23 @@ class DeveloperChannel:
     warnings: list[str] = field(default_factory=list)
     #: The one capability suggestion this run produced, if any.
     suggestion: dict[str, Any] | None = None
+    #: What each Guardrail node did, as `{node, entity, strategy, count}`.
+    #: **Counts and entity types, never values** (guardrails ticket 03).
+    #:
+    #: A redaction that happens silently is its own defect — a developer
+    #: debugging "why did the agent answer that?" is reading text the
+    #: machinery quietly rewrote. The obvious fix, showing what was removed,
+    #: recreates the leak in the surface people read most often. The audience
+    #: boundary is the answer that was already here: this side gets the
+    #: counts, the customer gets clean text, and neither has to be told
+    #: anything about the other. `abc.guardrail.Redaction` has no field that
+    #: could carry a value, so a later edit cannot widen this by accident.
+    #:
+    #: A field here rather than a sentence in `warnings`, which was cheaper
+    #: and wrong: every guarded run would then report warnings, the editor
+    #: renders warnings as problems, and a channel that cries wolf on the
+    #: happy path is one people learn to skip.
+    redactions: list[dict[str, Any]] = field(default_factory=list)
 
     def payload(self, audience: Audience) -> dict[str, Any]:
         """The frame fragment to merge into `done` — `{}` for a customer.
@@ -250,4 +303,10 @@ class DeveloperChannel:
         """
         if audience is not Audience.DEVELOPER:
             return {}
-        return {"developer": {"warnings": list(self.warnings), "suggestion": self.suggestion}}
+        return {
+            "developer": {
+                "warnings": list(self.warnings),
+                "suggestion": self.suggestion,
+                "redactions": list(self.redactions),
+            }
+        }

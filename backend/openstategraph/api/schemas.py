@@ -268,6 +268,10 @@ class DeveloperChannelResponse(BaseModel):
     #: canvas (`src/view/ask/suggestion.ts`), which is a question no schema on
     #: this side can answer.
     suggestion: dict[str, Any] | None = None
+    #: What each Guardrail node removed, as `{node, entity, strategy, count}`.
+    #: Counts and entity types, **never values** — the whole reason this rides
+    #: the developer channel rather than the answer (guardrails ticket 03).
+    redactions: list[dict[str, Any]] = []
 
 
 class RunResponse(BaseModel):

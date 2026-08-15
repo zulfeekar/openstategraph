@@ -153,6 +153,15 @@
       "DeveloperChannelResponse": {
         "description": "What only a workflow editor may see \u2014 see `api/audience.py`.\n\nOne object rather than loose fields, because \"developer-only\" is the\nproperty they share and it should be visible in the contract: a reader of\nthis schema can tell at a glance which half of a run is guidance about the\nworkflow and which half is the answer to the question.",
         "properties": {
+          "redactions": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Redactions",
+            "type": "array"
+          },
           "suggestion": {
             "anyOf": [
               {

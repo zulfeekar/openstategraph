@@ -30,6 +30,7 @@ from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
 from openstategraph.compile.workflow_compiler import (
+    GUARDRAIL_TYPE,
     ROUTER_TYPE,
     CompiledPlan,
     failure_marker,
@@ -105,6 +106,14 @@ class RunState(TypedDict, total=False):
     task_id: str
     task_instruction: str
 
+
+#: Node-type prefixes whose step writes text that did not exist before it ran.
+#:
+#: Used by the unguarded-exit check, and by nothing else, so it is stated as
+#: what that question needs rather than as a general taxonomy. Inputs echo,
+#: routers and graders and approvals forward, guardrails rewrite — none of
+#: them invent, so none of them is what an outbound policy exists to catch.
+_PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "workflow.")
 
 #: Node types whose streamed text is machinery, not the reply.
 #:
@@ -2399,12 +2408,53 @@ class NodeRuntime:
 
         return run
 
+    def _guarded_upstream(self, node_id: str, plan: CompiledPlan) -> bool:
+        """Whether every path into this node meets a guardrail before a producer.
+
+        Not "is there a guardrail anywhere upstream" — that was the first
+        version and it was wrong in the one case worth catching: an *inbound*
+        guard is upstream of every exit in the document, so a second Output
+        wired straight off the agent looked protected by a guard that had
+        already run before the agent wrote a word. What matters outbound is
+        whether the policy sits between the thing that **produced new text**
+        and the user.
+
+        So the walk stops at a guardrail (that path is covered) and reports
+        the moment it reaches a producer without having met one. Backwards
+        over *both* kinds of edge, because a guardrail's own outputs are
+        conditional ones — an Output on the `blocked` wire is the most
+        guarded node in the document and `plan.edges` cannot see it.
+        """
+        seen: set[str] = set()
+        stack = [node_id]
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            node_type = self._types.get(current, "")
+            if node_type == GUARDRAIL_TYPE:
+                continue
+            if current != node_id and node_type.startswith(_PRODUCES_CONTENT):
+                return False
+            stack.extend(src for src, dst in plan.edges if dst == current)
+            stack.extend(
+                src for src, dests in plan.conditional.items() if current in dests.values()
+            )
+        return True
+
     def _output(self, node_id: str, _node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Collects whatever reached it as the run's answer."""
         upstream = [src for src, dst in plan.edges if dst == node_id]
         conditional_upstream = [
             src for src, dests in plan.conditional.items() if node_id in dests.values()
         ]
+        # Guardrails ticket 02: the outbound guard is a node you place, and
+        # what makes its absence loud is here. Only reported when the document
+        # *has* a policy — see `Finding.UNGUARDED_EXIT` for why the absent
+        # case is deliberately silent.
+        if GUARDRAIL_TYPE in self._types.values() and not self._guarded_upstream(node_id, plan):
+            self.diagnostics.record(Finding.UNGUARDED_EXIT, node_id)
 
         def run(state: RunState) -> dict[str, Any]:
             from langchain_core.messages import AIMessage
