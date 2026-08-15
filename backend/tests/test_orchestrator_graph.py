@@ -471,6 +471,39 @@ class TestThePlanIsModelDrivenWhereRulesSaySo:
         assert planning and "Never plan more than one subtask." in planning[0]
 
 
+class TestAWorkerIsToldItsRole:
+    """Gallery ticket 16: `role` described the worker to the router only."""
+
+    def test_the_role_reaches_the_worker_that_carries_it(self) -> None:
+        model = RespondingModel(
+            [(lambda c: "supervisor assigning" in c, "researcher\nwriter")],
+            default="an answer",
+        )
+        document = archetype_document()
+
+        run(document, "find the facts; write the summary", model)
+
+        worker_calls = [
+            c for c in model.calls if "grader" not in c and "supervisor assigning" not in c
+        ]
+        assert worker_calls
+        assert any("Finds facts." in call for call in worker_calls)
+        assert any("Writes finished prose." in call for call in worker_calls)
+
+    def test_a_role_is_context_so_replace_cannot_delete_it(self) -> None:
+        # `rulesMode: replace` drops the rules layers beneath the topmost one.
+        # A worker's identity is not a rules layer, so it survives.
+        model = RespondingModel([], default="an answer")
+        document = archetype_document()
+        for candidate in document["nodes"]:
+            if candidate["id"] == "research1":
+                candidate["data"]["rulesMode"] = "replace"
+
+        run(document, "find the facts", model)
+
+        assert any("Finds facts." in call for call in model.calls)
+
+
 class TestTheCeilingIsNoLongerASilentSlice:
     """Gallery ticket 15's batch-B facet: `maxSubtasks` dropped work silently."""
 

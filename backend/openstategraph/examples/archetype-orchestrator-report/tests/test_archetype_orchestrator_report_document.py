@@ -57,7 +57,9 @@ def test_exactly_one_worker_is_the_default(document: dict) -> None:
 
 def test_every_worker_describes_its_role(document: dict) -> None:
     # `role` is what the planning prompt shows the model as the archetype's
-    # description. Without it the supervisor is labelling blind.
+    # description — and, since gallery ticket 16, context in that worker's own
+    # system prompt. Without it the supervisor labels blind *and* the worker
+    # has nothing telling it what kind of answer it owes.
     assert all(w["data"].get("role") for w in _workers(document))
 
 

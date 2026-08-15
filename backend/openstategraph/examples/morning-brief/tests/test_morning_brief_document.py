@@ -10,10 +10,10 @@ Gallery example 20. What is settled here without a model:
 - **The dispatch keys.** `archetype_key` slugifies the worker's **title**, so
   the titles are the dispatch vocabulary, and two workers whose titles slugify
   alike would shadow each other with only a plan warning to say so.
-- **The one lever a worker has.** `role` never reaches the worker
-  (gallery ticket 16) — it describes the worker to the *supervisor's* labelling
-  call. The `skill` port is the only way to tell a worker how to answer, and
-  this document uses one skill for all three.
+- **The two levers a worker has.** `role` is context in the worker's own
+  prompt *and* the archetype description the supervisor labels against
+  (gallery ticket 16); the `skill` port is the rules layer above it, and this
+  document uses one skill for all three.
 - **The splitter.** The smoke question is a bare numbered list, and a preamble
   line above one is now carried as context rather than planned as subtask #1
   (gallery ticket 15). That is pinned against the real splitter.
@@ -110,10 +110,10 @@ def test_exactly_one_worker_is_the_default(doc: dict) -> None:
 
 
 def test_no_worker_carries_a_prompt_of_its_own(doc: dict) -> None:
-    """`orchestrate.worker` declares no prompt field, and `role` reaches the
-    supervisor's labeller rather than the worker (gallery ticket 16). A
-    `systemPrompt` typed onto a worker would be silently inert, so this pins
-    that none is there and that the skill port is wired instead."""
+    """`orchestrate.worker` declares no prompt field: its `role` is context in
+    its own prompt (gallery ticket 16) and its rules come from the wired
+    skill. A `systemPrompt` typed onto a worker would be silently inert, so
+    this pins that none is there and that the skill port is wired instead."""
     workers = [n for n in doc["nodes"] if n["type"] == "orchestrate.worker"]
     assert not any("systemPrompt" in w["data"] for w in workers)
     skill_targets = {

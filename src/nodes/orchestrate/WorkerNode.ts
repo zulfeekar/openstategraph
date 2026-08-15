@@ -58,9 +58,17 @@ export function createWorkerNode(providers: ProviderRegistry): INodeDefinition {
           placeholder: 'What this worker archetype handles, e.g. "weather and forecast questions"',
           defaultValue: '',
           onCard: false,
-          // Shown to the supervisor's labelling model alongside the node's
-          // title — the description half of the archetype roster. The title
-          // itself (slugified) is the dispatch key; see
+          // One string, two audiences (gallery ticket 16). It is shown to the
+          // supervisor's labelling model alongside the node's title — the
+          // description half of the archetype roster — *and* it is context in
+          // this worker's own system prompt, so what you type here changes
+          // how this worker answers. It used to reach the labeller only: a
+          // card reading "at most three short bullet points" returned a
+          // ten-row table, live, because the text was never sent. Context and
+          // not a rules layer, so `rulesMode: replace` and a wired skill
+          // customise behaviour without deleting the worker's identity.
+          //
+          // The title itself (slugified) is the dispatch key; see
           // `backend/openstategraph/abc/orchestrator.py`'s `archetype_key`.
         },
         {

@@ -1799,6 +1799,21 @@ class NodeRuntime:
         # ignored for the graph-wide default (audit 2026-08).
         data = node.get("data") or {}
         model = self._resolve_model(data)
+        # **The `role` field reaches the worker itself** (ticket 16). It used
+        # to reach exactly one place — `_orchestrator`, which packs it into
+        # `Archetype.description` for the *supervisor's* labelling call — so
+        # it described the worker to the router and said nothing to the
+        # worker. A card reading "at most three short bullet points, no
+        # headings" returned a ten-row Markdown table, live, and nothing was
+        # wrong: the text was never sent. With a single archetype wired,
+        # `label()` returns early and the field was inert entirely.
+        #
+        # **Context, not rules.** It is what this worker *is* — the same
+        # sentence the roster shows the supervisor — so it sits above the
+        # rules layers and outside what `rulesMode: replace` can delete. A
+        # wired skill still customises behaviour and still wins ties; the
+        # worker's identity is not something a skill should have to restate.
+        role = _text(data, "role")
         # Directive, not a nudge. A weaker version of this ("use tools if
         # available") was tried live first and the model answered a database
         # question from general industry knowledge anyway — a vague
@@ -1853,7 +1868,17 @@ class NodeRuntime:
                 default_rules=default_prompt,
                 skill=_wired_skill(state, skills, self._nodes),
                 replace_rules=_replaces_rules(data),
-                context=self.services.skills_context,
+                context="\n\n".join(
+                    part
+                    for part in (
+                        f"Your role on this team:\n{role}" if role else "",
+                        # Ambient, package-wide `skills/*.md`: house style for
+                        # every model-driven node here, not a choice about
+                        # this one. Context, and it stays context.
+                        self.services.skills_context,
+                    )
+                    if part
+                ),
             ).build()
             result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
