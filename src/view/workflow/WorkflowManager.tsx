@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, FileJson, FolderOpen, Globe, GlobeLock, Plus, Save, Trash2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FileJson,
+  FolderOpen,
+  Globe,
+  GlobeLock,
+  Plus,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   Button,
   Field,
@@ -33,6 +45,7 @@ import {
   publishedMessage,
   unpublishedMessage,
 } from './consequences';
+import { examplesShelfStartsOpen, rememberExamplesShelf } from './examplesShelf';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -88,6 +101,15 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   // the installed package, and they appear in the list above only once the
   // user has taken a copy. Empty is legitimate, exactly as for templates.
   const [examples, setExamples] = useState<readonly WorkflowExample[]>([]);
+  // …and it starts **closed** (install-experience T9). The reasoning, and why
+  // this is a gesture rather than a packaging change, is in `examplesShelf.ts`.
+  const [examplesOpen, setExamplesOpen] = useState(examplesShelfStartsOpen);
+  const toggleExamples = useCallback(() => {
+    setExamplesOpen((wasOpen) => {
+      rememberExamplesShelf(!wasOpen);
+      return !wasOpen;
+    });
+  }, []);
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
@@ -563,7 +585,28 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         </PanelSection>
 
         {examples.length > 0 && (
-          <PanelSection heading="Examples">
+          <PanelSection
+            heading="Examples"
+            aside={
+              <Button
+                variant="ghost"
+                size="sm"
+                // The count is on the closed header on purpose: the shelf has
+                // to say how much is behind it, or it is a control nobody has
+                // a reason to press.
+                title={
+                  examplesOpen
+                    ? 'Hide the shipped examples'
+                    : `Show the ${examples.length} shipped examples`
+                }
+                aria-expanded={examplesOpen}
+                onClick={toggleExamples}
+                icon={<Icon glyph={examplesOpen ? ChevronDown : ChevronRight} size="xs" />}
+              >
+                {examples.length}
+              </Button>
+            }
+          >
             <p className="workflow-manager__hint">
               Worked examples that ship inside OpenStateGraph — one per pattern the canvas can
               express. They are <strong>not in this project</strong> until you copy one; a copy is
@@ -571,34 +614,36 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
               touches. Same thing on the command line:{' '}
               <code>openstategraph examples copy &lt;slug&gt;</code>.
             </p>
-            <ul className="workflow-manager__list">
-              {examples.map((example) => (
-                <li key={example.slug} className="workflow-manager__item">
-                  <div className="workflow-manager__info">
-                    <Icon glyph={FileJson} size="sm" />
-                    <span className="workflow-manager__name" title={example.summary}>
-                      {example.name}
-                    </span>
-                    <span className="workflow-manager__badge">{example.pattern}</span>
-                  </div>
-                  <div className="workflow-manager__actions">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      // What it will write, said before it writes it: three of
-                      // these mount other examples and a copy brings them.
-                      title={`Copies ${example.requires.join(', ')} into workflows/`}
-                      onClick={() => void handleCopyExample(example)}
-                      icon={<Icon glyph={Copy} size="xs" />}
-                    >
-                      Copy
-                      {example.requires.length > 1 ? ` +${example.requires.length - 1}` : ''}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {examplesOpen && (
+              <ul className="workflow-manager__list">
+                {examples.map((example) => (
+                  <li key={example.slug} className="workflow-manager__item">
+                    <div className="workflow-manager__info">
+                      <Icon glyph={FileJson} size="sm" />
+                      <span className="workflow-manager__name" title={example.summary}>
+                        {example.name}
+                      </span>
+                      <span className="workflow-manager__badge">{example.pattern}</span>
+                    </div>
+                    <div className="workflow-manager__actions">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        // What it will write, said before it writes it: three of
+                        // these mount other examples and a copy brings them.
+                        title={`Copies ${example.requires.join(', ')} into workflows/`}
+                        onClick={() => void handleCopyExample(example)}
+                        icon={<Icon glyph={Copy} size="xs" />}
+                      >
+                        Copy
+                        {example.requires.length > 1 ? ` +${example.requires.length - 1}` : ''}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </PanelSection>
         )}
       </PanelBody>
