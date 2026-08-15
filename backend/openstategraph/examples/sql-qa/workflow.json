@@ -7,7 +7,6 @@
     "version": 3,
     "name": "SQL QA",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Text-to-SQL over a real database with the generic prebuilt SQL Explorer atoms: list tables, read one schema, run one read-only SELECT. Nothing here is Chinook-specific except the file the three nodes point at."
     },
     "nodes": [

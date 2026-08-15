@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Nested Mounts (middle)",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "The middle level of the three-deep mount chain: it mounts Chained Summarizer and nothing else, so the only thing this document adds is a level."
     },
     "nodes": [

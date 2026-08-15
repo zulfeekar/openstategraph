@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Delegate by Mount",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Delegation, as far as today's vocabulary reaches: a classifier picks one of two whole packages, and that package answers. A supervisor of packages rather than of agents."
     },
     "nodes": [

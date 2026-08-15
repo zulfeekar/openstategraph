@@ -15,6 +15,7 @@ about the library, and five copies is how one of them ends up wrong.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, Iterator
 
 import os
@@ -229,7 +230,22 @@ def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     The ticket also named "ambient config discovery walks up from cwd". It
     does not: `find_config_file` looks in `base` only, never in its parents,
     so a stray file *above* the checkout was never reachable. The exported
-    variable was the real half.
+    variable was one half; **this checkout's own file is the other**, and it
+    arrived with install-experience T10.
+
+    `openstategraph.yaml` is committed at the repository root now — it is where
+    the gallery's Ollama-cloud pin moved to when the 22 examples stopped naming
+    a vendor — and `find_config_file` looks in the working directory, which for
+    this suite is that root. Left alone it would make one operator decision the
+    default for two and a half thousand tests, most of which are about what the
+    *rules* answer.
+
+    So the variable is pointed at a path that does not exist, which
+    `find_config_file` documents as `None` — the explicit setting wins over the
+    search, so nothing is discovered, and a test that wants a config still sets
+    the variable to its own file and overrides this. The empty temporary file
+    that would do the same job is a file, and a file has contents somebody will
+    eventually put something in.
 
     **The memoised config is dropped on both sides too**, which the catalogue
     fixture above has always done and this one did not. `config_file._ACTIVE`
@@ -240,7 +256,7 @@ def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """
     from openstategraph.config_file import reset_active_config
 
-    monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)
+    monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(Path(__file__).parent / "no-such-config.yaml"))
     reset_active_config()
     yield
     reset_active_config()

@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from openstategraph.package_testing import (
-    GALLERY_MODEL,
     assert_document_shape,
     edges_of,
     load_document,
@@ -27,7 +26,7 @@ from openstategraph.package_testing import (
 def _document() -> dict:
     return {
         "version": 3,
-        "settings": {"model": GALLERY_MODEL},
+        "settings": {"purpose": "the smallest document this helper is asked about"},
         "nodes": [
             {"id": "in1", "type": "input.text", "data": {}},
             {"id": "draft1", "type": "agent.llm", "data": {"systemPrompt": "draft it"}},
@@ -111,18 +110,27 @@ class TestAssertDocumentShape:
     def test_a_conforming_document_passes(self) -> None:
         assert_document_shape(_document(), compiles=False)
 
-    def test_it_catches_an_unpinned_model(self) -> None:
-        """Gallery ticket 12's whole point: omit the field and a machine with
-        ANTHROPIC_API_KEY wins the no-request fallback."""
-        unpinned = _document() | {"settings": {}}
-        with pytest.raises(AssertionError, match="model"):
-            assert_document_shape(unpinned, compiles=False)
+    def test_an_unpinned_document_is_the_ordinary_case_now(self) -> None:
+        """Inverted by install-experience T10, with the default it followed.
 
-    def test_a_package_may_pin_a_different_model_deliberately(self) -> None:
-        """Example 16 runs its synthesis node on Anthropic. The helper must not
-        make the pin unopinionated, only overridable."""
+        It used to assert that a document *without* `settings.model` failed the
+        baseline, because omitting the field let a machine that happened to
+        have `ANTHROPIC_API_KEY` win the fallback and silently move the gallery
+        off Ollama cloud. That reasoning moved rather than died: the 22 examples
+        are unpinned on purpose now — a copied example runs on whatever the
+        adopter installed — and this repository's own runs are pinned in its
+        committed `openstategraph.yaml`, which is the level that choice belongs
+        at.
+        """
+        assert_document_shape(_document() | {"settings": {}}, compiles=False)
+
+    def test_a_package_may_still_pin_a_model_deliberately(self) -> None:
+        """A document that genuinely needs one vendor says so, and is checked."""
         other = _document() | {"settings": {"model": "anthropic:claude-haiku-4-5"}}
         assert_document_shape(other, model="anthropic:claude-haiku-4-5", compiles=False)
+
+        with pytest.raises(AssertionError, match="model"):
+            assert_document_shape(other, model="openai:gpt-4.1-mini", compiles=False)
 
     def test_it_checks_the_node_type_list_when_given_one(self) -> None:
         assert_document_shape(
@@ -184,9 +192,9 @@ class TestAssertDocumentShape:
             assert_document_shape(entryless)
 
 
-class TestTheGalleryModelConstant:
-    def test_it_is_an_ollama_cloud_model(self) -> None:
-        """CLAUDE.md's standing instruction: a bare `ollama:` does not resolve
-        and a local model is never representative."""
-        assert GALLERY_MODEL.startswith("ollama:")
-        assert GALLERY_MODEL.endswith("-cloud")
+# `GALLERY_MODEL` was asserted here — an Ollama **cloud** model, per CLAUDE.md's
+# standing instruction. The constant went with the 22 pins (install-experience
+# T10) and the instruction did not: it is asserted against this repository's
+# committed `openstategraph.yaml` by
+# `test_documented_install.py::test_this_repository_pins_its_own_runs`, which is
+# where the pin now lives.

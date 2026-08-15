@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Two Stage Double Loop",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Two independent revision cycles in series: an engineer's changelog graded on accuracy, then a customer rewrite graded on readability."
     },
     "nodes": [

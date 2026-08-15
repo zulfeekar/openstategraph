@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Guarded Lookup",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "One entity, two answers: the email you type passes inbound so the lookup can use it, and every address in the reply is redacted before you read it. A card number never gets past the door at all."
     },
     "nodes": [

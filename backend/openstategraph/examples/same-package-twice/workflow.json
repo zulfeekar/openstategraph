@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Same Package Twice",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "One definition, two instances. Both mounts run Chained Summarizer; each carries its own data.overrides, and the package on disk is never written."
     },
     "nodes": [

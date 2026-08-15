@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Fanout In A Loop",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "The only cycle containing a Send: a grader that rejects the joined report sends the whole plan back to the supervisor, and one lap costs several supersteps."
     },
     "nodes": [

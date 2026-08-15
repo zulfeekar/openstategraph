@@ -187,6 +187,30 @@ finally read by code. Wayfinder tickets 02–04;
   `test_config_file.py::TestPrecedence` carries the flipped pair with the
   reasoning rewritten at the test rather than deleted.
 
+- **The gallery stops naming a vendor** (install-experience T10, grill item
+  G1(a)). All 22 shipped examples pinned `settings.model:
+  "ollama:gpt-oss:120b-cloud"`, so an adopter who installed
+  `openstategraph[anthropic]`, copied an example and pressed Run — the first
+  thing anybody does — was told to install Ollama. The pin leaves the **source**
+  documents: rewriting it at copy time was refused, because workflow-gallery 07
+  makes a copy verbatim and falsifying a package's own `AGENTS.md` on the way
+  out is what 07 chose against.
+
+  The pin was never about those documents; it was about *this repository's*
+  smoke runs and token budget, which is a repository-wide choice. It moves to a
+  committed `openstategraph.yaml` at the repository root, and CLAUDE.md's
+  standing "Ollama means cloud, never local" rule is asserted against that file
+  rather than against 22 documents.
+
+  Consequences: `package_testing.GALLERY_MODEL` is **removed** and
+  `assert_document_shape`'s `model=` default becomes `None` — what it guarded is
+  asserted once over the whole gallery by
+  `test_documented_install.py::test_no_shipped_example_names_a_provider`, which
+  covers examples whose own tests forget to call it. Two `AGENTS.md` sections
+  that described the pin, and `site/gallery.html`'s callout, are rewritten
+  rather than left as stale claims. `settings.purpose` is untouched, and a
+  document that genuinely needs one vendor still pins it.
+
 ### Fixed — `new` and `examples copy` write where the project says
 
 - **The two commands that create packages bypassed the workflows-root

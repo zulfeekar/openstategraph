@@ -50,7 +50,14 @@ is worth stating where someone will read it:
 `NodeRuntime._base_model` partitions the node's value on `/` and rebuilds
 `f"{provider}:{model_id}"`. A colon in the node field resolves the provider
 `"anthropic:claude-haiku-4-5"`, which is not a provider. An empty string means
-"use the workflow default", which is what the two Ollama agents leave it as.
+"use the workflow default", which is what the two other agents leave it as.
+
+**This document sets no `settings.model`** — the row above shows the spelling,
+not this file's contents. Every shipped example dropped its pin so a copied
+example runs on whatever the adopter installed; the two unpinned agents
+therefore run on the instance default, and only `synth1` names a vendor,
+because this example is *about* mixing two of them. The recorded run below was
+made where this repository pins its own default, `ollama:gpt-oss:120b-cloud`.
 
 `synth1` holds **no tools**, deliberately: one call, one price. A tool on the
 paid node turns it into a loop of unknown length.

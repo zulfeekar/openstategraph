@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Web Research Digest",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Search, fetch, then be checked: one agent loops over two web tools until it has a source it actually read, and a grader that knows the difference between a digest and a recollection sends it back when it does not."
     },
     "nodes": [

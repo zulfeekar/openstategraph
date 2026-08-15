@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Skill-driven Rubric",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "One rules layer, two readers. The writer's rules and the grader's criteria are the same skill, wired to both — so the rules and the check they are graded against cannot drift."
     },
     "nodes": [

@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Classifier Router QA",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Pure routing: one classifier, three exclusive terminal branches, no grader and no loop."
     },
     "nodes": [

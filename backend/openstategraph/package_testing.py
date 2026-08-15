@@ -27,8 +27,8 @@ dataset" draws the line, and this module is the third of them:
 | `openstategraph eval` | a dataset of known answers | a model call per case | deliberately |
 | **this module** | the document and its compiled plan | nothing | every `pytest` |
 
-Public surface, deliberately small: `GALLERY_MODEL`, `load_document`,
-`node_of`, `types_of`, `edges_of`, `assert_document_shape`.
+Public surface, deliberately small: `load_document`, `node_of`, `types_of`,
+`edges_of`, `assert_document_shape`.
 """
 
 from __future__ import annotations
@@ -40,27 +40,12 @@ from typing import Any
 
 __all__ = [
     "Edge",
-    "GALLERY_MODEL",
     "assert_document_shape",
     "edges_of",
     "load_document",
     "node_of",
     "types_of",
 ]
-
-#: The model every gallery package pins, in the workflow-level colon form.
-#:
-#: One thing makes this a pin rather than a default: omitting the field lets a
-#: machine that happens to have `ANTHROPIC_API_KEY` win the no-request
-#: fallback, which would silently move the gallery off Ollama cloud. CLAUDE.md
-#: also forbids treating a *local* model's behaviour as representative, so the
-#: `-cloud` suffix is load-bearing rather than decorative.
-#:
-#: Until install-experience T1 there was a second reason, and it is now
-#: **false**: a bare `ollama:` prefix did not resolve, because `resolve_model`
-#: returned any truthy request verbatim and `init_chat_model("ollama:")` failed
-#: on the empty model name (gallery ticket 12, closed). It expands now.
-GALLERY_MODEL = "ollama:gpt-oss:120b-cloud"
 
 #: `(source node, source port, target node, target port)` — an edge flattened
 #: to the tuple nine package tests had each defined for themselves.
@@ -134,7 +119,7 @@ def edges_of(document: dict[str, Any]) -> set[Edge]:
 def assert_document_shape(
     document: dict[str, Any],
     *,
-    model: str | None = GALLERY_MODEL,
+    model: str | None = None,
     node_types: Sequence[str] | None = None,
     edges: Iterable[Edge] | None = None,
     compiles: bool = True,
@@ -148,7 +133,20 @@ def assert_document_shape(
     and quietly not contain the edge somebody drew.
 
     `model`, `node_types` and `edges` each become an assertion only when
-    supplied; `model` defaults to the gallery pin and takes `None` to opt out.
+    supplied. `model` defaults to `None` — assert nothing — and that default
+    **changed** with install-experience T10: it used to be `GALLERY_MODEL`, the
+    Ollama-cloud string all 22 shipped examples pinned, and that constant is
+    gone with the pins. A document naming no vendor inherits the instance
+    default, which is what makes `pip install 'openstategraph[anthropic]'` mean
+    Anthropic for a copied example.
+
+    Nothing is lost by the weaker default, because what it guarded is asserted
+    once over the whole gallery rather than 22 times inside it:
+    `tests/test_documented_install.py::test_no_shipped_example_names_a_provider`
+    covers every example, including one whose own test forgets to call this.
+    A package that genuinely must run on a particular model still says so by
+    passing `model=`.
+
     `compiles` runs the real `WorkflowCompiler` and requires a warning-free
     plan — the default, because a document that parses while its graph refuses
     to assemble is the failure worth catching cheaply.

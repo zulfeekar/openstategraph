@@ -50,6 +50,18 @@ def write(root: Path, text: str, name: str = "openstategraph.yaml") -> Path:
 
 
 class TestTheFileIsFound:
+    @pytest.fixture(autouse=True)
+    def _no_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A test about the *search* clears the thing that short-circuits it.
+
+        `conftest` points `OPENSTATEGRAPH_CONFIG` at a path that does not exist,
+        so this checkout's own committed `openstategraph.yaml` cannot decide the
+        default for the whole suite (install-experience T10). `find_config_file`
+        checks that variable before it looks anywhere, which is exactly right
+        and exactly what these tests are not about.
+        """
+        monkeypatch.delenv("OPENSTATEGRAPH_CONFIG", raising=False)
+
     def test_yaml_is_the_canonical_name(self) -> None:
         assert CONFIG_FILENAMES[0] == "openstategraph.yaml"
 

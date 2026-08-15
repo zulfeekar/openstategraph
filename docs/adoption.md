@@ -480,7 +480,7 @@ constructor is worse than one that is honest about the line.
 
 | Collaborator | Parameter | Default when omitted | When you'd override |
 | --- | --- | --- | --- |
-| Chat model | `model=` | the document's `settings.model`, else the environment (`ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY`/`OLLAMA_HOST` → Ollama **cloud**; with none of them, a stand-in that raises `MissingProviderKey` the first time a node uses it — and `MissingProviderPackage`, the same way, when the provider's extra is not installed) | a pre-built model object with your own retry, base URL, temperature or gateway |
+| Chat model | `model=` | the document's `settings.model`, else `default_model:` in `openstategraph.yaml`, else the instance default — the provider integration you installed, preferring one whose credential is set (`openstategraph providers` shows which and why). With the key missing you get a stand-in raising `MissingProviderKey` the first time a node uses it, `MissingProviderPackage` when the extra is absent, and `NoProviderInstalled` when no integration is installed at all | a pre-built model object with your own retry, base URL, temperature or gateway |
 | Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
 | Long-term memory | `store=` | `build_store()` — in-process, or sqlite when `OPENSTATEGRAPH_MEMORY_PATH` is set | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
@@ -585,9 +585,23 @@ things you asked for is how a list that matters gets ignored.
   `"ollama:gpt-oss:120b-cloud"`), resolved through the *same* path the HTTP API
   uses, or an already-built LangChain model object, passed through untouched.
   Omit it and you get the document's own `settings.model` if it names one,
-  otherwise the environment default: `ANTHROPIC_API_KEY` → Claude,
-  `OPENAI_API_KEY` → GPT, `OLLAMA_API_KEY` (or `OLLAMA_HOST`) → Ollama
-  **cloud**. A node that names its own model still wins over all of it.
+  then `default_model:` in `openstategraph.yaml` if the project declares one,
+  then **the instance default**: the provider integration you have installed.
+  That last rule is what makes the install line the mental model — `pip
+  install 'openstategraph[anthropic]'` and Anthropic is your default, with no
+  configuration at all. Among installed integrations, one with a credential
+  set wins; among several, the first registered; and an installed integration
+  with no key yet still wins, so the one thing left to do names *your*
+  vendor's variable. `openstategraph providers` prints which won and why.
+  A node that names its own model still wins over all of it.
+
+  A credential in your environment does **not** outrank `default_model:`: it
+  is a fact about your machine, not a request about this project. It feeds the
+  election, one rung below.
+
+  A model reference may be written in full (`anthropic:claude-opus-4-1`) or as
+  a bare provider (`anthropic`, `ollama:`), which resolves to that provider's
+  own default.
   With no provider credential set at all, `build_chat_model` returns an
   `UnconfiguredProvider` that raises `MissingProviderKey` naming the exact
   variable — on first *use*, not at construction, so a workflow whose nodes

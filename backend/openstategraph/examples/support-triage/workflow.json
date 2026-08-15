@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Support Triage",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Every control molecule in one graph: classify the ticket, answer it on the matching desk, grade the reply, and let a person decide whether it is sent. Nothing reaches a customer without the gate."
     },
     "nodes": [

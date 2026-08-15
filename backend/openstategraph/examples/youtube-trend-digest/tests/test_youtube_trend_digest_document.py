@@ -104,10 +104,20 @@ class TestTheProviderSplit:
         assert provider == "anthropic"
         assert model_id == "claude-haiku-4-5"
 
-    def test_the_document_model_uses_the_colon_form(self, doc: dict) -> None:
-        """The other half of the same trap, and the two must not be swapped."""
-        assert "/" not in doc["settings"]["model"]
-        assert doc["settings"]["model"].count(":") >= 1
+    def test_the_document_names_no_model_at_all(self, doc: dict) -> None:
+        """The split is now *one* override against the instance default.
+
+        This asserted the document's own `settings.model` was in **colon**
+        form, the other half of the slash/colon trap above. The document has no
+        model since install-experience T10: every shipped example dropped its
+        pin so a copied example runs on whatever the adopter installed, and
+        this repository pins its own runs in `openstategraph.yaml`.
+
+        The trap the pair guarded is unchanged and still guarded, because it
+        was never symmetric — the *node* field is the one that partitions on
+        `/`, and that assertion is directly above.
+        """
+        assert not doc["settings"].get("model")
 
     def test_the_paid_node_holds_no_tools(self, plan) -> None:
         """One call, one price. A tool on the synthesis node makes the paid

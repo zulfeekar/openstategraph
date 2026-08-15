@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Knowledge Lookup QA",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Retrieval as a plain tool binding. One agent, one knowledge store, no loop — the answer is fetched from the package's own knowledge/ directory rather than recalled."
     },
     "nodes": [

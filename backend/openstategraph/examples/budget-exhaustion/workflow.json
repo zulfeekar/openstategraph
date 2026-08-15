@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Budget Exhaustion",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "A loop that stops without ever passing: the grader's criteria contradict each other, the attempt counter runs out, and the last candidate ships anyway."
     },
     "nodes": [

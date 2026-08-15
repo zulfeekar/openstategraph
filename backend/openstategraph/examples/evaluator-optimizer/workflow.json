@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Evaluator Optimizer",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "The canonical revision loop: a drafter, a grader, and the one feedback edge that makes it a cycle."
     },
     "nodes": [

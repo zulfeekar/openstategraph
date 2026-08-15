@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Parallel Workers Join",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Fan out one role across several subtasks, then join the results with no model in the join."
     },
     "nodes": [

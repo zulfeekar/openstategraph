@@ -48,14 +48,29 @@ both would have shipped the paragraph *and* the sentence.
 
 ## The model string
 
-`settings.model` is `ollama:gpt-oss:120b-cloud`, in **colon** form — the
-workflow-level spelling. A node's own `data.model` is the frontend's **slash**
-form (`ollama/gpt-oss:120b-cloud`); `NodeRuntime._resolve_model` converts it.
-Two spellings, one seam, and it is easy to write the wrong one.
+**This document names no model, and that is deliberate.** `settings` carries a
+`purpose` and nothing else, so the run uses the instance default — the provider
+integration you installed. That is what makes `pip install
+'openstategraph[anthropic]'` mean "Anthropic is my default" for an example you
+copied. Set `settings.model` if this workflow genuinely needs one vendor.
+
+Two spellings exist for when you do, one seam, and it is easy to write the
+wrong one:
+
+| Where | Form | Example |
+| --- | --- | --- |
+| `settings.model` (document) | **colon** — `init_chat_model` | `ollama:gpt-oss:120b-cloud` |
+| `data.model` (node) | **slash** — the picker's selection | `ollama/gpt-oss:120b-cloud` |
+
+`NodeRuntime._resolve_model` converts the second into the first.
 
 The catalogue asked for the bare prefix `ollama:`, on the belief that it
-resolves to the cloud default. It does not — see gallery ticket 12. Every
-example in this batch is pinned instead.
+resolves to the cloud default. It did not when this was written — gallery
+ticket 12, now closed — and it does, exactly, today.
+
+The recorded run above was made against `ollama:gpt-oss:120b-cloud`, which is
+what this repository's own committed `openstategraph.yaml` pins. That is a fact
+about where the run happened, not a claim this document makes.
 
 ## Tests
 

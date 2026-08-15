@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Agentic RAG Rewrite",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "The loop whose revise edge reshapes the question rather than the answer: a rewriter upstream of a retriever, and a grader that sends the question back to be asked better."
     },
     "nodes": [

@@ -7,7 +7,6 @@
     "version": 3,
     "name": "Morning Brief",
     "settings": {
-      "model": "ollama:gpt-oss:120b-cloud",
       "purpose": "Many sources, one report: three workers fan out in parallel, each holding a different tool — the open web, the team handbook, and this platform's own workflow list — and the join assembles their answers into one brief."
     },
     "nodes": [

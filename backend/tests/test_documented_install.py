@@ -97,51 +97,95 @@ def installable_references() -> list[tuple[str, int, set[str]]]:
     return found
 
 
-def example_models() -> set[str]:
+def example_settings() -> dict[str, dict]:
+    """`{slug: settings}` for every shipped example, settings possibly empty."""
     return {
-        (json.loads(path.read_text()).get("document", {}).get("settings") or {}).get("model", "")
+        path.parent.name: (json.loads(path.read_text()).get("document", {}).get("settings") or {})
         for path in sorted(EXAMPLES.glob("*/workflow.json"))
     }
 
 
 class TestTheDocumentedInstallCanRunSomething:
-    def test_every_shipped_example_names_one_provider(self) -> None:
-        """The premise the rest of this file rests on, asserted rather than assumed.
+    def test_no_shipped_example_names_a_provider(self) -> None:
+        """Flipped by install-experience T10 (grill item G1(a)).
 
-        If the gallery ever mixes providers, the quickstart line has to cover
-        all of them or say which example it covers — and this failing is how
-        that decision gets made instead of missed.
+        This asserted the opposite until 2026-08-15 —
+        `example_models() == {"ollama:gpt-oss:120b-cloud"}` — and the reasoning
+        was sound for what it guarded: if the gallery mixed providers, the one
+        quickstart line could not cover all of them, and this failing was how
+        that got decided rather than missed.
+
+        What changed is the premise underneath it. The install line is the
+        mental model: `pip install 'openstategraph[anthropic]'` means Anthropic
+        is the default, and the instance default is now elected from what is
+        *installed* (T2). A gallery where all 22 documents pin Ollama makes
+        that false for the twenty-two things a new adopter opens first — they
+        copy one, press Run, and are told to install a vendor they did not
+        choose. Rewriting the pin at copy time was refused: workflow-gallery 07
+        makes a copy **verbatim**, and falsifying a package's own `AGENTS.md`
+        on the way out is exactly what 07 chose against.
+
+        So the pin leaves the **source** documents, and this repository pins
+        its own runs where a pin belongs — `openstategraph.yaml`, asserted
+        below. A copied example then runs on whatever the adopter installed,
+        and `settings.model` still wins wherever a document genuinely needs a
+        specific model.
         """
-        assert example_models() == {"ollama:gpt-oss:120b-cloud"}
+        offenders = {slug: s["model"] for slug, s in example_settings().items() if s.get("model")}
+        assert offenders == {}, (
+            "these shipped examples name a vendor, so an adopter who installed a "
+            f"different one cannot run them as copied: {offenders}"
+        )
 
-    def test_the_quickstart_install_covers_the_examples_provider(
+    def test_the_examples_still_declare_what_they_are_for(self) -> None:
+        """Unpinned is not unset: `settings` still carries `purpose`.
+
+        Guards the mechanical form of the edit — a bulk removal that took the
+        whole `settings` block with it would leave the gallery's own
+        descriptions gone and nothing failing.
+        """
+        without = [slug for slug, s in example_settings().items() if not s.get("purpose")]
+        assert without == []
+
+    def test_this_repository_pins_its_own_runs(self) -> None:
+        """The other half of G1(a), and the standing Ollama-cloud rule's new home.
+
+        The gallery is developed and smoke-run here, and CLAUDE.md's constraint
+        has not moved: these runs go to Ollama **cloud**, never a local model,
+        because a weak local model turns a wiring bug and a capability gap into
+        the same symptom. That was enforced by 22 document pins; it is enforced
+        by one committed config file now, which is the level a repository-wide
+        choice belongs at — and is what workflow-gallery ticket 12 was really
+        asking for when it worried about a stray `ANTHROPIC_API_KEY` billing
+        Claude while the gallery was being built.
+        """
+        from openstategraph.config_file import load_config
+
+        config = load_config(ROOT / "openstategraph.yaml")
+        assert config.default_model is not None
+        spec = provider_catalogue().for_model(config.default_model)
+        assert spec is not None and spec.name == "ollama"
+        assert config.default_model.endswith("-cloud"), (
+            "Ollama means Ollama cloud in this project, never a local model"
+        )
+
+    def test_the_quickstart_install_still_carries_a_provider(
         self, extras: dict[str, list[str]]
     ) -> None:
-        """`examples copy … && run …` after the pasted line, as a resolution.
+        """What replaces the per-vendor check above, and it is the same ticket.
 
-        The whole of ticket 37 in one assertion: what the reader installs must
-        contain the integration for what the reader then runs.
+        With the gallery naming no vendor, "the extra the examples need" is
+        whichever one the reader installed — so the property left to hold is
+        that a documented line which serves the product installs *a* provider
+        at all. That is the test below, and this one only guards that such a
+        line still exists to check.
         """
-        model = example_models().pop()
-        spec = provider_catalogue().for_model(model)
-        assert spec is not None, f"no registered provider owns {model!r}"
-
         serving = [
             (where, line, names)
             for where, line, names in installable_references()
             if "server" in resolve(names, extras)
         ]
         assert serving, "no documented install line serves the product any more"
-
-        offenders = [
-            f"{where}:{line}" for where, line, names in serving
-            if spec.extra not in resolve(names, extras)
-        ]
-        assert offenders == [], (
-            f"these install the product but not the [{spec.extra}] integration the "
-            f"shipped examples need for {model!r}: {offenders} — a reader pasting one "
-            "of them cannot run the example they are told to copy next"
-        )
 
     def test_no_documented_install_serves_without_any_provider(
         self, extras: dict[str, list[str]]
