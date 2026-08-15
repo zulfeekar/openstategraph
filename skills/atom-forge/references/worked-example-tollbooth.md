@@ -202,3 +202,15 @@ the module; nothing more is needed.
 - **A question mark can be a complete answer** when it names how it resolves.
 - **Gates fire mid-interview.** The first design died on gate 1 before anyone
   wrote a file, which is the cheapest possible place for it to die.
+
+---
+
+**Honesty note (2026-08-15, added by the skill's first live client):** this
+worked example itself scores 8/10 on the readiness card — it numbered
+*Retention* as its fifth question and never ran the failure-modes dimension,
+and it treated three honesty gates as "already applied". The first build run
+caught that, refused to start at 8, and closed both gaps from the repository.
+The complete card — all ten lines, the six failure-mode sentences, all ten
+gates run — is recorded in
+`.scratch/install-experience/tickets/17-the-tollbooth-memory-segment.md`.
+Follow the card, not this example's shortcut.
