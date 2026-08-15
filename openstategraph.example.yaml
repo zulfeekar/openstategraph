@@ -47,6 +47,23 @@ version: 1
 # `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
 default_model: ollama:gpt-oss:120b-cloud
 
+# Where <slug>/workflow.json packages live, when it is not ./workflows.
+# A first-class key since scale-and-adopt ticket 02, and undocumented here
+# until install-experience T6 — which is how a key nobody knew about ends up
+# with a project that has one and a reader who cannot find out why.
+#
+# **Relative to THIS FILE, never to the directory you happen to be standing
+# in.** The file is committed and shared; the working directory is wherever a
+# process was started from, so resolving against it would make one committed
+# line mean a different directory per developer — and a different one again
+# when a supervisor starts the same service from /.
+#
+# `openstategraph init my_demo --workflows-dir flows` writes this line for you.
+# OPENSTATEGRAPH_WORKFLOWS_ROOT still beats it: a direction outranks a shared
+# statement of fact.
+#
+# workflows_dir: workflows
+
 providers:
   # Adjusting a provider this framework already knows about: every field you
   # omit is inherited from the built-in, so this changes one string and leaves
