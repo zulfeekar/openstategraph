@@ -29,6 +29,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # Build before verify: seedDemo.test.ts's shipped-bundle guard inspects
+      # dist/ and hard-fails without it — the guard is only real against a
+      # built artifact, and CI is exactly where it must be real.
+      - run: npm run build
       - run: npm run verify   # tsc + eslint + prettier-check + vitest
 
   # RC-01: `backend/openstategraph/compile/port_specs.json` is GENERATED from

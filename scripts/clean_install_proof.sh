@@ -150,7 +150,10 @@ for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
                 "examples/index.json" "examples/chained-summarizer/workflow.json" \
                 "examples/chained-summarizer/AGENTS.md" \
                 "examples/sql-qa/data/Chinook_Sqlite.sqlite"; do
-  printf '%s\n' "$LISTING" | grep -qF "$required" \
+  # No pipe here on purpose: `printf | grep -q` lets grep exit at first
+  # match while printf is mid-write — SIGPIPE, which pipefail turns into a
+  # nondeterministic failure (it did, on the second-ever CI run).
+  grep -qF "$required" <<<"$LISTING" \
     || { echo "the wheel is missing package data it must ship: $required"; exit 1; }
 done
 
