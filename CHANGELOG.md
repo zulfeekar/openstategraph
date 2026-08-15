@@ -1,7 +1,6 @@
 # Changelog
 
-## 0.3.0rc1 — unreleased
-
+## 0.3.0rc1 — 2026-08-15
 The release train's first ride, on the beta repository, to TestPyPI only. The
 candidate carries everything 0.3.0 below describes plus the work landed since
 that section was written:
