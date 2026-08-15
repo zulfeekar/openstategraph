@@ -83,7 +83,11 @@ describe('a tollbooth is transparent to the graph', () => {
   it('has one input and one output and nothing else', () => {
     // Same type in and out is what lets one segment name sit between several
     // node pairs without changing what flows.
-    expect(ports().map((p) => p.id).sort()).toEqual(['crossing', 'onward']);
+    expect(
+      ports()
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(['crossing', 'onward']);
   });
 });
 
