@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -37,11 +37,12 @@ const read = (relative: string): string =>
  * gets under the ceiling, and it is how CLAUDE.md describes
  * `WorkflowController`'s ten.
  */
-function publicMembers(file: string, className: string): string[] {
+function classesIn(file: string): Map<string, string[]> {
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
-  const found = new Set<string>();
+  const classes = new Map<string, string[]>();
   const walk = (node: ts.Node): void => {
-    if (ts.isClassDeclaration(node) && node.name?.text === className) {
+    if (ts.isClassDeclaration(node) && node.name) {
+      const found = new Set<string>();
       for (const member of node.members) {
         if (ts.isConstructorDeclaration(member)) continue;
         const flags = ts.getCombinedModifierFlags(member);
@@ -51,12 +52,46 @@ function publicMembers(file: string, className: string): string[] {
         if (!name || name.startsWith('#') || name.startsWith('_')) continue;
         found.add(name);
       }
+      classes.set(node.name.text, [...found]);
     }
     ts.forEachChild(node, walk);
   };
   walk(source);
-  if (found.size === 0) throw new Error(`${className} not found in ${file}`);
-  return [...found];
+  return classes;
+}
+
+function publicMembers(file: string, className: string): string[] {
+  const members = classesIn(file).get(className);
+  if (!members) throw new Error(`${className} not found in ${file}`);
+  return members;
+}
+
+/**
+ * Every class under `src/` over the ceiling — derived, not remembered.
+ *
+ * The audit of 2026-08-15 found the reason this exists: pins chosen by hand
+ * cover the classes somebody already worried about, which are the ones least
+ * likely to drift. Three were pinned here and two in the Python sibling,
+ * against nineteen over the ceiling — including `WorkflowModel` at 43, the
+ * exception CLAUDE.md argues at the greatest length and nothing held to the
+ * shape that argument assumed.
+ *
+ * Test and spec files are skipped for the same reason `hatch_build.py` skips
+ * them: they are not the app, and a fixture class written to prove a point is
+ * not a design decision.
+ */
+function classesOverTheCeiling(): Map<string, number> {
+  const root = fileURLToPath(new URL('.', import.meta.url));
+  const over = new Map<string, number>();
+  for (const entry of readdirSync(root, { recursive: true, encoding: 'utf8' })) {
+    const relative = entry.split('\\').join('/');
+    if (!/\.tsx?$/.test(relative) || /\.(test|spec)\.tsx?$/.test(relative)) continue;
+    if (relative.endsWith('.d.ts')) continue;
+    for (const [className, members] of classesIn(`./${relative}`)) {
+      if (members.length > CEILING) over.set(`./${relative}#${className}`, members.length);
+    }
+  }
+  return over;
 }
 
 const CEILING = 10;
@@ -71,6 +106,33 @@ interface Subject {
 }
 
 const SUBJECTS: readonly Subject[] = [
+  {
+    file: './core/model/WorkflowModel.ts',
+    className: 'WorkflowModel',
+    members: 43,
+    exception: `CLAUDE.md's recorded exception, and until 2026-08-15 the one nothing
+      measured — which is how an argument becomes a story. The argument itself
+      still holds and is not re-litigated here: the internals *are* split
+      (AdjacencyIndex and GraphQueries hold the real implementations, each
+      independently unit-tested), and ticket 17 concluded that collapsing the
+      flat surface onto 'model.queries.x()' / 'model.adjacency.x()' is a
+      100+-call-site rename across canvas, execution and validation code for a
+      smaller public surface rather than a clearer design.
+
+      What was missing was the number. Forty-three is 21 queries, 17 mutators,
+      'on'/'onAny'/'dispose', 'toJSON' and 'transact'; ten of the queries
+      (edgesOf, edgesInto, edgesFrom, childrenOf, descendantsOf, predecessorsOf,
+      successorsOf, countOfType, topologicalOrder, bounds) are verbatim
+      one-liners onto the private 'queries', which is precisely the shape the
+      exception describes and now the shape it is held to. A forty-fourth member
+      fails this test, and adding one is the thing CLAUDE.md forbids
+      ("do not add new *behavior* directly onto WorkflowModel either way").
+
+      Two members here have no caller at all — 'requireNode', and 'isEmpty',
+      which Inspector.tsx:279 reimplements inline as a local const rather than
+      calling. They are ticketed with the rest of the dead surface
+      (install-experience 21); removing them re-records this at 41.`,
+  },
   {
     file: './canvas/PaperController.ts',
     className: 'PaperController',
@@ -145,6 +207,205 @@ const SUBJECTS: readonly Subject[] = [
       and never together. That is a grouping invented rather than found, and
       ticket 07 records what those are worth.`,
   },
+  {
+    file: './core/runtime/WorkflowFileClient.ts',
+    className: 'WorkflowFileClient',
+    members: 17,
+    exception: `Ten reads, six writes and one subscription over the file API — a flat HTTP
+      adapter where every member is its own fetch and there is nothing to
+      delegate to. Width here is the width of the endpoint surface, and the
+      class does not get to be narrower than the API it adapts.
+
+      The interesting part is that the split is **already drawn, in the type
+      system**: this class declares four interfaces at once
+      (IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates,
+      IWorkflowExamples) and consumers import those, never this. That is the
+      Interface Segregation half of the rule kept, with one implementation
+      behind it — 'sqlSchema' is reached by SqlSchemaBody, 'watchCatalogue' by
+      the catalogue view, and neither knows about the other's methods.
+
+      Splitting the class to match would mean four objects each holding the same
+      baseUrl, fetchImpl and eventSourceImpl, constructed together at one call
+      site, so the consumer's view would not change and the wiring would grow.
+      Recorded rather than done, and the next person should check the interface
+      list first: if a fifth interface appears here, that is the signal this
+      became a bucket.`,
+  },
+  {
+    file: './core/providers/ProviderRegistry.ts',
+    className: 'ProviderRegistry',
+    members: 17,
+    exception: `Two reasons to change, and both are visible in the member list: which
+      providers and models exist (register, get, list, allModels, resolve,
+      model, modelOptions, reasoningEffortLevelsFor, setWorkflowDefaultModel,
+      refreshModels) and what credentials they are configured with (setApiKey,
+      getApiKey, describeApiKey, setBaseUrl). The second already has a private
+      collaborator — CredentialStore — and 'getApiKey' is a verbatim
+      pass-through to it, so exposing 'credentials' as one member in place of
+      three is a genuine reduction rather than an invented grouping.
+
+      Two more are free: 'providers' leaks the inner Registry and has no
+      external reader (every workbench.providers.list() resolves to this class's
+      own wrapper, not to that field), and 'allModels' has no caller anywhere.
+      Both are in install-experience 21 with the rest of the dead surface;
+      taking them plus the credential grouping puts this near twelve.
+
+      Pinned at seventeen meanwhile, because the credential move is a real
+      change to a class the model picker, the runtime health dot and the
+      workflow settings panel all read.`,
+  },
+  {
+    file: './core/providers/ILLMProvider.ts',
+    className: 'AbstractLLMProvider',
+    members: 14,
+    exception: `Five abstract members are the provider's identity (id, label, models,
+      requiresApiKey, complete). Four are the shared credential behaviour every
+      provider inherits rather than reimplements (setApiKey, setBaseUrl,
+      hasApiKey, isConfigured) — the anti-duplication rule working exactly as
+      CLAUDE.md states it, declared once on the abstract base.
+
+      The remaining five are **declarations, not behaviour**: credentialsHint,
+      allowsCustomModel, configurableEndpoint, runtimeCredentialKey and
+      reasoningEffortLevels are optional properties defaulting to undefined, by
+      which a provider says what it supports. That is the open/closed rule kept
+      the cheap way — a new capability is a field a provider sets, not a
+      subclass and not an edit to the consumer. Hiding them behind a
+      'capabilities' object would be one member instead of five and one more
+      indirection at every read site; considered, and not worth it while the
+      list is five long. If it reaches ten, do it.`,
+  },
+  {
+    file: './controller/SelectionModel.ts',
+    className: 'SelectionModel',
+    members: 14,
+    exception: `One reason to change: what is selected. Seven queries (nodes, edges, size,
+      isEmpty, soleNode, hasNode, hasEdge), five mutators (selectNodes,
+      selectEdges, set, clear, prune) and the on/dispose pair every observable
+      model here carries.
+
+      Nodes and edges are the two axes of one selection rather than two
+      sub-objects: 'set' takes both at once, 'prune' walks both, and the canvas
+      asks "is this selected" without caring which kind it holds. A
+      'selection.nodes.has()' / 'selection.edges.has()' split would double the
+      mutator surface it removed and break the one invariant this class exists
+      to keep — that a change to either axis notifies exactly once, through the
+      private commit.
+
+      'soleNode' has no caller (install-experience 21); at thirteen without it
+      this stays a wide vocabulary for a single noun, which is the shape
+      Viewport is recorded under.`,
+  },
+  {
+    file: './core/commands/CommandStack.ts',
+    className: 'CommandStack',
+    members: 13,
+    exception: `Undo and redo are one vocabulary, and this is it: five queries, five
+      mutators, on/dispose, plus 'context' — which leaks the whole
+      CommandContext and is read by NodeEditor to build commands.
+
+      Three of the thirteen have never had a caller: 'undoLabel' and 'redoLabel'
+      exist for an "Undo Move node" tooltip nobody built, and 'depth' says in
+      its own doc comment that it is "for the history panel and for tests",
+      neither of which exists. Removing them takes this class to exactly ten —
+      **under the ceiling, with no design change at all**, which is the clearest
+      illustration in the repository of the audit's actual finding: the ceiling
+      was being cleared by surface nobody wanted rather than by structure
+      anybody chose. Ticketed as install-experience 21 rather than done here so
+      the deletion lands with the rest of its kind.`,
+  },
+  {
+    file: './core/providers/OllamaProvider.ts',
+    className: 'OllamaProvider',
+    members: 12,
+    exception: `Almost entirely override, which is a property of the counting rule as much
+      as of the class: this side counts *declared* members, so a leaf that
+      concretises its base looks as wide as the base. Nine of the twelve are the
+      abstract five made real (id, label, models, requiresApiKey, complete), the
+      four capability declarations, and 'isConfigured' — overridden because
+      Ollama is the one vendor reachable two ways, by key or by a host you run,
+      which CLAUDE.md records as a standing instruction.
+
+      Genuinely new: 'listModels' (the interface's optional discovery method)
+      and 'probe', which has no caller anywhere in src/ and is ticketed with the
+      dead surface (install-experience 21). Everything vendor-specific — cloud
+      detection, the seed list, header assembly, host resolution — is private,
+      which is the part that matters: the base's surface did not widen to admit
+      a second provider.`,
+  },
+  {
+    file: './core/kernel/Registry.ts',
+    className: 'Registry',
+    members: 12,
+    exception: `The generic container every extension point in the repository is built from
+      — node types, port types, providers, executors, canvas features, export
+      formats — and one noun with one verb family: register, look up, observe.
+      It imports no domain type. It passes the "and" test cleanly, which is why
+      the number alone is a poor signal here.
+
+      Two members are the exception to that: 'filter' is 'list().filter' with no
+      caller anywhere, and 'groupBy' has exactly one (ModelRegistry). They are
+      collection-utility verbs on a registry vocabulary, and dropping both puts
+      this at ten — recorded in install-experience 21. Pinned at twelve until
+      then, because this class is depended on by every registry in the app and a
+      deletion here is a change to all of them at once.`,
+  },
+  {
+    file: './app/Workbench.ts',
+    className: 'Workbench',
+    members: 12,
+    exception: `The composition root, and the shape CLAUDE.md blesses rather than tolerates:
+      ten of the twelve are readonly collaborators (registry, preferences,
+      model, credentials, providers, connectionValidator, workflowValidator,
+      serializer, engine, controller) and the other two are 'warmUp', a
+      pass-through to providers.refreshModels(), and 'dispose', which fans out
+      to the three collaborators that own resources.
+
+      It has no logic of its own beyond construction and the two serializer
+      migrations it registers. "Extend it by adding a collaborator, never a
+      method" is the rule for WorkflowController and it is doubly the rule here:
+      an eleventh collaborator is this class working, an extra method is the
+      composition root starting to do something, and this pin is where the
+      difference gets noticed. That is why the count is exact rather than a
+      bound.`,
+  },
+  {
+    file: './core/model/GraphQueries.ts',
+    className: 'GraphQueries',
+    members: 11,
+    exception: `The object WorkflowModel's recorded exception points at, one over the
+      ceiling and for the least interesting reason: it is eleven read-only
+      questions about a graph (edgesOf, edgesInto, edgesFrom, childrenOf,
+      descendantsOf, predecessorsOf, successorsOf, isAncestorOf, countOfType,
+      topologicalOrder, bounds), no state of its own, one reason to change —
+      what a graph relation means.
+
+      Splitting it would mean naming sub-vocabularies (traversal versus counting
+      versus geometry) that no consumer asks for separately: every one of these
+      is reached through WorkflowModel's pass-through by a different caller,
+      never in a group. This is the class that *was* the extraction, and an
+      extraction that then needs extracting is a signal worth having — so it is
+      pinned at eleven rather than waved through as "basically ten".`,
+  },
+  {
+    file: './controller/WorkflowController.ts',
+    className: 'WorkflowController',
+    members: 11,
+    exception: `**The count CLAUDE.md asserted as settled, and it had drifted.** Ticket 17
+      fixed this class at "10 public members, each a collaborator"; it is
+      eleven. Nine are the readonly collaborators (selection, nodes, edges,
+      grouping, clipboard, history, document, selectionActions — and 'model',
+      the one that is re-exported rather than owned, which is the drift), plus
+      'onChange' and 'dispose'. No queries, no mutators, no constants: the
+      design is intact and the sentence describing it was not.
+
+      That is the defect the audit called stale-claim, in the file that warns
+      about stale claims — a number in prose has no way to fail. CLAUDE.md now
+      says eleven and names the eleventh; this pin is what makes the next drift
+      a red test instead of a paragraph. Taking it back to ten means asking
+      whether 'model' should be reached through the controller at all, which is
+      a question about the layering rule and not about a member count, so it is
+      deliberately not answered by trimming.`,
+  },
 ];
 
 describe.each(SUBJECTS)('$className', (subject) => {
@@ -172,6 +433,25 @@ describe.each(SUBJECTS)('$className', (subject) => {
       expect(subject.exception.trim().length).toBeGreaterThan(400);
     },
   );
+});
+
+it('records every class over the ceiling, and only those', () => {
+  // The half that was missing. Three classes were pinned here and two in the
+  // Python sibling, against nineteen over the ceiling — so the guard covered
+  // the classes somebody had already thought about, which are the ones least
+  // likely to move. The list is derived now; the table has to match it.
+  const census = classesOverTheCeiling();
+  const recorded = new Set(SUBJECTS.map((s) => `${s.file}#${s.className}`));
+
+  const unrecorded = [...census].filter(([key]) => !recorded.has(key));
+  const departed = [...recorded].filter((key) => !census.has(key));
+
+  expect(
+    unrecorded,
+    `over the ceiling and not recorded. Take it under ${CEILING} by adding a collaborator, ` +
+      'or add it to SUBJECTS with the argument that makes the number a decision.',
+  ).toEqual([]);
+  expect(departed, 'recorded but no longer over the ceiling — delete the entry').toEqual([]);
 });
 
 it('records an exception only for a class that needs one', () => {

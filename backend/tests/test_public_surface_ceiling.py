@@ -33,10 +33,16 @@ not by inspecting one object that happens not to have been used yet.
 from __future__ import annotations
 
 import ast
+import dataclasses
+import importlib
 import inspect
+import pkgutil
 import textwrap
+from functools import lru_cache
 
 import pytest
+
+import openstategraph
 
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.compile.node_runtime import NodeRuntime
@@ -76,10 +82,41 @@ def assigned_to_self(cls: type) -> set[str]:
     return found
 
 
+def _root_package(subject: type) -> str:
+    return getattr(subject, "__module__", "").partition(".")[0]
+
+
 def public_members(subject: type) -> set[str]:
-    """What a consumer of this class can reach."""
-    methods = {name for name, _ in inspect.getmembers(subject) if not name.startswith("_")}
-    return methods | assigned_to_self(subject)
+    """What a consumer of this class can reach.
+
+    Two exclusions, both deliberate, and one counting rule for every class this
+    file measures:
+
+    **Members inherited from a third party are not counted.** A Pydantic model
+    reaches `model_dump`, `model_validate` and a dozen more; those are the
+    vendor's contract, we cannot split them, and counting them would flag every
+    model in the package for a design decision that is not ours to make. Only
+    bases from the subject's own top-level package contribute.
+
+    **A record's fields are not counted.** `ProviderSpec` and `Scorecard` are
+    frozen dataclasses; their fields are the data they are, and "one reason to
+    change" is a question about behaviour. So the numbers below are the audit's
+    *behaviour* column rather than its raw one — which is also what makes
+    `Scorecard`'s 17 a finding: that is 17 without its seven fields.
+    """
+    home = _root_package(subject)
+    names: set[str] = set()
+    for base in subject.__mro__:
+        if _root_package(base) != home:
+            continue
+        names |= {name for name in vars(base) if not name.startswith("_")}
+        names |= assigned_to_self(base)
+    if dataclasses.is_dataclass(subject):
+        names -= {field.name for field in dataclasses.fields(subject)}
+    fields = getattr(subject, "model_fields", None)
+    if isinstance(fields, dict):
+        names -= set(fields)
+    return names
 
 
 @pytest.mark.parametrize(
@@ -143,3 +180,267 @@ def test_the_runtimes_members_are_each_nameable_without_and() -> None:
         # `vars()`-on-a-fresh-instance pin could not see.
         "last_bound_tools",
     }
+
+
+# ---------------------------------------------------------------------------
+# The census: every class over the ceiling, not the two somebody remembered.
+# ---------------------------------------------------------------------------
+#
+# Until the 2026-08-15 audit this file pinned two classes and
+# `src/publicSurfaceCeiling.test.ts` pinned three, against **nineteen** over the
+# ceiling. Pins chosen by hand measure the classes somebody already worried
+# about, which are the ones least likely to drift. So the list is not written
+# here — it is *derived*, and the table below has to match it exactly. A class
+# that grows past ten fails until somebody records why, and a class that shrinks
+# fails until somebody records the smaller number.
+
+
+def _census_key(subject: type) -> str:
+    return f"{subject.__module__.removeprefix('openstategraph.')}.{subject.__qualname__}"
+
+
+@lru_cache(maxsize=1)
+def classes_over_the_ceiling() -> dict[str, int]:
+    """Every class the shipped package defines whose surface clears the ceiling.
+
+    `examples/` is excluded for the same reason mypy excludes it: those are
+    *workflow packages* that happen to ship inside this distribution, written in
+    the adopter's idiom rather than the framework's.
+
+    An unimportable module raises rather than being skipped. A census that
+    quietly measures less than it claims is the defect this whole file is about.
+    """
+    found: dict[str, int] = {}
+    for module in pkgutil.walk_packages(openstategraph.__path__, "openstategraph."):
+        if module.name.startswith("openstategraph.examples"):
+            continue
+        for value in vars(importlib.import_module(module.name)).values():
+            if not inspect.isclass(value):
+                continue
+            origin = getattr(value, "__module__", "")
+            if not origin.startswith("openstategraph.") or origin.startswith(
+                "openstategraph.examples"
+            ):
+                continue
+            count = len(public_members(value))
+            if count > CEILING:
+                found[_census_key(value)] = count
+    return found
+
+
+@dataclasses.dataclass(frozen=True)
+class Recorded:
+    """A count somebody looked at, with the argument that made it a decision.
+
+    The review's finding, quoted by the TypeScript sibling: a number written
+    down with its reasoning is a decision; the same number undocumented is a
+    class nobody has looked at. Counts are **exact**. A class that drops a
+    member fails here and gets re-recorded lower — an exception with room to
+    spare is how a ceiling becomes a floor.
+    """
+
+    members: int
+    reason: str
+
+
+#: Twelve classes, four bases. `AbstractAgentNode` (19), `BaseRouter` (18),
+#: `BaseGrader` (16) and `BaseOrchestrator` (13) declare a family vocabulary
+#: once — CLAUDE.md's rule that a shared concern lives on the base — and every
+#: leaf inherits it whole. `ReactAgentNode` adds nothing at all, `DeepAgentNode`
+#: adds `subagents`, `CustomGraphNode` adds `runnable`, `Orchestrator` and
+#: `PlanningOrchestrator` add only their own `split`. So this is four wide bases
+#: counted twelve times, which is what "what a consumer can reach" honestly
+#: means for a ladder.
+PROMPT_LADDER = """Pinned at today's count with the reduction ticketed (install-experience 19),
+    because the width has one cause and it is not "these classes do many
+    things".
+
+    Of `AbstractAgentNode`'s nineteen, seven exist only because the prompt is
+    composed here: five ingredients held as loose attributes (`default_rules`,
+    `rules`, `skill`, `replace_rules`, `context`) plus `system_prompt()` and
+    `resolve_prompt()`, which build a fresh `SystemPrompt` on every call rather
+    than the node holding one. `BaseRouter` and `BaseGrader` repeat it and add
+    an accessor pair each — `describe_rules` is `return self.rules.strip()`, one
+    line under the attribute it reads.
+
+    `BaseOrchestrator` is the counter-example that turns this from an opinion
+    into a measurement: same job, no `describe_*`, no `resolve_system_prompt`,
+    thirteen members. Folding the ingredients into one held `prompt:
+    SystemPrompt` collaborator takes Agent to about eleven, Router to eleven,
+    Grader to ten and Orchestrator to seven. That is a real refactor across a
+    seam six tests read, not a rename, so it is a ticket rather than this
+    commit."""
+
+#: `BaseKnowledgeBuilder` is at exactly ten, which is the point.
+KNOWLEDGE_BUILDERS = """A recorded exception, and the cheapest kind to defend: the base is at exactly
+    the ceiling (`BaseKnowledgeBuilder`, ten), and every concrete builder is
+    over it by declaring what kind of source it is. `SqlKnowledgeBuilder` is
+    eleven — the base's ten plus `source_kind`. `AgenticKnowledgeBuilder` is
+    fourteen because the agentic branch adds a second seam on top of the
+    mechanical one (`MISSION`, `study_tools`, `explorer_prompt`, `explore`), and
+    its two leaves add a `source_kind` and a `MISSION` string on top of that.
+
+    Nothing here is a class doing two jobs. The whole leaf surface of
+    `CodebaseKnowledgeBuilder` is two strings and one method; the behaviour —
+    ownership, collision, target path, marker header, write — is declared once
+    on the base, which is the shape the Interface/Abstract/Base/Concrete ladder
+    is supposed to produce. Taking the family under ten would mean removing a
+    member from the base, and the candidates (`marker_header`, `compose_prompt`)
+    are single-caller helpers whose only sin is being public. Worth doing when
+    the file is next open; not worth a rename across seven classes on its own."""
+
+#: Five of the eleven are SQL string templates.
+ENGINE_ADAPTERS = """A recorded exception: this is a data class the counting rule cannot see is
+    one. `BaseEngineAdapter` is **five** members, and the two driver-backed
+    leaves reach eleven by inheriting five SQL string templates
+    (`LIST_TABLES_SQL`, `COLUMNS_SQL`, `FOREIGN_KEYS_SQL`, `DRIVER_MODULES`,
+    `DRIVER_HINT`) from the private `_DriverBackedAdapter`, plus their `engine`
+    name. They are `ClassVar` strings rather than dataclass fields, so the
+    record exemption in `public_members` does not apply to them — but they are
+    the same thing: the data that distinguishes Postgres from SQL Server.
+
+    The behaviour each leaf actually declares is one method, `sample`. There is
+    no "and" to split here, and moving the templates into a dataclass to satisfy
+    the counter would be writing code for the measurement rather than the
+    design."""
+
+#: `BaseTool` is six; the leaves carry their own manifest.
+PREBUILT_TOOLS = """A recorded exception, with the shape visible in the sibling that stays under:
+    `BaseTool` is six members, `SqlListTablesTool` is ten, and both tools listed
+    here clear the ceiling only by their own configuration. `SqlQueryTool` is
+    eleven — the tool contract, its four manifest constants (`name`,
+    `description`, `node_type`, `Args`) and `row_cap`.
+    `YouTubeTranscriptTool` is thirteen for the same reason plus three settings
+    (`language`, `allow_auto_captions`, `max_chars`) and one genuinely public
+    method, `resolve`.
+
+    Those manifest constants are how a tool declares itself to the editor — they
+    are the atom's identity card, and the registry reads them off the class. A
+    tool that hid them behind a collaborator would be a tool the node palette
+    cannot describe. `resolve` is the one member worth a second look and it has
+    a real caller; the rest is declaration, not surface."""
+
+#: Seventeen behaviour members over seven fields.
+SCORECARD = """A recorded exception, and the one that most looks like a violation. Fourteen
+    of the seventeen are properties derived from the record's own fields —
+    `execution_accuracy`, `exact_set_match`, `refusal_accuracy`,
+    `latency_p50/p95`, `by_difficulty`, `verdict_counts` and so on — and a
+    record deriving from itself is not a second reason to change: they all move
+    when the definition of a correct answer moves, together, which is the test
+    CLAUDE.md actually sets.
+
+    The split was considered. `render`, `to_json` and `meets` are the three
+    members with a different reason to change (presentation, wire format,
+    policy) and they are also the only three anything outside this file calls —
+    `cli.py:209` touches exactly those. So the candidate split produces a
+    metrics object whose sole consumer is the renderer that would have been
+    split from it, and a caller that reaches for `card.metrics.x` to read a
+    number the scorecard is named after. That is the `WorkflowModel` argument in
+    miniature and it lands the same way. Recorded, not deferred."""
+
+PROVIDER_SPEC = """Pinned at fifteen with the split ticketed (install-experience 20), because
+    unlike `Scorecard` this record does have a second reason to change and it is
+    named in its own members: seven are derivations over its own fields
+    (`display`, `requires_key`, `primary_env_var`, `model_env_var`, `prefixes`,
+    `credential_variables`, `install_hint`), and six *read the environment or
+    probe an import* (`is_configured`, `is_installed`, `key_hint`, `base_url`,
+    `model_string`, `readiness`), with two more that render failure prose.
+
+    A frozen dataclass whose members go to `os.environ` and to `importlib` is
+    not a record, and it is why the class cannot be tested without arranging an
+    environment. `ProviderGap` already exists as the result type of the probing
+    half, so the seam is half-drawn. The audit measured this file mid-edit and
+    said to re-measure; re-measured at fifteen behaviour members on
+    2026-08-15."""
+
+WORKFLOW_SERVICES = """Pinned at eleven — one over — with the reduction ticketed
+    (install-experience 20), because the member that takes it over is one
+    nothing outside the class uses. `tool_registry_for`, `function_registry_for`
+    and `middleware_for` have no production caller anywhere in the backend: the
+    only place they are read is `runtime_for` a few lines below them, plus
+    `test_sdk_injection.py`. Three public factories serving one internal caller
+    is an injection cluster that belongs behind `runtime_for`, and collapsing it
+    puts the class at nine.
+
+    What remains is the shape CLAUDE.md asks for: durable collaborators every
+    transport reaches through (`store`, `memory_store`, `checkpointer`,
+    `events`, `principals`), the per-request `checkpointer_for` and
+    `runtime_for`, and `close`. Not done here because ticket 12 moved this
+    class's own vocabulary last week and ticket 11 gave it a lifecycle; a third
+    consecutive rewrite of one class in one wave is how a mistake gets in."""
+
+#: Every class in the shipped package over the ceiling, with the reasoning that
+#: makes each number a decision rather than an oversight. Derived list, hand
+#: written arguments — `test_the_census_matches_the_record` holds the two
+#: together.
+RECORDED: dict[str, Recorded] = {
+    "abc.agent.AbstractAgentNode": Recorded(19, PROMPT_LADDER),
+    "abc.agent.BaseAgentNode": Recorded(19, PROMPT_LADDER),
+    "abc.agent.ReactAgentNode": Recorded(19, PROMPT_LADDER),
+    "abc.agent.DeepAgentNode": Recorded(20, PROMPT_LADDER),
+    "abc.agent.CustomGraphNode": Recorded(20, PROMPT_LADDER),
+    "abc.router.BaseRouter": Recorded(18, PROMPT_LADDER),
+    "abc.router.Router": Recorded(19, PROMPT_LADDER),
+    "abc.grader.BaseGrader": Recorded(16, PROMPT_LADDER),
+    "abc.grader.Grader": Recorded(16, PROMPT_LADDER),
+    "abc.orchestrator.BaseOrchestrator": Recorded(13, PROMPT_LADDER),
+    "abc.orchestrator.Orchestrator": Recorded(13, PROMPT_LADDER),
+    "abc.orchestrator.PlanningOrchestrator": Recorded(13, PROMPT_LADDER),
+    "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
+    "knowledge_builders.AbstractWorkflowPointerBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
+    "knowledge_builders.RootKnowledgeBuilder": Recorded(13, KNOWLEDGE_BUILDERS),
+    "knowledge_builders.ProjectKnowledgeBuilder": Recorded(13, KNOWLEDGE_BUILDERS),
+    "knowledge_explorer.AgenticKnowledgeBuilder": Recorded(14, KNOWLEDGE_BUILDERS),
+    "knowledge_explorer.ExplorerKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
+    "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
+    "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
+    "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
+    "prebuilt_sql.SqlQueryTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(13, PREBUILT_TOOLS),
+    "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
+    "providers.ProviderSpec": Recorded(15, PROVIDER_SPEC),
+    "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),
+}
+
+
+def test_the_census_matches_the_record() -> None:
+    """The half nobody had: a class cannot go over the ceiling unnoticed.
+
+    Before this, the pins were chosen by hand — which measures the classes
+    somebody already worried about, the ones least likely to drift, and left
+    fourteen of nineteen unguarded including `WorkflowModel`, the exception
+    CLAUDE.md argues at the most length.
+    """
+    census = classes_over_the_ceiling()
+
+    unrecorded = sorted(set(census) - set(RECORDED))
+    departed = sorted(set(RECORDED) - set(census))
+
+    assert not unrecorded, (
+        f"over the ceiling and not recorded: "
+        f"{ {name: census[name] for name in unrecorded} }. Take it under "
+        f"{CEILING} by adding a collaborator, or add it to RECORDED with the "
+        "argument that makes the number a decision."
+    )
+    assert not departed, (
+        f"recorded but no longer over the ceiling: {departed}. Good news — "
+        "delete the entry, and its reasoning with it."
+    )
+
+
+@pytest.mark.parametrize("name", sorted(RECORDED))
+def test_each_recorded_count_is_exact(name: str) -> None:
+    census = classes_over_the_ceiling()
+
+    assert census[name] == RECORDED[name].members, (
+        f"{name} is {census[name]}, recorded as {RECORDED[name].members}. "
+        "Exact, not an upper bound: an exception with room to spare is how a "
+        "ceiling becomes a floor."
+    )
+
+
+@pytest.mark.parametrize("reason", sorted({entry.reason for entry in RECORDED.values()}))
+def test_every_exception_carries_reasoning(reason: str) -> None:
+    # Length is a crude proxy for "somebody actually thought about this", and a
+    # crude proxy beats none. Same threshold as the TypeScript sibling.
+    assert len(reason.strip()) > 400

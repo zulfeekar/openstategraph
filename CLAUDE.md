@@ -18,9 +18,20 @@ A class with many public members is a design failure, not a convenience. If it c
 
 **Ceiling: ~10 public members, one reason to change.**
 
-`WorkflowController` (ticket 17) is fixed: 10 public members, each a
-collaborator (`controller.nodes`, `controller.edges`, `controller.history`,
-...). Extend it by adding a collaborator, never a method.
+`WorkflowController` (ticket 17) is fixed: **11 public members** — nine
+collaborators (`controller.nodes`, `controller.edges`, `controller.history`,
+...) plus `onChange` and `dispose`. Extend it by adding a collaborator, never
+a method.
+
+(Until 2026-08-15 this line said ten, and had said so since ticket 17 while the
+class carried eleven. `model` is the eleventh: the one collaborator
+re-exported rather than owned. Nobody added a method — the number in prose
+simply had no way to fail. It is pinned now, in
+`src/publicSurfaceCeiling.test.ts` alongside every other class over the
+ceiling, so the next drift is a red test rather than a paragraph. The same
+census runs on the Python side in `backend/tests/test_public_surface_ceiling.py`:
+a class that passes ten fails until somebody records the number **and** the
+argument for it.)
 
 `WorkflowModel` is a **deliberate, recorded exception**, not a violation
 still awaiting decomposition. Its internals *are* split — `AdjacencyIndex`
@@ -35,6 +46,12 @@ against forcing it. Do not re-litigate this without new evidence; do not
 add new *behavior* directly onto `WorkflowModel` either way — a new query
 belongs on `GraphQueries`, a new index on `AdjacencyIndex`, surfaced
 through a thin pass-through only if genuinely needed.
+
+The exception is **43**, and that number is now pinned too. It was the
+most carefully argued exception in this file and the least defended — an
+argument with no way to fail is a story. A forty-fourth member is a red
+test, which is exactly what "do not add new behavior onto `WorkflowModel`"
+was always asking for.
 
 ### Interface → Abstract → Base → Concrete
 
