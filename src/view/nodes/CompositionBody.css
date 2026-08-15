@@ -40,6 +40,21 @@
   color: var(--color-text-secondary);
 }
 
+/* What stands where the census would be when the child could not be counted —
+ * unsaved package, empty document, runtime unreachable.
+ *
+ * It takes the toggle's place in the row rather than replacing the whole row,
+ * so **Open this mount** keeps its position: the verb is what a reader reaches
+ * for when the card cannot describe itself, and it must not move about
+ * depending on whether a fetch happened to succeed. Not a button, because
+ * there is nothing to disclose. */
+.node__composition-note {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-quaternary);
+  font-style: italic;
+}
+
 .node__composition-caret {
   flex: none;
   font-size: 0.9em;

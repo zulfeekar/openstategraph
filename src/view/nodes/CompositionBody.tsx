@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { SlugCache } from '@core/runtime/SlugCache';
-import {
-  compositionPurpose,
-  formatComposition,
-  summarizeComposition,
-} from '@core/runtime/compositionSummary';
 import { peekDiagramId, peekMermaid } from '@core/runtime/mermaidPeek';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
@@ -14,6 +9,7 @@ import { childAddress, parseMountAddress } from '@core/model/MountAddress';
 import { Pencil } from 'lucide-react';
 import { Icon } from '@design/primitives';
 import { loadMountIntoEditor } from '@view/workflow/loadWorkflowIntoEditor';
+import { compositionSurface, type MountDocumentState } from './compositionSurface';
 import type { NodeBody, NodeBodyProps } from './nodeBodyRegistry';
 import './CompositionBody.css';
 
@@ -43,31 +39,27 @@ import './CompositionBody.css';
  * with their own overrides. Drilling in remains a navigation, not a zoom — but
  * the address now says which mount you are inside, so a reload comes back to
  * the same one and the trail is derivable from it rather than remembered.
+ *
+ * ## One early return, and there must never be a second
+ *
+ * Everything this component decides beyond "what did the fetch say" is decided
+ * by `compositionSurface`, which is pure and tested. The regression that put it
+ * there (ticket 43) was not a deletion: **Open this mount** was written as a
+ * *child* of the census, and four of the five states a slug can be in returned
+ * `null` before reaching it — so an unsaved package, an empty child or a
+ * restarting runtime produced a mount card with no way into it and nothing
+ * saying why. Nothing removed the affordance; a condition did, silently.
+ *
+ * Reading the child is how the card *describes* the box. It is not how the card
+ * lets you *in*. So the verb is a sibling of the census, not a child of it, and
+ * the census's absence is a sentence rather than a silence.
  */
-/**
- * How many child nodes this mount overrides (docs/decisions/mount-overrides.md).
- * The annotation must say so — a group visual claiming the package default
- * while an override runs would be a lie about what executes.
- */
-function overriddenCount(node: NodeBodyProps['node']): number {
-  const raw = (node.getField<string>('overrides') ?? '').trim();
-  if (!raw) return 0;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return Object.keys(parsed).length;
-    }
-  } catch {
-    // Malformed JSON is the inspector validator's problem; the annotation
-    // stays silent rather than guessing.
-  }
-  return 0;
-}
-
 function CompositionAnnotation({ node }: NodeBodyProps) {
   const workbench = useWorkbench();
   const slug = (node.getField<string>('workflow') ?? '').trim();
-  const [state, setState] = useState<SlugState>(() => CACHE.settled(slug) ?? { status: 'loading' });
+  const [state, setState] = useState<MountDocumentState>(
+    () => CACHE.settled(slug) ?? { status: 'loading' },
+  );
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -81,63 +73,73 @@ function CompositionAnnotation({ node }: NodeBodyProps) {
     };
   }, [slug]);
 
-  // Nothing while unset: an unconfigured mount has no composition to describe,
-  // and a placeholder there would read as a failure rather than an empty field.
-  if (!slug) return null;
-  if (state.status === 'missing') {
-    return (
-      <div className="node__composition node__composition--missing">unknown workflow: {slug}</div>
-    );
-  }
-  if (state.status !== 'ready') return null;
-
-  // Whether this mount promises anything is what decides if a missing loop
-  // is worth mentioning — see `CompositionContext`. Read from the node rather
-  // than from its type, because since v3 the type no longer distinguishes.
-  const claimsOutcome = Boolean((node.getField<string>('outcome') ?? '').trim());
-  // The words come from the registry, not from `core/` — see
-  // `ModelRegistry.censusTerms` (reviews-2026-08-14 ticket 13). An empty
-  // registry is not a broken card: every type falls back to its family, so
-  // the census reads "1 agent · 3 tool" rather than coming back empty.
-  const summary = summarizeComposition(state.document, {
-    claimsOutcome,
+  const surface = compositionSurface({
+    slug,
+    state,
+    overrides: node.getField<string>('overrides') ?? '',
+    // Whether this mount promises anything is what decides if a missing loop
+    // is worth mentioning — see `CompositionContext`. Read from the node
+    // rather than its type, because since v3 the type no longer distinguishes.
+    claimsOutcome: Boolean((node.getField<string>('outcome') ?? '').trim()),
+    // The words come from the registry, not from `core/` — see
+    // `ModelRegistry.censusTerms` (reviews-2026-08-14 ticket 13). An empty
+    // registry is not a broken card: every type falls back to its family, so
+    // the census reads "1 agent · 3 tool" rather than coming back empty.
     vocabulary: workbench.registry.censusTerms.list(),
   });
-  if (!summary) return null;
 
-  // What the box achieves, above what is in it. The census is machinery; a
-  // reader looking at a mount wants the meaning first and the parts second.
-  const purpose = compositionPurpose(state.document);
+  // Nothing while unset: an unconfigured mount has no composition to describe,
+  // and a placeholder there would read as a failure rather than an empty field.
+  if (!surface) return null;
 
   return (
     <div className="node__composition">
-      {purpose ? <div className="node__composition-purpose">{purpose}</div> : null}
+      {surface.purpose ? <div className="node__composition-purpose">{surface.purpose}</div> : null}
       <div className="node__composition-row" data-no-drag>
-        <button
-          type="button"
-          className="node__composition-toggle"
-          aria-expanded={expanded}
-          title={expanded ? 'Hide what is inside' : 'Peek inside this workflow'}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <span className="node__composition-caret" aria-hidden="true">
-            {expanded ? '▾' : '▸'}
-          </span>
-          {formatComposition(summary)}
-          {overriddenCount(node) > 0 ? (
-            <span
-              className="node__composition-overridden"
-              title="This mount overrides fields of the shared package (see the Overrides field in the inspector). Other mounts keep the package defaults."
-            >
-              {' '}
-              · {overriddenCount(node)} overridden
+        {surface.census ? (
+          <button
+            type="button"
+            className="node__composition-toggle"
+            aria-expanded={expanded}
+            title={expanded ? 'Hide what is inside' : 'Peek inside this workflow'}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <span className="node__composition-caret" aria-hidden="true">
+              {expanded ? '▾' : '▸'}
             </span>
-          ) : null}
-        </button>
-        <OpenMount slug={slug} mountId={node.id} />
+            {surface.census}
+            <OverriddenNote count={surface.overridden} />
+          </button>
+        ) : (
+          <span className="node__composition-note">
+            {surface.note}
+            <OverriddenNote count={surface.overridden} />
+          </span>
+        )}
+        {surface.open ? <OpenMount slug={slug} mountId={node.id} /> : null}
       </div>
-      {expanded ? <GraphPeek slug={slug} /> : null}
+      {expanded && surface.peekable ? <GraphPeek slug={slug} /> : null}
     </div>
+  );
+}
+
+/**
+ * `· n overridden`, beside whichever line the row is showing.
+ *
+ * A fact about this instance's own data, so it outlives a failed fetch: a card
+ * claiming the package default while an override runs would be a lie about what
+ * executes, and it would tell that lie exactly when the runtime is down.
+ */
+function OverriddenNote({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="node__composition-overridden"
+      title="This mount overrides fields of the shared package (see the Overrides field in the inspector). Other mounts keep the package defaults."
+    >
+      {' '}
+      · {count} overridden
+    </span>
   );
 }
 
@@ -270,12 +272,6 @@ export function compositionBody(): NodeBody {
  * Per-slug cache
  * ================================================================== */
 
-type SlugState =
-  | { status: 'loading' }
-  | { status: 'ready'; document: unknown }
-  | { status: 'missing' }
-  | { status: 'unreachable' };
-
 /**
  * One fetch per slug, shared by every card referencing it.
  *
@@ -290,12 +286,12 @@ type SlugState =
  * slug it names; and the whole thing is bounded. Before that, "cached only
  * until the next slug change" described an eviction that existed nowhere.
  */
-const CACHE = new SlugCache<SlugState>('composition.document', {
+const CACHE = new SlugCache<MountDocumentState>('composition.document', {
   keep: (state) => state.status !== 'unreachable',
 });
 
-function resolveSlug(slug: string): Promise<SlugState> {
-  return CACHE.resolve(slug, async (): Promise<SlugState> => {
+function resolveSlug(slug: string): Promise<MountDocumentState> {
+  return CACHE.resolve(slug, async (): Promise<MountDocumentState> => {
     const result = await new WorkflowFileClient().loadIfPresent(slug);
     if (!result.ok) return { status: 'unreachable' };
     return result.value == null
