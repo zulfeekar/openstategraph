@@ -58,9 +58,9 @@ describe('the policy table is the card', () => {
   });
 
   it('takes a custom pattern as text, because a regex is data and a lambda is not', () => {
-    const detector = (field('policy') as { fields: readonly { key: string; kind: string }[] }).fields.find(
-      (f) => f.key === 'detector',
-    );
+    const detector = (
+      field('policy') as { fields: readonly { key: string; kind: string }[] }
+    ).fields.find((f) => f.key === 'detector');
     expect(detector?.kind).toBe('text');
   });
 
@@ -206,8 +206,8 @@ describe('the model reads its own table', () => {
     // thing a developer does — the shipped default is two rules, following
     // the Grader's prebuilt criteria rather than a blank field.)
     workbench.controller.nodes.setField(node.id, 'policy', []);
-    expect(
-      (workbench.model.node(node.id) as GuardrailNodeModel).subtitle.toLowerCase(),
-    ).toMatch(/no |nothing|empty/);
+    expect((workbench.model.node(node.id) as GuardrailNodeModel).subtitle.toLowerCase()).toMatch(
+      /no |nothing|empty/,
+    );
   });
 });
