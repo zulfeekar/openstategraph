@@ -139,6 +139,18 @@ interface ChatTurn {
    * failure mode this whole feature is trying to avoid.
    */
   readonly notice: string | null;
+  /**
+   * The workflow this turn was asked about — `null` for a never-saved one.
+   *
+   * Ticket 25. A conversation outlives the document: opening another workflow
+   * starts a fresh *thread* but keeps the turns on screen, so without this the
+   * panel held a run with no address, and the canvas projection (`replayRun`)
+   * repainted whichever document was open next by matching node ids that two
+   * unrelated files happen to share. Recorded at send, from the same
+   * `currentWorkflowSlug()` the request itself is addressed with, so the
+   * record and the run cannot disagree.
+   */
+  readonly slug: string | null;
 }
 
 let nextTurnId = 0;
@@ -847,6 +859,9 @@ export function AskPanel({
           suggestion: null,
           suggestionDecision: null,
           notice: null,
+          // The document this run is about (ticket 25) — the same value the
+          // request is addressed with, two lines above.
+          slug: slug ?? null,
         },
       ]);
       scrollToEnd();
@@ -964,11 +979,19 @@ export function AskPanel({
   }, [turns]);
   useEffect(() => {
     const project = () => {
+      const open = getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined;
       // The run in progress if there is one, else the last that finished
-      // (ticket 43). The rule is `turnToReplay`, in `core/`, for the same
-      // reason `replayRun` is: it is a decision over data, and a decision
-      // buried in a subscription is a decision nobody can test.
-      const chosen = turnToReplay(turnsRef.current);
+      // (ticket 43) — and, since ticket 25, only among the turns that ran
+      // *this* document or reached it. The rule is `turnToReplay`, in `core/`,
+      // for the same reason `replayRun` is: it is a decision over data, and a
+      // decision buried in a subscription is a decision nobody can test.
+      const chosen = turnToReplay(turnsRef.current, {
+        // The **root**, not the class slug: a run is rooted where it was
+        // started, so drilling into a mount of the running document still
+        // matches, while another workflow entirely does not.
+        root: open?.root ?? null,
+        slug: currentWorkflowSlug() ?? null,
+      });
       if (!chosen) return;
       const writes = replayRun(
         chosen.turn.activity,
@@ -977,7 +1000,7 @@ export function AskPanel({
         // The address, same rule as the live path — a replay onto a canvas
         // that is one of two mounts of the same package must land on the one
         // actually open.
-        getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined,
+        open,
       );
       for (const write of writes) {
         controller.model.setNodeRuntime(write.nodeId, {

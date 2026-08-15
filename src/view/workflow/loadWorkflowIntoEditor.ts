@@ -2,8 +2,8 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
 import type { Workbench } from '@app/Workbench';
 import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
-import { setOpenSlug } from '@app/openWorkflow';
-import { clearOpenAddress, setOpenAddress } from '@app/openAddress';
+import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
+import { clearOpenAddress, getOpenAddress, setOpenAddress } from '@app/openAddress';
 import type { MountAddress } from '@core/model/MountAddress';
 import { MountContext } from '@core/model/MountContext';
 import {
@@ -216,6 +216,28 @@ export async function loadWorkflowIntoEditor(
     // Baseline for the palette's manual Refresh: without it, the first press
     // after a load would report every tool the load itself registered as new.
     recordKnownCapabilities(slug, tools);
+    // **Which document this is, recorded before the import** — the same
+    // load-bearing ordering `loadMountIntoEditor` documents above, and ticket
+    // 25's other half.
+    //
+    // `importJSON` fires `workflow:reset`, and two listeners answer it by
+    // asking what is open: the canvas catch-up projection (`AskPanel`, tickets
+    // 34/43/25) and the draft autosave key. With the slug still naming the
+    // document being left behind, the first replayed the *previous*
+    // workflow's run onto this canvas — an owner opened Morning Brief and its
+    // entry card asked the Workflow Architect's question — and the second
+    // wrote this document into the previous one's draft.
+    //
+    // Back to a package: every change is expressible again, and the tab is no
+    // longer displaying an instance (ticket 42). Both are cleared here rather
+    // than at each caller, because this is the one path that opens a document.
+    //
+    // The rule it appears to break — never name a workflow that failed to open
+    // — is honoured by the `catch` below, which puts back whatever was open.
+    const leaving = { slug: getOpenSlug(), address: getOpenAddress() };
+    workbench.controller.document.leaveInstance();
+    clearOpenAddress();
+    setOpenSlug(slug);
     workbench.controller.document.importJSON(JSON.stringify(outcome.value));
     // What disk holds, for disk autosave — recorded here, and *before* the
     // draft restore below. Importing fires `controller.onChange`, which is
@@ -229,16 +251,6 @@ export async function loadWorkflowIntoEditor(
     // them with no prompt and no way back, because the draft was keyed on the
     // tab rather than on the document.
     const draft = restoreDraftFor(slug, workbench);
-    // Continuing to edit and save now updates *this* workflow, not a new one —
-    // and the address bar says which one, so the developer who just opened it
-    // can copy the link (ticket 20). Set after the import succeeded: a URL
-    // naming a workflow that failed to open is a link that lies.
-    // Back to a package: every change is expressible again, and the tab is no
-    // longer displaying an instance (ticket 42). Both are cleared here rather
-    // than at each caller, because this is the one path that opens a document.
-    workbench.controller.document.leaveInstance();
-    clearOpenAddress();
-    setOpenSlug(slug);
     // Establishes the file watch's baseline for this slug — otherwise its
     // first poll after a load would have nothing to compare against and could
     // mistake the file as already-changed. Asked about *this slug*, not found
@@ -254,6 +266,12 @@ export async function loadWorkflowIntoEditor(
     }
     return Ok({ name: workbench.model.name, restoredDraft: draft.restored });
   } catch (error) {
+    // Put back what was open: the identity was recorded before the import so
+    // the one `workflow:reset` signal carried a consistent pair, and a
+    // document that did not open must not keep claiming the address bar.
+    if (leaving.address) setOpenAddress(leaving.address, leaving.slug ?? leaving.address.root);
+    else if (leaving.slug) setOpenSlug(leaving.slug);
+    else clearOpenAddress();
     return Err(`Failed to import: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

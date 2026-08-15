@@ -119,6 +119,53 @@ export interface ReplayCandidate {
   /** Why this turn is not running, when it was cut short rather than finished. */
   readonly stopped: 'streaming' | 'paused' | null;
   readonly activity: readonly ReplayFrame[];
+  /**
+   * The document this turn ran — the class slug open when it was sent, or
+   * `null` for a never-saved one.
+   *
+   * Required rather than optional, and that is ticket 25's whole substance. A
+   * turn without it is a run with no address, and every rule downstream is
+   * then matching node ids that two unrelated documents happen to share.
+   */
+  readonly slug: string | null;
+}
+
+/**
+ * The document on screen, as this decision needs it — two names, because a
+ * mount has two.
+ */
+export interface OpenDocument {
+  /**
+   * The **root** of the address displayed: the parent document, when a mount
+   * of it is open, and otherwise the same as `slug`. This is the one that
+   * matches a run, because a run is rooted where it was started.
+   */
+  readonly root: string | null;
+  /** The class slug of the document displayed. */
+  readonly slug: string | null;
+}
+
+/**
+ * Whether this run ever touched the document now on screen.
+ *
+ * Three ways it can have, and they are not interchangeable:
+ *
+ * 1. **It is this document's run** — `slug === root`. The ordinary case.
+ * 2. **It is this document's parent's run** — a drill-in. `concierge/wf-music`
+ *    displays `chinook-assistant` while the address root stays `concierge`,
+ *    and those inner steps are exactly what ticket 34 exists to paint.
+ * 3. **The run reached this document as a package** — someone opened the
+ *    shared definition mid-run rather than drilling in, so the address cannot
+ *    index the run and the evidence is in the frames' own `pathSlugs`.
+ *
+ * Anything else is another document's run, and the honest projection of
+ * another document's run onto this canvas is nothing at all.
+ */
+function turnTouches(turn: ReplayCandidate, open: OpenDocument): boolean {
+  if (turn.slug === open.root) return true;
+  const here = open.slug;
+  if (here === null) return false;
+  return turn.activity.some((frame) => frame.pathSlugs?.includes(here) ?? false);
 }
 
 /**
@@ -147,17 +194,30 @@ export interface ReplayCandidate {
  * The live turn still wins, and it is still the only one whose last card
  * glows: `running` rides out with the choice so the caller cannot pair the
  * wrong turn with the wrong flag.
+ *
+ * Ticket 25 added the document. A conversation outlives the workflow it was
+ * asked about — the panel keeps its turns when the developer opens another
+ * file — so "the newest turn" and "a turn about what I am looking at" stopped
+ * being the same sentence, and the projection was answering the first while
+ * meaning the second. See `turnTouches`.
+ *
+ * @param open the document on screen, when the caller knows it. Omitted means
+ *   *no claim*, not *no match*: the per-frame rules in `frameTarget` stay the
+ *   gate, exactly as they were.
  */
 export function turnToReplay(
   turns: readonly ReplayCandidate[],
+  open?: OpenDocument,
 ): { readonly turn: ReplayCandidate; readonly running: boolean } | null {
-  const live = turns.find((turn) => turn.running);
+  const mine = open ? turns.filter((turn) => turnTouches(turn, open)) : turns;
+
+  const live = mine.find((turn) => turn.running);
   if (live) return { turn: live, running: true };
 
   // Last first: a conversation's newest settled turn is the one whose state
   // the canvas should be showing.
-  for (let index = turns.length - 1; index >= 0; index -= 1) {
-    const turn = turns[index];
+  for (let index = mine.length - 1; index >= 0; index -= 1) {
+    const turn = mine[index];
     if (!turn || turn.stopped !== null || turn.activity.length === 0) continue;
     return { turn, running: false };
   }

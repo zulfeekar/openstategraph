@@ -157,8 +157,9 @@ describe('turnToReplay — which turn a newly-opened document catches up to', ()
       running: boolean;
       stopped: 'streaming' | 'paused' | null;
       activity: ReplayFrame[];
+      slug: string | null;
     }>,
-  ) => ({ running: false, stopped: null, activity: [frame], ...over });
+  ) => ({ running: false, stopped: null, activity: [frame], slug: null, ...over });
 
   it('prefers the run in progress', () => {
     // Unchanged: a live turn is still the one to project, and it is the only
@@ -208,3 +209,95 @@ describe('turnToReplay — which turn a newly-opened document catches up to', ()
     expect(turnToReplay([])).toBeNull();
   });
 });
+
+/**
+ * Ticket 25, and the defect it names is one line of vocabulary: a turn belongs
+ * to a **document**, and until now it did not say which.
+ *
+ * Owner QA, reproduced: run `workflow-architect`, then open `morning-brief`
+ * from the Workflows panel. Its entry card read "THIS RUN IS ASKING
+ * ARCHITECT-BLEED-PROBE-25" — the other document's question. Nothing about the
+ * shared `in1` id was a coincidence to be tolerated: `frameTarget` is a
+ * per-frame heuristic over ids and optional provenance, and a heuristic asked
+ * about the wrong run answers the wrong question no matter how careful it is.
+ *
+ * So the gate moved up a level, where the fact is definite: replay a turn onto
+ * this document only if the run **touched** it.
+ */
+describe('turnToReplay — a turn belongs to the document it ran', () => {
+  const architect = {
+    running: false,
+    stopped: null,
+    slug: 'workflow-architect',
+    activity: [
+      { node: 'in1', path: ['in1'], pathSlugs: ['workflow-architect'], output: 'PROBE' },
+    ] as ReplayFrame[],
+  };
+
+  it('refuses a turn from another workflow, however the ids line up', () => {
+    // `in1` exists in both documents. That is the whole bug: without the
+    // turn's own slug, every downstream rule is matching strings that two
+    // unrelated files happen to share.
+    expect(turnToReplay([architect], { root: 'morning-brief', slug: 'morning-brief' })).toBeNull();
+  });
+
+  it('replays onto the document the run was rooted at', () => {
+    expect(
+      turnToReplay([architect], { root: 'workflow-architect', slug: 'workflow-architect' }),
+    ).toEqual({ turn: architect, running: false });
+  });
+
+  it('still replays into a mount of the running document (ticket 34)', () => {
+    // Drilling into `concierge/wf-music` opens `chinook-assistant`, whose class
+    // slug is not the run's — but the address root is, and the run is exactly
+    // the one whose steps that canvas should be showing.
+    const concierge = {
+      running: true,
+      stopped: null,
+      slug: 'concierge',
+      activity: [
+        { node: 'in1', path: ['in1'], pathSlugs: ['concierge'], output: 'Q' },
+      ] as ReplayFrame[],
+    };
+    expect(turnToReplay([concierge], { root: 'concierge', slug: 'chinook-assistant' })).toEqual({
+      turn: concierge,
+      running: true,
+    });
+  });
+
+  it('replays onto a child opened as its own package, when the run reached it', () => {
+    // The class-level case `frameTarget` already models: the run is rooted at
+    // `concierge`, and someone opened the shared definition mid-run. The proof
+    // is in the frames, not the root, so that is where it is looked for.
+    const nested = {
+      running: true,
+      stopped: null,
+      slug: 'concierge',
+      activity: [
+        {
+          node: 'agent_sql',
+          path: ['wf-music', 'agent-sql'],
+          pathSlugs: ['concierge', 'chinook-assistant'],
+        },
+      ] as ReplayFrame[],
+    };
+    expect(
+      turnToReplay([nested], { root: 'chinook-assistant', slug: 'chinook-assistant' }),
+    ).toEqual({ turn: nested, running: true });
+  });
+
+  it('keeps an unsaved document to its own runs', () => {
+    // A never-saved draft has no slug, and neither has its turn. Equal, so it
+    // catches up to itself — and a named workflow's run still cannot reach it.
+    const draft = { running: false, stopped: null, slug: null, activity: [frameOf('n1')] };
+    expect(turnToReplay([draft], { root: null, slug: null })?.turn).toBe(draft);
+    expect(turnToReplay([architect], { root: null, slug: null })).toBeNull();
+  });
+
+  it('projects as before when the caller cannot say what is open', () => {
+    // No claim is not a claim of mismatch; the per-frame rules stay the gate.
+    expect(turnToReplay([architect])?.turn).toBe(architect);
+  });
+});
+
+const frameOf = (id: string): ReplayFrame => ({ node: id, path: [id], output: 'x' });
