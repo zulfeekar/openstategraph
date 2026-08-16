@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient
 from openstategraph.api import editor_assets
 
 
-def built_editor(directory: Path, marker: str = "<div id=\"root\"></div>") -> Path:
+def built_editor(directory: Path, marker: str = '<div id="root"></div>') -> Path:
     """The smallest thing that is recognisably a built SPA."""
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "index.html").write_text(f"<!doctype html><html><body>{marker}</body></html>")
@@ -51,7 +51,9 @@ class TestResolution:
         gets a *different* editor has a debugging session ahead of them."""
         (tmp_path / "empty").mkdir()
 
-        assert editor_assets.editor_dir({"OPENSTATEGRAPH_STATIC_DIR": str(tmp_path / "empty")}) is None
+        assert (
+            editor_assets.editor_dir({"OPENSTATEGRAPH_STATIC_DIR": str(tmp_path / "empty")}) is None
+        )
 
     def test_the_packaged_copy_is_used_when_no_one_says_otherwise(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -89,7 +91,9 @@ class TestMounting:
         nothing else, because Vite on :5273 is serving the editor."""
         app = FastAPI()
 
-        mounted = editor_assets.mount_editor(app, {"OPENSTATEGRAPH_STATIC_DIR": str(built_editor(tmp_path / "d"))})
+        mounted = editor_assets.mount_editor(
+            app, {"OPENSTATEGRAPH_STATIC_DIR": str(built_editor(tmp_path / "d"))}
+        )
 
         assert mounted is None
         assert TestClient(app).get("/").status_code == 404
@@ -170,22 +174,58 @@ class TestTheChatMermaidAsset:
     every developer running from source, and looked like a decision.
     """
 
-    def test_the_asset_resolves_in_this_checkout(self) -> None:
-        # This repository has `node_modules`; that is what `npm run verify`
-        # needs to run at all, so it is a fair thing for a test to assume.
-        resolved = editor_assets.mermaid_asset()
+    def _fake_checkout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """A checkout that has run `npm install`, built rather than assumed.
 
-        assert resolved is not None, "no mermaid found — the checkout fallback is broken"
-        assert resolved.is_file()
+        The first version of these two tests read the ambient repository and
+        asserted `node_modules/mermaid` was there, on the stated reasoning
+        that `npm run verify` needs it anyway. True of a developer's machine
+        and false of CI's **backend** job, which installs Python and no Node
+        at all — so the suite was green here and red there, which is the one
+        thing a gate must never be. What is under test is the resolution
+        rule, so the tree it resolves against is now built by the test.
+        """
+        vendored = tmp_path / "node_modules" / "mermaid" / "dist" / "mermaid.min.js"
+        vendored.parent.mkdir(parents=True)
+        vendored.write_text("/* a checkout's copy */")
+        monkeypatch.setattr(editor_assets, "PACKAGED_MERMAID", tmp_path / "absent.js")
+        monkeypatch.setattr(editor_assets, "checkout_root", lambda: tmp_path)
+        return vendored
 
-    def test_it_is_not_looking_inside_backend(self) -> None:
+    def test_the_asset_resolves_in_a_checkout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        vendored = self._fake_checkout(tmp_path, monkeypatch)
+
+        assert editor_assets.mermaid_asset() == vendored
+
+    def test_it_is_not_looking_inside_backend(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # The bug, named. `backend/node_modules` is not a directory anything
         # creates, so a path pointing there can only ever miss.
+        self._fake_checkout(tmp_path, monkeypatch)
         resolved = editor_assets.mermaid_asset()
 
         assert resolved is not None
         assert "backend/node_modules" not in resolved.as_posix()
         assert resolved.parent.parent.parent.name == "node_modules"
+
+    def test_this_repository_really_does_carry_it(self) -> None:
+        """The one test that reads the machine — and skips rather than fails.
+
+        Worth keeping: the tests above prove the rule, and this proves the
+        rule meets a real tree. It is a skip and not a failure where Node was
+        never installed, because "this job has no `node_modules`" is a fact
+        about the job, not a defect in the asset.
+        """
+        root = editor_assets.checkout_root()
+        if root is None or not (root / "node_modules" / "mermaid").is_dir():
+            pytest.skip("no node_modules/mermaid here — nothing to check against")
+
+        resolved = editor_assets.mermaid_asset()
+
+        assert resolved is not None and resolved.is_file()
 
     def test_the_packaged_copy_wins(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # The wheel's own copy, written by `hatch_build.py`. It comes first
@@ -209,6 +249,12 @@ class TestTheChatMermaidAsset:
 
     def test_the_route_serves_it(self) -> None:
         from openstategraph.api.main import app
+
+        # Same reasoning as `test_this_repository_really_does_carry_it`: this
+        # one drives the real route against whatever the machine has, so a
+        # machine with no Node is a skip rather than a red gate.
+        if editor_assets.mermaid_asset() is None:
+            pytest.skip("no mermaid on this machine — the 404 branch is tested below")
 
         response = TestClient(app).get("/chat/mermaid.js")
 
