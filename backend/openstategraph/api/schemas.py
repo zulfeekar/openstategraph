@@ -245,7 +245,11 @@ class McpValidateResponse(BaseModel):
     """
 
     status: str = Field(
-        description="`live`, `unreachable`, `auth_required` or `not_mcp` — never a stack trace."
+        description=(
+            "`live`, `unreachable`, `auth_required`, `not_mcp` or `not_installed` — never a "
+            "stack trace. The last is the one verdict about this runtime rather than the "
+            "server: the `[mcp]` extra is absent, so no socket was opened."
+        )
     )
     message: str
     serverName: str = ""

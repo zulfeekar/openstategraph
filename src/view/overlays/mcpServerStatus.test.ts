@@ -27,10 +27,10 @@ class FakeStorage {
   }
 }
 
-describe('the four badges', () => {
+describe('the badges', () => {
   it('has a distinct word for every status the runtime can return', () => {
-    // The research's taxonomy is four messages, and they are four because each
-    // sends a developer somewhere different: a network, a credential, a URL.
+    // The research's taxonomy is one message per destination — a network, a
+    // credential, a URL, and since ticket 05 a pip command.
     const words = MCP_STATUSES.map((status) => describeMcpStatus(status).label);
     expect(new Set(words).size).toBe(MCP_STATUSES.length);
   });
@@ -50,6 +50,19 @@ describe('the four badges', () => {
     expect(mcpStatusTone('unreachable')).toBe('danger');
     expect(mcpStatusTone('auth_required')).toBe('danger');
     expect(mcpStatusTone('not_mcp')).toBe('danger');
+    expect(mcpStatusTone('not_installed')).toBe('danger');
+  });
+
+  it('says the missing extra is ours, and never points at the server', () => {
+    // The whole reason this verdict is its own status. Both seeded defaults
+    // used to badge `not an MCP server` on an install without `[mcp]` —
+    // sending a reader to the URL box for a problem `pip` fixes.
+    const badge = describeMcpStatus('not_installed');
+    expect(badge.detail).toContain("pip install 'openstategraph[mcp]'");
+    for (const blame of ['answered', 'handshake', 'that address']) {
+      expect(badge.detail).not.toContain(blame);
+      expect(badge.label).not.toContain(blame);
+    }
   });
 });
 

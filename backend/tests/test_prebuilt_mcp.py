@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 
 import httpx
 import pytest
@@ -33,6 +34,7 @@ from openstategraph.prebuilt_mcp import (
     KEY_TRANSPORT,
     KEY_URL,
     STATUS_AUTH_REQUIRED,
+    STATUS_NOT_INSTALLED,
     STATUS_NOT_MCP,
     STATUS_UNREACHABLE,
     TRANSPORT_HTTP,
@@ -747,6 +749,43 @@ def _status_error(code: int) -> httpx.HTTPStatusError:
     )
 
 
+class _Absent:
+    """A meta-path finder that makes one package unimportable.
+
+    Returning `None` is the import system's own "I do not have it", so the
+    failure raised is the genuine `ModuleNotFoundError` a user without the
+    extra gets — not an approximation of it.
+    """
+
+    def __init__(self, package: str) -> None:
+        self.package = package
+
+    def find_module(self, fullname: str, path: object = None) -> None:  # pragma: no cover - legacy
+        return None
+
+    def find_spec(self, fullname: str, path: object = None, target: object = None) -> None:
+        if fullname == self.package or fullname.startswith(f"{self.package}."):
+            raise ModuleNotFoundError(f"No module named {fullname!r}", name=fullname)
+        return None
+
+
+@contextmanager
+def _extra_uninstalled(package: str):
+    """Stand where a user without `[mcp]` stands, for the length of a `with`."""
+    import sys
+
+    cached = {name: mod for name, mod in sys.modules.items() if name.split(".")[0] == package}
+    for name in cached:
+        del sys.modules[name]
+    finder = _Absent(package)
+    sys.meta_path.insert(0, finder)
+    try:
+        yield
+    finally:
+        sys.meta_path.remove(finder)
+        sys.modules.update(cached)
+
+
 class TestClassification:
     @pytest.mark.parametrize(
         ("exc", "expected"),
@@ -794,12 +833,90 @@ class TestClassification:
         assert "sk-live-secret" not in classify_mcp_failure(error)[1]
 
 
+class TestTheExtraIsOurGapNotTheServers:
+    """A missing `[mcp]` extra is a local fact, and used to be blamed on the host.
+
+    On `pip install "openstategraph[server,ollama]"` both seeded defaults came
+    back *"not an MCP server — Connected, but the MCP handshake failed"* in
+    16 ms: false in both halves, and pointing at a machine that was answering
+    fine. `ImportError` matched none of the arms, so it fell through the
+    terminal line that assumes the socket opened.
+    """
+
+    def test_a_missing_module_is_its_own_status(self) -> None:
+        status, message = classify_mcp_failure(
+            ModuleNotFoundError("No module named 'langchain_mcp_adapters'")
+        )
+        assert status == STATUS_NOT_INSTALLED
+        assert "pip install 'openstategraph[mcp]'" in message
+
+    def test_the_message_never_blames_the_server(self) -> None:
+        _status, message = classify_mcp_failure(ModuleNotFoundError("langchain_mcp_adapters"))
+        for blame in ("answered", "handshake", "Connected", "that address"):
+            assert blame not in message, f"{blame!r} points at the remote host"
+
+    def test_it_survives_the_task_group_wrapper_like_every_other_arm(self) -> None:
+        wrapped = ExceptionGroup("unhandled errors in a TaskGroup", [ImportError("mcp")])
+        assert classify_mcp_failure(wrapped)[0] == STATUS_NOT_INSTALLED
+
+    def test_validate_says_so_with_the_module_absent(self, monkeypatch) -> None:
+        """The panel's answer, reproduced without uninstalling anything.
+
+        The dev environment always has the extra, which is exactly why this
+        shipped: an import hook is the only way to have a test stand where the
+        user stood.
+        """
+        with _extra_uninstalled("langchain_mcp_adapters"):
+            verdict = prebuilt_mcp.validate_mcp_server(DEFAULT_MCP_SERVERS[0])
+
+        assert verdict.status == STATUS_NOT_INSTALLED
+        assert "pip install 'openstategraph[mcp]'" in verdict.message
+        assert not verdict.ok
+
+    def test_the_compile_path_degrades_with_the_same_answer(self) -> None:
+        """`_bind_sentence`, not "could not be reached" — a run says one thing."""
+        sentence = prebuilt_mcp._bind_sentence(STATUS_NOT_INSTALLED, DEFAULT_MCP_SERVERS[0])
+        assert "pip install 'openstategraph[mcp]'" in sentence
+        assert "could not be reached" not in sentence
+
+    def test_a_document_binding_a_server_warns_about_the_extra(self) -> None:
+        node = McpTool()
+        warnings: list[str] = []
+        node = node.configure({KEY_SERVER: DEFAULT_MCP_SERVERS[0].name})
+        with _extra_uninstalled("langchain_mcp_adapters"):
+            bound = node.as_langchain_tools(warnings=warnings)
+
+        assert bound == []
+        assert warnings and "pip install 'openstategraph[mcp]'" in warnings[0]
+
+
 # --------------------------------------------------------------------- #
 # Honesty gates that can be tested
 # --------------------------------------------------------------------- #
 
 
 class TestHonestyGates:
+    def test_the_extras_table_says_the_extra_is_needed_to_consume_mcp(self) -> None:
+        """Every mention used to describe `[mcp]` as us *serving* MCP.
+
+        So a user who wanted MCP tools on an agent — the whole point of this
+        module — had no documented reason to install it, and met the panel's
+        red badges instead of a sentence.
+        """
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        table = (root / "docs" / "what-is-this.md").read_text()
+        entry = next(line for line in table.splitlines() if line.startswith("[mcp]"))
+        # The description wraps, so take the entry and its continuation lines.
+        lines = table.splitlines()
+        start = lines.index(entry)
+        described = " ".join(
+            [entry] + [line for line in lines[start + 1 :] if line.startswith(" " * 8)][:3]
+        )
+        assert "use" in described, described
+        assert "tool.mcp" in described or "panel" in described, described
+
     def test_gate_8_nothing_in_this_path_can_call_a_model(self) -> None:
         """The card claims latency, not tokens. This is why that is true.
 

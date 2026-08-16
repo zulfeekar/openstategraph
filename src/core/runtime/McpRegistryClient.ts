@@ -54,20 +54,25 @@ export interface McpServer extends McpServerDraft {
 }
 
 /**
- * The four verdicts a handshake can reach — the research's taxonomy, verbatim.
+ * The verdicts a handshake can reach — the research's taxonomy, verbatim.
  *
- * They are four and not one because each sends a developer somewhere
+ * They are several and not one because each sends a developer somewhere
  * different: a network, a credential, a URL. Every failure arrives from the
  * library as one opaque `ExceptionGroup`, and the runtime is what unwraps it
  * into these; collapsing them again in the browser would undo that work.
+ *
+ * `not_installed` is the odd one and the newest (mcp-connect ticket 05): the
+ * only verdict that is a fact about the **runtime**, not the server. The
+ * `[mcp]` extra is absent, so nothing was contacted at all.
  */
-export type McpStatus = 'live' | 'unreachable' | 'auth_required' | 'not_mcp';
+export type McpStatus = 'live' | 'unreachable' | 'auth_required' | 'not_mcp' | 'not_installed';
 
 export const MCP_STATUSES: readonly McpStatus[] = [
   'live',
   'unreachable',
   'auth_required',
   'not_mcp',
+  'not_installed',
 ];
 
 /** One handshake's verdict. `tools` is what a Validate button is actually for. */
@@ -95,10 +100,16 @@ const BADGES: Record<McpStatus, McpBadge> = {
     detail: 'The server answered, but rejected the credential.',
   },
   not_mcp: { label: 'not an MCP server', detail: 'Something answered, but it does not speak MCP.' },
+  not_installed: {
+    label: 'MCP not installed',
+    // Every word names something the reader can type. No URL, no server name,
+    // and none of the three verbs that imply a socket opened.
+    detail: "MCP support is not installed here — pip install 'openstategraph[mcp]'.",
+  },
 };
 
 /**
- * The four verdicts in the words a reader sees.
+ * Every verdict in the words a reader sees.
  *
  * Beside the taxonomy rather than in the panel that first needed it, because
  * the panel is no longer the only reader: since mcp-connect ticket 04 a

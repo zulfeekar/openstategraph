@@ -678,7 +678,7 @@
             "type": "string"
           },
           "status": {
-            "description": "`live`, `unreachable`, `auth_required` or `not_mcp` \u2014 never a stack trace.",
+            "description": "`live`, `unreachable`, `auth_required`, `not_mcp` or `not_installed` \u2014 never a stack trace. The last is the one verdict about this runtime rather than the server: the `[mcp]` extra is absent, so no socket was opened.",
             "title": "Status",
             "type": "string"
           },

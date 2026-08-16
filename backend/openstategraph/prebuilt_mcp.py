@@ -131,6 +131,13 @@ STATUS_LIVE = "live"
 STATUS_UNREACHABLE = "unreachable"
 STATUS_AUTH_REQUIRED = "auth_required"
 STATUS_NOT_MCP = "not_mcp"
+#: The one verdict that is about **this** machine. Every other status is a
+#: fact about the remote server; this one says the extra that speaks MCP was
+#: never installed, so nothing was ever asked. It is its own status rather
+#: than a `not_mcp` with a better sentence because the badge is what a reader
+#: acts on, and "not an MCP server" sends them to the URL box for a problem
+#: `pip` fixes (mcp-connect ticket 05).
+STATUS_NOT_INSTALLED = "not_installed"
 
 #: `DEFAULT_STREAMABLE_HTTP_SSE_READ_TIMEOUT` is **300 s** in the library, so a
 #: server that accepts a connection and then says nothing would hang a panel
@@ -341,17 +348,37 @@ def flatten_causes(exc: BaseException) -> list[BaseException]:
 
 
 def classify_mcp_failure(exc: BaseException) -> tuple[str, str]:
-    """`(status, message)` — the three panel answers, and only three.
+    """`(status, message)` — the four panel answers, and only four.
 
     A **404 page and a plain HTML page give the identical 405**, because both
     are POST-to-a-GET-endpoint failures rather than MCP failures. So "wrong
     path" and "wrong host" are deliberately not distinguished: the wire does
     not carry that difference, and inventing it would produce a message that
     is confidently wrong half the time.
+
+    Three of the four are facts about the server. The fourth,
+    `STATUS_NOT_INSTALLED`, is a fact about **us**, and it is tested first —
+    before `httpx` is even imported — because it is the only arm that can be
+    true while no socket was ever opened. Without it a missing `[mcp]` extra
+    fell to the terminal line below, whose own comment promises the transport
+    succeeded, and both seeded defaults came back red in 16 ms blaming a
+    server that was answering fine (mcp-connect ticket 05).
     """
+    causes = flatten_causes(exc)
+    if any(isinstance(cause, ImportError) for cause in causes):
+        from openstategraph._extras import install_hint
+
+        # No URL, no server name, no "answered": every word here is about a
+        # thing the reader can type. `MissingProviderPackage` set the shape —
+        # our gap, named with the exact line (install-experience 38).
+        return (
+            STATUS_NOT_INSTALLED,
+            f"MCP support is not installed here — {install_hint('mcp')}.",
+        )
+
     import httpx
 
-    for cause in flatten_causes(exc):
+    for cause in causes:
         if isinstance(cause, httpx.HTTPStatusError):
             code = cause.response.status_code
             if code in (401, 403):
@@ -885,6 +912,16 @@ def _bind_sentence(status: str, definition: McpServerDefinition) -> str:
     under a URL box and the wrong thing to put in a run's warnings, where
     nobody can see which URL box it was about.
     """
+    if status == STATUS_NOT_INSTALLED:
+        from openstategraph._extras import install_hint
+
+        # Deliberately the same fix in both surfaces. A run that degraded with
+        # "could not be reached" sent a developer to check a server that was
+        # never contacted.
+        return (
+            f"MCP support is not installed, so no tools from any MCP server are available "
+            f"for this run — {install_hint('mcp')}."
+        )
     if status == STATUS_AUTH_REQUIRED:
         return (
             f'MCP server "{definition.name}" rejected the credential in '
@@ -935,6 +972,7 @@ __all__ = [
     "MCP_TOOLS",
     "STATUS_AUTH_REQUIRED",
     "STATUS_LIVE",
+    "STATUS_NOT_INSTALLED",
     "STATUS_NOT_MCP",
     "STATUS_UNREACHABLE",
     "TRANSPORTS",
