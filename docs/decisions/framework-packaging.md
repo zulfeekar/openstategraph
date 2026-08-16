@@ -17,8 +17,10 @@ what is missing.**
 > is the argument for why the work was done; the header of §2 says what is true
 > now.
 >
-> The count "seven extras" appears throughout and is now **eight** —
-> `[postgres]` was added later.
+> The count "seven extras" appears throughout. There are **nine feature
+> extras** now — `[postgres]` and `[bastion]` were added later — plus `[all]`
+> and `[dev]`. `[all]` is no longer exhaustive either: it holds everything
+> except `[bastion]`, which is AGPL-3.0-or-later and therefore opt-in by name.
 >
 > **§3 is a design, and parts of it were never built.** Those are marked
 > inline at §3.5 and §3.6 so nothing here reads as a description of shipped
@@ -110,10 +112,10 @@ Three lessons a maintainer should take:
 > | no `LICENSE` in `dist-info` | `license = "MIT"`, `license-files` declared |
 > | no `py.typed` | present, plus the `Typing :: Typed` classifier |
 > | no README / long description | `readme = "README.md"` |
-> | no classifiers | nine |
-> | no `project.urls` / `authors` | both present *(URLs still `PLACEHOLDER` — see `gap-register.md` PK-02)* |
+> | no classifiers | ten |
+> | no `project.urls` / `authors` | both present, and the four URLs are **real** as of 2026-08-15 — they point at the live remote. (This row said `PLACEHOLDER` until 2026-08-16; `gap-register.md` PK-02 is closed by the same fact.) |
 > | distribution named `openstategraph-backend` | renamed to `openstategraph` |
-> | `abc/__init__.py` is empty | 93 lines with an explicit `__all__` |
+> | `abc/__init__.py` is empty | a real module with an explicit `__all__` |
 > | "No test guards any of it" | `backend/tests/test_public_api.py` + `public_api.txt` |
 > | the schema version is decorative | `schema.py` — `SCHEMA_VERSION`, `MIN_SUPPORTED_VERSION`, `MIGRATIONS`, `SchemaVersionError`, and `test_schema_versioning.py` |
 > | `settings.checkpointer: "sqlite"` silently degrades everywhere | the `[sqlite]` extra is declared and `[server]` depends on it |
@@ -334,8 +336,16 @@ reject any command whose body is longer than argument parsing plus a call.
 
 ```toml
 [project.scripts]
-openstategraph = "openstategraph.cli:main"
+openstategraph = "openstategraph.cli:console_main"
 ```
+
+> **Corrected 2026-08-16.** This proposal wrote `openstategraph.cli:main`, and
+> the wheel declares `console_main`. Both exist and they are different
+> functions: `main` **returns** an exit code so a test can invoke it directly
+> instead of shelling out, `console_main` is the wrapper that hands that code
+> to the shell. A third party copying the line as first written gets a command
+> that always exits 0. `backend/tests/test_documented_cli_surface.py` now pins
+> the declared entry point.
 
 | Command | Wraps | Notes |
 | --- | --- | --- |
@@ -348,6 +358,24 @@ openstategraph = "openstategraph.cli:main"
 | `openstategraph knowledge build <package> [--source X] [--instruction …]` | `api.knowledge_build.run_build` | prints `written / skipped / collisions / warnings` |
 
 Exit codes, fixed and documented:
+
+> **This table is the proposal, and the shipped CLI does not match it.**
+> `1` and `2` are **transposed** against what was built, and `5` was never
+> built at all — so a CI script written from this section reads a usage error
+> as a failed run and a failed run as a bad argument. What ships is four
+> codes, and `docs/adoption.md` is the consumer-facing statement of them:
+>
+> | | Shipped (`openstategraph/cli.py`) |
+> | --- | --- |
+> | `0` | `EXIT_OK` — success |
+> | `1` | `EXIT_FAILURE` — the run failed, or validation found blocking findings |
+> | `2` | `EXIT_USAGE` — usage error; argparse's own code, which is why it is 2 |
+> | `3` | `EXIT_MISSING_EXTRA` — a required extra is missing; the message names the `pip install` line |
+>
+> `backend/tests/test_documented_cli_surface.py` pins those four and asserts
+> there is no fourth or fifth. The original proposal is left below because
+> `4`'s argument is still worth reading and `gap-register.md` PK-10 records
+> the decision to drop it.
 
 | | |
 | --- | --- |
@@ -634,9 +662,12 @@ the guard has a hole.
 
 ### 3.5 Extension without forking — `entry_points`
 
-> **Three groups shipped, not five** (2026-08-13). `extensions.py` declares
-> `ENTRY_POINT_GROUPS = (TOOLS_GROUP, KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP)`
-> and argues against one of this section's proposals **by name**:
+> **Four groups shipped, not five** (2026-08-13; recounted 2026-08-16).
+> `extensions.py` declares `ENTRY_POINT_GROUPS = (TOOLS_GROUP,
+> KNOWLEDGE_BUILDERS_GROUP, PROVIDERS_GROUP, NODE_FAMILIES_GROUP)` — this note
+> said *three* and omitted `openstategraph.node_families`, which is a
+> supported extension point a plugin author would have missed — and argues
+> against one of this section's proposals **by name**:
 > *"Two groups, deliberately — and `openstategraph.functions` is not one of…"*.
 > `openstategraph.functions` and `openstategraph.middlewares` do not exist.
 >
@@ -715,6 +746,13 @@ The TypeScript counterpart stays fog, as the ticket says.
 `[tool.hatch.version] path = "openstategraph/__init__.py"` so the wheel and
 `import openstategraph; openstategraph.__version__` can never disagree.
 
+> **Not built, and it went the other way** (2026-08-16). There is no
+> `[tool.hatch.version]` table. `pyproject.toml` carries a literal `version =`
+> and `__init__.py` reads it back with `importlib.metadata` — single-sourced,
+> as intended, from the opposite end. The invariant this paragraph wanted
+> holds; the mechanism named here does not exist, and this section read as
+> shipped fact for three days.
+
 **Prove the install in a clean venv — the gate that matters.** A CI job, and
 the same script runnable locally:
 
@@ -741,6 +779,13 @@ that is the honest half.
 - Tags: `v0.3.0rc1` → **TestPyPI**; `v0.3.0` → **PyPI**. Both through
   **PyPI Trusted Publishing (OIDC)**, so no long-lived API token exists in
   repository secrets.
+
+  > **Neither half is what shipped** (2026-08-16). `release.yml` has **no tag
+  > trigger** — it runs on `push: branches: [main]` and creates the tag inside
+  > the run, because a tag pushed by `GITHUB_TOKEN` does not start another
+  > workflow. Its own header says so: *a tag pushed by hand publishes
+  > nothing.* And Trusted Publishing was not adopted; two long-lived tokens
+  > are used. `docs/releasing.md` is the description of what runs.
 - The PyPI job depends on the clean-venv job. A wheel that has not been
   installed from scratch does not get published.
 - After TestPyPI, a job installs *from TestPyPI* into a fresh venv (with
@@ -805,7 +850,12 @@ instead of a middleware, per §3.2(d).
 
 With §3.1 shipped, a team running a workflow in their own Python service
 installs `openstategraph[anthropic]`: **~45 distributions, of which ~44 are
-LangChain's, LangGraph's and Anthropic's.** Ours is one wheel of ~170 KB.
+LangChain's, LangGraph's and Anthropic's.** Ours was one wheel of ~170 KB when
+this was written; it is several megabytes now, because since scale-and-adopt
+ticket 01 the distribution force-includes the **built editor** as package data
+— a visual workflow builder that ships without visuals was judged the worse
+trade. `docs/what-is-this.md` carries the measured breakdown and its own
+caveat about when it was measured.
 They already had, or would have had, essentially all of the rest — because the
 alternative is writing the `StateGraph` by hand, which means installing
 `langgraph` and `langchain` and a provider anyway.
