@@ -109,7 +109,7 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/model/WorkflowModel.ts',
     className: 'WorkflowModel',
-    members: 43,
+    members: 41,
     exception: `CLAUDE.md's recorded exception, and until 2026-08-15 the one nothing
       measured — which is how an argument becomes a story. The argument itself
       still holds and is not re-litigated here: the internals *are* split
@@ -119,19 +119,21 @@ const SUBJECTS: readonly Subject[] = [
       100+-call-site rename across canvas, execution and validation code for a
       smaller public surface rather than a clearer design.
 
-      What was missing was the number. Forty-three is 21 queries, 17 mutators,
+      What was missing was the number. Forty-one is 19 queries, 17 mutators,
       'on'/'onAny'/'dispose', 'toJSON' and 'transact'; ten of the queries
       (edgesOf, edgesInto, edgesFrom, childrenOf, descendantsOf, predecessorsOf,
       successorsOf, countOfType, topologicalOrder, bounds) are verbatim
       one-liners onto the private 'queries', which is precisely the shape the
-      exception describes and now the shape it is held to. A forty-fourth member
+      exception describes and now the shape it is held to. A forty-second member
       fails this test, and adding one is the thing CLAUDE.md forbids
       ("do not add new *behavior* directly onto WorkflowModel either way").
 
-      Two members here have no caller at all — 'requireNode', and 'isEmpty',
-      which Inspector.tsx:279 reimplements inline as a local const rather than
-      calling. They are ticketed with the rest of the dead surface
-      (install-experience 21); removing them re-records this at 41.`,
+      It was 43 until install-experience 21. Two members had no caller at all —
+      'requireNode', and 'isEmpty', which Inspector.tsx:279 reimplements inline
+      as a local const rather than calling — so the exception was two members
+      wider than any consumer had ever asked for. 'requireNode' went from
+      'IWorkflowModel' with it: an interface method nothing implements against
+      and nothing calls is a contract in name only.`,
   },
   {
     file: './canvas/PaperController.ts',
@@ -234,23 +236,24 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/providers/ProviderRegistry.ts',
     className: 'ProviderRegistry',
-    members: 17,
+    members: 15,
     exception: `Two reasons to change, and both are visible in the member list: which
-      providers and models exist (register, get, list, allModels, resolve,
+      providers and models exist (register, get, list, resolve, selectionFor,
       model, modelOptions, reasoningEffortLevelsFor, setWorkflowDefaultModel,
       refreshModels) and what credentials they are configured with (setApiKey,
       getApiKey, describeApiKey, setBaseUrl). The second already has a private
       collaborator — CredentialStore — and 'getApiKey' is a verbatim
       pass-through to it, so exposing 'credentials' as one member in place of
-      three is a genuine reduction rather than an invented grouping.
+      three is a genuine reduction rather than an invented grouping. That is
+      what would take this to twelve, and it is not done here.
 
-      Two more are free: 'providers' leaks the inner Registry and has no
-      external reader (every workbench.providers.list() resolves to this class's
-      own wrapper, not to that field), and 'allModels' has no caller anywhere.
-      Both are in install-experience 21 with the rest of the dead surface;
-      taking them plus the credential grouping puts this near twelve.
+      Install-experience 21 took the two that were free: 'allModels' had no
+      caller anywhere, and 'providers' leaked the inner Registry with no
+      external reader (every workbench.providers.list() resolves to this
+      class's own wrapper, not to that field) — it is private now, so a second
+      credential-unaware path to the same providers no longer exists.
 
-      Pinned at seventeen meanwhile, because the credential move is a real
+      Pinned at fifteen meanwhile, because the credential move is a real
       change to a class the model picker, the runtime health dot and the
       workflow settings panel all read.`,
   },
@@ -277,9 +280,9 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './controller/SelectionModel.ts',
     className: 'SelectionModel',
-    members: 14,
-    exception: `One reason to change: what is selected. Seven queries (nodes, edges, size,
-      isEmpty, soleNode, hasNode, hasEdge), five mutators (selectNodes,
+    members: 13,
+    exception: `One reason to change: what is selected. Six queries (nodes, edges, size,
+      isEmpty, hasNode, hasEdge), five mutators (selectNodes,
       selectEdges, set, clear, prune) and the on/dispose pair every observable
       model here carries.
 
@@ -291,63 +294,29 @@ const SUBJECTS: readonly Subject[] = [
       to keep — that a change to either axis notifies exactly once, through the
       private commit.
 
-      'soleNode' has no caller (install-experience 21); at thirteen without it
-      this stays a wide vocabulary for a single noun, which is the shape
-      Viewport is recorded under.`,
-  },
-  {
-    file: './core/commands/CommandStack.ts',
-    className: 'CommandStack',
-    members: 13,
-    exception: `Undo and redo are one vocabulary, and this is it: five queries, five
-      mutators, on/dispose, plus 'context' — which leaks the whole
-      CommandContext and is read by NodeEditor to build commands.
-
-      Three of the thirteen have never had a caller: 'undoLabel' and 'redoLabel'
-      exist for an "Undo Move node" tooltip nobody built, and 'depth' says in
-      its own doc comment that it is "for the history panel and for tests",
-      neither of which exists. Removing them takes this class to exactly ten —
-      **under the ceiling, with no design change at all**, which is the clearest
-      illustration in the repository of the audit's actual finding: the ceiling
-      was being cleared by surface nobody wanted rather than by structure
-      anybody chose. Ticketed as install-experience 21 rather than done here so
-      the deletion lands with the rest of its kind.`,
+      Fourteen until install-experience 21, where 'soleNode' went for having no
+      caller; at thirteen this stays a wide vocabulary for a single noun, which
+      is the shape Viewport is recorded under.`,
   },
   {
     file: './core/providers/OllamaProvider.ts',
     className: 'OllamaProvider',
-    members: 12,
+    members: 11,
     exception: `Almost entirely override, which is a property of the counting rule as much
       as of the class: this side counts *declared* members, so a leaf that
-      concretises its base looks as wide as the base. Nine of the twelve are the
+      concretises its base looks as wide as the base. Ten of the eleven are the
       abstract five made real (id, label, models, requiresApiKey, complete), the
       four capability declarations, and 'isConfigured' — overridden because
       Ollama is the one vendor reachable two ways, by key or by a host you run,
       which CLAUDE.md records as a standing instruction.
 
-      Genuinely new: 'listModels' (the interface's optional discovery method)
-      and 'probe', which has no caller anywhere in src/ and is ticketed with the
-      dead surface (install-experience 21). Everything vendor-specific — cloud
+      Genuinely new: 'listModels', the interface's optional discovery method.
+      It was twelve until install-experience 21 removed 'probe', a second
+      liveness check with no caller anywhere in src/ — the runtime health dot
+      asks the backend, not the browser. Everything vendor-specific — cloud
       detection, the seed list, header assembly, host resolution — is private,
       which is the part that matters: the base's surface did not widen to admit
       a second provider.`,
-  },
-  {
-    file: './core/kernel/Registry.ts',
-    className: 'Registry',
-    members: 12,
-    exception: `The generic container every extension point in the repository is built from
-      — node types, port types, providers, executors, canvas features, export
-      formats — and one noun with one verb family: register, look up, observe.
-      It imports no domain type. It passes the "and" test cleanly, which is why
-      the number alone is a poor signal here.
-
-      Two members are the exception to that: 'filter' is 'list().filter' with no
-      caller anywhere, and 'groupBy' has exactly one (ModelRegistry). They are
-      collection-utility verbs on a registry vocabulary, and dropping both puts
-      this at ten — recorded in install-experience 21. Pinned at twelve until
-      then, because this class is depended on by every registry in the app and a
-      deletion here is a change to all of them at once.`,
   },
   {
     file: './app/Workbench.ts',

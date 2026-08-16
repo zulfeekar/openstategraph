@@ -72,20 +72,6 @@ export class CommandStack {
     return this.redoStack.length > 0;
   }
 
-  /** Label of the next undo, for the tooltip: "Undo Move node". */
-  get undoLabel(): string | null {
-    return this.undoStack[this.undoStack.length - 1]?.label ?? null;
-  }
-
-  get redoLabel(): string | null {
-    return this.redoStack[this.redoStack.length - 1]?.label ?? null;
-  }
-
-  /** Number of entries, exposed for the history panel and for tests. */
-  get depth(): number {
-    return this.undoStack.length;
-  }
-
   /**
    * Runs a command and records it.
    *

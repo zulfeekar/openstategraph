@@ -203,17 +203,6 @@ export class OllamaProvider extends AbstractLLMProvider {
     }
   }
 
-  /** True when a daemon you named answers. Always false for the cloud. */
-  async probe(): Promise<boolean> {
-    if (this.isCloud) return false;
-    try {
-      const response = await fetch(`${this.host}/api/tags`, { headers: this.headers });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }
-
   async complete(request: CompletionRequest): Promise<Result<CompletionResult, string>> {
     const { system, messages } = this.splitSystem(request);
 

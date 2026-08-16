@@ -41,11 +41,6 @@ export class SelectionModel {
     return this.size === 0;
   }
 
-  /** The single selected node, or null when zero or several are selected. */
-  get soleNode(): NodeId | null {
-    return this.nodeIds.size === 1 && this.edgeIds.size === 0 ? (this.nodes[0] ?? null) : null;
-  }
-
   hasNode(id: NodeId): boolean {
     return this.nodeIds.has(id);
   }

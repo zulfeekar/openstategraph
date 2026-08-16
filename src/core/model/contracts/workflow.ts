@@ -106,7 +106,6 @@ export interface IWorkflowModel {
   nodes(): readonly INodeModel[];
   edges(): readonly IEdgeModel[];
   node(id: NodeId): INodeModel | undefined;
-  requireNode(id: NodeId): INodeModel;
   edge(id: EdgeId): IEdgeModel | undefined;
   hasNode(id: NodeId): boolean;
 

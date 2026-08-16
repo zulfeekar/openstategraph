@@ -86,12 +86,6 @@ export class WorkflowModel implements IWorkflowModel {
     return this.nodeMap.get(id);
   }
 
-  requireNode(id: NodeId): AbstractNodeModel {
-    const node = this.nodeMap.get(id);
-    if (!node) throw new Error(`[workflow] no node "${id}"`);
-    return node;
-  }
-
   edge(id: EdgeId): EdgeModel | undefined {
     return this.edgeMap.get(id);
   }
@@ -106,10 +100,6 @@ export class WorkflowModel implements IWorkflowModel {
 
   get edgeCount(): number {
     return this.edgeMap.size;
-  }
-
-  get isEmpty(): boolean {
-    return this.nodeMap.size === 0;
   }
 
   edgesOf(nodeId: NodeId): readonly EdgeModel[] {

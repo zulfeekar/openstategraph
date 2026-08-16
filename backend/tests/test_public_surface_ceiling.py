@@ -255,21 +255,29 @@ PROMPT_LADDER = """Pinned at today's count with the reduction ticketed (install-
     because the width has one cause and it is not "these classes do many
     things".
 
-    Of `AbstractAgentNode`'s nineteen, seven exist only because the prompt is
+    Of `AbstractAgentNode`'s eighteen, seven exist only because the prompt is
     composed here: five ingredients held as loose attributes (`default_rules`,
     `rules`, `skill`, `replace_rules`, `context`) plus `system_prompt()` and
     `resolve_prompt()`, which build a fresh `SystemPrompt` on every call rather
     than the node holding one. `BaseRouter` and `BaseGrader` repeat it and add
-    an accessor pair each — `describe_rules` is `return self.rules.strip()`, one
+    an accessor each — `describe_rules` is `return self.rules.strip()`, one
     line under the attribute it reads.
+
+    Every count here came down by one on install-experience 21, which took the
+    members nobody wanted rather than the design: `middleware_preset()` off the
+    agent base (returned `{}`, never overridden by any tier), and the router's
+    `describe_branches` / grader's `describe_rubric`, public override points
+    with no override and one caller each — the `system_prompt()` a screen
+    below them.
 
     `BaseOrchestrator` is the counter-example that turns this from an opinion
     into a measurement: same job, no `describe_*`, no `resolve_system_prompt`,
-    thirteen members. Folding the ingredients into one held `prompt:
-    SystemPrompt` collaborator takes Agent to about eleven, Router to eleven,
-    Grader to ten and Orchestrator to seven. That is a real refactor across a
-    seam six tests read, not a rename, so it is a ticket rather than this
-    commit."""
+    thirteen members — and it is the one class here that ticket 21 did not
+    move, because it had nothing dead to take. Folding the ingredients into one
+    held `prompt: SystemPrompt` collaborator takes Agent to about eleven, Router
+    to eleven, Grader to ten and Orchestrator to seven. That is a real refactor
+    across a seam six tests read, not a rename, so it is a ticket rather than
+    this commit."""
 
 #: `BaseKnowledgeBuilder` is at exactly ten, which is the point.
 KNOWLEDGE_BUILDERS = """A recorded exception, and the cheapest kind to defend: the base is at exactly
@@ -408,15 +416,15 @@ WORKFLOW_SERVICES = """Pinned at eleven — one over — with the reduction tick
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
-    "abc.agent.AbstractAgentNode": Recorded(19, PROMPT_LADDER),
-    "abc.agent.BaseAgentNode": Recorded(19, PROMPT_LADDER),
-    "abc.agent.ReactAgentNode": Recorded(19, PROMPT_LADDER),
-    "abc.agent.DeepAgentNode": Recorded(20, PROMPT_LADDER),
-    "abc.agent.CustomGraphNode": Recorded(20, PROMPT_LADDER),
-    "abc.router.BaseRouter": Recorded(18, PROMPT_LADDER),
-    "abc.router.Router": Recorded(19, PROMPT_LADDER),
-    "abc.grader.BaseGrader": Recorded(16, PROMPT_LADDER),
-    "abc.grader.Grader": Recorded(16, PROMPT_LADDER),
+    "abc.agent.AbstractAgentNode": Recorded(18, PROMPT_LADDER),
+    "abc.agent.BaseAgentNode": Recorded(18, PROMPT_LADDER),
+    "abc.agent.ReactAgentNode": Recorded(18, PROMPT_LADDER),
+    "abc.agent.DeepAgentNode": Recorded(19, PROMPT_LADDER),
+    "abc.agent.CustomGraphNode": Recorded(19, PROMPT_LADDER),
+    "abc.router.BaseRouter": Recorded(17, PROMPT_LADDER),
+    "abc.router.Router": Recorded(18, PROMPT_LADDER),
+    "abc.grader.BaseGrader": Recorded(15, PROMPT_LADDER),
+    "abc.grader.Grader": Recorded(15, PROMPT_LADDER),
     "abc.orchestrator.BaseOrchestrator": Recorded(13, PROMPT_LADDER),
     "abc.orchestrator.Orchestrator": Recorded(13, PROMPT_LADDER),
     "abc.orchestrator.PlanningOrchestrator": Recorded(13, PROMPT_LADDER),

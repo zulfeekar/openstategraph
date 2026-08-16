@@ -191,8 +191,16 @@ class BaseRouter(ABC):
         """
         return self.rules.strip()
 
-    def describe_branches(self) -> str:
-        """How the branch list is presented. Rarely worth overriding."""
+    def _describe_branches(self) -> str:
+        """How the branch list is presented.
+
+        Private: it was public as an override point "rarely worth overriding",
+        and in the whole repository nothing has ever overridden or called it
+        except `system_prompt()` one screen below (install-experience 21). A
+        public member with one internal caller is surface an adopter has to
+        read past to find the one thing this class asks them to write, which is
+        `rules`.
+        """
         lines = []
         for name in self.branches:
             marker = "  (used when nothing else matches)" if name == self.fallback else ""
@@ -216,7 +224,7 @@ class BaseRouter(ABC):
         """
         return (
             SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
-            .with_context(self.describe_branches())
+            .with_context(self._describe_branches())
             .with_defaults(self.DEFAULT_RULES)
             .with_rules(self.describe_rules(), replace_defaults=self.replace_rules)
             .with_skill(self.skill)

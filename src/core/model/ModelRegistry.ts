@@ -44,7 +44,16 @@ export class ModelRegistry {
    * node types in registration order.
    */
   paletteSections(): readonly { category: INodeCategory; nodes: readonly INodeDefinition[] }[] {
-    const byCategory = this.nodeTypes.groupBy<NodeCategoryId>((def) => def.category);
+    // Grouped here rather than by a `Registry.groupBy` verb: this is the only
+    // place in the repository that wants it, and a collection utility on the
+    // registry vocabulary is surface every extension point pays for
+    // (install-experience 21).
+    const byCategory = new Map<NodeCategoryId, INodeDefinition[]>();
+    for (const def of this.nodeTypes.list()) {
+      const bucket = byCategory.get(def.category);
+      if (bucket) bucket.push(def);
+      else byCategory.set(def.category, [def]);
+    }
     return this.categories
       .list()
       .slice()

@@ -100,7 +100,12 @@ export class CredentialStore {
  * from here, so none of them needs a per-vendor branch.
  */
 export class ProviderRegistry {
-  readonly providers = new Registry<ILLMProvider>('llmProviders');
+  /**
+   * The inner registry. **Private**: every consumer goes through this class's
+   * own `register`/`get`/`list`, and exposing it leaked a second, credential-
+   * unaware way to reach the same providers (install-experience 21).
+   */
+  private readonly providers = new Registry<ILLMProvider>('llmProviders');
   private readonly bus = new EventBus<ProviderEvents>();
 
   /**
@@ -161,11 +166,6 @@ export class ProviderRegistry {
 
   list(): readonly ILLMProvider[] {
     return this.providers.list();
-  }
-
-  /** Every model across every provider, in registration order. */
-  allModels(): readonly ModelDescriptor[] {
-    return this.providers.list().flatMap((provider) => provider.models);
   }
 
   /**

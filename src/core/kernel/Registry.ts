@@ -85,22 +85,6 @@ export class Registry<T extends IIdentifiable> {
     return [...this.entries.values()];
   }
 
-  filter(predicate: (entry: T) => boolean): readonly T[] {
-    return this.list().filter(predicate);
-  }
-
-  /** Groups entries by a derived key, preserving registration order. */
-  groupBy<K extends string>(key: (entry: T) => K): Map<K, T[]> {
-    const groups = new Map<K, T[]>();
-    for (const entry of this.entries.values()) {
-      const group = key(entry);
-      const bucket = groups.get(group);
-      if (bucket) bucket.push(entry);
-      else groups.set(group, [entry]);
-    }
-    return groups;
-  }
-
   get size(): number {
     return this.entries.size;
   }

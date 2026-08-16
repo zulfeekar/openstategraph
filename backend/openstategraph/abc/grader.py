@@ -136,8 +136,14 @@ class BaseGrader(ABC):
 
     # -- the parts a subclass may shape ----------------------------------- #
 
-    def describe_rubric(self) -> str:
-        """The rubric as a numbered checklist, or "" when none is set."""
+    def _describe_rubric(self) -> str:
+        """The rubric as a numbered checklist, or "" when none is set.
+
+        Private for the same reason as the router's `_describe_branches`
+        (install-experience 21): nothing has ever overridden it or called it
+        except `system_prompt()` below. The rubric rows are the extension
+        point; their rendering is machinery.
+        """
         if not self.rubric:
             return ""
         lines = ["Rubric — judge each row explicitly:"]
@@ -177,7 +183,7 @@ class BaseGrader(ABC):
             .with_rules(self.describe_criteria(), replace_defaults=self.replace_defaults)
             .with_skill(self.skill)
         )
-        rubric = self.describe_rubric()
+        rubric = self._describe_rubric()
         if rubric:
             # Context, not rules: the rubric is structure the machinery
             # renders, and it must survive `replace_defaults` untouched.

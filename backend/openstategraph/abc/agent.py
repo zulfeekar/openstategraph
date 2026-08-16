@@ -13,14 +13,14 @@ Two rules the shape enforces:
 - **The base holds the minimum.** ``AbstractAgentNode`` owns the three
   resolvers — ``resolve_model`` / ``resolve_prompt`` / ``resolve_middleware``
   — and the one template method that sequences them. A concrete supplies only
-  what makes it that tier: which constructor it calls and which middleware
-  slots it presets. Nothing else may accrete here; a new shared concern is a
-  collaborator (like ``SystemPrompt``), not a new base member.
+  what makes it that tier: which constructor it calls. Nothing else may accrete
+  here; a new shared concern is a collaborator (like ``SystemPrompt``), not a
+  new base member.
 
 - **``DeepAgentNode`` is a sibling of ``ReactAgentNode``, never a subclass.**
   ``create_deep_agent`` is ``create_agent`` plus a fixed middleware slot
-  assembly — the relationship is *data*, so it is expressed as a preset, not
-  as inheritance. (An earlier draft had ``DeepAgentNode extends
+  assembly — the relationship is *data*, so it is expressed as a constructor
+  swap, not as inheritance. (An earlier draft had ``DeepAgentNode extends
   ReactAgentNode``; CLAUDE.md records why that was wrong.)
 
 Retry, timeout and caching are **not** here, and must never be: they are
@@ -184,17 +184,21 @@ class AbstractAgentNode(ABC):
         return rendered or None
 
     def resolve_middleware(self) -> MiddlewareSlotTable:
-        """Preset slots first, then config contributions, replacement by name."""
+        """Config contributions into the canonical slot order, replacement by name.
+
+        A tier with slots of its own overrides *this*, merging them before
+        ``self._middleware_contributions`` so config still replaces by name.
+        There was a separate ``middleware_preset()`` hook for that until
+        install-experience 21; it returned ``{}``, no tier ever overrode it —
+        ``DeepAgentNode`` differs by constructor, and deepagents assembles its
+        own stack internally — and a second named seam onto the same table is
+        one more thing to read and one more place the order could be decided.
+        """
         table = MiddlewareSlotTable(order=self.SLOT_ORDER)
-        table.merge(self.middleware_preset())
         table.merge(self._middleware_contributions)
         return table
 
     # -- what a concrete tier supplies ------------------------------------ #
-
-    def middleware_preset(self) -> dict[str, Any]:
-        """The slots this tier fills before config gets a say. Empty by default."""
-        return {}
 
     @abstractmethod
     def build_agent(
