@@ -375,10 +375,14 @@ def default_port_resolver(node_type: str, port_id: str) -> PortSpec:
 class CompiledPlan:
     """What the compiler decided, before a `StateGraph` is built.
 
-    Separated from the graph so it can be asserted directly in a test, inspected
-    in the editor, and reused by the code generator — the generator and the
-    interpreter must agree, and sharing this plan is what makes that true by
-    construction rather than by discipline.
+    Separated from the graph so it can be asserted directly in a test and
+    inspected in the editor. It is also what `openstategraph validate` prints.
+
+    This docstring also promised it was *"reused by the code generator"*. There
+    is no code generator and there never has been — `docs/export-and-portability.md`
+    records the decision that a `.py` export is not planned. The sentence was
+    describing a design that would have made generator and interpreter agree by
+    construction; nothing was built to disagree.
     """
 
     nodes: list[str] = field(default_factory=list)

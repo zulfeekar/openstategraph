@@ -180,11 +180,19 @@ class SystemPrompt:
         return "\n\n".join(part for part in parts if part)
 
     def describe(self) -> dict[str, object]:
-        """What the editor shows so a developer can see the whole prompt.
+        """The whole prompt, section by section, for a surface that shows it.
 
-        The locked sections are surfaced read-only rather than hidden: a
-        developer writing rules needs to know what the machinery already says,
-        or they will duplicate or contradict it.
+        The locked sections are meant to be surfaced read-only rather than
+        hidden: a developer writing rules needs to know what the machinery
+        already says, or they will duplicate or contradict it.
+
+        **This said "what the editor shows" and had zero callers.** The editor
+        panel is still unwritten — `site/behind-the-scenes.html` is the only
+        thing that renders these sections today, and the MCP vocabulary hands
+        a composing client `PREAMBLE`/`OUTPUT_CONTRACT` off the ladder class
+        rather than through here. A docstring naming a consumer that does not
+        exist reads as a description of shipped behaviour, so it now names the
+        intent as intent (production-ready ticket 20).
         """
         return {
             "preamble": self.preamble.strip(),

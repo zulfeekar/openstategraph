@@ -274,13 +274,17 @@ which `docs/releasing.md` §4 owns.
 
 **PK-03 — `EXTENSION_NAMESPACE = "org.openstategraph"` is a placeholder.**
 
-> **This entry and the code now disagree, and someone has to decide**
-> (flagged 2026-08-16). `plugin_interop.py` describes the value as **pinned**,
-> and `backend/pyproject.toml` says so too; this entry still calls it
-> placeholder-grade and rates it **blocks 1.0**. Both cannot be right. The
-> substantive question is unchanged and unanswered: the spec SHOULDs a
-> reverse-domain namespace on a domain we control, and `openstategraph.org` is
-> not owned. Pinning the string did not acquire the domain.
+> **Three files disagree about this and someone has to decide** (flagged
+> 2026-08-16; production-ready **ticket 32**). `backend/pyproject.toml`'s
+> release checklist says the namespace **is pinned**; `plugin_interop.py` still
+> calls it **placeholder-grade** and says to pin it before publishing anything
+> public; this entry rates it **blocks 1.0**. All three cannot be right, and
+> correcting any one of them to match the others would be deciding by editing
+> prose. The substantive question is unchanged and unanswered: the spec SHOULDs
+> a reverse-domain namespace on a domain we control, and `openstategraph.org`
+> is not owned. Pinning the string did not acquire the domain — and the string
+> is written into every exported bundle, so the cost of changing it grows with
+> use.
 
 Evidence as recorded: `backend/openstategraph/plugin_interop.py` — *"Placeholder-grade:
 the spec SHOULDs a domain we control, so pin this before publishing anything

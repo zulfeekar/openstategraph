@@ -33,7 +33,9 @@
 #   PYPI_API_TOKEN       pypi.org token, project-scoped once the project exists
 # Preferred successor, still not adopted: PyPI Trusted Publishing (OIDC), which
 # deletes both. It cannot be configured until the project exists on PyPI under a
-# real repository — this checkout has no git remote yet.
+# real repository. The repository half arrived on 2026-08-15 — this comment said
+# "no git remote yet" until 2026-08-16 — so the one remaining blocker is the
+# first PyPI upload, which this workflow's own `pypi` job has never performed.
 name: Release
 
 on:

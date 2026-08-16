@@ -15,9 +15,13 @@ interface RegistryEvents<T> extends Record<string, unknown> {
  * A keyed collection with change notification.
  *
  * This is the seam that makes the app extensible without editing it: node
- * types, port types, LLM providers, node executors, canvas features and
- * export formats are all registries. Adding a capability is a `register`
- * call from a plugin module — the engine never learns the concrete type.
+ * types, port types, LLM providers, node executors and canvas features are
+ * all registries. Adding a capability is a `register` call from a plugin
+ * module — the engine never learns the concrete type.
+ *
+ * (This list named "export formats" too, and no such registry is among the
+ * instantiations in this codebase. An example in a docstring is a claim about
+ * the tree, and this one could not be grepped.)
  *
  * Registration order is preserved, because it drives the order things
  * appear in the palette and in select menus.

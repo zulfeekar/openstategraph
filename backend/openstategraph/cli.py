@@ -950,8 +950,9 @@ def build_parser() -> argparse.ArgumentParser:
     example_copy = example_commands.add_parser(
         "copy", help="copy one into your workflows directory, mounts included"
     )
-    # No `choices`: the gallery has twenty-one entries and argparse would print
-    # all of them on every usage error. `examples.get` raises with the list.
+    # No `choices`: the gallery has more entries than argparse should print on
+    # every usage error, and it grows. `examples.get` raises with the list.
+    # (This comment said "twenty-one" for as long as there were twenty-three.)
     # Optional so `--all` can stand alone; `cmd_examples_copy` supplies the
     # usage error argparse would otherwise give, with the same exit code.
     example_copy.add_argument("slug", nargs="?", help="see `openstategraph examples list`")

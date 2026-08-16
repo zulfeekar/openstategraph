@@ -82,7 +82,7 @@ class Finding(str, Enum):
     #: that has one. It chose the node, on the condition that its absence be
     #: loud; this is that condition, scoped by the rule stated at the top of
     #: this module. Warning every document that has no guardrail would fire on
-    #: all twenty-one shipped examples and on every workflow anyone has drawn,
+    #: every shipped example and on every workflow anyone has drawn,
     #: and "a warning a user cannot act on is a warning they learn to skip".
     #:
     #: What this catches is the realistic mistake instead: somebody added a
