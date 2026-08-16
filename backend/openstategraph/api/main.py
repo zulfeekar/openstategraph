@@ -128,6 +128,7 @@ from openstategraph.api.routes import examples as example_routes  # noqa: E402
 from openstategraph.api.routes import mcp as mcp_routes  # noqa: E402
 from openstategraph.api.routes import providers as providers_routes  # noqa: E402
 from openstategraph.api.routes import runs as runs_routes  # noqa: E402
+from openstategraph.api.routes import site as site_routes  # noqa: E402
 from openstategraph.api.routes import system as system_routes  # noqa: E402
 from openstategraph.api.routes import threads as threads_routes  # noqa: E402
 from openstategraph.api.routes import workflows as workflow_routes  # noqa: E402
@@ -315,6 +316,7 @@ def create_app(
     app.include_router(mcp_routes.router)
     app.include_router(providers_routes.router)
     app.include_router(runs_routes.router)
+    app.include_router(site_routes.router)
     app.include_router(system_routes.router)
     app.include_router(threads_routes.router)
     app.include_router(workflow_routes.router)

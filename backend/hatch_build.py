@@ -58,6 +58,12 @@ VENDOR_DEST = "openstategraph/api/static/vendor"
 
 MERMAID_SOURCE = "node_modules/mermaid/dist/mermaid.min.js"
 
+#: The hand-written story pages — landing, gallery, and the five-artifact
+#: walk-through — served by `api/routes/site.py`. Production-ready ticket 28:
+#: their only route to a reader was GitHub Pages, which has never once
+#: published them, so the wheel carries them and `serve` hands them out.
+SITE_DEST = "openstategraph/api/static/site"
+
 #: Debugging aids for this repository, not for an adopter. 18 MB of the 23 MB
 #: `dist/` weighs.
 EXCLUDED_SUFFIXES = (".map",)
@@ -224,12 +230,40 @@ def editor_force_include(root: Path, version: str) -> dict[str, str]:
     return include
 
 
+def site_force_include(root: Path) -> dict[str, str]:
+    """The `site/*.html` pages, source path → path inside the distribution.
+
+    Its own function rather than a few more lines inside `editor_force_include`,
+    because that one returns early in two cases that have nothing to do with
+    these files — an sdist rebuild, and an editable install with no `dist/` —
+    and folding the pages in there would make shipping them depend on whether
+    somebody had run `npm run build`.
+
+    Optional, like the mermaid asset and unlike the editor: absence is a 404
+    with a sentence rather than a broken product, so it is not worth failing a
+    build over. `test_site_pages.py` asserts *this* repository ships all three,
+    which is the case that would otherwise regress in silence.
+    """
+    if (root / SITE_DEST / "gallery.html").is_file():
+        # Building from our own sdist: already package data.
+        return {}
+
+    source = root.parent / "site"
+    if not (source / "gallery.html").is_file():
+        return {}
+
+    return {
+        str(path): f"{SITE_DEST}/{path.name}"
+        for path in sorted(source.glob("*.html"))
+    }
+
+
 class EditorAssetsBuildHook(BuildHookInterface):  # type: ignore[misc,valid-type]
     PLUGIN_NAME = "custom"
 
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         if self.target_name not in ("wheel", "sdist"):
             return
-        build_data.setdefault("force_include", {}).update(
-            editor_force_include(Path(self.root), version)
-        )
+        include = build_data.setdefault("force_include", {})
+        include.update(editor_force_include(Path(self.root), version))
+        include.update(site_force_include(Path(self.root)))
