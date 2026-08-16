@@ -80,7 +80,11 @@ export function modelField(providers: ProviderRegistry): SelectFieldSchema {
     key: MODEL_FIELD_KEY,
     label: 'Model',
     // Resolved lazily on each render so a key added mid-session, or a freshly
-    // pulled Ollama model, shows up without a reload.
+    // pulled Ollama model, shows up without a reload — and `subscribe` below is
+    // what causes that render. Lazy resolution alone was only ever half of it:
+    // the list was always *computable* and nothing ever asked, so a card's
+    // picker kept its first-paint labels for the session while the credentials
+    // dialog and the onboarding hint moved on without it.
     options: () => [
       {
         value: WORKFLOW_DEFAULT_MODEL,
@@ -91,6 +95,13 @@ export function modelField(providers: ProviderRegistry): SelectFieldSchema {
       },
       ...providers.modelOptions(),
     ],
+    // The registry is the store, and one subscription covers everything it
+    // reports: a key set or forgotten, the workflow default changing, a
+    // catalogue refresh, and the health probe answering. That last one is how
+    // this was found — `serverReadiness` resolved with the editor already open,
+    // every model kept its `· needs key` from a second earlier, and the hint
+    // that subscribes directly updated in the same moment.
+    subscribe: (notify) => providers.onChange(notify),
     defaultValue: WORKFLOW_DEFAULT_MODEL,
     hint: 'Leave on the workflow default unless this step needs a different model.',
   };

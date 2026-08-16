@@ -86,8 +86,17 @@ export interface TextAreaFieldSchema extends FieldSchemaBase<string> {
   readonly mono?: boolean;
 }
 
-export interface SelectFieldSchema extends FieldSchemaBase<string> {
-  readonly kind: 'select';
+/**
+ * What the two option-bearing kinds share: a list, and where it comes from.
+ *
+ * Declared once rather than on each kind, because the pair is one piece of
+ * knowledge — *these options are resolved, and resolving can start answering
+ * differently*. Keeping `subscribe` on the combobox alone is what let the model
+ * `select` go stale: `options` was re-read on every render and nothing ever
+ * caused one, so a card's picker held its first-paint list for the session
+ * while the store beneath it moved four different ways.
+ */
+interface OptionBearingSchema extends FieldSchemaBase<string> {
   /**
    * Static options, or a provider for options that depend on runtime state
    * (the model list depends on which providers hold credentials) **or on the
@@ -100,6 +109,30 @@ export interface SelectFieldSchema extends FieldSchemaBase<string> {
    * model will discard.
    */
   readonly options: readonly FieldOption[] | ((data: Readonly<NodeData>) => readonly FieldOption[]);
+  /**
+   * Where the options come from, so the control re-renders when they move.
+   *
+   * `options` is synchronous because it is called during a render, while every
+   * interesting list — the workflow catalogue, the MCP registry, the provider
+   * registry — moves after one. Something has to tell React the answer changed,
+   * and the field is the only thing that knows *which* store answers its
+   * question. The renderer subscribed to one hardcoded catalogue before
+   * mcp-connect ticket 07, which meant a second live picker could not be added
+   * without editing the renderer — the closed engine this project's O rule
+   * forbids.
+   *
+   * Data changes need nothing here: an edit to the node's own data already
+   * re-renders the card, so a `select` that varies only with `data` (the
+   * reasoning tiers, as the model choice changes) is not what this is for. It
+   * is for the store the node cannot see.
+   *
+   * Returns an unsubscribe. Omit it for a list that cannot move.
+   */
+  readonly subscribe?: (notify: () => void) => () => void;
+}
+
+export interface SelectFieldSchema extends OptionBearingSchema {
+  readonly kind: 'select';
 }
 
 /**
@@ -115,28 +148,12 @@ export interface SelectFieldSchema extends FieldSchemaBase<string> {
  * The value is a plain string, unchanged: `data.workflow` is a serialised
  * contract, and swapping the control must not alter what is written.
  */
-export interface ComboboxFieldSchema extends FieldSchemaBase<string> {
+export interface ComboboxFieldSchema extends OptionBearingSchema {
   readonly kind: 'combobox';
-  /** Suggestions, resolved the same way a `select`'s options are. */
-  readonly options: readonly FieldOption[] | ((data: Readonly<NodeData>) => readonly FieldOption[]);
   readonly placeholder?: string;
   readonly mono?: boolean;
   /** Shown under the box when there is nothing to suggest. */
   readonly emptyHint?: string;
-  /**
-   * Where the suggestions come from, so the control re-renders when they move.
-   *
-   * `options` is synchronous because it is called during a render, while every
-   * interesting list — the workflow catalogue, the MCP registry — arrives over
-   * HTTP. Something has to tell React the answer changed, and the field is the
-   * only thing that knows *which* store answers its question. The renderer
-   * subscribed to one hardcoded catalogue before mcp-connect ticket 07, which
-   * meant a second live picker could not be added without editing the
-   * renderer — the closed engine this project's O rule forbids.
-   *
-   * Returns an unsubscribe. Omit it for a list that cannot move.
-   */
-  readonly subscribe?: (notify: () => void) => () => void;
 }
 
 export interface FieldOption {

@@ -157,6 +157,12 @@ export function effortField(providers: ProviderRegistry): SelectFieldSchema {
     // Resolved per render from the node's own data, so changing the model
     // changes this list in place rather than leaving a stale tier behind.
     options: (data) => effortOptionsFor(providers, data),
+    // The data half of that is free — editing the node re-renders the card. The
+    // registry half is not: `reasoningEffortLevelsFor` reads the same provider
+    // catalogue and `serverReadiness` that `modelOptions` does, so a refreshed
+    // Ollama catalogue can turn `unknown` into `supported`, and "Not supported
+    // by Mock · Offline" can stop being true, under a card already on screen.
+    subscribe: (notify) => providers.onChange(notify),
     defaultValue: MODEL_DEFAULT_EFFORT,
     hint: 'Sent only to models that support it; the run reports it if it could not be.',
     // On the card, beside the model it qualifies — and not folded away as

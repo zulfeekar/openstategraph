@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, type ChangeEvent } from 'react';
 import { Replace } from 'lucide-react';
-import type { ComboboxFieldSchema } from '@core/model/contracts/fields';
+import type { ComboboxFieldSchema, SelectFieldSchema } from '@core/model/contracts/fields';
 import {
   Badge,
   Button,
@@ -141,18 +141,15 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     }
 
     case 'select': {
-      const options = resolveOptions(schema, data).map<SelectOption>((option) => ({
-        value: option.value,
-        label: option.label,
-        ...(option.group ? { group: option.group } : {}),
-        ...(option.disabled ? { disabled: true } : {}),
-      }));
-      const value = asString(data[schema.key]) || schema.defaultValue;
       return (
         <Field {...common}>
-          <div data-no-drag>
-            <Select id={id} options={options} value={value} onValueChange={set} />
-          </div>
+          <SelectField
+            id={id}
+            schema={schema}
+            value={asString(data[schema.key]) || schema.defaultValue}
+            data={data}
+            onChange={set}
+          />
         </Field>
       );
     }
@@ -449,15 +446,12 @@ function RepeatableGroupField({
                         />
                       )}
                       {field.kind === 'select' && (
-                        <Select
-                          options={resolveOptions(field, row).map((opt) => ({
-                            value: opt.value,
-                            label: opt.label,
-                            group: opt.group,
-                            disabled: opt.disabled,
-                          }))}
+                        <SelectField
+                          id={`${common.htmlFor}-${index}-${field.key}`}
+                          schema={field}
                           value={asString(row[field.key]) || field.defaultValue}
-                          onValueChange={(val) => updateRow(index, field.key, val)}
+                          data={row}
+                          onChange={(val) => updateRow(index, field.key, val)}
                         />
                       )}
                       {/* Missing for the same reason `combobox` was: the Grader's
@@ -521,20 +515,84 @@ function RepeatableGroupField({
 }
 
 /**
- * A text box with suggestions, subscribed to the source of those suggestions.
+ * Redraws this control when the store its options come from says so.
  *
- * Its own component because it needs a hook: a suggestion list arrives over
- * HTTP and moves when a package is saved or a server registered, and a `case`
- * in the switch above cannot call `useSyncExternalStore` — hooks may not be
- * conditional. Extracting it is also what lets the subscription be *narrow*:
- * only the field whose store moved re-renders, not every field on the
- * inspector.
- *
- * **The field names its own store.** This used to subscribe to
+ * **The field names its own store.** The combobox used to subscribe to
  * `workflowCatalogue` by name, so the MCP server picker — the second live
  * combobox — could not be given a live list without editing this file
  * (mcp-connect ticket 07). A schema declaring `subscribe` extends the renderer
  * by registering rather than by editing it.
+ *
+ * One hook for both option-bearing kinds, because the select needed exactly
+ * this and did not have it: `ProviderRegistry.onChange` fires for a key set or
+ * forgotten, for a workflow-default change, for a model refresh and for the
+ * health probe reporting a configured server — and a card's model picker
+ * answered none of them. It kept its first-paint list for the session while the
+ * onboarding hint beside it, subscribed directly, updated correctly.
+ *
+ * A subscription here rather than on the card is what keeps it narrow: only the
+ * fields whose store moved re-render, a card with no model picker re-renders
+ * for nothing, and the inspector and the note body inherit it from the same
+ * declaration. A card-level subscription would also have put "provider state
+ * affects field options" back inside the renderer's chrome — the hardcoding
+ * ticket 07 removed.
+ */
+function useOptionSource(subscribe: ((notify: () => void) => () => void) | undefined): void {
+  // A schema is data assembled once at import time, so `subscribe` is stable;
+  // keying the effect on it anyway means a field that swapped stores would
+  // resubscribe rather than keep listening to the old one.
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => subscribe?.(redraw), [subscribe]);
+}
+
+/**
+ * A listbox, subscribed to the source of its options.
+ *
+ * Its own component for the reason the combobox is one: it needs a hook, and a
+ * `case` in the switch above cannot call one — hooks may not be conditional.
+ * That is not an incidental detail of this fix, it is why the bug existed. The
+ * combobox was extracted when it needed a subscription; the select was left in
+ * the switch, so when its options became live there was nowhere to put the
+ * subscription and nobody noticed there wasn't.
+ *
+ * Also the row control, so a select inside a repeatable group follows its store
+ * on the same terms — `data` is the node's data or the row's, whichever the
+ * options are resolved against.
+ */
+function SelectField({
+  id,
+  schema,
+  value,
+  data,
+  onChange,
+}: {
+  id: string;
+  schema: SelectFieldSchema;
+  value: string;
+  /** What the options are resolved against — the node's data, or the row's. */
+  data: Readonly<NodeData> | Readonly<Record<string, FieldValue>>;
+  onChange: (value: string) => void;
+}) {
+  useOptionSource(schema.subscribe);
+
+  const options = resolveOptions(schema, data).map<SelectOption>((option) => ({
+    value: option.value,
+    label: option.label,
+    ...(option.group ? { group: option.group } : {}),
+    ...(option.disabled ? { disabled: true } : {}),
+  }));
+
+  return (
+    <div data-no-drag>
+      <Select id={id} options={options} value={value} onValueChange={onChange} />
+    </div>
+  );
+}
+
+/**
+ * A text box with suggestions, subscribed to the source of those suggestions.
+ *
+ * See `useOptionSource` for why the subscription is the field's to declare.
  */
 function ComboboxField({
   id,
@@ -552,12 +610,7 @@ function ComboboxField({
   data: Readonly<NodeData> | Readonly<Record<string, FieldValue>>;
   onChange: (value: string) => void;
 }) {
-  // A schema is data assembled once at import time, so `subscribe` is stable;
-  // keying the effect on it anyway means a field that swapped stores would
-  // resubscribe rather than keep listening to the old one.
-  const subscribe = schema.subscribe;
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
-  useEffect(() => subscribe?.(redraw), [subscribe]);
+  useOptionSource(schema.subscribe);
 
   // A native `<datalist>`: the browser gives the dropdown, the filtering and
   // the keyboard handling, and the control stays a plain text input — so the
