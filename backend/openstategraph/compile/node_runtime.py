@@ -2462,7 +2462,21 @@ class NodeRuntime:
                 f"### {task_id}\n{text or '_(this member produced no result)_'}"
                 for task_id, text in sorted(scoped.items())
             )
-            report = f"# {title}\n\n{body}" if body else f"# {title}\n\n_No results._"
+            # An empty body means the *plan* was empty, not that the workers
+            # were quiet: a dispatched task that died is filled in above as a
+            # named gap. So the only way to get here is that nothing ever
+            # dispatched to this join — the shape `docs/patterns.md` §4 warns
+            # about, where agents are wired straight into `candidate` and the
+            # edges sequence the join without carrying anything. Saying which
+            # of the two happened is the difference between a debuggable run
+            # and a shrug (production-ready ticket 31).
+            empty = (
+                "_No results — nothing was dispatched to this join. It reports the "
+                "worker results of a supervisor's fan-out; an edge into `candidate` "
+                "from anything else sequences this step without carrying data "
+                "(docs/patterns.md §4)._"
+            )
+            report = f"# {title}\n\n{body}" if body else f"# {title}\n\n{empty}"
             return {"outputs": {node_id: report}, "answer": report}
 
         return run

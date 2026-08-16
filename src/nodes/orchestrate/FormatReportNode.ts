@@ -84,6 +84,25 @@ export function createFormatReportNode(_providers: ProviderRegistry): INodeDefin
           // A bus since ticket 37: every worker archetype's `result` wires in,
           // and the join runs once after the fan-out's superstep completes.
           maxConnections: null,
+          // …and a bus for workers ONLY (production-ready ticket 31). These
+          // edges sequence the join; they do not carry it. The compiled step
+          // reads `worker_results`, which only a `Send`-dispatched worker
+          // writes, so an agent wired here validated, compiled to a plain
+          // `add_edge` and produced `_No results._` — the documented
+          // "intuitive" parallelization shape that never worked
+          // (`docs/patterns.md` §4). The capacity rule could not catch it
+          // (three edges are legal) and neither could the type rule (a
+          // worker's `result` and an agent's `result` are one type), so the
+          // port states the requirement the runtime actually has.
+          //
+          // This is a refusal, not a fan-in: static fan-in is still unbuilt.
+          sourceMustDeclare: {
+            portType: PORT.worker,
+            refusal:
+              'Format Report joins the worker_results a supervisor’s fan-out writes to graph ' +
+              'state — its edges only sequence it, they carry nothing. Wire an Orchestrator ' +
+              '→ Worker → this join; an agent wired straight in reports “No results”.',
+          },
           description: 'Worker results to join into the report.',
         },
         {
@@ -108,6 +127,15 @@ export function createFormatReportNode(_providers: ProviderRegistry): INodeDefin
  * arrived on `candidate`. So this executor renders exactly what it is given,
  * which is the honest preview behaviour: it demonstrates the formatting, not
  * the fan-out/join semantics that only the compiled graph has.
+ *
+ * That difference used to be reachable, and a docstring is not a guard
+ * (production-ready ticket 31): an agent wired into `candidate` rendered a
+ * convincing joined document here and produced `_No results._` when compiled.
+ * The port's `sourceMustDeclare` now makes that edge undrawable, so the only
+ * source this executor can receive from is a worker — whose own preview
+ * executor refuses, exactly as the fan-out it stands for cannot run in a
+ * browser. The approximation is still an approximation; it is no longer one a
+ * user can walk into.
  */
 export const formatReportExecutor: INodeExecutor = {
   id: FORMAT_REPORT_TYPE,

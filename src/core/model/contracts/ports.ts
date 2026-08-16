@@ -90,6 +90,36 @@ export interface IPortDescriptor {
    * — a port may open itself up, never close down what its type allows.
    */
   readonly accepts?: readonly (PortTypeId | '*')[];
+  /**
+   * Refuses a source whose node does not itself declare an **input** port of
+   * the named type.
+   *
+   * For the port whose data does not travel along its own edges.
+   * `function.format_report.candidate` is the worked example and the reason
+   * this exists (production-ready ticket 31): the compiled join reads
+   * `worker_results` out of graph state, written by the workers a supervisor
+   * dispatched with `Send`, and the edges into `candidate` only *sequence* the
+   * join after that superstep. Wire an agent there instead and the edge is
+   * drawable, `required` is satisfied, `openstategraph validate` says `VALID`
+   * — and the run reports `_No results._`, because nothing ever wrote the key
+   * the join reads.
+   *
+   * The condition is what makes a source eligible, not who it is: a `Send` is
+   * emitted for an edge whose destination port type is `worker`, so "declares
+   * a `worker` input" is exactly "is dispatched by a fan-out". Naming the node
+   * type instead would exclude a plugin's own worker family for no reason
+   * (open-closed), and naming the *source* port type cannot work — a worker's
+   * `result` and an agent's `result` are the same type, which is why the type
+   * system could not already refuse this.
+   *
+   * `refusal` is the sentence the user reads, so it belongs to the node that
+   * knows the mechanism rather than to the generic rule that enforces it.
+   * Enforced by `sourceCapabilityRule`.
+   */
+  readonly sourceMustDeclare?: {
+    readonly portType: PortTypeId;
+    readonly refusal: string;
+  };
 }
 
 export interface PortInstance extends IPortDescriptor {

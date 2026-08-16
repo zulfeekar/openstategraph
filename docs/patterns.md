@@ -118,8 +118,10 @@ subtask several times, for confidence).
 
 > **Read this before you draw it.** The shape every parallelization diagram in
 > the literature uses — one source fanning out to *N* drawn agent nodes, whose
-> results converge on one join node — **does not work here**, and it fails
-> silently. It validates, it runs, and it produces `# Title` followed by
+> results converge on one join node — **does not work here**. The canvas now
+> refuses the edge and says why (an agent's `result` into
+> `function.format_report.candidate`), because until it did, the shape failed
+> *silently*: it validated, it ran, and it produced `# Title` followed by
 > `_No results._`. The mechanism is below, under *Why the intuitive shape
 > cannot work*. If you are here to build, skip to the shape that runs.
 
@@ -183,13 +185,26 @@ nothing reports the loss:
 
 - `openstategraph validate` says `VALID` — `candidate` is a bus
   (`maxConnections: null`) and `required`, so three edges satisfy both the
-  capacity rule and the required-port check. The port advertises a fan-in the
+  capacity rule and the required-port check. The port advertised a fan-in the
   runtime does not implement.
 - the **canvas preview disagrees with the compiler**. Its browser executor does
   read `candidate` and will show you a joined document; its own source says it
   "demonstrates the formatting, not the fan-out/join semantics that only the
-  compiled graph has". A shape can look right in preview and return
+  compiled graph has". A shape could look right in preview and return
   `_No results._` on the backend.
+
+**What changed (production-ready ticket 31), and what did not.** The port now
+declares who may feed it — a source that itself takes a `worker` input, which
+is exactly "is dispatched by a fan-out" — so the editor refuses the agent edge
+at connection time with a sentence naming the mechanism, and the preview can no
+longer render a join the compiler will not produce. A join that never was
+dispatched to now says so in its own report instead of a bare `_No results._`.
+
+**Static fan-in is still unbuilt.** Refusing the drawing is not implementing
+it: there is no mechanism by which *N* drawn nodes' outputs converge into one
+join, and adding one is a multi-writer state key with a named reducer, not a
+port change. A hand-authored or generated document can still contain the edge —
+`openstategraph validate` does not enforce this rule, only the canvas does.
 
 Recorded as `.scratch/workflow-gallery/tickets/14-all-fan-in-is-send-shaped.md`
 and `.scratch/production-ready/tickets/30-a-documented-pattern-that-produces-nothing.md`.

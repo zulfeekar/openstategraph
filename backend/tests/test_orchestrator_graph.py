@@ -569,3 +569,56 @@ class TestTheCeilingIsNoLongerASilentSlice:
         final = run(document, "one thing; two things", model)
 
         assert final["outputs"]["node:orchestrate.supervisor-1"] == "Planned 2 subtask(s)."
+
+
+class TestAJoinThatWasNeverDispatchedToSaysSo:
+    """production-ready ticket 31, the "Also".
+
+    `_No results._` was the same sentence for two different situations: a
+    fan-out whose workers genuinely produced nothing, and a join that was
+    never dispatched to at all. The second is the failure mode the documented
+    "intuitive" parallelization shape produces (`docs/patterns.md` §4) — an
+    agent wired straight into `candidate` compiles to a plain sequencing edge,
+    the join reads a `worker_results` nobody wrote, and the run answers with a
+    blank report. The editor now refuses to draw that (`sourceCapabilityRule`),
+    but a hand-authored or generated document still can, so the report says
+    which of the two happened.
+    """
+
+    @staticmethod
+    def _agents_into_the_join() -> dict[str, Any]:
+        """The shape the literature draws and this substrate does not have."""
+        return {
+            "version": 1,
+            "name": "the-intuitive-shape",
+            "nodes": [
+                node("node:input.text-1", "input.text"),
+                node("node:agent.llm-1", "agent.llm", systemPrompt="answer"),
+                node("node:function.format_report-1", "function.format_report", reportTitle="Report"),
+                node("node:output.formatted-1", "output.formatted"),
+            ],
+            "edges": [
+                edge("node:input.text-1", "text", "node:agent.llm-1", "prompt"),
+                edge("node:agent.llm-1", "result", "node:function.format_report-1", "candidate"),
+                edge("node:function.format_report-1", "report", "node:output.formatted-1", "result"),
+            ],
+        }
+
+    def test_the_report_names_the_missing_fan_out_rather_than_shrugging(self) -> None:
+        model = RespondingModel([], default="an answer")
+
+        final = run(self._agents_into_the_join(), "do a thing", model)
+
+        report = final["answer"]
+        assert "No results" in report
+        # The sentence has to say *why*, and point somewhere.
+        assert "dispatched" in report
+        assert "supervisor" in report.lower()
+
+    def test_a_real_fan_out_still_reports_its_workers(self) -> None:
+        model = RespondingModel([], default="an answer")
+
+        final = run(orchestrator_graph_document(max_subtasks=8), "one thing; two things", model)
+
+        assert "dispatched" not in final["answer"]
+        assert "### task-1" in final["answer"]

@@ -172,6 +172,37 @@ export const typeCompatibilityRule: IConnectionRule = {
 };
 
 /**
+ * Enforces a port's `sourceMustDeclare` — "who may feed me", where the type
+ * system cannot tell.
+ *
+ * Production-ready ticket 31. A port whose data arrives through **graph state**
+ * rather than along its own edges cannot express its real requirement as a
+ * type: `orchestrate.worker.result` and `agent.llm.result` are both `result`,
+ * and only the first is written to the key the consumer reads. So the consumer
+ * names the *capability* its source must have — an input port of a given type
+ * — and this refuses the rest with the consumer's own sentence.
+ *
+ * Structural on purpose. It asks what the source node declares, never what it
+ * is called, so a plugin family that is genuinely dispatched by the same
+ * mechanism qualifies without amending anything here (open-closed).
+ *
+ * Runs before `capacity`: an ineligible source should hear why it is the wrong
+ * source, not that the bus is full.
+ */
+export const sourceCapabilityRule: IConnectionRule = {
+  id: 'source-capability',
+  order: 45,
+  check({ targetPort, sourceNode }) {
+    const requirement = targetPort.sourceMustDeclare;
+    if (!requirement) return null;
+    const declares = sourceNode.ports.some(
+      (port) => port.direction === 'in' && port.type === requirement.portType,
+    );
+    return declares ? null : { reason: requirement.refusal };
+  },
+};
+
+/**
  * Enforces port capacity.
  *
  * A full single-slot input yields a *replacement* rather than a rejection:
@@ -251,6 +282,7 @@ export const DEFAULT_CONNECTION_RULES: readonly IConnectionRule[] = [
   selfLoopRule,
   duplicateRule,
   typeCompatibilityRule,
+  sourceCapabilityRule,
   capacityRule,
   acyclicRule,
 ];

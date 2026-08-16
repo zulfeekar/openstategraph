@@ -261,6 +261,55 @@ describe('ConnectionValidator', () => {
     });
   });
 
+  describe('source capability rule (production-ready ticket 31)', () => {
+    // `function.format_report.candidate` is a bus its runtime never reads: the
+    // compiled join takes `worker_results` out of graph state, written only by
+    // workers a supervisor dispatched with `Send`. An `agent.result →
+    // candidate` edge is drawable, satisfies `required`, validates — and
+    // compiles to a plain sequencing edge that carries nothing, so the run
+    // reports `_No results._`. The port now says who may feed it.
+    let join: AbstractNodeModel;
+
+    beforeEach(() => {
+      join = addNode(workbench, TYPE.formatReport);
+    });
+
+    it('accepts a worker, which is what the fan-out actually dispatches', () => {
+      const worker = addNode(workbench, TYPE.worker);
+      expect(validate(worker, 'result', join, 'candidate').ok).toBe(true);
+    });
+
+    it('accepts several workers, because the bus is still a bus', () => {
+      const first = addNode(workbench, TYPE.worker);
+      const second = addNode(workbench, TYPE.worker);
+      connect(workbench, first, 'result', join, 'candidate');
+      expect(validate(second, 'result', join, 'candidate').ok).toBe(true);
+    });
+
+    it('refuses an agent, and names the mechanism and the shape', () => {
+      const verdict = validate(agent, 'result', join, 'candidate');
+      expect(verdict).toMatchObject({ ok: false });
+      if (verdict.ok) return;
+      expect(verdict.reason).toMatch(/worker_results/);
+      expect(verdict.reason).toMatch(/supervisor/i);
+    });
+
+    it('refuses it at the gesture too, not only in the verdict', () => {
+      const outcome = workbench.controller.edges.connect(
+        { nodeId: agent.id, portId: 'result' },
+        { nodeId: join.id, portId: 'candidate' },
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(workbench.model.edgesInto({ nodeId: join.id, portId: 'candidate' })).toHaveLength(0);
+    });
+
+    it('leaves every other port alone', () => {
+      // The rule is opt-in per port descriptor, not a global tightening.
+      expect(validate(agent, 'result', output, 'result').ok).toBe(true);
+    });
+  });
+
   describe('unknown endpoints', () => {
     it('rejects a missing node rather than throwing', () => {
       const verdict = workbench.connectionValidator.validate(
