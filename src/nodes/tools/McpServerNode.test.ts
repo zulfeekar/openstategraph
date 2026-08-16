@@ -11,10 +11,13 @@ import {
   AUTH_NONE,
   DEFAULT_MCP_SERVER_NAMES,
   MCP_FIELD,
+  MCP_GROUPING_GUIDE,
   MCP_LOCKED_NOTE,
   TRANSPORT_HTTP,
   TRANSPORT_SSE,
   mcpServerFields,
+  mcpServerRowFields,
+  parseToolFilter,
   validateEnvVarName,
 } from './mcpServerFields';
 import { CATEGORY, PORT } from '../vocabulary';
@@ -23,17 +26,33 @@ import { makeWorkbench } from '@core/testing/fixtures';
 
 /**
  * `tool.mcp` — mcp-connect ticket 02, built through `skills/atom-forge` as
- * its third live client.
+ * its third live client; N servers per card since ticket 04.
  *
  * What these tests pin is the **seam** and the **rules that only exist here**:
- * the id string `prebuilt_mcp.py` is keyed by, the eight field keys its
- * `configure()` reads, the port, and the two promises the card makes about
- * credentials. Everything the atom *does* — discovery, filtering, the six
- * failure sentences — is asserted in `backend/tests/test_prebuilt_mcp.py`,
- * where the connection is; asserting it twice in two languages is the
- * duplication this repository's DRY rule names.
+ * the id string `prebuilt_mcp.py` is keyed by, the keys its `configure()`
+ * reads — three on the node and seven inside a row — the port, and the
+ * promises the card makes about credentials and about what a second row costs.
+ * Everything the atom *does* — discovery, filtering, the failure sentences,
+ * which row a warning names — is asserted in
+ * `backend/tests/test_prebuilt_mcp.py`, where the connection is; asserting it
+ * twice in two languages is the duplication this repository's DRY rule names.
  */
+/** A node-level field. Everything describing a *server* is a row field now. */
 const field = (key: string) => mcpServerNode.fields.find((f) => f.key === key);
+
+const serversField = () => {
+  const schema = field(MCP_FIELD.servers);
+  if (schema?.kind !== 'repeatable-group') throw new Error('tool.mcp has no server rows');
+  return schema;
+};
+
+/** One row's control, by key — the shared field set, in its row container. */
+const rowField = (key: string) => serversField().fields.find((f) => f.key === key);
+
+/** Node data as the card writes it: N server rows. */
+const withRows = (...rows: Array<Record<string, unknown>>) => ({
+  [MCP_FIELD.servers]: rows.map((row, index) => ({ id: `r${index}`, ...row })),
+});
 
 /** Every data key this node owns — graph-assembly overrides subtracted. */
 const GRAPH_ASSEMBLY_KEYS = ['maxRetries', 'timeoutSeconds'];
@@ -60,9 +79,9 @@ describe('the seam the Python tool is keyed by', () => {
     expect(mcpServerNode.id).toBe(MCP_SERVER_TYPE);
   });
 
-  it('declares exactly the keys `configure()` reads', () => {
+  it('declares exactly the keys the node itself carries', () => {
     // A `data` key no field declares reads "" forever, silently. The Python
-    // side pins the same eight in `MCP_FIELD_KEYS`, and
+    // side pins the same three in `MCP_NODE_KEYS`, and
     // `test_mcp_field_contract.py` compares the two lists.
     //
     // `maxRetries` and `timeoutSeconds` are subtracted because `defineNode`
@@ -70,11 +89,20 @@ describe('the seam the Python tool is keyed by', () => {
     // which CLAUDE.md places on the workflow rather than on any family, so
     // they are not this atom's to declare or to mirror.
     expect(ownFieldKeys().sort()).toEqual(
+      [MCP_FIELD.servers, MCP_FIELD.guide, MCP_FIELD.note].sort(),
+    );
+  });
+
+  it('describes a server inside a row, in the seven keys Python reads there', () => {
+    expect(
+      serversField()
+        .fields.map((f) => f.key)
+        .sort(),
+    ).toEqual(
       [
         MCP_FIELD.authHeaderName,
         MCP_FIELD.authKind,
         MCP_FIELD.authTokenEnv,
-        MCP_FIELD.note,
         MCP_FIELD.server,
         MCP_FIELD.tools,
         MCP_FIELD.transport,
@@ -99,11 +127,16 @@ describe('the seam the Python tool is keyed by', () => {
     expect(tool?.maxConnections).toBeUndefined();
   });
 
-  it('defaults to HTTP with no authentication', () => {
-    const defaults = defaultsFrom(mcpServerNode.fields);
-    expect(defaults[MCP_FIELD.transport]).toBe(TRANSPORT_HTTP);
-    expect(defaults[MCP_FIELD.authKind]).toBe(AUTH_NONE);
-    expect(defaults[MCP_FIELD.tools]).toEqual([]);
+  it('starts with one empty row, defaulting to HTTP with no authentication', () => {
+    // One row rather than zero: a placed card is something to fill in, not
+    // something you must first discover has a button.
+    const [row] = defaultsFrom(mcpServerNode.fields)[MCP_FIELD.servers] as Array<
+      Record<string, unknown>
+    >;
+    expect(row?.[MCP_FIELD.transport]).toBe(TRANSPORT_HTTP);
+    expect(row?.[MCP_FIELD.authKind]).toBe(AUTH_NONE);
+    expect(row?.[MCP_FIELD.tools]).toBe('');
+    expect(row?.id).toBeTruthy();
   });
 });
 
@@ -117,8 +150,35 @@ describe('the field set is shared, not fused into this card', () => {
     expect(panelFields.map((f) => f.key)).toContain(MCP_FIELD.authTokenEnv);
   });
 
+  it('renders each row from the panel’s own schemas, control for control', () => {
+    // Not "the same keys" — the same schemas, options, hints and validators.
+    // A row is the panel's field set in a different container, so a fourth
+    // auth type or a reworded hint reaches both places or neither. Compared
+    // by value rather than by reference only because the factory deliberately
+    // mints fresh objects per call (its options resolve lazily); a copied
+    // declaration would still fail here the moment either side changed.
+    const panel = new Map(mcpServerFields().map((schema) => [schema.key, schema]));
+    for (const rowSchema of mcpServerRowFields()) {
+      // The one control that cannot travel as it is: a `repeatable-group`
+      // inside a row would be a table inside a table.
+      if (rowSchema.key === MCP_FIELD.tools) continue;
+      expect(rowSchema, `row field ${rowSchema.key} is not the panel's own`).toEqual(
+        panel.get(rowSchema.key),
+      );
+    }
+  });
+
+  it('spells the tool filter as one line in a row and a table in the panel', () => {
+    expect(mcpServerFields().find((f) => f.key === MCP_FIELD.tools)?.kind).toBe('repeatable-group');
+    expect(rowField(MCP_FIELD.tools)?.kind).toBe('text');
+    // Both are read as the same thing, in both languages.
+    expect(parseToolFilter('search_docs, get_symbol')).toEqual(['search_docs', 'get_symbol']);
+    expect(parseToolFilter([{ name: 'search_docs' }, { name: '  ' }])).toEqual(['search_docs']);
+    expect(parseToolFilter('  ,  ')).toEqual([]);
+  });
+
   it('suggests the two built-in servers when nothing is registered', () => {
-    const picker = field(MCP_FIELD.server);
+    const picker = rowField(MCP_FIELD.server);
     expect(picker?.kind).toBe('combobox');
     const options = resolveOptions(picker as never, {});
     expect(options.map((o) => o.value)).toEqual([...DEFAULT_MCP_SERVER_NAMES]);
@@ -129,7 +189,11 @@ describe('the field set is shared, not fused into this card', () => {
     const definition = createMcpServerNode(() =>
       registered.map((name) => ({ value: name, label: name })),
     );
-    const picker = definition.fields.find((f) => f.key === MCP_FIELD.server);
+    const group = definition.fields.find((f) => f.key === MCP_FIELD.servers);
+    const picker =
+      group?.kind === 'repeatable-group'
+        ? group.fields.find((f) => f.key === MCP_FIELD.server)
+        : undefined;
 
     expect(resolveOptions(picker as never, {}).map((o) => o.value)).toEqual(['Internal wiki']);
     registered = ['Internal wiki', 'Vendor API'];
@@ -139,11 +203,11 @@ describe('the field set is shared, not fused into this card', () => {
   it('lets a name be typed that is not registered yet', () => {
     // Combobox rather than select: drafting the card before registering the
     // server is a real order of work, and a listbox would outlaw it.
-    expect(field(MCP_FIELD.server)?.kind).toBe('combobox');
+    expect(rowField(MCP_FIELD.server)?.kind).toBe('combobox');
   });
 
   it('offers HTTP and a labelled-deprecated SSE, and nothing that cannot carry a credential', () => {
-    const options = resolveOptions(field(MCP_FIELD.transport) as never, {});
+    const options = resolveOptions(rowField(MCP_FIELD.transport) as never, {});
     expect(options.map((o) => o.value)).toEqual([TRANSPORT_HTTP, TRANSPORT_SSE]);
     expect(options.find((o) => o.value === TRANSPORT_SSE)?.label).toMatch(/deprecated/i);
     // WebSocket has no headers field at all; stdio names an executable.
@@ -153,7 +217,7 @@ describe('the field set is shared, not fused into this card', () => {
 
   it('offers a custom header as well as a bearer token', () => {
     // Both are load-bearing: LangSmith's own server wants LANGSMITH-API-KEY.
-    const kinds = resolveOptions(field(MCP_FIELD.authKind) as never, {}).map((o) => o.value);
+    const kinds = resolveOptions(rowField(MCP_FIELD.authKind) as never, {}).map((o) => o.value);
     expect(kinds).toEqual([AUTH_NONE, AUTH_BEARER, 'header']);
   });
 });
@@ -181,11 +245,23 @@ describe('a credential can never be typed into this card', () => {
     expect(validateEnvVarName('sk-live-abc')).toMatch(/\.env/);
   });
 
-  it('has no field a credential value belongs in', () => {
-    const keys = mcpServerNode.fields.map((f) => f.key);
+  it('has no field a credential value belongs in, at either level', () => {
+    const keys = [
+      ...mcpServerNode.fields.map((f) => f.key),
+      ...serversField().fields.map((f) => f.key),
+    ];
     for (const forbidden of ['token', 'apiKey', 'secret', 'password', 'authToken']) {
       expect(keys).not.toContain(forbidden);
     }
+  });
+
+  it('refuses a pasted key inside a row, exactly as the flat field does', () => {
+    // The row renderer runs the schema's own `validate`, so this is the same
+    // function in a different container — not a second rule that can drift.
+    const credential = rowField(MCP_FIELD.authTokenEnv);
+    expect(credential?.kind).toBe('text');
+    expect(credential?.validate?.('ghp_aaaaaaaaaaaaaaaaaaaa' as never)).toMatch(/\.env/);
+    expect(credential?.validate?.('MY_MCP_TOKEN' as never)).toBeNull();
   });
 });
 
@@ -208,37 +284,93 @@ describe('the machinery is shown, never pre-filled into an editable box', () => 
 describe('the card says only what the document knows', () => {
   it('reads as unconfigured before anything is picked', () => {
     expect(placed().subtitle).toMatch(/No server yet/);
+    expect(placed().rows).toEqual([]);
   });
 
   it('names the registered server and that nothing is filtered out', () => {
-    expect(placed({ [MCP_FIELD.server]: 'LangChain docs' }).subtitle).toBe(
+    expect(placed(withRows({ [MCP_FIELD.server]: 'LangChain docs' })).subtitle).toBe(
       'LangChain docs · every tool it offers',
     );
   });
 
-  it('falls back to the URL when no server is named', () => {
-    expect(placed({ [MCP_FIELD.url]: 'https://vendor.test/mcp' }).subtitle).toBe(
+  it('falls back to the URL when a row names no server', () => {
+    expect(placed(withRows({ [MCP_FIELD.url]: 'https://vendor.test/mcp' })).subtitle).toBe(
       'https://vendor.test/mcp · every tool it offers',
     );
   });
 
   it('counts the filter, and never a discovered tool list', () => {
-    const node = placed({
-      [MCP_FIELD.server]: 'LangChain docs',
-      [MCP_FIELD.tools]: [{ name: 'search_docs' }, { name: 'get_symbol' }],
-    });
+    const node = placed(
+      withRows({
+        [MCP_FIELD.server]: 'LangChain docs',
+        [MCP_FIELD.tools]: 'search_docs, get_symbol',
+      }),
+    );
     // The number here is the document's, not the server's. A count of what
     // the server offers needs a round trip, so a card showing one would be
     // claiming something it cannot know before a run.
     expect(node.subtitle).toBe('LangChain docs · 2 tools only');
   });
 
-  it('drops blank filter rows in both languages alike', () => {
+  it('counts the servers once there is more than one, and names the first two', () => {
+    const node = placed(
+      withRows(
+        { [MCP_FIELD.server]: 'LangChain docs' },
+        { [MCP_FIELD.server]: 'LangChain API reference' },
+        { [MCP_FIELD.url]: 'https://internal.test/mcp' },
+      ),
+    );
+    expect(node.subtitle).toBe('3 servers · LangChain docs, LangChain API reference +1 more');
+  });
+
+  it('ignores a row nobody has filled in yet', () => {
+    // The card ships with one empty row. It is not a server, and a subtitle
+    // that counted it would say "1 server" about nothing.
+    const node = placed(withRows({ [MCP_FIELD.server]: 'LangChain docs' }, {}));
+    expect(node.rows).toHaveLength(1);
+    expect(node.subtitle).toBe('LangChain docs · every tool it offers');
+  });
+
+  it('drops blank filter entries in both languages alike', () => {
+    const node = placed(
+      withRows({ [MCP_FIELD.server]: 'LangChain docs', [MCP_FIELD.tools]: ' , search_docs' }),
+    );
+    expect(node.rows[0]?.tools).toEqual(['search_docs']);
+  });
+
+  it('reads a workflow saved before the card went plural', () => {
+    // Compatibility, not migration: opening an old document must neither
+    // rewrite it nor lose the server it names. `prebuilt_mcp._server_rows`
+    // reads the same two shapes.
     const node = placed({
       [MCP_FIELD.server]: 'LangChain docs',
-      [MCP_FIELD.tools]: [{ name: '  ' }, { name: 'search_docs' }],
+      [MCP_FIELD.tools]: [{ name: 'search_docs' }],
     });
-    expect(node.selectedTools).toEqual(['search_docs']);
+    expect(node.rows.map((row) => row.target)).toEqual(['LangChain docs']);
+    expect(node.rows[0]?.tools).toEqual(['search_docs']);
+    expect(node.subtitle).toBe('LangChain docs · 1 tool only');
+  });
+});
+
+describe('one node per group of servers that share a consumer', () => {
+  it('says so on the card, where the second row is added', () => {
+    const guide = field(MCP_FIELD.guide);
+    expect(guide?.kind).toBe('readonly');
+    expect(guide?.onCard ?? true).toBe(true);
+    expect(MCP_GROUPING_GUIDE).toMatch(/share a consumer/);
+    // The two halves of the trade: what rows buy, and when to use two nodes.
+    expect(MCP_GROUPING_GUIDE).toMatch(/two of these nodes/);
+  });
+
+  it('offers each row its own live check', () => {
+    // The panel's Validate button, per row — same route, same four verdicts.
+    expect(serversField().rowProbe?.label).toBe('Check');
+  });
+
+  it('keeps the rows off the card and in the inspector', () => {
+    // Seven controls times three rows is taller than the canvas. What the
+    // card shows is the subtitle and the guidance.
+    expect(serversField().onCard).toBe(false);
   });
 });
 

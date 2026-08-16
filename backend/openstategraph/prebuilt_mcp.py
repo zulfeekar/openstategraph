@@ -26,6 +26,25 @@ docs server: a call is 1.2–1.5 s, of which ≈0.8 s is reconnection. Roughly
 half of every MCP tool call is the handshake. That number is on the card,
 because a cost nobody can see gets blamed on the model.
 
+## One card, N servers (ticket 04)
+
+A `tool.mcp` node carries a **list of server rows**, not one server. The grill
+that settled it is worth keeping: N servers on one node give up per-server
+*routing*, because the card's output feeds one place and every row travels
+together — and the case it was asked for, several services with one agent
+choosing per task, is precisely where that costs nothing, because they already
+share a consumer. The guidance the card carries is the same sentence: **one
+node per group of servers that share a consumer**, a second node when two
+agents need different servers.
+
+What rows must *not* share is a fate. Discovery runs `asyncio.gather` across
+them — one client per row rather than one client holding every connection,
+because `get_tools()` over a multi-server client answers a failure as one
+`ExceptionGroup` and a warning that cannot name a row is a warning nobody can
+act on. So each row is reached independently, a sick row degrades to a
+capability warning naming its ordinal and its server, and every healthy row
+still binds.
+
 ## What is here and what is deliberately not
 
 **HTTP only.** `streamable_http` and the deprecated `sse`. WebSocket cannot
@@ -63,6 +82,7 @@ logger = logging.getLogger(__name__)
 # schema has something stable to be compared against.
 # --------------------------------------------------------------------- #
 
+KEY_SERVERS = "servers"
 KEY_SERVER = "server"
 KEY_URL = "url"
 KEY_TRANSPORT = "transport"
@@ -70,11 +90,21 @@ KEY_AUTH_KIND = "authKind"
 KEY_AUTH_HEADER_NAME = "authHeaderName"
 KEY_AUTH_TOKEN_ENV = "authTokenEnv"
 KEY_TOOLS = "tools"
+KEY_GUIDE = "mcpGuide"
 KEY_NOTE = "mcpNote"
 
-#: Every key `configure()` reads, plus the read-only note the card renders.
-#: Compared against the TypeScript declaration by `test_mcp_field_contract.py`.
-MCP_FIELD_KEYS = (
+#: Keys on the **node's own** `data` — what `defaultsFrom(fields)` emits, and
+#: therefore what the generated port table declares. Since ticket 04 that is
+#: the row list plus the two read-only notes; everything a server is described
+#: by moved *into* a row. Compared against the TypeScript declaration by
+#: `test_mcp_field_contract.py`.
+MCP_NODE_KEYS = (KEY_SERVERS, KEY_GUIDE, KEY_NOTE)
+
+#: Keys within one server row. The same seven the app-level panel renders flat,
+#: because a row and a panel entry are the same field set in two containers —
+#: `src/nodes/tools/mcpServerFields.ts` declares them once and the contract test
+#: fails if the two vocabularies drift.
+MCP_ROW_KEYS = (
     KEY_SERVER,
     KEY_URL,
     KEY_TRANSPORT,
@@ -82,7 +112,6 @@ MCP_FIELD_KEYS = (
     KEY_AUTH_HEADER_NAME,
     KEY_AUTH_TOKEN_ENV,
     KEY_TOOLS,
-    KEY_NOTE,
 )
 
 #: The `StreamableHttpConnection` literal. Three spellings alias to one branch
@@ -436,20 +465,25 @@ def validate_mcp_server(
 # --------------------------------------------------------------------- #
 
 
-def _discover_tools(
+async def _discover_tools(
     definition: McpServerDefinition, headers: Mapping[str, str], *, timeout: float
 ) -> list[Any]:
-    """`asyncio.run(get_tools())` — a network call in the compile path.
+    """`get_tools()` for one server — a network call in the compile path.
 
     Named as its own module-level function for two reasons. It is the seam a
     unit test replaces, so no test in this repository needs a server; and it
     is the *one* place to look when asking what compiling a document can
     reach, which is a question worth being able to answer in one file.
 
-    Measured: 1.08 s for one remote server on 0.3.2. N servers cost roughly
-    one server's latency rather than N — `get_tools()` with no `server_name`
-    gathers over all connections — but each `tool.mcp` node binds exactly one,
-    so that concurrency is not ours to claim.
+    Measured: 1.08 s for one remote server on 0.3.2. A coroutine rather than a
+    blocking call because a card carries N rows and `_discover_all` gathers
+    over them, so N servers cost roughly one server's latency.
+
+    **One client per row, not one client holding every connection.** The
+    library would gather for us if handed all the connections at once, and it
+    would also collapse every failure into one `ExceptionGroup` with no way to
+    say which server it came from. Attribution is the feature; the concurrency
+    is available either way.
     """
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -460,7 +494,32 @@ def _discover_tools(
     # `StreamableHttpConnection`), and the seam is one line.
     connections = cast(Any, {definition.name: definition.connection(headers)})
     client = MultiServerMCPClient(connections)
-    return asyncio.run(asyncio.wait_for(client.get_tools(server_name=definition.name), timeout))
+    return await asyncio.wait_for(client.get_tools(server_name=definition.name), timeout)
+
+
+def _discover_all(
+    jobs: Sequence[tuple[McpServerDefinition, Mapping[str, str]]], *, timeout: float
+) -> list[Any]:
+    """Every row's tools, or the exception that row raised, in row order.
+
+    One `asyncio.run` for the whole card rather than one per row: the loop's
+    lifetime is still exactly this call, which is what makes the shim honest,
+    and `gather` is what turns three servers into one server's wait.
+
+    `return_exceptions=True` is the isolation. Without it the first row to
+    fail cancels the others, and a card with one dead server would bind
+    nothing — the failure this ticket exists to prevent.
+    """
+    if not jobs:
+        return []
+
+    async def gather() -> list[Any]:
+        return await asyncio.gather(
+            *(_discover_tools(definition, headers, timeout=timeout) for definition, headers in jobs),
+            return_exceptions=True,
+        )
+
+    return asyncio.run(gather())
 
 
 def _wrap_async_tool(tool: Any) -> Any:
@@ -494,12 +553,20 @@ def _wrap_async_tool(tool: Any) -> Any:
 # --------------------------------------------------------------------- #
 
 
-def _rows(value: Any) -> list[str]:
-    """The `repeatable-group` filter, as a list of names.
+def _tool_filter(value: Any) -> list[str]:
+    """One row's tool filter, as names — typed on a line, or a list of rows.
 
-    Blank rows are not a filter. Somebody pressing *Add tool* and then
-    changing their mind must not silently bind nothing.
+    Two containers, one meaning. A server row has no room for a sub-table, so
+    the card's row spells its filter as one comma-separated line; a document
+    written before ticket 04 (and the app-level panel's own field set) spells
+    it as `[{"name": …}]`. Both are read here rather than migrated, because a
+    reader who opens an old workflow must not have it rewritten under them.
+
+    Blank entries are not a filter either way. Somebody pressing *Add tool* and
+    then changing their mind must not silently bind nothing.
     """
+    if isinstance(value, str):
+        return [name.strip() for name in re.split(r"[,\n]", value) if name.strip()]
     if not isinstance(value, list):
         return []
     names: list[str] = []
@@ -513,12 +580,58 @@ def _rows(value: Any) -> list[str]:
     return names
 
 
-class McpTool(BaseTool):
-    """One card, a whole MCP server's tools — filtered, if you like.
+def _names_a_server(row: Mapping[str, Any]) -> bool:
+    """Whether this row points at anything at all."""
+    return any(str(row.get(key, "")).strip() for key in (KEY_SERVER, KEY_URL))
 
-    **One node is one server, not one tool.** The alternative was considered
-    and rejected in research: a thirty-tool server would be thirty cards, and
-    the filter below does the same job in one.
+
+def _server_rows(data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """A node's server rows — or its flat fields, read as the one row they were.
+
+    The fallback is compatibility, not migration: nothing is rewritten, so
+    opening a workflow saved before the card went plural neither changes the
+    file nor loses its server.
+
+    It is reached when **no row names anything**, rather than when the row list
+    is absent, and that is the case that actually occurs: a new card seeds one
+    empty row, so an old document opened in a new editor carries an empty row
+    list *and* its flat fields, and a fallback keyed on absence would silently
+    bind nothing. A card with even one filled row is a card that has been
+    edited, and its rows are the whole truth.
+    """
+    listed = data.get(KEY_SERVERS)
+    rows = [row for row in listed if isinstance(row, Mapping)] if isinstance(listed, list) else []
+    if any(_names_a_server(row) for row in rows):
+        return rows
+    return [data] if _names_a_server(data) else []
+
+
+@dataclass(frozen=True)
+class McpBinding:
+    """One row of the card: a server, its filter, and what is wrong with it.
+
+    `problem` is set at configure time — a name nothing registers, a row with
+    nothing in it — and it is per row rather than per node, which is the whole
+    of ticket 04 in one field: a card with a bad row still has good ones.
+    """
+
+    #: Zero-based position on the card. Warnings quote it one-based, because
+    #: the developer counting rows is counting from one.
+    index: int
+    definition: McpServerDefinition | None = None
+    selected: tuple[str, ...] = ()
+    problem: str | None = None
+
+
+class McpTool(BaseTool):
+    """One card, N servers' tools — each row filtered, if you like.
+
+    **One node is a server list, not one tool.** The alternative was considered
+    and rejected in research: a thirty-tool server would be thirty cards, and a
+    row's filter does the same job in one line. Ticket 04 then took the node
+    from one server to a list, because three services an agent chooses between
+    per task share a consumer, and sharing a consumer is exactly when rows cost
+    nothing.
 
     The singular seam refuses rather than guessing — see `as_langchain_tool`.
     """
@@ -533,79 +646,94 @@ class McpTool(BaseTool):
 
     def __init__(
         self,
-        definition: McpServerDefinition | None = None,
-        selected: Sequence[str] = (),
+        bindings: Sequence[McpBinding] = (),
         *,
         data: Mapping[str, Any] | None = None,
-        problem: str | None = None,
     ) -> None:
-        self.definition = definition
-        self.selected = tuple(selected)
-        self.problem = problem
+        self.bindings = tuple(bindings)
         self._data = dict(data or {})
 
     # -- configuration -------------------------------------------------- #
 
     def configure(self, data: dict[str, Any]) -> "McpTool":
-        """One node's own fields, resolved into a server definition.
+        """One node's server rows, each resolved into a server definition.
 
         A fresh instance, never a mutation of the shared registry one: two
-        `tool.mcp` nodes pointing at two servers in one document is the
+        `tool.mcp` nodes pointing at two sets of servers in one document is the
         expected case, not the exotic one.
         """
-        server_name = str(data.get(KEY_SERVER, "")).strip()
-        url = str(data.get(KEY_URL, "")).strip()
-        selected = _rows(data.get(KEY_TOOLS))
+        catalogue: dict[str, McpServerDefinition] | None = None
+        bindings: list[McpBinding] = []
 
-        if server_name:
-            registered = mcp_server_catalogue(_configured_servers()).get(server_name)
-            if registered is None:
-                return McpTool(
-                    None,
-                    selected,
-                    data=data,
-                    problem=(
-                        f'No MCP server named "{server_name}" is registered in this project, '
-                        f"and this node configures none of its own. Add it to "
-                        f"openstategraph.yaml under mcp_servers, or fill in the server's URL "
-                        f"on the card."
-                    ),
+        for index, row in enumerate(_server_rows(data)):
+            server_name = str(row.get(KEY_SERVER, "")).strip()
+            url = str(row.get(KEY_URL, "")).strip()
+            selected = tuple(_tool_filter(row.get(KEY_TOOLS)))
+
+            if server_name:
+                # Read once per node rather than once per row: the project's
+                # config is one file, and three rows naming three registered
+                # servers must not be three reads of it.
+                if catalogue is None:
+                    catalogue = mcp_server_catalogue(_configured_servers())
+                registered = catalogue.get(server_name)
+                bindings.append(
+                    McpBinding(index, registered, selected)
+                    if registered is not None
+                    else McpBinding(
+                        index,
+                        selected=selected,
+                        problem=(
+                            f'No MCP server named "{server_name}" is registered in this '
+                            f"project, and this row configures none of its own. Add it to "
+                            f"openstategraph.yaml under mcp_servers, or fill in the server's "
+                            f"URL on the card."
+                        ),
+                    )
                 )
-            return McpTool(registered, selected, data=data)
+                continue
 
-        if not url:
-            return McpTool(
-                None,
-                selected,
-                data=data,
-                problem=(
-                    "An MCP server node names no registered server and carries no URL, so "
-                    "there is nothing for it to connect to. Pick a server or type its URL."
-                ),
+            if not url:
+                bindings.append(
+                    McpBinding(
+                        index,
+                        selected=selected,
+                        problem=(
+                            "This row names no registered server and carries no URL, so there "
+                            "is nothing for it to connect to. Pick a server or type its URL."
+                        ),
+                    )
+                )
+                continue
+
+            transport = str(row.get(KEY_TRANSPORT, "")).strip()
+            bindings.append(
+                McpBinding(
+                    index,
+                    McpServerDefinition(
+                        # An inline server has no registered name; the URL is
+                        # the only honest identity it has, and every warning
+                        # below names it.
+                        name=url,
+                        url=url,
+                        # A transport this build does not implement (websocket,
+                        # stdio) falls back rather than failing: the document
+                        # may have been written by a newer editor, and HTTP is
+                        # the only one of the four that both carries a
+                        # credential and needs no subprocess.
+                        transport=transport if transport in TRANSPORTS else TRANSPORT_HTTP,
+                        auth=McpAuth(
+                            kind=str(row.get(KEY_AUTH_KIND, AUTH_NONE)).strip() or AUTH_NONE,
+                            header_name=str(row.get(KEY_AUTH_HEADER_NAME, "")).strip(),
+                            token_env=str(row.get(KEY_AUTH_TOKEN_ENV, "")).strip(),
+                        ),
+                        origin="inline",
+                    ),
+                    selected,
+                )
             )
 
-        transport = str(data.get(KEY_TRANSPORT, "")).strip()
-        return McpTool(
-            McpServerDefinition(
-                # An inline server has no registered name; the URL is the only
-                # honest identity it has, and every warning below names it.
-                name=url,
-                url=url,
-                # A transport this build does not implement (websocket, stdio)
-                # falls back rather than failing: the document may have been
-                # written by a newer editor, and HTTP is the only one of the
-                # four that both carries a credential and needs no subprocess.
-                transport=transport if transport in TRANSPORTS else TRANSPORT_HTTP,
-                auth=McpAuth(
-                    kind=str(data.get(KEY_AUTH_KIND, AUTH_NONE)).strip() or AUTH_NONE,
-                    header_name=str(data.get(KEY_AUTH_HEADER_NAME, "")).strip(),
-                    token_env=str(data.get(KEY_AUTH_TOKEN_ENV, "")).strip(),
-                ),
-                origin="inline",
-            ),
-            selected,
-            data=data,
-        )
+        return McpTool(bindings, data=data)
 
     def document_state(self) -> dict[str, Any]:
         """Everything this node would serialise. Exists to be tested.
@@ -619,58 +747,111 @@ class McpTool(BaseTool):
 
     # -- the seam ------------------------------------------------------- #
 
+    def _row_prefix(self, binding: McpBinding) -> str:
+        """Which row a sentence is about — and nothing at all when there is one.
+
+        A card with a single server says "Row 1 of 1" to no one's benefit, and
+        every sentence in this module was written to read without it.
+        """
+        total = len(self.bindings)
+        return f"Row {binding.index + 1} of {total} — " if total > 1 else ""
+
     def as_langchain_tools(self, warnings: list[str] | None = None) -> list[Any]:
-        """Every tool this server offers, filtered, wrapped, never raising.
+        """Every tool every healthy row offers, filtered, wrapped, never raising.
 
         A network call in the compile path is what this is, and nothing else
         here is one. So the rule that makes it acceptable is enforced at every
-        exit: **a failure contributes a warning and zero tools.** The agent
-        then runs without the capability, loudly, instead of the compile dying
-        for a server that happened to be down.
+        exit: **a failure contributes a warning and zero tools** — for that
+        row. The agent runs without the capability, loudly, instead of the
+        compile dying for a server that happened to be down, and instead of
+        two healthy servers dying with it.
         """
 
-        def warn(message: str) -> list[Any]:
+        def warn(message: str, binding: McpBinding | None = None) -> None:
+            sentence = f"{self._row_prefix(binding)}{message}" if binding else message
             if warnings is not None:
-                warnings.append(message)
+                warnings.append(sentence)
             else:  # a caller that wants none still gets the log line
-                logger.warning(message)
+                logger.warning(sentence)
+
+        if not self.bindings:
+            warn(
+                "An MCP server node has no servers on it, so it contributes no tools. Add a "
+                "row naming a registered server, or one carrying a URL."
+            )
             return []
 
-        if self.problem:
-            return warn(self.problem)
-        definition = self.definition
-        if definition is None:  # pragma: no cover — `problem` is always set with it
-            return warn("An MCP server node resolved to no server at all.")
+        # Two passes: everything resolvable without a socket first, so a row
+        # that cannot be reached at all never enters the gather and its
+        # warning still comes out in row order.
+        jobs: list[tuple[McpBinding, McpServerDefinition, dict[str, str]]] = []
+        for binding in self.bindings:
+            if binding.problem:
+                warn(binding.problem, binding)
+                continue
+            definition = binding.definition
+            if definition is None:  # pragma: no cover — `problem` is always set with it
+                warn("This row resolved to no server at all.", binding)
+                continue
+            headers, problem = resolve_auth_headers(definition.auth, server_name=definition.name)
+            if problem:
+                warn(problem, binding)
+                continue
+            jobs.append((binding, definition, headers))
 
-        headers, problem = resolve_auth_headers(definition.auth, server_name=definition.name)
-        if problem:
-            return warn(problem)
+        outcomes = _discover_all([(job[1], job[2]) for job in jobs], timeout=MCP_TIMEOUT_SECONDS)
 
-        try:
-            discovered = _discover_tools(definition, headers, timeout=MCP_TIMEOUT_SECONDS)
-        except BaseException as exc:  # noqa: BLE001 — ExceptionGroup is a BaseException
-            status, _panel_message = classify_mcp_failure(exc)
-            return warn(_bind_sentence(status, definition))
+        bound: list[Any] = []
+        claimed: dict[str, McpBinding] = {}
+        for (binding, definition, _headers), outcome in zip(jobs, outcomes):
+            if isinstance(outcome, BaseException):
+                status, _panel_message = classify_mcp_failure(outcome)
+                warn(_bind_sentence(status, definition), binding)
+                continue
+            for tool in self._chosen(binding, definition, outcome, warn):
+                first = claimed.get(tool.name)
+                if first is not None:
+                    # One card is one namespace: `ToolNode` keys tools by name,
+                    # so binding both would shadow the first silently and the
+                    # agent would call a server nobody chose.
+                    warn(
+                        f'Two servers on this node offer a tool named "{tool.name}". The '
+                        f"agent gets the one from row {first.index + 1}; filter one of the "
+                        f"two rows, or split them across two nodes.",
+                        binding,
+                    )
+                    continue
+                claimed[tool.name] = binding
+                bound.append(_wrap_async_tool(tool))
+        return bound
 
-        available = {tool.name: tool for tool in discovered}
-        if not self.selected:
+    def _chosen(
+        self,
+        binding: McpBinding,
+        definition: McpServerDefinition,
+        discovered: list[Any],
+        warn: Any,
+    ) -> list[Any]:
+        """One row's filter applied to what its server answered with."""
+        if not binding.selected:
             # G7: an absent filter means "all, now and later". Storing the
             # resolved list would silently freeze the server's surface.
-            chosen = list(discovered)
-        else:
-            chosen = [tool for tool in discovered if tool.name in set(self.selected)]
-            missing = [name for name in self.selected if name not in available]
-            if missing:
-                # The failure that would otherwise be reported as success: a
-                # filter naming three tools where the server offers two binds
-                # two and looks entirely healthy.
-                named = ", ".join(sorted(missing))
-                warn(
-                    f'MCP server "{definition.name}" has no tool named {named}. '
-                    f"Bound {len(chosen)} of the {len(self.selected)} tools this node asks for."
-                )
+            return list(discovered)
 
-        return [_wrap_async_tool(tool) for tool in chosen]
+        available = {tool.name: tool for tool in discovered}
+        chosen = [tool for tool in discovered if tool.name in set(binding.selected)]
+        missing = [name for name in binding.selected if name not in available]
+        if missing:
+            # The failure that would otherwise be reported as success: a
+            # filter naming three tools where the server offers two binds two
+            # and looks entirely healthy.
+            named = ", ".join(sorted(missing))
+            warn(
+                f'MCP server "{definition.name}" has no tool named {named}. '
+                f"Bound {len(chosen)} of the {len(binding.selected)} tools this row asks for.",
+                binding,
+            )
+        return chosen
 
     def as_langchain_tool(self) -> Any:
         """Refuses, and names the plural seam.
@@ -743,7 +924,8 @@ __all__ = [
     "AUTH_KINDS",
     "AUTH_NONE",
     "DEFAULT_MCP_SERVERS",
-    "MCP_FIELD_KEYS",
+    "MCP_NODE_KEYS",
+    "MCP_ROW_KEYS",
     "MCP_TIMEOUT_SECONDS",
     "MCP_TOOLS",
     "STATUS_AUTH_REQUIRED",
@@ -754,6 +936,7 @@ __all__ = [
     "TRANSPORT_HTTP",
     "TRANSPORT_SSE",
     "McpAuth",
+    "McpBinding",
     "McpServerDefinition",
     "McpTool",
     "McpValidation",

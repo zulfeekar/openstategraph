@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 from openstategraph.config_file import SECRET_VALUE_PREFIXES
-from openstategraph.prebuilt_mcp import MCP_FIELD_KEYS, McpTool
+from openstategraph.prebuilt_mcp import MCP_NODE_KEYS, MCP_ROW_KEYS, McpTool
 
 ROOT = Path(__file__).resolve().parents[2]
 PORT_SPECS = ROOT / "backend" / "openstategraph" / "compile" / "port_specs.json"
@@ -42,12 +42,27 @@ def _declared_keys() -> set[str]:
     return set(entry["field_keys"]) - GRAPH_ASSEMBLY_KEYS
 
 
+def _typescript_keys() -> dict[str, str]:
+    """`MCP_FIELD` in the editor's own words, read out of the declaration.
+
+    The generated port table carries the node's keys and stops there — a row's
+    sub-keys are inside a `repeatable-group` and `defaultsFrom` never sees
+    them. Since ticket 04 that is where six of the seven server keys live, so
+    the contract reads the factory's own constant rather than losing its grip
+    on exactly the keys a misspelling would silence.
+    """
+    source = FIELD_SET.read_text()
+    block = re.search(r"export const MCP_FIELD = \{(.*?)\} as const", source, re.S)
+    assert block, "mcpServerFields.ts no longer declares MCP_FIELD"
+    return dict(re.findall(r"(\w+):\s*'([^']+)'", block.group(1)))
+
+
 class TestTheCardAndTheToolAgree:
-    def test_the_editor_declares_every_key_the_tool_reads(self) -> None:
-        missing = set(MCP_FIELD_KEYS) - _declared_keys()
+    def test_the_editor_declares_every_key_the_node_carries(self) -> None:
+        missing = set(MCP_NODE_KEYS) - _declared_keys()
         assert not missing, (
-            f"prebuilt_mcp reads {sorted(missing)}, which no field on tool.mcp declares — "
-            f"those keys are '' forever, silently."
+            f"prebuilt_mcp reads {sorted(missing)} off a node, which no field on tool.mcp "
+            f"declares — those keys are '' forever, silently."
         )
 
     def test_the_tool_reads_every_key_the_editor_declares(self) -> None:
@@ -57,8 +72,23 @@ class TestTheCardAndTheToolAgree:
         defect rather than a legitimate case — there is no equivalent here of
         a worker's `role`, which its *supervisor's* factory reads.
         """
-        unread = _declared_keys() - set(MCP_FIELD_KEYS)
+        unread = _declared_keys() - set(MCP_NODE_KEYS)
         assert not unread, f"tool.mcp declares {sorted(unread)}, which nothing reads."
+
+    def test_a_server_row_is_spelled_the_same_in_both_languages(self) -> None:
+        """The seven keys inside a row, and the panel's flat seven, are one set.
+
+        `configure()` reads them off a row; the app-level panel writes them
+        flat; both spellings come from `MCP_FIELD`. A key added on one side
+        only would make a control that configures nothing — the defect this
+        file exists for, one container deeper.
+        """
+        declared = set(_typescript_keys().values())
+        missing = set(MCP_ROW_KEYS) - declared
+        assert not missing, f"prebuilt_mcp reads {sorted(missing)} off a row; MCP_FIELD has no such key."
+        # And nothing in the editor's vocabulary that nothing reads.
+        unread = declared - set(MCP_ROW_KEYS) - set(MCP_NODE_KEYS)
+        assert not unread, f"MCP_FIELD declares {sorted(unread)}, which nothing reads."
 
     def test_the_node_type_is_one_string_in_both_languages(self) -> None:
         assert McpTool.node_type == "tool.mcp"

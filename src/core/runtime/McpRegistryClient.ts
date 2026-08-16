@@ -80,6 +80,62 @@ export interface McpValidation {
   readonly elapsedSeconds: number;
 }
 
+interface McpBadge {
+  /** Two or three words, for a badge. */
+  readonly label: string;
+  /** The sentence to fall back on when the runtime sent none. */
+  readonly detail: string;
+}
+
+const BADGES: Record<McpStatus, McpBadge> = {
+  live: { label: 'live', detail: 'The server answered and offers tools.' },
+  unreachable: { label: 'unreachable', detail: 'Nothing answered at that address.' },
+  auth_required: {
+    label: 'auth required',
+    detail: 'The server answered, but rejected the credential.',
+  },
+  not_mcp: { label: 'not an MCP server', detail: 'Something answered, but it does not speak MCP.' },
+};
+
+/**
+ * The four verdicts in the words a reader sees.
+ *
+ * Beside the taxonomy rather than in the panel that first needed it, because
+ * the panel is no longer the only reader: since mcp-connect ticket 04 a
+ * `tool.mcp` row checks itself from the canvas, and two spellings of
+ * *unreachable* would be two things to change when the wording changes.
+ */
+export const describeMcpStatus = (status: McpStatus): McpBadge => BADGES[status];
+
+/**
+ * One handshake, as anything that shows a badge wants it.
+ *
+ * Three rules live here rather than in each surface. Green means **live** and
+ * nothing else. A live server reports the tool *names*, which is what a
+ * validate press was actually for — a count proves something answered, the
+ * names prove it is the server you meant. And a failure prefers the runtime's
+ * own sentence over the badge's: concatenating both printed "Nothing answered
+ * at that address." twice, because the runtime's message *is* the taxonomy
+ * sentence, and where it differs it is the more specific of the two ("within
+ * 15 seconds", "Connected, but the MCP handshake failed").
+ */
+export function summariseMcpValidation(verdict: McpValidation): {
+  ok: boolean;
+  label: string;
+  detail: string;
+} {
+  const badge = describeMcpStatus(verdict.status);
+  if (verdict.status !== 'live') {
+    return { ok: false, label: badge.label, detail: verdict.message || badge.detail };
+  }
+  const count = verdict.tools.length;
+  return {
+    ok: true,
+    label: badge.label,
+    detail: `${count} tool${count === 1 ? '' : 's'}: ${verdict.tools.join(', ')}`,
+  };
+}
+
 /** Name a registered server, or post a URL to check one before saving it. */
 export interface McpValidateRequest {
   readonly server?: string;

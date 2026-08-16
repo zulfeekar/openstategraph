@@ -1,4 +1,10 @@
-import type { FieldOption, FieldSchema, FieldValue } from '@core/model/contracts/fields';
+import type {
+  FieldOption,
+  FieldSchema,
+  FieldValue,
+  RepeatableGroupSchema,
+  RowProbe,
+} from '@core/model/contracts/fields';
 
 /**
  * The MCP-server field set, declared **once** and rendered in two places.
@@ -23,8 +29,18 @@ import type { FieldOption, FieldSchema, FieldValue } from '@core/model/contracts
  * from `GET /api/mcp/servers`) and not a literal.
  */
 
-/** Keys within a node's `data`. Mirrored by `prebuilt_mcp.MCP_FIELD_KEYS`. */
+/**
+ * Keys, in two containers. Mirrored by `prebuilt_mcp.MCP_NODE_KEYS` and
+ * `MCP_ROW_KEYS`, which `test_mcp_field_contract.py` compares against this
+ * declaration.
+ *
+ * `servers`, `mcpGuide` and `mcpNote` are the node's own; the rest describe
+ * **one server**, and since ticket 04 they live inside a row on the card and
+ * flat in the app-level panel. One vocabulary, two containers — a panel entry
+ * and a card row are the same seven questions asked in different places.
+ */
 export const MCP_FIELD = {
+  servers: 'servers',
   server: 'server',
   url: 'url',
   transport: 'transport',
@@ -32,6 +48,7 @@ export const MCP_FIELD = {
   authHeaderName: 'authHeaderName',
   authTokenEnv: 'authTokenEnv',
   tools: 'tools',
+  guide: 'mcpGuide',
   note: 'mcpNote',
 } as const;
 
@@ -159,6 +176,22 @@ export const MCP_LOCKED_NOTE =
   'or that does not speak MCP costs this agent its tools and says so in the ' +
   'run’s warnings; it never fails the compile. Each call reconnects, which ' +
   'costs roughly 0.8 seconds on top of whatever the server itself takes.';
+
+/**
+ * The one sentence a developer needs before adding a second row, on the card
+ * where the decision is made.
+ *
+ * N servers on one node give up per-server **routing** — the card has one
+ * output, so every row's tools travel to the same place. That is a cost of
+ * zero when the servers share a consumer (three services, one agent choosing
+ * per task) and a wall when they do not, and nothing about the card says which
+ * situation you are in. So it says it here rather than in a support thread.
+ */
+export const MCP_GROUPING_GUIDE =
+  'One node per group of servers that share a consumer. Every row’s tools land ' +
+  'on the same bus, so an agent wired here can call all of them and choose per ' +
+  'task; two agents that need different servers want two of these nodes. Narrow ' +
+  'a thirty-tool server with that row’s own filter rather than by splitting it out.';
 
 export interface McpFieldSetOptions {
   /**
@@ -293,4 +326,110 @@ export function mcpServerFields(options: McpFieldSetOptions = {}): readonly Fiel
       group,
     },
   ];
+}
+
+/**
+ * The same field set, shaped for **one row** of the card's server table.
+ *
+ * Derived from `mcpServerFields()` rather than written again: every control
+ * that survives is the *identical object* the panel renders, so a fourth auth
+ * type or a changed hint appears in both places or in neither.
+ *
+ * Two schemas cannot travel into a row as they are, and both exclusions are
+ * mechanical rather than editorial:
+ *
+ * - **The read-only notes** are facts about the machinery, not about a server.
+ *   They belong to the node, once, and repeating them per row would be the
+ *   same paragraph three times on one card.
+ * - **The tool filter** is a `repeatable-group`, and a row cannot contain a
+ *   table. It becomes one comma-separated line under the same key, and both
+ *   spellings are read by `parseToolFilter` here and `_tool_filter` in
+ *   `prebuilt_mcp.py` — so an old document, the panel's field set and a card
+ *   row all mean the same thing by "only these tools".
+ */
+export function mcpServerRowFields(options: McpFieldSetOptions = {}): readonly FieldSchema[] {
+  return mcpServerFields(options).flatMap((schema): FieldSchema[] => {
+    if (schema.kind === 'readonly') return [];
+    if (schema.key !== MCP_FIELD.tools) return [schema];
+    return [
+      {
+        kind: 'text',
+        key: MCP_FIELD.tools,
+        label: schema.label,
+        mono: true,
+        defaultValue: '',
+        placeholder: 'search_docs, get_symbol',
+        hint: schema.hint,
+        group: schema.group,
+      },
+    ];
+  });
+}
+
+export interface McpServerRowsOptions extends McpFieldSetOptions {
+  /**
+   * The per-row live check. Optional because a field set is a declaration and
+   * a probe opens a socket: the app-level panel has its own Validate button,
+   * and a generated port table must not acquire an HTTP client to be read.
+   */
+  readonly probe?: RowProbe;
+}
+
+/** A row as the card writes it, with the stable id every row group carries. */
+const emptyRow = (): Record<string, FieldValue> => ({
+  id: 'mcp1',
+  [MCP_FIELD.server]: '',
+  [MCP_FIELD.url]: '',
+  [MCP_FIELD.transport]: TRANSPORT_HTTP,
+  [MCP_FIELD.authKind]: AUTH_NONE,
+  [MCP_FIELD.authHeaderName]: '',
+  [MCP_FIELD.authTokenEnv]: '',
+  [MCP_FIELD.tools]: '',
+});
+
+/**
+ * The card's server table: N rows of the shared field set.
+ *
+ * One row by default, not zero — a placed card is something to fill in rather
+ * than something you must first discover has a button. The Guardrail's policy
+ * table seeds its rows for the same reason.
+ *
+ * **Not on the card itself.** Seven controls times three rows is taller than
+ * the canvas; the card carries the subtitle and the guidance, and the rows are
+ * edited in the inspector. That is the only difference from the Guardrail's
+ * table, whose three short controls genuinely do read at a glance.
+ */
+export function mcpServersField(options: McpServerRowsOptions = {}): RepeatableGroupSchema {
+  const { probe, ...fieldOptions } = options;
+  return {
+    kind: 'repeatable-group',
+    key: MCP_FIELD.servers,
+    label: 'Servers',
+    addLabel: 'Add server',
+    defaultValue: [emptyRow()],
+    fields: mcpServerRowFields(fieldOptions),
+    hint: 'Each row is one server. All of their tools reach whatever this node is wired to.',
+    onCard: false,
+    group: 'MCP servers',
+    ...(probe ? { rowProbe: probe } : {}),
+  };
+}
+
+/**
+ * A row's tool filter, as names — typed on a line, or the panel's row list.
+ *
+ * The mirror of `prebuilt_mcp._tool_filter`, and blank entries are dropped in
+ * both: somebody who types a comma and stops must not silently bind nothing.
+ */
+export function parseToolFilter(value: FieldValue | undefined): string[] {
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n]/)
+      .map((name) => name.trim())
+      .filter((name) => name !== '');
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => String((row as Record<string, unknown>)['name'] ?? '').trim())
+    .filter((name) => name !== '');
 }

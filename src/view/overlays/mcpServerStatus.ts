@@ -19,6 +19,10 @@ import { MCP_STATUSES, type McpStatus } from '@core/runtime/McpRegistryClient';
  * network, a credential, a URL. Every failure arrives from the library as one
  * opaque `ExceptionGroup`; the runtime unwraps it into these, and collapsing
  * them again here would throw that work away.
+ *
+ * **The words** those verdicts wear moved to `McpRegistryClient` when a card's
+ * row learned to check itself (ticket 04): two readers, one spelling. What
+ * stays here is the *memory* — which is what this module's name says.
  */
 
 /** A `localStorage`-shaped thing. Narrow on purpose, as `onceOnlyFlag`'s is. */
@@ -38,23 +42,6 @@ export interface McpStatusRecord {
   /** When this browser learned it, so the panel can say how old it is. */
   readonly checkedAt: number;
 }
-
-interface Badge {
-  readonly label: string;
-  readonly detail: string;
-}
-
-const BADGES: Record<McpStatus, Badge> = {
-  live: { label: 'live', detail: 'The server answered and offers tools.' },
-  unreachable: { label: 'unreachable', detail: 'Nothing answered at that address.' },
-  auth_required: {
-    label: 'auth required',
-    detail: 'The server answered, but rejected the credential.',
-  },
-  not_mcp: { label: 'not an MCP server', detail: 'Something answered, but it does not speak MCP.' },
-};
-
-export const describeMcpStatus = (status: McpStatus): Badge => BADGES[status];
 
 /**
  * Green means one thing only.

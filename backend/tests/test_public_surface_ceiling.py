@@ -333,22 +333,26 @@ PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base the
     cannot describe. `resolve` is the one member worth a second look and it has
     a real caller; the rest is declaration, not surface."""
 
-#: Fourteen: the seven-member base, four manifest constants, and three of its own.
-MCP_TOOL = """A recorded exception, and the largest tool in the catalogue for a
-    structural reason rather than a sprawling one. Fourteen is the seven-member
-    `BaseTool` contract, the four manifest constants every atom declares, and
-    exactly three of its own: `definition`, `selected` and `problem` — the
-    server it resolved to, the filter it was given, and why it resolved to
-    nothing. `document_state()` is the fourth and it exists to be *tested*: the
-    map's rule that a document may name a server but never carry a credential
-    needs a seam a test can read, and a rule with no test is a wish.
+#: Twelve: the seven-member base, three manifest constants, a seam and a field.
+MCP_TOOL = """A recorded exception, and one of the larger tools in the catalogue
+    for a structural reason rather than a sprawling one. Twelve is the
+    seven-member `BaseTool` contract, the three manifest constants every atom
+    declares (`name`, `description`, `Args`), `document_state()`, and exactly
+    one field of its own: `bindings`, the server rows this node resolved to.
 
-    The alternative was a collaborator holding the resolution — an
-    `McpBinding` — and it was rejected because it splits nothing: all three
-    fields are written by one method (`configure`) and read by one method
-    (`as_langchain_tools`), so a second object would be a second name for one
-    reason to change. `McpTool` genuinely has one: what it takes to reach an
-    MCP server."""
+    `document_state()` exists to be *tested*: the map's rule that a document
+    may name a server but never carry a credential needs a seam a test can
+    read, and a rule with no test is a wish.
+
+    **This entry recorded fourteen and an argument, and mcp-connect ticket 04
+    overturned the argument.** The three fields were `definition`, `selected`
+    and `problem`, and the note here rejected collecting them into an
+    `McpBinding` on the grounds that a collaborator written by one method and
+    read by one method splits nothing. That held while a node was one server.
+    A node is now N server rows, and each row resolves, fails and filters on
+    its own — so the collaborator is not a second name for one thing, it is
+    the thing there are several of. Three fields became one list, and the
+    surface got smaller rather than larger."""
 
 #: Seventeen behaviour members over seven fields.
 SCORECARD = """A recorded exception, and the one that most looks like a violation. Fourteen
@@ -429,7 +433,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_sql.SqlListTablesTool": Recorded(11, PREBUILT_TOOLS),
     "prebuilt_sql.SqlQueryTool": Recorded(12, PREBUILT_TOOLS),
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(14, PREBUILT_TOOLS),
-    "prebuilt_mcp.McpTool": Recorded(14, MCP_TOOL),
+    "prebuilt_mcp.McpTool": Recorded(12, MCP_TOOL),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "providers.ProviderSpec": Recorded(15, PROVIDER_SPEC),
     "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),

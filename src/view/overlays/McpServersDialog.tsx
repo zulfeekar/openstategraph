@@ -3,11 +3,16 @@ import { Plug, RotateCcw, Trash2, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import type { FieldValue } from '@core/model/contracts/fields';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
-import type { McpServer, McpServerDraft, McpValidation } from '@core/runtime/McpRegistryClient';
+import {
+  summariseMcpValidation,
+  type McpServer,
+  type McpServerDraft,
+  type McpValidation,
+} from '@core/runtime/McpRegistryClient';
 import { MCP_FIELD, mcpServerFields } from '@nodes/tools/mcpServerFields';
 import { Dialog } from './Dialog';
 import { McpServerFieldSet } from './McpServerFieldSet';
-import { McpStatusMemory, describeMcpStatus, mcpStatusTone } from './mcpServerStatus';
+import { McpStatusMemory, mcpStatusTone } from './mcpServerStatus';
 import './overlays.css';
 
 /**
@@ -155,7 +160,19 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
 
       {(servers ?? []).map((server) => {
         const verdict = memory.recall(server.name);
-        const badge = verdict ? describeMcpStatus(verdict.status) : null;
+        // The badge word and the sentence under it, from the one place that
+        // decides them — the same function a `tool.mcp` row's own check reads,
+        // so a card and this panel never disagree about what "live" looks like.
+        const summary = verdict
+          ? summariseMcpValidation({
+              status: verdict.status,
+              message: verdict.message,
+              serverName: '',
+              serverVersion: '',
+              tools: verdict.tools,
+              elapsedSeconds: 0,
+            })
+          : null;
         const busy = checking.includes(server.name);
 
         return (
@@ -166,29 +183,14 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
               <Badge>{server.origin === 'built-in' ? 'default' : 'project'}</Badge>
               {busy ? (
                 <Badge>checking…</Badge>
-              ) : verdict && badge ? (
-                <Badge tone={mcpStatusTone(verdict.status)}>{badge.label}</Badge>
+              ) : verdict && summary ? (
+                <Badge tone={mcpStatusTone(verdict.status)}>{summary.label}</Badge>
               ) : null}
             </div>
 
             <span className="provider__models">{server.url}</span>
 
-            {verdict ? (
-              <p className="provider__hint">
-                {verdict.status === 'live'
-                  ? // The tool NAMES, which are what a Validate press was for:
-                    // a count proves something answered, the names prove it is
-                    // the server you meant.
-                    `${verdict.tools.length} tool${verdict.tools.length === 1 ? '' : 's'}: ${verdict.tools.join(', ')}`
-                  : // The runtime's own sentence, and the badge's only when
-                    // there is none. Concatenating both printed "Nothing
-                    // answered at that address." twice, because the runtime's
-                    // message IS the taxonomy sentence — and where it differs
-                    // it is the more specific of the two ("within 15
-                    // seconds", "Connected, but the MCP handshake failed").
-                    verdict.message || describeMcpStatus(verdict.status).detail}
-              </p>
-            ) : null}
+            {summary ? <p className="provider__hint">{summary.detail}</p> : null}
 
             {server.auth.kind !== 'none' ? (
               <p className="provider__hint">

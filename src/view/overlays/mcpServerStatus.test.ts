@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { MCP_STATUSES } from '@core/runtime/McpRegistryClient';
 import {
-  McpStatusMemory,
+  MCP_STATUSES,
   describeMcpStatus,
-  mcpStatusTone,
-  type McpStatusRecord,
-} from './mcpServerStatus';
+  summariseMcpValidation,
+} from '@core/runtime/McpRegistryClient';
+import { McpStatusMemory, mcpStatusTone, type McpStatusRecord } from './mcpServerStatus';
 
 const record = (over: Partial<McpStatusRecord> = {}): McpStatusRecord => ({
   status: 'live',
@@ -51,6 +50,47 @@ describe('the four badges', () => {
     expect(mcpStatusTone('unreachable')).toBe('danger');
     expect(mcpStatusTone('auth_required')).toBe('danger');
     expect(mcpStatusTone('not_mcp')).toBe('danger');
+  });
+});
+
+describe('one handshake, summarised the same way wherever it is shown', () => {
+  const verdict = (over: Partial<Parameters<typeof summariseMcpValidation>[0]> = {}) =>
+    summariseMcpValidation({
+      status: 'live',
+      message: '',
+      serverName: 'Docs',
+      serverVersion: '1',
+      tools: ['search_docs', 'get_symbol'],
+      elapsedSeconds: 0.8,
+      ...over,
+    });
+
+  it('names the tools a live server offers, not merely how many', () => {
+    // A count proves something answered; the names prove it is the server you
+    // meant — which is what pressing a validate button is actually for.
+    expect(verdict()).toEqual({
+      ok: true,
+      label: 'live',
+      detail: '2 tools: search_docs, get_symbol',
+    });
+  });
+
+  it('prefers the runtime’s own sentence to the badge’s', () => {
+    expect(
+      verdict({ status: 'unreachable', message: 'Nothing answered within 15 seconds.' }),
+    ).toEqual({ ok: false, label: 'unreachable', detail: 'Nothing answered within 15 seconds.' });
+  });
+
+  it('falls back to the taxonomy when the runtime sent no sentence', () => {
+    expect(verdict({ status: 'not_mcp', message: '' }).detail).toBe(
+      'Something answered, but it does not speak MCP.',
+    );
+  });
+
+  it('calls nothing but a live server ok', () => {
+    for (const status of MCP_STATUSES) {
+      expect(verdict({ status }).ok).toBe(status === 'live');
+    }
   });
 });
 

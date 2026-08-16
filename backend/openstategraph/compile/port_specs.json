@@ -909,16 +909,11 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
-        "authHeaderName",
-        "authKind",
-        "authTokenEnv",
         "maxRetries",
+        "mcpGuide",
         "mcpNote",
-        "server",
-        "timeoutSeconds",
-        "tools",
-        "transport",
-        "url"
+        "servers",
+        "timeoutSeconds"
       ]
     },
     {
