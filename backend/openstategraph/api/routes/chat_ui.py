@@ -7,7 +7,6 @@ it belongs in none of the routers named after an API subject.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -32,22 +31,20 @@ def chat_page() -> Any:
 def chat_mermaid_asset() -> Any:
     """Mermaid for the /chat live-flow view (ticket 68) — never a CDN.
 
-    Two homes, one behaviour: the wheel carries its own copy as package
-    data (scale-and-adopt ticket 01, `hatch_build.py`), and a checkout
-    serves the repo's own `node_modules` so the page cannot version-skew
-    against the editor's copy. A checkout with no `npm install` still 404s
-    here, and `/chat` degrades to "flow view unavailable" rather than
-    breaking.
+    Where it comes from is `editor_assets.mermaid_asset()`, and this route
+    knows nothing else about it. It used to compute the checkout's path here,
+    by counting `parent` from this file — and counted one short, so the
+    fallback pointed at `backend/node_modules/` and every source checkout
+    404'd (production-ready 56).
+
+    A `None` is still a 404, and `/chat` degrades to "flow view unavailable"
+    rather than breaking — that part was right and is unchanged.
     """
     from fastapi.responses import FileResponse
 
-    from openstategraph.api.editor_assets import PACKAGED_MERMAID
+    from openstategraph.api.editor_assets import mermaid_asset
 
-    asset = PACKAGED_MERMAID
-    if not asset.is_file():
-        asset = Path(__file__).resolve().parent.parent.parent.parent / (
-            "node_modules/mermaid/dist/mermaid.min.js"
-        )
-    if not asset.is_file():
+    asset = mermaid_asset()
+    if asset is None:
         raise HTTPException(status_code=404, detail="mermaid asset not installed")
     return FileResponse(asset, media_type="text/javascript")

@@ -90,6 +90,42 @@ def editor_dir(env: Mapping[str, str] | None = None) -> Path | None:
     return None
 
 
+#: Where a checkout keeps its copy, relative to the repository root. The same
+#: string `hatch_build.MERMAID_SOURCE` vendors *from*, so the wheel and the
+#: checkout are two locations of one file rather than two facts.
+CHECKOUT_MERMAID = "node_modules/mermaid/dist/mermaid.min.js"
+
+
+def mermaid_asset() -> Path | None:
+    """The Mermaid bundle `/chat` renders its live flow diagram with.
+
+    Two homes and one behaviour: the wheel's package data first, else the
+    repository's own `node_modules` so the page cannot version-skew against
+    the editor's copy. `None` is a real answer — an install whose build hook
+    found nothing to vendor, or a checkout that has not run `npm install` —
+    and the route turns it into a 404 the page degrades on. There is no third
+    place to look, deliberately: the third place is a CDN, and shipping a
+    user's graph past one is the thing this asset exists to avoid.
+
+    **Here rather than in the route, because the route got it wrong**
+    (production-ready 56). It counted `parent` four times from
+    `api/routes/chat_ui.py` and arrived at `backend/`, so every source
+    checkout 404'd and the flow diagram was simply missing. `checkout_root()`
+    is this repository's one answer to "where is the repository", already
+    load-bearing for `workflows_root` and the site pages, and it answers
+    `None` when installed — which is exactly the branch that must not fall
+    through to a guess.
+    """
+    if PACKAGED_MERMAID.is_file():
+        return PACKAGED_MERMAID
+
+    checkout = checkout_root()
+    if checkout is not None and (checkout / CHECKOUT_MERMAID).is_file():
+        return checkout / CHECKOUT_MERMAID
+
+    return None
+
+
 def serving_enabled(env: Mapping[str, str] | None = None) -> bool:
     """Off by default so `scripts/dev.sh` and pytest are untouched — Vite
     serves the editor there, and this process must stay a pure API."""

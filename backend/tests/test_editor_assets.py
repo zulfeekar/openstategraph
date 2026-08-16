@@ -147,3 +147,98 @@ class TestMounting:
         """Same rule `chat_page.py` already follows — markup lives in markup."""
         assert editor_assets.EDITOR_MISSING_PAGE.is_file()
         assert "npm run build" in editor_assets.editor_missing_html()
+
+
+class TestTheChatMermaidAsset:
+    """`/chat/mermaid.js` 404'd in every source checkout (production-ready 56).
+
+    The route's own docstring describes two homes and one behaviour — the
+    wheel's package data, else the repository's `node_modules` — and the
+    second half never worked, because the path was hand-counted from
+    `api/routes/chat_ui.py` and landed one directory short of the repository
+    root, on `backend/node_modules/`. Nothing in this repository has ever
+    installed anything there.
+
+    It is the exact defect `workflows_root.py` was written for and opens its
+    docstring with: a root computed as a fixed number of `parents[...]` hops
+    from whichever file happens to be asking. `checkout_root()` is the one
+    answer to that question, and it is also the answer for *installed*, where
+    there is no checkout and the packaged copy is the only home.
+
+    The visible cost was not a stack trace. `/chat` degrades on a 404 to
+    "flow view unavailable", so the live flow diagram was simply absent for
+    every developer running from source, and looked like a decision.
+    """
+
+    def test_the_asset_resolves_in_this_checkout(self) -> None:
+        # This repository has `node_modules`; that is what `npm run verify`
+        # needs to run at all, so it is a fair thing for a test to assume.
+        resolved = editor_assets.mermaid_asset()
+
+        assert resolved is not None, "no mermaid found — the checkout fallback is broken"
+        assert resolved.is_file()
+
+    def test_it_is_not_looking_inside_backend(self) -> None:
+        # The bug, named. `backend/node_modules` is not a directory anything
+        # creates, so a path pointing there can only ever miss.
+        resolved = editor_assets.mermaid_asset()
+
+        assert resolved is not None
+        assert "backend/node_modules" not in resolved.as_posix()
+        assert resolved.parent.parent.parent.name == "node_modules"
+
+    def test_the_packaged_copy_wins(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The wheel's own copy, written by `hatch_build.py`. It comes first
+        # so an installed adopter never depends on a checkout existing.
+        packaged = tmp_path / "mermaid.min.js"
+        packaged.write_text("/* the wheel's copy */")
+        monkeypatch.setattr(editor_assets, "PACKAGED_MERMAID", packaged)
+
+        assert editor_assets.mermaid_asset() == packaged
+
+    def test_an_install_with_no_package_data_resolves_to_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Installed, and the build hook found no `node_modules` to vendor
+        # from. There is no third place to look, and inventing one would be
+        # how a CDN gets back in.
+        monkeypatch.setattr(editor_assets, "PACKAGED_MERMAID", tmp_path / "absent.js")
+        monkeypatch.setattr(editor_assets, "checkout_root", lambda: None)
+
+        assert editor_assets.mermaid_asset() is None
+
+    def test_the_route_serves_it(self) -> None:
+        from openstategraph.api.main import app
+
+        response = TestClient(app).get("/chat/mermaid.js")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/javascript")
+        assert len(response.content) > 100_000
+
+    def test_the_route_404s_with_a_sentence_when_there_is_nothing_to_serve(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from openstategraph.api.main import app
+
+        monkeypatch.setattr(editor_assets, "PACKAGED_MERMAID", tmp_path / "absent.js")
+        monkeypatch.setattr(editor_assets, "checkout_root", lambda: None)
+
+        response = TestClient(app).get("/chat/mermaid.js")
+
+        assert response.status_code == 404
+        assert "mermaid" in response.json()["detail"]
+
+    def test_the_wheel_and_the_checkout_ask_one_function(self) -> None:
+        # The route must not re-derive a path of its own: two answers to
+        # "where is mermaid" is how this shipped broken while a test of the
+        # other one would have passed.
+        from openstategraph.api.routes import chat_ui
+
+        source = Path(chat_ui.__file__).read_text(encoding="utf-8")
+
+        assert "mermaid_asset" in source
+        # The mechanism, not the word: a path counted off this file's own
+        # location is what miscounted. The prose above may name the old path;
+        # the code must not build one.
+        assert "Path(__file__)" not in source
