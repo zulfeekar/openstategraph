@@ -514,10 +514,15 @@ def _discover_all(
         return []
 
     async def gather() -> list[Any]:
-        return await asyncio.gather(
+        # Bound rather than returned directly: `asyncio.gather`'s stub is
+        # `Any`-shaped on 3.11 and precise on 3.13, so the direct return is a
+        # `no-any-return` error on the floor version only — caught by the
+        # matrix, invisible on this machine.
+        results: list[Any] = await asyncio.gather(
             *(_discover_tools(definition, headers, timeout=timeout) for definition, headers in jobs),
             return_exceptions=True,
         )
+        return results
 
     return asyncio.run(gather())
 
