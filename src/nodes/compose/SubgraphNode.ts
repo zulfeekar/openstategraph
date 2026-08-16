@@ -5,7 +5,7 @@ import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
 import { OVERRIDES_FIELD } from './overridesField';
-import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
+import { HIDDEN_PACKAGE_MARK, workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import { mountAncestry } from '@core/runtime/mountAncestry';
 import { mountCycleRefusal } from '@core/validation/mountCycleRule';
 
@@ -108,12 +108,20 @@ export const subgraphNode: INodeDefinition = defineNode(
         subscribe: (notify: () => void) => workflowCatalogue.onChange(notify),
         options: () => {
           const above = new Set(mountAncestry());
-          return workflowCatalogue.list().map((choice) => ({
-            value: choice.slug,
-            label: above.has(choice.slug)
-              ? `${choice.name} · ${choice.slug} — would include itself`
-              : `${choice.name} · ${choice.slug}`,
-          }));
+          return workflowCatalogue.list().map((choice) => {
+            // Two independent facts, so a row can wear both — `concierge` is
+            // routinely hidden *and*, from inside itself, refused. Hidden says
+            // no customer surface advertises the package; the refusal says
+            // this mount would not compile. Neither implies the other, and
+            // collapsing them would refuse a legal mount or advertise a
+            // package the customer surface will not show (ticket 57).
+            const mark = choice.hidden ? ` · ${HIDDEN_PACKAGE_MARK}` : '';
+            const refusal = above.has(choice.slug) ? ' — would include itself' : '';
+            return {
+              value: choice.slug,
+              label: `${choice.name} · ${choice.slug}${mark}${refusal}`,
+            };
+          });
         },
         // Refused at **pick time**, in the compiler's own sentence — ticket 42.
         // The server refuses self-inclusion twice already (`_subgraph`'s

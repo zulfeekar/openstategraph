@@ -16,9 +16,11 @@ import type { CatalogueChange } from './WorkflowFileClient';
  * HTTP. So this holds the last answer, and is refreshed around the edges —
  * the same arrangement `ProviderRegistry` has with the model picker.
  */
-const row = (slug: string, name: string) => ({ slug, name });
+const row = (slug: string, name: string, hidden = false) => ({ slug, name, hidden });
 
-const clientReturning = (...pages: (readonly { slug: string; name: string }[])[]) => {
+const clientReturning = (
+  ...pages: (readonly { slug: string; name: string; hidden: boolean }[])[]
+) => {
   let call = 0;
   const watchers: ((change: CatalogueChange) => void)[] = [];
   return {
@@ -120,6 +122,52 @@ describe('the workflow catalogue', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(catalogue.list()).toHaveLength(1);
+  });
+
+  describe('whether a customer surface advertises the package', () => {
+    /**
+     * production-ready ticket 57. `surface=editor` returns hidden packages
+     * (`concierge`, `workflow-architect`) deliberately — `concierge` mounts
+     * `workflow-architect`, so filtering them would make a shipped composition
+     * undrawable — and every row carries `hidden` "so the UI can mark one
+     * rather than pretend it is not there".
+     *
+     * Nothing marked. Both consumers that show a package to a developer read
+     * this object, so the flag has to survive the trip through it: the
+     * Packages palette (`view/palette/packageRows.ts`) and the mount combobox
+     * (`nodes/compose/SubgraphNode.ts`) get their rows from `list()` and from
+     * nowhere else.
+     */
+    it('survives the trip, because both pickers mark the row with it', async () => {
+      const catalogue = new WorkflowCatalogue();
+      const client = clientReturning([
+        row('chinook-assistant', 'Chinook Assistant'),
+        row('workflow-architect', 'Workflow Architect', true),
+      ]);
+
+      catalogue.syncFrom(client as never);
+      await vi.waitFor(() => expect(catalogue.list()).toHaveLength(2));
+      expect(catalogue.list().map((choice) => [choice.slug, choice.hidden])).toEqual([
+        ['chinook-assistant', false],
+        ['workflow-architect', true],
+      ]);
+    });
+
+    it('notifies when only it changed, so a mark can appear without the slug set moving', () => {
+      // The quiet-when-unchanged rule compares the rows, and `hidden` is now
+      // one of the things a row says. Editing `hidden: true` into a package's
+      // `workflow.json` moves no slug — so a comparison that ignored the flag
+      // would leave every mount card and every palette row showing the old
+      // answer until something else happened to change the list.
+      const catalogue = new WorkflowCatalogue();
+      catalogue.set([row('concierge', 'Concierge')]);
+      const listener = vi.fn();
+      catalogue.onChange(listener);
+
+      catalogue.set([row('concierge', 'Concierge', true)]);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(catalogue.list()[0]?.hidden).toBe(true);
+    });
   });
 
   it('forwards the change itself, so one subscription serves more than this list', async () => {

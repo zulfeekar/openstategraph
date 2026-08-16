@@ -19,14 +19,59 @@ import type { CatalogueChange, ICatalogueEvents, IWorkflowFileClient } from './W
  * backend already broadcasts catalogue changes over `GET /api/events`; this
  * subscribes rather than polling, so the list moves when the catalogue does.
  *
- * Deliberately holds slugs and names only. It is not a cache of documents —
- * `CompositionBody` already resolves a slug to its document for the card
- * census, and a second copy of that would be a second thing to invalidate.
+ * Deliberately holds what a picker prints and nothing else. It is not a cache
+ * of documents — `CompositionBody` already resolves a slug to its document for
+ * the card census, and a second copy of that would be a second thing to
+ * invalidate.
  */
 export interface WorkflowChoice {
   readonly slug: string;
   readonly name: string;
+  /**
+   * Whether a **customer** surface advertises this package — the row's own
+   * `hidden` flag, carried through rather than dropped (ticket 57).
+   *
+   * The third field, and it earns the place the way the other two do: it is
+   * printed. `GET /api/workflows?surface=editor` returns hidden packages
+   * deliberately — `concierge` mounts `workflow-architect`, so filtering them
+   * would make a shipped composition undrawable — and sets the flag "so the UI
+   * can mark one rather than pretend it is not there". Both consumers of this
+   * list are that UI: the Packages palette and the mount combobox. Until
+   * ticket 57 neither read it, so `concierge` and `workflow-architect` looked
+   * exactly like a package a developer can put in front of customers.
+   *
+   * Not a cache of the document, and not the whole `WorkflowSummary` either:
+   * `published` is deliberately absent, because publishing is an *action*
+   * surface (`WorkflowManager` owns it) and a picker that printed a lifecycle
+   * badge it could not change would invite a click that goes nowhere.
+   */
+  readonly hidden: boolean;
 }
+
+/**
+ * The word every picker prints on a hidden package's row, and the sentence
+ * behind it.
+ *
+ * One constant rather than two literals, because two surfaces mark the same
+ * rows and are deliberately consistent with each other — the Packages palette
+ * (`view/palette/Palette.tsx`) and the mount combobox
+ * (`nodes/compose/SubgraphNode.ts`). Two spellings would agree on the day they
+ * were written and drift on the first reword, which is the failure this
+ * codebase keeps finding in prose.
+ *
+ * A user-facing string in `core/` for the same reason `mountCycleRefusal`'s
+ * sentence is one: the rule and its words are the same knowledge, and a
+ * surface that re-words the verdict is a surface that can contradict it.
+ */
+export const HIDDEN_PACKAGE_MARK = 'Hidden';
+
+/**
+ * Why, in one sentence — shown where a surface has room for one. A native
+ * `<datalist>` option has no tooltip, so the combobox prints the mark alone;
+ * the palette row hangs this off its `title`.
+ */
+export const HIDDEN_PACKAGE_NOTE =
+  'Hidden — no customer surface advertises this package: it stays out of the /chat picker even when published. You can still mount it here, which is how the shipped gateway reaches it.';
 
 type Listener = () => void;
 
@@ -52,7 +97,15 @@ export class WorkflowCatalogue {
       next.length === this.choices.length &&
       next.every((choice, index) => {
         const current = this.choices[index];
-        return current?.slug === choice.slug && current?.name === choice.name;
+        // Every printed field, `hidden` included: editing `hidden: true` into
+        // a package's `workflow.json` moves no slug, and a comparison blind to
+        // it would leave the mark off every card and row until something else
+        // happened to change the list.
+        return (
+          current?.slug === choice.slug &&
+          current?.name === choice.name &&
+          current?.hidden === choice.hidden
+        );
       });
     if (same) return;
     this.choices = next;
@@ -88,7 +141,13 @@ export class WorkflowCatalogue {
         .list()
         .then((result) => {
           if (result.ok) {
-            this.set(result.value.map((row) => ({ slug: row.slug, name: row.name })));
+            this.set(
+              result.value.map((row) => ({
+                slug: row.slug,
+                name: row.name,
+                hidden: row.hidden,
+              })),
+            );
           }
         })
         .catch(() => {

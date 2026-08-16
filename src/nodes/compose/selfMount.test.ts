@@ -78,8 +78,8 @@ describe('the workflow combobox refuses a mount that would include itself', () =
 
   it('marks an ancestor in the suggestions rather than waiting to punish the pick', () => {
     workflowCatalogue.set([
-      { slug: 'concierge', name: 'Concierge' },
-      { slug: 'sql-analyst', name: 'SQL Analyst' },
+      { slug: 'concierge', name: 'Concierge', hidden: false },
+      { slug: 'sql-analyst', name: 'SQL Analyst', hidden: false },
     ]);
     standingIn('concierge');
     const options = resolveOptions(

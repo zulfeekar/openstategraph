@@ -46,12 +46,21 @@ export type FileWatchAction =
  *
  * **`entry` is the answer to an existence question, not a visibility one**
  * (ticket 21). It used to be `entries.find(...)` over
- * `GET /api/workflows?surface=editor`, which is a *surface*: it omits hidden
- * packages by design, so drilling into `concierge` or `workflow-architect`
- * made this function announce a deletion over a file the backend was happily
- * serving 200. It now takes what `WorkflowFileClient.summary(slug)` returned,
- * where `null` means a 404 and nothing else does — so a genuinely deleted
- * workflow still warns, and only that.
+ * `GET /api/workflows?surface=editor`, which is a *surface* — and a surface
+ * omits things that exist, so drilling into `concierge` or
+ * `workflow-architect` made this function announce a deletion over a file the
+ * backend was happily serving 200. It now takes what
+ * `WorkflowFileClient.summary(slug)` returned, where `null` means a 404 and
+ * nothing else does — so a genuinely deleted workflow still warns, and only
+ * that.
+ *
+ * (Until 2026-08-16 the sentence above gave the reason as "it omits hidden
+ * packages by design". That was true when ticket 21 was written and is not
+ * true now: launch-readiness ticket 04 made `surface=editor` return hidden
+ * packages carrying the flag, and only `surface=chat` omits them. The seam is
+ * unchanged and still load-bearing — that listing still drops *unreadable*
+ * packages, and absence from a surface is still not absence from disk — but
+ * the example had outlived the behaviour it cited.)
  */
 export function decideFileWatchAction(
   entry: WorkflowSummary | null,

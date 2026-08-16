@@ -267,9 +267,12 @@ export async function loadWorkflowIntoEditor(
     // Establishes the file watch's baseline for this slug — otherwise its
     // first poll after a load would have nothing to compare against and could
     // mistake the file as already-changed. Asked about *this slug*, not found
-    // in the editor listing: that listing omits hidden packages, so a drill-in
-    // to `concierge` used to baseline `undefined` and then be told, one poll
-    // later, that the file it had just loaded was deleted (ticket 21).
+    // in the editor listing: a listing answers what a surface advertises, so a
+    // drill-in to `concierge` used to baseline `undefined` and then be told,
+    // one poll later, that the file it had just loaded was deleted (ticket 21).
+    // (That listing omitted hidden packages when ticket 21 was written;
+    // `surface=editor` has carried them since launch-readiness ticket 04. It
+    // still omits unreadable ones, so asking by slug is still the right call.)
     const row = await client.summary(slug);
     recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
     // After the import, never before: a trail entry for a load that failed

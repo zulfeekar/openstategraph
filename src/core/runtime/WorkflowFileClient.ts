@@ -52,6 +52,11 @@ export interface WorkflowSummary {
    *
    * `hidden` is absolute on `surface=chat` only, which is the customer's.
    *
+   * The marking that sentence promises is real since ticket 57, and there are
+   * exactly two surfaces doing it — the Packages palette and the mount
+   * combobox — both from `WorkflowChoice.hidden`, which is where a third one
+   * should read it rather than fetching the row again.
+   *
    * (Until production-ready ticket 33 this said "always `false` on a row from
    * `list()` — that endpoint omits hidden packages outright". It never did,
    * on the editor surface; the Packages palette and the mount combobox both

@@ -83,6 +83,16 @@
   background: var(--color-bg-subtle);
 }
 
+/* "Hidden" beside a package's name: no customer surface advertises it. Sized
+   down from the title it sits beside, and `flex: none` so a long workflow name
+   shrinks before the mark does — the mark is the part a reader is scanning
+   for, and a truncated one says nothing. */
+.palette-item__mark {
+  flex: none;
+  font: var(--type-caption);
+  text-transform: none;
+}
+
 /* The slug is an identifier, and the card that mounts it shows it in mono
    too — a reader matching this row to `workflows/<slug>/` is comparing
    characters, which proportional type makes harder than it needs to be. */

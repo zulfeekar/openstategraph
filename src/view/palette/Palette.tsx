@@ -22,7 +22,11 @@ import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { type IAssemblyDefinition } from '@nodes/assemblies';
-import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
+import {
+  HIDDEN_PACKAGE_MARK,
+  HIDDEN_PACKAGE_NOTE,
+  workflowCatalogue,
+} from '@core/runtime/workflowCatalogue';
 import { mountAncestry } from '@core/runtime/mountAncestry';
 import { assembliesFor, sectionSurvivesSearch } from './paletteSearch';
 import { packageRows, type PackageRow } from './packageRows';
@@ -456,6 +460,13 @@ export function Palette({ onNotify }: PaletteProps) {
  * `<datalist>` could not do. The gesture is unavailable, and the reason is the
  * compiler's own sentence, which is the same one the mount field shows and the
  * same one a failed compile would have printed later.
+ *
+ * **A hidden package is marked, not greyed** (ticket 57) — a different fact
+ * about a different thing, and the two are independent: `concierge` is hidden
+ * on disk and is a perfectly legal mount from anywhere but inside itself.
+ * Marking it is what the editor surface promised to do with the flag it asks
+ * for; without it, a package no customer will ever be offered looked exactly
+ * like one they will.
  */
 function PackageItem({
   row,
@@ -477,6 +488,9 @@ function PackageItem({
     event.preventDefault();
     if (row.refusal) onRefuse(row.refusal);
   };
+  // Both, when both apply: the refusal is why this gesture will not work, and
+  // the note is what the package is. A row can be either, neither or both.
+  const hint = row.refusal ?? `Mount ${row.name} — task in, answer out.`;
   return (
     <button
       type="button"
@@ -484,7 +498,7 @@ function PackageItem({
       data-accent="violet"
       draggable={!refused}
       aria-disabled={refused}
-      title={row.refusal ?? `Mount ${row.name} — task in, answer out.`}
+      title={row.hidden ? `${hint}\n\n${HIDDEN_PACKAGE_NOTE}` : hint}
       onDragStart={(event) => {
         if (refused) {
           refuse(event);
@@ -497,7 +511,14 @@ function PackageItem({
     >
       <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
       <span className="palette-item__text">
-        <span className="palette-item__title">{row.name}</span>
+        <span className="palette-item__title">
+          {row.name}
+          {/* A word, not an icon: "hidden" is a claim about who can see this
+              package, and the scoped rows next door already spend the glyph
+              vocabulary on provenance. The sentence behind it is on the row's
+              hover text — a palette row has no other room. */}
+          {row.hidden ? <Badge className="palette-item__mark">{HIDDEN_PACKAGE_MARK}</Badge> : null}
+        </span>
         <span className="palette-item__description">
           {/* The slug, because it is what the document stores and what a
               developer types into the mount field — the name alone leaves a
