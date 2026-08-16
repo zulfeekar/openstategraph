@@ -504,6 +504,43 @@ async def stop_when_client_leaves_async(frames: Any, receive: Any) -> Any:
                 await closer()
 
 
+def _stream_parts(stream: Any) -> Any:
+    """`(namespace, mode, payload)` for each chunk, whichever shape it arrives in.
+
+    We ask LangGraph for **`version="v2"`** (see `_run_frames`), whose every
+    chunk is a `StreamPart` — `{"type", "ns", "data"}` — regardless of how many
+    modes were requested or whether `subgraphs=True` is set. v1, the default,
+    yields a bare payload for one mode, a `(mode, payload)` pair for several,
+    and a `(ns, mode, payload)` triple once subgraphs are on. We unpacked the
+    triple, which was correct for exactly the combination we happened to pass
+    and would have become wrong on the day a third mode was added — stable by
+    accident rather than by contract.
+
+    The v1 tuple is still accepted here, and that is deliberate rather than
+    leftover. Nine test files script this fold with hand-written chunks, and a
+    decode change that can only be demonstrated by rewriting its own callers
+    has not been isolated; `test_stream_version_v2.py` pins the two shapes to
+    identical frames and pins the `version="v2"` we actually send.
+
+    A chunk this version cannot produce is **skipped, not raised on**. The fold
+    is the one place a run can die without a terminal frame reaching the
+    client, so an unreadable chunk costs one frame rather than the stream.
+    """
+    for chunk in stream:
+        if isinstance(chunk, dict):
+            mode = chunk.get("type")
+            if isinstance(mode, str):
+                yield tuple(chunk.get("ns") or ()), mode, chunk.get("data")
+            else:
+                logger.warning("skipping an unreadable stream chunk: %r", sorted(chunk))
+            continue
+        if isinstance(chunk, tuple) and len(chunk) == 3:
+            namespace, mode, payload = chunk
+            yield namespace, mode, payload
+            continue
+        logger.warning("skipping an unreadable stream chunk of type %s", type(chunk).__name__)
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
 
@@ -769,9 +806,22 @@ def _run_frames(
             graph_input,
             config,
             stream_mode=["updates", "messages"],
+            # Verbatim from the doc, and not to be disturbed: without it,
+            # `stream_mode="messages"` on the parent graph will not emit token
+            # chunks from the inner agent's LLM calls.
             subgraphs=True,
+            # One chunk shape whatever we ask for — see `_stream_parts`.
+            # Checked against the installed LangGraph 1.2.10 rather than taken
+            # from the page, because the page does not say the thing that
+            # decides whether this is a decode change or a contract change:
+            # `pregel/_messages.py` attaches the content-block messages
+            # handler only when an internal config key opts in, and states
+            # that "direct `graph.stream(stream_mode="messages")` callers keep
+            # the v1 AIMessageChunk shape". So the envelope moves and the
+            # `messages` payload does not.
+            version="v2",
         )
-        for namespace, mode, payload in stream:
+        for namespace, mode, payload in _stream_parts(stream):
             if mode == "updates":
                 for raw_name, raw_update in payload.items():
                     update = _coerce_update(raw_update)

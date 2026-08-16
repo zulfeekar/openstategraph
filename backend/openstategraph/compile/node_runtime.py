@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     # store, never the filesystem `WorkflowStore` (ticket 12).
     from langgraph.store.base import BaseStore
 
+from langgraph.constants import TAG_NOSTREAM
+
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
@@ -157,6 +159,81 @@ MACHINERY_NODE_TYPES: frozenset[str] = frozenset(
 )
 
 
+#: LangGraph's own tag for "run this model, but keep its tokens off the
+#: `messages` stream". Read from the library rather than retyped, because a
+#: misspelling here is silent — the invocation simply keeps streaming.
+NOSTREAM_TAG: str = TAG_NOSTREAM
+
+
+def silence_tokens(model: Any) -> Any:
+    """The same model, with its tokens omitted from `stream_mode="messages"`.
+
+    `MACHINERY_NODE_TYPES` above records *which* nodes produce text nobody
+    asked to read; `api/audience.AnswerChannel` then empties their frames on
+    the way out. That works, and its tests are untouched — but it is a curtain
+    in front of a door. The bytes are still generated, streamed across the
+    subgraph boundary and folded before anything blanks them, and a developer
+    audience receives every one of them.
+
+    LangGraph publishes the door. `pregel/_messages.py` gates the whole
+    forward on `TAG_NOSTREAM not in tags`, so an invocation carrying the tag
+    never reaches the stream at all.
+
+    **This does not replace the fold**, and nothing here removes it. The fold
+    guards three things the tag cannot: a mounted child's nodes (whose models
+    this compiler never resolved), a tool's raw payload (a `ToolMessage`, not
+    a model invocation), and the hand-rolled stand-ins this codebase passes
+    around, which have no `with_config` at all. Those degrade to exactly
+    today's behaviour, which is why the fallback below returns the model
+    untouched rather than raising.
+
+    Tags are **merged here, by hand, because the library replaces them.**
+    Measured on the installed langchain-core 1.5.3 rather than assumed:
+
+        r.with_config(tags=["mine"]).with_config(tags=["nostream"])
+        # RunnableBinding config -> {'tags': ['nostream']}
+
+    — `mine` is gone. Reasoning effort already binds these models
+    (`_apply_effort`), so the naive spelling would silently drop a caller's
+    tags on exactly the nodes this touches. Existing tags are read from both
+    spellings for the same reason: a `BaseChatModel` carries them on `.tags`,
+    a `RunnableBinding` in `.config["tags"]`, and both shapes reach here.
+
+    **Every probe below is inside the `try`, and that is load-bearing rather
+    than defensive habit.** `chat_model.UnconfiguredProvider` stands in for a
+    model this machine has no credential for, and its rule is stated as *"a
+    provider is required at the moment a model is used, not at the moment one
+    is built"* — which it enforces by raising from `__getattr__`. So a bare
+    `getattr(model, "with_config", None)` does not return `None` there, it
+    raises `MissingProviderKey` **at compile time**, turning a workflow whose
+    router never runs into one that cannot be built. Caught live by
+    `test_behind_the_scenes.py`, not reasoned about here first.
+
+    Any failure therefore leaves the model exactly as it was: a model that
+    cannot be tagged still streams, which is today's behaviour, and the
+    sentinel goes on raising at the moment it is genuinely used, with its own
+    message rather than one from here.
+    """
+    if model is None:
+        return None
+    try:
+        with_config = getattr(model, "with_config", None)
+        if not callable(with_config):
+            return model
+        bound = getattr(model, "config", None)
+        existing = tuple(
+            getattr(model, "tags", None)
+            or (bound.get("tags") if isinstance(bound, dict) else None)
+            or ()
+        )
+        if NOSTREAM_TAG in existing:
+            return model
+        return with_config(tags=[*existing, NOSTREAM_TAG])
+    except Exception:  # noqa: BLE001 — a model that cannot be tagged is not an error
+        logger.debug("could not tag a model %s; its tokens still stream", NOSTREAM_TAG)
+        return model
+
+
 #: Maps a tool node type to the Python tool that implements it.
 #:
 #: Injectable, because tool discovery is workflow-scoped (ticket 18) and the
@@ -198,9 +275,12 @@ class _DeepAgentAsChatModel:
     deliver a directive prompt, not a hand-assembled message list.
     """
 
-    def __init__(self, model: Any, name: str) -> None:
+    def __init__(self, model: Any, name: str, tags: tuple[str, ...] = ()) -> None:
         self._model = model
         self._name = name
+        #: Applied to the *invocation*, never bound onto the model — see
+        #: `invoke`. Empty by default; the machinery nodes pass `nostream`.
+        self._tags = tuple(tags)
 
     def invoke(self, messages: list[Any]) -> Any:
         from openstategraph._extras import require_extra
@@ -212,12 +292,23 @@ class _DeepAgentAsChatModel:
         system_prompt = messages[0].content if messages else ""
         candidate_message = messages[-1]
         agent = create_deep_agent(
+            # Deliberately the model as resolved, with nothing bound onto it.
+            # `create_deep_agent` does not accept a `RunnableBinding` here: a
+            # non-`BaseChatModel` is treated as a model *identifier*, and the
+            # failure is `AttributeError: 'RespondingModel' object has no
+            # attribute 'count'` from deep inside the string handling — a
+            # sentence that names neither this call nor the binding that
+            # caused it. So a tag that must reach this tier travels on the
+            # invocation below instead, where LangChain propagates it down to
+            # the child LLM run, which is the run `nostream` is read from.
             model=self._model,
             tools=[],
             system_prompt=system_prompt,
             name=self._name,
         )
-        result = agent.invoke({"messages": [candidate_message]})
+        result = agent.invoke(
+            {"messages": [candidate_message]}, config={"tags": list(self._tags)}
+        )
         out = result.get("messages") or []
         text = _final_text(out)
         return SimpleNamespace(content=text if isinstance(text, str) else str(text))
@@ -1677,9 +1768,15 @@ class NodeRuntime:
         data = node.get("data") or {}
         branches = _branch_entries(data.get("branches"))
         base_model = self._resolve_model(data)
-        classifying_model = base_model
+        # A router streams the branch NAME it chose, which QA read glued to the
+        # sentence beside it. The fold blanks it for a customer; `nostream`
+        # stops it being produced at all (ticket 21). Two spellings because the
+        # deep tier cannot take a bound model — see `_DeepAgentAsChatModel`.
+        classifying_model = silence_tokens(base_model)
         if _text(data, "tier") == "deep" and base_model is not None:
-            classifying_model = _DeepAgentAsChatModel(base_model, name=f"router_{node_id}")
+            classifying_model = _DeepAgentAsChatModel(
+                base_model, name=f"router_{node_id}", tags=(NOSTREAM_TAG,)
+            )
         upstream = [src for src, dst in plan.edges if dst == node_id]
         skills = plan.skill_bindings.get(node_id, [])
 
@@ -1743,9 +1840,13 @@ class NodeRuntime:
         """
         data = node.get("data") or {}
         base_model = self._resolve_model(data)
-        grading_model = base_model
+        # See the router's line: a grader streams `FAIL Include the SQL SELECT
+        # statement…` onto the end of a finished answer.
+        grading_model = silence_tokens(base_model)
         if _text(data, "tier") == "deep" and base_model is not None:
-            grading_model = _DeepAgentAsChatModel(base_model, name=f"grader_{node_id}")
+            grading_model = _DeepAgentAsChatModel(
+                base_model, name=f"grader_{node_id}", tags=(NOSTREAM_TAG,)
+            )
         raw_rubric = data.get("rubric")
         rubric_rows = [
             {"criterion": str(row.get("criterion") or row.get("name") or ""),

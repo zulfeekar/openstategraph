@@ -148,8 +148,11 @@ class TestDeepRouter:
         calls: list[dict[str, Any]] = []
 
         class StubDeepAgent:
-            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+            def invoke(
+                self, payload: dict[str, Any], config: dict[str, Any] | None = None
+            ) -> dict[str, Any]:
                 calls.append(payload)
+                calls.append({"config": config})
                 return {"messages": [AIMessage(content="dataquery")]}
 
         def fake_create_deep_agent(**kwargs: Any) -> StubDeepAgent:
@@ -249,8 +252,11 @@ class TestDeepGrader:
         calls: list[dict[str, Any]] = []
 
         class StubDeepAgent:
-            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+            def invoke(
+                self, payload: dict[str, Any], config: dict[str, Any] | None = None
+            ) -> dict[str, Any]:
                 calls.append(payload)
+                calls.append({"config": config})
                 return {"messages": [AIMessage(content="FAIL\nName the genre.")]}
 
         def fake_create_deep_agent(**kwargs: Any) -> StubDeepAgent:
@@ -278,7 +284,9 @@ class TestDeepGrader:
         from langchain_core.messages import AIMessage
 
         class StubDeepAgent:
-            def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+            def invoke(
+                self, payload: dict[str, Any], config: dict[str, Any] | None = None
+            ) -> dict[str, Any]:
                 return {"messages": [AIMessage(content="PASS")]}
 
         monkeypatch.setattr(
