@@ -12,6 +12,7 @@ import {
 } from '@app/WorkbenchContext';
 import { NodeLayer } from '@view/nodes/NodeLayer';
 import { PALETTE_ASSEMBLY_DRAG_TYPE, PALETTE_DRAG_TYPE } from '@view/palette/Palette';
+import { decodePackageDrag, PALETTE_PACKAGE_DRAG_TYPE } from '@view/palette/packageDrag';
 import { assemblyById } from '@nodes/assemblies';
 import {
   EMPTY_CANVAS_EXAMPLES,
@@ -207,12 +208,15 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
 
   /* ---------------- palette drop ---------------- */
 
-  // Two payloads: one node type, or a whole wired assembly (ticket 21). Kept
-  // as separate MIME types so the canvas knows which it is about to receive
-  // *before* the drop, rather than inspecting an id and guessing.
+  // Three payloads: one node type, a whole wired assembly (ticket 21), or a
+  // node type *plus the data that binds it* — a named package (ticket 11).
+  // Kept as separate MIME types so the canvas knows which it is about to
+  // receive *before* the drop, rather than inspecting an id and guessing:
+  // during `dragover`, `getData` returns `''` for every type.
   const isPaletteDrag = (event: React.DragEvent) =>
     event.dataTransfer.types.includes(PALETTE_DRAG_TYPE) ||
-    event.dataTransfer.types.includes(PALETTE_ASSEMBLY_DRAG_TYPE);
+    event.dataTransfer.types.includes(PALETTE_ASSEMBLY_DRAG_TYPE) ||
+    event.dataTransfer.types.includes(PALETTE_PACKAGE_DRAG_TYPE);
 
   return (
     <div
@@ -248,6 +252,22 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
           if (!assembly) return;
           const dropped = controller.clipboard.insertFragment(assembly.fragment, at);
           if (!dropped.ok && dropped.message) onNotify(dropped.message);
+          return;
+        }
+
+        // A named package drops as a mount **already bound to it**: the payload
+        // carries the type id and the fields, so this handler never learns the
+        // mount family's name and a second pre-bound drag would need no change
+        // here. Not spliced onto a nearby edge — that rule inserts a node into
+        // a link, and this drop is aimed at a package, not at a wire.
+        const packagePayload = decodePackageDrag(
+          event.dataTransfer.getData(PALETTE_PACKAGE_DRAG_TYPE),
+        );
+        if (packagePayload) {
+          const mounted = controller.nodes.add(packagePayload.typeId, at, {
+            data: packagePayload.data,
+          });
+          if (!mounted.ok && mounted.message) onNotify(mounted.message);
           return;
         }
 

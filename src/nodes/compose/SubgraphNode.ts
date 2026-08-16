@@ -96,9 +96,11 @@ export const subgraphNode: INodeDefinition = defineNode(
         // dropped from the suggestions, not greyed in them — so marking the
         // ancestor disabled would delete the one entry a reader is looking for
         // and say nothing about why. Greying a gesture needs a surface that can
-        // grey: that is the Packages palette of ticket 11, which is still open.
-        // When it lands it should call `mountCycleRefusal` with
-        // `mountAncestry()` too, rather than reimplementing the comparison.
+        // grey: that is the Packages palette (ticket 11, landed), where the row
+        // renders greyed and non-draggable carrying this same refusal. It asks
+        // `mountCycleRefusal` with `mountAncestry()` through
+        // `view/palette/packageRows.ts` rather than comparing slugs again, so
+        // the two surfaces cannot drift.
         options: () => {
           const above = new Set(mountAncestry());
           return workflowCatalogue.list().map((choice) => ({

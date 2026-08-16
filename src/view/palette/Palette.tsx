@@ -22,7 +22,12 @@ import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
 import { type IAssemblyDefinition } from '@nodes/assemblies';
+import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
+import { mountAncestry } from '@core/runtime/mountAncestry';
 import { assembliesFor, sectionSurvivesSearch } from './paletteSearch';
+import { packageRows, type PackageRow } from './packageRows';
+import { encodePackageDrag, PALETTE_PACKAGE_DRAG_TYPE } from './packageDrag';
+import { SUBGRAPH_TYPE } from '@nodes/compose/SubgraphNode';
 import './Palette.css';
 
 /** Custom drag type, so canvas drops can tell a palette drag from a file. */
@@ -128,6 +133,29 @@ export function Palette({ onNotify }: PaletteProps) {
 
   const searching = query.trim().length > 0;
 
+  // The saved packages, subscribed exactly as the registry is above — the
+  // catalogue is live (a package saved two minutes ago must be draggable), and
+  // it is a different store from the node-type registry, so it needs its own
+  // subscription rather than a second reason for that one to fire.
+  const catalogue = useSyncExternalStore(
+    (onStoreChange) => workflowCatalogue.onChange(onStoreChange),
+    // Safe as a snapshot: `WorkflowCatalogue.set` replaces the array only when
+    // the slug list actually changed, so the reference is stable between
+    // changes and this cannot loop.
+    () => workflowCatalogue.list(),
+  );
+
+  // `mountAncestry()` is a **reader**, asked here every render rather than
+  // remembered — the same decision, for the same reason, as the mount field's
+  // `validate` (ticket 42). A stored trail would go stale on a drill, a pop or
+  // a load, and a stale trail greys out a package that is perfectly legal to
+  // mount, which is the one failure this must not have. Deliberately not
+  // memoised for that reason: the trail is not among the values a dependency
+  // array could watch, and a memo keyed on the two that are would hold a
+  // refusal from the workflow before this one. It is a filter over a handful
+  // of rows.
+  const packages = packageRows(catalogue, mountAncestry(), query);
+
   // The capability-warning channel, subscribed the same way the registry is:
   // warnings arrive after a load or a Refresh, long after this first painted.
   const warnings = useSyncExternalStore(onCapabilityWarningsChange, capabilityWarnings);
@@ -193,6 +221,19 @@ export function Palette({ onNotify }: PaletteProps) {
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };
 
+  // The click half of a package row, so it behaves like every other row in
+  // this panel. Same call the canvas's drop makes, differing only in where —
+  // a click names no point, so it cascades like the one above.
+  const mount = (row: PackageRow) => {
+    if (row.refusal) return;
+    const preferred = paper?.viewport.center ?? { x: 120, y: 120 };
+    const outcome = controller.nodes.add(SUBGRAPH_TYPE, preferred, {
+      avoidOverlap: true,
+      data: { workflow: row.slug },
+    });
+    if (!outcome.ok && outcome.message) onNotify(outcome.message);
+  };
+
   return (
     <Panel side="left" className="palette" style={{ width: 'var(--layout-palette-width)' }}>
       <PanelHeader>
@@ -238,7 +279,11 @@ export function Palette({ onNotify }: PaletteProps) {
           </div>
         ) : null}
 
-        {matchCount === 0 ? (
+        {/* Packages count as matches. Assemblies taught this lesson once
+            already: a section filtered out before its own items are consulted
+            makes the palette report "no matches" directly above the thing it
+            just found. */}
+        {matchCount === 0 && packages.length === 0 ? (
           <PanelEmpty
             glyph={Search}
             title="No matches"
@@ -297,6 +342,44 @@ export function Palette({ onNotify }: PaletteProps) {
           </PanelSection>
         ) : null}
 
+        {/* Packages — the reusable definitions a mount points at, one drag
+            each (ticket 11). Above "Always available" and outside it, because
+            that label promises "in every workflow" and this list is the user's
+            own: it grows when they save one and shrinks when they delete one.
+            Hidden entirely when a search matches none of them; a section that
+            ignored the filter would read as a bug.
+
+            Open, unlike the Examples shelf, and the difference is the whole of
+            that shelf's reasoning: it is closed by default because a fresh
+            install otherwise showed one empty section of your own work above
+            twenty-three workflows of somebody else's. Every row here is the
+            user's own, and on a fresh install there are none — so the argument
+            for collapsing does not reach this list. */}
+        {packages.length > 0 || !searching ? (
+          <PanelSection
+            className="palette-section--packages"
+            heading="Packages"
+            aside={packages.length > 0 ? <Badge numeric>{packages.length}</Badge> : undefined}
+          >
+            {!searching ? (
+              <p className="palette-note">
+                Your saved workflows, each mounted as one isolated step — task in, answer out.
+                Mounted <em>by reference</em>: change the package and every mount of it changes.
+              </p>
+            ) : null}
+            {packages.length > 0 ? (
+              packages.map((row) => (
+                <PackageItem key={row.slug} row={row} onActivate={() => mount(row)} />
+              ))
+            ) : (
+              <p className="palette-note">
+                No saved workflows yet — save one, and it appears here as a node you can drop into
+                another.
+              </p>
+            )}
+          </PanelSection>
+        ) : null}
+
         {appSections.length > 0 ? (
           <>
             <div className="palette-group-label">
@@ -336,10 +419,14 @@ export function Palette({ onNotify }: PaletteProps) {
           </>
         ) : null}
 
-        {searching && matchCount > 0 ? (
+        {searching && matchCount + packages.length > 0 ? (
           <div className="palette-footnote">
+            {/* "results", not "nodes". A package is emphatically not a node
+                type in this lexicon — it is the definition a mount points at —
+                and the count now includes them. */}
             <span>
-              {matchCount} {matchCount === 1 ? 'node' : 'nodes'} match &ldquo;{query}&rdquo;
+              {matchCount + packages.length}{' '}
+              {matchCount + packages.length === 1 ? 'result' : 'results'} for &ldquo;{query}&rdquo;
             </span>
             <Button size="sm" variant="ghost" onClick={() => setQuery('')}>
               Show all
@@ -348,6 +435,54 @@ export function Palette({ onNotify }: PaletteProps) {
         ) : null}
       </PanelBody>
     </Panel>
+  );
+}
+
+/**
+ * One saved package in the palette — a drag that lands a mount already bound
+ * to it, rather than a generic mount you then have to go and configure.
+ *
+ * Its own component beside `PaletteItem` and `AssemblyItem`, for the reason
+ * those two are separate from each other: a package has no node definition, no
+ * instance cap and no scope, and it carries a refusal none of them has. Sharing
+ * one widened component would give all three a branch each for the other two.
+ *
+ * **A refused row is greyed, not hidden** — ticket 42's half that a native
+ * `<datalist>` could not do. The gesture is unavailable, and the reason is the
+ * compiler's own sentence, which is the same one the mount field shows and the
+ * same one a failed compile would have printed later.
+ */
+function PackageItem({ row, onActivate }: { row: PackageRow; onActivate: () => void }) {
+  const refused = row.refusal != null;
+  return (
+    <button
+      type="button"
+      className={clsx('palette-item', refused && 'palette-item--disabled')}
+      data-accent="violet"
+      draggable={!refused}
+      aria-disabled={refused}
+      title={row.refusal ?? `Mount ${row.name} — task in, answer out.`}
+      onDragStart={(event) => {
+        if (refused) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.setData(PALETTE_PACKAGE_DRAG_TYPE, encodePackageDrag(row.slug));
+        event.dataTransfer.effectAllowed = 'copy';
+      }}
+      onClick={onActivate}
+    >
+      <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
+      <span className="palette-item__text">
+        <span className="palette-item__title">{row.name}</span>
+        <span className="palette-item__description">
+          {/* The slug, because it is what the document stores and what a
+              developer types into the mount field — the name alone leaves a
+              reader unable to connect this row to `workflows/<slug>/`. */}
+          {refused ? row.refusal : <code className="palette-item__slug">{row.slug}</code>}
+        </span>
+      </span>
+    </button>
   );
 }
 

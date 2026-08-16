@@ -75,6 +75,22 @@
   background: var(--color-bg-subtle);
 }
 
+/* ---------- Packages ---------- *
+ * The user's own saved workflows, not node types, so the section is marked
+ * the way the scoped one is — a reader scrolling past should be able to tell
+ * that this list changes with what they have saved. */
+.palette-section--packages {
+  background: var(--color-bg-subtle);
+}
+
+/* The slug is an identifier, and the card that mounts it shows it in mono
+   too — a reader matching this row to `workflows/<slug>/` is comparing
+   characters, which proportional type makes harder than it needs to be. */
+.palette-item__slug {
+  font: var(--type-mono-sm);
+  color: var(--color-text-tertiary);
+}
+
 /* A one-line explanation, and the empty state for a workflow with no tools
    of its own — a full `PanelEmpty` block would out-weigh the section. */
 .palette-note {
