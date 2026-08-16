@@ -127,9 +127,23 @@ class CompiledWorkflow:
     def mermaid(self, *, xray: bool = True) -> str:
         """The compiled topology as Mermaid **text**, with no network call.
 
-        `xray=True` expands subgraph internals, so what you render is what the
-        compiler actually produced. Never `draw_mermaid_png()`: that posts the
-        graph to a third-party API.
+        `xray` expands a **LangGraph subgraph**, and this compiler emits none,
+        so today the flag changes nothing: an agent is built lazily inside its
+        node's closure, and a mount is a closure over the child's `invoke()`.
+        Neither is a node LangGraph can open. Verified byte-identical against
+        `xray=False` on all 23 shipped examples.
+
+        The parameter stays because the day a node type compiles to a real
+        subgraph it starts mattering again, and
+        `backend/tests/test_behind_the_scenes.py` fails on that day rather
+        than letting the words drift back.
+
+        (Until 2026-08-16 this said "`xray=True` expands subgraph internals,
+        so what you render is what the compiler actually produced" — aspirational
+        for the one construct it named, and the third unciteable claim found in
+        this area.)
+
+        Never `draw_mermaid_png()`: that posts the graph to a third-party API.
         """
         diagram: str = self.graph.get_graph(xray=xray).draw_mermaid()
         return diagram

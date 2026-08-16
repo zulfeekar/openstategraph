@@ -5,6 +5,7 @@
 
 Every diagram on the gallery page is the Mermaid the **compiler actually
 produced** — ``compiled.get_graph(xray=True).draw_mermaid()`` on each package
+(``xray`` expands nothing here; see the note on ``ALIASES`` below)
 under ``backend/openstategraph/examples/``. Compiling needs no credentials and
 calls no model, so this script is free to run.
 

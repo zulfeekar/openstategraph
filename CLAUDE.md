@@ -303,7 +303,9 @@ variable someone can set, see and revoke.
 
 ### Never send a user's graph to a third party
 
-`draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()` — `xray=True` expands subgraph internals, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
+`draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()`, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
+
+**`xray` expands nothing here, and the sentence that said it did was wrong.** Until 2026-08-16 this line claimed `xray=True` "expands subgraph internals". It expands a *LangGraph subgraph*, and this compiler emits none: an agent is built lazily inside its node's closure and a mount is a closure over the child's `invoke()`. Verified byte-identical against `xray=False` on all 23 shipped examples. So a composed workflow previews as flat boxes, `xray` is kept for the day a node type compiles to a real subgraph, and `backend/tests/test_behind_the_scenes.py` fails on that day rather than letting the words drift back.
 
 ### Cycles are gated by port *type*, and the step budget is not an iteration count
 
@@ -396,10 +398,21 @@ not survive the next run, which is why this correction lives outside them.
 The stamped claim that the scheduled workflow "refreshes the repository wiki"
 describes intent, not observed behaviour:
 
-> **It has never run.** This repository has six workflow files and **zero git
-> remotes**, so nothing in `.github/` has ever executed — not this, not the type
-> gate, not the drift gates, not `clean-install`. Until that changes (ship-it
-> ticket 49), "let OpenWiki regenerate" means *a human runs it*, and a generated
-> page you leave stale stays stale. Treat every sentence in this repository
-> asserting that a gate "runs" or "is enforced" as describing intent, not
-> observed behaviour.
+> **This workflow has never run** — zero executions, still true on 2026-08-16.
+> So "let OpenWiki regenerate" means *a human runs it*, and a generated page
+> you leave stale stays stale.
+>
+> **The blanket version of this warning is itself now stale, and that is the
+> point.** Until 2026-08-16 this block said the repository had "zero git
+> remotes, so nothing in `.github/` has ever executed — not this, not the type
+> gate, not the drift gates, not `clean-install`". A remote (`beta`) exists,
+> and **CI does run and does pass** — 25 green runs including `clean-install`
+> and the generated-artifact drift gates, alongside 24 Release runs. Corrected
+> rather than deleted, because a rule document asserting the gates are theatre
+> is more dangerous than one asserting they are real.
+>
+> Two exceptions survive and are worth knowing by name: `openwiki-update.yml`
+> has **never** run, and `docs-freshness` is PR-only (`ci.yml`) while this
+> repository pushes straight to `main`, so it has executed once, ever. And
+> `pages.yml` has run four times and **failed four times** — see
+> `.scratch/production-ready/tickets/28-the-gallery-nobody-could-see.md`.

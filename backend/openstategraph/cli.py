@@ -869,7 +869,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--xray",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="expand subgraph internals (default: on)",
+        help=(
+            "expand LangGraph subgraph internals (default: on). A no-op today "
+            "— nothing this compiler emits is one; see CompiledWorkflow.mermaid"
+        ),
     )
     graph.set_defaults(handler=cmd_graph)
 

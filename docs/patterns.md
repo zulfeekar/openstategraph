@@ -17,7 +17,9 @@ Diagrams are hand-written Mermaid using the same shapes the compiler's own
 `draw_mermaid()` output uses — rounded boxes for nodes, dotted lines for
 conditional edges. The authoritative picture of any workflow you build is the
 top bar's **View compiled graph**, which renders `draw_mermaid()` on the
-compiled graph with `xray=True`, locally, with no network call.
+compiled graph, locally, with no network call. It passes `xray=True`, which
+expands nothing: a mount and an agent are closures, not LangGraph subgraphs,
+so a composed workflow shows its mounts as flat boxes.
 
 ---
 

@@ -374,8 +374,11 @@ class WorkflowArtifacts:
 
     @staticmethod
     def _compile_topology(document: dict[str, Any]) -> tuple[str, list[str]]:
-        """The COMPILED topology, `xray=True` so subgraph internals expand,
-        plus every capability the compile could not resolve.
+        """The COMPILED topology, plus every capability the compile could
+        not resolve.
+
+        `xray=True` is asked for and expands nothing today: agents and mounts
+        are closures, not LangGraph subgraphs (see `CompiledWorkflow.mermaid`).
 
         `model=None` on purpose: the compiler owns topology and knows nothing
         about models, so the whole structure compiles without a key. Text, never

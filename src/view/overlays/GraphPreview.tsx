@@ -5,9 +5,10 @@ import './GraphPreview.css';
 
 /**
  * The compiled graph, as the backend compiler actually produced it — ticket
- * 54, and the cheap half of the dual-view ask (ticket 68): `xray=True`
- * expands subgraphs, so a concierge shows its routed children and a Team
- * shows its members inline.
+ * 54, and the cheap half of the dual-view ask (ticket 68). The backend asks
+ * for `xray=True`, which expands nothing: a concierge's routed children and a
+ * Team's members are closures over the child graph's invoke(), not LangGraph
+ * subgraphs, so each renders as one flat box.
  *
  * Mermaid renders locally (lazy-imported so its chunk costs nothing until
  * someone opens this); the Mermaid *text* is also exposed for copy, because

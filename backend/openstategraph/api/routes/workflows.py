@@ -771,9 +771,10 @@ def compiled_graph(
     """The COMPILED topology as Mermaid text (ticket 54) — what the
     compiler actually produced, not a hand-drawn approximation.
 
-    `xray=True` expands subgraph internals (a concierge shows its routed
-    children; a Team shows its members), which is also the cheap half of
-    the editor's dual-view ask (ticket 68). Text, never a PNG —
+    `xray=True` is asked for, and expands nothing today — a concierge's
+    routed children and a Team's members are closures, not LangGraph
+    subgraphs, so each renders as one flat box (see
+    `CompiledWorkflow.mermaid`). Text, never a PNG —
     `draw_mermaid_png()` posts the graph to a third-party API.
 
     `audience=customer` hides the compiler's own vocabulary — `__start__`,

@@ -69,14 +69,18 @@ every `pytest`.
 | `openstategraph eval` | a dataset of known answers | a model call per case | deliberately |
 | `<package>/tests/` | the document and its plan | nothing | every `pytest` |
 
-That split is why nineteen of the twenty gallery packages carry a `tests/` file
-and only `sql-qa` carries an `evals/` directory: a shape is an **assertion**
-(binary, no reference corpus needed), while an answer's quality is a **metric**
-(fuzzy, useful in relative terms). Three packages resist even the assertion and
-say so in their own `AGENTS.md` — `approval-in-the-loop` (the answer does not
-exist until a person supplies one), `youtube-trend-digest` (the correct answer
-changes daily) and `web-research-digest` (the network failure *is* the
-expectation). For those, a recorded smoke run is the honest artifact.
+That split is why twenty-two of the twenty-three gallery packages carry a
+`tests/` file and only `sql-qa` carries an `evals/` directory: a shape is an
+**assertion** (binary, no reference corpus needed), while an answer's quality
+is a **metric** (fuzzy, useful in relative terms). The one without is
+`nested-mounts-mid`, a nested child rather than an example in its own right.
+
+Three packages cannot assert an *answer* and say so in their own `AGENTS.md` —
+`approval-in-the-loop` (the answer does not exist until a person supplies one),
+`youtube-trend-digest` (the correct answer changes daily) and
+`web-research-digest` (the network failure *is* the expectation). Their
+`tests/` assert the document and its plan like everyone else's; what stands in
+for the answer is a recorded smoke run.
 
 **Eval is not a third axis.** It is the same judgement machinery pointed at a
 dataset instead of at a run, so there is no eval node on the canvas and there

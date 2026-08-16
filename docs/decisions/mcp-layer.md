@@ -64,7 +64,7 @@ stating plainly:
 | Tool | What it wraps | Writes? |
 | --- | --- | --- |
 | `get_node_vocabulary` | the generated `compile/port_specs.json` + `KNOWN_NODE_TYPES` + the ladder classes' locked prompt sections | no |
-| `compile_workflow` | `ValidateWorkflowTool` + `WorkflowCompiler.build` + `draw_mermaid(xray=True)` | **no** |
+| `compile_workflow` | `ValidateWorkflowTool` + `WorkflowCompiler.build` + `draw_mermaid(xray=True)`, which expands nothing — mounts and agents are closures, not subgraphs | **no** |
 | `validate_workflow` | `ValidateWorkflowTool` | no |
 | `list_workflows` | `WorkflowStore.list` | no |
 | `describe_workflow` | `WorkflowStore.load` + `validate_package` | no |
