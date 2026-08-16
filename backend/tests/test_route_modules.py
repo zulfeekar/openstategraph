@@ -183,10 +183,18 @@ class TestNothingSlipsBackIntoTheFactory:
     def test_every_route_the_app_serves_comes_from_a_router(self) -> None:
         """The other direction: the routers really are the whole surface, so
         the guard above cannot be satisfied by registering routes some third
-        way."""
+        way.
+
+        Built **with** a graph factory, because since production-ready ticket
+        54 that is what mounts the Chinook demo router — the one router whose
+        registration is conditional, and the condition is having a graph to
+        serve. Asking a fully-assembled app keeps this an equality rather than
+        a subset, which is what makes it catch a route registered some third
+        way.
+        """
         from openstategraph.api.routes import __name__ as routes_package
 
-        served = {route.path for route in api_routes(create_app())}
+        served = {route.path for route in api_routes(create_app(graph_factory=lambda _m: None))}
         assert served, "no routes found — the walk above is not seeing them"
         from_routers = {
             route.path

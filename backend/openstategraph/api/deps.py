@@ -91,6 +91,9 @@ def get_graph_factory(http: Request) -> Any:
     rather than part of `WorkflowServices`, which is why it needs its own way
     through: a test injects a stub graph here, and `create_app` being a factory
     is what makes that possible.
+
+    Never `None` where this runs: since ticket 54 the route that depends on it
+    is registered only when `create_app` was handed a factory.
     """
     factory: Any = http.app.state.graph_factory
     return factory

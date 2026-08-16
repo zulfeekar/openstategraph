@@ -7,10 +7,9 @@ a supported thing to build rather than a reverse-engineering exercise.
 
 **This page is not the path list.** `openapi.json` is, and it carries roughly
 three times as many paths as this page walks through — the editor's own writing,
-knowledge, provider, MCP-registry, template and example endpoints among them,
-plus `POST /api/workflows/chinook-assistant/ask`, a hand-built demo that
-predates the canvas and does not generalise. What follows is the subset a
-**custom chat client** needs, in the order it needs them.
+knowledge, provider, MCP-registry, template and example endpoints among them.
+What follows is the subset a **custom chat client** needs, in the order it
+needs them.
 
 This page is the whole contract in two halves:
 

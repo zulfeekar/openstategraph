@@ -5,6 +5,14 @@ One route, and the only one that needed something other than
 the canvas, through the `graph_factory` a test can inject into `create_app`.
 That is a constructor argument rather than part of the assembly, so it reaches
 handlers by its own dependency (reviews-2026-08-14 ticket 15).
+
+**This router is not part of the default assembly** (production-ready ticket
+54). `create_app` includes it only when a caller supplies that factory, so the
+route exists exactly where a graph exists to answer it — and is absent, rather
+than `500`-ing, everywhere else. It is therefore not in `docs/openapi.json`
+either, which is the point: the committed contract is what a stranger reads to
+learn what this server does, and a path that cannot succeed on any install
+teaches them the contract is not checked.
 """
 
 from __future__ import annotations

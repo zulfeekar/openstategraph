@@ -1,79 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AskRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "question": {
-            "description": "A natural-language question.",
-            "minLength": 1,
-            "title": "Question",
-            "type": "string"
-          },
-          "recursion_limit": {
-            "default": 50,
-            "maximum": 1000.0,
-            "minimum": 10.0,
-            "title": "Recursion Limit",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "question"
-        ],
-        "title": "AskRequest",
-        "type": "object"
-      },
-      "AskResponse": {
-        "description": "What the editor renders.\n\nThe SQL and rows are returned alongside the prose deliberately: an answer a\ndeveloper cannot audit is not much use, and seeing the query is how they tell\na right answer from a plausible one.",
-        "properties": {
-          "answer": {
-            "title": "Answer",
-            "type": "string"
-          },
-          "attempts": {
-            "title": "Attempts",
-            "type": "integer"
-          },
-          "passed": {
-            "title": "Passed",
-            "type": "boolean"
-          },
-          "reason": {
-            "title": "Reason",
-            "type": "string"
-          },
-          "rows": {
-            "title": "Rows",
-            "type": "string"
-          },
-          "sql": {
-            "title": "Sql",
-            "type": "string"
-          }
-        },
-        "required": [
-          "answer",
-          "sql",
-          "rows",
-          "attempts",
-          "passed",
-          "reason"
-        ],
-        "title": "AskResponse",
-        "type": "object"
-      },
       "CapabilitiesResponse": {
         "properties": {
           "functions": {
@@ -2649,48 +2576,6 @@
         "summary": "Create a workflow \u2014 the backend mints its slug",
         "tags": [
           "Catalogue"
-        ]
-      }
-    },
-    "/api/workflows/chinook-assistant/ask": {
-      "post": {
-        "description": "A fixed, hand-built demo graph \u2014 the NL-to-SQL loop that is now the assistant's `data_query` branch \u2014 kept as its own endpoint because it predates the canvas and returns the SQL and rows alongside the prose so an answer can be audited. It answers database questions only, and has no router in front of it: the path shares this workflow's slug, not its document. It does not generalise: a client of your own wants `/api/runs/stream`.",
-        "operationId": "ask_api_workflows_chinook_assistant_ask_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AskRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "The Chinook demo's own endpoint (not a general API)",
-        "tags": [
-          "Demo"
         ]
       }
     },

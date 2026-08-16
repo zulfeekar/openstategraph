@@ -503,6 +503,13 @@ async function renderFlow(slug) {
   const host = $("flow");
   if (flow.slug === slug && flow.ready) return;
   flow.slug = slug; flow.ready = false;
+  // Nothing selected means nothing published, which means there is nothing to
+  // compile and no request to make (workflow-gallery 43, production-ready 54).
+  // `renderPicker` already falls through to `""` correctly and says so in
+  // words; this used to interpolate that empty slug straight into the path —
+  // `GET /api/workflows//graph` — and render the 404 as the pane's empty
+  // state, so the first minute of every install read "no compiled view: 404".
+  if (!slug) { flow.ready = true; host.textContent = "No workflows are published yet"; return; }
   host.textContent = "compiling…";
   try {
     // `audience=customer`: the compiler's own names — `__start__`,
@@ -510,7 +517,9 @@ async function renderFlow(slug) {
     // reader's vocabulary. The editor asks the same endpoint without it and
     // still gets the ids it debugs with.
     const resp = await fetch(`/api/workflows/${slug}/graph?audience=customer`);
-    if (!resp.ok) { host.textContent = "no compiled view: " + resp.status; return; }
+    // A status code is not a sentence. Whatever went wrong, what this reader
+    // needs to know is that the diagram is missing, not that it was a 404.
+    if (!resp.ok) { host.textContent = "This workflow has no diagram to show."; return; }
     const { mermaid: text } = await resp.json();
     const source = themeMermaid(text);
     // The diagram has to follow the page's scheme too — a light-on-white

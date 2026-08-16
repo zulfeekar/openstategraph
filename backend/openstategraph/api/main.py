@@ -154,13 +154,6 @@ from openstategraph.api.streaming import (  # noqa: E402, F401  (underscored nam
 # both names are read by tests and by `openapi_document`.
 
 
-def _default_factory(model: str) -> Any:
-    from graph import build_live_graph
-
-    return build_live_graph(model)
-
-
-
 def single_server_lifespan(services: Any) -> Any:
     """The startup guard that makes "one worker" true instead of documented.
 
@@ -222,10 +215,18 @@ def create_app(
     instance and can inject a stub graph — and, since tickets 10/14/16, an
     isolated `workflows_root` so a test never touches the real `workflows/`
     tree at the repo root.
+
+    **`graph_factory` is now the demo endpoint's condition, not its
+    decoration** (production-ready ticket 54). It used to default to
+    `from graph import build_live_graph` — a bare top-level module that exists
+    only inside `workflows/chinook-assistant/`, so
+    `POST /api/workflows/chinook-assistant/ask` was mounted on every server,
+    published as the first path of the committed `docs/openapi.json`, and
+    answered `500` with a `ModuleNotFoundError` on every install including
+    this checkout's own. The route is registered only when a caller hands over
+    a graph to serve, which is the same condition under which it can answer.
     """
     from openstategraph.api.services import WorkflowServices
-
-    factory = graph_factory or _default_factory
 
     # The store, the process-wide memory Store and the one NodeRuntime
     # construction live on a collaborator (`api/services.py`) rather than in
@@ -280,8 +281,9 @@ def create_app(
     #: On `app.state` for the same reason `services` is: it is what lets the
     #: `/api/workflows/chinook-assistant/ask` handler be a module-level
     #: function rather than a closure over this factory
-    #: (reviews-2026-08-14 ticket 15).
-    app.state.graph_factory = factory
+    #: (reviews-2026-08-14 ticket 15). `None` when nobody handed one over, in
+    #: which case the route it serves is never registered — see the docstring.
+    app.state.graph_factory = graph_factory
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins(),
@@ -311,7 +313,11 @@ def create_app(
     # registered — the committed OpenAPI snapshot sorts its keys, so ordering
     # is not load-bearing, but keeping it makes the diff readable.
     app.include_router(chat_ui_routes.router)
-    app.include_router(demo_routes.router)
+    # Only when there is a graph to serve (ticket 54). An unregistered path
+    # answers 404 — "this server does not offer that", which is true — instead
+    # of publishing a promise every install breaks.
+    if graph_factory is not None:
+        app.include_router(demo_routes.router)
     app.include_router(example_routes.router)
     app.include_router(mcp_routes.router)
     app.include_router(providers_routes.router)
