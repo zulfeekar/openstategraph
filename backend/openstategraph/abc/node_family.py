@@ -30,10 +30,14 @@ that installs one (see `openstategraph.extensions`).
 **What a family may see is `NodeBuildContext`, not the runtime.** The runtime
 is a 2,000-line compiler internal with no stability guarantee; the context is
 the narrow, named set of things building a node legitimately needs — this
-node's own id and document entry, the compiled plan, the runtime's
-collaborators, the diagnostics channel, and two callables (`upstream_text`,
-`resolve_model`) that would otherwise each be a reimplementation of compiler
-behaviour in every plugin.
+node's own id and document entry, the compiled plan, the diagnostics channel,
+two callables (`upstream_text`, `resolve_model`) that would otherwise each be
+a reimplementation of compiler behaviour in every plugin, and
+`NodeCapabilities`, which is that same sentence applied to the collaborators.
+
+That last one was the exception until framework-packaging ticket 09: the field
+read `services: Any` and carried the whole `RuntimeServices`, so the paragraph
+above was true of six fields out of seven. `NodeCapabilities` names three.
 
 **Built-ins are un-shadowable.** `NodeRuntime.builder_for` consults its own
 table first and reports a family that tried, naming the distribution. A
@@ -44,6 +48,7 @@ records why a distribution must not be able to change what one resolves to.
 
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Protocol, runtime_checkable
@@ -51,6 +56,56 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Protocol, ru
 if TYPE_CHECKING:  # pragma: no cover - types only, as `loader.py` established
     from openstategraph.compile.diagnostics import CompileDiagnostics
     from openstategraph.compile.workflow_compiler import CompiledPlan
+
+
+@dataclass(frozen=True)
+class NodeCapabilities:
+    """The runtime's collaborators a node family may reach — named, and only
+    these.
+
+    **Why this exists** (framework-packaging ticket 09). The field it replaces
+    was `services: Any`, and what the compiler passed through it was the whole
+    of `compile.node_runtime.RuntimeServices` — thirteen fields including
+    `document_loader`, `package_loader`, `knowledge_dir_override` and
+    `advisor_catalog`. That is the compiler internal this context exists to
+    hide, published to every installed plugin through the one field on a
+    stability-contract dataclass whose width nothing pinned. A field added to
+    `RuntimeServices` next month widened the plugin seam, and the diff a
+    reviewer saw was a line in the compiler — `public_api.txt` would not move,
+    because the *name* `services` did not.
+
+    The `Any` had a real reason and still does: `abc` must stay out of the
+    compiler's import graph, so nothing here may name `RuntimeServices`. That
+    is an argument for a façade, not for the object — this class is declared
+    here, in `abc`, and the compiler fills it in.
+
+    **Three fields, and the presumption is against a fourth.** They are what
+    building a *step* legitimately needs and nothing more:
+
+    - `tools` — the shared registry, keyed by node type, so a family can bind
+      the capability a document's tool node names.
+    - `functions` — the callables a package's `functions/` contributed, for the
+      same reason.
+    - `memory_store` — the long-term store, when the deployment has one.
+
+    What is deliberately absent is everything that is the *compiler's* job
+    rather than a step's: loading another document, resolving a package,
+    finding a knowledge directory, the advisor catalogue, the middleware slot
+    table. A family that finds itself needing one of those is describing a gap
+    in this seam — the answer is a new named field here, argued and visible in
+    the snapshot, not a widening nobody diffs.
+
+    A model is not here either: `NodeBuildContext.resolve_model` already
+    answers that question properly, including the per-node override and the
+    provider spelling a plugin should not have to know.
+    """
+
+    #: Tool implementations, keyed by the node type a document names.
+    tools: Mapping[str, Any] = field(default_factory=dict)
+    #: Discovered callables, keyed by `function.<name>`.
+    functions: Mapping[str, Any] = field(default_factory=dict)
+    #: LangGraph's `BaseStore`, or `None` where the deployment has no memory.
+    memory_store: Any = None
 
 
 @dataclass(frozen=True)
@@ -70,10 +125,9 @@ class NodeBuildContext:
     #: What the compiler decided about the graph before it was built: nodes,
     #: edges, conditional routes, fan-out. Read-only in every honest use.
     plan: 'CompiledPlan'
-    #: The runtime's collaborators — model, tools, functions, memory settings,
-    #: the memory store. Typed `Any` here only to keep this module out of the
-    #: compiler's import graph; it is a `compile.node_runtime.RuntimeServices`.
-    services: Any = None
+    #: What this family may reach of the runtime — see `NodeCapabilities`.
+    #: Replaced `services: Any`, which was the whole `RuntimeServices`.
+    capabilities: NodeCapabilities = field(default_factory=NodeCapabilities)
     #: Where a family reports what it could not do. Use
     #: `Finding.CAPABILITY_FAILED` for "I was asked for something I could not
     #: supply"; raising from `build` is reported for you, but as our sentence
@@ -96,6 +150,31 @@ class NodeBuildContext:
     def data(self) -> dict[str, Any]:
         """This node's configuration, as the editor saved it. Never `None`."""
         return dict(self.node.get("data") or {})
+
+    @property
+    def services(self) -> NodeCapabilities:
+        """Deprecated spelling of `capabilities` (framework-packaging 09).
+
+        The shim `docs/stability.md`'s deprecation policy requires, shipped in
+        the same commit as the change rather than "before the release": a
+        family written against the old name keeps working for the fields that
+        survived, and hears about the new one.
+
+        It returns the **façade**, not what `services` used to be. That is the
+        change, not a shortcoming of the shim: the whole defect was that this
+        name reached the compiler's own collaborators, so a plugin that read
+        `context.services.document_loader` gets an `AttributeError` naming the
+        attribute it should never have had. Loud, at the seam, rather than a
+        `None` that behaves like a deployment without one.
+        """
+        warnings.warn(
+            "NodeBuildContext.services is deprecated; use .capabilities, which "
+            "names what a family may reach instead of handing over the compiler's "
+            "RuntimeServices.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.capabilities
 
 
 @runtime_checkable

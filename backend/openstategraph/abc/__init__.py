@@ -60,7 +60,12 @@ from openstategraph.abc.guardrail import (
     Screening,
 )
 from openstategraph.abc.middleware import MiddlewareSlotTable
-from openstategraph.abc.node_family import BaseNodeFamily, INodeFamily, NodeBuildContext
+from openstategraph.abc.node_family import (
+    BaseNodeFamily,
+    INodeFamily,
+    NodeBuildContext,
+    NodeCapabilities,
+)
 from openstategraph.abc.orchestrator import (
     Archetype,
     BaseOrchestrator,
@@ -103,6 +108,7 @@ __all__ = [
     "MiddlewareSlotTable",
     "NoArgs",
     "NodeBuildContext",
+    "NodeCapabilities",
     "Orchestrator",
     "Progress",
     "ReactAgentNode",

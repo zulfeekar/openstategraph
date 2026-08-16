@@ -34,7 +34,7 @@ from langgraph.constants import TAG_NOSTREAM
 from openstategraph.abc.grader import Grader
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
-from openstategraph.abc.node_family import INodeFamily, NodeBuildContext
+from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
@@ -1258,7 +1258,17 @@ class NodeRuntime:
                 node_id=node_id,
                 node=node,
                 plan=plan,
-                services=self.services,
+                # The façade, never `self.services` (framework-packaging 09).
+                # This dataclass is a compiler internal with thirteen fields
+                # and no stability guarantee; `NodeCapabilities` is declared in
+                # `abc` and names three. Widening what a plugin can reach is
+                # now an edit to a published signature rather than a field
+                # added here.
+                capabilities=NodeCapabilities(
+                    tools=self.services.tools,
+                    functions=self.services.functions,
+                    memory_store=self.services.memory_store,
+                ),
                 diagnostics=self.diagnostics,
                 upstream_text=lambda state: _upstream_text(state, upstream),  # type: ignore[arg-type]
                 resolve_model=self._resolve_model,

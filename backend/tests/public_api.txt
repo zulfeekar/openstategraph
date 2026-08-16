@@ -36,7 +36,8 @@ openstategraph.abc.IRouter = class(Protocol)(*args, **kwargs)
 openstategraph.abc.ITool = class(Protocol)(*args, **kwargs)
 openstategraph.abc.MiddlewareSlotTable = class(object)(order: 'Sequence[str]' = ()) -> 'None'
 openstategraph.abc.NoArgs = class(BaseModel)() -> None
-openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan,services,diagnostics,upstream_text,resolve_model)
+openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan,capabilities,diagnostics,upstream_text,resolve_model)
+openstategraph.abc.NodeCapabilities = dataclass(object) fields(tools,functions,memory_store)
 openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.Progress = class(BaseModel)(*, message: str, current: Annotated[int | None, Ge(ge=0)] = None, total: Annotated[int | None, Ge(ge=0)] = None, node: str = '') -> None
 openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'None'

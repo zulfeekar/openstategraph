@@ -41,10 +41,47 @@
   unaffected.
 
 ### Changed
+- **A node family is handed a façade, not the compiler.**
+  `NodeBuildContext.services` — typed `Any`, and passed the whole thirteen-field
+  `RuntimeServices` including `document_loader`, `package_loader`,
+  `knowledge_dir_override` and `advisor_catalog` — is replaced by
+  `NodeBuildContext.capabilities`, a new public `openstategraph.abc.NodeCapabilities`
+  naming three: `tools`, `functions`, `memory_store`.
+
+  The context's own docstring already said a family sees "the narrow, named set
+  of things building a node legitimately needs", and six of its seven fields
+  delivered that. The seventh re-widened the seam to the compiler internal the
+  context exists to hide — and because `Any` pinned nothing, a field added to a
+  compiler dataclass reached every installed plugin with no diff in
+  `backend/tests/public_api.txt`, since the *name* `services` had not changed.
+  It does now: widening what a plugin can reach is an edit to a published
+  signature.
+
+  `.services` still works and emits a `DeprecationWarning` naming
+  `.capabilities`; it returns the façade, so a family that read `.services.tools`
+  is unaffected and one that reached `.services.document_loader` gets an
+  `AttributeError` at the seam rather than a compiler internal.
+
 - The run stream now asks LangGraph for `version="v2"`, whose chunk shape does
   not vary with the stream modes requested, and tags the router's and grader's
   model invocations `nostream` so their machinery text is never produced
   rather than blanked after the fact. No client-visible change.
+
+- **The published API says what a frame carries, not only what it is called.**
+  The `200` description of `POST /api/runs/stream` and `/api/runs/resume` now
+  lists each event's fields beside its name, generated from one declaration
+  (`FRAME_FIELDS`) rather than mirrored — so `docs/openapi.json` publishes the
+  whole run/stream vocabulary and a field added or removed is a diff in a
+  committed artifact. `RuntimeClient` gained `withheld` on its `token` event,
+  which had been emitted, documented and read by no client at all.
+
+- **`POST /api/workflows/chinook-assistant/ask` is no longer mounted by
+  default**, and is out of `docs/openapi.json`. It was the first path in the
+  published contract and answered `500` on every install, including this
+  repository's: its default graph factory did `from graph import
+  build_live_graph`, a top-level module that exists only inside one workflow
+  package's directory. `create_app(graph_factory=…)` still mounts it, which is
+  the condition under which it can answer.
 
 ## 0.3.0rc1 — 2026-08-15
 The release train's first ride, on the beta repository, to TestPyPI only. The

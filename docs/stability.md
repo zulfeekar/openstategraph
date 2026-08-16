@@ -39,7 +39,7 @@ from openstategraph.abc import (
     IGuardrail, BaseGuardrail, Guardrail, GuardrailRule, Redaction, Screening,
     IAgent, AbstractAgentNode, BaseAgentNode, ReactAgentNode, DeepAgentNode,
     CustomGraphNode, agent_node_for_tier,
-    INodeFamily, BaseNodeFamily, NodeBuildContext,
+    INodeFamily, BaseNodeFamily, NodeBuildContext, NodeCapabilities,
     IOrchestrator, BaseOrchestrator, Orchestrator, Archetype, Subtask,
     SystemPrompt, MiddlewareSlotTable,
     Progress, report_progress,
