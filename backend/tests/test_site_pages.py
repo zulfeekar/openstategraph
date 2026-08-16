@@ -201,12 +201,23 @@ class TestItDoesNotDependOnTheEditorGate:
 
 class TestTheGalleryCountsItselfHonestly:
     """A number in prose is the first thing to rot, and this page carries seven
-    of them. They had rotted: the gallery said "twenty-two examples" in its
-    headline and "these twenty" and "twenty finished packages" in its closing
-    copy, at the same time, on the same page.
+    of them. They had rotted twice: ticket 45 was "the gallery says twenty-one
+    and ships twenty-two", and ticket 47 was the same sentence one higher.
 
-    The count is derived rather than restated — `class="ex"` sections are what
-    a reader actually counts, and `examples/index.json` is what ships.
+    **Ticket 45's fix was to edit the numbers, and that is why it drifted
+    again.** `expected = {"twenty-two"}` sat in this file as a literal, so the
+    page and the test agreed with each other and neither agreed with what ships.
+    The expectation is *derived* now — from `examples/index.json`, the same file
+    the wheel packages and `openstategraph examples list` reads — so the only
+    way to make this pass is to make the page true.
+
+    **What the word counts is packages, not sections**, and ticket 45 chose the
+    other one. 23 examples ship; 22 have a `class="ex"` section of their own,
+    because `nested-mounts-mid` is shown inside its parent's. A reader meeting
+    "twenty-three examples, each with the graph it compiles to" is told the
+    truth — every one of the 23 has its diagram on this page, which
+    `test_the_page_shows_every_shipped_example` asserts — while "all
+    twenty-two are validate-clean" was simply wrong about a package that is.
     """
 
     #: Cardinals big enough that they can only be a claim about the gallery.
@@ -215,6 +226,30 @@ class TestTheGalleryCountsItselfHonestly:
         r"\b(nineteen|twent(?:y|ieth)(?:-(?:one|two|three|four|five))?)\b",
         re.IGNORECASE,
     )
+
+    #: Only as far as the regex above can reach. A twenty-sixth example is a
+    #: `KeyError` here rather than a silent pass, which is the right failure.
+    WORDS = {
+        19: "nineteen",
+        20: "twenty",
+        21: "twenty-one",
+        22: "twenty-two",
+        23: "twenty-three",
+        24: "twenty-four",
+        25: "twenty-five",
+    }
+
+    @classmethod
+    def _shipped_word(cls) -> str:
+        """The cardinal the pages must use, read from what actually ships."""
+        import json
+
+        index = json.loads(
+            (
+                Path(site_pages.__file__).resolve().parent.parent / "examples" / "index.json"
+            ).read_text()
+        )
+        return cls.WORDS[len(index["examples"])]
 
     @staticmethod
     def _entries(page: str) -> int:
@@ -244,26 +279,108 @@ class TestTheGalleryCountsItselfHonestly:
         assert packaged - shown == {"nested-mounts-mid"}
         assert packaged <= drawn, "a shipped example with no diagram on the page"
 
-    def test_every_cardinal_on_the_page_is_the_same_number(self) -> None:
+    def test_every_cardinal_on_the_page_is_what_actually_ships(self) -> None:
         directory = site_pages.site_dir({})
         assert directory is not None
         page = (directory / "gallery.html").read_text()
-        expected = {"twenty-two"}
+        expected = self._shipped_word()
 
         found = {match.lower() for match in self.CARDINALS.findall(page)}
 
-        assert found == expected, f"gallery.html disagrees with itself: {sorted(found)}"
+        assert found == {expected}, (
+            f"gallery.html says {sorted(found)}; {expected} ship. "
+            f"This is derived from examples/index.json — fix the page, not this number."
+        )
 
     def test_the_landing_page_agrees_with_the_gallery(self) -> None:
         directory = site_pages.site_dir({})
         assert directory is not None
-        entries = self._entries((directory / "gallery.html").read_text())
         index_page = (directory / "index.html").read_text()
 
         found = {match.lower() for match in self.CARDINALS.findall(index_page)}
 
-        assert entries == 22
-        assert found == {"twenty-two"}
+        assert found == {self._shipped_word()}
+
+    def test_a_section_count_is_not_the_claim_the_prose_makes(self) -> None:
+        """The two numbers this page could mean, kept apart on purpose.
+
+        22 sections and 23 packages, and the difference is `nested-mounts-mid`
+        shown inside its parent's section. Ticket 45 made the prose mean
+        *sections* and the lead went on saying "all twenty-two are
+        validate-clean" about 23 packages. Pinned so a future reader knows the
+        gap is a decision rather than an off-by-one nobody noticed.
+        """
+        directory = site_pages.site_dir({})
+        assert directory is not None
+        sections = self._entries((directory / "gallery.html").read_text())
+
+        assert sections == 22
+        assert self._shipped_word() == "twenty-three"
+
+
+class TestOneHeaderNav:
+    """workflow-gallery ticket 47 §2 and §3.
+
+    Two defects with one cause: three pages each carrying their own copy of
+    the header. `/gallery` had an FAQ link and `/behind-the-scenes` did not;
+    `/index` had an *Examples* link neither of the others had; and the rule
+    hiding the links on a phone was written three times at **two different
+    breakpoints** (720px twice, 860px once). All three hid the nav with
+    nothing in its place, so at 390px the only navigation was a footer at the
+    bottom of a page 50 543px tall.
+
+    Three static files and no templating step, so "one shared component" is
+    enforced here rather than generated: the navs are compared to each other,
+    and a fourth page added by copy-paste has to match or fail.
+    """
+
+    NAV = re.compile(r"<nav>(.*?)</nav>", re.S)
+    LINK = re.compile(r'<a href="([^"]+)"[^>]*>([^<]+)</a>')
+
+    @staticmethod
+    def _page(name: str) -> str:
+        directory = site_pages.site_dir({})
+        assert directory is not None
+        return (directory / name).read_text()
+
+    def _links(self, name: str) -> list[tuple[str, str]]:
+        body = self.NAV.search(self._page(name))
+        assert body is not None, f"{name} has no header nav at all"
+        return self.LINK.findall(body.group(1))
+
+    @pytest.mark.parametrize("page", ["index.html", "gallery.html", "behind-the-scenes.html"])
+    def test_every_page_offers_the_same_destinations(self, page: str) -> None:
+        """Compared modulo `aria-current`, which is the one thing that may
+        legitimately differ — it says which of them you are on."""
+        assert self._links(page) == self._links("gallery.html")
+
+    @pytest.mark.parametrize("page", ["index.html", "gallery.html", "behind-the-scenes.html"])
+    def test_the_links_reach_every_page_of_the_site(self, page: str) -> None:
+        targets = {href.split("#")[0] for href, _ in self._links(page) if href.split("#")[0]}
+
+        for name in site_pages.SITE_PAGES:
+            assert f"{name}.html" in targets, f"{page}'s nav cannot reach {name}"
+
+    @pytest.mark.parametrize("page", ["index.html", "gallery.html", "behind-the-scenes.html"])
+    def test_a_phone_is_not_left_with_no_navigation(self, page: str) -> None:
+        """`display: none` on the links with no replacement is the defect.
+
+        The links stay in the layout and scroll inside their own strip — the
+        answer this site already gives for wide code and diagrams, so the body
+        still never scrolls sideways.
+        """
+        source = self._page(page)
+
+        assert ".nav nav { display: none; }" not in source
+        assert "overflow-x: auto" in source
+
+    @pytest.mark.parametrize("page", ["index.html", "gallery.html", "behind-the-scenes.html"])
+    def test_the_three_pages_break_at_the_same_width(self, page: str) -> None:
+        """720px on two pages and 860px on the third is three copies drifting,
+        which is the same defect as the nav contents drifting."""
+        breakpoints = set(re.findall(r"@media \(max-width: (\d+)px\) \{\s*\.nav ", self._page(page)))
+
+        assert breakpoints == {"860"}
 
 
 class TestTheWheelCarriesThem:

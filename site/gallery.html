@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gallery — twenty-two examples, each with the graph it compiles to</title>
-<meta name="description" content="Twenty-two finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
+<title>Gallery — twenty-three examples, each with the graph it compiles to</title>
+<meta name="description" content="Twenty-three finished OpenStateGraph packages, every one validated and smoke-run. For each: the diagram the compiler actually produced, which LangGraph constructs the drawing became, and the two commands that put it in your project." />
 <meta name="color-scheme" content="light dark" />
-<meta property="og:title" content="OpenStateGraph gallery — twenty-two examples, each with its compiled graph" />
+<meta property="og:title" content="OpenStateGraph gallery — twenty-three examples, each with its compiled graph" />
 <meta property="og:description" content="Prompt chaining to a three-deep mount to a two-provider flagship. Every diagram is draw_mermaid() output from the real compiler, rendered on your machine." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='1.8'%3E%3Cpath d='M10 10h4M10 22h4M18 16h4'/%3E%3C/g%3E%3Cg fill='%23fafafa'%3E%3Ccircle cx='9' cy='10' r='2.4'/%3E%3Ccircle cx='9' cy='22' r='2.4'/%3E%3Ccircle cx='23' cy='16' r='2.4'/%3E%3C/g%3E%3C/svg%3E" />
@@ -86,9 +86,22 @@ header {
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
 .brand svg { display: block; }
 .nav nav { margin-left: auto; display: flex; gap: 1.5rem; font-size: 0.875rem; }
-.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; white-space: nowrap; }
 .nav nav a:hover, .nav nav a[aria-current="page"] { color: hsl(var(--foreground)); }
-@media (max-width: 720px) { .nav nav { display: none; } }
+/* At 390 the six links were `display: none` with nothing in their place, so a
+   visitor landing on the gallery from a link had 50 543px to scroll before the
+   footer offered another page (workflow-gallery ticket 47). They scroll inside
+   their own strip instead — the same answer this page already gives for wide
+   code and diagrams, so the body still never scrolls sideways. */
+@media (max-width: 860px) {
+  .nav { height: auto; gap: 0.75rem; padding: 0.6rem 0; flex-wrap: wrap; }
+  .nav nav {
+    margin-left: 0; width: 100%; gap: 1.1rem;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 0.1rem;
+  }
+  .nav nav::-webkit-scrollbar { display: none; }
+}
 
 /* ── hero + sections ────────────────────────────────────────────── */
 .hero { padding: 4.5rem 0 3rem; position: relative; overflow: hidden; }
@@ -282,6 +295,7 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
     </a>
     <nav>
       <a href="index.html#how">How it works</a>
+      <a href="index.html#examples">Examples</a>
       <a href="gallery.html" aria-current="page">Gallery</a>
       <a href="behind-the-scenes.html">Behind the scenes</a>
       <a href="index.html#quickstart">Quickstart</a>
@@ -298,13 +312,13 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
   <div class="hero">
     <div class="wrap">
       <span class="eyebrow">The gallery</span>
-      <h1>Twenty-two examples, each with the graph it compiles to</h1>
+      <h1>Twenty-three examples, each with the graph it compiles to</h1>
       <p class="lede">
         Every pattern the node catalogue can express, built as a finished package: a straight
         line, three kinds of loop, a mount three documents deep, a guardrail that reads
         opposite ways depending on which side of the agent it sits, a workflow that remembers
         what it was told across two separate runs, and a flagship that reads a live YouTube
-        transcript and hands it to Claude. All twenty-two are
+        transcript and hands it to Claude. All twenty-three are
         <code>validate</code>-clean and were smoke-run for real — the answers on this page are
         recorded, not imagined.
       </p>
@@ -1885,7 +1899,7 @@ answer = wf.<span class="f">ask</span>(<span class="s">"How many customers are i
       <div class="callout callout-tip">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
         <span>
-          <b>These twenty-two are permanent.</b> They are not demo scaffolding to be tidied away — they
+          <b>These twenty-three are permanent.</b> They are not demo scaffolding to be tidied away — they
           are the regression surface for every pattern the catalogue can express, and a test
           asserts that every package shipped in the wheel validates, compiles warning-free and has
           an entry and an exit.
@@ -1919,7 +1933,7 @@ answer = wf.<span class="f">ask</span>(<span class="s">"How many customers are i
           OpenStateGraph
         </a>
         <p class="muted" style="max-width:24rem; font-size:.875rem">
-          Twenty-two finished packages, every diagram straight out of the compiler. Nothing on this
+          Twenty-three finished packages, every diagram straight out of the compiler. Nothing on this
           page was fetched from anywhere.
         </p>
       </div>

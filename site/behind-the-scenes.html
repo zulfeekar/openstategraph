@@ -98,9 +98,22 @@ header {
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
 .brand svg { display: block; }
 .nav nav { margin-left: auto; display: flex; gap: 1.5rem; font-size: 0.875rem; }
-.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; white-space: nowrap; }
 .nav nav a:hover, .nav nav a[aria-current="page"] { color: hsl(var(--foreground)); }
-@media (max-width: 860px) { .nav nav { display: none; } }
+/* At 390 the six links were `display: none` with nothing in their place, so a
+   visitor landing on the gallery from a link had 50 543px to scroll before the
+   footer offered another page (workflow-gallery ticket 47). They scroll inside
+   their own strip instead — the same answer this page already gives for wide
+   code and diagrams, so the body still never scrolls sideways. */
+@media (max-width: 860px) {
+  .nav { height: auto; gap: 0.75rem; padding: 0.6rem 0; flex-wrap: wrap; }
+  .nav nav {
+    margin-left: 0; width: 100%; gap: 1.1rem;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 0.1rem;
+  }
+  .nav nav::-webkit-scrollbar { display: none; }
+}
 
 /* ── hero ───────────────────────────────────────────────────────── */
 .hero { padding: 4.5rem 0 3rem; position: relative; overflow: hidden; }
@@ -415,11 +428,13 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
     </a>
     <nav>
       <a href="index.html#how">How it works</a>
+      <a href="index.html#examples">Examples</a>
       <a href="gallery.html">Gallery</a>
       <a href="behind-the-scenes.html" aria-current="page">Behind the scenes</a>
       <a href="index.html#quickstart">Quickstart</a>
       <a href="index.html#use">Using a workflow</a>
       <a href="index.html#docs">Docs</a>
+      <a href="index.html#faq">FAQ</a>
     </nav>
   </div>
 </header>

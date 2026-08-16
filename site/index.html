@@ -87,9 +87,22 @@ header {
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
 .brand svg { display: block; }
 .nav nav { margin-left: auto; display: flex; gap: 1.5rem; font-size: 0.875rem; }
-.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; }
-.nav nav a:hover { color: hsl(var(--foreground)); }
-@media (max-width: 720px) { .nav nav { display: none; } }
+.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; white-space: nowrap; }
+.nav nav a:hover, .nav nav a[aria-current="page"] { color: hsl(var(--foreground)); }
+/* At 390 the six links were `display: none` with nothing in their place, so a
+   visitor landing on the gallery from a link had 50 543px to scroll before the
+   footer offered another page (workflow-gallery ticket 47). They scroll inside
+   their own strip instead — the same answer this page already gives for wide
+   code and diagrams, so the body still never scrolls sideways. */
+@media (max-width: 860px) {
+  .nav { height: auto; gap: 0.75rem; padding: 0.6rem 0; flex-wrap: wrap; }
+  .nav nav {
+    margin-left: 0; width: 100%; gap: 1.1rem;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 0.1rem;
+  }
+  .nav nav::-webkit-scrollbar { display: none; }
+}
 
 /* ── buttons ────────────────────────────────────────────────────── */
 .btn {
@@ -364,14 +377,14 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
       OpenStateGraph
     </a>
     <nav>
-      <a href="#how">How it works</a>
-      <a href="#examples">Examples</a>
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#examples">Examples</a>
       <a href="gallery.html">Gallery</a>
       <a href="behind-the-scenes.html">Behind the scenes</a>
-      <a href="#quickstart">Quickstart</a>
-      <a href="#use">Using a workflow</a>
-      <a href="#docs">Docs</a>
-      <a href="#faq">FAQ</a>
+      <a href="index.html#quickstart">Quickstart</a>
+      <a href="index.html#use">Using a workflow</a>
+      <a href="index.html#docs">Docs</a>
+      <a href="index.html#faq">FAQ</a>
     </nav>
   </div>
 </header>
@@ -754,7 +767,7 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
       <div class="callout callout-tip" style="max-width:52rem">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
         <span>
-          <b>Twenty-two more ship inside the wheel.</b> Every pattern the node catalogue can express —
+          <b>Twenty-three more ship inside the wheel.</b> Every pattern the node catalogue can express —
           a straight line, three kinds of loop, a mount three documents deep, a two-provider
           flagship — each with the diagram its compiler produced, what that drawing became in
           LangGraph, and the question it was actually asked.
