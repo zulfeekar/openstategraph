@@ -274,7 +274,7 @@ class TestTheRulesLayersAreWhereTheDocumentSaysTheyAre:
     def test_the_analyst_carries_no_inline_prompt_of_its_own(self) -> None:
         """The proof that the skill layer is load-bearing. It is also the
         proof in the other direction: unwire it and the agent falls back to
-        `AbstractAgentNode.DEFAULT_RULES`, which is the "works with nothing
+        `AbstractAgentNode.PROMPT.default_rules`, which is the "works with nothing
         configured" bar the owner set."""
         analyst = next(n for n in document(ASSISTANT)["nodes"] if n["id"] == "agent-sql")
         assert not str(analyst["data"].get("systemPrompt", "")).strip()

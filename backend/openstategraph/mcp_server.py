@@ -132,7 +132,7 @@ class NodeVocabulary:
 
         # Spelled as a union rather than left to inference: the only supertype
         # mypy can find for four unrelated ABCs is `ABCMeta`, on which
-        # `.PREAMBLE` below is an untyped guess.
+        # `.PROMPT` below is an untyped guess.
         contracts: dict[
             str,
             type[BaseAgentNode] | type[BaseRouter] | type[BaseGrader] | type[BaseOrchestrator],
@@ -186,8 +186,8 @@ class NodeVocabulary:
                     ],
                     "prompt_contract": (
                         {
-                            "preamble": ladder.PREAMBLE,
-                            "contract": ladder.OUTPUT_CONTRACT,
+                            "preamble": ladder.PROMPT.preamble,
+                            "contract": ladder.PROMPT.output_contract,
                             "editable": (
                                 "Only your own rules are editable. The preamble and "
                                 "the output contract are supplied by the runtime and "

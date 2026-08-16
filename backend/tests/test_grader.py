@@ -31,7 +31,7 @@ class TestPrebuiltAndOverridable:
     def test_it_works_before_anyone_configures_it(self) -> None:
         # Prebuilt criteria, not a blank field.
         prompt = Grader().resolve_system_prompt()
-        assert BaseGrader.DEFAULT_CRITERIA.splitlines()[0] in prompt
+        assert BaseGrader.PROMPT.default_rules.splitlines()[0] in prompt
 
     def test_developer_criteria_are_added_to_the_defaults(self) -> None:
         grader = Grader(criteria="- Must name a specific genre.")
@@ -60,18 +60,27 @@ class TestPrebuiltAndOverridable:
         )
         prompt = grader.resolve_system_prompt()
         # The machinery is not rules, so `replace` cannot delete it...
-        assert BaseGrader.OUTPUT_CONTRACT in prompt
+        assert BaseGrader.PROMPT.output_contract in prompt
         # ...and it still comes last, so it wins the tie.
-        assert prompt.index("write an essay") < prompt.index(BaseGrader.OUTPUT_CONTRACT)
+        assert prompt.index("write an essay") < prompt.index(BaseGrader.PROMPT.output_contract)
 
-    def test_a_subclass_overrides_only_the_criteria(self) -> None:
+    def test_a_subclass_supplies_criteria_rather_than_overriding_a_method(self) -> None:
+        """There was a `describe_criteria()` override point here until
+        install-experience 19. It was `return self.criteria.strip()`, and this
+        test — the only thing that ever overrode it — is the demonstration it
+        was written for, made without it: a stricter grader is a constructor
+        argument, which is what "a working grader is a sentence of criteria,
+        not a new class" actually means."""
+
         class StrictGrader(Grader):
-            def describe_criteria(self) -> str:
-                return "- Reject anything without a numeric figure."
+            def __init__(self, **kwargs: object) -> None:
+                super().__init__(
+                    criteria="- Reject anything without a numeric figure.", **kwargs
+                )
 
         grader = StrictGrader(model=FakeModel("PASS"))
         assert "numeric figure" in grader.resolve_system_prompt()
-        assert BaseGrader.OUTPUT_CONTRACT in grader.resolve_system_prompt()
+        assert BaseGrader.PROMPT.output_contract in grader.resolve_system_prompt()
 
     def test_two_graders_with_different_criteria_are_the_same_class(self) -> None:
         assert type(Grader(criteria="a")) is type(Grader(criteria="b")) is Grader
@@ -217,4 +226,4 @@ class TestRubric:
         from openstategraph.abc.grader import Grader
         grader = Grader(rubric=[{"criterion": "x"}])
         prompt = grader.resolve_system_prompt()
-        assert prompt.rstrip().endswith(grader.OUTPUT_CONTRACT.rstrip())
+        assert prompt.rstrip().endswith(grader.PROMPT.output_contract.rstrip())

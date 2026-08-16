@@ -243,41 +243,51 @@ class Recorded:
     reason: str
 
 
-#: Twelve classes, four bases. `AbstractAgentNode` (19), `BaseRouter` (18),
-#: `BaseGrader` (16) and `BaseOrchestrator` (13) declare a family vocabulary
+#: Seven classes, two bases — down from twelve and four (install-experience 19).
+#: `AbstractAgentNode` (11) and `BaseRouter` (11) declare a family vocabulary
 #: once — CLAUDE.md's rule that a shared concern lives on the base — and every
 #: leaf inherits it whole. `ReactAgentNode` adds nothing at all, `DeepAgentNode`
-#: adds `subagents`, `CustomGraphNode` adds `runnable`, `Orchestrator` and
-#: `PlanningOrchestrator` add only their own `split`. So this is four wide bases
-#: counted twelve times, which is what "what a consumer can reach" honestly
-#: means for a ladder.
-PROMPT_LADDER = """Pinned at today's count with the reduction ticketed (install-experience 19),
-    because the width has one cause and it is not "these classes do many
-    things".
+#: adds `subagents`, `CustomGraphNode` adds `runnable`, `Router` adds
+#: `destinations`. So this is two bases counted seven times, which is what "what
+#: a consumer can reach" honestly means for a ladder.
+PROMPT_LADDER = """**Install-experience 19 landed, and this entry is the smaller half that
+    remains.** The four families were 19 / 18 / 16 / 13 and every one of them
+    was over the ceiling for the same reason: a node held its prompt's
+    *ingredients* rather than its prompt. Five loose attributes
+    (`default_rules`, `rules`, `skill`, `replace_rules`, `context`), plus a
+    `system_prompt()` that rebuilt a fresh `SystemPrompt` from them on every
+    call, plus an accessor per family that was `return self.rules.strip()` one
+    line under the attribute it read.
 
-    Of `AbstractAgentNode`'s eighteen, seven exist only because the prompt is
-    composed here: five ingredients held as loose attributes (`default_rules`,
-    `rules`, `skill`, `replace_rules`, `context`) plus `system_prompt()` and
-    `resolve_prompt()`, which build a fresh `SystemPrompt` on every call rather
-    than the node holding one. `BaseRouter` and `BaseGrader` repeat it and add
-    an accessor each — `describe_rules` is `return self.rules.strip()`, one
-    line under the attribute it reads.
+    Each family now holds one composed `SystemPrompt` — `self.prompt`, built in
+    `__init__` — and declares its locked machinery as one `PROMPT` ClassVar
+    instead of `PREAMBLE` / `OUTPUT_CONTRACT` / `DEFAULT_RULES` sitting loose.
+    That second move is a grouping the call sites already made rather than one
+    invented for a count: `api/routes/system.py` and `mcp_server.py` both read
+    preamble and contract *together*, for all four families, and `render()`
+    already owned the order they compose in.
 
-    Every count here came down by one on install-experience 21, which took the
-    members nobody wanted rather than the design: `middleware_preset()` off the
-    agent base (returned `{}`, never overridden by any tier), and the router's
-    `describe_branches` / grader's `describe_rubric`, public override points
-    with no override and one caller each — the `system_prompt()` a screen
-    below them.
+    **`BaseGrader` and `BaseOrchestrator` left this table entirely** — nine
+    members each, under the ceiling, no argument needed. What keeps the other
+    two here is not prompt composition at all, and naming it is the point of
+    still writing this down:
 
-    `BaseOrchestrator` is the counter-example that turns this from an opinion
-    into a measurement: same job, no `describe_*`, no `resolve_system_prompt`,
-    thirteen members — and it is the one class here that ticket 21 did not
-    move, because it had nothing dead to take. Folding the ingredients into one
-    held `prompt: SystemPrompt` collaborator takes Agent to about eleven, Router
-    to eleven, Grader to ten and Orchestrator to seven. That is a real refactor
-    across a seam six tests read, not a rename, so it is a ticket rather than
-    this commit."""
+    - **The agent base is eleven**, and every member is load-bearing: the
+      tier's identity (`name`, `model`, `tools`, `prompt`), the two ClassVar
+      declarations (`PROMPT`, `SLOT_ORDER`), the three resolvers, `build_agent`
+      and `build`. `DeepAgentNode` and `CustomGraphNode` reach twelve by one
+      field each — `subagents`, `runnable` — which is the leaf declaring what
+      makes it that tier.
+    - **The router base is eleven** because four of them are the *branch*
+      vocabulary, not the prompt: `branch_table`, `branches`, `fallback`,
+      `route_key`. Collecting those into a `Branches` collaborator would take
+      the base to eight, and it is the obvious next move — but `branches` and
+      `fallback` are declared on the `IRouter` Protocol, which is Tier 1, so it
+      is a public-contract change and not a tidy-up. Named here so the next
+      person starts from it rather than from the count.
+
+    The reduction is measured, not asserted: 19 -> 11, 18 -> 11, 16 -> 9,
+    13 -> 9, and five classes off the census."""
 
 #: `BaseKnowledgeBuilder` is at exactly ten, which is the point.
 KNOWLEDGE_BUILDERS = """A recorded exception, and the cheapest kind to defend: the base is at exactly
@@ -385,18 +395,13 @@ SCORECARD = """A recorded exception, and the one that most looks like a violatio
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
-    "abc.agent.AbstractAgentNode": Recorded(18, PROMPT_LADDER),
-    "abc.agent.BaseAgentNode": Recorded(18, PROMPT_LADDER),
-    "abc.agent.ReactAgentNode": Recorded(18, PROMPT_LADDER),
-    "abc.agent.DeepAgentNode": Recorded(19, PROMPT_LADDER),
-    "abc.agent.CustomGraphNode": Recorded(19, PROMPT_LADDER),
-    "abc.router.BaseRouter": Recorded(17, PROMPT_LADDER),
-    "abc.router.Router": Recorded(18, PROMPT_LADDER),
-    "abc.grader.BaseGrader": Recorded(15, PROMPT_LADDER),
-    "abc.grader.Grader": Recorded(15, PROMPT_LADDER),
-    "abc.orchestrator.BaseOrchestrator": Recorded(13, PROMPT_LADDER),
-    "abc.orchestrator.Orchestrator": Recorded(13, PROMPT_LADDER),
-    "abc.orchestrator.PlanningOrchestrator": Recorded(13, PROMPT_LADDER),
+    "abc.agent.AbstractAgentNode": Recorded(11, PROMPT_LADDER),
+    "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
+    "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
+    "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),
+    "abc.agent.CustomGraphNode": Recorded(12, PROMPT_LADDER),
+    "abc.router.BaseRouter": Recorded(11, PROMPT_LADDER),
+    "abc.router.Router": Recorded(12, PROMPT_LADDER),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.AbstractWorkflowPointerBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.RootKnowledgeBuilder": Recorded(13, KNOWLEDGE_BUILDERS),

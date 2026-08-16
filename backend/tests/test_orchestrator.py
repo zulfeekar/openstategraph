@@ -217,9 +217,9 @@ class TestModelDrivenPlanning:
         model = RespondingModel([], default="one\ntwo")
         PlanningOrchestrator(model=model, rules="Never plan more than two.").plan("x and y")
         prompt = model.calls[0]
-        assert BaseOrchestrator.PREAMBLE in prompt
+        assert BaseOrchestrator.PROMPT.preamble in prompt
         # The contract is last, and a developer's rules cannot displace it.
-        assert prompt.rindex(BaseOrchestrator.OUTPUT_CONTRACT) > prompt.rindex(
+        assert prompt.rindex(BaseOrchestrator.PROMPT.output_contract) > prompt.rindex(
             "Never plan more than two."
         )
 

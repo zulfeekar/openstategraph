@@ -55,8 +55,8 @@ SQL_ANSWER = (
 )
 
 #: Sends the scripted model's classification down the `data_query` branch.
-#: Matched off `BaseRouter.PREAMBLE`, the same way the grader rules match off
-#: `BaseGrader.PREAMBLE`.
+#: Matched off `BaseRouter.PROMPT.preamble`, the same way the grader rules match off
+#: `BaseGrader.PROMPT.preamble`.
 ROUTE_TO_THE_ANALYST = (lambda c: "You are a router" in c, "data_query")
 
 

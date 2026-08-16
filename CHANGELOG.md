@@ -47,6 +47,31 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **A node holds its prompt, not its prompt's ingredients.** Every ladder in
+  `openstategraph.abc` — agent, router, grader, orchestrator — now composes one
+  `SystemPrompt` in its constructor and holds it as `node.prompt`, instead of
+  keeping the layers as loose attributes and reassembling them on every call.
+
+  What moved, for anyone subclassing:
+
+  - `PREAMBLE`, `OUTPUT_CONTRACT` and `DEFAULT_RULES` / `DEFAULT_CRITERIA` are
+    one ClassVar, `PROMPT: SystemPrompt`. Read them as `PROMPT.preamble`,
+    `PROMPT.output_contract`, `PROMPT.default_rules`. The orchestrator's
+    `LABEL_PREAMBLE` / `LABEL_CONTRACT` are `LABEL_PROMPT` the same way. A tier
+    that shipped stronger defaults now declares
+    `PROMPT = Base.PROMPT.with_defaults("…")`.
+  - `system_prompt()` is the attribute `prompt`. `resolve_prompt()` (agent) and
+    `resolve_system_prompt()` (router, grader) are unchanged and stay the seam
+    that enforces the locked order — preamble, context, rules, contract last.
+  - `describe_rules()` and `describe_criteria()` are gone. They were
+    `return self.rules.strip()` and its twin; supply the text through
+    `super().__init__(rules=…)` / `(criteria=…)` instead.
+
+  Constructor signatures are untouched, so `backend/tests/public_api.txt` does
+  not move and nothing that *builds* one of these breaks. The ceiling this
+  bought: 19 → 11 on `AbstractAgentNode`, 18 → 11 on `BaseRouter`, 16 → 9 on
+  `BaseGrader`, 13 → 9 on `BaseOrchestrator` (install-experience 19).
+
 - **`ProviderSpec` is a record again, and asking a machine a question is
   `ProviderEnvironment`.** Six members moved off the frozen dataclass onto a
   new Tier 1 collaborator: `is_configured`, `is_installed`, `key_hint`,

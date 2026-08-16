@@ -69,12 +69,10 @@ class TestTheContractIsLast:
     @pytest.mark.parametrize(
         "assemble",
         [
-            lambda skill: ReactAgentNode(
-                name="a", rules="- inline", skill=skill
-            ).system_prompt(),
-            lambda skill: Router(["one", "two"], rules="- inline", skill=skill).system_prompt(),
-            lambda skill: Grader(criteria="- inline", skill=skill).system_prompt(),
-            lambda skill: Orchestrator(rules="- inline", skill=skill).system_prompt(),
+            lambda skill: ReactAgentNode(name="a", rules="- inline", skill=skill).prompt,
+            lambda skill: Router(["one", "two"], rules="- inline", skill=skill).prompt,
+            lambda skill: Grader(criteria="- inline", skill=skill).prompt,
+            lambda skill: Orchestrator(rules="- inline", skill=skill).prompt,
         ],
         ids=["agent", "router", "grader", "supervisor"],
     )

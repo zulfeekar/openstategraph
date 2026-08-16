@@ -334,8 +334,8 @@ package's ambient `skills/` directory already does.
   **Correction (ticket 10): the bottom layer was missing on two more of the
   five, and the bar it exists to meet was never enforced.** The table above
   names `default_rules` as "what the node type ships with" — and neither
-  `agent.llm` nor `route.classifier` shipped anything. `BaseRouter.system_prompt()`
-  did not call `.with_defaults()` at all (two layers, not three), and
+  `agent.llm` nor `route.classifier` shipped anything. The router's prompt
+  composition did not call `.with_defaults()` at all (two layers, not three), and
   `AbstractAgentNode` accepted a `default_rules` argument that only the Worker
   ever passed, so a stock Agent's `resolve_prompt()` returned `None`.
 
@@ -343,9 +343,11 @@ package's ambient `skills/` directory already does.
   the box with minimum capability on any workflow"*, and an agent with no rules
   is precisely the state CLAUDE.md records as having let a tool-holding agent
   answer a database question out of parametric memory. Both families now
-  declare a `DEFAULT_RULES` ClassVar — generic, about honesty and tool
-  discipline only, never domain-shaped, because a domain rule on a base class
-  reaches every agent in every workflow and a subclass can only append to it.
+  declare that layer on their `PROMPT` ClassVar (`PROMPT.default_rules`, one
+  `SystemPrompt` per node type since install-experience 19) — generic, about
+  honesty and tool discipline only, never domain-shaped, because a domain rule
+  on a base class reaches every agent in every workflow and a subclass can only
+  append to it.
 
   One consequence is worth stating because it reverses an earlier reading:
   `resolve_prompt()` returning `None` used to mean "defer to the library's own

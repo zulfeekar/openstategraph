@@ -96,47 +96,58 @@ class IRouter(Protocol):
 class BaseRouter(ABC):
     """Everything every router shares, declared exactly once.
 
-    Subclasses supply `rules` (or override `describe_rules`) and nothing else.
-    The prompt assembly, the branch validation and the fallback are inherited
-    behaviour, not copied code.
+    Subclasses supply `rules` and nothing else. The prompt assembly, the branch
+    validation and the fallback are inherited behaviour, not copied code.
+
+    There was a `describe_rules()` override point here until
+    install-experience 19; it was `return self.rules.strip()`, one line under
+    the attribute it read, and nothing in the repository overrode it except a
+    test written to show that it could be. A subclass that wants richer rules
+    passes them to `super().__init__(rules=…)`, which is also the demonstration
+    this ladder exists to make: a new kind of router is *configuration*.
     """
 
-    #: Locked. Not exposed as an editable field anywhere in the UI, because a
+    #: The locked prompt machinery, as one object (install-experience 19).
+    #: None of it is exposed as an editable field anywhere in the UI, because a
     #: developer who deletes it gets a router that cannot be parsed.
-    PREAMBLE: ClassVar[str] = (
-        "You are a router. Your only job is to decide which single branch a "
-        "message belongs to. You never answer the message itself. When a "
-        "conversation is shown, classify the NEW message in its light: a "
-        "follow-up about a previous answer (how did you get it, explain, "
-        "why, tell me more) belongs to the branch that produced that "
-        "answer, not to whichever branch the follow-up's words resemble."
-    )
-
-    #: Locked, and appended *after* the developer's rules so it cannot be
-    #: countermanded by them.
-    OUTPUT_CONTRACT: ClassVar[str] = (
-        "Reply with exactly one branch name from the list above. "
-        "No punctuation, no explanation, no quotes — the branch name alone."
-    )
-
-    #: The bottom rules layer, so a router with an empty `rules` field and no
-    #: wired skill still classifies on something better than the branch names.
     #:
-    #: This layer was **described but not built**. `docs/decisions/skill-layer.md`
-    #: names three rules layers — `default_rules` → `rules` → `skill` — for all
-    #: five model-driven families, and `system_prompt()` below never called
-    #: `.with_defaults()`, so a router had two. The gap was invisible while
-    #: every shipped router carried a long inline `rules` string; it stops being
-    #: invisible the moment a developer drops a bare Router on a canvas, which
-    #: is exactly what "works out of the box" has to survive.
+    #: `output_contract` is rendered *after* the developer's rules so it cannot
+    #: be countermanded by them — `SystemPrompt.render` owns that order, which
+    #: is precisely why the three strings belong to one object rather than
+    #: sitting loose on the class for each caller to combine.
+    #:
+    #: `default_rules` is the bottom rules layer, so a router with an empty
+    #: `rules` field and no wired skill still classifies on something better
+    #: than the branch names. That layer was **described but not built**:
+    #: `docs/decisions/skill-layer.md` names three rules layers —
+    #: `default_rules` → `rules` → `skill` — for all five model-driven
+    #: families, and `system_prompt()` never called `.with_defaults()`, so a
+    #: router had two. The gap was invisible while every shipped router carried
+    #: a long inline `rules` string; it stops being invisible the moment a
+    #: developer drops a bare Router on a canvas, which is exactly what "works
+    #: out of the box" has to survive.
     #:
     #: Generic on purpose — how to *decide*, never what the branches mean. The
-    #: branch list is `context`, and the branch semantics are the developer's
+    #: branch list is context, and the branch semantics are the developer's
     #: `rules`.
-    DEFAULT_RULES: ClassVar[str] = (
-        "- Decide from what the message NEEDS, not from how it is phrased.\n"
-        "- Exactly one branch. If two fit, take the more specific one.\n"
-        "- Never answer the message, and never invent a branch name."
+    PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are a router. Your only job is to decide which single branch a "
+            "message belongs to. You never answer the message itself. When a "
+            "conversation is shown, classify the NEW message in its light: a "
+            "follow-up about a previous answer (how did you get it, explain, "
+            "why, tell me more) belongs to the branch that produced that "
+            "answer, not to whichever branch the follow-up's words resemble."
+        ),
+        output_contract=(
+            "Reply with exactly one branch name from the list above. "
+            "No punctuation, no explanation, no quotes — the branch name alone."
+        ),
+        default_rules=(
+            "- Decide from what the message NEEDS, not from how it is phrased.\n"
+            "- Exactly one branch. If two fit, take the more specific one.\n"
+            "- Never answer the message, and never invent a branch name."
+        ),
     )
 
     def __init__(
@@ -163,12 +174,22 @@ class BaseRouter(ABC):
         # with an arbitrary but valid one.
         resolved = names_by_id.get(fallback or "", fallback)
         self.fallback = resolved if resolved in self.branches else self.branches[-1]
-        self.rules = rules
-        #: The wired skill file's body, and the one extend/replace switch that
-        #: governs every rules layer (`docs/decisions/skill-layer.md`).
-        self.skill = skill
-        self.replace_rules = replace_rules
         self.model = model
+        #: **This router's prompt, composed once and held** — the branch list
+        #: as context, the developer's `rules` and the wired skill's body as
+        #: rules layers over the class's defaults, governed by the one
+        #: extend/replace switch every layer shares
+        #: (`docs/decisions/skill-layer.md`).
+        #:
+        #: Held rather than reassembled per call (install-experience 19). The
+        #: branch list is fixed at construction — `branch_table` is built above
+        #: and never mutated — so a method that rebuilt this on every
+        #: `classify()` was rebuilding a constant.
+        self.prompt = (
+            self.PROMPT.with_context(self._describe_branches())
+            .with_rules(rules, replace_defaults=replace_rules)
+            .with_skill(skill)
+        )
 
     def route_key(self, name: str) -> str:
         """The graph-side key for a classified branch name.
@@ -179,17 +200,6 @@ class BaseRouter(ABC):
         fallback handling stays in charge of what a misroute means.
         """
         return self._ids_by_name.get(name, name)
-
-    # -- the parts a subclass may shape ----------------------------------- #
-
-    def describe_rules(self) -> str:
-        """The domain rules. Overridable, but a string is usually enough.
-
-        This is the whole extension point. A `SupportRouter` that wants richer
-        rules overrides this; a developer configuring a node in the editor just
-        sets `rules`.
-        """
-        return self.rules.strip()
 
     def _describe_branches(self) -> str:
         """How the branch list is presented.
@@ -209,8 +219,8 @@ class BaseRouter(ABC):
 
     # -- inherited behaviour ---------------------------------------------- #
 
-    def system_prompt(self) -> SystemPrompt:
-        """The assembled prompt, as a structure rather than a string.
+    def resolve_system_prompt(self) -> str:
+        """The string a model sees, in the locked order.
 
         `SystemPrompt` is **composed, not inherited** — Router, Grader and Agent
         compile to different graph constructs, so they are different families, and
@@ -218,21 +228,13 @@ class BaseRouter(ABC):
         `AbstractPromptedNode` would be the beginning of a god base class and
         would force a prompt onto `CustomGraphNode`, which has none.
 
-        Returning the structure lets the editor render the locked sections
-        read-only beside the one editable field, which is how a developer knows
-        what the machinery already says instead of duplicating it.
+        `self.prompt` is the structure, and it is public for the reason this
+        method is not the only thing that wants it: the editor renders the
+        locked sections read-only beside the one editable field, which is how a
+        developer knows what the machinery already says instead of duplicating
+        it.
         """
-        return (
-            SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
-            .with_context(self._describe_branches())
-            .with_defaults(self.DEFAULT_RULES)
-            .with_rules(self.describe_rules(), replace_defaults=self.replace_rules)
-            .with_skill(self.skill)
-        )
-
-    def resolve_system_prompt(self) -> str:
-        """The string a model sees."""
-        return self.system_prompt().render()
+        return self.prompt.render()
 
     def normalise(self, answer: str) -> Classification:
         """Turns whatever the model said into a valid branch.

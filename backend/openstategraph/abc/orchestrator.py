@@ -135,15 +135,35 @@ class BaseOrchestrator(ABC):
     inherit the bounding, the id assignment and the empty-instruction fallback.
     """
 
-    PREAMBLE: ClassVar[str] = (
-        "You are an orchestrator. Your only job is to split one instruction into "
-        "independent subtasks that can run in parallel. You never do the work "
-        "yourself."
+    #: The planning call's locked machinery, as one object
+    #: (install-experience 19).
+    PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are an orchestrator. Your only job is to split one instruction into "
+            "independent subtasks that can run in parallel. You never do the work "
+            "yourself."
+        ),
+        output_contract=(
+            "Reply with one subtask per line, each a complete, self-contained "
+            "instruction. No numbering, no preamble, no explanation."
+        ),
     )
 
-    OUTPUT_CONTRACT: ClassVar[str] = (
-        "Reply with one subtask per line, each a complete, self-contained "
-        "instruction. No numbering, no preamble, no explanation."
+    #: The labelling call's locked machinery. A separate declaration rather
+    #: than a variant of `PROMPT`, because it is a different call with a
+    #: different contract. The literal phrase "one archetype key per line" is
+    #: load-bearing: tests (and any scripted model) recognise a labelling call
+    #: by it.
+    LABEL_PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are a supervisor assigning subtasks to specialist workers. For "
+            "each subtask, pick the one worker archetype best suited to it."
+        ),
+        output_contract=(
+            "Reply with exactly one archetype key per line, one line per subtask, "
+            "in the same order as the subtasks. Use only the keys listed above. "
+            "No numbering, no explanation."
+        ),
     )
 
     def __init__(
@@ -156,14 +176,25 @@ class BaseOrchestrator(ABC):
         model: Any = None,
     ) -> None:
         self.max_subtasks = max_subtasks
-        #: The developer's inline rules and the wired skill file's body. The
-        #: split itself is deterministic, so these shape the one call a
-        #: supervisor actually makes to a model — assigning each subtask to a
-        #: worker archetype. See `docs/decisions/skill-layer.md`.
-        self.rules = rules
-        self.skill = skill
-        self.replace_rules = replace_rules
         self.model = model
+        #: **The two prompts this orchestrator drives a model with, composed
+        #: once and held** (install-experience 19). The developer's inline
+        #: `rules` and the wired skill file's body were three attributes whose
+        #: only job was to be reassembled into a `SystemPrompt`; they are its
+        #: rules layers (`docs/decisions/skill-layer.md`).
+        #:
+        #: Two, not one, because this family genuinely makes two different
+        #: calls: planning a split, and assigning each subtask to a worker
+        #: archetype. Both wear the same developer rules over different locked
+        #: machinery, which is exactly what a `SystemPrompt` per call is for.
+        #: The split itself is deterministic when no model is configured, so on
+        #: many runs neither of these is ever rendered.
+        self.prompt = self.PROMPT.with_rules(
+            rules, replace_defaults=replace_rules
+        ).with_skill(skill)
+        self.label_prompt = self.LABEL_PROMPT.with_rules(
+            rules, replace_defaults=replace_rules
+        ).with_skill(skill)
 
     @abstractmethod
     def split(self, instruction: str, feedback: str = "") -> list[str]:
@@ -176,27 +207,6 @@ class BaseOrchestrator(ABC):
         which is what makes the supervisor's `feedback` port mean what its
         name says.
         """
-
-    #: The labelling call's machinery — locked, like every output contract.
-    #: The literal phrase "one archetype key per line" is load-bearing: tests
-    #: (and any scripted model) recognise a labelling call by it.
-    LABEL_PREAMBLE: ClassVar[str] = (
-        "You are a supervisor assigning subtasks to specialist workers. For "
-        "each subtask, pick the one worker archetype best suited to it."
-    )
-
-    LABEL_CONTRACT: ClassVar[str] = (
-        "Reply with exactly one archetype key per line, one line per subtask, "
-        "in the same order as the subtasks. Use only the keys listed above. "
-        "No numbering, no explanation."
-    )
-
-    def system_prompt(self) -> SystemPrompt:
-        return (
-            SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
-            .with_rules(self.rules, replace_defaults=self.replace_rules)
-            .with_skill(self.skill)
-        )
 
     def label(self, subtasks: list[Subtask], archetypes: list[Archetype]) -> list[str]:
         """One archetype key per subtask — hybrid routing (ticket 37).
@@ -245,14 +255,8 @@ class BaseOrchestrator(ABC):
             for a in archetypes
         )
         listing = "\n".join(f"{i + 1}. {t.instruction}" for i, t in enumerate(subtasks))
-        prompt = (
-            SystemPrompt(
-                preamble=self.LABEL_PREAMBLE,
-                output_contract=self.LABEL_CONTRACT,
-            )
-            .with_context(f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}")
-            .with_rules(self.rules, replace_defaults=self.replace_rules)
-            .with_skill(self.skill)
+        prompt = self.label_prompt.with_context(
+            f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}"
         )
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
@@ -487,7 +491,7 @@ class PlanningOrchestrator(BaseOrchestrator):
                 "A previous attempt at this work was rejected. Plan differently "
                 f"in light of it:\n{feedback}"
             )
-        prompt = self.system_prompt().with_context(*context)
+        prompt = self.prompt.with_context(*context)
 
         try:
             from langchain_core.messages import HumanMessage, SystemMessage

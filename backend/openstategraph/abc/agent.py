@@ -51,8 +51,16 @@ class AbstractAgentNode(ABC):
 
     Everything every agent tier needs exactly once: config in, and the three
     resolution steps that turn config into a model, a prompt and a middleware
-    list. The composition itself — which constructor, which slot preset —
-    belongs to the concrete tier.
+    list. The composition itself — which constructor — belongs to the concrete
+    tier.
+
+    **A node holds its prompt, not its prompt's ingredients**
+    (install-experience 19). `default_rules`, `rules`, `skill`, `replace_rules`
+    and `context` were five attributes here, and `system_prompt()` reassembled
+    a `SystemPrompt` out of them on every call. They are that object's own
+    layers, and it already owns the order they compose in, so keeping a second
+    copy was keeping one piece of knowledge in two places. What is left is
+    `self.prompt`, composed once in `__init__` from the class's `PROMPT`.
     """
 
     #: The canonical slot order the base owns. Contributors name a slot; they
@@ -73,19 +81,22 @@ class AbstractAgentNode(ABC):
         "patch-tool-calls",
     )
 
-    #: Locked prompt machinery. Empty by default — an agent, unlike a router,
-    #: legitimately answers free-form, so the base imposes no contract. A tier
-    #: or a node type overrides these when it *does* own machinery.
-    PREAMBLE: ClassVar[str] = ""
-    OUTPUT_CONTRACT: ClassVar[str] = ""
-
-    #: The bottom rules layer every agent inherits, declared **once** here
-    #: rather than copied into each prebuilt document.
+    #: The locked prompt machinery this node type declares, as **one object
+    #: rather than three loose strings** (install-experience 19).
     #:
-    #: The bar it exists to meet is the owner's, and it is about the *node*, not
-    #: about any one example: an Agent dropped on a blank canvas, with nothing
-    #: typed into its prompt field and nothing wired to its `skill` port, must
-    #: still behave. Before this, an unconfigured agent had no rules at all and
+    #: `preamble` and `output_contract` are empty by default — an agent, unlike
+    #: a router, legitimately answers free-form, so the base imposes no
+    #: contract. A tier or a node type that *does* own machinery overrides this
+    #: ClassVar with `AbstractAgentNode.PROMPT.with_defaults(...)` or a fresh
+    #: `SystemPrompt`; `SystemPrompt` is frozen, so one shared instance per
+    #: class is safe by construction.
+    #:
+    #: `default_rules` is the bottom rules layer every agent inherits, declared
+    #: **once** here rather than copied into each prebuilt document. The bar it
+    #: exists to meet is the owner's, and it is about the *node*, not about any
+    #: one example: an Agent dropped on a blank canvas, with nothing typed into
+    #: its prompt field and nothing wired to its `skill` port, must still
+    #: behave. Before this layer, an unconfigured agent had no rules at all and
     #: `resolve_prompt()` returned `None` — which is precisely the state that
     #: let a tool-holding agent answer a database question out of parametric
     #: memory (CLAUDE.md's recorded Ollama finding).
@@ -96,16 +107,19 @@ class AbstractAgentNode(ABC):
     #: belong in the node's own `rules` or in a wired skill file — the two
     #: layers above this one (`docs/decisions/skill-layer.md`).
     #:
-    #: A tier or a node type that ships stronger defaults overrides this
-    #: ClassVar; a caller that passes `default_rules=` explicitly (the Worker
-    #: does) replaces it for that instance.
-    DEFAULT_RULES: ClassVar[str] = (
-        "- Answer the question that was asked, and stop there.\n"
-        "- Where you hold a tool that can establish a fact, use it. Never answer "
-        "from memory what a tool could check, and never state a figure you did "
-        "not obtain.\n"
-        "- If you cannot answer honestly, say what is missing instead of "
-        "approximating it."
+    #: A caller that passes `default_rules=` explicitly (the Worker does)
+    #: replaces this layer for that instance.
+    PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble="",
+        output_contract="",
+        default_rules=(
+            "- Answer the question that was asked, and stop there.\n"
+            "- Where you hold a tool that can establish a fact, use it. Never answer "
+            "from memory what a tool could check, and never state a figure you did "
+            "not obtain.\n"
+            "- If you cannot answer honestly, say what is missing instead of "
+            "approximating it."
+        ),
     )
 
     def __init__(
@@ -124,29 +138,23 @@ class AbstractAgentNode(ABC):
         self.name = name
         self.model = model
         self.tools = list(tools)
-        #: The rules this node ships with, so a prebuilt agent works before
-        #: anyone configures it. Not editable anywhere; a developer overrides
-        #: them by writing rules, or replaces them by wiring a skill.
+        #: **This node's prompt, composed once and held** — not five loose
+        #: attributes and a method that reassembles them on every call
+        #: (install-experience 19). The ingredients that used to live here were
+        #: `default_rules`, `rules`, `skill`, `replace_rules` and `context`; all
+        #: five are layers of `SystemPrompt`, which already owns the order they
+        #: compose in, so keeping a second copy of them on the node was keeping
+        #: the same knowledge in two places.
         #:
-        #: Falls back to `DEFAULT_RULES` rather than to nothing: an agent with
-        #: no defaults at all is the state this layer exists to abolish. A
-        #: caller with its own directive — the Worker — passes one and replaces
-        #: this entirely, which is why the fallback is on the empty string
-        #: rather than merged.
-        self.default_rules = default_rules or self.DEFAULT_RULES
-        #: The developer's system-prompt rules (the editable part).
-        self.rules = rules
-        #: The body of the skill file wired to this node's ``skill`` port. A
-        #: rules layer, rendered after ``rules`` — never context. (It *was*
-        #: context until the skill-layer ticket: that made a wired skill lose
-        #: every tie against the inline prompt it was meant to customise.)
-        self.skill = skill
-        #: One extend/replace switch for every rules layer — the canvas's
-        #: ``rulesMode``.
-        self.replace_rules = replace_rules
-        #: Machine-supplied situational text — the package's ambient skills,
-        #: the branch list, the advisor catalogue. Rides above the rules.
-        self.context = context
+        #: `default_rules` falls back to the class's layer rather than to
+        #: nothing: an agent with no defaults at all is the state that layer
+        #: exists to abolish. The caller with its own directive — the Worker —
+        #: passes one and replaces it entirely, which is why the fallback is on
+        #: the empty string rather than merged.
+        prompt = self.PROMPT.with_context(context)
+        if default_rules:
+            prompt = prompt.with_defaults(default_rules)
+        self.prompt = prompt.with_rules(rules, replace_defaults=replace_rules).with_skill(skill)
         #: Named slot contributions from config; replacement is by slot name.
         self._middleware_contributions = dict(middleware or {})
 
@@ -154,16 +162,6 @@ class AbstractAgentNode(ABC):
 
     def resolve_model(self) -> Any:
         return self.model
-
-    def system_prompt(self) -> SystemPrompt:
-        """The assembled prompt, as a structure — inspectable without a run."""
-        return (
-            SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
-            .with_context(self.context)
-            .with_defaults(self.default_rules)
-            .with_rules(self.rules, replace_defaults=self.replace_rules)
-            .with_skill(self.skill)
-        )
 
     def resolve_prompt(self) -> str | None:
         """The string the model sees, or ``None`` when nothing is configured.
@@ -173,14 +171,20 @@ class AbstractAgentNode(ABC):
         unconfigured node means.
 
         **In practice it is now never ``None`` for a stock agent**, because
-        ``DEFAULT_RULES`` is a layer every agent inherits. That is the point of
-        that layer and it reverses an earlier reading of this method: "nothing
-        configured" used to mean "defer to the library", and it now means
-        "inherit this node type's own minimum". The ``None`` path survives for
-        a subclass that deliberately blanks ``DEFAULT_RULES`` — a hand-written
-        tier whose harness owns its prompt entirely.
+        ``PROMPT.default_rules`` is a layer every agent inherits. That is the
+        point of that layer and it reverses an earlier reading of this method:
+        "nothing configured" used to mean "defer to the library", and it now
+        means "inherit this node type's own minimum". The ``None`` path
+        survives for a subclass that deliberately blanks that layer
+        (``PROMPT = AbstractAgentNode.PROMPT.with_defaults("")``) — a
+        hand-written tier whose harness owns its prompt entirely.
+
+        Kept as a method rather than collapsed into ``self.prompt.render()`` at
+        the call site, because the locked order — preamble, context, rules,
+        output contract last — is the rule this seam exists to enforce, and the
+        ``None`` is a second rule the raw render does not express.
         """
-        rendered = self.system_prompt().render()
+        rendered = self.prompt.render()
         return rendered or None
 
     def resolve_middleware(self) -> MiddlewareSlotTable:

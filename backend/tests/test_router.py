@@ -40,8 +40,8 @@ class TestPromptComposition:
 
         assert "If it mentions revenue or tables" in prompt
         # None of this was written by the developer.
-        assert BaseRouter.PREAMBLE in prompt
-        assert BaseRouter.OUTPUT_CONTRACT in prompt
+        assert BaseRouter.PROMPT.preamble in prompt
+        assert BaseRouter.PROMPT.output_contract in prompt
         for branch in BRANCHES:
             assert branch in prompt
 
@@ -49,14 +49,14 @@ class TestPromptComposition:
         # The whole reason the contract is not an editable field: a router whose
         # answer cannot be parsed is broken, and that must not be reachable by
         # clearing a textarea.
-        assert BaseRouter.OUTPUT_CONTRACT in make(rules="").resolve_system_prompt()
+        assert BaseRouter.PROMPT.output_contract in make(rules="").resolve_system_prompt()
 
     def test_the_output_contract_comes_after_the_developer_rules(self) -> None:
         prompt = make(rules="Explain your reasoning at length.").resolve_system_prompt()
         # Later instructions win ties, so the contract must be last or a rule
         # like the one above would make every classification unparseable.
         assert prompt.index("Explain your reasoning") < prompt.index(
-            BaseRouter.OUTPUT_CONTRACT
+            BaseRouter.PROMPT.output_contract
         )
 
     def test_the_fallback_is_named_in_the_prompt(self) -> None:
@@ -79,14 +79,24 @@ class TestNoNewClassNeeded:
         assert type(support) is type(analytics) is Router
         assert support.resolve_system_prompt() != analytics.resolve_system_prompt()
 
-    def test_a_subclass_need_only_override_the_rules(self) -> None:
+    def test_a_subclass_need_only_supply_the_rules(self) -> None:
+        """There was a `describe_rules()` override point until
+        install-experience 19 — `return self.rules.strip()`, one line under the
+        attribute it read, and this test was the only thing that ever overrode
+        it. Written through the constructor instead, it makes the ladder's own
+        claim better: a new kind of router is configuration."""
+
         class SupportRouter(Router):
-            def describe_rules(self) -> str:
-                return "Refunds and invoices are help. Everything else is off_topic."
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                super().__init__(
+                    *args,
+                    rules="Refunds and invoices are help. Everything else is off_topic.",
+                    **kwargs,
+                )
 
         router = SupportRouter(BRANCHES, fallback="off_topic", model=FakeModel("help"))
         # Inherited the contract, the branch listing and the classification loop.
-        assert BaseRouter.OUTPUT_CONTRACT in router.resolve_system_prompt()
+        assert BaseRouter.PROMPT.output_contract in router.resolve_system_prompt()
         assert "Refunds and invoices" in router.resolve_system_prompt()
         assert router.classify("where is my refund?").branch == "help"
 

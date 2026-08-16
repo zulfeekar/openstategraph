@@ -71,45 +71,62 @@ class IGrader(Protocol):
 
 
 class BaseGrader(ABC):
-    """Everything every grader shares, declared once."""
+    """Everything every grader shares, declared once.
 
-    PREAMBLE: ClassVar[str] = (
-        "You are a grader. You judge whether a candidate answer is good enough "
-        "to return to the user. You never rewrite it yourself."
-    )
+    A grader holds its prompt rather than its prompt's ingredients
+    (install-experience 19): `criteria`, `skill` and `replace_defaults` were
+    three attributes that existed to be reassembled into a `SystemPrompt` on
+    every call, and `describe_criteria()` was `return self.criteria.strip()`
+    one line under the attribute it read. A stricter grader is a constructor
+    argument, which is what "a working grader is a sentence of criteria, not a
+    new class" was always supposed to mean.
+    """
 
-    #: Locked, and rendered after the criteria so they cannot countermand it.
-    OUTPUT_CONTRACT: ClassVar[str] = (
-        "Reply with PASS or FAIL on the first line. If FAIL, add one short line "
-        "saying exactly what to change. Nothing else."
-    )
-
-    #: Prebuilt criteria. A developer extends or replaces these; they are not a
-    #: blank field, so a grader works before anyone configures it.
-    DEFAULT_CRITERIA: ClassVar[str] = (
-        "- The answer must address the question that was asked.\n"
-        "- Figures must come from the supplied data, never invented.\n"
-        "- An answer that is empty, truncated or an error is a FAIL.\n"
-        # The refusal clause. A grader whose criteria demand evidence — "show
-        # the SQL you ran", "cite the source" — measures an honest *decline*
-        # against a rule it cannot satisfy, and fails it: a refusal has no
-        # query to show. Observed live, exported trace 2026-08-11: an agent
-        # with no SQL tool wired answered "I'm unable to determine the
-        # top-earning genre without a way to query the database", which is the
-        # correct answer; the grader rejected it, the retries returned empty
-        # strings, and the run delivered nothing. The *right* answer was in
-        # hand on attempt one and the loop destroyed it.
-        #
-        # It belongs here, in the base's default criteria, for two reasons.
-        # It is not domain knowledge — nothing about SQL, sources or figures —
-        # so every grader wants it. And criteria are the grader's own language,
-        # so this needs no new verdict state, no string matching against
-        # "I cannot", and nothing upstream self-reporting a refusal it has
-        # every incentive to misreport. Retrying a refusal cannot fix it: the
-        # capability is missing, and asking again just spends the budget.
-        "- An answer that honestly declines — stating it cannot be produced, "
-        "and why — is a PASS. It is a correct answer, not a failed one, and "
-        "retrying it cannot make the missing capability appear."
+    #: The locked prompt machinery, as one object (install-experience 19) —
+    #: `output_contract` is rendered after the criteria so they cannot
+    #: countermand it, and `SystemPrompt.render` is the one place that order is
+    #: decided, which is why these belong together rather than loose on the
+    #: class.
+    #:
+    #: `default_rules` here is the prebuilt **criteria**. A developer extends or
+    #: replaces them; they are not a blank field, so a grader works before
+    #: anyone configures it.
+    PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are a grader. You judge whether a candidate answer is good enough "
+            "to return to the user. You never rewrite it yourself."
+        ),
+        output_contract=(
+            "Reply with PASS or FAIL on the first line. If FAIL, add one short line "
+            "saying exactly what to change. Nothing else."
+        ),
+        default_rules=(
+            "- The answer must address the question that was asked.\n"
+            "- Figures must come from the supplied data, never invented.\n"
+            "- An answer that is empty, truncated or an error is a FAIL.\n"
+            # The refusal clause. A grader whose criteria demand evidence —
+            # "show the SQL you ran", "cite the source" — measures an honest
+            # *decline* against a rule it cannot satisfy, and fails it: a
+            # refusal has no query to show. Observed live, exported trace
+            # 2026-08-11: an agent with no SQL tool wired answered "I'm unable
+            # to determine the top-earning genre without a way to query the
+            # database", which is the correct answer; the grader rejected it,
+            # the retries returned empty strings, and the run delivered
+            # nothing. The *right* answer was in hand on attempt one and the
+            # loop destroyed it.
+            #
+            # It belongs here, in the base's default criteria, for two reasons.
+            # It is not domain knowledge — nothing about SQL, sources or
+            # figures — so every grader wants it. And criteria are the grader's
+            # own language, so this needs no new verdict state, no string
+            # matching against "I cannot", and nothing upstream self-reporting
+            # a refusal it has every incentive to misreport. Retrying a refusal
+            # cannot fix it: the capability is missing, and asking again just
+            # spends the budget.
+            "- An answer that honestly declines — stating it cannot be produced, "
+            "and why — is a PASS. It is a correct answer, not a failed one, and "
+            "retrying it cannot make the missing capability appear."
+        ),
     )
 
     def __init__(
@@ -121,28 +138,35 @@ class BaseGrader(ABC):
         replace_defaults: bool = False,
         model: Any = None,
     ) -> None:
-        self.criteria = criteria
-        #: The wired skill file's body — a criteria layer above `criteria`,
-        #: governed by the same `replace_defaults` switch. See
-        #: `docs/decisions/skill-layer.md`.
-        self.skill = skill
+        self.model = model
         #: Structured rubric rows: {"criterion": str, "required": bool}.
         #: Rendered as a numbered checklist the model must judge row by row —
         #: a failed required row is a revise, with that row as the feedback.
         #: Freeform `criteria` and a rubric compose; neither replaces the other.
+        #: Kept as a member because it is *config a caller supplied*, unlike the
+        #: criteria text, which is now a layer of the prompt below.
         self.rubric = [r for r in (rubric or []) if str(r.get("criterion") or "").strip()]
-        self.replace_defaults = replace_defaults
-        self.model = model
-
-    # -- the parts a subclass may shape ----------------------------------- #
+        #: **This grader's prompt, composed once and held** (install-experience
+        #: 19). `criteria`, `skill` and `replace_defaults` were three attributes
+        #: that existed only to be reassembled into a `SystemPrompt` on every
+        #: call; they are its rules layers, and the wired skill sits above the
+        #: inline criteria under the one extend/replace switch every layer
+        #: shares (`docs/decisions/skill-layer.md`).
+        #:
+        #: The rubric rides as **context, not rules**: it is structure the
+        #: machinery renders, and it must survive `replace_defaults` untouched.
+        prompt = self.PROMPT.with_rules(
+            criteria, replace_defaults=replace_defaults
+        ).with_skill(skill)
+        rubric_text = self._describe_rubric()
+        self.prompt = prompt.with_context(rubric_text) if rubric_text else prompt
 
     def _describe_rubric(self) -> str:
         """The rubric as a numbered checklist, or "" when none is set.
 
-        Private for the same reason as the router's `_describe_branches`
-        (install-experience 21): nothing has ever overridden it or called it
-        except `system_prompt()` below. The rubric rows are the extension
-        point; their rendering is machinery.
+        Private (install-experience 21): nothing has ever overridden it or
+        called it except the composition in `__init__`. The rubric rows are the
+        extension point; their rendering is machinery.
         """
         if not self.rubric:
             return ""
@@ -155,10 +179,6 @@ class BaseGrader(ABC):
             "failing row numbers in your reason."
         )
         return "\n".join(lines)
-
-    def describe_criteria(self) -> str:
-        """The developer's criteria. Override for something richer than a string."""
-        return self.criteria.strip()
 
     def deterministic_checks(self, candidate: str) -> Verdict | None:
         """Facts, checked before spending a model call.
@@ -176,22 +196,17 @@ class BaseGrader(ABC):
 
     # -- inherited behaviour ---------------------------------------------- #
 
-    def system_prompt(self, question: str = "") -> SystemPrompt:
-        prompt = (
-            SystemPrompt(preamble=self.PREAMBLE, output_contract=self.OUTPUT_CONTRACT)
-            .with_defaults(self.DEFAULT_CRITERIA)
-            .with_rules(self.describe_criteria(), replace_defaults=self.replace_defaults)
-            .with_skill(self.skill)
-        )
-        rubric = self._describe_rubric()
-        if rubric:
-            # Context, not rules: the rubric is structure the machinery
-            # renders, and it must survive `replace_defaults` untouched.
-            prompt = prompt.with_context(rubric)
-        return prompt.with_context(f"The question was:\n{question}") if question else prompt
-
     def resolve_system_prompt(self, question: str = "") -> str:
-        return self.system_prompt(question).render()
+        """The string a model sees, in the locked order.
+
+        `question` is the one part of a grader's prompt that is not known at
+        construction — it arrives with the candidate being judged — so it is
+        layered on here rather than held. Everything else is `self.prompt`.
+        """
+        prompt = self.prompt
+        if question:
+            prompt = prompt.with_context(f"The question was:\n{question}")
+        return prompt.render()
 
     def normalise(self, answer: str) -> Verdict:
         """Reads a verdict out of whatever the model said.

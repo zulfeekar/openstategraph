@@ -164,7 +164,7 @@ def prompt_sections() -> dict[str, dict]:
                 replace_rules=_replaces_rules(data),
                 context="",
             )
-        prompt = built.system_prompt()
+        prompt = built.prompt
         out[node_id] = {
             "title": node.get("title") or node_id,
             "type": node["type"],

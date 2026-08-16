@@ -51,18 +51,20 @@ def node_contracts() -> dict[str, NodeContractResponse]:
 
     return {
         "agent.llm": NodeContractResponse(
-            preamble=BaseAgentNode.PREAMBLE,
-            contract=BaseAgentNode.OUTPUT_CONTRACT,
+            preamble=BaseAgentNode.PROMPT.preamble,
+            contract=BaseAgentNode.PROMPT.output_contract,
         ),
         "route.classifier": NodeContractResponse(
-            preamble=BaseRouter.PREAMBLE, contract=BaseRouter.OUTPUT_CONTRACT
+            preamble=BaseRouter.PROMPT.preamble,
+            contract=BaseRouter.PROMPT.output_contract,
         ),
         "route.grader": NodeContractResponse(
-            preamble=BaseGrader.PREAMBLE, contract=BaseGrader.OUTPUT_CONTRACT
+            preamble=BaseGrader.PROMPT.preamble,
+            contract=BaseGrader.PROMPT.output_contract,
         ),
         "orchestrate.supervisor": NodeContractResponse(
-            preamble=BaseOrchestrator.PREAMBLE,
-            contract=BaseOrchestrator.OUTPUT_CONTRACT,
+            preamble=BaseOrchestrator.PROMPT.preamble,
+            contract=BaseOrchestrator.PROMPT.output_contract,
         ),
     }
 

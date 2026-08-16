@@ -110,18 +110,19 @@ class TestAbstractAgentNode:
         now never empty, and "nothing configured" means "inherit this node
         type's own minimum" rather than "defer to the library".
 
-        The `None` path still exists for a tier that blanks `DEFAULT_RULES`,
-        which the test below pins."""
+        The `None` path still exists for a tier that blanks the default rules
+        layer, which the test below pins."""
         prompt = ReactAgentNode(name="a1", model=object()).resolve_prompt()
         assert prompt is not None
         assert "never state a figure you did not obtain" in prompt
 
     def test_a_tier_that_blanks_the_defaults_still_gets_no_prompt(self) -> None:
         """The escape hatch, so the `None` branch is not dead code: a harness
-        that owns its own prompt entirely opts out by emptying the ClassVar."""
+        that owns its own prompt entirely opts out by declaring a `PROMPT` with
+        no defaults layer."""
 
         class BareAgentNode(ReactAgentNode):
-            DEFAULT_RULES = ""
+            PROMPT = ReactAgentNode.PROMPT.with_defaults("")
 
         assert BareAgentNode(name="a1", model=object()).resolve_prompt() is None
 
@@ -154,13 +155,13 @@ class TestConcreteTiers:
     def test_react_omits_system_prompt_only_when_there_are_no_rules_at_all(
         self, monkeypatch
     ) -> None:
-        """A stock agent now always passes a `system_prompt`, because
-        `DEFAULT_RULES` is a layer it inherits (ticket 10). The omission
+        """A stock agent now always passes a `system_prompt`, because the
+        default rules are a layer it inherits (ticket 10). The omission
         survives for a tier that blanks that layer — which is what this pins,
         so the "no key at all" path does not rot."""
 
         class BareAgentNode(ReactAgentNode):
-            DEFAULT_RULES = ""
+            PROMPT = ReactAgentNode.PROMPT.with_defaults("")
 
         recorder = Recorder()
         node = ReactAgentNode(name="a1", model="MODEL")
