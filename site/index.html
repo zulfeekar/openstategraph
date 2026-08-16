@@ -217,10 +217,11 @@ ul.clean li b { color: hsl(var(--foreground)); font-weight: 500; }
 
 /* ── journey strip ──────────────────────────────────────────────── */
 .journey {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem;
   counter-reset: jstep;
 }
-@media (max-width: 780px) { .journey { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1000px) { .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .journey { grid-template-columns: minmax(0, 1fr); } }
 .journey a {
   display: block; text-decoration: none; counter-increment: jstep;
   border: 1px solid hsl(var(--border)); border-radius: var(--radius);
@@ -366,6 +367,7 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
       <a href="#how">How it works</a>
       <a href="#examples">Examples</a>
       <a href="gallery.html">Gallery</a>
+      <a href="behind-the-scenes.html">Behind the scenes</a>
       <a href="#quickstart">Quickstart</a>
       <a href="#use">Using a workflow</a>
       <a href="#docs">Docs</a>
@@ -752,7 +754,7 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
       <div class="callout callout-tip" style="max-width:52rem">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
         <span>
-          <b>Twenty more ship inside the wheel.</b> Every pattern the node catalogue can express —
+          <b>Twenty-two more ship inside the wheel.</b> Every pattern the node catalogue can express —
           a straight line, three kinds of loop, a mount three documents deep, a two-provider
           flagship — each with the diagram its compiler produced, what that drawing became in
           LangGraph, and the question it was actually asked.
@@ -783,6 +785,11 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           <h3>Read a real one</h3>
           <p>Open the Chinook Assistant, follow an intent from router to grader, then change a rule and re-run.</p>
           <span class="go">Examples →</span>
+        </a>
+        <a href="behind-the-scenes.html">
+          <h3>See what it becomes</h3>
+          <p>One workflow followed all the way down: the file, the plan, the compiled graph, the prompt a model receives.</p>
+          <span class="go">Behind the scenes →</span>
         </a>
         <a href="#docs">
           <h3>Add your own</h3>
@@ -1440,6 +1447,7 @@ python -m pytest    <span class="c"># backend + workflow tests</span></code></pr
         <ul>
           <li><a href="#quickstart">Quickstart</a></li>
           <li><a href="gallery.html">Example gallery</a></li>
+          <li><a href="behind-the-scenes.html">Behind the scenes</a></li>
           <li><a href="#use">Using a workflow</a></li>
           <li><a href="#faq">FAQ</a></li>
           <li><a href="#contribute">Contribute</a></li>

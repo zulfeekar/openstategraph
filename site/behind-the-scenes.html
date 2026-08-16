@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Behind the scenes — one workflow, five artifacts</title>
+<meta name="description" content="A worked walk-through of one OpenStateGraph workflow through everything it becomes: the document you drew, the plan the compiler decided, the compiled LangGraph, the system prompt layer by layer, and the Python that runs it. Every block generated from the real compiler." />
+<meta name="color-scheme" content="light dark" />
+<meta property="og:title" content="Behind the scenes — one workflow, five artifacts" />
+<meta property="og:description" content="What a drawn workflow actually becomes: document, plan, compiled graph, rendered prompt, Python. Nothing on this page was typed by hand." />
+<meta property="og:type" content="article" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='1.8'%3E%3Cpath d='M10 10h4M10 22h4M18 16h4'/%3E%3C/g%3E%3Cg fill='%23fafafa'%3E%3Ccircle cx='9' cy='10' r='2.4'/%3E%3Ccircle cx='9' cy='22' r='2.4'/%3E%3Ccircle cx='23' cy='16' r='2.4'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+/* ── shadcn zinc tokens, hand-rolled ─────────────────────────────── */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --border: 240 5.9% 90%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --accent: 240 4.8% 95.9%;
+  --ring: 240 5% 64.9%;
+  --radius: 0.5rem;
+  --shadow: 0 1px 2px 0 hsl(240 6% 10% / 0.05);
+  --shadow-md: 0 4px 16px -4px hsl(240 6% 10% / 0.08), 0 1px 2px hsl(240 6% 10% / 0.04);
+  --grid: 240 5.9% 92%;
+  /* The four provenances every block on this page is labelled with. One hue
+     each, used for the rail dot, the layer stripe and the chip alike, so the
+     colour means the same thing wherever it appears. */
+  --locked: 240 4% 46%;
+  --generated: 217 70% 50%;
+  --yours: 142 60% 38%;
+  --wired: 38 92% 42%;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 6%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --border: 240 3.7% 15.9%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --accent: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.4);
+    --shadow-md: 0 4px 20px -4px hsl(0 0% 0% / 0.5);
+    --grid: 240 4% 13%;
+    --locked: 240 5% 60%;
+    --generated: 213 85% 68%;
+    --yours: 142 55% 55%;
+    --wired: 38 90% 60%;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.022em; margin: 0; font-weight: 600; }
+p { margin: 0; }
+a { color: inherit; }
+code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+  "Liberation Mono", monospace; font-size: 0.8125rem; }
+:not(pre) > code { overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+.narrow { max-width: 46rem; }
+.muted { color: hsl(var(--muted-foreground)); }
+.eyebrow {
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: hsl(var(--muted-foreground));
+}
+
+/* ── header ─────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 20;
+  backdrop-filter: saturate(180%) blur(12px);
+  background: hsl(var(--background) / 0.8);
+  border-bottom: 1px solid hsl(var(--border));
+}
+.nav { display: flex; align-items: center; gap: 1.5rem; height: 3.5rem; }
+.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
+.brand svg { display: block; }
+.nav nav { margin-left: auto; display: flex; gap: 1.5rem; font-size: 0.875rem; }
+.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+.nav nav a:hover, .nav nav a[aria-current="page"] { color: hsl(var(--foreground)); }
+@media (max-width: 860px) { .nav nav { display: none; } }
+
+/* ── hero ───────────────────────────────────────────────────────── */
+.hero { padding: 4.5rem 0 3rem; position: relative; overflow: hidden; }
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background-image:
+    linear-gradient(to right, hsl(var(--grid)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--grid)) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 30% 0%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 60% 60% at 30% 0%, #000 40%, transparent 100%);
+}
+.hero h1 { margin-top: 1rem; max-width: 22ch; font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.035em; }
+.hero p.lede { margin-top: 1.25rem; max-width: 46rem; font-size: 1.0625rem; color: hsl(var(--muted-foreground)); }
+
+section { padding: 4rem 0; border-top: 1px solid hsl(var(--border)); scroll-margin-top: 4rem; }
+section.plain { border-top: 0; }
+.head { max-width: 46rem; margin-bottom: 2rem; }
+.head h2 { font-size: clamp(1.5rem, 3.2vw, 2rem); margin-top: 0.75rem; }
+.head p { margin-top: 0.75rem; color: hsl(var(--muted-foreground)); }
+.prose p { font-size: .9375rem; max-width: 46rem; }
+.prose p + p { margin-top: .875rem; }
+.prose b { font-weight: 600; }
+
+/* ── the five-artifact rail ─────────────────────────────────────── */
+.rail {
+  margin-top: 2.5rem; display: grid; gap: .75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr)); counter-reset: art;
+}
+@media (max-width: 900px) { .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .rail { grid-template-columns: minmax(0, 1fr); } }
+.rail a {
+  counter-increment: art; text-decoration: none; display: block; position: relative;
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); padding: 1rem 1rem .875rem; box-shadow: var(--shadow);
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.rail a:hover { background: hsl(var(--accent)); border-color: hsl(var(--ring) / .6); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { .rail a:hover { transform: none; } }
+.rail a::before {
+  content: counter(art); display: grid; place-items: center;
+  width: 1.375rem; height: 1.375rem; border-radius: 999px; margin-bottom: .625rem;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  font-size: .6875rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.rail strong { display: block; font-size: .875rem; font-weight: 600; }
+.rail span { display: block; margin-top: .25rem; font-size: .75rem; color: hsl(var(--muted-foreground)); }
+.rail code { font-size: .6875rem; }
+
+/* ── subject strip ──────────────────────────────────────────────── */
+.subject {
+  margin-top: 2rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); box-shadow: var(--shadow-md); overflow: hidden;
+}
+.subject-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .625rem;
+  padding: .75rem 1rem; border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / .4); font-size: .8125rem;
+}
+.subject-bar .fname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.subject-bar .spacer { margin-left: auto; }
+.subject-facts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  font-size: .875rem;
+}
+@media (max-width: 680px) { .subject-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.subject-facts div { padding: 1rem; border-right: 1px solid hsl(var(--border)); }
+.subject-facts div:last-child { border-right: 0; }
+@media (max-width: 680px) {
+  .subject-facts div:nth-child(2n) { border-right: 0; }
+  .subject-facts div:nth-child(-n+2) { border-bottom: 1px solid hsl(var(--border)); }
+}
+.subject-facts dt { font-size: .6875rem; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); }
+.subject-facts dd { margin: .25rem 0 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── section number ─────────────────────────────────────────────── */
+.n {
+  display: inline-grid; place-items: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 999px;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  font-size: .75rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  vertical-align: .1rem; margin-right: .625rem;
+}
+
+/* ── panes and code ─────────────────────────────────────────────── */
+.pane {
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); box-shadow: var(--shadow-md); overflow: hidden;
+}
+.pane-bar {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .5rem .875rem; border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.75rem; color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.pane-bar .spacer { margin-left: auto; }
+pre { margin: 0; padding: 1rem 1.25rem; overflow-x: auto; line-height: 1.7; }
+pre.tall { max-height: 34rem; overflow-y: auto; }
+pre .c, pre .p { color: hsl(var(--muted-foreground)); }
+.k { color: hsl(262 60% 55%); } .s { color: hsl(142 45% 38%); } .f { color: hsl(217 70% 48%); }
+@media (prefers-color-scheme: dark) {
+  .k { color: hsl(265 80% 78%); } .s { color: hsl(142 55% 65%); } .f { color: hsl(213 85% 74%); }
+}
+.codeblock {
+  margin-top: .875rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); overflow: hidden; box-shadow: var(--shadow);
+}
+.codeblock .pane-bar { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Where a generated block sits, say so on the block itself rather than only
+   in the prose — the claim is worth nothing if the reader has to take it on
+   trust from a paragraph three screens up. */
+.stamp {
+  display: inline-flex; align-items: center; gap: .375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .6875rem;
+  color: hsl(var(--muted-foreground));
+}
+.stamp::before {
+  content: ""; width: 6px; height: 6px; border-radius: 999px;
+  background: hsl(142 71% 45%); flex: none;
+}
+
+/* ── callouts ───────────────────────────────────────────────────── */
+.callout {
+  display: flex; gap: .75rem; margin-top: 1.25rem; padding: .875rem 1rem;
+  border: 1px solid hsl(var(--border)); border-left-width: 3px;
+  border-radius: var(--radius); background: hsl(var(--muted) / .4);
+  font-size: .8125rem; color: hsl(var(--muted-foreground)); max-width: 52rem;
+}
+.callout b { color: hsl(var(--foreground)); font-weight: 600; }
+.callout svg { flex: none; width: 1rem; height: 1rem; margin-top: .22rem;
+  stroke: hsl(var(--foreground)); fill: none; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.callout p + p { margin-top: .5rem; }
+.callout-info { border-left-color: hsl(217 70% 55%); }
+.callout-tip { border-left-color: hsl(142 60% 45%); }
+.callout-warn { border-left-color: hsl(38 92% 50%); }
+
+/* ── tables ─────────────────────────────────────────────────────── */
+.compare { overflow-x: auto; border: 1px solid hsl(var(--border)); border-radius: var(--radius); background: hsl(var(--card)); margin-top: 1.5rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.875rem; min-width: 32rem; }
+th, td { text-align: left; padding: 0.75rem 1.25rem; border-bottom: 1px solid hsl(var(--border)); vertical-align: top; }
+thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: hsl(var(--muted-foreground)); font-weight: 500; }
+tbody tr:last-child td { border-bottom: 0; }
+
+/* ── the diagram ────────────────────────────────────────────────── */
+figure.fig { margin: 0; }
+.mmd {
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card));
+  background-image: radial-gradient(hsl(var(--grid)) 1px, transparent 1px);
+  background-size: 16px 16px;
+  box-shadow: var(--shadow-md); padding: 1.5rem 1rem; overflow-x: auto;
+}
+figure.fig figcaption { margin-top: .75rem; font-size: .75rem; color: hsl(var(--muted-foreground)); }
+/* Mermaid ships a ~9 KB stylesheet inside every diagram it renders; the build
+   script strips it and the rules live here once, in the site's own tokens,
+   which is also what makes a build-time SVG follow the reader's theme. */
+/* Narrower than the gallery's full-bleed diagrams on purpose: this graph is
+   top-down and seven boxes deep, so width buys nothing and height costs a
+   scroll. */
+.mmd svg { width: 100%; max-width: 26rem; margin: 0 auto; height: auto; display: block; overflow: visible; }
+.mmd svg .node rect, .mmd svg .node circle, .mmd svg .node polygon, .mmd svg .node path {
+  stroke: hsl(var(--border)); stroke-width: 1px;
+}
+.mmd svg .nodeLabel, .mmd svg .edgeLabel {
+  color: hsl(var(--foreground));
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12.5px;
+}
+.mmd svg .edgeLabel { color: hsl(var(--muted-foreground)); font-size: 11.5px; }
+.mmd svg .edgeLabel .labelBkg { background: hsl(var(--card)); }
+.mmd svg p { margin: 0; }
+.mmd svg .flowchart-link { stroke: hsl(var(--muted-foreground)); fill: none; stroke-width: 1px; }
+.mmd svg .marker, .mmd svg .arrowMarkerPath { fill: hsl(var(--muted-foreground)); stroke: hsl(var(--muted-foreground)); }
+.mmd svg .edge-pattern-dotted { stroke-dasharray: 2; }
+.mmd svg .edge-pattern-dashed { stroke-dasharray: 3; }
+.mmd svg .edge-thickness-normal { stroke-width: 1px; }
+.mmd svg .edge-thickness-invisible { stroke-width: 0; fill: none; }
+
+/* ── the prompt stack ───────────────────────────────────────────── */
+.prompts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 2rem; }
+@media (max-width: 980px) { .prompts { grid-template-columns: minmax(0, 1fr); } }
+.node-col > h3 { font-size: 1rem; display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem; }
+.node-col > p.sub { margin-top: .375rem; font-size: .875rem; color: hsl(var(--muted-foreground)); }
+
+.stack { position: relative; margin-top: 1.25rem; padding-left: 1.625rem; display: grid; gap: .625rem; }
+/* The spine is the render order, and it is the point of the whole section:
+   top to bottom is the order a model reads, and later instructions win ties. */
+.stack::before {
+  content: ""; position: absolute; left: .3125rem; top: 1rem; bottom: 1rem; width: 2px;
+  background: linear-gradient(to bottom, hsl(var(--border)), hsl(var(--ring)));
+  border-radius: 2px;
+}
+.layer {
+  position: relative; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); box-shadow: var(--shadow);
+  border-left: 3px solid hsl(var(--locked));
+  padding: .75rem .875rem;
+}
+.layer::before {
+  content: ""; position: absolute; left: -1.625rem; top: 1.0625rem;
+  width: .75rem; height: .75rem; border-radius: 999px;
+  background: hsl(var(--background)); border: 2px solid hsl(var(--locked));
+}
+.layer--generated, .layer--generated::before { border-left-color: hsl(var(--generated)); border-color: hsl(var(--generated)); }
+.layer--yours, .layer--yours::before { border-left-color: hsl(var(--yours)); border-color: hsl(var(--yours)); }
+.layer--wired, .layer--wired::before { border-left-color: hsl(var(--wired)); border-color: hsl(var(--wired)); }
+.layer--generated, .layer--yours, .layer--wired { border-top-color: hsl(var(--border)); border-right-color: hsl(var(--border)); border-bottom-color: hsl(var(--border)); }
+.layer--yours { background: hsl(var(--yours) / .04); }
+.layer--yours::before { background: hsl(var(--yours)); }
+.layer.is-empty { opacity: .72; border-style: dashed; border-left-style: solid; }
+
+.layer-bar { display: flex; align-items: center; gap: .5rem; }
+.layer-key { font-size: .8125rem; font-weight: 600; color: hsl(var(--foreground)); }
+.layer-kind {
+  margin-left: auto; font-size: .625rem; letter-spacing: .06em; text-transform: uppercase;
+  font-weight: 600; padding: .0625rem .4375rem; border-radius: 999px;
+  border: 1px solid currentColor; color: hsl(var(--locked));
+}
+.layer--generated .layer-kind { color: hsl(var(--generated)); }
+.layer--yours .layer-kind { color: hsl(var(--yours)); }
+.layer--wired .layer-kind { color: hsl(var(--wired)); }
+.layer-what { margin-top: .3125rem; font-size: .75rem; color: hsl(var(--muted-foreground)); line-height: 1.5; }
+.layer-what code { font-size: .6875rem; }
+.layer-body {
+  margin-top: .625rem; padding: .625rem .75rem; border-radius: .375rem;
+  background: hsl(var(--muted) / .55); white-space: pre-wrap; overflow-wrap: anywhere;
+  font-size: .75rem; line-height: 1.6; max-height: 18rem; overflow-y: auto;
+}
+.layer-empty { margin-top: .5rem; font-size: .75rem; font-style: italic; color: hsl(var(--muted-foreground)); }
+
+details.reveal {
+  margin-top: 1rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); overflow: hidden;
+}
+details.reveal summary {
+  cursor: pointer; list-style: none; padding: .625rem .875rem;
+  font-size: .8125rem; font-weight: 500;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+details.reveal summary::-webkit-details-marker { display: none; }
+details.reveal summary:hover { background: hsl(var(--accent)); }
+details.reveal summary .chev {
+  flex: none; width: .875rem; height: .875rem; stroke: hsl(var(--muted-foreground));
+  fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .2s ease;
+}
+details.reveal[open] summary .chev { transform: rotate(180deg); }
+details.reveal[open] summary { border-bottom: 1px solid hsl(var(--border)); }
+details.reveal pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { details.reveal summary .chev { transition: none; } }
+
+/* ── legend ─────────────────────────────────────────────────────── */
+.legend { display: flex; flex-wrap: wrap; gap: .375rem .875rem; margin-top: 1rem; font-size: .75rem; }
+.legend span { display: inline-flex; align-items: center; gap: .375rem; color: hsl(var(--muted-foreground)); }
+.legend i { width: .625rem; height: .625rem; border-radius: 999px; display: block; }
+
+ul.clean { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: .625rem; max-width: 46rem; }
+ul.clean li { display: flex; gap: .625rem; font-size: .875rem; color: hsl(var(--muted-foreground)); }
+ul.clean li svg { flex: none; width: 1rem; height: 1rem; margin-top: .28rem;
+  stroke: hsl(var(--foreground)); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+ul.clean li b { color: hsl(var(--foreground)); font-weight: 500; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  height: 2.5rem; padding: 0 1rem; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 500; text-decoration: none;
+  border: 1px solid transparent; white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-outline { border-color: hsl(var(--border)); background: hsl(var(--background)); }
+.btn-outline:hover { background: hsl(var(--accent)); }
+.cta { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.75rem; }
+
+@media (max-width: 680px) {
+  .wrap { padding: 0 1.25rem; }
+  .hero { padding: 3rem 0 2rem; }
+  section { padding: 3rem 0; }
+  pre { padding: .875rem 1rem; }
+  .cta .btn { flex: 1 1 100%; }
+}
+
+/* ── footer ─────────────────────────────────────────────────────── */
+footer { border-top: 1px solid hsl(var(--border)); padding: 3rem 0; font-size: 0.875rem; }
+footer a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text-underline-offset: 3px; }
+.colophon {
+  margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid hsl(var(--border));
+  display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between;
+  color: hsl(var(--muted-foreground)); font-size: 0.8125rem;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="index.html">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="hsl(var(--primary))"/>
+        <g fill="none" stroke="hsl(var(--primary-foreground))" stroke-width="1.8">
+          <path d="M11 10h3M11 22h3M18 16h4"/><path d="M14 10c3 0 3 6 4 6M14 22c3 0 3-6 4-6"/>
+        </g>
+        <g fill="hsl(var(--primary-foreground))">
+          <circle cx="9" cy="10" r="2.2"/><circle cx="9" cy="22" r="2.2"/><circle cx="23" cy="16" r="2.2"/>
+        </g>
+      </svg>
+      OpenStateGraph
+    </a>
+    <nav>
+      <a href="index.html#how">How it works</a>
+      <a href="gallery.html">Gallery</a>
+      <a href="behind-the-scenes.html" aria-current="page">Behind the scenes</a>
+      <a href="index.html#quickstart">Quickstart</a>
+      <a href="index.html#use">Using a workflow</a>
+      <a href="index.html#docs">Docs</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ── hero ──────────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Behind the scenes</p>
+    <h1>One workflow, five artifacts</h1>
+    <p class="lede">
+      You drew four boxes and one loop. This page follows that drawing all the way down —
+      into the file it is stored as, the plan the compiler decided, the LangGraph it became,
+      the system prompt a model actually receives, and the Python that runs the whole thing.
+      Nothing here is a description of what happens. It <em>is</em> what happens, taken
+      from the compiler at build time.
+    </p>
+
+    <nav class="rail" aria-label="The five artifacts">
+      <a href="#document"><strong>The document</strong><span>What you drew, as a file — <code>workflow.json</code></span></a>
+      <a href="#plan"><strong>The plan</strong><span>What the compiler decided — <code>validate</code></span></a>
+      <a href="#graph"><strong>The graph</strong><span>The compiled <code>StateGraph</code></span></a>
+      <a href="#prompt"><strong>The prompt</strong><span>Every layer a model receives</span></a>
+      <a href="#python"><strong>The Python</strong><span>Running it from your own code</span></a>
+    </nav>
+
+    <div class="subject">
+      <div class="subject-bar">
+        <span class="fname">backend/openstategraph/examples/evaluator-optimizer/</span>
+        <span class="spacer stamp">generated from this package at build time</span>
+      </div>
+      <dl class="subject-facts">
+        <div><dt>Pattern</dt><dd>Revision loop</dd></div>
+        <div><dt>Nodes</dt><dd>4</dd></div>
+        <div><dt>Cycles</dt><dd>1</dd></div>
+        <div><dt>Tools</dt><dd>none</dd></div>
+      </dl>
+    </div>
+
+    <div class="callout callout-tip">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      <div>
+        <p><b>The subject is the smallest thing that is still interesting.</b>
+        <code>evaluator-optimizer</code> is a drafter, a grader, and the one feedback edge
+        that makes it a cycle — four nodes, no tools, no mounts, nothing to hide behind.
+        Every other example in the <a href="gallery.html">gallery</a> is this shape with
+        more on top.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 1. the document ───────────────────────────────────────────── -->
+<section id="document">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Artifact one</p>
+      <h2><span class="n">1</span>The document</h2>
+      <p>
+        A workflow is a file. Not a row in our database, not an export of one — the
+        canvas is a projection of this document, and this document is the thing that
+        gets committed, reviewed and diffed.
+      </p>
+    </div>
+
+    <div class="prose">
+      <p>
+        Read it and you can see the whole workflow without opening the editor. Four
+        <b>nodes</b>, each with a type from the registry and a <code>data</code> blob that
+        is the node's configuration. Four <b>edges</b>, each naming a port on both ends —
+        which is what makes the loop legal: <code>grader1.revise → draft1.feedback</code> is
+        drawable only because the grader declares a typed <code>revise</code> output and the
+        agent a typed <code>feedback</code> input. An accidental cycle stays inexpressible;
+        this one is two clicks.
+      </p>
+      <p>
+        Notice what is <em>not</em> in here. No Python, no lambda, no expression in a host
+        language, no vendor type name. The prose in <code>systemPrompt</code> and
+        <code>criteria</code> is the only thing a human wrote, and <code>position</code> is
+        the canvas's business — the compiler never reads it.
+      </p>
+    </div>
+
+    <div class="pane" style="margin-top:1.5rem">
+      <div class="pane-bar">
+        <span>evaluator-optimizer/workflow.json</span>
+        <span class="spacer stamp">printed verbatim</span>
+      </div>
+      <pre class="tall"><!--bts:document-->{
+  <span class="f">"version"</span>: <span class="k">3</span>,
+  <span class="f">"name"</span>: <span class="s">"Evaluator Optimizer"</span>,
+  <span class="f">"settings"</span>: {
+    <span class="f">"purpose"</span>: <span class="s">"The canonical revision loop: a drafter, a grader, and the one feedback edge that makes it a cycle."</span>
+  },
+  <span class="f">"nodes"</span>: [
+    {
+      <span class="f">"id"</span>: <span class="s">"in1"</span>,
+      <span class="f">"type"</span>: <span class="s">"input.text"</span>,
+      <span class="f">"title"</span>: <span class="s">"Request"</span>,
+      <span class="f">"data"</span>: {},
+      <span class="f">"position"</span>: {
+        <span class="f">"x"</span>: <span class="k">40</span>,
+        <span class="f">"y"</span>: <span class="k">200</span>
+      }
+    },
+    {
+      <span class="f">"id"</span>: <span class="s">"draft1"</span>,
+      <span class="f">"type"</span>: <span class="s">"agent.llm"</span>,
+      <span class="f">"title"</span>: <span class="s">"Draft"</span>,
+      <span class="f">"data"</span>: {
+        <span class="f">"systemPrompt"</span>: <span class="s">"Write the release note the user asks for: exactly two sentences, past tense, plain language.\n\nSentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over."</span>
+      },
+      <span class="f">"position"</span>: {
+        <span class="f">"x"</span>: <span class="k">380</span>,
+        <span class="f">"y"</span>: <span class="k">200</span>
+      }
+    },
+    {
+      <span class="f">"id"</span>: <span class="s">"grader1"</span>,
+      <span class="f">"type"</span>: <span class="s">"route.grader"</span>,
+      <span class="f">"title"</span>: <span class="s">"Review"</span>,
+      <span class="f">"data"</span>: {
+        <span class="f">"criteria"</span>: <span class="s">"- The note must be exactly two sentences \u2014 count them.\n- The first sentence must name the defect; the second must name the fixed behaviour.\n- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.\n- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing."</span>,
+        <span class="f">"rulesMode"</span>: <span class="s">"extend"</span>,
+        <span class="f">"maxAttempts"</span>: <span class="k">2</span>
+      },
+      <span class="f">"position"</span>: {
+        <span class="f">"x"</span>: <span class="k">720</span>,
+        <span class="f">"y"</span>: <span class="k">200</span>
+      }
+    },
+    {
+      <span class="f">"id"</span>: <span class="s">"out1"</span>,
+      <span class="f">"type"</span>: <span class="s">"output.formatted"</span>,
+      <span class="f">"title"</span>: <span class="s">"Release note"</span>,
+      <span class="f">"data"</span>: {},
+      <span class="f">"position"</span>: {
+        <span class="f">"x"</span>: <span class="k">1060</span>,
+        <span class="f">"y"</span>: <span class="k">200</span>
+      }
+    }
+  ],
+  <span class="f">"edges"</span>: [
+    {
+      <span class="f">"source"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"in1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"text"</span>
+      },
+      <span class="f">"target"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"draft1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"prompt"</span>
+      }
+    },
+    {
+      <span class="f">"source"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"draft1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"result"</span>
+      },
+      <span class="f">"target"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"grader1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"candidate"</span>
+      }
+    },
+    {
+      <span class="f">"source"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"grader1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"pass"</span>
+      },
+      <span class="f">"target"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"out1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"result"</span>
+      }
+    },
+    {
+      <span class="f">"source"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"grader1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"revise"</span>
+      },
+      <span class="f">"target"</span>: {
+        <span class="f">"nodeId"</span>: <span class="s">"draft1"</span>,
+        <span class="f">"portId"</span>: <span class="s">"feedback"</span>
+      }
+    }
+  ]
+}<!--/bts:document--></pre>
+    </div>
+
+    <div class="callout callout-info">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+      <div>
+        <p><b>The envelope and the document are different things.</b> The outer object is
+        the save envelope — <code>name</code>, <code>published</code>, <code>savedAt</code> —
+        and it belongs to the editor. Everything inside <code>document</code> is what the
+        compiler consumes, and it is versioned separately (<code>"version": 3</code>) for
+        exactly that reason.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 2. the plan ───────────────────────────────────────────────── -->
+<section id="plan">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Artifact two</p>
+      <h2><span class="n">2</span>The plan</h2>
+      <p>
+        Between the document and the graph there is a decision: which node is the entry,
+        which edges are conditional and where each one may land, what needs binding.
+        <code>validate</code> prints that decision without running anything.
+      </p>
+    </div>
+
+    <div class="codeblock" style="max-width:52rem">
+      <div class="pane-bar">
+        <span>$ openstategraph validate backend/openstategraph/examples/evaluator-optimizer</span>
+        <span class="spacer stamp">real output</span>
+      </div>
+      <pre><!--bts:plan-->VALID
+
+Topology: 4 graph nodes · entry ['in1'] · exits ['out1']
+Routes: {'grader1': ['pass', 'revise']}
+Tool bindings: none
+Fan-out: none<!--/bts:plan--></pre>
+    </div>
+
+    <div class="prose" style="margin-top:1.5rem">
+      <p>
+        Five lines, and each one is a claim you can check against the document above.
+        <b>Four graph nodes</b> — the four you drew. <b>Entry <code>in1</code></b>, because it
+        is the node nothing points at. <b>Exits <code>out1</code></b>. And the row that
+        matters most: <code>Routes: {'grader1': ['pass', 'revise']}</code> is the grader's
+        <em>complete declared destination set</em>. A conditional edge that could land
+        somewhere undeclared is the failure mode this line exists to make visible.
+      </p>
+      <p>
+        Compiling calls no model and needs no credentials, which is why this is safe to run
+        in CI, on a laptop with an empty <code>.env</code>, and — as it happens — in the
+        script that built this page.
+      </p>
+    </div>
+
+    <div class="callout callout-warn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <div>
+        <p><b>It is <code>validate</code>, not <code>graph</code>.</b> The plan and the picture
+        are two different commands and it is easy to name the wrong one.
+        <code>openstategraph graph</code> prints Mermaid — that is artifact three, below.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. the compiled graph ─────────────────────────────────────── -->
+<section id="graph">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Artifact three</p>
+      <h2><span class="n">3</span>The compiled graph</h2>
+      <p>
+        The document becomes a LangGraph <code>StateGraph</code>. Not an interpretation of
+        one, not a lookalike executed by an engine of ours — the real object, with real
+        checkpointing, real streaming and real fan-out.
+      </p>
+    </div>
+
+    <figure class="fig">
+      <div class="mmd"><!--bts:mermaid--><svg role="img" id="devaluator-optimizer" width="100%" xmlns="http://www.w3.org/2000/svg" class="flowchart" viewBox="0 0 320.09375 504.78125" role="graphics-document document" aria-roledescription="flowchart-v2"><g><marker id="devaluator-optimizer_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></path></marker><g class="root"><g class="clusters"></g><g class="edgePaths"><path d="M44.195,40.797L44.195,65.797L44.195,86.797" id="devaluator-optimizer-L___start___in1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path><path d="M37.295,206.391L22.355,241.891L35.743,273.704" id="devaluator-optimizer-L_draft1_grader1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path><path d="M51.096,277.391L66.035,241.891L52.648,210.077" id="devaluator-optimizer-L_grader1_draft1_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path><path d="M44.195,310.188L44.195,345.688L44.195,377.188" id="devaluator-optimizer-L_grader1_out1_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path><path d="M44.195,123.594L44.195,148.594L44.195,169.594" id="devaluator-optimizer-L_in1_draft1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path><path d="M44.195,413.984L44.195,438.984L44.195,459.984" id="devaluator-optimizer-L_out1___end___0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" marker-end="url(#devaluator-optimizer_flowchart-v2-pointEnd)"></path></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(66.03515625, 241.890625)"><g class="label" transform="translate(-23.6796875, -10.5)"><foreignObject width="47.359375" height="21"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>&nbsp;revise&nbsp;</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(44.1953125, 345.6875)"><g class="label" transform="translate(-19.46875, -10.5)"><foreignObject width="38.9375" height="21"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>&nbsp;pass&nbsp;</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="devaluator-optimizer-flowchart-__start__-0" transform="translate(44.1953125, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-36.1953125" y="-16.3984375" width="72.390625" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-28.1953125, -8.3984375)"><rect></rect><foreignObject width="56.390625" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__start__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-draft1-1" transform="translate(44.1953125, 189.9921875)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-27.2265625" y="-16.3984375" width="54.453125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-19.2265625, -8.3984375)"><rect></rect><foreignObject width="38.453125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>draft1</p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-grader1-2" transform="translate(44.1953125, 293.7890625)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-33.1015625" y="-16.3984375" width="66.203125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-25.1015625, -8.3984375)"><rect></rect><foreignObject width="50.203125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>grader1</p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-in1-3" transform="translate(44.1953125, 107.1953125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-16.734375" y="-16.3984375" width="33.46875" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-8.734375, -8.3984375)"><rect></rect><foreignObject width="17.46875" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>in1</p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-out1-4" transform="translate(44.1953125, 397.5859375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-22.046875" y="-16.3984375" width="44.09375" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-14.046875, -8.3984375)"><rect></rect><foreignObject width="28.09375" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p>out1</p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-__default_error_handler__-5" transform="translate(221.2421875, 24.3984375)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-90.8515625" y="-16.3984375" width="181.703125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-82.8515625, -8.3984375)"><rect></rect><foreignObject width="165.703125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__default_error_handler__</p><p></p></span></div></foreignObject></g></g><g class="node default" id="devaluator-optimizer-flowchart-__end__-6" transform="translate(44.1953125, 480.3828125)"><rect class="basic label-container" style="fill:hsl(var(--muted)) !important" rx="5" ry="5" x="-33.40625" y="-16.3984375" width="66.8125" height="32.796875"></rect><g class="label" style="line-height:1.2 !important" transform="translate(-25.40625, -8.3984375)"><rect></rect><foreignObject width="50.8125" height="16.796875"><div style="line-height: 1.5; display: table-cell; white-space: nowrap; max-width: 200px; text-align: center;" xmlns="http://www.w3.org/1999/xhtml"><span style="line-height:1.2 !important" class="nodeLabel"><p></p><p>__end__</p><p></p></span></div></foreignObject></g></g></g></g></g><defs><filter id="devaluator-optimizer-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><defs><filter id="devaluator-optimizer-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"></feDropShadow></filter></defs><linearGradient id="devaluator-optimizer-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="hsl(var(--border))" stop-opacity="1"></stop><stop offset="100%" stop-color="hsl(239.5275590551, 60%, 39.8039215686%)" stop-opacity="1"></stop></linearGradient></svg><!--/bts:mermaid--></div>
+      <figcaption>
+        <code>compiled.get_graph().draw_mermaid()</code>, rendered to inline SVG on the
+        machine that built this page. Dotted edges are conditional — they are the grader's
+        two destinations, chosen at run time.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:1.75rem">
+      <p>
+        Seven boxes for four nodes. Three of them are machinery you did not draw:
+        <code>__start__</code> and <code>__end__</code> are LangGraph's, and
+        <code>__default_error_handler__</code> comes from <code>set_node_defaults</code> —
+        retry, timeout and error handling are parameters of graph assembly, applied to
+        every node at once, never a field on any one of them.
+      </p>
+      <p>
+        <b>The loop is two edges, not a wrapper around one.</b> <code>draft1 → grader1</code>
+        is static; <code>grader1 ⇢ draft1</code> is the grader choosing <code>revise</code>.
+        There is no loop construct here because there does not need to be one: a cycle in a
+        graph is a cycle. What stops it running forever is the step budget and the grader's
+        own attempt cap, not a special node type.
+      </p>
+    </div>
+
+    <details class="reveal" style="max-width:52rem">
+      <summary>
+        The Mermaid source, before rendering
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <pre><!--bts:mermaid-src-->---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__(&lt;p&gt;__start__&lt;/p&gt;)
+	draft1(draft1)
+	grader1(grader1)
+	in1(in1)
+	out1(out1)
+	__default_error_handler__(&lt;p&gt;__default_error_handler__&lt;/p&gt;)
+	__end__(&lt;p&gt;__end__&lt;/p&gt;)
+	__start__ --&gt; in1;
+	draft1 --&gt; grader1;
+	grader1 -. &amp;nbsp;revise&amp;nbsp; .-&gt; draft1;
+	grader1 -. &amp;nbsp;pass&amp;nbsp; .-&gt; out1;
+	in1 --&gt; draft1;
+	out1 --&gt; __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+<!--/bts:mermaid-src--></pre>
+    </details>
+
+    <div class="callout callout-warn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <div>
+        <p><b><code>--xray</code> expands nothing in this project today.</b> LangGraph can
+        open a node that <em>is</em> a subgraph. Ours are not: an agent is built lazily
+        inside its closure, and a mounted workflow is a closure over the child's
+        <code>invoke()</code>. Both render as one flat box whether you ask for x-ray or not.</p>
+        <p>The build script for this page renders the graph both ways and fails if they ever
+        differ — so the day that stops being true, this paragraph gets rewritten instead of
+        quietly becoming false.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+      <div>
+        <p><b>Your graph is never sent anywhere.</b> LangGraph's
+        <code>draw_mermaid_png()</code> posts the diagram to a third-party API. We use
+        <code>draw_mermaid()</code>, which is text and no network call, and render it here at
+        build time. This page makes zero external requests — no fonts, no scripts, no CDN.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. the prompt ─────────────────────────────────────────────── -->
+<section id="prompt">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Artifact four</p>
+      <h2><span class="n">4</span>The rendered system prompt</h2>
+      <p>
+        This is the one nobody shows you. A node's prompt is not the sentence you typed —
+        it is an ordered assembly, and your sentence is one layer of it. Here is the whole
+        thing, for both prompted nodes, exactly as the compiler builds it.
+      </p>
+    </div>
+
+    <div class="prose">
+      <p>
+        Some of a prompt is <b>machinery</b> the developer must not be able to break: a
+        grader must always emit a verdict that can be parsed into an edge. Some of it is
+        <b>domain rules</b> only the developer can write. Putting both in one editable
+        textarea is how you get a router whose answer nothing can parse, because the first
+        thing anyone does with a pre-filled field is clear it.
+      </p>
+      <p>
+        So the layers are separate and the order is the substance:
+        <b>preamble → context → rules → wired skill → output contract</b>. The contract is
+        rendered <b>last</b> deliberately. Prompts are order-sensitive the way middleware
+        is — later instructions win ties — so if developer text came last, a rule like
+        "explain your reasoning" would countermand the output format and every parse would
+        fail. Your rules shape the <em>decision</em>; the base keeps the <em>shape of the
+        answer</em>.
+      </p>
+    </div>
+
+    <div class="legend" aria-hidden="true">
+      <span><i style="background:hsl(var(--locked))"></i> locked — the base writes it</span>
+      <span><i style="background:hsl(var(--generated))"></i> generated — the machinery resolves it</span>
+      <span><i style="background:hsl(var(--yours))"></i> yours — the one field you edit</span>
+      <span><i style="background:hsl(var(--wired))"></i> wired — arrives over a port</span>
+    </div>
+
+    <div class="prompts">
+      <div class="node-col">
+        <h3>Draft <span class="muted" style="font-weight:400; font-size:.8125rem">
+          <code>agent.llm</code> · built by <code><!--bts:builder-draft1-->ReactAgentNode<!--/bts:builder-draft1--></code></span></h3>
+        <p class="sub">
+          An agent's answer <em>is</em> the output, so there is nothing downstream to protect:
+          its preamble and its output contract are both empty. Almost all of its prompt is
+          the sentence you wrote.
+        </p>
+        <div class="stack"><!--bts:layers-draft1--><div class="layer layer--locked is-empty"><div class="layer-bar"><code class="layer-key">preamble</code><span class="layer-kind">locked</span></div><p class="layer-what">What this node <em>is</em>. Written by the base class.</p><p class="layer-empty">empty for this node</p></div>
+<div class="layer layer--generated is-empty"><div class="layer-bar"><code class="layer-key">context</code><span class="layer-kind">generated</span></div><p class="layer-what">Situational detail the machinery resolves — a branch table, a rubric, a schema.</p><p class="layer-empty">empty for this node</p></div>
+<div class="layer layer--locked"><div class="layer-bar"><code class="layer-key">default_rules</code><span class="layer-kind">locked</span></div><p class="layer-what">The domain rules this node type ships with, so it works before anyone configures it.</p><pre class="layer-body">- Answer the question that was asked, and stop there.
+- Where you hold a tool that can establish a fact, use it. Never answer from memory what a tool could check, and never state a figure you did not obtain.
+- If you cannot answer honestly, say what is missing instead of approximating it.</pre></div>
+<div class="layer layer--yours"><div class="layer-bar"><code class="layer-key">rules</code><span class="layer-kind">yours</span></div><p class="layer-what">The one field on the card. This is the sentence you wrote.</p><pre class="layer-body">Write the release note the user asks for: exactly two sentences, past tense, plain language.
+
+Sentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.
+
+When you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over.</pre></div>
+<div class="layer layer--wired is-empty"><div class="layer-bar"><code class="layer-key">skill</code><span class="layer-kind">wired</span></div><p class="layer-what">The body of a skill file wired to the node&rsquo;s <code>skill</code> port. A rules layer, above your text.</p><p class="layer-empty">empty for this node</p></div>
+<div class="layer layer--locked is-empty"><div class="layer-bar"><code class="layer-key">output_contract</code><span class="layer-kind">locked</span></div><p class="layer-what">The shape of the answer. Rendered <strong>last</strong>, so nothing above can countermand it.</p><p class="layer-empty">empty for this node</p></div><!--/bts:layers-draft1--></div>
+        <details class="reveal">
+          <summary>
+            What the model receives, flattened
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <pre><!--bts:rendered-draft1-->Rules:
+- Answer the question that was asked, and stop there.
+- Where you hold a tool that can establish a fact, use it. Never answer from memory what a tool could check, and never state a figure you did not obtain.
+- If you cannot answer honestly, say what is missing instead of approximating it.
+Write the release note the user asks for: exactly two sentences, past tense, plain language.
+
+Sentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.
+
+When you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over.<!--/bts:rendered-draft1--></pre>
+        </details>
+        <details class="reveal">
+          <summary>
+            <code>describe()</code> — the raw return value
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <pre class="tall"><!--bts:describe-draft1-->{
+  <span class="f">"preamble"</span>: <span class="s">""</span>,
+  <span class="f">"context"</span>: [],
+  <span class="f">"default_rules"</span>: <span class="s">"- Answer the question that was asked, and stop there.\n- Where you hold a tool that can establish a fact, use it. Never answer from memory what a tool could check, and never state a figure you did not obtain.\n- If you cannot answer honestly, say what is missing instead of approximating it."</span>,
+  <span class="f">"rules"</span>: <span class="s">"Write the release note the user asks for: exactly two sentences, past tense, plain language.\n\nSentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over."</span>,
+  <span class="f">"skill"</span>: <span class="s">""</span>,
+  <span class="f">"replace_defaults"</span>: <span class="k">false</span>,
+  <span class="f">"effective_rules"</span>: <span class="s">"- Answer the question that was asked, and stop there.\n- Where you hold a tool that can establish a fact, use it. Never answer from memory what a tool could check, and never state a figure you did not obtain.\n- If you cannot answer honestly, say what is missing instead of approximating it.\nWrite the release note the user asks for: exactly two sentences, past tense, plain language.\n\nSentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over."</span>,
+  <span class="f">"output_contract"</span>: <span class="s">""</span>,
+  <span class="f">"editable"</span>: [
+    <span class="s">"rules"</span>,
+    <span class="s">"replace_defaults"</span>
+  ]
+}<!--/bts:describe-draft1--></pre>
+        </details>
+      </div>
+
+      <div class="node-col">
+        <h3>Review <span class="muted" style="font-weight:400; font-size:.8125rem">
+          <code>route.grader</code> · built by <code><!--bts:builder-grader1-->Grader<!--/bts:builder-grader1--></code></span></h3>
+        <p class="sub">
+          A grader's answer becomes an <em>edge</em>. It must be parseable or the graph
+          cannot route, so the machinery is thick at both ends — and the four criteria you
+          typed sit in the middle, on top of the four it already knew.
+        </p>
+        <div class="stack"><!--bts:layers-grader1--><div class="layer layer--locked"><div class="layer-bar"><code class="layer-key">preamble</code><span class="layer-kind">locked</span></div><p class="layer-what">What this node <em>is</em>. Written by the base class.</p><pre class="layer-body">You are a grader. You judge whether a candidate answer is good enough to return to the user. You never rewrite it yourself.</pre></div>
+<div class="layer layer--generated is-empty"><div class="layer-bar"><code class="layer-key">context</code><span class="layer-kind">generated</span></div><p class="layer-what">Situational detail the machinery resolves — a branch table, a rubric, a schema.</p><p class="layer-empty">empty for this node</p></div>
+<div class="layer layer--locked"><div class="layer-bar"><code class="layer-key">default_rules</code><span class="layer-kind">locked</span></div><p class="layer-what">The domain rules this node type ships with, so it works before anyone configures it.</p><pre class="layer-body">- The answer must address the question that was asked.
+- Figures must come from the supplied data, never invented.
+- An answer that is empty, truncated or an error is a FAIL.
+- An answer that honestly declines — stating it cannot be produced, and why — is a PASS. It is a correct answer, not a failed one, and retrying it cannot make the missing capability appear.</pre></div>
+<div class="layer layer--yours"><div class="layer-bar"><code class="layer-key">rules</code><span class="layer-kind">yours</span></div><p class="layer-what">The one field on the card. This is the sentence you wrote.</p><pre class="layer-body">- The note must be exactly two sentences — count them.
+- The first sentence must name the defect; the second must name the fixed behaviour.
+- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.
+- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing.</pre></div>
+<div class="layer layer--wired is-empty"><div class="layer-bar"><code class="layer-key">skill</code><span class="layer-kind">wired</span></div><p class="layer-what">The body of a skill file wired to the node&rsquo;s <code>skill</code> port. A rules layer, above your text.</p><p class="layer-empty">empty for this node</p></div>
+<div class="layer layer--locked"><div class="layer-bar"><code class="layer-key">output_contract</code><span class="layer-kind">locked</span></div><p class="layer-what">The shape of the answer. Rendered <strong>last</strong>, so nothing above can countermand it.</p><pre class="layer-body">Reply with PASS or FAIL on the first line. If FAIL, add one short line saying exactly what to change. Nothing else.</pre></div><!--/bts:layers-grader1--></div>
+        <details class="reveal">
+          <summary>
+            What the model receives, flattened
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <pre><!--bts:rendered-grader1-->You are a grader. You judge whether a candidate answer is good enough to return to the user. You never rewrite it yourself.
+
+Rules:
+- The answer must address the question that was asked.
+- Figures must come from the supplied data, never invented.
+- An answer that is empty, truncated or an error is a FAIL.
+- An answer that honestly declines — stating it cannot be produced, and why — is a PASS. It is a correct answer, not a failed one, and retrying it cannot make the missing capability appear.
+- The note must be exactly two sentences — count them.
+- The first sentence must name the defect; the second must name the fixed behaviour.
+- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.
+- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing.
+
+Reply with PASS or FAIL on the first line. If FAIL, add one short line saying exactly what to change. Nothing else.<!--/bts:rendered-grader1--></pre>
+        </details>
+        <details class="reveal">
+          <summary>
+            <code>describe()</code> — the raw return value
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <pre class="tall"><!--bts:describe-grader1-->{
+  <span class="f">"preamble"</span>: <span class="s">"You are a grader. You judge whether a candidate answer is good enough to return to the user. You never rewrite it yourself."</span>,
+  <span class="f">"context"</span>: [],
+  <span class="f">"default_rules"</span>: <span class="s">"- The answer must address the question that was asked.\n- Figures must come from the supplied data, never invented.\n- An answer that is empty, truncated or an error is a FAIL.\n- An answer that honestly declines \u2014 stating it cannot be produced, and why \u2014 is a PASS. It is a correct answer, not a failed one, and retrying it cannot make the missing capability appear."</span>,
+  <span class="f">"rules"</span>: <span class="s">"- The note must be exactly two sentences \u2014 count them.\n- The first sentence must name the defect; the second must name the fixed behaviour.\n- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.\n- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing."</span>,
+  <span class="f">"skill"</span>: <span class="s">""</span>,
+  <span class="f">"replace_defaults"</span>: <span class="k">false</span>,
+  <span class="f">"effective_rules"</span>: <span class="s">"- The answer must address the question that was asked.\n- Figures must come from the supplied data, never invented.\n- An answer that is empty, truncated or an error is a FAIL.\n- An answer that honestly declines \u2014 stating it cannot be produced, and why \u2014 is a PASS. It is a correct answer, not a failed one, and retrying it cannot make the missing capability appear.\n- The note must be exactly two sentences \u2014 count them.\n- The first sentence must name the defect; the second must name the fixed behaviour.\n- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.\n- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing."</span>,
+  <span class="f">"output_contract"</span>: <span class="s">"Reply with PASS or FAIL on the first line. If FAIL, add one short line saying exactly what to change. Nothing else."</span>,
+  <span class="f">"editable"</span>: [
+    <span class="s">"rules"</span>,
+    <span class="s">"replace_defaults"</span>
+  ]
+}<!--/bts:describe-grader1--></pre>
+        </details>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:2rem">
+      <p>
+        The grader's document said <code>"rulesMode": "extend"</code>, so its four criteria
+        are added to the four the node ships with rather than replacing them — which is why
+        the flattened prompt above still contains "an answer that honestly declines is a
+        PASS", a rule nobody on this workflow wrote. <code>replace</code> is available and
+        deliberately so: prebuilt behaviour you cannot override is a straitjacket. What
+        <code>replace</code> cannot reach is the preamble and the contract, because those
+        are machinery, not rules.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+      <div>
+        <p><b>The last key is the whole design in one line.</b>
+        <code>"editable": ["rules", "replace_defaults"]</code> — of everything a prompt is
+        made of, two things are yours. The rest is surfaced read-only rather than hidden,
+        because a developer writing rules needs to see what the machinery already says, or
+        they will duplicate it or contradict it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 5. the python ─────────────────────────────────────────────── -->
+<section id="python">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Artifact five</p>
+      <h2><span class="n">5</span>The Python that runs it</h2>
+      <p>
+        The output of all of the above is a standard Python object. It runs anywhere Python
+        runs — a script, a pytest run, a FastAPI service, a cron job. The editor is not in
+        the room.
+      </p>
+    </div>
+
+    <div class="codeblock" style="max-width:52rem">
+      <div class="pane-bar"><span>run_it.py</span></div>
+      <pre><span class="c"># pip install openstategraph</span>
+<span class="k">from</span> openstategraph <span class="k">import</span> load_workflow
+
+workflow = load_workflow(<span class="s">"backend/openstategraph/examples/evaluator-optimizer"</span>)
+
+<span class="k">if</span> workflow.warnings:                <span class="c"># capabilities it could not resolve</span>
+    print(<span class="s">"degraded:"</span>, workflow.warnings)
+
+answer = workflow.ask(<span class="s">"Write the note for the autosave fix."</span>)
+
+print(answer)                        <span class="c"># the RunResult IS the answer string</span>
+print(answer.decisions)              <span class="c"># {'grader1': 'pass'} — which way it routed</span>
+print(answer.attempts)               <span class="c"># how many laps of the revision loop</span></pre>
+    </div>
+
+    <div class="prose" style="margin-top:1.5rem">
+      <p>
+        Three lines to an answer, and the fourth is the one that matters when the answer is
+        wrong: <code>.decisions</code> tells you which branch the grader took, so a bad
+        result is a routing question rather than a mystery.
+      </p>
+      <p>
+        <code>workflow.graph</code> is the escape hatch — a genuine compiled LangGraph
+        object with nothing of ours wrapped around it. Everything LangGraph can do, you can
+        do:
+      </p>
+    </div>
+
+    <div class="codeblock" style="max-width:52rem">
+      <div class="pane-bar"><span>the escape hatch</span></div>
+      <pre><span class="k">for</span> chunk <span class="k">in</span> workflow.graph.stream(state, config):   <span class="c"># stream it</span>
+    ...
+workflow.graph.get_state(config)                     <span class="c"># time-travel it</span>
+workflow.graph.get_graph().draw_mermaid()            <span class="c"># draw it, no network call</span></pre>
+    </div>
+
+    <ul class="clean" style="margin-top:1.5rem">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><b>We compile, we do not interpret.</b> There is no execution engine of ours
+        between you and the graph, which is why checkpointing, <code>interrupt()</code>,
+        <code>Send</code> fan-out and streaming are LangGraph's rather than
+        reimplementations.</span></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><b>The compiler is not portable; the output is.</b> The document is
+        vendor-neutral JSON and the graph is a standard object. Neither needs this editor to
+        exist tomorrow.</span></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><b>Same object, three doors.</b> The CLI, the HTTP API and this call all go
+        through the one <code>load_workflow</code> path, so what you test is what runs.</span></li>
+    </ul>
+
+    <div class="callout callout-warn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <div>
+        <p><b>This is how you run the graph, not how you get a standalone file.</b> There is
+        no <code>eject</code> command today — importing a workflow imports
+        <code>openstategraph</code>, and a page that implied otherwise would be selling
+        something that does not exist. If the emitter is ever built, it becomes a sixth
+        artifact on this page rather than a rewrite of it.</p>
+      </div>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="gallery.html">See all the examples</a>
+      <a class="btn btn-outline" href="index.html#quickstart">Install it</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── how this page is built ────────────────────────────────────── -->
+<section id="how-built">
+  <div class="wrap narrow">
+    <div class="head">
+      <p class="eyebrow">Colophon</p>
+      <h2>How this page is built</h2>
+      <p>
+        A walk-through of what a compiler does, typed out by hand, is a walk-through of
+        what someone <em>remembers</em> the compiler doing. So none of it is typed.
+      </p>
+    </div>
+
+    <div class="compare">
+      <table>
+        <thead><tr><th>Block</th><th>Comes from</th></tr></thead>
+        <tbody>
+          <tr><td>The document</td><td>the committed <code>workflow.json</code>, printed verbatim</td></tr>
+          <tr><td>The plan</td><td><code>ValidateWorkflowTool</code> — the same seam the CLI and the MCP server use</td></tr>
+          <tr><td>The graph</td><td><code>compiled.get_graph().draw_mermaid()</code>, rendered locally to inline SVG</td></tr>
+          <tr><td>The prompt</td><td><code>SystemPrompt.describe()</code> and <code>.render()</code> on the objects the compiler builds</td></tr>
+          <tr><td>The Python</td><td>hand-written — it is an instruction, not an output. A test pins every name in it against the real API</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="muted" style="margin-top:1.25rem; font-size:.875rem">
+      <code>python3 scripts/build_behind_the_scenes.py</code> rewrites the generated regions
+      and leaves every word of prose alone. <code>--check</code> re-renders and fails if this
+      page has drifted from what the compiler produces today, which is what stops a true
+      sentence from outliving its truth.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div style="display:flex; flex-wrap:wrap; gap:2rem; justify-content:space-between">
+      <div>
+        <a class="brand" href="index.html" style="margin-bottom:.75rem">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="hsl(var(--primary))"/>
+            <g fill="hsl(var(--primary-foreground))">
+              <circle cx="9" cy="10" r="2.2"/><circle cx="9" cy="22" r="2.2"/><circle cx="23" cy="16" r="2.2"/>
+            </g>
+            <g fill="none" stroke="hsl(var(--primary-foreground))" stroke-width="1.8">
+              <path d="M11 10h3M11 22h3M18 16h4"/>
+            </g>
+          </svg>
+          OpenStateGraph
+        </a>
+        <p class="muted" style="max-width:26rem; font-size:.875rem">
+          One workflow, followed all the way down. Every generated block on this page came
+          out of the compiler on the machine that built it, and nothing on it was fetched
+          from anywhere.
+        </p>
+      </div>
+      <div style="display:flex; gap:2.5rem">
+        <ul style="list-style:none; padding:0; margin:0; display:grid; gap:.5rem">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="gallery.html">Gallery</a></li>
+          <li><a href="index.html#quickstart">Quickstart</a></li>
+        </ul>
+        <ul style="list-style:none; padding:0; margin:0; display:grid; gap:.5rem">
+          <li><a href="#document">The document</a></li>
+          <li><a href="#graph">The graph</a></li>
+          <li><a href="#prompt">The prompt</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>MIT licensed.</span>
+      <span>Compiles to LangGraph. Never sends your graph anywhere.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
