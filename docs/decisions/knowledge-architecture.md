@@ -297,14 +297,15 @@ runs the ladder and reports which rung found what.
 **Scope, against the gap rather than around it.** The two are not equally
 ready, and pretending otherwise is what would produce a half-built family:
 
-- **MCP is blocked, and not on anything in this document.** An MCP knowledge
-  adapter needs an MCP *client*, and `docs/decisions/agent-plugins.md` §7
-  records that we have none ("`grep mcpServers` in `backend/` → zero hits"),
-  with "we gain an MCP client" listed as one of the triggers to re-open that
-  decision. Building a client inside the knowledge feature would put the
-  product's first MCP integration in the place nobody would look for it. So
-  MCP waits on `agent-plugins.md` §7's own trigger, and the knowledge adapter
-  is a small piece of work *after* it, not a reason to start it.
+- **MCP was blocked, and not on anything in this document.** An MCP knowledge
+  adapter needs an MCP *client*, and this section recorded that we had none.
+  *Amended 2026-08-16:* we do — `tool.mcp` binds every tool an MCP server
+  offers onto an agent, over `prebuilt_mcp.py`'s `MultiServerMCPClient`. The
+  original worry was that building a client inside the knowledge feature would
+  put the product's first MCP integration where nobody would look for it; that
+  cannot happen now, because the first one already shipped somewhere visible.
+  What remains is ordinary work: an adapter that reads a server's `list_tools`
+  as a knowledge source.
 - **OpenAPI is unblocked but is not small.** Recognition from wiring means a
   spec path must be *declared on the canvas*, and no node type declares one
   today — so it is a new node type in the TypeScript catalogue (plus a

@@ -107,10 +107,13 @@ rather than a generic source one. The rung that is already generic is
 `BaseKnowledgeBuilder`; each source family gets its own sibling adapter ladder
 in its own vocabulary and is composed by its own builder concrete, meeting the
 others only at `BUILDERS`. Re-sized against the gaps rather than around them:
-**MCP is blocked** on there being no MCP client at all
-(`docs/decisions/agent-plugins.md` §7, whose own re-open trigger is "we gain
-an MCP client") and must not smuggle the product's first MCP integration in
-under the knowledge feature; **OpenAPI is unblocked but is not an adapter
+**MCP was blocked** on there being no MCP client at all
+(`docs/decisions/agent-plugins.md` §7, whose own re-open trigger was "we gain
+an MCP client"). *Amended 2026-08-16: that trigger has been pulled.* `tool.mcp`
+is a registered node type over a live `MultiServerMCPClient`
+(`prebuilt_mcp.py`), so the blocker is gone and the remaining reason not to
+rush is the original one — a knowledge adapter must not be the product's first
+MCP integration by the back door; **OpenAPI is unblocked but is not an adapter
 drop-in** — recognition-from-wiring needs a spec path *declared on the canvas*
 and no node type declares one, so it starts as a new TypeScript node type.
 Original entry: The trainer recognises SQL

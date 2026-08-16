@@ -16,8 +16,12 @@ Two facts made that unciteable in a review:
 2. **`src/core/runtime/RuntimeClient.ts` hand-mirrors the whole run and stream
    schema.** `RunRequest`, `RunResult`, `DeveloperChannel`, `RunInterrupted`,
    `RunCancelled`, `RunOutcome`, `RunStreamEvent`, `ResumeRequest`, `PastRun`,
-   `PastRunStep`, `PastRunHistory`, `PastRunQuery` are all hand-written
-   TypeScript over Pydantic models in `backend/openstategraph/api/schemas.py`.
+   `PastRunStep`, `PastRunHistory`, `PastRunQuery` — plus `ProviderStatus`,
+   `GuardrailRedaction` and `StreamOptions`, which this list did not name and
+   which arrived after it — are hand-written TypeScript over Pydantic models
+   in `backend/openstategraph/api/schemas.py`. The list has grown twice since
+   it was written, which is the argument for the pin rather than against it:
+   the file is the count, not this paragraph.
 
 A rule the tree openly breaks is worse than no rule: a reviewer who cites it
 is immediately shown the counter-example, and the next hand-mirror is waved
@@ -74,19 +78,37 @@ Proposed as `src/core/runtime/runtimeContract.test.ts` (Vitest, reads
   `DeveloperChannelResponse`, `ResumeRequest`, `ThreadSummary`, `ThreadStep`,
   `ThreadListResponse` and `ThreadHistoryResponse` has a counterpart in the
   corresponding `RuntimeClient.ts` interface, and vice versa. Missing on
-  either side fails, naming the field. (Those eight are exactly the schemas
-  `RuntimeClient.ts` mirrors; a ninth appearing in the document without a
-  mirror is not a failure, an unmirrored *field* on these eight is.)
+  either side fails, naming the field. (Those were the schemas
+  `RuntimeClient.ts` mirrored when this was written; one appearing in the
+  document without a mirror is not a failure, an unmirrored *field* on a
+  mirrored schema is.)
 - `required` in the schema matches non-optional in TypeScript.
 - Primitive kinds match (`string`/`number`/`boolean`/array/object).
 - The **SSE half is explicitly out of scope** and says so in the test's
   docstring, pointing at `docs/api.md` § the frame vocabulary and at
   `backend/tests/test_stream_frames.py` as its Python-side gate.
 
-That test is **not written yet** — this document is the decision, not the
-implementation. Until it lands, the boundary is review-only, and
-`CONTRIBUTING.md`'s non-negotiables table says so rather than implying a gate
-that does not exist.
+> **It is written, and it runs.** This paragraph said the test was *"not
+> written yet"* and the boundary *"review-only"* until 2026-08-16 — three
+> months of a decision record telling a reviewer to fall back on manual review
+> for a gate that exists. `src/core/runtime/contractDrift.test.ts` shipped
+> under reviews-2026-08-14 ticket 08, runs in `npm run verify`, and therefore
+> in CI's `frontend` job.
+>
+> Two details differ from the proposal above, and they are improvements rather
+> than shortfalls. The file is **`contractDrift.test.ts`**, not
+> `runtimeContract.test.ts` — nothing was ever created under the proposed
+> name. And the pin is on the **seam**, not on one file: it reads both
+> `RuntimeClient.ts` and `McpRegistryClient.ts`, because the latter was split
+> out of the former for the public-surface ceiling and a pin watching only the
+> old file would have gone quiet at exactly the moment the code moved.
+>
+> One thing named here does not exist: `backend/tests/test_stream_frames.py`,
+> cited as the SSE half's Python-side gate. There is no such file. The SSE
+> frames are exercised by `test_customer_token_stream.py` and
+> `test_stream_cancellation.py`, and the vocabulary itself by
+> `test_api_guide.py::TestTheStreamVocabularyIsDocumented` — so the half is
+> covered, and this document pointed at the wrong door.
 
 ## The amendment to `CLAUDE.md`
 

@@ -353,7 +353,16 @@ def _import_extension(plugin_dir: Path, root: Path, files: dict[str, str], notes
 
 
 def _import_mcp(mcp_path: Path, notes: list[str]) -> None:
-    """Report every server. We have no MCP client, and silence would be a lie."""
+    """Report every server. Nothing maps one onto a node, and silence would be a lie.
+
+    This docstring said "we have no MCP client" until 2026-08-16, and the note
+    below said it to the user. It stopped being true when `tool.mcp` shipped:
+    `prebuilt_mcp.py` wraps a real `MultiServerMCPClient` and binds every tool
+    a server offers onto an agent. What is genuinely missing is the *importer*
+    — nothing turns an `mcp.json` entry into a `tool.mcp` node — which is a
+    smaller gap and, unlike the old wording, one the reader can act on: the
+    node type they need already exists.
+    """
     if not mcp_path.is_file():
         return
     try:
@@ -366,8 +375,9 @@ def _import_mcp(mcp_path: Path, notes: list[str]) -> None:
     for server, entry in sorted(servers.items()):
         transport = entry.get("type") if isinstance(entry, dict) else "?"
         notes.append(
-            f"MCP server {server!r} ({transport}) not imported: this runtime has no MCP client. "
-            "Nothing was dropped silently — wire it as a tool by hand, or see "
+            f"MCP server {server!r} ({transport}) not imported: nothing maps an "
+            "mcp.json entry onto a node yet. Nothing was dropped silently — add a "
+            "'MCP server' (tool.mcp) card and name this server on it, or see "
             "docs/decisions/agent-plugins.md §7."
         )
 

@@ -225,5 +225,8 @@ Re-open when *identity* is needed rather than admission — the MCP
   to carry the `thread_id` between calls.
 - Ticket 02 lands generated port specs — the vocabulary tool should then be
   generated output rather than a read of a hand-maintained table.
-- We gain an MCP *client* (see `agent-plugins.md` §7). Being a server does not
-  give us one, and `mcp.json` import stays an unsupported, reported gap.
+- ~~We gain an MCP *client*~~ — **we have one** (`tool.mcp` over
+  `prebuilt_mcp.py`'s `MultiServerMCPClient`). Being a server did not give us
+  one; a node type did. `mcp.json` import is still an unsupported, reported
+  gap, but for a narrower reason: nothing maps an entry in one onto a
+  `tool.mcp` node.

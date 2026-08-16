@@ -99,7 +99,7 @@ downloads at load time, subprocess sandboxing.
 | `tools/*.py`, `functions/*.py` (in-process Python, discovered) | `mcp.json` servers (out-of-process) | **not the same thing**; a Python callable is not an MCP server |
 | `middlewares/<slot>.py` (slot table) | — (v1 non-goal: "hooks") | none |
 | `tests/`, `data/` | — | none (plain files) |
-| — | `mcp.json` | **we have no MCP client at all** (`grep mcpServers` in `backend/` → zero hits) |
+| — | `mcp.json` | **nothing reads one.** This said *"we have no MCP client at all"* until 2026-08-16, which stopped being true when `tool.mcp` shipped: `prebuilt_mcp.py` is a live `MultiServerMCPClient`. What is missing is the **wiring** — no importer turns an `mcp.json` entry into a `tool.mcp` node — so the gap is real and its name was wrong |
 
 Two genuine convergences worth naming: both are **directory-as-package,
 git-diffable, no archive format, no registry required**; and both put
@@ -156,7 +156,7 @@ labelled as non-portable, rather than being mangled into a portable slot.
 | `plugin.json` | validated; `name`/`description` seed the workflow envelope | unknown top-level fields reported and ignored, per §5.2 |
 | `skills/<x>/SKILL.md` | `skills/<x>.md` (frontmatter stripped, body kept) | frontmatter metadata (`allowed-tools`, `compatibility`, `license`) is **dropped** — our loader has nowhere to put it |
 | `skills/<x>/{scripts,references,assets}/…` | copied under `skills/<x>/` | **our `discover_skills` globs `skills/*.md` only, so these files are inert.** Reported, not hidden |
-| `mcp.json` | nothing | **we have no MCP client.** Every server is reported as unsupported; none is silently dropped |
+| `mcp.json` | nothing | Every server is reported as unsupported; none is silently dropped. Not for want of a client — `tool.mcp` binds MCP servers to agents today — but because no importer maps an `mcp.json` entry onto one |
 | `org.openstategraph/…` | restored in place | round-trips our own exports losslessly |
 | other `com.*` extension dirs | ignored | per §8.1, without validating |
 | absent `workflow.json` | a **skeleton** envelope (zero nodes/edges) | an imported plugin is a *package to open in the editor*, never a runnable graph |
@@ -185,7 +185,9 @@ against the endpoint and expensive to design now.
 - v1.1+ standardizes **agents, commands or rules** — the FUTURE_CONSIDERATIONS
   list. Agents standardizing would be the first time their box could hold
   something shaped like a workflow node.
-- We gain an MCP client. Then `mcp.json` becomes a real import target instead
-  of a reported gap, and export could publish our tools as MCP servers.
+- ~~We gain an MCP client.~~ **We have one** (`tool.mcp`, `prebuilt_mcp.py`).
+  The re-open trigger is therefore already pulled: what remains is mapping an
+  `mcp.json` entry onto a `tool.mcp` node so it becomes a real import target
+  instead of a reported gap, and export could publish our tools as MCP servers.
 - We publish plugins publicly — at which point `org.openstategraph` must be
   replaced by a namespace on a domain we actually control.
