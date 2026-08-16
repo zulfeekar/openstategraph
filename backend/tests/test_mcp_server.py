@@ -139,6 +139,33 @@ class TestNodeVocabulary:
 
         assert KNOWN_NODE_TYPES <= listed
 
+    def test_the_guide_enumerates_the_same_types_the_payload_carries(self) -> None:
+        """`docs/mcp.md` elides the payload and names every type in a comment.
+
+        That comment is load-bearing in a way an elision usually is not,
+        because the sentence closing it says so: *"a tool absent from this
+        payload is a tool no agent can be wired to."* A reader who trusts that
+        and does not find `tool.mcp` in the list concludes that MCP tools
+        cannot be bound to an agent — which is the opposite of true, and was
+        the state of the page until production-ready ticket 20's fifth sweep.
+
+        Three types were missing (`guard.policy`, `memory.segment`,
+        `tool.mcp`, `tool.youtube-transcript`) under a printed total of 28 for
+        a registry of 31. The total is gone — a cardinal is the half of this
+        that rots silently — and the names are pinned, which is the half that
+        matters.
+        """
+        guide = (
+            Path(__file__).resolve().parents[2] / "docs" / "mcp.md"
+        ).read_text()
+        listed = {n["type"] for n in NodeVocabulary().describe()["node_types"]}
+
+        missing = sorted(t for t in listed if t not in guide)
+        assert missing == [], (
+            "docs/mcp.md tells a composing client that a type absent from the "
+            f"vocabulary payload cannot be used, and never names these: {missing}"
+        )
+
 
 class TestStatelessCompile:
     """The centerpiece. Artifacts out, nothing written, no model involved."""
