@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from openstategraph.messages import content_text
+from openstategraph.messages import content_text, reasoning_text, usage_of
 
 import json
 import logging
@@ -505,6 +505,103 @@ async def stop_when_client_leaves_async(frames: Any, receive: Any) -> Any:
                 await closer()
 
 
+def _token_frame(common: dict[str, Any], block: str, text: str, usage: Any) -> str:
+    """One `token` frame, built in the one place a `token` frame is built.
+
+    A chunk can now produce **two** frames — a model's deliberation and its
+    answer arrive in one content list and are split apart (ticket 23) — so the
+    fifteen fields below are assembled here rather than twice at the call
+    site, which is where the two would drift.
+
+    `common` carries everything decided per chunk; `block`, `text` and `usage`
+    are what differ between the frames a single chunk yields.
+    """
+    message = common["message"]
+    withheld = bool(common["withheld"])
+    return _sse(
+        "token",
+        {
+            "node": common["node"],
+            "namespace": common["namespace"],
+            "content": text,
+            # WHICH KIND of text this is (ticket 23), so a reasoning model can
+            # be rendered as one: thinking shown as thinking, the answer as
+            # the answer. `text` | `reasoning`.
+            #
+            # Distinct from `kind` below, which answers *who produced it*. A
+            # tool result is `kind: "tool"`, `block: "text"`; collapsing the
+            # two would make a thinking tool inexpressible and would leave a
+            # client unable to tell a tool's output from its reasoning.
+            #
+            # `"text"` is the right default against a backend that predates
+            # the field: it is the overwhelming majority of frames and the
+            # only kind that was ever emitted.
+            "block": block,
+            # What this message cost, on the frame that SETTLES it — the
+            # docs' `message-finish`. `null` on every other frame, so a client
+            # reads one field unconditionally and "usage is present" is itself
+            # the signal that the message finished.
+            "usage": usage.as_frame() if usage else None,
+            # Present and true only when the text was the machinery rather
+            # than the reply. Absent on every frame a developer receives, so
+            # "did I get the whole stream" stays answerable.
+            **({"withheld": True} if withheld else {}),
+            # Ticket 02, and the whole point of it: `activeNode` means exactly
+            # what it means on an `update` frame — the canvas node to show as
+            # running — but a `token` frame is the only one that arrives while
+            # a node is STILL WORKING. `updates` fires on completion, so a
+            # highlight fed by update frames alone can only ever show who last
+            # finished. Measured on a real run: 135 consecutive token frames
+            # streamed out of the mounted analyst over ~20s while the last
+            # update frame still said `router1`.
+            #
+            # NOT coalesced here. The field is attached to every frame because
+            # its meaning must not vary by frame ("present = changed" would be
+            # a second, implicit field), and because an SSE consumer may join
+            # late or drop frames. Coalescing is the clients' job and is cheap
+            # there — both compare against the node they last highlighted and
+            # do nothing when it is unchanged, so a 135-token model turn is
+            # one state write.
+            "activeNode": common["activeNode"],
+            # Carried here too, and for the reason `activeNode` is: a `token`
+            # frame is the only one that arrives while a node is STILL
+            # WORKING, so a canvas fed by `update` frames alone can only ever
+            # light who last finished. A child canvas opened mid-run sees
+            # nothing at all without this — its steps are exactly the long
+            # ones.
+            "path": common["path"],
+            "pathSlugs": common["pathSlugs"],
+            # WHAT produced this text, so a client can stop treating a tool's
+            # result as the model's prose.
+            #
+            # LangGraph's `messages` mode carries every message a node emits,
+            # not only model tokens — a `ToolMessage` rides the same stream
+            # (documented, and observed: `list_all_tables` streamed its
+            # eleven-row Markdown table through here). Untagged, the client
+            # concatenated tool output and model reasoning into one blob and
+            # rendered the result as Markdown, which collapsed the table onto
+            # a single line — a tool result made unreadable precisely because
+            # it was long.
+            "kind": common["kind"],
+            # A tool result's identity for the client's fold. `name` alone
+            # cannot separate two consecutive calls to the same tool
+            # (`get_table_schema` on Invoice, then on InvoiceLine); the
+            # `tool_call_id` can.
+            #
+            # Withheld with the content, because ticket 25 names the tool NAME
+            # as its own leak: QA read `music_store` on the customer surface,
+            # and `chinook_execute_sql` says as much about the machinery as
+            # the table it returned.
+            "tool": {"name": "", "callId": ""}
+            if withheld
+            else {
+                "name": str(getattr(message, "name", "") or ""),
+                "callId": str(getattr(message, "tool_call_id", "") or ""),
+            },
+        },
+    )
+
+
 def _stream_parts(stream: Any) -> Any:
     """`(namespace, mode, payload)` for each chunk, whichever shape it arrives in.
 
@@ -790,7 +887,11 @@ def _run_frames(
     # unrelated streams together. See `ProseGuard`: the settled answer is
     # cleaned at the end, but `token` frames reach a client while the model is
     # still typing, and that is the half a `done`-frame fix cannot reach.
-    guards: dict[tuple[str, str], ProseGuard] = {}
+    #: Keyed by node, message kind **and content block** (ticket 23): a
+    #: model's reasoning and its answer are two independent sequences of
+    #: chunks arriving interleaved, so one guard across both would carry a
+    #: partial fence out of the thinking and splice it into the reply.
+    guards: dict[tuple[str, str, str], ProseGuard] = {}
     # The streaming half of the audience boundary that `ProseGuard` could not
     # reach (ticket 25). `ProseGuard` polices a marker *inside* model prose;
     # this decides whether the text is prose at all — a tool's raw payload, a
@@ -1052,8 +1153,21 @@ def _run_frames(
                 # `"messages"` is in `stream_mode`. Gating on `isinstance(str)`
                 # dropped them all: no live text, and the flow diagram never
                 # lit up. See `openstategraph.messages`.
-                content = content_text(getattr(message, "content", ""))
-                if content:
+                raw_content = getattr(message, "content", "")
+                content = content_text(raw_content)
+                # The half of the same content list `content_text` drops on
+                # purpose (ticket 23). A thinking model puts its deliberation
+                # and its answer in one chunk, so until now they were one
+                # frame kind and no client could tell them apart — while
+                # reasoning effort has been a per-node field all along.
+                thinking = reasoning_text(raw_content)
+                # `message-finish` in the docs' vocabulary. It arrives on the
+                # LAST chunk of a message, whose content is empty — which is
+                # exactly why no usage ever reached a client: the gate below
+                # used to read `if content:` and dropped the one frame
+                # carrying the numbers.
+                usage = usage_of(message)
+                if content or thinking or usage:
                     raw_name = metadata.get("langgraph_node", "")
                     token_node = node_ids_by_name.get(raw_name, raw_name)
                     kind = "tool" if _is_tool_message(message) else "ai"
@@ -1077,6 +1191,47 @@ def _run_frames(
                         audience is not Audience.DEVELOPER
                         and not answer_channel.carries(token_node, kind, namespace)
                     )
+                    # Cost is developer material, by the same rule that blanks
+                    # a tool's NAME on this frame — and gated on the audience
+                    # rather than on `withheld`, because an agent's own tokens
+                    # ARE carried to a customer while what they cost is not.
+                    shown_usage = usage if audience is Audience.DEVELOPER else None
+                    common = {
+                        "node": token_node,
+                        "namespace": list(namespace),
+                        "activeNode": active_node,
+                        "path": token_path,
+                        "pathSlugs": token_slugs,
+                        "kind": kind,
+                        "message": message,
+                        "withheld": withheld,
+                    }
+
+                    # Reasoning first, because that is the order it was
+                    # produced in: a model deliberates and then answers.
+                    #
+                    # **Dropped, not emptied, for a customer** — the opposite
+                    # of the withheld text frame below, and deliberately so.
+                    # That frame is kept because it is the only carrier of
+                    # `activeNode` while a node works; a reasoning frame is
+                    # always accompanied by that node's own text frames, which
+                    # carry it already. So a customer's stream is byte for
+                    # byte what it was before this ticket, and the rule
+                    # `content_text` states in its docstring — that blindly
+                    # concatenating would hand a customer the model's private
+                    # deliberation as if it were the answer — survives being
+                    # made visible to developers.
+                    if thinking and audience is Audience.DEVELOPER:
+                        # Its own guard instance: reasoning and answer are two
+                        # sequences of chunks, and a shared fence tail would
+                        # splice one into the other — the same reason the
+                        # guard was already keyed per node and per kind.
+                        guard = guards.setdefault((token_node, kind, "reasoning"), ProseGuard())
+                        shown = guard.feed(thinking)
+                        if shown:
+                            yield _token_frame(common, "reasoning", shown, None)
+
+                    text = content
                     if withheld:
                         # Emptied, **not dropped**, and the difference was
                         # measured rather than reasoned about. Dropping the
@@ -1096,94 +1251,21 @@ def _run_frames(
                         # the field concatenates `""` and is correct anyway,
                         # which is the property that makes this a boundary —
                         # the bytes do not reach the browser at all.
-                        content = ""
-                    else:
+                        text = ""
+                    elif text:
                         # A frame whose whole content was fence is dropped
                         # rather than sent empty: an empty `token` there says
                         # "the model produced nothing just then", a lie.
-                        guard = guards.setdefault((token_node, kind), ProseGuard())
-                        content = guard.feed(content)
-                        if not content:
-                            continue
-                    yield _sse(
-                        "token",
-                        {
-                            "node": token_node,
-                            "namespace": list(namespace),
-                            "content": content,
-                            # Present and true only when the text was the
-                            # machinery rather than the reply. Absent on every
-                            # frame a developer receives, so "did I get the
-                            # whole stream" stays answerable.
-                            **({"withheld": True} if withheld else {}),
-                            # Ticket 02, and the whole point of it: `activeNode`
-                            # means exactly what it means on an `update` frame —
-                            # the canvas node to show as running — but a `token`
-                            # frame is the only one that arrives while a node is
-                            # STILL WORKING. `updates` fires on completion, so a
-                            # highlight fed by update frames alone can only ever
-                            # show who last finished. Measured on a real run: 135
-                            # consecutive token frames streamed out of the mounted
-                            # analyst over ~20s while the last update frame still
-                            # said `router1`.
-                            #
-                            # Same resolver instance as the update branch, so the
-                            # stickiness is shared and one honest sequence comes
-                            # off the wire rather than two that can disagree.
-                            #
-                            # NOT coalesced here. The field is attached to every
-                            # frame because its meaning must not vary by frame
-                            # ("present = changed" would be a second, implicit
-                            # field), and because an SSE consumer may join late or
-                            # drop frames. Coalescing is the clients' job and is
-                            # cheap there — both compare against the node they
-                            # last highlighted and do nothing when it is unchanged,
-                            # so a 135-token model turn is one state write.
-                            "activeNode": active_node,
-                            # Carried here too, and for the reason `activeNode`
-                            # is: a `token` frame is the only one that arrives
-                            # while a node is STILL WORKING, so a canvas fed by
-                            # `update` frames alone can only ever light who
-                            # last finished. A child canvas opened mid-run sees
-                            # nothing at all without this — its steps are
-                            # exactly the long ones.
-                            "path": token_path,
-                            "pathSlugs": token_slugs,
-                            # WHAT produced this text, so a client can stop
-                            # treating a tool's result as the model's prose.
-                            #
-                            # LangGraph's `messages` mode carries every message
-                            # a node emits, not only model tokens — a
-                            # `ToolMessage` rides the same stream (documented,
-                            # and observed: `list_all_tables` streamed its
-                            # eleven-row Markdown table through here). Untagged,
-                            # the client concatenated tool output and model
-                            # reasoning into one blob and rendered the result as
-                            # Markdown, which collapsed the table onto a single
-                            # line — a tool result made unreadable precisely
-                            # because it was long.
-                            #
-                            # Additive: a client that ignores these two fields
-                            # behaves exactly as before.
-                            "kind": kind,
-                            # A tool result's identity for the client's fold.
-                            # `name` alone cannot separate two consecutive calls
-                            # to the same tool (`get_table_schema` on Invoice,
-                            # then on InvoiceLine); `tool_call_id` can.
-                            #
-                            # Withheld with the content, because the ticket
-                            # names the tool NAME as its own leak: QA read
-                            # `music_store` on the customer surface, and
-                            # `chinook_execute_sql` says as much about the
-                            # machinery as the table it returned.
-                            "tool": {"name": "", "callId": ""}
-                            if withheld
-                            else {
-                                "name": str(getattr(message, "name", "") or ""),
-                                "callId": str(getattr(message, "tool_call_id", "") or ""),
-                            },
-                        },
-                    )
+                        guard = guards.setdefault((token_node, kind, "text"), ProseGuard())
+                        text = guard.feed(text)
+
+                    # Three reasons to send a text frame, and no others:
+                    # it has something to say; it settles the message and
+                    # carries what that cost; or it states its own withheld
+                    # emptiness. A chunk that is none of the three is the lie
+                    # above and stays dropped.
+                    if text or shown_usage or (withheld and content):
+                        yield _token_frame(common, "text", text, shown_usage)
     finally:
         # Explicit, not left to refcounting. CPython happens to close the
         # inner generator when this frame is destroyed, but "happens to" is

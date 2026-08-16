@@ -37,9 +37,33 @@ read a message", it is one piece of knowledge, and it was duplicated into five
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-__all__ = ["content_text"]
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "REASONING_BLOCK_TYPES",
+    "TokenUsage",
+    "content_text",
+    "reasoning_text",
+    "usage_of",
+]
+
+#: The block types that are a model *thinking*, in every spelling that reaches
+#: us.
+#:
+#: Two, not one, and this is a version fact rather than defensive breadth.
+#: langchain-core 1.5.3 publishes `ReasoningContentBlock` as `type:
+#: "reasoning"`, and its Anthropic and Google translators map those providers'
+#: raw `"thinking"` blocks onto it — but the *raw* blocks are what arrive on
+#: `stream_mode="messages"`, because `pregel/_messages.py` keeps direct
+#: `graph.stream` callers on the v1 `AIMessageChunk` shape. The library itself
+#: treats the pair as one thing where it counts: `messages/utils.py` tests
+#: `block.get("type") in {"thinking", "reasoning"}`.
+REASONING_BLOCK_TYPES: frozenset[str] = frozenset({"reasoning", "thinking"})
 
 
 def content_text(content: Any) -> str:
@@ -63,3 +87,95 @@ def content_text(content: Any) -> str:
             if isinstance(block, dict) and block.get("type") == "text"
         )
     return ""
+
+
+def reasoning_text(content: Any) -> str:
+    """The model's *deliberation*, which `content_text` deliberately drops.
+
+    The other half of the same piece of knowledge, so it lives beside it: a
+    thinking model puts both in one content list, and until now the second
+    half was read by nobody. Reasoning effort is already a per-node field, so
+    a developer could ask for reasoning and then had no way to see any of it
+    (ticket 23).
+
+    **A plain string is never reasoning.** A provider that sends a bare string
+    is sending the answer; there is no shape in which deliberation arrives
+    unlabelled, and guessing would be the exact failure `content_text`'s
+    docstring catalogues five times over.
+
+    The text lives under a key named after the block type — `reasoning` for
+    the standard block, `thinking` for the raw provider spelling — so both are
+    read rather than one being silently empty. See `REASONING_BLOCK_TYPES`.
+    """
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if kind not in REASONING_BLOCK_TYPES:
+            continue
+        parts.append(str(block.get("reasoning") or block.get("thinking") or ""))
+    return "".join(parts)
+
+
+class TokenUsage(BaseModel):
+    """What one model message cost, as the provider reported it.
+
+    Modelled rather than passed through as a raw dict for the reason
+    `openstategraph.progress` is: this is **provider metadata**, so its shape
+    is not ours and the seam that publishes it is a contract. LangChain's own
+    `UsageMetadata` carries optional per-modality breakdowns beside these
+    three; only the three cross the wire, because the breakdown differs by
+    provider and a field that is sometimes there is a field a client cannot
+    rely on.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+    def as_frame(self) -> dict[str, int]:
+        """The published spelling — camelCase, like every other frame field."""
+        return {
+            "inputTokens": self.input_tokens,
+            "outputTokens": self.output_tokens,
+            "totalTokens": self.total_tokens,
+        }
+
+
+def usage_of(message: Any) -> TokenUsage | None:
+    """This message's token usage, or `None` when it reported none.
+
+    Usage rides the **last** chunk of a streamed message — the docs' own
+    `message-finish` — and that chunk's content is empty, which is precisely
+    why none of it ever reached a client: the fold gated on `if content:` and
+    dropped the one frame carrying the numbers.
+
+    Total by construction: provider metadata is third-party data, and a
+    malformed payload must cost its own field rather than the run. `None`
+    where the numbers are absent or unreadable, never a zeroed record — "this
+    message cost nothing" and "nobody said" are different claims.
+    """
+    raw = getattr(message, "usage_metadata", None)
+    if not isinstance(raw, dict):
+        return None
+    try:
+        counted = TokenUsage(
+            input_tokens=int(raw.get("input_tokens") or 0),
+            output_tokens=int(raw.get("output_tokens") or 0),
+            # Derived when the provider omits it rather than published as 0:
+            # a total that contradicts the two numbers beside it is worse than
+            # no total, and this is the one field trivially recoverable.
+            total_tokens=int(
+                raw.get("total_tokens")
+                or (int(raw.get("input_tokens") or 0) + int(raw.get("output_tokens") or 0))
+            ),
+        )
+    except (TypeError, ValueError):
+        logger.debug("a provider reported usage this version cannot read")
+        return None
+    if not (counted.input_tokens or counted.output_tokens or counted.total_tokens):
+        return None
+    return counted

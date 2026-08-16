@@ -26,6 +26,20 @@
   testable with plain pytest. Public: `openstategraph.abc.report_progress` and
   `openstategraph.abc.Progress`.
 
+- **`block` and `usage` on every `token` frame.** A reasoning model streams its
+  deliberation and its reply in one content list, so both used to arrive as the
+  same frame and a client had to choose between rendering a model's private
+  thinking as its answer and losing the thinking entirely — while reasoning
+  effort has been a per-node field all along. `block` is `text` or `reasoning`,
+  and one chunk can now produce two frames, reasoning first. Reasoning reaches
+  a **developer** run only; a customer's token stream is byte for byte what it
+  was. `usage` (`inputTokens`, `outputTokens`, `totalTokens`) rides the frame
+  that settles a message and is `null` on every other, so a non-null `usage` is
+  also the stream's only end-of-message signal — those frames carry no text,
+  which is why no usage had ever reached a client before. Developer-only, like
+  a tool's name. Both fields are additive: a client that ignores them is
+  unaffected.
+
 ### Changed
 - The run stream now asks LangGraph for `version="v2"`, whose chunk shape does
   not vary with the stream modes requested, and tags the router's and grader's

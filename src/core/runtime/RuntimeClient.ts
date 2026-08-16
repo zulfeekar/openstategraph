@@ -269,6 +269,20 @@ export interface ResumeRequest {
 }
 
 /**
+ * What one model message cost, as its provider reported it.
+ *
+ * The three standard counts and no more. LangChain's own `UsageMetadata`
+ * carries optional per-modality breakdowns (audio, cache reads, reasoning
+ * tokens) beside them, and those differ by provider — a field that is
+ * sometimes there is a field a consumer cannot rely on, so none crosses.
+ */
+export interface TokenUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
+/**
  * One frame of `/api/runs/stream`'s Server-Sent-Events feed.
  *
  * `node`/`namespace`/`taskId` mirror the backend's own finding (verified
@@ -339,6 +353,39 @@ export type RunStreamEvent =
       readonly node: string;
       readonly namespace: readonly string[];
       readonly content: string;
+      /**
+       * Which *kind* of text this is (ticket 23).
+       *
+       * A reasoning model streams its deliberation and its reply in the same
+       * content list. Arriving as one frame kind, a consumer had two bad
+       * choices — concatenate and render the model's private thinking as its
+       * answer, or drop the thinking entirely — while reasoning effort has
+       * been a per-node field all along.
+       *
+       * One chunk can produce **two** frames, reasoning first, because that is
+       * the order it was produced in.
+       *
+       * Not the same question as `kind`, which says *who* produced the text. A
+       * tool result is `kind: 'tool'` with `block: 'text'`.
+       *
+       * `'text'` against a backend that predates the field: it is the
+       * overwhelming majority of frames and the only kind ever emitted before.
+       */
+      readonly block: 'text' | 'reasoning';
+      /**
+       * What this message cost, on the frame that **settles** it — `null` on
+       * every other frame.
+       *
+       * So a non-null `usage` is also the only end-of-message signal this
+       * stream has. The settling frame's `content` is usually empty, which is
+       * exactly why none of this reached a consumer before: a frame with no
+       * text used to be dropped on the floor.
+       *
+       * `null` on a customer run whatever the model reported — cost is
+       * developer material, like a tool's name. There is no run total; sum
+       * these if you want one.
+       */
+      readonly usage: TokenUsage | null;
       /**
        * The canvas node the run is inside for this frame — the same field, with
        * the same meaning, as on an `update` frame (ticket 02).
@@ -791,11 +838,18 @@ export class RuntimeClient implements IRuntimeClient {
         });
       } else if (eventName === 'token') {
         const tool = asRecord(payload['tool']);
+        const usage = payload['usage'];
         onEvent({
           type: 'token',
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
           content: asString(payload['content']),
+          // `'text'` unless the backend said otherwise — the safe default,
+          // and what every frame was before the field existed.
+          block: payload['block'] === 'reasoning' ? 'reasoning' : 'text',
+          // Present only on the frame that settles a message, so `null` here
+          // is the common case rather than a failure to parse.
+          usage: usage && typeof usage === 'object' ? asTokenUsage(usage) : null,
           activeNode: asString(payload['activeNode']),
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
@@ -1010,6 +1064,17 @@ export class RuntimeClient implements IRuntimeClient {
 
 function asRecordOfUnknown(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+/** A `token` frame's `usage` object, with a missing count read as zero. */
+function asTokenUsage(value: unknown): TokenUsage {
+  const row = asRecordOfUnknown(value);
+  const count = (key: string): number => (typeof row[key] === 'number' ? row[key] : 0);
+  return {
+    inputTokens: count('inputTokens'),
+    outputTokens: count('outputTokens'),
+    totalTokens: count('totalTokens'),
+  };
 }
 
 function asPastRun(row: Record<string, unknown>): PastRun {

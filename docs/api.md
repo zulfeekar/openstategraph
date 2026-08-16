@@ -95,7 +95,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | Event | Meaning | Payload |
 | --- | --- | --- |
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output` |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
@@ -283,6 +283,49 @@ frame is **emptied, not dropped**, deliberately — it is the only frame that
 arrives while a node is still working, so it is what keeps a live diagram
 honest about where the run is. A developer run gets the text and no `withheld`
 key at all.
+
+#### `block` and `usage` — thinking is not the answer, and a turn has a cost
+
+A reasoning model streams its deliberation and its reply in the same content
+list. Until now both arrived as the same frame, so a client had two bad
+choices: concatenate them and show a model's private thinking as if it were
+the answer, or drop the thinking and lose it — while **reasoning effort has
+been a per-node field all along**, i.e. you could ask for reasoning and then
+never see any of it.
+
+`block` says which one a frame carries:
+
+| `block` | What |
+| --- | --- |
+| `text` | the reply — the overwhelming majority, and the only kind ever emitted before this field existed |
+| `reasoning` | the model thinking out loud |
+
+One chunk can produce **two frames**, reasoning first, because that is the
+order it was produced in. `block` is not `kind`: `kind` says *who* produced
+the text (`ai` or `tool`), `block` says *what kind of text it is*, so a tool
+result is `kind: "tool"` with `block: "text"`.
+
+**Reasoning frames reach a developer run only.** A customer never sees them at
+all — not emptied, absent — so a customer's token stream is exactly what it
+always was. This is the same rule that keeps a branch name and a grader's
+verdict out of an answer: deliberation is what produced the reply, not the
+reply.
+
+`usage` carries what the message cost, on the frame that **settles** it:
+
+```
+event: token
+data: {"node":"agent-sql","content":"","block":"text",
+       "usage":{"inputTokens":350,"outputTokens":240,"totalTokens":590}, …}
+```
+
+It is `null` on every other frame, so read it unconditionally — and read
+"`usage` is not null" as *this message has finished*, which is the only
+end-of-message signal on this stream. Note that the settling frame's `content`
+is usually empty: that is why usage never reached a client before, since a
+frame with no text used to be dropped. `usage` is developer material like a
+tool's name, so a customer run always reads `null`. Sum across frames for a
+run total; nothing publishes one.
 
 #### `progress` — the frame a slow tool sends
 
