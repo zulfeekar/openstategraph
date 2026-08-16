@@ -116,35 +116,92 @@ Independent subtasks run at the same time and an aggregator joins the results.
 Two flavours: **sectioning** (different subtasks) and **voting** (the same
 subtask several times, for confidence).
 
-**Our vocabulary:** there is no `parallel` node, deliberately — the shape is
-three edges. Fan out from one source to several `agent.llm` nodes, and join
-them on `function.format_report`, whose `candidate` input is a bus
-(`maxConnections: null`).
+> **Read this before you draw it.** The shape every parallelization diagram in
+> the literature uses — one source fanning out to *N* drawn agent nodes, whose
+> results converge on one join node — **does not work here**, and it fails
+> silently. It validates, it runs, and it produces `# Title` followed by
+> `_No results._`. The mechanism is below, under *Why the intuitive shape
+> cannot work*. If you are here to build, skip to the shape that runs.
 
-The fan-out source can be an `input.text` or an upstream agent's `result`.
+**Our vocabulary:** there is no `parallel` node, and there is no drawn
+parallelism either. Fan-out is always `orchestrate.supervisor` →
+`orchestrate.worker` — the same three nodes as pattern 5 — and what makes this
+pattern *sectioning* rather than planning is that **you name the sections in
+the request**, as an enumerated list, instead of leaving them to the run.
 
-Voting has no aggregation policy today: `function.format_report` concatenates.
-If you need majority or best-of, that is a field on the join node, not a new
-node type — ask for it.
+The supervisor's split is deterministic on numbered lists, semicolons and
+literal "and" (`backend/openstategraph/abc/orchestrator.py::deterministic_split`),
+so a request written as *N* numbered items becomes exactly *N* subtasks, in
+order, with no model call in the split. Set `Max subtasks` to *N*. That is as
+close to fixed parallelism as this substrate has, and it is genuinely fixed:
+you decided the sections, not the model.
+
+**Each worker sees only its own item.** A leading summary above a numbered list
+is treated as context and dropped, not dispatched — so an item reading *"1.
+Correctness: what does this get wrong?"* arrives at a worker with no idea what
+*this* is, and the worker says so. **Write every item self-contained**, naming
+its subject in full. This is the single thing that decides whether the pattern
+returns three answers or three requests for clarification.
 
 ```mermaid
 graph LR
-  q([question]) --> a1(agent.llm · revenue by genre)
-  q --> a2(agent.llm · revenue by country)
-  q --> a3(agent.llm · top customers)
-  a1 --> j(function.format_report)
-  a2 --> j
-  a3 --> j
+  q([question · 1. … 2. … 3. …]) --> s(orchestrate.supervisor · max 3)
+  s -. Send .-> w(orchestrate.worker)
+  w --> j(function.format_report)
   j --> o([report])
 ```
+
+The `w` box is **one drawn node that runs three times**, once per subtask. That
+is the whole difference from the picture you expected: the parallelism is in
+the `Send` fan-out at run time, never in the number of boxes.
+
+Voting is the same shape with the same item repeated. Aggregation has no policy
+today: `function.format_report` concatenates, under `### task-1`, `### task-2`
+… headings taken from the subtask ids rather than from your wording. If you
+need majority, best-of, or your own section titles, that is a field on the join
+node, not a new node type — ask for it.
+
+### Why the intuitive shape cannot work
+
+`function.format_report` **ignores its incoming edges**. Its runtime reads two
+state keys and nothing else (`backend/openstategraph/compile/node_runtime.py`,
+`_format_report_function`): `worker_results`, keyed by subtask id, and
+`subtasks`. It reports the intersection, and renders `_No results._` when that
+intersection is empty.
+
+Only two node types ever write those keys — `orchestrate.supervisor` writes
+`subtasks`, `orchestrate.worker` writes `worker_results[task_id]` — and
+`task_id` has exactly one source: the `Send` payload the compiler constructs in
+`_fan_out_router`. A `Send` is emitted only for an edge whose **destination
+port type is `worker`**. An `agent.llm.result → candidate` edge is not that, so
+it compiles to a plain `add_edge`: it sequences the join after the agents and
+transfers no data at all. Meanwhile `agent.llm` writes `outputs[node_id]` and
+`answer`, never `worker_results`.
+
+So all fan-in here is `Send`-shaped. The three edges are decoration, and
+nothing reports the loss:
+
+- `openstategraph validate` says `VALID` — `candidate` is a bus
+  (`maxConnections: null`) and `required`, so three edges satisfy both the
+  capacity rule and the required-port check. The port advertises a fan-in the
+  runtime does not implement.
+- the **canvas preview disagrees with the compiler**. Its browser executor does
+  read `candidate` and will show you a joined document; its own source says it
+  "demonstrates the formatting, not the fan-out/join semantics that only the
+  compiled graph has". A shape can look right in preview and return
+  `_No results._` on the backend.
+
+Recorded as `.scratch/workflow-gallery/tickets/14-all-fan-in-is-send-shaped.md`
+and `.scratch/production-ready/tickets/30-a-documented-pattern-that-produces-nothing.md`.
 
 **Commonly used to:** cut latency on work that does not depend on itself;
 review one document against several independent criteria at once; run a
 generation and a safety check side by side.
 
-**Fixed vs dynamic:** **fixed.** You can name every subtask before the run
-starts — you drew one node per subtask. The moment you cannot, you want the
-next pattern.
+**Fixed vs dynamic:** **fixed sections, dynamic mechanism.** You can name every
+subtask before the run starts — but you name them in the *request*, never by
+drawing one node per subtask. The moment you cannot name them, you want the
+next pattern, which is the same three nodes with the enumeration removed.
 
 ---
 
@@ -186,8 +243,15 @@ sub-questions only emerge from the first pass; answer "give me a full report
 on X" where X determines the sections.
 
 **Fixed vs dynamic:** **dynamic.** The one question that separates this from
-parallelization: *can you name the subtasks before you run?* If yes, draw
-them (pattern 4). If no, plan them (this one).
+parallelization: *can you name the subtasks before you run?* If yes, enumerate
+them in the request and cap `Max subtasks` (pattern 4). If no, let the split
+find them (this one). Either way it is these three nodes — the two patterns
+differ in what you write, not in what you draw.
+
+Each wire out of `workers` is one **archetype**, so drawing three worker nodes
+here means three *kinds* of worker, not three subtasks; a single default worker
+catching every subtask is the common case and is what
+`examples/parallel-workers-join` ships.
 
 ---
 
