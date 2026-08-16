@@ -220,11 +220,20 @@ LangGraph `Send`, never to a `workflow.json` graph edge. A `Max subtasks`
 field bounds the split, because a 500-item numbered list must not become 500
 workers.
 
-The split itself is deterministic (numbered lists, semicolons, "and"), so the
-supervisor's one model call is the **dispatch** decision: which archetype each
-subtask goes to. That is what its `Dispatch rules` field and any wired skill
-shape — "anything needing SQL goes to the analyst" — and what `Rules mode`
-switches between. No rule there can change *how many* subtasks there are.
+**The split has two strategies, and your rules choose between them.** With no
+authored rules the supervisor uses the deterministic splitter — numbered lists,
+semicolons, "and" — which is free, reproducible and good at the punctuated
+lists it was written for. Write something in `Planning rules` (or wire a skill
+into `skill`) and, provided a model is configured, `orchestrator_for` builds a
+`PlanningOrchestrator` instead: one planning call that decides both **how many**
+subtasks there are, bounded by `Max subtasks`, and which archetype each goes to.
+
+So the field is `Planning rules` and it means what it says. (This page called
+it `Dispatch rules` and said "no rule there can change *how many* subtasks
+there are" until 2026-08-16; that was true of the deterministic path only, and
+the shipped `team` template's own rules string is exactly the case it got
+wrong.) `Rules mode` still switches between appending your prose to the
+node's own and replacing it, as everywhere else.
 
 ```mermaid
 graph LR

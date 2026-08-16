@@ -194,7 +194,7 @@ control.
 
 ## 4. Run the Chinook Assistant
 
-`chinook-assistant` is the one visible example, and it is deliberately small
+`chinook-assistant` is the checkout's worked example, and it is deliberately small
 enough to read in a glance. Left to right: a question, a **Router** with five
 intents, three destinations, one answer.
 
@@ -409,11 +409,13 @@ openstategraph examples copy evaluator-optimizer        # take one; the copy is 
 
 The templates ship inside the package, so they are there on a machine that
 never cloned this repository — and the editor's **New Workflow → Start from**
-picker offers the same three:
+picker offers the same set, in the same order, from the same
+`templates/index.json`. Cheapest first:
 
 | `--template` | What you get | When |
 | --- | --- | --- |
 | `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
+| `loop` | an agent drafts, a grader reviews, weak answers go back | you want the revision loop and nothing else — the smallest thing that shows a cycle |
 | `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
 | `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere with the `Workflow` card — "team" is a package shape, not a node type |
 
@@ -454,9 +456,13 @@ The three directions from here:
   [Building an atom](building-an-atom.md). A tool node is a TypeScript
   definition plus a Python `BaseTool`, and adding one touches no engine code.
 
-A workflow is a package under `workflows/<slug>/`: `workflow.json` and
-`AGENTS.md` are required; `tools/`, `functions/`, `middlewares/`, `skills/`,
-`knowledge/`, `evals/`, `tests/` and `data/` are discovered by convention. `openstategraph new <slug> [--template
+A workflow is a package under `workflows/<slug>/`: **`workflow.json` is the
+only required file** — a directory holding nothing else validates and runs.
+`AGENTS.md` is a strong convention rather than a requirement, and every
+scaffold and every shipped example writes one, because it is where a package
+records what it actually answered. `tools/`, `functions/`, `middlewares/`,
+`skills/`, `knowledge/`, `evals/`, `tests/` and `data/` are discovered by
+convention. `openstategraph new <slug> [--template
 NAME]` scaffolds one (as do `scripts/new_workflow.py` and
 `scripts/new_team.py`, which call the same code).
 

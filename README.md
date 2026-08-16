@@ -63,7 +63,7 @@ with no commercial packages.
 
 This repository is the editor **and** the framework, and you do not need the
 first to use the second. From 0.3.0 the backend is a proper distribution — one
-wheel, a four-package core, eight named extras, `py.typed`, and an
+wheel, a four-package core, named extras, `py.typed`, and an
 `openstategraph` console script:
 
 ```bash
@@ -215,10 +215,15 @@ at all and so was *always* reported configured.
 
 ### Example workflows
 
-The repository ships exactly **one** visible example, evaluated against
-**one** sample database — `workflows/chinook-assistant/data/Chinook_Sqlite.sqlite`,
-the standard Chinook music store. One database is the single source of truth:
-every figure the example produces can be checked against the same file.
+`chinook-assistant` is the checkout's worked example, evaluated against
+`workflows/chinook-assistant/data/Chinook_Sqlite.sqlite`, the standard Chinook
+music store. One database per package is the single source of truth: every
+figure the example produces can be checked against the same file. (The wheel's
+`sql-qa` example ships its own copy of the same database, for the same reason
+an example is copied whole rather than mounted where it lies.) The rest of
+`workflows/` in this checkout is the app spine — the concierge and the
+architect — plus whatever is being drafted; `openstategraph examples list` is
+the gallery.
 
 - **`chinook-assistant`** ("Chinook Assistant") — a router with five intents
   in front of three destinations. A **data question** goes to a SQL analyst;

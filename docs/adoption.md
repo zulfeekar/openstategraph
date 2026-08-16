@@ -180,13 +180,15 @@ That scaffolds `workflows/my-thing/`.
 
 ### Which template
 
-The three ship **inside the wheel**, so they are there on a machine that has
-never seen this repository, and the editor's **New Workflow → Start from**
-picker offers the same three from the same source.
+They ship **inside the wheel**, so they are there on a machine that has never
+seen this repository, and the editor's **New Workflow → Start from** picker
+offers the same set from the same source. `openstategraph new --list-templates`
+is the authoritative list; this table is the reading order.
 
 | Template | Start here when | Cost of one run |
 | --- | --- | --- |
 | `minimal` *(default)* | you are finding out whether any of this works, or you know exactly what you are building and want an empty-ish canvas | one model call |
+| `loop` | you want to see a revision loop and nothing else: an agent drafts, a grader reviews, weak answers go back | two, plus one per revision |
 | `routed-qa` | you have more than one kind of request to handle, or you want the answer checked before it is returned. Router → agent → grader → output, plus a cheap branch that skips the grader | up to three, plus one per revision |
 | `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow. The `Workflow` card runs it — "team" names a package *shape*, not a node type | several — a fan-out per subtask |
 
@@ -347,7 +349,7 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
 | `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings. **Exit 1** on blocking findings, so it is a CI gate |
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
-| `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
+| `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `loop`, `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
 | `openstategraph new --list-templates` | the templates and one line on what each is for |
 | `openstategraph examples list` | the worked examples in the wheel, in reading order: slug, the pattern it demonstrates, and its one-line purpose |
 | `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; an existing directory exits **1** and nothing is written. `--all` takes the whole gallery instead of one slug, all-or-nothing, printing the size before the first byte |
