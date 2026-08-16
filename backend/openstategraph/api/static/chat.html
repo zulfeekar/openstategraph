@@ -854,10 +854,28 @@ function renderPicker(list) {
   // unconditionally. On a fresh `pip install`, which ships no `workflows/`,
   // the picker's first and default entry answered "no compiled view: 404"
   // (reviews-2026-08-14 ticket 04 / canvas-feels-right ticket 04).
+  // A name is a label; the slug is the identity. Two published packages may
+  // legitimately share a name — and by default they do, because a new document
+  // is called "AI Workflow" and most people save before renaming — which put
+  // two identical <option>s in front of a customer, with the default one
+  // arbitrary and picking the wrong one undetectable
+  // (the-editor-makes-a-real-package 07). So the slug is appended **only where
+  // the name does not already tell them apart**: a customer picker should not
+  // wear folder names it does not need, and the "no longer available" row
+  // below already shows a bare slug for the same reason.
+  const duplicated = new Set(
+    list
+      .map((w) => (w.name || "").trim().toLowerCase())
+      .filter((name, index, all) => all.indexOf(name) !== index),
+  );
+  const optionLabel = (w) =>
+    duplicated.has((w.name || "").trim().toLowerCase())
+      ? `${esc(w.name)} — ${esc(w.slug)}`
+      : esc(w.name);
   const options = (state.hasAuto
     ? ['<option value="concierge">Auto — let OpenStateGraph route</option>']
     : []
-  ).concat(list.map((w) => `<option value="${esc(w.slug)}">${esc(w.name)}</option>`));
+  ).concat(list.map((w) => `<option value="${esc(w.slug)}">${optionLabel(w)}</option>`));
   if (options.length === 0) {
     options.push('<option value="">No workflows are published yet</option>');
   }

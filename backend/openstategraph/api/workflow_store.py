@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import re
-import secrets
 import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -58,15 +57,12 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 #: shorter directory would have been fine.
 _MAX_MINTED_SLUG = 60
 
-#: The disambiguator's alphabet: digits and lowercase letters with `0`, `1`,
-#: `l` and `o` removed, so a slug read aloud or copied out of a chat message
-#: cannot be mistyped into a different workflow.
-_SUFFIX_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz"
-_SUFFIX_LENGTH = 6
-#: How many disambiguated candidates to try before giving up. With 32**6 ≈ 1.07
-#: billion suffixes, reaching the end means something is wrong with the disk,
-#: not that the space is full — and an unbounded loop would hide that.
-_MINT_ATTEMPTS = 8
+#: How many disambiguated candidates to try before giving up. Ordinals now, so
+#: this is also the highest one ever minted: reaching `-200` means either a
+#: workspace with two hundred workflows of one name — which the duplicate-name
+#: warning in the editor exists to prevent — or something wrong with the disk.
+#: An unbounded loop would hide both.
+_MINT_ATTEMPTS = 199
 
 
 def slugify(name: str) -> str:
@@ -125,20 +121,33 @@ def _candidate_slugs(name: str) -> Iterator[str]:
     have, and `my-workflow-k7m3qp` is a worse URL than `my-workflow` for no
     gain. The suffix is the exception, not the rule.
 
-    The suffix is *random*, not a `-2`/`-3` counter, for two reasons. A counter
-    has to be derived from what already exists, so two clients creating the
-    same name at the same moment both compute `-2` and one of them still loses
-    — the very failure being fixed. And a counter states how many workflows of
-    that name a workspace holds, which is nobody's business in a URL. Six
-    characters rather than a full uuid4: `my-workflow-k7m3qp` is short enough
-    to read out and paste, where `my-workflow-3f2b9c1e-...` is a machine's
-    string in a human's address bar.
+    **The suffix is an ordinal — `my-workflow-2`, `my-workflow-3`.** It was six
+    random characters, and the argument recorded here for that was that a
+    counter "has to be derived from what already exists", so two clients
+    creating the same name at once would both compute `-2` and one would still
+    lose. That is true of a counter that *queries*, and this one does not: it
+    is a sequence of candidates, and `create` adjudicates each by
+    `mkdir(exist_ok=False)`. The loser of a race takes `-3` on the next turn,
+    and neither client can overwrite the other — which was the property being
+    protected.
+
+    The second argument, that an ordinal leaks how many workflows of a name a
+    workspace holds, was worth less than what the random token cost. The
+    drawer showed no slug at all, so two rows named "AI Workflow" were told
+    apart only by a link reading `…/?w=ai-workflow-tsi934` — six characters
+    nobody can read, remember or repeat over a call
+    (the-editor-makes-a-real-package 07). The slug is the identity; it should
+    look like one.
+
+    An ordinal counts *attempts*, not workflows: if `-2` is taken by a
+    directory this store never minted, the next candidate is `-3`. So the
+    number is never a claim about anything, which also disposes of the leak.
     """
     base = slugify(name)[:_MAX_MINTED_SLUG].strip("-") or "workflow"
     yield base
-    for _ in range(_MINT_ATTEMPTS):
-        suffix = "".join(secrets.choice(_SUFFIX_ALPHABET) for _ in range(_SUFFIX_LENGTH))
-        yield f"{base[: _MAX_MINTED_SLUG - _SUFFIX_LENGTH - 1].strip('-')}-{suffix}"
+    for ordinal in range(2, _MINT_ATTEMPTS + 2):
+        room = _MAX_MINTED_SLUG - len(str(ordinal)) - 1
+        yield f"{base[:room].strip('-')}-{ordinal}"
 
 
 def _broken(slug: str, reason: str) -> WorkflowSummary:

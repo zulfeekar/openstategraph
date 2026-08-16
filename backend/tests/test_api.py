@@ -766,7 +766,10 @@ class TestWorkflowPersistence:
 
         first_slug, second_slug = first.json()["slug"], second.json()["slug"]
         assert first_slug == "my-workflow"
-        assert second_slug != first_slug and second_slug.startswith("my-workflow-")
+        # Readable, over HTTP too: the slug is what the address bar, the folder
+        # and the `/chat` picker will all read afterwards, so it has to be a
+        # string a person can repeat (the-editor-makes-a-real-package 07).
+        assert second_slug == "my-workflow-2"
 
         assert client.get(f"/api/workflows/{first_slug}").json()["document"] == {
             "nodes": [{"id": "a"}]

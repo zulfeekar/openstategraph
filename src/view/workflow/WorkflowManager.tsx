@@ -43,6 +43,7 @@ import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './createNewWo
 import {
   deleteConfirmation,
   deletedMessage,
+  duplicateNameConfirmation,
   publishedMessage,
   unpublishedMessage,
 } from './consequences';
@@ -247,6 +248,23 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       return;
     }
     const open = getOpenSlug();
+    // A create, not an overwrite, is the one path that can mint a second
+    // package of a name that already has one — and it used to do so in
+    // silence, which is how a review ended with three "AI Workflow"s
+    // (the-editor-makes-a-real-package 07). The listing is already in hand,
+    // so this costs no request. Still allowed, just announced.
+    if (!open) {
+      const wanted = workbench.model.name.trim().toLocaleLowerCase();
+      const clashes = workflows
+        .filter((row) => row.name.trim().toLocaleLowerCase() === wanted)
+        .map((row) => row.slug);
+      if (
+        clashes.length > 0 &&
+        !confirm(duplicateNameConfirmation(workbench.model.name, clashes))
+      ) {
+        return;
+      }
+    }
     setBusy(true);
     const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;
     let slug = open;
@@ -304,7 +322,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // saving one used to record no baseline at all (ticket 21).
     const row = await client.summary(slug);
     recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
-  }, [client, workbench, onNotify, refreshList]);
+  }, [client, workbench, onNotify, refreshList, workflows]);
 
   const handleLoad = useCallback(
     async (slug: string) => {
@@ -525,7 +543,22 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                 <li key={wf.slug} className="workflow-manager__item">
                   <div className="workflow-manager__info">
                     <Icon glyph={FileJson} size="sm" />
-                    <span className="workflow-manager__name">{wf.name}</span>
+                    <span className="workflow-manager__ident">
+                      <span className="workflow-manager__name">{wf.name}</span>
+                      {/* The slug, on every row, because the name is a label
+                          and this is the identity. Two documents saved without
+                          renaming both read "AI Workflow" with the same badge
+                          and the same date, and nothing in the row — or in the
+                          DOM — told them apart, including the delete
+                          confirmation (the-editor-makes-a-real-package 07).
+                          Shown always rather than only on a collision: the
+                          Packages palette already prints it unconditionally
+                          for the same reason, and a slug that appears only
+                          sometimes is a row that changes shape under you. */}
+                      <code className="workflow-manager__slug" title={`workflows/${wf.slug}/`}>
+                        {wf.slug}
+                      </code>
+                    </span>
                     <span
                       className={
                         wf.published

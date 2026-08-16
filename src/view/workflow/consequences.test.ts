@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deleteConfirmation,
   deletedMessage,
+  duplicateNameConfirmation,
   publishedMessage,
   unpublishedMessage,
 } from './consequences';
@@ -15,6 +16,24 @@ import {
  * that does not name `/chat` leaves the rule the lifecycle exists for
  * invisible. Tested strings are strings somebody has to keep true.
  */
+
+describe('duplicateNameConfirmation', () => {
+  it('names the workflow, the slug already holding it, and what happens next', () => {
+    const text = duplicateNameConfirmation('AI Workflow', ['ai-workflow']);
+
+    expect(text).toContain('AI Workflow');
+    expect(text).toContain('ai-workflow');
+    // The offer the ticket asked for: rename, rather than a silent second one.
+    expect(text).toContain('rename');
+  });
+
+  it('counts them when a name already belongs to more than one', () => {
+    const text = duplicateNameConfirmation('AI Workflow', ['ai-workflow', 'ai-workflow-2']);
+
+    expect(text).toContain('2 packages');
+    expect(text).toContain('ai-workflow-2');
+  });
+});
 
 describe('deleteConfirmation', () => {
   it('names the workflow and the folder that goes with it', () => {

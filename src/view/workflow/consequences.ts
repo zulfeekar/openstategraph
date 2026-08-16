@@ -34,6 +34,36 @@ export function deleteConfirmation(name: string, published: boolean): string {
     : base;
 }
 
+/**
+ * The confirm shown when a save is about to mint a *second* package of a name
+ * that already belongs to one, or `null` when no name collides.
+ *
+ * The-editor-makes-a-real-package 07: the default document name is a constant
+ * (`AI Workflow`), most people save before renaming, and the second save
+ * succeeded in silence. By the end of that review there were three packages
+ * called "AI Workflow" and the only thing distinguishing them was a slug no
+ * surface printed.
+ *
+ * The collision is still *allowed* — two packages may legitimately share a
+ * name, and refusing would make the name an identity it is not. What changes
+ * is that it is announced, with the slug it is about to take, before it
+ * happens. Naming the slug is the substance: it is what the address bar, the
+ * folder and the `/chat` picker will read afterwards.
+ */
+export function duplicateNameConfirmation(name: string, existingSlugs: readonly string[]): string {
+  const trimmed = name.trim();
+  const others =
+    existingSlugs.length === 1
+      ? `“${existingSlugs[0]}”`
+      : `${existingSlugs.length} packages (${existingSlugs.join(', ')})`;
+  return (
+    `A workflow called “${trimmed}” already exists — ${others}.\n\n` +
+    `Saving makes a second one. It gets its own folder and its own slug, and ` +
+    `the two are told apart by the slug alone.\n\n` +
+    `Cancel to rename this document first, or continue to create it anyway.`
+  );
+}
+
 /** The toast after a delete — the same terms the confirm used. */
 export function deletedMessage(name: string): string {
   return `Deleted: ${name} — its folder is gone from workflows/.`;

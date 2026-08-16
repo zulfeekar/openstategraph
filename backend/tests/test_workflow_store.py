@@ -120,17 +120,38 @@ class TestCreateMintsAUniqueSlug:
         assert store.load(second) == {"nodes": [{"id": "bob"}]}
         assert sorted(p.name for p in tmp_path.iterdir()) == sorted([first, second])
 
-    def test_the_disambiguator_is_the_name_plus_a_short_suffix(
-        self, store: WorkflowStore
-    ) -> None:
+    def test_the_disambiguator_is_the_name_plus_an_ordinal(self, store: WorkflowStore) -> None:
+        """`my-workflow-2`, not `my-workflow-tsi934`.
+
+        The suffix used to be six random characters, and the argument for it —
+        that a `-2` counter races between two clients — does not survive
+        contact with `create`, which adjudicates every candidate by
+        `mkdir(exist_ok=False)` and simply moves to the next one. The loser of
+        a race gets `-3`; nobody gets an overwrite either way. What the random
+        token did cost was real: the drawer showed no slug, so a link to
+        `…/?w=ai-workflow-tsi934` was the only thing distinguishing two rows
+        named "AI Workflow" and it was unreadable
+        (the-editor-makes-a-real-package 07).
+        """
         store.create(name="My Workflow", document={}, saved_at="t")
         second = store.create(name="My Workflow", document={}, saved_at="t")
-        # Readable prefix preserved — the URL still says what it is.
-        assert second.startswith("my-workflow-")
-        assert len(second) == len("my-workflow-") + 6
+        third = store.create(name="My Workflow", document={}, saved_at="t")
+
+        assert second == "my-workflow-2"
+        assert third == "my-workflow-3"
         # Round-trips through the store's own slug validation, so it is a
         # legal directory name and a legal URL segment.
         assert second == slugify(second)
+
+    def test_an_ordinal_skips_a_slug_taken_by_something_else(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        """The ordinal counts attempts, not workflows — so a `-2` somebody
+        else already holds costs the next one nothing but a turn."""
+        store.create(name="My Workflow", document={}, saved_at="t")
+        (tmp_path / "my-workflow-2").mkdir()
+
+        assert store.create(name="My Workflow", document={}, saved_at="t") == "my-workflow-3"
 
     def test_a_hidden_package_still_counts_as_taken(
         self, store: WorkflowStore, tmp_path: Path

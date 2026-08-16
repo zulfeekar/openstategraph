@@ -47,10 +47,26 @@
   gap: var(--space-2);
 }
 
+/* Name over slug, because both have to fit a 320px panel beside a badge and a
+   date. Stacked rather than inline: the slug is the longer of the two and the
+   one that must not be truncated, since telling two same-named rows apart is
+   the whole reason it is here. */
+.workflow-manager__ident {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .workflow-manager__name {
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-13);
-  flex: 1;
+}
+
+.workflow-manager__slug {
+  font: var(--type-mono-sm);
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
 }
 
 .workflow-manager__date {
