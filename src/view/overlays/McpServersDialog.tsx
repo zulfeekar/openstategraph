@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plug, RotateCcw, Trash2, TriangleAlert } from 'lucide-react';
+import { Plug, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react';
 import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import type { FieldValue } from '@core/model/contracts/fields';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
@@ -13,6 +13,12 @@ import { MCP_FIELD, mcpServerFields } from '@nodes/tools/mcpServerFields';
 import { Dialog } from './Dialog';
 import { McpServerFieldSet } from './McpServerFieldSet';
 import { McpStatusMemory, mcpStatusTone } from './mcpServerStatus';
+import {
+  mcpDeleteConfirmation,
+  mcpDeletedMessage,
+  mcpRestoredMessage,
+  restoreDefaultsLabel,
+} from './mcpConsequences';
 import './overlays.css';
 
 /**
@@ -48,6 +54,10 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
   const [, setVerdictVersion] = useState(0);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Built-in defaults tombstoned in this project's config, by name. */
+  const [hidden, setHidden] = useState<readonly string[]>([]);
+  /** What just happened — a delete or a restore, in the confirm's own terms. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const record = useCallback(
     (name: string, verdict: McpValidation) => {
@@ -108,17 +118,51 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
     void check(draft.name.trim());
   };
 
-  const remove = async (name: string) => {
+  /** Which built-in defaults this project has hidden, so Restore can exist. */
+  const refreshHidden = useCallback(async () => {
+    const result = await client.mcp.hidden();
+    if (result.ok) setHidden(result.value);
+  }, [client]);
+
+  useEffect(() => void refreshHidden(), [refreshHidden]);
+
+  const remove = async (name: string, origin: string) => {
+    // **Asks first.** A red Delete on every row that removed it instantly —
+    // no confirmation, no toast, no undo — and on a `default` that read as
+    // destroying a server the product ships (mcp-connect ticket 06). The
+    // usage lookup happens here rather than on the list because it reads every
+    // saved package, and this is the one moment its answer changes a decision.
+    const usage = await client.mcp.usage(name);
+    if (!confirm(mcpDeleteConfirmation(name, origin, usage.ok ? usage.value : []))) return;
+
     const result = await client.mcp.remove(name);
     if (!result.ok) {
       setProblem(result.error);
       return;
     }
     setServers(result.value);
+    setNotice(mcpDeletedMessage(name, origin));
+    void refreshHidden();
     // Otherwise a re-registered server of the same name would inherit a badge
     // earned by a different URL.
     memory.forget(name);
     setVerdictVersion((version) => version + 1);
+  };
+
+  /** Lift every tombstone this project holds. */
+  const restoreDefaults = async () => {
+    const names = [...hidden];
+    for (const name of names) {
+      const result = await client.mcp.restore(name);
+      if (!result.ok) {
+        setProblem(result.error);
+        return;
+      }
+      setServers(result.value);
+      void check(name);
+    }
+    setNotice(names.map(mcpRestoredMessage).join(' '));
+    void refreshHidden();
   };
 
   return (
@@ -153,6 +197,31 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
       </p>
 
       {problem ? <p className="provider__hint">{problem}</p> : null}
+      {notice ? (
+        <p className="provider__hint" role="status">
+          {notice}
+        </p>
+      ) : null}
+
+      {/* The control the ticket asked for, and it only exists when it has
+          something to do. A hidden default was indistinguishable from one that
+          never existed, so a permanently-present "Restore defaults" would be
+          the same silence one step along: this names what is coming back. */}
+      {restoreDefaultsLabel(hidden) ? (
+        <p className="dialog__warning">
+          <Icon glyph={Undo2} size="sm" />
+          <span>
+            {hidden.length === 1
+              ? `“${hidden[0]}” is a default this project has hidden. `
+              : `${hidden.length} defaults are hidden in this project. `}
+            Deleting a default writes <code>enabled: false</code> in{' '}
+            <code>openstategraph.yaml</code> rather than destroying anything.{' '}
+            <Button size="sm" onClick={() => void restoreDefaults()}>
+              {restoreDefaultsLabel(hidden)}
+            </Button>
+          </span>
+        </p>
+      ) : null}
 
       {servers === null ? (
         <p className="provider__hint">Asking the runtime what is registered…</p>
@@ -208,7 +277,7 @@ export function McpServersDialog({ onClose }: { onClose: () => void }) {
               <Button
                 variant="danger"
                 icon={<Icon glyph={Trash2} size="sm" />}
-                onClick={() => void remove(server.name)}
+                onClick={() => void remove(server.name, server.origin)}
               >
                 Delete
               </Button>

@@ -19,7 +19,9 @@ from pathlib import Path
 import pytest
 
 from openstategraph.config_edit import (
+    hidden_default_mcp_servers,
     remove_mcp_server,
+    restore_mcp_server,
     upsert_mcp_server,
     writable_config_path,
 )
@@ -192,3 +194,52 @@ class TestDeleting:
     ) -> None:
         with pytest.raises(ConfigError):
             remove_mcp_server("Never registered")
+
+
+class TestBringingABuiltInBack:
+    """mcp-connect ticket 06 — the tombstone was recoverable and unreachable.
+
+    `enabled: false` is a good mechanism: committed, commented, and it says
+    what it means. But it was only ever reachable by hand-editing the file, so
+    from inside the product the built-in the install shipped with was
+    destroyed by one click with no confirmation and no way back.
+    """
+
+    def test_a_tombstoned_default_can_be_named(self, config: Path) -> None:
+        remove_mcp_server("LangChain docs")
+
+        assert hidden_default_mcp_servers() == ["LangChain docs"]
+
+    def test_nothing_is_hidden_on_a_project_that_never_deleted_one(self, config: Path) -> None:
+        assert hidden_default_mcp_servers() == []
+
+    def test_a_deleted_project_entry_is_not_a_hidden_default(self, config: Path) -> None:
+        """Only a built-in can be hidden. A project entry that is gone is gone,
+        and offering to "restore" it would promise a URL nobody kept."""
+        upsert_mcp_server(entry())
+        remove_mcp_server("Internal docs")
+
+        assert hidden_default_mcp_servers() == []
+
+    def test_restoring_puts_it_back_as_a_default(self, config: Path) -> None:
+        remove_mcp_server("LangChain docs")
+        restore_mcp_server("LangChain docs")
+
+        catalogue = mcp_server_catalogue(config_mcp_servers(load_config(config)))
+        assert "LangChain docs" in catalogue
+        # A *default* again, not a project entry wearing the same name — which
+        # is what re-adding it by hand produced, and why the badge lied.
+        assert catalogue["LangChain docs"].origin == "built-in"
+        assert "enabled: false" not in config.read_text(encoding="utf-8")
+
+    def test_restoring_leaves_the_other_entries_alone(self, config: Path) -> None:
+        upsert_mcp_server(entry())
+        remove_mcp_server("LangChain docs")
+        restore_mcp_server("LangChain docs")
+
+        catalogue = mcp_server_catalogue(config_mcp_servers(load_config(config)))
+        assert "Internal docs" in catalogue
+
+    def test_restoring_something_that_was_never_hidden_is_an_error(self, config: Path) -> None:
+        with pytest.raises(ConfigError):
+            restore_mcp_server("LangChain docs")

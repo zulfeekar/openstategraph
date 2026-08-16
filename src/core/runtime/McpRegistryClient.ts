@@ -209,6 +209,54 @@ export class McpRegistryClient {
   }
 
   /**
+   * Built-in defaults this project has hidden.
+   *
+   * The other half of `remove` on a `default` row, and the reason it needed
+   * one: every other route filters `enabled` out before answering, so the
+   * editor could not tell a default that had never existed from one somebody
+   * deleted last week (mcp-connect ticket 06).
+   */
+  async hidden(): Promise<Result<readonly string[], string>> {
+    return this.names(`${this.baseUrl}/api/mcp/servers/hidden`, 'names');
+  }
+
+  /** Lift a tombstone, putting a built-in back as a built-in. */
+  async restore(name: string): Promise<Result<readonly McpServer[], string>> {
+    return this.list(`${this.baseUrl}/api/mcp/servers/${encodeURIComponent(name)}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Saved packages whose `tool.mcp` cards name this server.
+   *
+   * Asked only when somebody is about to press Delete: a card names a server
+   * and the project defines it, so deleting one can break a document that is
+   * not open, and nothing said so.
+   */
+  async usage(name: string): Promise<Result<readonly string[], string>> {
+    return this.names(`${this.baseUrl}/api/mcp/servers/${encodeURIComponent(name)}/usage`, 'slugs');
+  }
+
+  /**
+   * The list inside a named envelope, for the two routes that answer with one.
+   *
+   * An envelope rather than a bare array because `test_openapi_contract`
+   * refuses an anonymous response shape, and it is right to: a `list[str]`
+   * publishes no clue what the strings are.
+   */
+  private async names(url: string, key: string): Promise<Result<readonly string[], string>> {
+    try {
+      const response = await this.fetchImpl(url);
+      if (!response.ok) return Err(await describeFailure(response));
+      const rows = asRecordOfUnknown(await response.json())[key];
+      return Ok((Array.isArray(rows) ? rows : []).map((row) => String(row)));
+    } catch {
+      return Err(this.unreachable());
+    }
+  }
+
+  /**
    * Shake hands with one server and report what it offers.
    *
    * **Never a refusal.** Every network outcome comes back as a verdict with a

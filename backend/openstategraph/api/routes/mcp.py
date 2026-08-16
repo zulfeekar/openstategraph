@@ -28,7 +28,9 @@ from fastapi import APIRouter, HTTPException
 
 from openstategraph.api.schemas import (
     McpAuthPayload,
+    McpHiddenServersResponse,
     McpServerResponse,
+    McpServerUsageResponse,
     McpServerWriteRequest,
     McpValidateRequest,
     McpValidateResponse,
@@ -112,6 +114,88 @@ def save_mcp_server(request: McpServerWriteRequest) -> list[McpServerResponse]:
             status_code=400, detail=f"Could not write the project's config file: {exc}"
         ) from exc
     return _registered()
+
+
+@router.get(
+    "/api/mcp/servers/hidden",
+    response_model=McpHiddenServersResponse,
+    summary="Built-in defaults this project has hidden",
+    tags=["Operations"],
+)
+def hidden_mcp_servers() -> McpHiddenServersResponse:
+    """The names `enabled: false` is standing on, so the editor can offer them.
+
+    mcp-connect ticket 06. Deleting a `default` row writes a tombstone rather
+    than destroying anything — a committed, commented, self-explaining record —
+    and the user was simply never told it exists. Every other route filters
+    `enabled` out before anything leaves the backend, correctly, because their
+    question is *what can a workflow bind*. This route asks the other one.
+
+    Declared **before** `/api/mcp/servers/{name}`'s writers so `hidden` is read
+    as a literal segment; it is a GET and they are not, so the two could not
+    collide anyway, but the order says the intent.
+    """
+    from openstategraph.config_edit import hidden_default_mcp_servers
+    from openstategraph.config_file import ConfigError
+
+    try:
+        return McpHiddenServersResponse(names=hidden_default_mcp_servers())
+    except ConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/api/mcp/servers/{name}/restore",
+    response_model=list[McpServerResponse],
+    summary="Bring a hidden built-in default back",
+    tags=["Operations"],
+)
+def restore_mcp_default(name: str) -> list[McpServerResponse]:
+    """Lift a tombstone. The other half of Delete on a `default` row.
+
+    Not the same as re-registering it by hand: that writes a project entry, so
+    the server comes back wearing a `project` badge and a second copy of a URL
+    the product ships. This deletes the line, and the built-in is the built-in
+    again.
+    """
+    from openstategraph.config_edit import restore_mcp_server
+    from openstategraph.config_file import ConfigError
+
+    try:
+        restore_mcp_server(name.strip())
+    except ConfigError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"Could not write the project's config file: {exc}"
+        ) from exc
+    return _registered()
+
+
+@router.get(
+    "/api/mcp/servers/{name}/usage",
+    response_model=McpServerUsageResponse,
+    summary="Saved workflows whose tool.mcp cards name this server",
+    tags=["Operations"],
+)
+def mcp_server_usage(name: str) -> McpServerUsageResponse:
+    """Which saved documents would break if this server went away.
+
+    A `tool.mcp` card **names** a server; the definition lives in the project's
+    config. That indirection is the feature — a copied package carries no URL
+    of yours — and it means deleting a server can silently break a document
+    that is not open, which nothing warned about (mcp-connect ticket 06).
+
+    The module docstring above says these routes do not touch a workflow, and
+    this one reads the package directory. The rule it was protecting is that a
+    server registry must not depend on a *workflow being open*, and this reads
+    files rather than `WorkflowServices`, exactly as `_catalogue` reads the
+    config file rather than a loaded config object. It is also asked only when
+    somebody is about to press Delete, never on a list.
+    """
+    from openstategraph.prebuilt_mcp import workflows_naming_mcp_server
+
+    return McpServerUsageResponse(slugs=workflows_naming_mcp_server(name.strip()))
 
 
 @router.delete(

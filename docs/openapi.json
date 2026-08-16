@@ -546,6 +546,21 @@
         "title": "McpAuthPayload",
         "type": "object"
       },
+      "McpHiddenServersResponse": {
+        "description": "`GET /api/mcp/servers/hidden` \u2014 built-in defaults this project hides.\n\nNamed rather than a bare `list[str]`, and the contract test is right to\ninsist: a list of strings publishes no clue what the strings *are*. It also\nleaves room for a hidden default to grow a reason later without every\nclient's shape changing under it.",
+        "properties": {
+          "names": {
+            "description": "Names of built-in servers tombstoned with `enabled: false` in the project's config. Every other MCP route filters these out.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "title": "McpHiddenServersResponse",
+        "type": "object"
+      },
       "McpServerResponse": {
         "description": "One registered server, as the editor may show it.",
         "properties": {
@@ -584,6 +599,21 @@
           "credentialConfigured"
         ],
         "title": "McpServerResponse",
+        "type": "object"
+      },
+      "McpServerUsageResponse": {
+        "description": "`GET /api/mcp/servers/{name}/usage` \u2014 who would break if it went away.",
+        "properties": {
+          "slugs": {
+            "description": "Saved packages with a `tool.mcp` row naming this server.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Slugs",
+            "type": "array"
+          }
+        },
+        "title": "McpServerUsageResponse",
         "type": "object"
       },
       "McpServerWriteRequest": {
@@ -1905,6 +1935,28 @@
         ]
       }
     },
+    "/api/mcp/servers/hidden": {
+      "get": {
+        "description": "The names `enabled: false` is standing on, so the editor can offer them.\n\nmcp-connect ticket 06. Deleting a `default` row writes a tombstone rather\nthan destroying anything \u2014 a committed, commented, self-explaining record \u2014\nand the user was simply never told it exists. Every other route filters\n`enabled` out before anything leaves the backend, correctly, because their\nquestion is *what can a workflow bind*. This route asks the other one.\n\nDeclared **before** `/api/mcp/servers/{name}`'s writers so `hidden` is read\nas a literal segment; it is a GET and they are not, so the two could not\ncollide anyway, but the order says the intent.",
+        "operationId": "hidden_mcp_servers_api_mcp_servers_hidden_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpHiddenServersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Built-in defaults this project has hidden",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
     "/api/mcp/servers/{name}": {
       "delete": {
         "description": "Delete a project entry, or tombstone a built-in default.\n\nThe two defaults are not declared by any file, so removing one has no line\nto delete: it writes `enabled: false`, which the catalogue honours. That\nis the honest version of a Delete button that is offered on every row \u2014\nthe alternative, hiding it on the two rows a new project actually has,\nmakes the first two entries the only undeletable ones.",
@@ -1947,6 +1999,96 @@
           }
         },
         "summary": "Remove one MCP server from this project",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/mcp/servers/{name}/restore": {
+      "post": {
+        "description": "Lift a tombstone. The other half of Delete on a `default` row.\n\nNot the same as re-registering it by hand: that writes a project entry, so\nthe server comes back wearing a `project` badge and a second copy of a URL\nthe product ships. This deletes the line, and the built-in is the built-in\nagain.",
+        "operationId": "restore_mcp_default_api_mcp_servers__name__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerResponse"
+                  },
+                  "title": "Response Restore Mcp Default Api Mcp Servers  Name  Restore Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bring a hidden built-in default back",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/api/mcp/servers/{name}/usage": {
+      "get": {
+        "description": "Which saved documents would break if this server went away.\n\nA `tool.mcp` card **names** a server; the definition lives in the project's\nconfig. That indirection is the feature \u2014 a copied package carries no URL\nof yours \u2014 and it means deleting a server can silently break a document\nthat is not open, which nothing warned about (mcp-connect ticket 06).\n\nThe module docstring above says these routes do not touch a workflow, and\nthis one reads the package directory. The rule it was protecting is that a\nserver registry must not depend on a *workflow being open*, and this reads\nfiles rather than `WorkflowServices`, exactly as `_catalogue` reads the\nconfig file rather than a loaded config object. It is also asked only when\nsomebody is about to press Delete, never on a list.",
+        "operationId": "mcp_server_usage_api_mcp_servers__name__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Saved workflows whose tool.mcp cards name this server",
         "tags": [
           "Operations"
         ]

@@ -280,3 +280,123 @@ class TestRegistering:
         response = client.delete("/api/mcp/servers/Nonesuch")
         assert response.status_code == 404
         assert "Nonesuch" in response.json()["detail"]
+
+
+class TestABuiltInCanComeBack:
+    """mcp-connect ticket 06 — Delete on a `default` row destroyed it, as far
+    as any user could tell. It never did: the tombstone is committed and
+    commented. These are the two routes that make it reachable.
+    """
+
+    @pytest.fixture
+    def project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        path = tmp_path / "openstategraph.yaml"
+        path.write_text("version: 1\n", encoding="utf-8")
+        monkeypatch.setenv(CONFIG_ENV_VAR, str(path))
+        reset_active_config()
+        yield path
+        reset_active_config()
+
+    def test_nothing_is_hidden_before_anything_is_deleted(
+        self, client: TestClient, project: Path
+    ) -> None:
+        assert client.get("/api/mcp/servers/hidden").json()["names"] == []
+
+    def test_a_deleted_default_is_reported_as_hidden(
+        self, client: TestClient, project: Path
+    ) -> None:
+        client.delete("/api/mcp/servers/LangChain docs")
+
+        assert client.get("/api/mcp/servers/hidden").json()["names"] == ["LangChain docs"]
+
+    def test_restoring_puts_it_back_wearing_its_own_badge(
+        self, client: TestClient, project: Path
+    ) -> None:
+        client.delete("/api/mcp/servers/LangChain docs")
+        body = client.post("/api/mcp/servers/LangChain docs/restore").json()
+
+        row = next(entry for entry in body if entry["name"] == "LangChain docs")
+        # `built-in`, not `project`: re-adding by hand resurrected the server
+        # and stamped it a project entry, so the badge said the wrong thing
+        # about a server the product ships.
+        assert row["origin"] == "built-in"
+        assert client.get("/api/mcp/servers/hidden").json()["names"] == []
+
+    def test_restoring_something_that_was_never_hidden_is_a_404(
+        self, client: TestClient, project: Path
+    ) -> None:
+        response = client.post("/api/mcp/servers/LangChain docs/restore")
+
+        assert response.status_code == 404
+
+    def test_hidden_is_a_segment_not_a_server_name(
+        self, client: TestClient, project: Path
+    ) -> None:
+        """The read route sits under the same prefix as the writers. It is a
+        GET and they are not, so nothing could shadow it — pinned because the
+        next route added here might not be."""
+        assert client.get("/api/mcp/servers/hidden").status_code == 200
+
+
+class TestWhoWouldBreak:
+    """A `tool.mcp` card NAMES a server; nothing warned that deleting one
+    would break a document that is not open (mcp-connect ticket 06)."""
+
+    @pytest.fixture
+    def workflows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        from openstategraph.workflows_root import WORKFLOWS_ROOT_ENV
+
+        root = tmp_path / "workflows"
+        root.mkdir()
+        monkeypatch.setenv(WORKFLOWS_ROOT_ENV, str(root))
+        return root
+
+    @staticmethod
+    def _package(root: Path, slug: str, server: str) -> None:
+        import json
+
+        directory = root / slug
+        directory.mkdir()
+        (directory / "workflow.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "name": slug,
+                    "document": {
+                        "nodes": [
+                            {
+                                "id": "mcp-1",
+                                "type": "tool.mcp",
+                                "data": {"servers": [{"server": server}]},
+                            }
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_it_names_the_packages_that_would_break(
+        self, client: TestClient, workflows: Path
+    ) -> None:
+        self._package(workflows, "docs-bot", "LangChain docs")
+        self._package(workflows, "other-bot", "Something else")
+
+        assert client.get("/api/mcp/servers/LangChain docs/usage").json()["slugs"] == ["docs-bot"]
+
+    def test_a_server_nobody_names_reports_nobody(
+        self, client: TestClient, workflows: Path
+    ) -> None:
+        self._package(workflows, "docs-bot", "LangChain docs")
+
+        assert client.get("/api/mcp/servers/Unused/usage").json()["slugs"] == []
+
+    def test_rubble_on_disk_is_skipped_rather_than_raised(
+        self, client: TestClient, workflows: Path
+    ) -> None:
+        (workflows / "half-written").mkdir()
+        (workflows / "broken").mkdir()
+        (workflows / "broken" / "workflow.json").write_text("{not json", encoding="utf-8")
+        self._package(workflows, "docs-bot", "LangChain docs")
+
+        assert client.get("/api/mcp/servers/LangChain docs/usage").json()["slugs"] == ["docs-bot"]

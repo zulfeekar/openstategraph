@@ -104,4 +104,31 @@ describe('the panel’s place in the app', () => {
   it('forgets a deleted server’s badge rather than leaving it to be inherited', () => {
     expect(panel).toContain('memory.forget(name)');
   });
+
+  /**
+   * mcp-connect ticket 06. Delete stays on every row — the test above is still
+   * the policy — but it now asks first, says which of the two things it is
+   * doing, and a hidden default has a way back.
+   */
+  it('asks before deleting, with the row’s own origin', () => {
+    expect(panel).toContain('mcpDeleteConfirmation');
+    expect(panel).toMatch(/remove\(server\.name, server\.origin\)/);
+    // The confirm's answer decides. A `confirm(...)` whose result is ignored
+    // is the original one-click delete wearing a dialog.
+    expect(panel).toMatch(/if \(!confirm\(mcpDeleteConfirmation\([^)]*\)\)\) return/);
+  });
+
+  it('warns with the documents a delete would break, before the delete', () => {
+    const body = panel.split('const remove =')[1]?.split('};')[0] ?? '';
+    expect(body.indexOf('client.mcp.usage')).toBeGreaterThan(-1);
+    expect(body.indexOf('client.mcp.usage')).toBeLessThan(body.indexOf('client.mcp.remove'));
+  });
+
+  it('offers a way back for a hidden default, and only when one is hidden', () => {
+    expect(panel).toContain('restoreDefaultsLabel(hidden)');
+    expect(panel).toContain('client.mcp.restore');
+    // Conditional on there being something to restore: a permanently-present
+    // control says nothing, which is where the ticket started.
+    expect(panel).toMatch(/\{restoreDefaultsLabel\(hidden\) \?/);
+  });
 });

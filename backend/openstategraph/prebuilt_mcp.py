@@ -641,6 +641,57 @@ def _names_a_server(row: Mapping[str, Any]) -> bool:
     return any(str(row.get(key, "")).strip() for key in (KEY_SERVER, KEY_URL))
 
 
+def workflows_naming_mcp_server(server_name: str) -> list[str]:
+    """Slugs of saved packages with a `tool.mcp` row naming this server.
+
+    The indirection a card relies on — a node NAMES a server, the project
+    config defines it — is what makes a copied package carry no URL of yours,
+    and it is also why deleting a server can break a document nobody has open
+    (mcp-connect ticket 06). Nothing warned about that, so this is the read
+    that lets a confirm name the documents.
+
+    Reads `workflow.json` and nothing else: no compile, no import of a node
+    runtime, no model. A package that cannot be parsed is skipped rather than
+    raising — this answers a confirmation dialog, and rubble on disk is a
+    different problem with its own report.
+    """
+    import json
+
+    from openstategraph.workflows_root import workflows_root
+
+    wanted = server_name.strip()
+    if not wanted:
+        return []
+
+    found: list[str] = []
+    root = workflows_root()
+    if not root.is_dir():
+        return []
+
+    for directory in sorted(root.iterdir()):
+        document = directory / "workflow.json"
+        if not document.is_file():
+            continue
+        try:
+            envelope = json.loads(document.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        nodes = envelope.get("document", envelope)
+        nodes = nodes.get("nodes", []) if isinstance(nodes, Mapping) else []
+        for node in nodes if isinstance(nodes, list) else []:
+            if not isinstance(node, Mapping) or node.get("type") != "tool.mcp":
+                continue
+            data = node.get("data")
+            if not isinstance(data, Mapping):
+                continue
+            if any(
+                str(row.get(KEY_SERVER, "")).strip() == wanted for row in _server_rows(data)
+            ):
+                found.append(directory.name)
+                break
+    return found
+
+
 def _server_rows(data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     """A node's server rows — or its flat fields, read as the one row they were.
 

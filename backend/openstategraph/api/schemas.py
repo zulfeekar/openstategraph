@@ -194,6 +194,33 @@ class McpServerResponse(BaseModel):
     )
 
 
+class McpHiddenServersResponse(BaseModel):
+    """`GET /api/mcp/servers/hidden` — built-in defaults this project hides.
+
+    Named rather than a bare `list[str]`, and the contract test is right to
+    insist: a list of strings publishes no clue what the strings *are*. It also
+    leaves room for a hidden default to grow a reason later without every
+    client's shape changing under it.
+    """
+
+    names: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names of built-in servers tombstoned with `enabled: false` in the "
+            "project's config. Every other MCP route filters these out."
+        ),
+    )
+
+
+class McpServerUsageResponse(BaseModel):
+    """`GET /api/mcp/servers/{name}/usage` — who would break if it went away."""
+
+    slugs: list[str] = Field(
+        default_factory=list,
+        description="Saved packages with a `tool.mcp` row naming this server.",
+    )
+
+
 class McpServerWriteRequest(BaseModel):
     """`POST /api/mcp/servers` — register one server in the project's config.
 

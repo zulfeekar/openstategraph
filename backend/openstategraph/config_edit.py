@@ -152,6 +152,53 @@ def remove_mcp_server(name: str, *, path: Path | None = None) -> Path:
     return _write(target, kept)
 
 
+def hidden_default_mcp_servers(*, path: Path | None = None) -> list[str]:
+    """The built-in defaults this project has tombstoned, by name.
+
+    The read side of `remove_mcp_server`'s write, and the reason it exists is
+    mcp-connect ticket 06: every route already filters `enabled` out before
+    anything leaves the backend (`mcp_server_catalogue`), which is correct for
+    "what can a workflow bind" and left the editor unable to know a default had
+    ever existed. So Delete on a `default` row destroyed it as far as any user
+    could tell, with no confirmation and nothing offering it back.
+
+    Only built-ins, deliberately. A deleted *project* entry leaves no line and
+    no URL, so there is nothing to restore it from — offering to would promise
+    something this module cannot keep.
+    """
+    from openstategraph.prebuilt_mcp import DEFAULT_MCP_SERVERS
+
+    target = path or writable_config_path()
+    builtin_names = {server.name for server in DEFAULT_MCP_SERVERS}
+    return [
+        item.name
+        for item in declared_mcp_servers(target)
+        if not item.enabled and item.name in builtin_names
+    ]
+
+
+def restore_mcp_server(name: str, *, path: Path | None = None) -> Path:
+    """Lift a tombstone, putting a built-in default back as a default.
+
+    Deleting the line rather than flipping `enabled` to `true`: an entry that
+    merely re-states the shipped default is a second copy of a URL that then
+    cannot follow it when it changes. With no line at all, the built-in is the
+    built-in again — including its `origin`, which is what the row's badge
+    reads. Re-adding by hand through `upsert_mcp_server` resurrects the server
+    but stamps it `project`, so the badge said the wrong thing about a server
+    the product ships.
+    """
+    target = path or writable_config_path()
+    declared = declared_mcp_servers(target)
+    tombstoned = [item for item in declared if item.name == name and not item.enabled]
+    if not tombstoned:
+        raise ConfigError(
+            f'No MCP server named "{name}" is hidden in this project, so there is '
+            f"nothing to restore."
+        )
+    return _write(target, [item for item in declared if item.name != name])
+
+
 # --------------------------------------------------------------------- #
 # The write itself
 # --------------------------------------------------------------------- #
