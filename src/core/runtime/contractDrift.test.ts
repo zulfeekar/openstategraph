@@ -19,7 +19,8 @@ import { describe, expect, it } from 'vitest';
  * **Deliberately not codegen.** `docs/decisions/typescript-runtime-types.md`
  * rejected a generator and that is not being re-litigated. This asserts the
  * two agree on the things a drift would actually break: the endpoints the
- * client calls, and the field names it sends.
+ * client calls, the field names it sends, and — since ticket 22 — the SSE
+ * event names it handles, which is the one leg of the seam nothing watched.
  */
 const REPO = new URL('../../../', import.meta.url);
 const openapi = JSON.parse(readFileSync(fileURLToPath(new URL('docs/openapi.json', REPO)), 'utf8'));
@@ -51,6 +52,21 @@ function pathsCalledByTheClient(): string[] {
 /** The same shape for a documented path: `/api/workflows/{slug}` → `/api/workflows/{}`. */
 const normalise = (path: string): string => path.replace(/\{[^}]*\}/g, '{}');
 
+/**
+ * The SSE event names the published contract declares, per endpoint.
+ *
+ * OpenAPI 3.1 cannot describe a *sequence* of frames, so `sse_contract.py`
+ * declares the media type and writes the vocabulary into the response
+ * description — generated from `RUN_EVENTS`, never retyped. That sentence is
+ * therefore the machine-readable half of the frame contract, and this is what
+ * makes it a pin rather than a comment.
+ */
+function eventNamesDeclaredFor(path: string, method: string): string[] {
+  const description: string = openapi.paths[path]?.[method]?.responses?.['200']?.description ?? '';
+  const names = description.match(/Event names: ([^.]*)\./)?.[1] ?? '';
+  return [...names.matchAll(/`([a-z]+)`/g)].map((match) => match[1] as string);
+}
+
 describe('the client and the published contract', () => {
   it('calls only endpoints the contract documents', () => {
     const documented = new Set(Object.keys(openapi.paths).map(normalise));
@@ -70,6 +86,46 @@ describe('the client and the published contract', () => {
     expect(called).toContain('/api/runs');
     expect(called).toContain('/api/runs/stream');
     expect(called.length).toBeGreaterThan(5);
+  });
+
+  /**
+   * The half of the seam the endpoint pin above could never see.
+   *
+   * A new frame name is not a new endpoint and not a new request field, so
+   * every assertion in this file used to pass while the backend grew an event
+   * the client silently dropped on the floor. `RUN_EVENTS` → `docs/api.md` →
+   * `RuntimeClient.ts` is the real contract (`api/sse_contract.py` says so
+   * outright), and until now only the first two legs were pinned —
+   * `test_api_guide.py` holds the guide to the tuple, and nothing held the
+   * TypeScript to either.
+   */
+  describe('the SSE frame vocabulary', () => {
+    it('is declared by the contract at all', () => {
+      // Guards the regex, not the client: a matcher that silently found
+      // nothing would make every assertion below vacuous.
+      expect(eventNamesDeclaredFor('/api/runs/stream', 'post')).toContain('done');
+      expect(eventNamesDeclaredFor('/api/runs/stream', 'post').length).toBeGreaterThan(4);
+    });
+
+    it('is handled frame for frame by the client', () => {
+      const declared = eventNamesDeclaredFor('/api/runs/stream', 'post');
+      const unhandled = declared.filter((name) => !client.includes(`eventName === '${name}'`));
+
+      expect(
+        unhandled,
+        `RuntimeClient never handles ${unhandled.join(', ')} — a frame the backend ` +
+          `emits and the client drops. Add the branch, the RunStreamEvent variant ` +
+          `and the row in docs/api.md, or remove it from RUN_EVENTS.`,
+      ).toEqual([]);
+    });
+
+    it('is the same vocabulary on resume', () => {
+      // One parser handles both endpoints, which is only safe while both
+      // publish the identical vocabulary — the guide promises exactly that.
+      expect(eventNamesDeclaredFor('/api/runs/resume', 'post')).toEqual(
+        eventNamesDeclaredFor('/api/runs/stream', 'post'),
+      );
+    });
   });
 
   it('sends run fields the contract declares', () => {

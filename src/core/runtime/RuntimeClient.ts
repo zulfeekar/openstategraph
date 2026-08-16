@@ -400,6 +400,42 @@ export type RunStreamEvent =
       readonly toolCallId: string;
     }
   | {
+      /**
+       * A step said something about itself **while still working**.
+       *
+       * The third frame that can arrive mid-node, and the only one a *tool*
+       * can send. `update` fires when a node completes and `token` exists only
+       * while a model types, so a tool that spends forty seconds paging an API
+       * produced nothing at all and the run read as stopped.
+       *
+       * A run whose steps say nothing emits none of these, so a consumer that
+       * ignores the variant behaves exactly as it did before.
+       */
+      readonly type: 'progress';
+      readonly node: string;
+      readonly namespace: readonly string[];
+      /**
+       * What to show. Written by the workflow's own developer and addressed to
+       * whoever is watching, so — unlike a tool's name or its payload — this
+       * crosses to a customer intact.
+       */
+      readonly message: string;
+      /**
+       * How far along, when the step happens to know. `null` means **no
+       * claim**, not zero: render a spinner rather than a bar until both are
+       * numbers. Never a sentinel and never a non-finite number, which JSON
+       * cannot carry across this seam.
+       */
+      readonly current: number | null;
+      readonly total: number | null;
+      /** The canvas node to show as running — same meaning as on `token`. */
+      readonly activeNode: string;
+      /** The same path the other mid-node frames carry — see the `update`
+       * variant, where the ambiguity it removes is spelled out. */
+      readonly path: readonly string[];
+      readonly pathSlugs: readonly string[];
+    }
+  | {
       /** A run created a child worker or subagent — the spawn *moment*,
        * emitted before the frame that revealed it. Three shapes of the same
        * event: an orchestrator's fan-out plan (`fanout`), a deep agent's
@@ -725,6 +761,20 @@ export class RuntimeClient implements IRuntimeClient {
           internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
           activeNode: asString(payload['activeNode']) || asString(payload['node']),
+          path: asPath(payload['path']),
+          pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
+        });
+      } else if (eventName === 'progress') {
+        onEvent({
+          type: 'progress',
+          node: asString(payload['node']),
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
+          message: asString(payload['message']),
+          // `null` unless the backend sent an actual number: a step that does
+          // not know how far along it is must not be rendered as being at 0.
+          current: typeof payload['current'] === 'number' ? payload['current'] : null,
+          total: typeof payload['total'] === 'number' ? payload['total'] : null,
+          activeNode: asString(payload['activeNode']),
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
         });

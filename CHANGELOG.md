@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **A `progress` frame, so a slow tool is no longer a silent gap.** An
+  `update` frame arrives when a node *completes* and a `token` frame only
+  while a model types, so a tool that spends forty seconds paging an API
+  produced neither and the run read as stopped. A step can now say something
+  about itself while it works:
+
+  ```python
+  from openstategraph.abc import report_progress
+
+  report_progress("Read 40 of 100 invoices", current=40, total=100)
+  ```
+
+  Reaches every client of `POST /api/runs/stream` and `/api/runs/resume` as a
+  seventh event name, `progress`, carrying `message`, `current` and `total`
+  (both `int` or `null`) beside the usual `node`/`activeNode`/`path`. The
+  message is developer-authored copy addressed to whoever is watching, so it
+  crosses to a customer audience intact — unlike a tool's name or its payload.
+  Purely additive: a run whose steps say nothing emits no such frames, and a
+  client that ignores the event behaves exactly as before. Outside a run
+  `report_progress` is a no-op returning `False`, so a package's tools stay
+  testable with plain pytest. Public: `openstategraph.abc.report_progress` and
+  `openstategraph.abc.Progress`.
+
+### Changed
+- The run stream now asks LangGraph for `version="v2"`, whose chunk shape does
+  not vary with the stream modes requested, and tags the router's and grader's
+  model invocations `nostream` so their machinery text is never produced
+  rather than blanked after the fact. No client-visible change.
+
 ## 0.3.0rc1 — 2026-08-15
 The release train's first ride, on the beta repository, to TestPyPI only. The
 candidate carries everything 0.3.0 below describes plus the work landed since

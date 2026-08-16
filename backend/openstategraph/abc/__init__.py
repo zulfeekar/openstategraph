@@ -71,6 +71,10 @@ from openstategraph.abc.orchestrator import (
 from openstategraph.abc.prompt import SystemPrompt
 from openstategraph.abc.router import BaseRouter, Classification, IRouter, Router
 from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolField, ToolResult
+# Not a ladder — the one thing a tool does *while* it runs. It lives here
+# because this is the import line a tool author is given, and a second
+# path for it would be a surface nobody finds.
+from openstategraph.progress import Progress, report_progress
 
 __all__ = [
     "AbstractAgentNode",
@@ -100,6 +104,7 @@ __all__ = [
     "NoArgs",
     "NodeBuildContext",
     "Orchestrator",
+    "Progress",
     "ReactAgentNode",
     "Redaction",
     "Router",
@@ -110,4 +115,5 @@ __all__ = [
     "ToolResult",
     "Verdict",
     "agent_node_for_tier",
+    "report_progress",
 ]

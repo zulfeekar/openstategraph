@@ -88,7 +88,7 @@ itself.
 
 ### `POST /api/runs/stream` and `POST /api/runs/resume`
 
-Six event names. A resumed run is not a different kind of thing from a
+Seven event names. A resumed run is not a different kind of thing from a
 client's point of view — it is the same stream picking back up — so both
 endpoints emit the identical vocabulary and one parser handles both.
 
@@ -96,6 +96,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | --- | --- | --- |
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output` |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
+| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
@@ -190,8 +191,8 @@ held anyone else's nodes in the first place.
 
 > **Every stream ends with a frame that says how it ended.** Exactly one of
 > `done`, `interrupt` or `error` is the last frame of every stream that lives
-> long enough to send one. `update`, `token` and `spawn` are progress: after
-> any of them, keep waiting.
+> long enough to send one. `update`, `token`, `progress` and `spawn` are
+> progress: after any of them, keep waiting.
 
 A client must never tell "still working", "finished" and "died" apart by
 waiting and guessing. There is exactly one exception, and it is honest rather
@@ -282,6 +283,46 @@ frame is **emptied, not dropped**, deliberately — it is the only frame that
 arrives while a node is still working, so it is what keeps a live diagram
 honest about where the run is. A developer run gets the text and no `withheld`
 key at all.
+
+#### `progress` — the frame a slow tool sends
+
+An `update` frame fires when a node **completes**, and a `token` frame only
+exists while a model is typing. A tool that spends forty seconds paging an API
+does neither, so between two `update` frames the stream goes quiet and the run
+reads as stopped. `progress` is what a step sends about itself *while it is
+still working*:
+
+```
+event: progress
+data: {"node":"agent-sql","message":"Read 40 of 100 invoices","current":40,"total":100,
+       "activeNode":"agent-sql","path":["agent-sql"],"pathSlugs":["chinook-assistant"],
+       "namespace":["agent_sql:7f3c"]}
+```
+
+`current` and `total` are `int` or `null` — `null` means "no claim", so render
+a spinner rather than a bar. They are never a sentinel and never a non-finite
+number, which JSON cannot carry.
+
+`message` is written by the workflow's own developer and is addressed to
+whoever is watching, so **it crosses to a customer intact** — unlike a tool's
+name or its payload, which do not. A silent forty-second gap is worst for the
+audience that cannot open a trace and work out what is happening.
+
+**A run whose steps say nothing sends no `progress` frames at all**, so a
+client that ignores the event behaves exactly as it did before. Frames come
+only from steps that ask for them, by calling `report_progress` from the
+package's own code:
+
+```python
+from openstategraph.abc import report_progress
+
+report_progress("Read 40 of 100 invoices", current=40, total=100)
+```
+
+Outside a run that call is a no-op returning `False`, so a tool stays testable
+with plain pytest. Under the hood this is LangGraph's `custom` stream mode; the
+channel is shared with any other library writing to it, so only payloads
+carrying our own envelope become frames and everything else is ignored.
 
 #### A thread is the conversation
 

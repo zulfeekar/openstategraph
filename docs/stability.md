@@ -42,6 +42,7 @@ from openstategraph.abc import (
     INodeFamily, BaseNodeFamily, NodeBuildContext,
     IOrchestrator, BaseOrchestrator, Orchestrator, Archetype, Subtask,
     SystemPrompt, MiddlewareSlotTable,
+    Progress, report_progress,
 )
 from openstategraph.errors import (
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,

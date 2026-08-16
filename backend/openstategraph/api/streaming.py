@@ -20,6 +20,7 @@ from openstategraph.api.audience import (  # noqa: E402
     split_suggestion,
 )
 from openstategraph.developer_channel import ProseGuard  # noqa: E402
+from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 
 
@@ -553,7 +554,12 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 
 #: The event names that report progress. A client must keep waiting after
 #: every one of them — none of these can be the last frame of a healthy run.
-PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "spawn")
+#:
+#: `progress` sits beside `token` because it is the other frame that arrives
+#: while a node is *still working* (ticket 22). `update` fires on completion,
+#: so between two of them a tool that spends forty seconds paging an API
+#: produced nothing at all and the run read as stopped.
+PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "progress", "spawn")
 
 #: The event names that *end* a stream. Exactly one of these is the last
 #: frame of every stream that lives long enough to send one — see
@@ -805,7 +811,12 @@ def _run_frames(
         stream = graph.stream(
             graph_input,
             config,
-            stream_mode=["updates", "messages"],
+            # `custom` is what lets a step say "read 40 of 100" while it works
+            # (ticket 22). Purely additive: a run whose tools write nothing
+            # produces not one extra frame. Note it is a **shared** channel —
+            # see `openstategraph.progress` for why an envelope is required
+            # before anything on it reaches a person.
+            stream_mode=["updates", "messages", "custom"],
             # Verbatim from the doc, and not to be disturbed: without it,
             # `stream_mode="messages"` on the parent graph will not emit token
             # chunks from the inner agent's LLM calls.
@@ -997,6 +1008,44 @@ def _run_frames(
                             ),
                         },
                     )
+            elif mode == "custom":
+                # A step saying something about itself mid-execution (22).
+                #
+                # `custom` is a channel LangGraph gives to everyone, so this
+                # reads only what carries our envelope and steps over the
+                # rest — deepagents and any middleware may be writing here
+                # too, and rendering a stranger's dict as a user's status line
+                # is the same leak as rendering a tool's payload as prose.
+                # `progress_report` is total: anything it cannot read is None.
+                report = progress_report(payload)
+                if report is None:
+                    continue
+                # Resolved exactly as a `token` frame's are, and by the same
+                # instances, so one honest sequence comes off the wire. The
+                # writer is ambient — the payload cannot name its own canvas
+                # id — so the node it stamped is mapped here like any other
+                # graph-step name.
+                progress_node = node_ids_by_name.get(report.node, report.node)
+                progress_path, progress_slugs = run_path.resolve(report.node, namespace)
+                yield _sse(
+                    "progress",
+                    {
+                        "node": progress_node,
+                        "namespace": list(namespace),
+                        # Developer-authored copy, addressed to whoever is
+                        # watching. Unlike a tool's *name* or its payload,
+                        # this text was written to be read by the person
+                        # running the workflow, so it crosses to a customer
+                        # intact — a silent forty-second gap is worse for the
+                        # audience that cannot open a trace to explain it.
+                        "message": report.message,
+                        "current": report.current,
+                        "total": report.total,
+                        "activeNode": active.resolve(progress_node, namespace),
+                        "path": progress_path,
+                        "pathSlugs": progress_slugs,
+                    },
+                )
             elif mode == "messages":
                 message, metadata = payload
                 # Block-shaped chunks are what a provider actually streams once

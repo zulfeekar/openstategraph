@@ -2156,7 +2156,7 @@
                 }
               }
             },
-            "description": "The resumed run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+            "description": "The resumed run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
           },
           "422": {
             "content": {
@@ -2200,7 +2200,7 @@
                 }
               }
             },
-            "description": "The run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+            "description": "The run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
           },
           "422": {
             "content": {
