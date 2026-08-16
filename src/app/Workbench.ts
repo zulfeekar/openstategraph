@@ -1,4 +1,6 @@
 import { PreferencesStore } from '@app/preferences';
+import { openAncestry } from '@app/openAncestry';
+import { provideMountAncestry } from '@core/runtime/mountAncestry';
 import { ModelRegistry } from '@core/model/ModelRegistry';
 import { WorkflowModel } from '@core/model/WorkflowModel';
 import { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
@@ -185,5 +187,19 @@ export class Workbench {
 export function createWorkbench(): Workbench {
   // Publish the shared layout constants before anything measures itself.
   applyLayoutTokens();
+  // Teach the mount field which packages are already above this document, so
+  // picking one is refused in the editor with the compiler's own sentence
+  // (organisms-first-class ticket 42). Installed here rather than in the
+  // constructor because the trail is `sessionStorage`, and a `new Workbench()`
+  // in a `node` test has no business inheriting a browser's open document.
+  //
+  // Oldest first: the drill trail, then the document on screen — the same
+  // order `_subgraph` builds its ancestry in, so the chain in the refusal
+  // reads as the route that produced the cycle.
+  //
+  // A reader, not a snapshot: the trail changes on every load, drill and save,
+  // and a stale copy here would refuse a legitimate mount. `openAncestry` owns
+  // what the trail is made of, and its own tests own the edge cases.
+  provideMountAncestry(openAncestry);
   return new Workbench();
 }

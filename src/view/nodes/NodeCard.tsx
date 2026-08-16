@@ -70,10 +70,18 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const menu = useMenu<HTMLButtonElement>();
 
+  // Keyed on the **data**, not just the node. The model is mutated in place —
+  // one `AbstractNodeModel` instance for the life of the node — so `[node]`
+  // memoised the errors of the data as it stood when the card first mounted,
+  // and no edit ever recomputed them. The card therefore showed a validation
+  // message only after something else forced a remount, which is how "refused
+  // at pick time" (ticket 42) could be true in the inspector, which validates
+  // on every render, and silently false on the card beside it. `_data` is
+  // replaced wholesale on every `setField`, so its identity is the right key.
   const fieldErrors = useMemo(
     () =>
       node ? validateFields(node.definition.fields, node.data) : ({} as Record<string, string>),
-    [node],
+    [node, node?.data],
   );
 
   /* ---------------- geometry reporting ----------------

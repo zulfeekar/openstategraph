@@ -6,6 +6,8 @@ import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/executi
 import { CATEGORY, PORT } from '../vocabulary';
 import { OVERRIDES_FIELD } from './overridesField';
 import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
+import { mountAncestry } from '@core/runtime/mountAncestry';
+import { mountCycleRefusal } from '@core/validation/mountCycleRule';
 
 export const SUBGRAPH_TYPE = 'workflow.subgraph';
 
@@ -84,10 +86,37 @@ export const subgraphNode: INodeDefinition = defineNode(
         defaultValue: '',
         mono: true,
         emptyHint: 'No saved workflows yet — save one, and it appears here.',
-        options: () =>
-          workflowCatalogue
-            .list()
-            .map((choice) => ({ value: choice.slug, label: `${choice.name} · ${choice.slug}` })),
+        // A package already above this document says so **in the list**, before
+        // it is picked, rather than only after — ticket 42's "unavailable
+        // rather than merely punished", in the only form a native `<datalist>`
+        // can carry: a suffix on the label.
+        //
+        // Not `disabled`. The flag exists on `FieldOption` and `select` honours
+        // it, but a datalist is a *suggestion* source — a disabled option is
+        // dropped from the suggestions, not greyed in them — so marking the
+        // ancestor disabled would delete the one entry a reader is looking for
+        // and say nothing about why. Greying a gesture needs a surface that can
+        // grey: that is the Packages palette of ticket 11, which is still open.
+        // When it lands it should call `mountCycleRefusal` with
+        // `mountAncestry()` too, rather than reimplementing the comparison.
+        options: () => {
+          const above = new Set(mountAncestry());
+          return workflowCatalogue.list().map((choice) => ({
+            value: choice.slug,
+            label: above.has(choice.slug)
+              ? `${choice.name} · ${choice.slug} — would include itself`
+              : `${choice.name} · ${choice.slug}`,
+          }));
+        },
+        // Refused at **pick time**, in the compiler's own sentence — ticket 42.
+        // The server refuses self-inclusion twice already (`_subgraph`'s
+        // ancestry chain, `mount_resolution`'s visited chain) and stays the
+        // authority; this only reports the same verdict before a save rather
+        // than after a failed compile. Declared on the schema rather than in a
+        // panel so the card and the inspector both get it from one place —
+        // and it is the ancestry, not just this slug, because drilling in means
+        // the cycle you would create need not involve the document on screen.
+        validate: (value: string) => mountCycleRefusal(value, mountAncestry()),
       },
       {
         kind: 'textarea',
