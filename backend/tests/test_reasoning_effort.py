@@ -12,6 +12,7 @@ changes any of them fails here instead of quietly changing behaviour.
 from __future__ import annotations
 
 import inspect
+from typing import Any
 
 import pytest
 
@@ -22,6 +23,7 @@ from openstategraph.reasoning import (
     REASONING_EFFORT_KEY,
     apply_reasoning_effort,
     effort_support,
+    enumerates_effort_levels,
 )
 
 
@@ -50,26 +52,134 @@ class TestCapabilityIsDiscovered:
         assert "high" in support.model_levels
         assert support.reasons is True
 
-    def test_a_reasoning_model_with_no_published_tiers_is_unknown_not_refused(
-        self,
-    ) -> None:
-        """`claude-haiku-4-5` reasons but publishes no `reasoning_effort_levels`.
+    def test_a_reasoning_model_with_no_published_tiers_still_reasons(self) -> None:
+        """`claude-haiku-4-5` reasons — via `thinking` — and publishes no tiers.
 
-        Treating a silent profile as "unsupported" would refuse a setting the
-        provider would have accepted, so the fallback is the integration's own
-        annotation — a fact, not a guess.
+        The two facts are independent, and conflating them is what broke:
+        `reasoning_output: True` says the model thinks, not that it accepts the
+        `effort` parameter. Anthropic's thinking models reach it through
+        `thinking={"type": "enabled", "budget_tokens": N}`, which this module
+        does not send — see `TestAProviderThatEnumeratesWhichModelsTakeIt`.
         """
         anthropic = pytest.importorskip("langchain_anthropic")
         model = anthropic.ChatAnthropic(model="claude-haiku-4-5", api_key="placeholder")
         support = effort_support(model)
         assert support.model_levels is None
         assert not support.refuses
-        assert "high" in support.accepted
+        assert support.reasons is True
 
     def test_a_probe_on_something_that_is_not_a_chat_model_does_not_raise(self) -> None:
         support = effort_support(_NotAModel())
         assert not support.carries
         assert support.accepted == ()
+
+
+class TestAProviderThatEnumeratesWhichModelsTakeIt:
+    """The fourth state: a silence that *is* a no, because the field is filled in.
+
+    Reproduced live on 2026-08-16 against `langchain-anthropic` 1.5.4: an
+    `agent.llm` node on `anthropic/claude-haiku-4-5` with `reasoningEffort:
+    "high"` streamed an `error` terminal frame rather than a warning —
+
+        BadRequestError: 400 - This model does not support the effort parameter.
+
+    Which is exactly what this module exists to prevent. The parameter is real
+    on the *integration* (`ChatAnthropic.reasoning_effort` is annotated, and
+    maps to `output_config.effort`) and rejected by the *API* per model, so the
+    annotation answered a question nobody asked.
+
+    The discriminator was already in the profile and was being read past. This
+    package's own dataset publishes `reasoning_effort_levels` for eight of its
+    fifteen models; `langchain-openai`'s publishes it for none of thirty-nine.
+    So the key's absence means opposite things per integration, and the fact
+    that separates them is discoverable: **does this integration fill the field
+    in for anybody?** Where it does, a model left out is left out on purpose.
+    Where it never does, the field is unpopulated and says nothing — so OpenAI
+    keeps falling back to the annotation, unchanged.
+
+    No model ids and no provider names in `reasoning.py`, per CLAUDE.md. The
+    ids below are in the *test*, where a package update that moves them is
+    supposed to fail.
+    """
+
+    @staticmethod
+    def _anthropic(model_id: str) -> Any:
+        anthropic = pytest.importorskip("langchain_anthropic")
+        return anthropic.ChatAnthropic(model=model_id, api_key="placeholder")
+
+    @pytest.mark.parametrize("model_id", ["claude-haiku-4-5", "claude-sonnet-4-5"])
+    def test_the_model_that_400s_is_refused_rather_than_sent(self, model_id: str) -> None:
+        """Both models from the live reproduction, at the level that killed it."""
+        model = self._anthropic(model_id)
+        assert effort_support(model).accepted == ()
+
+        resolved, warning = apply_reasoning_effort(model, "high")
+        assert resolved is model
+        assert warning is not None
+        assert model_id in warning
+        assert "no reasoning-effort tiers" in warning
+
+    def test_a_model_that_publishes_tiers_still_receives_it(self) -> None:
+        """The other half: refusing everything would be a different bug."""
+        model = self._anthropic("claude-sonnet-4-6")
+        resolved, warning = apply_reasoning_effort(model, "high")
+        assert warning is None
+        assert resolved.reasoning_effort == "high"
+
+    def test_a_model_the_dataset_has_never_heard_of_is_refused(self) -> None:
+        """An unlisted id degrades to a warning, and that direction is chosen.
+
+        A model released tomorrow may well accept `effort`, and refusing it is a
+        false negative — but a false negative here costs a sentence in the run
+        warnings, and a false positive costs the run. The module's whole premise
+        is that those two are not symmetric.
+        """
+        resolved, warning = apply_reasoning_effort(self._anthropic("claude-not-yet"), "high")
+        assert resolved is not None and warning is not None
+
+    def test_an_integration_that_publishes_no_tiers_at_all_is_unaffected(self) -> None:
+        """OpenAI's reasoning models keep working off the annotation.
+
+        `gpt-5` reports `reasoning_output: True` and no tiers — the same shape
+        as `claude-haiku-4-5` — and unlike it, accepts the parameter. Reading
+        the shape alone cannot tell them apart, which is why the rule reads the
+        dataset instead.
+        """
+        openai = pytest.importorskip("langchain_openai")
+        model = openai.ChatOpenAI(model="gpt-5", api_key="placeholder")
+        resolved, warning = apply_reasoning_effort(model, "high")
+        assert warning is None
+        assert resolved.reasoning_effort == "high"
+
+    def test_the_premise_holds_in_the_installed_packages(self) -> None:
+        """The evidence, asserted rather than described.
+
+        Every claim above rests on one fact about the shipped datasets. If a
+        package update populates the OpenAI dataset or empties the Anthropic
+        one, the rule silently changes meaning — so it fails here first.
+        """
+        anthropic = pytest.importorskip("langchain_anthropic")
+        openai = pytest.importorskip("langchain_openai")
+
+        publishing = enumerates_effort_levels(
+            anthropic.ChatAnthropic(model="claude-haiku-4-5", api_key="placeholder")
+        )
+        assert publishing is True, (
+            "langchain-anthropic no longer publishes reasoning_effort_levels for "
+            "any model — the per-model gate has gone blind and the 400 is back."
+        )
+        assert (
+            enumerates_effort_levels(openai.ChatOpenAI(model="gpt-5", api_key="placeholder"))
+            is False
+        ), (
+            "langchain-openai has started publishing reasoning_effort_levels — "
+            "good news, but OpenAI models are now gated on it too. Confirm the "
+            "dataset is complete before accepting this."
+        )
+
+    def test_a_probe_of_something_with_no_dataset_does_not_raise(self) -> None:
+        """`langchain-ollama` ships no `data._profiles` at all."""
+        assert enumerates_effort_levels(_NotAModel()) is False
 
 
 class TestItDoesNotBreak:
