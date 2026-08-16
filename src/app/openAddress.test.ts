@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { formatMountAddress, parseMountAddress } from '@core/model/MountAddress';
 import { CURRENT_SLUG_KEY } from './workflowFileWatch';
+import { resolveOpenRequest } from './openWorkflow';
 import {
   OPEN_ADDRESS_KEY,
   getOpenAddress,
@@ -161,5 +162,69 @@ describe('resolveAddressRequest', () => {
     expect(
       resolveAddressRequest({ urlAddress: address('chinook-assistant'), openAddress: null }),
     ).toEqual({ action: 'fetch', address: address('chinook-assistant') });
+  });
+  /* ---------------- ticket 49: a missing draft is never a blank canvas ------- */
+
+  it('fetches a reload of the open address when this browser holds no draft', () => {
+    // The whole of ticket 49's second bug, in one assertion. Declining to
+    // refetch is a trade — the file for this tab's unsaved edits — and with no
+    // draft there is nothing on the other side of it. The old rule still fired,
+    // and the user got a blank canvas for a slug the backend could serve.
+    expect(
+      resolveAddressRequest({
+        urlAddress: address('reload-repro'),
+        openAddress: address('reload-repro'),
+        hasDraft: false,
+      }),
+    ).toEqual({ action: 'fetch', address: address('reload-repro') });
+  });
+
+  it('still restores a reload of the open address when there is a draft', () => {
+    // The behaviour the old rule was written for, kept exactly: a reload must
+    // not refetch the file over unsaved edits to that same workflow.
+    expect(
+      resolveAddressRequest({
+        urlAddress: address('reload-repro'),
+        openAddress: address('reload-repro'),
+        hasDraft: true,
+      }),
+    ).toEqual({ action: 'restore' });
+  });
+
+  it('does not fetch a draftless tab that has no address in the URL', () => {
+    // A brand-new document that has never been saved has no slug to fetch. The
+    // rule keys on the URL naming something, not on the draft being absent.
+    expect(resolveAddressRequest({ urlAddress: null, openAddress: null, hasDraft: false })).toEqual(
+      {
+        action: 'restore',
+      },
+    );
+  });
+
+  it('answers the same as the slug resolver on every shared input', () => {
+    // `AppShell` runs both hooks and its comment promises "exactly one of
+    // restore this tab's autosave and fetch the linked workflow happens". That
+    // promise is only true while the two resolvers agree, and until ticket 49
+    // nothing checked it — the pair were edited apart twice. Pinned here rather
+    // than argued in a docstring.
+    const slugs = [null, 'reload-repro', 'concierge'];
+    for (const url of slugs) {
+      for (const open of slugs) {
+        for (const hasDraft of [true, false]) {
+          const bySlug = resolveOpenRequest({ urlSlug: url, openSlug: open, hasDraft });
+          const byAddress = resolveAddressRequest({
+            urlAddress: url === null ? null : address(url),
+            openAddress: open === null ? null : address(open),
+            hasDraft,
+          });
+          expect([url, open, hasDraft, byAddress.action]).toEqual([
+            url,
+            open,
+            hasDraft,
+            bySlug.action,
+          ]);
+        }
+      }
+    }
   });
 });

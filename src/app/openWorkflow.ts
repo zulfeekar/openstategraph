@@ -192,12 +192,33 @@ function syncUrl(slug: string | null): void {
  *   loading the link cannot overwrite another tab's autosaved graph.
  * - **No `w=` at all** → `restore`, the editor's existing behaviour, and the
  *   caller writes the open slug back into the URL so it is copyable.
+ *
+ * ## …unless there is no draft to restore (ticket 49)
+ *
+ * The first rule above assumes its own premise: it declines to refetch because
+ * "this tab's autosave holds unsaved edits to that very workflow". When it does
+ * not, the reasoning has nothing left in it — and the branch still fired,
+ * because nobody had ever asked whether the draft was there. A missing draft
+ * therefore restored *nothing at all*, leaving the blank default document on
+ * screen for a slug the backend could serve in full. That is ticket 49's
+ * blocker, and it is not an edge case: it is the state of every tab
+ * immediately after its first Save.
+ *
+ * So `hasDraft` is part of the decision rather than a detail of carrying it
+ * out. **A missing draft is never an empty canvas** — the fallback is the
+ * document the URL names, always. Omitting the field keeps the old behaviour
+ * for the one caller that genuinely has no storage question to ask.
  */
 export function resolveOpenRequest(input: {
   urlSlug: string | null;
   openSlug: string | null;
+  /** Whether this browser holds a draft of the workflow already open here. */
+  hasDraft?: boolean;
 }): { readonly action: 'fetch'; readonly slug: string } | { readonly action: 'restore' } {
   if (input.urlSlug !== null && input.urlSlug !== input.openSlug) {
+    return { action: 'fetch', slug: input.urlSlug };
+  }
+  if (input.urlSlug !== null && input.hasDraft === false) {
     return { action: 'fetch', slug: input.urlSlug };
   }
   return { action: 'restore' };

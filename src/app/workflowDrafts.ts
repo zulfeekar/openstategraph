@@ -1,5 +1,5 @@
 import type { Workbench } from './Workbench';
-import { readWorkflow, type KeyValueStore } from './workflowStore';
+import { moveWorkflow, readWorkflow, type KeyValueStore } from './workflowStore';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 
 /**
@@ -49,7 +49,80 @@ import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
  * minted before this existed, and so `listWorkflows` still shows both.
  */
 export function draftIdForSlug(slug: string): string {
-  return `slug-${slug}`;
+  return `${SLUG_DRAFT_PREFIX}${slug}`;
+}
+
+const SLUG_DRAFT_PREFIX = 'slug-';
+
+/**
+ * Where a tab records which draft key it is writing under.
+ *
+ * Lives here, with `draftIdForSlug`, rather than privately inside the hook that
+ * happens to write it: three modules now need to agree on the answer — the
+ * session hook, the Save that renames it, and any test that simulates a
+ * reload — and a constant known to one of them was how the rename came to be
+ * missed in the first place.
+ */
+export const DRAFT_SESSION_KEY = 'openstategraph-current-workflow-id';
+
+/** The draft key this tab is writing under, or `null` before one is settled. */
+export function currentDraftId(): string | null {
+  try {
+    return sessionStorage.getItem(DRAFT_SESSION_KEY);
+  } catch {
+    return null; // sessionStorage throws in restricted contexts
+  }
+}
+
+/**
+ * Move this tab's draft onto `slug`'s key — **ticket 49**, and the moment it
+ * is called is the whole of its correctness.
+ *
+ * ## What went wrong
+ *
+ * A document with no slug autosaves under a minted `wf-<timestamp>` id. Saving
+ * it for the first time mints a slug on the backend, and `setOpenSlug` moves
+ * the autosave key to `slug-<slug>` from that instant on — but the draft
+ * already written stayed where it was. So immediately after the one gesture
+ * that is supposed to make work durable, the key the editor reads on the next
+ * page load pointed at nothing, and the bytes it wanted sat under a name
+ * nobody would ever ask for again.
+ *
+ * ## Why not simply do this whenever the open slug changes
+ *
+ * Because the open slug moves for two different reasons and only one of them
+ * is this one. Opening a *second* workflow also moves it — and moving the
+ * draft along would take the scratch document the user was editing and file it
+ * as the opened workflow's unsaved edits, which the load path would then
+ * restore over the file it had just fetched. That is ticket 23's data loss
+ * with the arrow reversed, and it would be exactly as silent.
+ *
+ * So the guard is not a timing heuristic; it is a statement about identity. A
+ * key that is already `slug-…` belongs to a document that *has* an identity,
+ * and such a draft is never re-filed under a different one. Only a key that
+ * names no document — the minted `wf-<timestamp>` — can acquire one, and it
+ * can do so exactly once. An occupied destination is refused by
+ * `moveWorkflow`, so a slug's own draft can never be overwritten either.
+ *
+ * Returns whether anything moved, so a caller can tell "renamed" from "there
+ * was nothing to rename" — the ordinary case when a save overwrites a package
+ * this tab already had open.
+ */
+export function adoptSlugForDraft(
+  previousId: string | null,
+  slug: string,
+  store: KeyValueStore = browserStore(),
+): boolean {
+  if (previousId == null || previousId === '') return false;
+  if (previousId.startsWith(SLUG_DRAFT_PREFIX)) return false;
+  return moveWorkflow(store, previousId, draftIdForSlug(slug));
+}
+
+/** Whether this browser holds a draft for `subject` (a slug or an address). */
+export function hasDraftFor(subject: string | null, store?: KeyValueStore): boolean {
+  return (
+    subject !== null && subject !== '' && draftSavedAt(subject, store ?? browserStore()) !== null
+  );
 }
 
 /**

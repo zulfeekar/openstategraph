@@ -36,7 +36,7 @@ import {
   resolveOpenRequest,
   subscribeOpenSlug,
 } from './openWorkflow';
-import { draftIdForSlug, draftSavedAt } from './workflowDrafts';
+import { DRAFT_SESSION_KEY, draftIdForSlug, draftSavedAt, hasDraftFor } from './workflowDrafts';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -288,9 +288,15 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // then overwrite that stored graph with the fetched one. Minting is the
     // whole answer to both. `resolveOpenRequest` is what decides this is a
     // genuine arrival rather than a reload of the workflow already open here.
+    // Ticket 49: with no draft under the open slug's key, "restore this tab's
+    // autosave" restores nothing and the canvas stays blank. Both startup hooks
+    // ask the same question of the same storage so they keep agreeing in
+    // advance about which of them owns the document.
+    const openSlug = getOpenSlug();
     const request = resolveOpenRequest({
       urlSlug: readSlugFromSearch(window.location.search),
-      openSlug: getOpenSlug(),
+      openSlug,
+      hasDraft: hasDraftFor(openSlug, localStorage),
     });
 
     // A deep link (`?w=<slug>`, ticket 20) names the document, so browser
@@ -316,7 +322,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       request.action === 'fetch'
         ? { id: draftIdForSlug(request.slug), shouldRestore: false, notice: undefined }
         : resolveSession({
-            sessionId: sessionStorage.getItem(SESSION_KEY),
+            sessionId: sessionStorage.getItem(DRAFT_SESSION_KEY),
             mostRecentId: mostRecentWorkflowId(localStorage),
             mintId: () => `wf-${Date.now()}`,
             // The clobber gate: a workflow another live tab is editing is not
@@ -358,7 +364,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       }
     }
 
-    sessionStorage.setItem(SESSION_KEY, session.id);
+    sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
     setState({ restored: session.shouldRestore, workflowId: session.id });
   }, [controller, workbench]);
@@ -380,7 +386,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
         const writer = (writerRef.current ??= newWriteGuard());
         writer.lastSeenAt = draftSavedAt(slug, localStorage);
         try {
-          sessionStorage.setItem(SESSION_KEY, id);
+          sessionStorage.setItem(DRAFT_SESSION_KEY, id);
         } catch {
           // Storage unavailable; the in-memory id below is still correct for
           // this session, which is what autosave actually writes under.
@@ -499,7 +505,6 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
   return state;
 }
 
-const SESSION_KEY = 'openstategraph-current-workflow-id';
 const SAVE_DELAY_MS = 1000;
 /** Comfortably inside `CLAIM_STALE_MS`, so a live tab is never mistaken for dead. */
 const CLAIM_HEARTBEAT_MS = 10_000;

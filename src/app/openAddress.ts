@@ -114,14 +114,24 @@ export function clearOpenAddress(): void {
  * `chinook-assistant` package, so a slug comparison would call the second a
  * reload of the first and leave the wrong instance's overrides on screen. The
  * unsaved-edits rule it inherits is unchanged: a reload of the address already
- * open restores this tab's autosave rather than refetching over it.
+ * open restores this tab's autosave rather than refetching over it — and so is
+ * ticket 49's correction to it, that "restore this tab's autosave" is only a
+ * decision worth making when there *is* one. With no draft, the fallback is the
+ * document the address names, never a blank canvas. `resolveOpenRequest` states
+ * the case at length; the two must answer alike, and
+ * `openAddress.test.ts` pins that they do.
  */
 export function resolveAddressRequest(input: {
   urlAddress: MountAddress | null;
   openAddress: MountAddress | null;
+  /** Whether this browser holds a draft of the address already open here. */
+  hasDraft?: boolean;
 }): { readonly action: 'fetch'; readonly address: MountAddress } | { readonly action: 'restore' } {
   const { urlAddress, openAddress } = input;
   if (urlAddress !== null && (openAddress === null || !addressEquals(urlAddress, openAddress))) {
+    return { action: 'fetch', address: urlAddress };
+  }
+  if (urlAddress !== null && input.hasDraft === false) {
     return { action: 'fetch', address: urlAddress };
   }
   return { action: 'restore' };

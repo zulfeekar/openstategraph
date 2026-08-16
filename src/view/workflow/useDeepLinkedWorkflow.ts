@@ -11,6 +11,7 @@ import {
 import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
 import { MountContext } from '@core/model/MountContext';
 import { clearDrillStack } from '@app/drillStack';
+import { hasDraftFor } from '@app/workflowDrafts';
 import {
   loadMountIntoEditor,
   loadWorkflowIntoEditor,
@@ -66,9 +67,16 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
     // `concierge/wf-other` are both `chinook-assistant`, so comparing slugs
     // would call a link to the second a reload of the first and leave the
     // wrong instance's overrides on screen.
+    const openAddress = getOpenAddress() ?? parseMountAddress(getOpenSlug() ?? '');
     const request = resolveAddressRequest({
       urlAddress: readAddressFromSearch(window.location.search),
-      openAddress: getOpenAddress() ?? parseMountAddress(getOpenSlug() ?? ''),
+      openAddress,
+      // Ticket 49. Declining to refetch is only defensible while this browser
+      // actually holds unsaved edits to refetch *over*; with none, the restore
+      // branch below leaves the blank default document on screen for a slug the
+      // backend can serve in full. That is the blocker, and it is the state of
+      // every tab immediately after its first Save.
+      hasDraft: hasDraftFor(openAddress === null ? null : formatMountAddress(openAddress)),
     });
     if (request.action === 'restore') {
       // Nothing to fetch — but if this tab has something open and the URL

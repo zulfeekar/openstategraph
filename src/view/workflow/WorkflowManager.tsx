@@ -37,6 +37,7 @@ import {
 } from '@core/runtime/WorkflowFileClient';
 import { clearDrillStack } from '@app/drillStack';
 import { rememberDiskDocument } from '@app/diskAutosave';
+import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './createNewWorkflow';
 import {
@@ -263,6 +264,23 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       onNotify(`Could not save: ${failure ?? 'the runtime did not name the new workflow'}`);
       return;
     }
+    // **Ticket 49, and it must come before `setOpenSlug`.** This is the one
+    // moment a document acquires an identity, so it is the one moment its
+    // draft can follow — a graph drawn before any save autosaves under a
+    // minted `wf-<timestamp>` key, and `setOpenSlug` below moves the autosave
+    // key to `slug-<slug>` from that instant on. Without the rename in
+    // between, the key the next page load reads points at nothing while the
+    // user's bytes sit under a name nobody will ever ask for again: press
+    // Save, press ⌘R, and the canvas comes back empty.
+    //
+    // Before, not after, because `setOpenSlug` announces the new key and the
+    // session hook immediately baselines its write guard against whatever is
+    // stored there. Renaming afterwards would hand it a `null` baseline and
+    // then a payload it had never seen — a conflict with itself.
+    //
+    // A no-op on an overwrite (the key is already this slug's) and refused
+    // outright if the destination is occupied; `adoptSlugForDraft` states why.
+    adoptSlugForDraft(currentDraftId(), slug);
     // Storage *and* the address bar — a workflow that has just become real on
     // the backend is linkable from this moment on.
     setOpenSlug(slug);

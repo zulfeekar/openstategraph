@@ -370,6 +370,42 @@ export function deleteWorkflow(store: KeyValueStore, id: string): void {
   }
 }
 
+/**
+ * Re-key a stored workflow, keeping its bytes exactly as they are.
+ *
+ * A move, not a copy-and-rewrite, and that distinction is the whole reason it
+ * lives here rather than being spelled `read` + `save` at the call site.
+ * Re-saving would stamp a new `savedAt` and this tab's `writerId` onto the
+ * payload; the compare-and-set above reads both, so a rewritten entry looks to
+ * the *next* page load like a write nobody has seen. Carrying the envelope
+ * across untouched keeps the write guard's lineage intact through the rename.
+ *
+ * **Refuses when the destination is occupied.** The one thing a re-key must
+ * never do is land on top of another document's draft — that is ticket 23's
+ * data loss with the arrow reversed, and it would be just as silent. The
+ * caller decides whether being refused matters; `false` says nothing moved.
+ */
+export function moveWorkflow(store: KeyValueStore, fromId: string, toId: string): boolean {
+  if (fromId === toId) return false;
+  const raw = read(store, keyFor(fromId));
+  if (raw == null) return false;
+  if (read(store, keyFor(toId)) != null) return false;
+  try {
+    store.setItem(keyFor(toId), raw);
+  } catch {
+    // No room for the copy. Leaving the original in place is the safe half of
+    // a failed move: the draft is still readable under its old key.
+    return false;
+  }
+  try {
+    store.removeItem(keyFor(fromId));
+  } catch {
+    // The copy landed, which is what the caller asked for. A source that
+    // cannot be removed is a stale row, not lost work.
+  }
+  return true;
+}
+
 export function mostRecentWorkflowId(store: KeyValueStore): string | null {
   return listWorkflows(store)[0]?.id ?? null;
 }
