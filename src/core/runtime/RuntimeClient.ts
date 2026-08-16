@@ -445,6 +445,23 @@ export type RunStreamEvent =
        * `Invoice`, then of `InvoiceLine`) share a name and differ only here.
        */
       readonly toolCallId: string;
+      /**
+       * Whether this frame's text was **emptied deliberately** (ticket 10).
+       *
+       * A customer's stream carries the reply and not the machinery — a tool
+       * payload, a branch name, a verdict, the echo of their own question are
+       * all blanked — but the frame still arrives, because it is the only one
+       * that says where a run is mid-node. Without this field a consumer
+       * cannot tell that from a model that produced nothing, and
+       * `api/audience.py` says the field exists precisely so it can.
+       *
+       * Always `false` on a developer run, which is why nothing here read it
+       * for so long: the editor always sends `audience: 'developer'`, and
+       * `audience` is public on `RunRequest` one screen up — so that was a
+       * caller convention, not a guarantee. Emitted only when true, so `false`
+       * covers both "there was text" and a backend that predates the field.
+       */
+      readonly withheld: boolean;
     }
   | {
       /**
@@ -856,6 +873,9 @@ export class RuntimeClient implements IRuntimeClient {
           kind: payload['kind'] === 'tool' ? 'tool' : 'ai',
           toolName: asString(tool['name']),
           toolCallId: asString(tool['callId']),
+          // Emitted only when true, so its absence is "there was text" — the
+          // same shape the backend uses, and what a pre-field backend sends.
+          withheld: payload['withheld'] === true,
         });
       } else if (eventName === 'error') {
         failure = asString(payload['detail']) || 'The workflow failed while streaming.';

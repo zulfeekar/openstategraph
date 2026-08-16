@@ -14,11 +14,35 @@ from __future__ import annotations
 
 from typing import Any
 
-from openstategraph.api.streaming import TERMINAL_EVENTS
+from openstategraph.api.streaming import FRAME_FIELDS, TERMINAL_EVENTS
 
 #: Named once, because it is the sentence a custom client is most likely to
 #: get wrong and OpenAPI has nowhere to put it.
 STREAM_GUIDE = "docs/api.md"
+
+
+def _frame_fields_sentence(events: tuple[str, ...]) -> str:
+    """What each named frame carries, in a grammar a pin can read.
+
+    OpenAPI cannot type a sequence of frames, but it can be told the
+    vocabulary — and the level below the names is where the drift was
+    (framework-packaging ticket 10). Written from `FRAME_FIELDS` rather than
+    typed here, so `docs/openapi.json` publishes what the emitters carry and
+    `src/core/runtime/contractDrift.test.ts` reads it from the artifact rather
+    than from a second list somebody keeps in step by attention.
+
+    Empty for an endpoint whose events are not run frames — `GET /api/events`
+    carries one catalogue hint and has no entry, and inventing one so this
+    sentence is never blank would be the mirror this exists to remove.
+    """
+    described = [name for name in events if name in FRAME_FIELDS]
+    if not described:
+        return ""
+    per_frame = "; ".join(
+        f"`{name}`: " + ", ".join(f"`{field}`" for field in FRAME_FIELDS[name])
+        for name in described
+    )
+    return f"Frame fields: {per_frame}. "
 
 
 def sse_responses(events: tuple[str, ...], summary: str) -> dict[int | str, Any]:
@@ -35,10 +59,10 @@ def sse_responses(events: tuple[str, ...], summary: str) -> dict[int | str, Any]
         200: {
             "description": (
                 f"{summary}\n\nA `text/event-stream`. Event names: {names}. "
-                f"The full frame vocabulary, and the guarantee that every "
-                f"stream ends with one of "
-                f"{', '.join(f'`{n}`' for n in TERMINAL_EVENTS)}, are in "
-                f"`{STREAM_GUIDE}` — OpenAPI cannot express either."
+                f"{_frame_fields_sentence(events)}"
+                f"The guarantee that every stream ends with one of "
+                f"{', '.join(f'`{n}`' for n in TERMINAL_EVENTS)} is in "
+                f"`{STREAM_GUIDE}` — OpenAPI cannot express it."
             ),
             "content": {
                 "text/event-stream": {

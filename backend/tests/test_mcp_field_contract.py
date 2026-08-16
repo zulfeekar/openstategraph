@@ -30,6 +30,7 @@ from openstategraph.prebuilt_mcp import MCP_NODE_KEYS, MCP_ROW_KEYS, McpTool
 ROOT = Path(__file__).resolve().parents[2]
 PORT_SPECS = ROOT / "backend" / "openstategraph" / "compile" / "port_specs.json"
 FIELD_SET = ROOT / "src" / "nodes" / "tools" / "mcpServerFields.ts"
+REGISTRY_CLIENT = ROOT / "src" / "core" / "runtime" / "McpRegistryClient.ts"
 
 #: `StateGraph.add_node` parameters the editor puts on every node. They belong
 #: to the workflow, not to any family, so they are not this atom's to mirror.
@@ -119,6 +120,79 @@ class TestTheCardAndTheToolAgree:
         assert McpTool.node_type == "tool.mcp"
         known = {item["type"] for item in json.loads(PORT_SPECS.read_text())["node_types"]}
         assert McpTool.node_type in known
+
+
+class TestTheThreeVocabulariesDoNotDiverge:
+    """The values, not only the keys — framework-packaging ticket 10.
+
+    This file pinned what the fields are *called* and stopped there. The three
+    closed sets whose members cross the wire — a transport, an auth kind, a
+    status — were two hand-mirrors each, with `mcpPanelSurface.test.ts` holding
+    the TypeScript half and `test_prebuilt_mcp.py` the Python half, and nothing
+    comparing them. A value only one side knows is the same defect one level
+    down from a key only one side knows: a document that stores `http` where
+    the runtime expects `streamable_http` looks configured and connects to
+    nothing.
+
+    Order is asserted along with membership. For the two dropdowns it is the
+    order a developer is offered them in, and `streamable_http` leading is the
+    argument `MCP_TRANSPORT_OPTIONS` makes in prose.
+    """
+
+    @staticmethod
+    def _const_values(source: Path, name: str) -> list[str]:
+        block = re.search(rf"export const {name}[^=]*= \[(.*?)\n\];", source.read_text(), re.S)
+        assert block, f"{source.name} no longer declares {name}"
+        return re.findall(r"'([^']+)'", block.group(1))
+
+    def test_the_extractors_can_actually_fail(self) -> None:
+        """The control every pin in this file carries. Two of the three read
+        symbols rather than literals, which is one more way to match nothing."""
+        assert len(self._resolved(FIELD_SET, "MCP_TRANSPORT_OPTIONS")) == 2
+        assert len(self._resolved(FIELD_SET, "MCP_AUTH_OPTIONS")) == 3
+        assert len(self._const_values(REGISTRY_CLIENT, "MCP_STATUSES")) == 5
+
+    def test_the_two_transports_are_the_same_two(self) -> None:
+        from openstategraph.prebuilt_mcp import TRANSPORTS
+
+        # The card names its own constants (`TRANSPORT_HTTP`), so the values
+        # are resolved through the file's own literal declarations rather than
+        # re-typed here — which is the point of the atom having them.
+        assert self._resolved(FIELD_SET, "MCP_TRANSPORT_OPTIONS") == list(TRANSPORTS)
+
+    def test_the_three_auth_kinds_are_the_same_three(self) -> None:
+        from openstategraph.prebuilt_mcp import AUTH_KINDS
+
+        assert self._resolved(FIELD_SET, "MCP_AUTH_OPTIONS") == list(AUTH_KINDS)
+
+    def test_the_five_statuses_are_the_same_five(self) -> None:
+        from openstategraph.prebuilt_mcp import MCP_STATUSES
+
+        assert self._const_values(REGISTRY_CLIENT, "MCP_STATUSES") == list(MCP_STATUSES)
+
+    @classmethod
+    def _resolved(cls, source: Path, name: str) -> list[str]:
+        """Option values, with a named constant looked up in the same file."""
+        text = source.read_text()
+        out: list[str] = []
+        for literal, symbol in re.findall(r"value:\s*(?:'([^']+)'|(\w+))", _block(source, name)):
+            if literal:
+                out.append(literal)
+                continue
+            found = re.search(rf"export const {symbol} = '([^']+)'", text)
+            assert found, f"{source.name} names {symbol} in {name} and does not declare it"
+            out.append(found.group(1))
+        return out
+
+
+def _block(source: Path, name: str) -> str:
+    block = re.search(
+        rf"export const {name}: readonly FieldOption\[\] = \[(.*?)\n\];",
+        source.read_text(),
+        re.S,
+    )
+    assert block, f"{source.name} no longer declares {name}"
+    return block.group(1)
 
 
 class TestTheSecretPrefixesDoNotDiverge:

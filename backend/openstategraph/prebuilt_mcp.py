@@ -143,6 +143,23 @@ STATUS_NOT_MCP = "not_mcp"
 #: `pip` fixes (mcp-connect ticket 05).
 STATUS_NOT_INSTALLED = "not_installed"
 
+#: Every verdict a handshake can reach, in the order the research's taxonomy
+#: sets them out — `live` first, then the three facts about the server, then
+#: the one fact about this machine.
+#:
+#: A tuple, beside `TRANSPORTS` and `AUTH_KINDS`, because those two had one and
+#: this did not — so the three vocabularies this atom shares with the editor
+#: were pinnable, pinnable and un-nameable (framework-packaging ticket 10).
+#: `MCP_STATUSES` in `src/core/runtime/McpRegistryClient.ts` is the other half,
+#: and `backend/tests/test_mcp_field_contract.py` holds them together.
+MCP_STATUSES = (
+    STATUS_LIVE,
+    STATUS_UNREACHABLE,
+    STATUS_AUTH_REQUIRED,
+    STATUS_NOT_MCP,
+    STATUS_NOT_INSTALLED,
+)
+
 #: `DEFAULT_STREAMABLE_HTTP_SSE_READ_TIMEOUT` is **300 s** in the library, so a
 #: server that accepts a connection and then says nothing would hang a panel
 #: for five minutes and a compile for as long. Every handshake this module
@@ -1074,6 +1091,7 @@ __all__ = [
     "DEFAULT_MCP_SERVERS",
     "MCP_NODE_KEYS",
     "MCP_ROW_KEYS",
+    "MCP_STATUSES",
     "MCP_TIMEOUT_SECONDS",
     "MCP_TOOLS",
     "STATUS_AUTH_REQUIRED",

@@ -1692,7 +1692,7 @@
                 }
               }
             },
-            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
           }
         },
         "summary": "Catalogue changes, live (SSE)",
@@ -2225,7 +2225,7 @@
                 }
               }
             },
-            "description": "The resumed run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+            "description": "The resumed run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. Frame fields: `update`: `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output`; `token`: `node`, `namespace`, `content`, `block`, `usage`, `activeNode`, `path`, `pathSlugs`, `kind`, `tool`, `withheld`; `progress`: `node`, `namespace`, `message`, `current`, `total`, `activeNode`, `path`, `pathSlugs`; `spawn`: `kind`, `parent`, `label`, `instruction`, `taskId`, `namespace`; `done`: `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `developer`; `interrupt`: `threadId`, `node`, `message`, `candidate`; `error`: `threadId`, `detail`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
           },
           "422": {
             "content": {
@@ -2269,7 +2269,7 @@
                 }
               }
             },
-            "description": "The run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. The full frame vocabulary, and the guarantee that every stream ends with one of `done`, `interrupt`, `error`, are in `docs/api.md` \u2014 OpenAPI cannot express either."
+            "description": "The run, frame by frame.\n\nA `text/event-stream`. Event names: `update`, `token`, `progress`, `spawn`, `done`, `interrupt`, `error`. Frame fields: `update`: `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output`; `token`: `node`, `namespace`, `content`, `block`, `usage`, `activeNode`, `path`, `pathSlugs`, `kind`, `tool`, `withheld`; `progress`: `node`, `namespace`, `message`, `current`, `total`, `activeNode`, `path`, `pathSlugs`; `spawn`: `kind`, `parent`, `label`, `instruction`, `taskId`, `namespace`; `done`: `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `developer`; `interrupt`: `threadId`, `node`, `message`, `candidate`; `error`: `threadId`, `detail`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
           },
           "422": {
             "content": {

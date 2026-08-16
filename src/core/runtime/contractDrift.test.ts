@@ -198,6 +198,28 @@ function eventNamesDeclaredFor(path: string, method: string): string[] {
   return [...names.matchAll(/`([a-z]+)`/g)].map((match) => match[1] as string);
 }
 
+/**
+ * What each frame *carries* — the level below the names, and where the drift
+ * actually was (framework-packaging ticket 10).
+ *
+ * Read out of the same published description, for the same reason the names
+ * are: `FRAME_FIELDS` in `api/streaming.py` is the one declaration, and
+ * `sse_responses` writes it into `docs/openapi.json`. Reading it here rather
+ * than listing it makes a field the backend adds a red test on the day the
+ * snapshot is regenerated, instead of a widening nobody diffs.
+ */
+function frameFieldsDeclaredFor(path: string, method: string): Record<string, string[]> {
+  const description: string = openapi.paths[path]?.[method]?.responses?.['200']?.description ?? '';
+  const sentence = description.match(/Frame fields: (.*?)\. /s)?.[1] ?? '';
+  const found: Record<string, string[]> = {};
+  for (const match of sentence.matchAll(/`([a-z]+)`: ([^;]+)/g)) {
+    found[match[1] as string] = [...(match[2] as string).matchAll(/`([A-Za-z]+)`/g)].map(
+      (field) => field[1] as string,
+    );
+  }
+  return found;
+}
+
 describe('the client and the published contract', () => {
   it('calls only endpoints the contract documents', () => {
     const documented = new Set(Object.keys(openapi.paths).map(normalise));
@@ -314,6 +336,38 @@ describe('the client and the published contract', () => {
       }
     });
 
+    /**
+     * The level below the names, and the one the pin above never reached.
+     *
+     * Asserted against `RuntimeClient.ts` and its collaborators only — not
+     * against every discovered consumer, unlike the frame *names* above. The
+     * two questions are different. A frame name a client ignores is a frame it
+     * drops on the floor, which is what `progress` did; a field it does not
+     * read is usually a client with a narrower job, and `chat.html` has no
+     * business with `pathSlugs`. What the DRY rule actually names is *this*
+     * file — the hand-written mirror of the Pydantic seam — so this is where
+     * the whole vocabulary has to land.
+     */
+    it('is parsed field for field by the hand-written client', () => {
+      const declared = frameFieldsDeclaredFor('/api/runs/stream', 'post');
+
+      // Anti-vacuity: an extractor that matched nothing would make the loop
+      // below a statement about no frames and no fields.
+      expect(Object.keys(declared)).toHaveLength(7);
+      expect(declared['token']).toContain('withheld');
+
+      for (const [name, fields] of Object.entries(declared)) {
+        const missing = fields.filter((field) => !client.includes(field));
+
+        expect(
+          missing,
+          `RuntimeClient never reads ${missing.join(', ')} off a \`${name}\` frame — ` +
+            `the field is emitted, documented and published, and no consumer of this ` +
+            `client can see it. That is exactly how 'withheld' shipped to nobody.`,
+        ).toEqual([]);
+      }
+    });
+
     it('is the same vocabulary on resume', () => {
       // One parser handles both endpoints, which is only safe while both
       // publish the identical vocabulary — the guide promises exactly that.
@@ -342,5 +396,31 @@ describe('the client and the published contract', () => {
       expect(declared, `RunRequest is missing ${field}`).toContain(field);
       expect(client, `RuntimeClient never sends ${field}`).toContain(field);
     }
+  });
+
+  /**
+   * `audience` was pinned as a *key* and not as its two values
+   * (framework-packaging ticket 10) — the same one-level-short shape as the
+   * frame names above, and nearly free to close because this file already
+   * reads the schema the enum is in.
+   *
+   * It is worth closing because of what the values decide. `customer` and
+   * `developer` are the boundary `api/audience.py` draws between a reply and
+   * the machinery around it; a client sending a third spelling gets a 422, and
+   * a client whose union drifts to `'dev'` sends a customer run believing it
+   * asked for a developer one — and the difference is silent, because a
+   * customer run answers perfectly well.
+   */
+  it('sends only audiences the contract accepts', () => {
+    const declared: string[] = openapi.components.schemas.RunRequest.properties.audience.enum ?? [];
+
+    expect(declared, 'RunRequest.audience is no longer an enum').toEqual(['customer', 'developer']);
+
+    const union = client.match(/audience\??:\s*('(?:customer|developer)'(?:\s*\|\s*'\w+')*)/)?.[1];
+    expect(
+      union,
+      'RuntimeClient no longer types `audience` as a union — check the matcher',
+    ).toBeDefined();
+    expect([...(union as string).matchAll(/'(\w+)'/g)].map((match) => match[1])).toEqual(declared);
   });
 });

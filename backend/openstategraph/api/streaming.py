@@ -672,6 +672,49 @@ TERMINAL_EVENTS: tuple[str, ...] = ("done", "interrupt", "error")
 #: the contract and a drift there is a broken client, not a typo.
 RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
 
+#: What each frame carries — the vocabulary one level below the names.
+#:
+#: **Why this exists** (framework-packaging ticket 10). `RUN_EVENTS` was
+#: published, pinned in both languages and read by a drift test; the ~30 field
+#: names inside those frames were a hand-mirror in `RuntimeClient.ts`, prose in
+#: `docs/api.md` and dict literals down this file, with nothing holding the
+#: three together. The pin stopped at what a frame is *called*. `withheld` is
+#: what that cost: emitted here, documented in the guide, Python-tested, and
+#: read by no client at all — while `api/audience.py` says the field exists
+#: precisely so a client can tell "emptied deliberately" from "nothing
+#: happened".
+#:
+#: Declared once, here, beside the emitters — so `sse_responses` can write it
+#: into the OpenAPI description, `docs/openapi.json` publishes it, and
+#: `contractDrift.test.ts` reads it from there rather than from a second list.
+#: A field a frame stops carrying, or gains, is now a diff in a committed
+#: artifact instead of a silent widening.
+#:
+#: Optional fields are included: `withheld` rides only a frame that was
+#: emptied, and `developer` only a developer run, but a client has to know
+#: they exist to handle them. Absence is a value here, not a gap.
+FRAME_FIELDS: dict[str, tuple[str, ...]] = {
+    "update": (
+        "node", "namespace", "taskId", "internal",
+        "activeNode", "path", "pathSlugs", "output",
+    ),
+    "token": (
+        "node", "namespace", "content", "block", "usage",
+        "activeNode", "path", "pathSlugs", "kind", "tool", "withheld",
+    ),
+    "progress": (
+        "node", "namespace", "message", "current", "total",
+        "activeNode", "path", "pathSlugs",
+    ),
+    "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
+    "interrupt": ("threadId", "node", "message", "candidate"),
+    "done": (
+        "threadId", "answer", "decisions", "outputs",
+        "nested", "attempts", "mermaid", "developer",
+    ),
+    "error": ("threadId", "detail"),
+}
+
 
 def _is_terminal(frame: str) -> bool:
     """True if this SSE frame is one of the three that end a stream."""
