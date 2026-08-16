@@ -103,7 +103,9 @@ The full checklist with the evidence behind each gate is
 8. **claims "zero tokens" while calling a model** anywhere in the path;
 9. **lets two node types write one state key with no named reducer**;
 10. **registers no browser executor** — a `standard` node without one is
-    *silently skipped* in preview. Refuse honestly instead.
+    *silently skipped* in preview. Refuse honestly instead;
+11. **cites a measurement without the version it ran on** — and the build must
+    re-verify on the version it pins.
 
 ---
 
@@ -122,7 +124,7 @@ is a different thing from unanswered and must be written down as such.
 6. Tier & family      — and the ladder rung it occupies
 7. Ports & cardinality— types, directions, maxConnections
 8. Compile target     — a named LangGraph construct
-9. Honesty gates      — all ten run, none tripped (or the design changed)
+9. Honesty gates      — all eleven run, none tripped (or the design changed)
 10. Smoke plan        — the one run that proves it, and what it must show
                                                         TOTAL: __/10
 ```
@@ -151,6 +153,13 @@ invalid arguments come back as data, `configure` returns a fresh instance),
 plus one test per failure mode from dimension 5. Never let a test hit the
 network.
 
+If the design contains a validator, a parser or a refusal, this is where
+dimension 5's adversarial input list gets spent: assert the rule against the
+inputs it must refuse, one at a time, rather than against the argument for why
+it holds. See `references/interview-questions.md` §5, "The second use of the
+failure list" — the recorded case is a rule that was reasoned about, shipped,
+and admitted exactly the value it existed to refuse.
+
 **2. Green, in Python.** Either:
 - a prebuilt platform module — `backend/openstategraph/prebuilt_<thing>.py`,
   the `prebuilt_web.py` / `prebuilt_youtube.py` shape: keyless where possible,
@@ -160,48 +169,90 @@ network.
   `orchestrator.py`, `middleware.py`, `prompt.py`). Implement `_execute`, never
   `run`.
 
-**3. Red, in TypeScript.** `src/nodes/**/<Thing>.test.ts` — assert the seam: the
+**3. Did you widen a shared base?** If step 2 added a member to a base class
+rather than to your leaf, three things moved and none of them are in your diff
+yet:
+
+- **The census.** `backend/tests/test_public_surface_ceiling.py` counts
+  *inherited* members, so one method on `BaseTool` charges all fourteen tools.
+  The recorded case: `as_langchain_tools()` — declared once on the base so
+  `tool.mcp` inherits the plural binding seam instead of re-declaring it — moved
+  every tool's count by one and broke the ceiling test **in three places** at
+  once. Two of those were tools sitting exactly at ten, which crossed on that
+  single commit having gained nothing of their own.
+- **The ceiling pins.** Update the recorded-exception notes with the new number
+  *and the argument*, not just the number. A pin that says "twelve" and not why
+  is a number the next person will edit rather than defend.
+- **The call sites.** Sweep them. A base member with a default
+  (`[self.as_langchain_tool()]`) silently works everywhere and is *wrong*
+  somewhere — the point of widening is that one leaf overrides it.
+
+A census that moves is the anti-duplication rule working, not failing: the
+alternatives here were a special case in the compiler's binding loop or a
+parallel interface every consumer must check for, and both are worse. Say that
+in the pin. If you cannot make the argument, put the member on the leaf.
+
+**4. Red, in TypeScript.** `src/nodes/**/<Thing>.test.ts` — assert the seam: the
 node id string the Python `node_type` declares, the ports, the field defaults.
 
-**4. Green, in TypeScript.** The card and its field schema. Tool atoms use
+**5. Green, in TypeScript.** The card and its field schema. Tool atoms use
 `defineToolNode` from `src/nodes/tools/AbstractToolNode.ts`; a platform atom can
 join `src/nodes/tools/PlatformToolsNode.ts` rather than opening a new file. An
 empty `ToolNodeModel` subclass is a test failure — pass `ToolNodeModel` itself.
 Declare configuration **once** as fields; card, inspector, defaults and
 validation all derive from it.
 
-**5. Register.** App-wide: `registerNodeCatalogue` in `src/nodes/index.ts`, and
+**6. Register.** App-wide: `registerNodeCatalogue` in `src/nodes/index.ts`, and
 `_process_tool_layer` in `backend/openstategraph/api/registries.py` — **not**
 `build_tool_registry`, which assembles layers and holds no list. Workflow-scoped:
 one line in `src/nodes/workflowScoped.ts`. Discovered: drop the tool in
 `workflows/<slug>/tools/` and add the slug to `pythonpath` in `pytest.ini`.
 
-**6. Tier.** If the palette gains a section or a member, `src/nodes/vocabulary.ts`
+**7. Tier.** If the palette gains a section or a member, `src/nodes/vocabulary.ts`
 is the single declaration and `src/nodes/vocabulary.test.ts` locks the ordering.
 
-**7. Regenerate the port table.** `npm run generate:ports` — it rewrites
+**8. Regenerate the port table.** `npm run generate:ports` — it rewrites
 `backend/openstategraph/compile/port_specs.json`, which is committed and gated
 both by `npm run verify` and by CI. Skipping this is a guaranteed red build.
 
-**8. Package tests.** Use `assert_document_shape` from
+**9. Pin the field contract — and for a tool atom, nobody else will.** Honesty
+gate 7 says every key a factory reads must be a key some field declares, and
+`backend/tests/test_data_key_contract.py` enforces it over the *compiler's*
+factories. It **does not cover a tool's `configure()`**, by deliberate design
+and stated in its own docstring — and `configure()` is exactly where a tool
+atom's keys live. So a tool with real configuration passes the general guard
+with a misspelling in every one of its keys, and produces a node that looks
+configured and connects to nothing.
+
+Write the atom's own contract test, both directions, off the regenerated
+`port_specs.json` rather than a hand-kept list.
+`backend/tests/test_mcp_field_contract.py` is the shape to copy: it asserts the
+tool reads every key the editor declares *and* the editor declares every key
+the tool reads. One note it earned the hard way: keys inside a
+`repeatable-group` never reach `field_keys`, so for those read the factory's
+own constant instead of losing your grip on exactly the keys a misspelling
+would silence. And if the atom validates anything, both languages validate —
+see the half-a-guard rule under dimension 5.
+
+**10. Package tests.** Use `assert_document_shape` from
 `backend/openstategraph/package_testing.py` for any example or package that
 carries the new node. A new example also needs its entry in
 `backend/openstategraph/examples/index.json` and the counts that quote it.
 
-**9. Gates.**
+**11. Gates.**
 ```bash
 npm run verify          # typecheck, lint, format:check, vitest
 python3 -m pytest -q    # backend + workflow tests
 openstategraph validate workflows/<slug>
 ```
 
-**10. Live smoke, on Ollama cloud.** `OLLAMA_API_KEY` plus a `-cloud` model
+**12. Live smoke, on Ollama cloud.** `OLLAMA_API_KEY` plus a `-cloud` model
 (`gpt-oss:120b-cloud`). Never smoke against a local model: a weak model turns a
 wiring bug and a capability gap into the same symptom. Record what ran, what it
 returned, and which rung answered — the youtube ticket's live-smoke table is the
 format.
 
-**11. Commit.** No prefix convention. One sentence saying what changed and why —
+**13. Commit.** No prefix convention. One sentence saying what changed and why —
 the log reads like `RC-01: generate the port table from TypeScript; the hand
 copy held 10 of 38 node types`. Add a `CHANGELOG.md` entry for anything a user
 can observe. A change under `src/` or `backend/` with genuinely no documentation
@@ -215,7 +266,7 @@ surface says `docs: not-needed — <reason>`.
 | --- | --- |
 | `references/interview-questions.md` | before the first question — full wordings, the reasoning each carries, the scope→backend map, follow-ups |
 | `references/honesty-gates.md` | before promising anything, and again before the commit |
-| `references/worked-example-tollbooth.md` | to see a real interview end to end: the 2026-08-15 memory-module session, each answer and what it decided, and the spec that came out |
+| `references/worked-example-tollbooth.md` | to see a real interview end to end: the 2026-08-15 memory-module session, each answer and what it decided, and the spec that came out — plus the honesty notes each live client has added since, which say what this skill did not have when they ran it |
 
 The governing rules this skill enforces are in `CLAUDE.md` at the repository
 root. Where this skill and `CLAUDE.md` disagree, `CLAUDE.md` wins and this skill

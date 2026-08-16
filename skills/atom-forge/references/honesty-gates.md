@@ -1,7 +1,7 @@
 # The honesty gates
 
 **Do not promise which is not possible.** That is the owner's phrasing and this
-skill's law. These ten gates are the feasibility checklist — run them before
+skill's law. These eleven gates are the feasibility checklist — run them before
 promising anything in the interview, and again before the commit.
 
 Each gate carries the evidence that put it here, because a gate whose reason is
@@ -140,11 +140,46 @@ truth:
 Do not fabricate a plausible result to keep the canvas green. Router, Grader and
 Orchestrator all refuse for the same reason.
 
+## 11. A measurement is a fact about one version
+
+**Gate:** every number, API shape and behaviour you measured cites the version
+it ran on, and the build **re-verifies on the version it pins**.
+
+Research and build happen on different days and, often, in different
+environments. The recorded case: the `tool.mcp` research read
+`langchain-mcp-adapters` **0.2.1** line by line — transports, error handling,
+the `load_mcp_tools` signature — while the doc page it was checked against
+described `>=0.3.0`, and the ship floor became `>=0.3.0`. Two of the measured
+facts had drifted:
+
+- errors. On 0.2.1 a tool error raises `ToolException` and
+  `handle_tool_errors` does not exist; on 0.3.2 it exists, defaults to `True`,
+  and the error comes back **as data**. The atom was scoped to own error
+  conversion and did not need to.
+- signatures. `tool_name_prefix` moved from the loader to the client
+  **constructor**. A build following the research literally would have passed
+  an unexpected keyword.
+
+Only the first was caught in advance, and only because the research author
+happened to notice and raised it as a grill flag; the second was flagged by
+nobody and found by the re-verification. That asymmetry is the whole argument
+for a gate: the catch must be structural, not attentive.
+
+So — record the versions beside the measurements (`.scratch/mcp-connect/research/01-adapters.md`
+is the format: a version line at the top, a caveat where the doc and the
+install disagree, and an **amendment** section written after re-verifying).
+Re-verify in a clean environment on the pinned version before the build trusts
+a single number. What holds, say so; what drifted, name.
+
+The corollary a build will want to skip: *"the docs say X"* is not a
+measurement. The docs describe some version, usually the newest. Pin, install,
+run it.
+
 ---
 
 ## Running the gates
 
-Read the design against all ten and write the outcome down. The two legitimate
+Read the design against all eleven and write the outcome down. The two legitimate
 outcomes are *passes* and *the design changed*. "We'll deal with it later" is
 neither, and it is what gate 6 exists to catch.
 

@@ -154,7 +154,8 @@ namespace at a drawn position. Compare the refusal it would have hit otherwise:
 > backend (read-only wheel); no model calls in the write path; reducer rule if
 > any new state key is multi-writer."*
 
-Three of the ten, tripped and resolved *during* the questions rather than
+Three of them — of the ten that existed then; there are eleven now — tripped
+and resolved *during* the questions rather than
 afterwards — which is the intended behaviour. The markdown-in-package option was
 the obvious first design and died on gate 1.
 
@@ -210,7 +211,18 @@ worked example itself scores 8/10 on the readiness card — it numbered
 *Retention* as its fifth question and never ran the failure-modes dimension,
 and it treated three honesty gates as "already applied". The first build run
 caught that, refused to start at 8, and closed both gaps from the repository.
-The complete card — all ten lines, the six failure-mode sentences, all ten
-gates run — is recorded in
+The complete card — all ten lines, the six failure-mode sentences, every gate
+run — is recorded in
 `.scratch/install-experience/tickets/17-the-tollbooth-memory-segment.md`.
 Follow the card, not this example's shortcut.
+
+**Honesty note (2026-08-16, added by the skill's third live client):** the
+`tool.mcp` build ran this skill end to end and found three steps that were not
+here to run — widening a shared base moved the census for all fourteen tools
+(build step 3), a tool atom's field contract lives in `configure()` where the
+general guard does not look (build step 9), and nothing gated a measurement
+taken on a version the build does not ship (honesty gate 11). All three were
+found by a human noticing, which is the failure mode a checklist exists to
+remove. `.scratch/install-experience/tickets/22-the-forge-learns-from-its-third-client.md`
+and `.scratch/mcp-connect/tickets/02-the-mcp-picker-atom.md` §"What the forge
+did not have" carry the full findings.

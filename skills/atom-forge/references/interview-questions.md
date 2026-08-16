@@ -171,6 +171,44 @@ Rules that fall out of it:
 **Follow-up:** *"Which of these is the one that would be reported as success?"*
 There is usually exactly one, and it is the reason this dimension exists.
 
+### The second use of the failure list: run it at your own validator
+
+The list this dimension produces is an **adversarial input list**, and it is
+worth more than the error messages it was collected for. So, once the design
+has a validator, a parser or a refusal in it:
+
+> **"Write the inputs that should be refused, then run them at the rule. Do not
+> reason about whether it holds."**
+
+**The recorded example — an env var name is not a secret value.** `tool.mcp`
+lets a document name the environment variable holding a server's credential
+(`authTokenEnv`), and must refuse a pasted credential outright, because the
+document is committed. The validator was written, and documented with a
+confident argument: *every credential shape contains a hyphen or starts with a
+digit, and neither is legal in a variable name.* It reads as a proof.
+
+It is false. `ghp_aaaa…` is a GitHub token **and** a legal environment-variable
+name — underscores and letters, nothing else. The rule admitted exactly the
+value it existed to refuse, and would have shipped, because nothing about
+reading it suggests otherwise.
+
+What found it was a test built from the failure-modes list: the pasted-shapes
+inventory this dimension had already produced, fed to the rule one at a time.
+The fix is a *value*-shaped check beside the *name*-shaped one —
+`SECRET_VALUE_PREFIXES` in `backend/openstategraph/config_file.py`, a literal
+list of known credential prefixes (`sk-`, `ghp_`, `AKIA`, `Bearer `, …), which
+is inelegant and correct where the elegant argument was neither.
+
+Three things to take, in the order they bite:
+
+- **A validator justified by an argument rather than by inputs is a hypothesis.**
+  The more confident the sentence, the less anyone re-runs it.
+- **A refusal rule needs the list of things it must refuse, written down**, and
+  the list belongs in the test, not in the prose.
+- **Both halves, both languages.** The editor validates and so does the loader;
+  a guard that runs in one is half a guard, and the missing half is always the
+  one somebody hits.
+
 ---
 
 ## 6. Tier and family
