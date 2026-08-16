@@ -1,4 +1,9 @@
-import { ensureDiskBaseline, writeOpenWorkflowToDisk } from '@app/diskAutosave';
+import {
+  ensureDiskBaseline,
+  writeOpenMountHostToDisk,
+  writeOpenWorkflowToDisk,
+  type DiskAutosaveOutcome,
+} from '@app/diskAutosave';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import {
   createContext,
@@ -474,12 +479,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
         // Failures are reported once per distinct reason for the same reason
         // the storage ones are — this fires on every edit, and a backend that
         // is down would otherwise raise a toast per second.
-        void writeOpenWorkflowToDisk(
-          (diskClientRef.current ??= new WorkflowFileClient()),
-          workbench.model,
-          workbench.serializer,
-          sessionStorage,
-        ).then((disk) => {
+        const reportDisk = (disk: DiskAutosaveOutcome) => {
           if (disk.kind !== 'failed') {
             lastDiskReported = null;
             return;
@@ -487,7 +487,27 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
           if (disk.reason === lastDiskReported) return;
           lastDiskReported = disk.reason;
           reportRef.current(`Not written to the workflow folder: ${disk.reason}`);
-        });
+        };
+
+        const client = (diskClientRef.current ??= new WorkflowFileClient());
+        void writeOpenWorkflowToDisk(
+          client,
+          workbench.model,
+          workbench.serializer,
+          sessionStorage,
+        ).then(reportDisk);
+
+        // The other document an edit can belong to. While a mount is open the
+        // call above writes nothing — what is on screen is derived, and
+        // writing it back to the package would burn one instance's overrides
+        // into the shared definition. The override itself lives on the
+        // **host's** mount node, and until ticket 44 nothing wrote that
+        // either: the inspector badged the field `overridden` and `Back`
+        // discarded it. Both are called on every tick; exactly one of them
+        // ever has somewhere to write.
+        void writeOpenMountHostToDisk(client, controller.document.mountContext() ?? null).then(
+          reportDisk,
+        );
       }, SAVE_DELAY_MS);
     };
 

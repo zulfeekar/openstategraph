@@ -1,9 +1,15 @@
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
 import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
-import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
+import {
+  CURRENT_SLUG_KEY,
+  forgetKnownSavedAt,
+  getKnownSavedAt,
+  recordKnownSavedAt,
+} from './workflowFileWatch';
 
 /**
  * Whether an edit should be written to `workflows/<slug>/` right now.
@@ -25,9 +31,14 @@ import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
  * - **A mount instance is open.** What is on screen is a *derived* document —
  *   the package plus this mount's overrides — and saving it back to the
  *   package would burn those overrides into the shared definition and hit
- *   every other mount. `WorkflowManager.handleSave` handles that case by
- *   writing the **parent**, with a compare-and-set on its `savedAt`; doing
- *   that silently on every keystroke is not the same trade.
+ *   every other mount.
+ *
+ * The second exclusion is still right and used to be the whole answer, which
+ * made it wrong by omission: while an instance was open **nothing** was
+ * written, and the override the inspector had already badged `overridden`
+ * lived only in a retained JavaScript object that `Back` threw away
+ * (organisms-first-class ticket 44). `writeOpenMountHostToDisk` below is the
+ * other half — the host, never the package.
  */
 export function diskAutosaveTarget(storage: Pick<Storage, 'getItem'>): string | null {
   const slug = (storage.getItem(CURRENT_SLUG_KEY) ?? '').trim();
@@ -238,5 +249,93 @@ export async function writeOpenWorkflowToDisk(
 
   lastWritten.set(slug, payload);
   forgetKnownSavedAt(slug);
+  return { kind: 'saved' };
+}
+
+/**
+ * What we believe `workflows/<root>/workflow.json` holds while a mount of it
+ * is open.
+ *
+ * Its own map rather than a second meaning for `lastWritten`, because the two
+ * hold different *forms* of a document. `lastWritten` holds the serializer's
+ * canonical form of a model; this holds the host document exactly as the
+ * backend served it and `MountContext` then mutates it in place. Comparing one
+ * against the other would report a difference on every tick and write the host
+ * file forever, which is the failure `comparable` is documented at length to
+ * prevent.
+ */
+const lastHostWritten = new Map<string, string>();
+
+/**
+ * Record the host as loaded, so an override is the first thing that changes it.
+ *
+ * Called by the drill-in load path, beside the `savedAt` baselines it already
+ * records. Without it `writeOpenMountHostToDisk` refuses every write — the
+ * same "never write a package this page has not opened" rule the class path
+ * follows, and for the same reason: the host document is written **whole**,
+ * so a blind write reverts whatever it did not see.
+ */
+export function rememberMountHostDocument(root: string, document: unknown): void {
+  lastHostWritten.set(root, canonical(document));
+}
+
+/** Drop a host's baseline — on leaving an instance, and for tests. */
+export function forgetMountHostDocument(root: string): void {
+  lastHostWritten.delete(root);
+}
+
+/**
+ * Write the open mount's **host** package — the document its override lives in.
+ *
+ * The instance's own state is `data.overrides` on the host's mount node, so
+ * this is the one file an edit inside a drill-in has any business touching.
+ * The package the mount points at is not written here and must never be:
+ * mount-by-reference is what makes two mounts of one package able to differ,
+ * and the ticket that produced this function reported the package half as
+ * already correct.
+ *
+ * **Compare-and-set, unlike the class path, and deliberately.**
+ * `writeOpenWorkflowToDisk` writes a document this tab is the sole author of,
+ * and the file watch is following that slug so a change underneath is noticed.
+ * Neither is true here: `mounts.rootDocument` is a whole retained document
+ * that goes stale from the moment the drill-in begins, and the watch follows
+ * the *class* while an instance is open, so nothing else would notice the host
+ * moving. `WorkflowManager.handleSave` already guarded its explicit save this
+ * way; an automatic save writes the same bytes far more often and silently, so
+ * it needs the guard more rather than less.
+ */
+export async function writeOpenMountHostToDisk(
+  client: Pick<IWorkflowFileClient, 'save' | 'summary'>,
+  mounts: Pick<MountContext, 'address' | 'rootDocument'> | null,
+): Promise<DiskAutosaveOutcome> {
+  if (!mounts) return { kind: 'skipped' };
+
+  const root = mounts.address.root;
+  const prev = lastHostWritten.get(root);
+  if (prev === undefined) return { kind: 'skipped' };
+
+  const payload = canonical(mounts.rootDocument);
+  if (prev === payload) return { kind: 'unchanged' };
+
+  const baseline = getKnownSavedAt(root);
+  const current = await client.summary(root);
+  if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
+    return {
+      kind: 'failed',
+      reason: `"${root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
+    };
+  }
+
+  const name = (mounts.rootDocument['name'] as string) || root;
+  const result = await client.save(root, name, mounts.rootDocument);
+  if (!result.ok) return { kind: 'failed', reason: result.error };
+
+  lastHostWritten.set(root, payload);
+  // Adopt our own write as the new baseline. Forgetting it — what the class
+  // path does — would disable the guard above from the second edit onwards,
+  // and recording nothing would make every later write look like somebody
+  // else's and refuse for ever.
+  const row = await client.summary(root);
+  recordKnownSavedAt(root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
   return { kind: 'saved' };
 }

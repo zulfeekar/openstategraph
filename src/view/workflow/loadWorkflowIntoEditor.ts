@@ -14,7 +14,11 @@ import { recordKnownCapabilities } from '@app/capabilityRefresh';
 import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 import { pushDrillFrame } from '@app/drillStack';
 import { restoreDraftFor } from '@app/workflowDrafts';
-import { rememberDiskDocument } from '@app/diskAutosave';
+import {
+  forgetMountHostDocument,
+  rememberDiskDocument,
+  rememberMountHostDocument,
+} from '@app/diskAutosave';
 
 /**
  * What was opened, and where its contents came from.
@@ -134,6 +138,12 @@ export async function loadMountIntoEditor(
           )
         : undefined,
     );
+    // The host as it arrived, so an override written into it is the first
+    // thing that differs. Autosave refuses to write a host it has no baseline
+    // for, which is what stops a failed load from becoming a blind whole-file
+    // write over somebody else's package (ticket 44).
+    if (root.ok) rememberMountHostDocument(address.root, root.value);
+    else forgetMountHostDocument(address.root);
     setOpenAddress(address, slug);
     workbench.controller.document.importJSON(JSON.stringify(document));
     // **No draft restore.** A draft belongs to a document someone can save,

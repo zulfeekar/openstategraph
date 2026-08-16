@@ -66,6 +66,22 @@ edits the field as JSON with the same validation.
 > something to a prerequisite, the prerequisite ships, and nobody returns to
 > the deferral.
 
+> **And the value now has somewhere to live** (noted 2026-08-16). The chips
+> above shipped before persistence did, which made them a claim rather than a
+> report: `SetMountOverrideCommand` wrote `data.overrides` on the host
+> document `MountContext` retains, the field badged `overridden`, and nothing
+> wrote that document — autosave is switched off for an instance, correctly,
+> because what is on screen is derived. So `Back` re-fetched the host from
+> disk and the override was gone, with `"overrides": ""` still on the file and
+> no warning that anything had been dropped (organisms-first-class ticket 44).
+>
+> `diskAutosave.writeOpenMountHostToDisk` is the missing sink: the **host**,
+> never the package, on the same debounce as every other edit, with a baseline
+> recorded by both paths that can enter an instance and a compare-and-set the
+> explicit Save already had. The package half was always correct and stays
+> untested-by-change: two mounts of one package hold different overrides and
+> the package's bytes do not move.
+
 ## Rejected alternatives
 
 - **Fork-on-configure** (copy the package per mount): kills the single source

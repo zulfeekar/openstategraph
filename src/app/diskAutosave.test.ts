@@ -7,9 +7,14 @@ import { Workbench } from '@app/Workbench';
 import {
   diskAutosaveTarget,
   forgetDiskDocument,
+  forgetMountHostDocument,
   rememberDiskDocument,
+  rememberMountHostDocument,
+  writeOpenMountHostToDisk,
   writeOpenWorkflowToDisk,
 } from './diskAutosave';
+import { MountContext } from '@core/model/MountContext';
+import type { MountAddress } from '@core/model/MountAddress';
 import { CURRENT_SLUG_KEY, getKnownSavedAt, recordKnownSavedAt } from './workflowFileWatch';
 import { OPEN_ADDRESS_KEY } from './openAddress';
 
@@ -346,5 +351,189 @@ describe('the write loop', () => {
       ).toEqual({ kind: 'unchanged' });
     }
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * organisms-first-class ticket 44 — the override that was badged and thrown away.
+ *
+ * Everything upstream of persistence already worked: `SetMountOverrideCommand`
+ * wrote `data.overrides` on the retained host document, the card and the
+ * inspector badged the field `overridden`, and the model change fired
+ * `controller.onChange`. Both sinks that listen to it take `workbench.model`
+ * — the *derived child* — and `diskAutosaveTarget` correctly refuses to write
+ * that back to the package. So the edit had a signal and no destination: the
+ * host was never written, `Back` re-fetched it from disk unchanged, and the
+ * override was gone with nothing having said so.
+ */
+describe('writing an open mount’s host package', () => {
+  const address = { root: 'host', mountPath: ['wf-child'] } as const;
+  const hostDocument = (overrides?: string) => ({
+    name: 'Host',
+    nodes: [
+      {
+        id: 'wf-child',
+        type: 'compose.subgraph',
+        data: { workflow: 'child', ...(overrides ? { overrides } : {}) },
+      },
+    ],
+  });
+  const context = (document: Record<string, unknown>) =>
+    new MountContext(address as unknown as MountAddress, document);
+
+  afterEach(() => forgetMountHostDocument('host'));
+
+  it('writes the host, under the host’s slug, when an override lands on it', async () => {
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const summary = vi.fn(async () => Ok(null));
+    const document = hostDocument();
+    const mounts = context(document);
+    rememberMountHostDocument('host', document);
+
+    mounts.writeOverride('question', 'prompt', 'OVERRIDE TEST');
+    const outcome = await writeOpenMountHostToDisk({ save, summary }, mounts);
+
+    expect(outcome).toEqual({ kind: 'saved' });
+    const [slug, name, written] = save.mock.calls[0]!;
+    expect(slug).toBe('host');
+    expect(name).toBe('Host');
+    // The value the reload has to find. Not `""`, which is what the mount
+    // node's schema default left on disk for as long as this was broken.
+    const node = (written as { nodes: Array<{ data: Record<string, unknown> }> }).nodes[0]!;
+    expect(JSON.parse(node.data['overrides'] as string)).toEqual({
+      question: { prompt: 'OVERRIDE TEST' },
+    });
+  });
+
+  it('never writes the package the mount points at', async () => {
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const document = hostDocument();
+    const mounts = context(document);
+    rememberMountHostDocument('host', document);
+
+    mounts.writeOverride('question', 'prompt', 'OVERRIDE TEST');
+    await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, mounts);
+
+    // Mount-by-reference is the whole design: the child on disk keeps its own
+    // prompt, and every other mount of it is untouched.
+    expect(save.mock.calls.map(([slug]) => slug)).toEqual(['host']);
+  });
+
+  it('is quiet while the host is not changing', async () => {
+    // The child's canvas fires `onChange` for a drag, a selection, a resize —
+    // none of which touch the host. Without this the editor would rewrite an
+    // unchanged host file every second for as long as the drill-in stayed
+    // open, which is the write loop `comparable` exists to prevent.
+    const save = vi.fn(async () => Ok(undefined));
+    const document = hostDocument();
+    const mounts = context(document);
+    rememberMountHostDocument('host', document);
+
+    for (let tick = 0; tick < 4; tick += 1) {
+      expect(
+        await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, mounts),
+      ).toEqual({ kind: 'unchanged' });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('carries two mounts of one package with different values', async () => {
+    // The `same-package-twice` shape, which is the whole point of an instance:
+    // both rows point at `child` by reference, and what differs is stored per
+    // mount on the host. One write carries both, because both live in the one
+    // document this function writes.
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const document = {
+      name: 'Host',
+      nodes: [
+        { id: 'm1', type: 'workflow.subgraph', data: { workflow: 'child' } },
+        { id: 'm2', type: 'workflow.subgraph', data: { workflow: 'child' } },
+      ],
+    };
+    rememberMountHostDocument('host', document);
+
+    new MountContext({ root: 'host', mountPath: ['m1'] } as MountAddress, document).writeOverride(
+      'q',
+      'prompt',
+      'FIRST',
+    );
+    const second = new MountContext({ root: 'host', mountPath: ['m2'] } as MountAddress, document);
+    second.writeOverride('q', 'prompt', 'SECOND');
+
+    await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, second);
+
+    const written = save.mock.calls[0]![2] as { nodes: Array<{ data: Record<string, string> }> };
+    expect(JSON.parse(written.nodes[0]!.data['overrides']!)).toEqual({ q: { prompt: 'FIRST' } });
+    expect(JSON.parse(written.nodes[1]!.data['overrides']!)).toEqual({ q: { prompt: 'SECOND' } });
+  });
+
+  it('writes nothing when no mount is open', async () => {
+    const save = vi.fn(async () => Ok(undefined));
+    expect(await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, null)).toEqual({
+      kind: 'skipped',
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing before the host has been baselined', async () => {
+    // Same rule as the class path: without a baseline the document in memory
+    // is not known to have come from this slug, and a blind write of a whole
+    // retained document is how somebody else's package gets reverted.
+    const save = vi.fn(async () => Ok(undefined));
+    const mounts = context(hostDocument());
+    mounts.writeOverride('question', 'prompt', 'x');
+
+    expect(await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, mounts)).toEqual(
+      {
+        kind: 'skipped',
+      },
+    );
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('refuses rather than reverting a host somebody else moved', async () => {
+    // The explicit Save has compare-and-set for this; autosave writes the same
+    // whole retained document far more often, and silently, so it needs it
+    // more rather than less.
+    const save = vi.fn(async () => Ok(undefined));
+    const summary = vi.fn(async () => Ok({ slug: 'host', name: 'Host', savedAt: 'later' }));
+    const document = hostDocument();
+    const mounts = context(document);
+    rememberMountHostDocument('host', document);
+    recordKnownSavedAt('host', 'when-we-opened-it');
+
+    mounts.writeOverride('question', 'prompt', 'OVERRIDE TEST');
+    const outcome = await writeOpenMountHostToDisk({ save, summary } as never, mounts);
+
+    expect(outcome.kind).toBe('failed');
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('keeps the compare-and-set baseline current after its own write', async () => {
+    // Otherwise autosave's own write looks like somebody else's to the next
+    // one, and the drill-in refuses to save anything ever again.
+    let writes = 0;
+    // A backend that stamps a new `savedAt` on every PUT, which is what one
+    // does. Every write therefore moves the file underneath us; only the
+    // adoption below stops the *next* one reading that as a stranger's edit.
+    const save = vi.fn(async () => {
+      writes += 1;
+      return Ok(undefined);
+    });
+    const summary = vi.fn(async () =>
+      Ok({ slug: 'host', name: 'Host', savedAt: `stamp-${writes}` }),
+    );
+    const document = hostDocument();
+    const mounts = context(document);
+    rememberMountHostDocument('host', document);
+    recordKnownSavedAt('host', 'stamp-0');
+
+    mounts.writeOverride('question', 'prompt', 'first');
+    expect((await writeOpenMountHostToDisk({ save, summary } as never, mounts)).kind).toBe('saved');
+    expect(getKnownSavedAt('host')).toBe('stamp-1');
+
+    mounts.writeOverride('question', 'prompt', 'second');
+    expect((await writeOpenMountHostToDisk({ save, summary } as never, mounts)).kind).toBe('saved');
+    expect(save).toHaveBeenCalledTimes(2);
   });
 });

@@ -10,6 +10,8 @@ import {
 } from '@app/openAddress';
 import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
 import { MountContext } from '@core/model/MountContext';
+import { forgetMountHostDocument, rememberMountHostDocument } from '@app/diskAutosave';
+import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { clearDrillStack } from '@app/drillStack';
 import { hasDraftFor } from '@app/workflowDrafts';
 import {
@@ -101,7 +103,7 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
           void Promise.all([
             client.load(openAddress.root),
             client.loadMount(openAddress, { inherited: true }),
-          ]).then(([root, inheritedDoc]) => {
+          ]).then(async ([root, inheritedDoc]) => {
             workbench.controller.document.enterInstance(
               mountId,
               root.ok
@@ -113,6 +115,23 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
                       : undefined,
                   )
                 : undefined,
+            );
+            // The same two baselines `loadMountIntoEditor` records, because a
+            // reload lands in exactly the state that path produces. Without
+            // the first, autosave has no proof this page opened the host and
+            // refuses every write — so an override made after a reload would
+            // be badged and dropped all over again (ticket 44). Without the
+            // second, the compare-and-set that stops a whole-document write
+            // reverting somebody else's parent edit disables itself.
+            if (!root.ok) {
+              forgetMountHostDocument(openAddress.root);
+              return;
+            }
+            rememberMountHostDocument(openAddress.root, root.value);
+            const row = await client.summary(openAddress.root);
+            recordKnownSavedAt(
+              openAddress.root,
+              row.ok ? (row.value?.savedAt ?? undefined) : undefined,
             );
           });
         }
