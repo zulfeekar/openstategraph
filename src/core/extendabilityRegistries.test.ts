@@ -14,10 +14,12 @@ import type { IWorkflowRule } from '@core/validation/WorkflowValidator';
  * reading, which is exactly the method that file exists to replace, so the
  * two that are `Registry<T>` on the `Workbench` are walked here.
  *
- * Card bodies are deliberately **not** pinned here. They are a module-level
- * `Map` in `src/view/nodes/nodeBodyRegistry.tsx` rather than a `Registry<T>`,
- * they live above `core/`, and the review filed the shape question as its own
- * ticket rather than settling it in a test.
+ * Card bodies are pinned, but not here — `src/view/nodes/nodeBodyRegistry.test.ts`.
+ * Framework-packaging ticket 12 settled the shape question the review left
+ * open: they are a `Registry<NodeBodyEntry>` like the other six, owned by
+ * `view/` rather than by the `Workbench`, because a card body is a React
+ * component and this file's own subject is that `core/` does not import one.
+ * Canvas features sit the same way one layer down, on `PaperController`.
  *
  * As in the sibling file, the imports are the assertion that matters: nothing
  * below imports a `core/` module it had to modify, and adding these two rules
