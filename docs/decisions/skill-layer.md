@@ -1,8 +1,11 @@
 # The Skill layer — what a skill is, and where it lands in a prompt
 
-**Status: accepted, backend implemented.** Ports and fields on the node types
-are ticket 05; the palette and inspector are ticket 06. Both are built against
-this document.
+**Status: accepted and built, front to back.** The header said "backend
+implemented", with ports and fields (ticket 05) and the palette and inspector
+(ticket 06) still ahead of it; both landed. `SKILL_PORT_ID` and
+`RULES_MODE_KEY` are in `src/nodes/skillLayer.ts`, `input.skill` is a
+registered node type with a palette card, and every model-driving node
+declares a `skill` port. Corrected 2026-08-16 (production-ready ticket 20).
 
 ## Problem
 

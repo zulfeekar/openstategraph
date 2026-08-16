@@ -23,9 +23,17 @@ from Tailwind classes to concrete values.
 ## Inventory
 
 `src/design/primitives/` exports: `Button`, `IconButton`, `Icon`, `Field`,
-`TextInput`, `TextArea`, `DisplayRow`, `Select`, `Slider`, `Tooltip`, `Menu`,
-`StatusDot`, `Badge`, `IconTile`, `Kbd`, `Spinner`, `Progress`, `Panel` (+
+`TextInput`, `TextArea`, `DisplayRow`, `Select`, `Slider`, `Tooltip`, `Menu`
+(+ `useMenu`), `StatusDot`, `Badge`, `IconTile`, `Kbd`, `Panel` (+
 `PanelHeader/Body/Footer/Section/Empty`), `useFloating`.
+
+> **`Spinner` and `Progress` were in this list and have never existed**
+> (corrected 2026-08-16). `src/design/primitives/index.ts` is the list, and it
+> has no such exports — nor does any file under `primitives/`. A comparison
+> table that credits us with two components we do not have flatters the
+> comparison in exactly the direction the document is arguing, which is the
+> worst place for an error like this to sit. Whether a busy-state primitive is
+> *wanted* is a live question; whether one exists is not.
 
 `Dialog` is **not** a primitive — it lives in `src/view/overlays/Dialog.tsx`
 with its CSS in `overlays.css`. See "Deferred" below.

@@ -235,8 +235,10 @@ answer to "how do I customise a prebuilt node without editing it":
   [the skill layer](decisions/skill-layer.md) for the three layers and how
   `rulesMode` chooses between them.
 
-1. In the editor, open **Manage workflows** (the document icon in the top bar,
-   or `Mod+Shift+F`).
+1. In the editor, open **Workflows** (the button in the top bar, or
+   `Mod+Shift+F`). It read *Manage workflows* on this page until 2026-08-16;
+   the button says `Workflows`, which is what step 1 of the *save your own*
+   walkthrough below already called it.
 2. Under **Saved Workflows**, open *Chinook Assistant*.
 3. Press **Run** (`Mod+Enter`), or ask through Chat — see below.
 4. Watch the node cards. Status flows along the links as each node runs.

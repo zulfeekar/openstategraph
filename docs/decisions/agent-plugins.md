@@ -131,7 +131,9 @@ file in this repo that knows the strings `plugin.json`, `mcp.json`,
 nothing else changes shape.
 
 **Our extension namespace: `org.openstategraph`.** Placeholder-grade — the
-spec SHOULDs a domain we control, so pin this before publishing anything
+spec SHOULDs a domain we control, and `openstategraph.org` is not owned. Three
+files in this repository disagree about whether that is settled; production-ready
+**ticket 32** is the decision. Pin this before publishing anything
 public. Everything of ours that v1 cannot express travels there, honestly
 labelled as non-portable, rather than being mangled into a portable slot.
 

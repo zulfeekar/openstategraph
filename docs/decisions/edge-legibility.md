@@ -30,9 +30,19 @@ pointed at. Every lever available is therefore a *layout* lever — where the
 cards are and which cards the layout engine is even allowed to rank — and
 nothing here asks the connector to be cleverer than it is.~~
 
-The recent tangent work in `canvas/links/edgeDecoration.ts` (each end's tangent
-pinned to the side its port actually sits on) is left alone. It is measured
-below and it is doing its job.
+The tangent work in `canvas/links/edgeDecoration.ts` (each end's tangent pinned
+to the side its port actually sits on) was left alone. It is measured below and
+it was doing its job.
+
+> **Rewritten in the router's vocabulary since** (noted 2026-08-16). Edges are
+> orthogonal now: `LINK_CONNECTOR` is `rounded`, there is no spline and no
+> `linkConnector` symbol anywhere in `src/`, and the tangent apparatus this
+> section and §"Edge stubs" both appeal to moved rather than went — the same
+> four facts live in `RUN_OUT` as router *directions* (`top`/`bottom`) instead
+> of curve *tangents* (`up`/`down`). The measurements below were taken against
+> the curve implementation and are kept as the record of why stubs were
+> rejected; the reason survives the rewrite, the numbers describe geometry
+> that no longer ships. `orthogonal-routing.md` is the current account.
 
 ## How the measurement works
 
@@ -182,7 +192,9 @@ first time an edge list is reordered.
 **Edge stubs — a short straight run out of the port before the curve begins.**
 Rejected on measurement. The purpose of a stub is to make lines leave a port in
 the port's own direction so they separate before diverging, and
-`linkConnector`'s pinned tangents already do exactly that. Measured gap between
+the pinned tangents of the day already did exactly that — and their successor,
+the orthogonal router's start directions, does it more literally still.
+Measured gap between
 the router's five branch curves, along their own paths:
 
 | along path | 0 | 8 | 16 | 24 | 32 | 48 |

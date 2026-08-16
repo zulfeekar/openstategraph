@@ -55,9 +55,16 @@ the dangerous silent case, so that is what warns.
 **UI contract (inherited vs overridden).** The mount card's composition
 annotation appends `· n overridden` when overrides exist, so a group visual
 never claims the package default while something else runs. The inspector
-edits the field as JSON with the same validation. Richer per-field
-"inherited/overridden" chips ride on the (charted, separate) inspector
-drill-in work.
+edits the field as JSON with the same validation.
+
+> **The per-field chips shipped** (noted 2026-08-16). This deferred them to
+> "the (charted, separate) inspector drill-in work"; `MountContext` exposes
+> `isOverridden` and `inheritedValue`, and `FieldRenderer` marks an overridden
+> field and offers the revert. `gap-register.md` UX-05 deferred the same work
+> and was closed on 2026-08-13 — this document was the half that did not
+> follow. It is the shape this repository keeps finding: a doc defers
+> something to a prerequisite, the prerequisite ships, and nobody returns to
+> the deferral.
 
 ## Rejected alternatives
 

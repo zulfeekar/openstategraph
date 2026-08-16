@@ -16,9 +16,20 @@ deliberate absence (see the correction below "The four kinds"). Companion to
 | **Procedural** | `skills/` (always in the prompt, small) + `knowledge/` (on-demand `knowledge_lookup`, chunked) | developers and build-time trainers | yes — files in git |
 | **Semantic** | the Store, via `save_memory`/`search_memory`/`forget_memory`, three scopes: `("memories", user)` / `("workflow-memory", slug)` / `("app-memory",)` — narrowable per document with `settings.memory` | agents at runtime | **yes, by default** (2026-08-15); opt out with `OPENSTATEGRAPH_MEMORY_PATH=memory`; retention via `OPENSTATEGRAPH_MEMORY_TTL_MINUTES` |
 | **Knowledge** | the second brain (see `knowledge-architecture.md`) | builders on the button, **never** runtime agents | yes — files in git |
+| **Segmented** | `memory.segment` — a card on the canvas that records what crosses it and hands the segment's earlier entries to whatever comes next | the graph, at the point the card sits | per the card's `retention` |
 
 **Knowledge ≠ memory** stays an invariant: promoting a runtime learning into
 `knowledge/` is a human act.
+
+> **The heading says four and the table has five** (2026-08-16). The fifth
+> arrived with the `memory.segment` node type, and the number in the heading is
+> left alone deliberately: *the four kinds* names a taxonomy this document
+> argues for — what memory **is** — and a segment is not a fifth kind of
+> memory. It is a fifth **construct**, a placed, scoped instance of the
+> semantic row above with its own retention. Renaming the section to "the five
+> kinds" would assert a taxonomy change nobody made. If a later reader
+> disagrees, that is the argument to have, and it belongs in prose rather than
+> in a cardinal.
 
 ### Correction, 2026-08-15 — that row said *Episodic*, and it was wrong
 
