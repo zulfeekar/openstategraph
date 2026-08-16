@@ -14,7 +14,10 @@ takes as `redaction_rules`), `RedactionRule.resolve()` returns a rule whose
 `.apply(text)` gives back `(text, matches)`, and `PIIDetectionError` carries
 the entity and every match. So every shape — `email`, `credit_card` with its
 Luhn checksum, `ip`, `mac_address`, `url` — and all four strategies come from
-the library, and this module contains no regular expression at all.
+the library, and this module contains no regular expression at all. (It
+imports `re` since guardrails ticket 05, to *check* the one regex a developer
+may write — `detector` — before a run reaches it. Checking somebody else's
+pattern is not writing one.)
 
 That answers ticket 01's research question directly, and it answers it the
 better way: **detection is separable from the middleware**, so a guardrail is
@@ -53,6 +56,7 @@ looks at intent — see `docs/decisions/injection-screening.md` and
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Mapping, Protocol, Sequence, cast, runtime_checkable
@@ -68,6 +72,56 @@ BUILTIN_ENTITIES: tuple[str, ...] = ("email", "credit_card", "ip", "mac_address"
 #: Every strategy a row may name. Four are LangChain's; `pass` is ours — see
 #: the module docstring for why an allowed entity has to be sayable.
 STRATEGIES: tuple[str, ...] = ("pass", "redact", "mask", "hash", "block")
+
+#: The longest pattern a `detector` may be, in characters.
+#:
+#: A bound on the absurd, and **not** a defence against a pathological pattern:
+#: `(a+)+$` is six characters. See `detector_problem` for what is refused and
+#: what is deliberately not. Mirrored on the card by
+#: `src/nodes/guard/detectorPattern.ts` and pinned by
+#: `backend/tests/test_a_detector_is_checked_before_it_runs.py`.
+DETECTOR_MAX_LENGTH = 400
+
+
+def detector_problem(detector: str) -> str:
+    """Why this pattern cannot be used, or `""` if it can.
+
+    The single place "invalid detector" is decided, so that the card, the
+    compiler and the ladder cannot hold three opinions of it — the same role
+    `resolved` plays for a strategy and `STRATEGIES` for its vocabulary.
+
+    **Compiling is not running.** `re.compile` parses a pattern; it matches
+    nothing, so asking it whether a user's regex is well formed costs a parse
+    and executes none of the user's intent. That distinction is the whole fix
+    here: the check that used to happen was `resolved()` inside `screen()`,
+    where compiling and matching arrive together, mid-run.
+
+    **What is refused, stated plainly: nothing about how long a match takes.**
+    Catastrophic backtracking — `(a+)+$` against a long non-matching string —
+    is not detected here and is not bounded anywhere else either. Python's
+    `re` cannot be interrupted, so the only real answers are a third-party
+    engine with a `timeout=` or a subprocess per screening, and both are a
+    dependency and a per-run cost paid by every document to bound a pattern
+    the document's own author wrote. A nested-quantifier heuristic was
+    considered and rejected for the reason CLAUDE.md gives for pinning numbers:
+    it would refuse legitimate patterns and miss others, while reading like a
+    guarantee. So the trust boundary is stated instead — a detector is code the
+    package author supplies, at the same trust level as that package's
+    `tools/*.py`, and mounting a third party's package means running a third
+    party's patterns.
+    """
+    if not detector:
+        return ""
+    if len(detector) > DETECTOR_MAX_LENGTH:
+        return (
+            f"is {len(detector)} characters long; a pattern may be at most "
+            f"{DETECTOR_MAX_LENGTH}."
+        )
+    try:
+        re.compile(detector)
+    except re.error as bad:
+        return f'"{detector}" is not a valid pattern: {bad.msg}.'
+    return ""
 
 #: How the refusal names an entity. Category names, never values, and phrased
 #: so one sentence works in both directions: an outbound block is refusing the
@@ -209,10 +263,18 @@ class BaseGuardrail(ABC):
         this entity is allowed here, and the correct implementation of
         "allowed" is to install no detector for it.
 
-        Raises `ValueError` for a strategy nobody implements or a custom
-        entity with no pattern. Both are cards that claim a protection which
-        does not exist, and a guardrail that silently is not there is worse
-        than no guardrail at all.
+        Raises `ValueError` for a strategy nobody implements, a custom entity
+        with no pattern, or a pattern that is not a pattern. All three are
+        cards that claim a protection which does not exist, and a guardrail
+        that silently is not there is worse than no guardrail at all.
+
+        The third one used to be the exception: a malformed `detector` reached
+        `re.compile` inside the library, mid-run, and came back as a bare
+        `re.error` — which is not a `ValueError`, so the compiler's own
+        handler around `screen()` did not catch it and the run died with a
+        traceback out of the standard library (guardrails ticket 05). It is a
+        `ValueError` now, alongside its two siblings, and `problems()` finds
+        it at compile time so nobody has to meet it here.
         """
         from langchain.agents.middleware import RedactionRule
 
@@ -223,6 +285,9 @@ class BaseGuardrail(ABC):
                     f'Guardrail rule for "{rule.entity}" names strategy '
                     f'"{rule.strategy}", which is not one of {", ".join(self.STRATEGIES)}.'
                 )
+            problem = detector_problem(rule.detector)
+            if problem:
+                raise ValueError(f'Guardrail rule for "{rule.entity}": pattern {problem}')
             if rule.strategy == "pass":
                 continue
             out.append(
@@ -241,6 +306,35 @@ class BaseGuardrail(ABC):
                 )
             )
         return tuple(out)
+
+    def problems(self) -> tuple[tuple[str, str], ...]:
+        """Every row that cannot do what its card says, as `(entity, why)`.
+
+        The compile-time half of `resolved`, and deliberately a *list* rather
+        than a raise: `resolved` stops at the first bad row because it is
+        producing machinery and there is nothing to produce, while a developer
+        looking at a card wants all three mistakes at once rather than three
+        runs.
+
+        Cheap on purpose — it parses patterns and reads a tuple, and imports
+        nothing from LangChain — so the compiler can call it on every guardrail
+        node it builds without paying for detectors it may never run.
+        """
+        found: list[tuple[str, str]] = []
+        for rule in self.rules:
+            if rule.strategy not in self.STRATEGIES:
+                found.append(
+                    (
+                        rule.entity,
+                        f'names strategy "{rule.strategy}", which is not one of '
+                        f'{", ".join(self.STRATEGIES)}',
+                    )
+                )
+                continue
+            problem = detector_problem(rule.detector)
+            if problem:
+                found.append((rule.entity, f"pattern {problem.rstrip('.')}"))
+        return tuple(found)
 
     # -- the part a subclass supplies -------------------------------------- #
 

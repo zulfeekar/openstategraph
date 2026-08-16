@@ -5,6 +5,7 @@ import type { FieldValue } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { ExecutionContext, INodeExecutor, PortOutputs } from '@core/execution/INodeExecutor';
 import { CATEGORY, PORT } from '../vocabulary';
+import { validateDetector } from './detectorPattern';
 
 export const GUARDRAIL_TYPE = 'guard.policy';
 
@@ -221,6 +222,12 @@ export const guardrailNode: INodeDefinition = defineNode(
             // A paragraph field for a one-line value, deliberately (ticket
             // 26): a pattern is long, and the alternative to wrapping it is a
             // box that scrolls sideways through the developer's own regex.
+            // Checked here, before it is ever saved (guardrails ticket 05):
+            // until then the first thing that looked at this value was
+            // `screen()`, inside a run, and a missing `)` arrived as an
+            // exception rather than as a sentence. What "invalid" means lives
+            // in one place and is pinned across both languages — see
+            // `detectorPattern.ts`.
             kind: 'textarea',
             key: 'detector',
             label: 'Pattern',
@@ -229,6 +236,7 @@ export const guardrailNode: INodeDefinition = defineNode(
             minRows: 1,
             maxRows: 4,
             mono: true,
+            validate: validateDetector,
           },
         ],
       },

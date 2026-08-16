@@ -92,6 +92,16 @@ class Finding(str, Enum):
     #: sentence at all — a missing inbound guard is a missed block, a missing
     #: outbound one is a disclosure.
     UNGUARDED_EXIT = "unguarded_exit"
+    #: A Guardrail row that cannot do what its card says — an unimplemented
+    #: strategy, or a `detector` that is not a valid pattern (guardrails 05).
+    #:
+    #: Found at build time by `BaseGuardrail.problems()`. It used to be found
+    #: only by running: `resolved()` is called from `screen()`, so a missing
+    #: `)` surfaced as a bare `re.error` out of the middle of a run, with a
+    #: person waiting. The node still refuses to pass text through when it
+    #: happens — a guardrail that fails open is the one failure worse than
+    #: noisy — but the developer is told at compile time, in a sentence.
+    INVALID_GUARDRAIL_RULE = "invalid_guardrail_rule"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -138,6 +148,11 @@ _SENTENCES: dict[Finding, str] = {
         "another path — so an answer that leaves this way is never checked against the "
         "policy the rest of the document keeps. Wire a Guardrail before it, or delete "
         "the one that suggests it should be there."
+    ),
+    Finding.INVALID_GUARDRAIL_RULE: (
+        'Guardrail "{0}" has a row for "{1}" that {2} — that row protects nothing, '
+        "and the node refuses everything rather than letting text past a policy it "
+        "cannot apply. Fix the row or remove it."
     ),
 }
 

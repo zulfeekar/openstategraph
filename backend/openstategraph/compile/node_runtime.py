@@ -2015,6 +2015,18 @@ class NodeRuntime:
             raw_policy, list
         ) else []
         guardrail = Guardrail(rules=policy, refusal=_text(data, "blockedMessage"))
+        # Compile time, not run time (guardrails ticket 05). A `detector` is
+        # the one regex a developer writes, and until this line nothing looked
+        # at it until `screen()` did — so a missing `)` was an exception in the
+        # middle of somebody's run rather than a sentence beside the card that
+        # caused it. `problems()` parses the patterns and reads the strategies;
+        # it compiles nothing of LangChain's and matches nothing, so a document
+        # pays a parse per row for the whole class of "this row is not the
+        # protection it looks like".
+        for entity, problem in guardrail.problems():
+            self.diagnostics.record(
+                Finding.INVALID_GUARDRAIL_RULE, node_id, entity, problem
+            )
         upstream = [src for src, dst in plan.edges if dst == node_id]
         # A guard placed after another guard, a grader or an approval arrives
         # over a *conditional* edge, which `plan.edges` does not carry — the
