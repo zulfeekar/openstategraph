@@ -873,6 +873,42 @@ class TestTheExtraIsOurGapNotTheServers:
         assert "pip install 'openstategraph[mcp]'" in verdict.message
         assert not verdict.ok
 
+    def test_a_nameless_row_names_its_address_once(self) -> None:
+        """Ticket 51's adjacent cosmetic bug, and it is not only cosmetic.
+
+        An inline row has no registered name, so `McpTool.configure` fills the
+        name slot with the URL — the only honest identity it has. Every
+        sentence below then printed that identity twice:
+
+            MCP server "https://…/mcp" could not be reached at https://…/mcp.
+
+        A reader who meets that sentence in a run's warnings reasonably
+        concludes the product has confused two servers, which is exactly the
+        wrong doubt to plant in the one message whose whole job is to be
+        believed.
+        """
+        url = "https://qa-not-a-real-host-98765.example.com/mcp"
+        inline = McpServerDefinition(name=url, url=url, origin="inline")
+
+        for status in (prebuilt_mcp.STATUS_UNREACHABLE, STATUS_NOT_MCP):
+            sentence = prebuilt_mcp._bind_sentence(status, inline)
+            assert sentence.count(url) == 1, sentence
+            # …and the address is still in there. Deduplicating by dropping
+            # the URL would leave a warning nobody could act on.
+            assert url in sentence
+
+    def test_a_named_row_still_says_both(self) -> None:
+        """The name and the address are two different facts for a registered
+        server, and a developer needs both: the name is what they typed into
+        `openstategraph.yaml`, the URL is what was actually dialled."""
+        named = McpServerDefinition(
+            name="LangChain docs", url="https://docs.langchain.com/mcp", origin="project"
+        )
+        sentence = prebuilt_mcp._bind_sentence(prebuilt_mcp.STATUS_UNREACHABLE, named)
+
+        assert "LangChain docs" in sentence
+        assert "https://docs.langchain.com/mcp" in sentence
+
     def test_the_compile_path_degrades_with_the_same_answer(self) -> None:
         """`_bind_sentence`, not "could not be reached" — a run says one thing."""
         sentence = prebuilt_mcp._bind_sentence(STATUS_NOT_INSTALLED, DEFAULT_MCP_SERVERS[0])

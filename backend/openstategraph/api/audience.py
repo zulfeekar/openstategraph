@@ -74,6 +74,7 @@ developer-only by their own convention.
 | capability suggestions | developer | proposes an edit to a workflow the customer cannot edit |
 | `runtime_warnings` — unbound tools, unresolved functions/subgraphs, mount overrides, discovery failures | developer | authoring diagnostics, naming node ids and tool types; a customer can act on none of it |
 | plan warnings | developer | same: findings about the document as an artifact |
+| **that** a capability was lost — `CAPABILITY_NOTICE`, appended to `answer` | **both**, differently | ticket 51. The sentences above stay developer-only; *the fact* cannot, because the alternative is a customer reading a degraded answer as a confident one and concluding the product does not know things. A developer gets the list and no notice; a customer gets the notice and no list. It rides `answer` rather than a field of its own for a hard reason as well as a soft one — a customer `done` frame may not carry a `warnings` key at all (see `payload` below, and the test that requires it *absent*), and `answer` is the one field every customer client already renders. |
 | guardrail `redactions` — counts and entity types per node, never values | developer | a customer must not be told what was removed from their own answer, and the developer needs to know the machinery rewrote it |
 | `mermaid` | **both** | `/chat` renders it as its live flow diagram, and `GET /api/workflows/{slug}/graph` already serves it to that page. Moving it here while leaving that endpoint open would be theatre, and it is topology, not guidance. |
 | `decisions` / `outputs` / `attempts` | **both** | facts about *this run*, which is the customer's own turn. `/chat`'s trace already shows them frame by frame. |
@@ -90,7 +91,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 # The fence grammar itself lives one layer down, in
@@ -310,3 +311,68 @@ class DeveloperChannel:
                 "redactions": list(self.redactions),
             }
         }
+
+
+#: What a customer reads when a capability did not reach their run — ticket 51.
+#:
+#: One fixed sentence, and every word of it is a decision:
+#:
+#: - **"part of this workflow"**, not "an MCP server", not a node id, not a
+#:   URL. A customer has no way to act on any of those and no vocabulary to
+#:   place them in; the raw sentences are precisely what `/chat` stopped
+#:   printing in red (ticket 04), and reintroducing them under a softer label
+#:   would undo that.
+#: - **"may be incomplete"**, not "is wrong". The run may well have answered
+#:   perfectly without the missing capability. What the reader is owed is the
+#:   *doubt* — the failure this ticket is about is a confidently wrong answer
+#:   with nothing on the page to suggest today differs from yesterday.
+#: - **leading with "Note:"**, and separated from the reply by a blank line,
+#:   so it reads as an aside rather than as part of the answer.
+#: - **no count.** "Two of my tools" invites the question "which two", which
+#:   is the developer channel's job to answer and not this sentence's.
+#: - **no Markdown, and that one was found in a browser rather than reasoned
+#:   out.** The first version wrapped this in `_underscores_` to render as an
+#:   italic aside; `/chat`'s own `md()` implements `**bold**`, `` `code` ``,
+#:   lists, tables and headings — and no italics at all — so the customer read
+#:   a sentence with literal underscores around it. The rule this leaves
+#:   behind is the general one: a string the *server* writes into `answer` is
+#:   read by every client that exists and every client that will, so it may
+#:   assume no renderer. Markup here is a bet on a feature the reader's client
+#:   may not have, for emphasis the words already carry.
+CAPABILITY_NOTICE = (
+    "Note: part of this workflow was unavailable for this answer, "
+    "so it may be incomplete."
+)
+
+
+def capability_notice(warnings: Sequence[str], audience: Audience) -> str:
+    """The aside to append to a customer's answer, or `""`.
+
+    The audience split stated as code, in the module that owns every other
+    one. A **developer** gets nothing here on purpose: they already have the
+    sentences themselves on `DeveloperChannel.warnings`, and a vague paragraph
+    in the prose beside a specific list is noise that trains people to skim
+    both.
+
+    Takes the warnings rather than a bare boolean so the caller cannot get the
+    question subtly wrong — "were there warnings" is the whole condition, and
+    a caller computing it separately is a caller that will one day compute it
+    from a different list than the one it reports.
+    """
+    if audience is Audience.DEVELOPER:
+        return ""
+    return CAPABILITY_NOTICE if any(str(w).strip() for w in warnings) else ""
+
+
+def with_capability_notice(prose: str, warnings: Sequence[str], audience: Audience) -> str:
+    """`prose` with the notice appended, when one is due.
+
+    The reply comes **first** and the notice is an aside after it. A notice
+    that led would make every degraded run look like an error page, and a
+    notice that replaced the answer would be a worse bug than the silence it
+    is fixing.
+    """
+    notice = capability_notice(warnings, audience)
+    if not notice:
+        return prose
+    return f"{prose.rstrip()}\n\n{notice}" if prose.strip() else notice

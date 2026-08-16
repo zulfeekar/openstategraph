@@ -929,14 +929,45 @@ def _bind_sentence(status: str, definition: McpServerDefinition) -> str:
             f"available for this run."
         )
     if status == STATUS_NOT_MCP:
+        if _is_nameless(definition):
+            return (
+                f"{definition.url} answered, but it does not speak MCP. Check the URL and "
+                f"the transport."
+            )
         return (
             f"{definition.url} answered, but it does not speak MCP. Check the URL and the "
             f'transport for server "{definition.name}".'
+        )
+    if _is_nameless(definition):
+        return (
+            f"MCP server {definition.url} could not be reached. None of its tools are "
+            f"available for this run."
         )
     return (
         f'MCP server "{definition.name}" could not be reached at {definition.url}. None of '
         f"its tools are available for this run."
     )
+
+
+def _is_nameless(definition: McpServerDefinition) -> bool:
+    """Whether this row's "name" is only its address wearing a name's clothes.
+
+    An inline row has no registered name, so `McpTool.configure` fills the slot
+    with the URL — the only honest identity it has. Every sentence that names
+    both then printed one string twice:
+
+        MCP server "https://…/mcp" could not be reached at https://…/mcp.
+
+    Read as a *reader* rather than as an author, that sentence says the product
+    has confused two servers — which is the worst possible doubt to plant in
+    the one message whose entire job is to be believed about a degradation.
+
+    The test is the equality, not `origin == "inline"`. `origin` says where the
+    row came from; this asks whether the two slots hold the same string, which
+    is the thing the sentence actually cares about and stays true if some other
+    path ever fills a name from a URL.
+    """
+    return definition.name.strip() == definition.url.strip()
 
 
 def _configured_servers() -> list[McpServerDefinition]:

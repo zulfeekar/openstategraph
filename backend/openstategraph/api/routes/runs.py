@@ -25,6 +25,7 @@ from openstategraph.api.audience import (
     redaction_report,
     resolve as resolve_audience,
     split_suggestion,
+    with_capability_notice,
 )
 from openstategraph.api.deps import PrincipalId, Services
 from openstategraph.api.model_resolution import (
@@ -223,9 +224,12 @@ def run_workflow(
     )
 
     raw_outputs = final.get("outputs") or {}
+    # Ticket 51 — the capabilities that never bound, kept apart from the steps
+    # that broke while running. See the same split in `streaming.py`: only the
+    # first kind produces a run that succeeds and reads confident.
+    degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
-        warnings=list(plan.warnings)
-        + runtime_warnings(runtime)
+        warnings=degraded
         # A node that failed after retries writes its failure into
         # `outputs` so downstream nodes still read *something*. Every
         # surface renders that map as the node's output, so without this
@@ -243,6 +247,11 @@ def run_workflow(
     # `node_runtime` cannot reach this case.
     if not prose.strip() and node_failure_warnings(raw_outputs):
         prose = RUN_FAILED_ANSWER
+
+    # …and the same aside the streaming door appends (ticket 51). This door
+    # exists precisely so a client can skip SSE, so a customer who takes it
+    # must not get the confident answer the other one declines to give.
+    prose = with_capability_notice(prose, degraded, audience)
 
     # Developer guidance stays off a customer surface, in `outputs` as
     # much as in `answer` — the same seam ticket 15 found one field along.

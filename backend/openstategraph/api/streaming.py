@@ -18,6 +18,7 @@ from openstategraph.api.audience import (  # noqa: E402
     clean_output as _clean_output,
     redaction_report,
     split_suggestion,
+    with_capability_notice,
 )
 from openstategraph.developer_channel import ProseGuard  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
@@ -1313,8 +1314,14 @@ def _run_frames(
     )
 
     failures = node_failure_warnings(outputs) + node_failure_warnings(nested_outputs)
+    # The capabilities that did not reach this run, kept as their own list —
+    # ticket 51. `failures` are a *step* that broke while running and already
+    # have their own customer-facing floor below (`RUN_FAILED_ANSWER`); these
+    # are a capability that never bound at all, which is the case where the run
+    # succeeds, reads confident, and is quietly worse than it looks.
+    degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
-        warnings=list(plan.warnings) + runtime_warnings(runtime)
+        warnings=degraded
         # Both doors report it, or `/api/runs` becomes the only one telling
         # the truth — see the same promotion in `api/main.py` (ticket 04).
         + failures,
@@ -1327,6 +1334,18 @@ def _run_frames(
     # marker is developer guidance, so it leaves a customer's `outputs` too.
     if not prose.strip() and failures:
         prose = RUN_FAILED_ANSWER
+    # **Ticket 51 — the customer's half of the capability report.**
+    #
+    # A degraded run used to reach `/chat` as a confident answer with nothing
+    # to suggest a tool was missing, so the only explanation available to the
+    # reader was that the product does not know things. It rides `answer`
+    # rather than a new field or a new frame, and that is a constraint rather
+    # than a shortcut: `done` may not grow a `warnings` key on a customer run
+    # (`test_audience_boundary.py` requires it *absent*), and a field only
+    # reaches clients that grow a branch for it while `answer` is what every
+    # customer surface already renders. `with_capability_notice` owns the
+    # audience split; a developer gets the sentences themselves instead.
+    prose = with_capability_notice(prose, degraded, audience)
     if not channel.payload(audience).get("developer"):
         outputs = redact_failure_markers(outputs)
         nested_outputs = redact_failure_markers(nested_outputs)
