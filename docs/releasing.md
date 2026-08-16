@@ -14,7 +14,7 @@ already seen it work.**
 
 ```
  contributor  ──▶  pull request  ──▶  CI (ci.yml)  ──▶  merge to main
-                                       6 checks, no secrets,
+                                       every check, no secrets,
                                        identical for forks
 
  maintainer   ──▶  Actions ▸ "Release PR" ▸ version: 0.3.0     (release-pr.yml)
@@ -136,8 +136,9 @@ after.
 
 The successor is **PyPI Trusted Publishing (OIDC)**, which deletes both tokens.
 It cannot be configured before the project exists on PyPI under a real
-repository; do it in the same sitting that replaces the `PLACEHOLDER` URLs
-(`decisions/sdk-practice.md` recommendation 6).
+repository. The repository half of that is settled — `backend/pyproject.toml`'s
+URLs are real and point at the remote — so the one thing left is the first PyPI
+upload (`decisions/sdk-practice.md` recommendation 6).
 
 ### 3. Branch protection — the required status checks
 
@@ -153,18 +154,26 @@ skipped, so adding a job to its `needs:` list is how a new check becomes
 mandatory — no second place to update, and no re-listing when a job is renamed
 or gains a matrix.
 
-If you would rather see the seven individually, require these exact names
-instead, and remember to revisit the list whenever `ci.yml` changes:
+If you would rather see them individually, require these exact names instead,
+and remember to revisit the list whenever `ci.yml` changes:
 
 ```
 frontend
 generated-port-specs
 generated-openapi
-backend
+backend (3.11)
+backend (3.13)
 clean-install
 docs-freshness
 e2e
 ```
+
+**`backend` is a matrix job, and that changes the name you must type.** GitHub
+reports one check per leg, `backend (3.11)` and `backend (3.13)`, so requiring
+plain `backend` matches nothing and protects less than the page you are looking
+at claims to. This is the exact failure mode the paragraph above predicts, and
+it caught this document: the matrix was added and the list was not re-read.
+Which is the argument for requiring `ci-success` alone.
 
 Also switch on: *Require a pull request before merging* (1 approval),
 *Require review from Code Owners*, *Dismiss stale approvals*, and *Require
@@ -176,10 +185,12 @@ push-to-main runs; `ci-success` accounts for that.
 
 ### 4. `CODEOWNERS`
 
-`.github/CODEOWNERS` ships with `@PLACEHOLDER` because this checkout has no git
-remote and the handle is not a fact yet. An unresolvable owner is silently
-ignored — and, with *Require review from Code Owners* enabled, blocks every
-pull request. Replace it before enabling that setting.
+`.github/CODEOWNERS` still ships with `@PLACEHOLDER`. It was written that way
+because the checkout had no remote and the handle was not a fact; the remote
+and the handle are both facts now, so this is an outstanding edit rather than a
+deferral. An unresolvable owner is silently ignored — and, with *Require review
+from Code Owners* enabled, blocks every pull request. Replace it before
+enabling that setting.
 
 ### 5. Labels
 
@@ -321,8 +332,8 @@ published, and the tag remains for the next attempt via `resume: true`.
 implements exactly the shape used here: a bot-authored release PR whose merge
 is the human decision. Two facts about *this* repository decided against it.
 
-**1. Our changelog is written, not generated.** `CHANGELOG.md` is ~17,000
-characters of prose that explains *why* each change happened, with measurements
+**1. Our changelog is written, not generated.** `CHANGELOG.md` is a long
+document of prose that explains *why* each change happened, with measurements
 ("78 → 36 distributions"), the reasoning behind each breaking change, and
 migration advice. release-please's contribution is generating that file from
 commit subjects. Trading a written document for a bulleted list of commit
@@ -385,20 +396,40 @@ Three further reasons the tag trigger could not stay:
 
 Everything else in that document's list stands, and the cheap items it flagged
 are taken here: `concurrency` on `ci.yml` (recommendation 3) and `CODEOWNERS`
-(recommendation 9). Still outstanding and **not** done here, deliberately, to
-avoid renaming status checks in the same change that asks you to configure
-them: recommendation 4, testing the Python versions we advertise (3.11 and 3.13
-as well as 3.12). It should be the next change to `ci.yml`, and with
-`ci-success` in place it needs no branch-protection edit.
+(recommendation 9). Recommendation 4 — testing the Python versions we advertise
+— was deferred by this page to avoid renaming status checks in the same change
+that asks you to configure them. **It has since landed**: `ci.yml`'s `backend`
+job carries `python-version: ["3.11", "3.13"]`, which is why the individual
+check names above are `backend (3.11)` and `backend (3.13)`. With `ci-success`
+required instead, it needed no branch-protection edit, exactly as predicted.
 
 ---
 
-## What has never been executed
+## What has run, and what still has not
 
-This repository has **no configured git remote**. Everything above is reasoned
-and locally verified — the YAML parses, the job graph's `needs:` edges resolve,
-`scripts/clean_install_proof.sh` passes in both modes locally — but no run of
-`release.yml`, `release-pr.yml` or `triage.yml` has happened on GitHub. The
-first release should be a `0.3.0rc1` pre-release for that reason alone: it
-exercises detect → tag → build → TestPyPI → rehearsal, and stops before it can
-burn a PyPI version number.
+**Until 2026-08-15 this section said the opposite**, and it was true when
+written: no remote, so nothing above had ever executed. The remote `beta`
+exists now, and the train has run.
+
+**The rc1 rehearsal happened and it worked.** `v0.3.0rc1` is tagged on the
+remote, and the run that made it carried `detect → tag → build → testpypi →
+rehearsal` all green, with `pypi` and `github-release` correctly **skipped**
+because a pre-release stops before the irreversible step. That is exactly the
+shape this document prescribes for a first release, and it is no longer a
+prediction.
+
+`ci.yml` and `release.yml` both run on every push to `main`; `triage.yml` has
+run on a pull request. So the gates on this page describe observed behaviour,
+not intent.
+
+Three things still have not executed, and they are named rather than implied:
+
+| | State |
+| --- | --- |
+| The **`pypi` job** | never run. `0.3.0rc1` is on TestPyPI only, and the human gate has never been clicked |
+| `openwiki-update.yml` | zero runs, ever |
+| `pages.yml` (*Deploy landing page*) | four runs, four failures — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
+
+`docs-freshness` is `if: github.event_name == 'pull_request'` and this
+repository pushes straight to `main`, so it skips on nearly every run by
+design — `ci-success` accounts for that, and a skip is not a gap.

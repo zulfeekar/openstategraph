@@ -214,7 +214,7 @@ Two consequences worth knowing before you rely on either:
   a live reference into `site-packages` is a workflow that changes when you
   upgrade something else.
 
-Three of them mount other examples, so a copy brings those too; the command
+Several of them mount other examples, so a copy brings those too; the command
 names them as it writes them. The editor's **Workflows → Examples** shelf is the
 same catalogue, over `GET /api/examples`.
 

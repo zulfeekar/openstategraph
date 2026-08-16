@@ -19,7 +19,7 @@ every workflow file under the workflows root (`workflow.json`, tools, skills
 and knowledge), spend the deployer's model budget without limit, and write
 drafts to disk.
 The provider API keys themselves never leave the server — the browser never
-sees them, `/api/capabilities` reports only whether a key is *present*, and the
+sees them, `/api/providers` reports only whether a key is *present*, and the
 MCP layer exposes no credential tool at all — but that is a narrow consolation,
 because an attacker who can run arbitrary workflows can spend those keys as
 freely as you can. **The one-line fix: set `OPENSTATEGRAPH_API_TOKEN` to a long

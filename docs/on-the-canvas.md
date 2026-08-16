@@ -1,8 +1,8 @@
 # On the canvas: what each thing is
 
-You have the editor open and a palette down the side. This page is the five
-answers you need before the first drag, in the order you need them. It assumes
-nothing except that you can see a canvas.
+You have the editor open and a palette down the side. This page is the answers
+you need before the first drag, in the order you need them. It assumes nothing
+except that you can see a canvas.
 
 Everything else in `docs/` is written for someone extending, deploying or
 integrating. This one is for someone **drawing**.
@@ -117,7 +117,7 @@ conversation is shared.
 ### Workflow or Team?
 
 **There is no longer a choice, because there was never a difference.** Until
-schema v2 the palette offered a second organism, `team.workflow`, beside
+schema v3 the palette offered a second organism, `team.workflow`, beside
 `workflow.subgraph`. This page used to tell you to weigh them. That advice is
 withdrawn: the two compiled through one backend builder with no branch and
 identical ports, so the only things separating them were a different glyph, an
@@ -195,8 +195,8 @@ mounting one would mean your workflow quietly changing on your next
 copy is an ordinary package of yours, a draft until you publish it, and nothing
 upstream reaches back into it.
 
-Three examples mount others, so a copy brings those too (`nested-mounts` writes
-three folders). The command says which before it writes them.
+Several examples mount others, so a copy brings those too (`nested-mounts`
+writes three folders). The command says which before it writes them.
 
 `openstategraph examples copy --all` takes the lot — all-or-nothing, so one
 folder already in the way means nothing is written, and the size and count are

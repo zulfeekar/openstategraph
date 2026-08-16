@@ -106,23 +106,27 @@ The gist of what comes back:
         "editable": "Only your own rules are editable. The preamble and the output contract are supplied by the runtime and must NOT be restated in the node's config — the contract is appended last and later instructions win. An EMPTY preamble/contract means this node type locks nothing: its prompt is entirely yours."
       }
     }
-    // …and 27 more. The grammar: annotate.group, annotate.note,
-    //  function.format_report, human.approval, input.markdown, input.skill,
-    //  input.text, orchestrate.supervisor, orchestrate.worker,
-    //  output.formatted, route.classifier, route.grader,
+    // …and the rest. The grammar: annotate.group, annotate.note,
+    //  function.format_report, guard.policy, human.approval, input.markdown,
+    //  input.skill, input.text, memory.segment, orchestrate.supervisor,
+    //  orchestrate.worker, output.formatted, route.classifier, route.grader,
     //  workflow.subgraph.
     //
     //  Then every bindable tool, which is the half that matters when you are
     //  composing a document an agent can actually run: tool.chinook-execute-sql,
     //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
-    //  tool.knowledge-lookup, tool.platform-describe-workflow, tool.platform-grep,
-    //  tool.platform-list-workflows, tool.platform-ls, tool.platform-read-file,
-    //  tool.reddit-search, tool.web-fetch, tool.web-search.
+    //  tool.knowledge-lookup, tool.mcp, tool.platform-describe-workflow,
+    //  tool.platform-grep, tool.platform-list-workflows, tool.platform-ls,
+    //  tool.platform-read-file, tool.reddit-search, tool.web-fetch,
+    //  tool.web-search, tool.youtube-transcript.
     //
-    //  28 in total, and the list is read from the same registry the runtime
-    //  binds from — which is what §7 means by "cannot drift". Enumerating the
-    //  tools here rather than eliding them is the point: a tool absent from
-    //  this payload is a tool no agent can be wired to.
+    //  The list is read from the same registry the runtime binds from — which
+    //  is what §7 means by "cannot drift" — and `backend/tests/test_mcp_server.py`
+    //  fails if this enumeration and that registry disagree in either
+    //  direction. No total is printed here on purpose: a count is the half of
+    //  this that rots silently, and the names are the half that matters.
+    //  Enumerating the tools rather than eliding them is the point: a tool
+    //  absent from this payload is a tool no agent can be wired to.
   ],
   "dynamic_type_prefixes": {
     "tool.": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",

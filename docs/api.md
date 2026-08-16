@@ -1,9 +1,16 @@
 # The HTTP API — build your own UI
 
 Both shipped surfaces — the canvas editor and `/chat` — are ordinary clients of
-the endpoints on this page. There is no private API behind them, so a third
-client is a supported thing to build rather than a reverse-engineering
-exercise.
+the endpoints in [`openapi.json`](openapi.json). There is no private API behind
+them: every path either surface calls is in that document, so a third client is
+a supported thing to build rather than a reverse-engineering exercise.
+
+**This page is not the path list.** `openapi.json` is, and it carries roughly
+three times as many paths as this page walks through — the editor's own writing,
+knowledge, provider, MCP-registry, template and example endpoints among them,
+plus `POST /api/workflows/chinook-assistant/ask`, a hand-built demo that
+predates the canvas and does not generalise. What follows is the subset a
+**custom chat client** needs, in the order it needs them.
 
 This page is the whole contract in two halves:
 
@@ -87,8 +94,8 @@ endpoints emit the identical vocabulary and one parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
-| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `output` |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path` |
+| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output` |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
@@ -265,6 +272,16 @@ in that case. When both are non-empty, `activeNode` equals `path[0]`.
 `token` frames are not only the agent's. The input node echoes the question and
 the output node re-renders the final answer, each as its own `token` frame.
 Key on `data.node` if you want one node's stream.
+
+**But on a customer run — the default — most of them arrive empty.** The
+audience boundary above applies frame by frame: a customer's token stream
+carries the reply and nothing that produced it, so the input node's echo of
+their own question, a tool payload, a branch name and a grader's verdict all
+come through with `content: ""` and `withheld: true` (and `tool` blanked). The
+frame is **emptied, not dropped**, deliberately — it is the only frame that
+arrives while a node is still working, so it is what keeps a live diagram
+honest about where the run is. A developer run gets the text and no `withheld`
+key at all.
 
 #### A thread is the conversation
 
@@ -575,7 +592,7 @@ event: token
 data: {"node": "out1", "namespace": [], "content": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
 
 event: done
-data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"approve1": "…", "out1": "…"}, "attempts": 0, "mermaid": "graph TD;…"}
+data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"approve1": "…", "out1": "…"}, "nested": {}, "attempts": 0, "mermaid": "graph TD;…"}
 ```
 
 ### 6 — The compiled diagram: `GET /api/workflows/{slug}/graph`
@@ -586,13 +603,17 @@ data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quart
 }
 ```
 
-This is what the **compiler actually produced**, not a redrawing of the canvas:
-subgraphs are expanded, so a mounted team or a routed child shows its insides.
+This is what the **compiler actually produced**, not a redrawing of the canvas.
+It is asked for with `xray=True`, which today expands **nothing**: this
+compiler emits no LangGraph subgraph — a mount is a closure over the child's
+`invoke()` and an agent is built lazily inside its node's closure, and neither
+is a node LangGraph can open. So a mounted child shows as one box, and
+`backend/tests/test_behind_the_scenes.py` fails the day that stops being true.
 Mermaid *text*, never a PNG — LangGraph's `draw_mermaid_png()` posts the graph
 to a third-party API, and a user's graph is not ours to send anywhere. Render
 it client-side.
 
-A sixth call is optional and worth it: `GET /api/events`, above, so a picker
+A seventh call is optional and worth it: `GET /api/events`, above, so a picker
 built from call 1 does not go stale the moment somebody publishes.
 
 ### Writing — `POST /api/workflows` mints the slug, `PUT` overwrites one
@@ -884,7 +905,7 @@ other languages.
 
 The streams are the part no generator can produce, which is the other half of
 the reasoning: a typed client would still hand you an untyped `fetch` for the
-three endpoints that matter most, and the forty-line example above is a more
+three endpoints that matter most, and the whole-file example above is a more
 useful answer than a wrapper that stops exactly where the difficulty starts.
 
 If you want types for the frames, they are six small interfaces — copy them out
