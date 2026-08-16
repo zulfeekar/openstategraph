@@ -80,7 +80,7 @@ describe('writing the open workflow to its package', () => {
     const bench = workbench();
     // A baseline means "this page opened this package"; without one nothing is
     // written at all. An empty document stands in for whatever was on disk.
-    rememberDiskDocument('demo', 'whatever was on disk', {});
+    rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
 
     const outcome = await writeOpenWorkflowToDisk(
       { save } as unknown as Pick<IWorkflowFileClient, 'save'>,
@@ -118,7 +118,7 @@ describe('writing the open workflow to its package', () => {
     // about the editor's own writes.
     recordKnownSavedAt('demo', '2026-08-13T00:00:00Z');
     const bench = workbench();
-    rememberDiskDocument('demo', 'whatever was on disk', {});
+    rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
 
     await writeOpenWorkflowToDisk(
       { save: async () => Ok(undefined) },
@@ -136,7 +136,7 @@ describe('writing the open workflow to its package', () => {
     // A failed write must not look like a successful one to the watcher.
     recordKnownSavedAt('demo', '2026-08-13T00:00:00Z');
     const bench = workbench();
-    rememberDiskDocument('demo', 'whatever was on disk', {});
+    rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
 
     const outcome = await writeOpenWorkflowToDisk(
       { save: async () => Err('the disk is full') },
@@ -182,7 +182,7 @@ describe('never write a package this page has not opened', () => {
       kind: 'skipped',
     });
 
-    rememberDiskDocument('demo', 'whatever was on disk', {});
+    rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
     expect(await writeOpenWorkflowToDisk(client, bench.model, bench.serializer, storage)).toEqual({
       kind: 'saved',
     });
@@ -198,7 +198,12 @@ describe('opening a workflow is not an edit', () => {
   it('does not write a document identical to the one just loaded', async () => {
     const save = vi.fn(async () => Ok(undefined));
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      bench.serializer.serialize(bench.model),
+      bench.serializer,
+    );
 
     const outcome = await writeOpenWorkflowToDisk(
       { save } as unknown as Pick<IWorkflowFileClient, 'save'>,
@@ -215,7 +220,12 @@ describe('opening a workflow is not an edit', () => {
     const save = vi.fn(async () => Ok(undefined));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      bench.serializer.serialize(bench.model),
+      bench.serializer,
+    );
 
     bench.model.setName('Renamed');
     expect(
@@ -235,7 +245,12 @@ describe('opening a workflow is not an edit', () => {
     // documents alone would have missed this entirely.
     const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
     const bench = new Workbench();
-    rememberDiskDocument('demo', bench.model.name, bench.serializer.serialize(bench.model));
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      bench.serializer.serialize(bench.model),
+      bench.serializer,
+    );
     bench.model.setName('A different name');
 
     const outcome = await writeOpenWorkflowToDisk(
@@ -284,7 +299,14 @@ describe('the write loop', () => {
       },
     } as unknown as WorkflowSerializer;
 
-    rememberDiskDocument('demo', bench.model.name, remeasuring.serialize(bench.model));
+    // The fake serializer stays on the *write* side, where its instability is
+    // the point; the baseline is canonicalised by the real one.
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      remeasuring.serialize(bench.model),
+      bench.serializer,
+    );
     for (let tick = 0; tick < 4; tick += 1) {
       expect(
         await writeOpenWorkflowToDisk(client, bench.model, remeasuring, storageWith('demo')),
@@ -312,7 +334,12 @@ describe('the write loop', () => {
       },
     } as unknown as WorkflowSerializer;
 
-    rememberDiskDocument('demo', bench.model.name, shuffling.serialize(bench.model));
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      shuffling.serialize(bench.model),
+      bench.serializer,
+    );
     for (let tick = 0; tick < 4; tick += 1) {
       expect(
         await writeOpenWorkflowToDisk(client, bench.model, shuffling, storageWith('demo')),

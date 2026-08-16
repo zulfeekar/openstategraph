@@ -248,7 +248,7 @@ export async function loadWorkflowIntoEditor(
     // workflow rewrote its file with an identical document and a new
     // `savedAt`. A restored draft, by contrast, genuinely differs from the
     // file and should reach it.
-    rememberDiskDocument(slug, workbench.model.name, outcome.value);
+    rememberDiskDocument(slug, workbench.model.name, outcome.value, workbench.serializer);
     // …and then this browser's own unsaved edits to *this* workflow, if it has
     // any that differ (ticket 23). Opening a second workflow used to discard
     // them with no prompt and no way back, because the draft was keyed on the

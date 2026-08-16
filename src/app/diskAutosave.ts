@@ -111,27 +111,44 @@ function comparable(name: string, document: unknown): string {
 /**
  * Record what the file on disk holds, so opening it is not an edit.
  *
- * Seeded from the **raw document as loaded**, not from the model that was just
- * built out of it. Those two are not the same thing, and the difference is the
- * whole reason this function takes a document rather than a `WorkflowModel`:
- * a model materialises its defaults (`maxRetries: ''`, a router's `branches`)
- * shortly *after* `importJSON` returns, so a baseline captured from the model
- * at load time is a snapshot of a state that lasts milliseconds. It matched
- * neither the file nor the settled model, so every open wrote once — an
- * identical document with a fresh `savedAt`, forever.
+ * **Canonicalised on the way in, and that is the whole of ticket 27.** The
+ * document handed here is the file's *authored* form; what autosave later
+ * compares it against is the model's *canonical* form. They describe the same
+ * workflow in different bytes — nodes in authoring order versus a stable sort,
+ * `parentId` omitted versus always present, `data` carrying what somebody set
+ * versus every schema default materialised — so comparing them raw reports a
+ * difference on every document the editor did not itself write.
  *
- * Seeding from the file makes the comparison converge instead:
+ * Until this call canonicalised, that is exactly what happened: opening
+ * `workflows/concierge/workflow.json` wrote it straight back with 256 changed
+ * lines and a fresh `savedAt`, and a field-by-field comparison found **zero
+ * keys lost and zero values altered** — the whole diff was reordering,
+ * `parentId: null`, and 51 materialised defaults.
  *
- * - the **first** open of a package written before defaults were materialised
- *   differs from the settled model, so it gets one normalising write;
- * - every open after that finds the file already in the settled form and
- *   writes nothing.
+ * This function's previous contract called that "one normalising write" and
+ * argued the comparison converges: the first open writes the settled form, and
+ * every open after that matches. It converges in one working copy and nowhere
+ * else. A package under version control is committed in its authored form, so
+ * the convergence resets with every checkout — every developer, opening any
+ * shipped package, dirtied it. (It also rested on a claim that was never true:
+ * defaults are merged by `AbstractNodeModel`'s constructor, synchronously,
+ * during `importJSON` — not "shortly after it returns".)
+ *
+ * `canonicalise` rather than the caller's own model on purpose. The model is
+ * only right on the path that just imported this document; `ensureDiskBaseline`
+ * has a file and no model at all, and a signature that let either caller supply
+ * an un-normalised baseline would let this defect back in silently.
  *
  * Called *before* any draft is restored: a restored draft is a genuine
  * difference from the file, and is exactly what should reach it.
  */
-export function rememberDiskDocument(slug: string, name: string, document: unknown): void {
-  lastWritten.set(slug, comparable(name, document));
+export function rememberDiskDocument(
+  slug: string,
+  name: string,
+  document: unknown,
+  serializer: Pick<WorkflowSerializer, 'canonicalise'>,
+): void {
+  lastWritten.set(slug, comparable(name, serializer.canonicalise(document)));
 }
 
 /**
@@ -153,13 +170,17 @@ export function rememberDiskDocument(slug: string, name: string, document: unkno
 export async function ensureDiskBaseline(
   slug: string,
   client: Pick<IWorkflowFileClient, 'load'>,
+  serializer: Pick<WorkflowSerializer, 'canonicalise'>,
 ): Promise<void> {
   if (lastWritten.has(slug)) return;
   const disk = await client.load(slug);
   if (!disk.ok) return;
   const document = disk.value as { name?: string };
   if (lastWritten.has(slug)) return; // a load may have landed while we waited
-  lastWritten.set(slug, comparable(document.name ?? '', disk.value));
+  // Canonicalised for the same reason `rememberDiskDocument` is: what came back
+  // is the file's authored form, and what it will be compared against is the
+  // model's. See that function for what comparing the two raw cost.
+  lastWritten.set(slug, comparable(document.name ?? '', serializer.canonicalise(disk.value)));
 }
 
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */

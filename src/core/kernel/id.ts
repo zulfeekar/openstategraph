@@ -37,3 +37,25 @@ export function seedIds(existing: Iterable<string>): void {
 export function resetIds(): void {
   counters.clear();
 }
+
+/**
+ * The counter state, for a caller that must load a document *without* claiming
+ * the live one's ids.
+ *
+ * The counters are module state and `WorkflowSerializer.load` re-seeds them
+ * from the document it is loading — correct for the editor's own document, and
+ * wrong for anything that loads a second document off to the side.
+ * `canonicalise` does exactly that, and on the reload path the document it
+ * normalises is the *file* while the editor holds a restored draft: re-seeding
+ * from the file would wind the counters back below ids the draft already uses,
+ * and the next node minted would collide with one on screen.
+ */
+export function snapshotIds(): ReadonlyMap<string, number> {
+  return new Map(counters);
+}
+
+/** Put back a {@link snapshotIds} reading. */
+export function restoreIds(snapshot: ReadonlyMap<string, number>): void {
+  counters.clear();
+  for (const [key, value] of snapshot) counters.set(key, value);
+}

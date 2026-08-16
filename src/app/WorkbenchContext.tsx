@@ -422,7 +422,11 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // demo, and the next tick would write the demo into that package.
     const restoredSlug = state.restored ? getOpenSlug() : null;
     if (restoredSlug) {
-      void ensureDiskBaseline(restoredSlug, (diskClientRef.current ??= new WorkflowFileClient()));
+      void ensureDiskBaseline(
+        restoredSlug,
+        (diskClientRef.current ??= new WorkflowFileClient()),
+        workbench.serializer,
+      );
     }
 
     let timer: ReturnType<typeof setTimeout> | null = null;

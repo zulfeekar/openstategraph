@@ -1,5 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
-import { resetIds, seedIds } from '@core/kernel/id';
+import { resetIds, restoreIds, seedIds, snapshotIds } from '@core/kernel/id';
 import { EdgeModel } from '@core/model/EdgeModel';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import { WORKFLOW_SCHEMA_VERSION, WorkflowModel } from '@core/model/WorkflowModel';
@@ -63,6 +63,49 @@ export class WorkflowSerializer {
    */
   toJSONString(model: WorkflowModel, pretty = true): string {
     return `${JSON.stringify(this.serialize(model), null, pretty ? 2 : 0)}\n`;
+  }
+
+  /**
+   * The **canonical form** of a document: what this build writes when it holds
+   * that document and nothing has been edited.
+   *
+   * A workflow has two normal forms and they are not the same bytes. The
+   * *authored* one is what a hand-written file, the backend, or the Architect
+   * agent produces: nodes in the order they were written, `parentId` omitted
+   * when there is no container, `data` carrying only the fields somebody set.
+   * The *canonical* one is what `WorkflowModel.toJSON` emits: nodes and edges
+   * in a stable sort, `parentId` always present, and every field the type's
+   * schema declares materialised to its default by `AbstractNodeModel`'s
+   * constructor.
+   *
+   * Both describe the same workflow. Comparing one against the other reports a
+   * difference on every document that was not written by the editor, which is
+   * production-ready ticket 27: the disk-autosave baseline was seeded from the
+   * authored form and compared against the canonical one, so merely opening a
+   * committed package wrote it back — 256 changed lines on
+   * `workflows/concierge/workflow.json`, none of them a value anybody typed.
+   *
+   * Normalising is done by *being* the editor rather than by reimplementing it:
+   * load the document and serialise it back. That keeps one definition of the
+   * canonical form instead of a second one that drifts the day a field gains a
+   * default. The scratch model is discarded, and the id counters are put back
+   * afterwards because `load` re-seeds them from whatever it loaded.
+   *
+   * Total by design: a document this build cannot parse has no canonical form,
+   * and is returned unchanged rather than thrown over. The caller is a
+   * comparison, and refusing to compare is worse than comparing raw.
+   */
+  canonicalise(document: unknown): unknown {
+    const parsed = this.normalise(document);
+    if (!parsed.ok) return document;
+    const ids = snapshotIds();
+    try {
+      const scratch = new WorkflowModel();
+      this.load(scratch, parsed.value);
+      return this.serialize(scratch);
+    } finally {
+      restoreIds(ids);
+    }
   }
 
   parse(text: string): Result<SerializedWorkflow, string> {

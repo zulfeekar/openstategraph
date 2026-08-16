@@ -271,7 +271,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // the first time here would never autosave again, which is precisely the
     // moment a developer starts expecting it to (ticket 02). `document` is
     // what was just written, so it is what disk now holds.
-    rememberDiskDocument(slug, workbench.model.name, document);
+    rememberDiskDocument(slug, workbench.model.name, document, workbench.serializer);
     // The minted slug is said out loud on a create, because it is the one
     // thing the user could not have predicted: a second "My Workflow" lands
     // at `my-workflow-k7m3qp`, and silently is how you later wonder which of
