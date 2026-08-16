@@ -49,6 +49,7 @@ from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, ToolResult
 from openstategraph.prebuilt_web import _request
+from openstategraph.progress import report_progress
 
 #: InnerTube's player endpoint. The POST `web_fetch` cannot make.
 PLAYER_URL = "https://www.youtube.com/youtubei/v1/player"
@@ -229,6 +230,12 @@ class YouTubeTranscriptTool(BaseTool):
             return ToolResult.failure(
                 f"'{args.video.strip()}' is not a YouTube video id or watch URL."
             )
+
+        # After the id is understood and before the client ladder walks: the
+        # ladder is several fetches, and the caption fetch after it is one
+        # more. Nothing is reported for an argument that is not a video,
+        # because that answer comes back without touching the network.
+        report_progress(f"Reading captions for {video_id}")
 
         resolution = self.resolve(video_id)
         if not resolution.tracks:

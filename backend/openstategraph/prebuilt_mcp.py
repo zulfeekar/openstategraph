@@ -73,6 +73,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.progress import report_progress
 
 logger = logging.getLogger(__name__)
 
@@ -554,27 +555,47 @@ def _discover_all(
     return asyncio.run(gather())
 
 
-def _wrap_async_tool(tool: Any) -> Any:
+def _wrap_async_tool(tool: Any, server: str) -> Any:
     """The sync shim: the original `coroutine`, plus a `func` that runs it.
 
     `response_format` is carried across deliberately. Every MCP tool arrives
     as `content_and_artifact`, so the coroutine returns a `(content,
     artifact)` tuple — a wrapper defaulting to `"content"` would stringify
     that tuple and hand the model its own artifact as text.
+
+    **It is also the one place an MCP call can say it has started**
+    (production-ready 50). This module's own header measures a call at
+    1.2–1.5 s of which ≈0.8 s is reconnection, and that is a floor, not a
+    typical case — a server paging an API spends as long as it likes. `update`
+    fires when the *node* finishes and `token` only while a model types, so
+    without this line the gap is genuinely unreported.
+
+    **Both entry points, not just the shim.** `StructuredTool` carries a
+    `func` and a `coroutine` and the caller picks; instrumenting only the
+    sync one would make the feature disappear under an async agent, which is
+    the runtime most likely to be doing several of these at once.
     """
     from langchain_core.tools import StructuredTool
 
-    coroutine = tool.coroutine
+    inner = tool.coroutine
+    # Composed once, here, rather than per call: the two entry points must
+    # not be able to say different things about the same call.
+    line = f"Calling {tool.name} on {server}"
+
+    async def _coroutine(**kwargs: Any) -> Any:
+        report_progress(line)
+        return await inner(**kwargs)
 
     def _call(**kwargs: Any) -> Any:
-        return asyncio.run(coroutine(**kwargs))
+        report_progress(line)
+        return asyncio.run(inner(**kwargs))
 
     return StructuredTool(
         name=tool.name,
         description=getattr(tool, "description", "") or "",
         args_schema=tool.args_schema,
         func=_call,
-        coroutine=coroutine,
+        coroutine=_coroutine,
         response_format=getattr(tool, "response_format", "content"),
         metadata=getattr(tool, "metadata", None),
     )
@@ -854,7 +875,7 @@ class McpTool(BaseTool):
                     )
                     continue
                 claimed[tool.name] = binding
-                bound.append(_wrap_async_tool(tool))
+                bound.append(_wrap_async_tool(tool, definition.name))
         return bound
 
     def _chosen(

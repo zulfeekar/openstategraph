@@ -351,10 +351,20 @@ whoever is watching, so **it crosses to a customer intact** — unlike a tool's
 name or its payload, which do not. A silent forty-second gap is worst for the
 audience that cannot open a trace and work out what is happening.
 
+**The built-in slow tools already send these.** Web Search says what it is
+searching for, Web Fetch names the host it is reading, YouTube Transcript names
+the video, and every MCP call announces itself as `Calling <tool> on <server>`
+— that one because a call reopens its session, which costs ≈0.8 s before the
+server is even asked. So a workflow assembled entirely from the palette
+produces progress frames without anybody writing code. (Until production-ready
+50 it produced none: the API shipped with no caller but its own docstring's
+example. **`openstategraph knowledge build` is deliberately still silent** —
+it is not a graph run, so there is no stream for it to write to.)
+
 **A run whose steps say nothing sends no `progress` frames at all**, so a
-client that ignores the event behaves exactly as it did before. Frames come
-only from steps that ask for them, by calling `report_progress` from the
-package's own code:
+client that ignores the event behaves exactly as it did before. Beyond the
+built-ins, frames come only from steps that ask for them, by calling
+`report_progress` from the package's own code:
 
 ```python
 from openstategraph.abc import report_progress

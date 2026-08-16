@@ -33,6 +33,7 @@ import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
 import { applicableSuggestion, type CapabilitySuggestion } from './suggestion';
 import { continuingThread, rememberThread, type ThreadBinding } from './thread';
+import { progressLine } from './progressLine';
 import './AskPanel.css';
 
 /**
@@ -91,6 +92,22 @@ interface ChatTurn {
   readonly freshThread: boolean;
   readonly running: boolean;
   readonly activity: readonly ActivityRow[];
+  /**
+   * What the step currently working last said about *itself* — the `progress`
+   * frame, which the editor used to drop on the floor (production-ready 56).
+   *
+   * One live line, not a row. A trace row records that something *finished*
+   * and stays; this says "still going" and is replaced by the next report or
+   * by the step's own completion. It is therefore not part of `activity` and
+   * not in the exported trace: nothing about it is a fact about the run
+   * afterwards, which is the same reason `chat.html` keeps it out of the
+   * timeline.
+   *
+   * Rendered only while `running`, so every ending clears it without any
+   * ending having to remember to — a run stopped mid-tool must not leave
+   * "page 3 of 12" on screen forever.
+   */
+  readonly progress: string | null;
   /**
    * Streamed *model* text, concatenated live — "how the agent thinks".
    *
@@ -573,6 +590,12 @@ export function AskPanel({
               turn.id === id
                 ? {
                     ...turn,
+                    // A step completed, so whatever it was last saying about
+                    // itself is no longer true. Cleared on every `update`,
+                    // internal ones included: an agent's inner `tools` step
+                    // finishing is exactly the end of the tool call whose
+                    // "Calling search_docs on langchain-docs" is on screen.
+                    progress: null,
                     activity: [
                       ...turn.activity,
                       {
@@ -662,6 +685,27 @@ export function AskPanel({
                   : { ...turn, thinking: turn.thinking + event.content }
                 : turn,
             ),
+          );
+          scrollToEnd();
+        } else if (event.type === 'progress') {
+          // The frame the editor dropped while the customer page rendered it
+          // — the inverse of what the architecture review believed
+          // (production-ready 56). `update` fires when a node *completes* and
+          // `token` only while a model types, so an MCP call or a web fetch
+          // produced neither and the panel read as stopped.
+          //
+          // It moves the glow for the same reason `token` does: it is the
+          // other frame that arrives while a node is still working, and it is
+          // the only one a *tool* can send.
+          const progressTarget = frameTarget(event, hasNode, openAddress());
+          if (progressTarget && progressTarget !== queuedActive) {
+            seen.add(progressTarget);
+            activate(progressTarget, null);
+            queuedActive = progressTarget;
+          }
+          const line = progressLine(event);
+          setTurns((all) =>
+            all.map((turn) => (turn.id === id ? { ...turn, progress: line } : turn)),
           );
           scrollToEnd();
         } else if (event.type === 'error') {
@@ -850,6 +894,7 @@ export function AskPanel({
           freshThread: continuing === undefined && all.length > 0,
           running: true,
           activity: [],
+          progress: null,
           thinking: '',
           toolResults: [],
           result: null,
@@ -1342,6 +1387,17 @@ function Turn({
           ) : (
             <RunTimeline rows={turn.activity} running={turn.running} />
           )}
+          {/* Below both views and outside either record: what the working step
+              is saying about itself right now is not a step that ran and not a
+              bar on a timeline. Gated on `running` so every ending — answered,
+              stopped, failed, paused — clears it without having to remember
+              to. `aria-live` because for a screen reader this line is the only
+              evidence the run has not died. */}
+          {turn.running && turn.progress ? (
+            <p className="ask__live" aria-live="polite">
+              {turn.progress}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

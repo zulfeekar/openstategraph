@@ -121,6 +121,44 @@ const IGNORED_BY_DESIGN: Record<string, readonly string[]> = {
   'docs/examples/minimal-client.html': ['update', 'progress', 'spawn'],
 };
 
+/**
+ * The **second** leg of the roll call, and the one the first could not see.
+ *
+ * `streamConsumers()` above discovers a file by two marks — it names the
+ * endpoint and it reads the body. Both plain-HTML pages parse and render in
+ * one file, so for them that is the whole story. The editor is split:
+ * `RuntimeClient.ts` parses a frame into a `RunStreamEvent` and hands it on,
+ * and a *renderer* decides what a person sees. So the pin passed, honestly, on
+ * a client that parses `progress` perfectly and an editor that dropped it on
+ * the floor — production-ready 56's finding, and a pin defect rather than a
+ * second instance of the original one.
+ *
+ * Discovered the same way, for the same reason: a file that takes a
+ * `RunStreamEvent` and branches on `event.type` is a renderer, and a second
+ * one cannot appear without appearing here.
+ */
+const RENDERER_ROOTS = ['src/view', 'src/app'];
+
+function eventRenderers(): string[] {
+  return RENDERER_ROOTS.flatMap(sourceFilesUnder).filter((path) => {
+    const source = readFileSync(fileURLToPath(new URL(path, REPO)), 'utf8');
+    return source.includes('RunStreamEvent') && source.includes('event.type ===');
+  });
+}
+
+/** The `type` discriminants `RuntimeClient` can actually hand a renderer. */
+function variantsTheClientProduces(): string[] {
+  return [...client.matchAll(/readonly type: '([a-z]+)'/g)].map((match) => match[1] as string);
+}
+
+/** How a renderer spells "I handle this variant". */
+function variantsHandledBy(source: string): Set<string> {
+  const found = new Set<string>();
+  for (const match of source.matchAll(/event\.type\s*===\s*'([a-z]+)'/g))
+    found.add(match[1] as string);
+  return found;
+}
+
 /** Every path the client builds, as a template with `{}` for interpolations. */
 function pathsCalledByTheClient(): string[] {
   const found = new Set<string>();
@@ -233,6 +271,34 @@ describe('the client and the published contract', () => {
             `and this client drops. Add the branch, or record the omission and its ` +
             `reason in IGNORED_BY_DESIGN.`,
         ).toEqual(ignored);
+      }
+    });
+
+    it('reaches a renderer, not only a parser', () => {
+      // The gap the roll call above is structurally unable to see: in the
+      // editor, handling a frame and *showing* it are two files, and only the
+      // first one names the endpoint.
+      const renderers = eventRenderers();
+      const produced = variantsTheClientProduces();
+
+      // Anti-vacuity, both halves: a walker that found nothing, or a variant
+      // matcher that found nothing, would make the loop below true of empty.
+      expect(renderers, 'no renderer found — check the discovery, not the editor').toContain(
+        'src/view/ask/AskPanel.tsx',
+      );
+      expect(produced).toContain('progress');
+      expect(produced.length).toBeGreaterThan(4);
+
+      for (const path of renderers) {
+        const handled = variantsHandledBy(readFileSync(fileURLToPath(new URL(path, REPO)), 'utf8'));
+        const missing = produced.filter((name) => !handled.has(name));
+
+        expect(
+          missing,
+          `${path} never handles ${missing.join(', ')} — the client parses that frame ` +
+            `and this renderer shows nothing for it. That is how 'progress' shipped to ` +
+            `the customer page and not to the editor.`,
+        ).toEqual([]);
       }
     });
 

@@ -49,6 +49,7 @@ from typing import Any, Callable
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, ToolResult
+from openstategraph.progress import report_progress
 
 USER_AGENT = "openstategraph/0.1 (+local dev tool)"
 FETCH_TIMEOUT = 15
@@ -210,6 +211,11 @@ class WebSearchTool(BaseTool):
         query = args.query.strip()
         if not query:
             return ToolResult.failure("Give a non-empty query.")
+        # Before the round trip, not after it: the line exists to fill the
+        # wait, and the longest wait is the request that ends in a timeout.
+        # Nothing is reported for the empty-query refusal above, because
+        # nothing is about to be slow.
+        report_progress(f'Searching the web for "{query}"')
         try:
             status, page = self._search(SEARCH_URL, query)
         except Exception as exc:
@@ -268,8 +274,15 @@ class WebFetchTool(BaseTool):
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, FetchArgs)
+        url = args.url.strip()
+        # The host, never the whole URL. This string is the one field of the
+        # frame that crosses to a *customer's* surface as prose, and a full
+        # URL there is both unreadable and the shape that carries a token in
+        # its query string.
+        host = urllib.parse.urlparse(url).hostname or url
+        report_progress(f"Reading {host}")
         try:
-            raw = self._fetch(args.url.strip())
+            raw = self._fetch(url)
         except Exception as exc:
             return ToolResult.failure(f"Fetch failed: {exc}")
         text = _strip_html(raw)

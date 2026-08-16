@@ -11,6 +11,15 @@ tell you who *last finished*. LangGraph's answer is the `custom` stream mode
 and `get_stream_writer()`, and it is also the documented escape hatch for any
 model that is not a LangChain chat model.
 
+**Who calls it.** Not only a developer's own tool: the shipped slow ones do
+too — `prebuilt_web` (search, fetch), `prebuilt_youtube`, and every MCP call
+through `prebuilt_mcp._wrap_async_tool`. That is deliberate and was missing
+until production-ready 50, when this module's only caller in the repository
+was the example in `report_progress`'s own docstring — an extension point
+described as a solved problem. `knowledge_builders` is the one named slow job
+that is **not** here, because a build is not a graph run and there is no
+stream for it to write to.
+
 **Why a Pydantic model here and nowhere else in the stream.** The other six
 frames are assembled by `api/streaming.py` out of values this process
 produced — LangGraph's own chunks, the compiler's name maps, our resolvers.

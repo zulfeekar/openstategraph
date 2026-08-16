@@ -156,6 +156,21 @@
   border-radius: var(--radius-md);
 }
 
+/* The one live line: what the working step is saying about itself. Muted and
+   italic like `.ask__stopped`, because it is a status about the run rather
+   than a result of it — and the leading ellipsis is the same mark the chat
+   page uses, so the two surfaces read the same. */
+.ask__live {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-body-sm);
+  font-style: italic;
+}
+
+.ask__live::before {
+  content: '⋯ ';
+}
+
 .ask__views {
   display: inline-flex;
   align-self: flex-start;
