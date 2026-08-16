@@ -83,15 +83,30 @@ describe('the seam the Python tool is keyed by', () => {
 
   it('declares exactly the keys the node itself carries', () => {
     // A `data` key no field declares reads "" forever, silently. The Python
-    // side pins the same three in `MCP_NODE_KEYS`, and
-    // `test_mcp_field_contract.py` compares the two lists.
+    // side pins the same list in `MCP_NODE_KEYS`, and
+    // `test_mcp_field_contract.py` compares the two.
     //
     // `maxRetries` and `timeoutSeconds` are subtracted because `defineNode`
     // puts them on *every* node: they are `StateGraph.add_node` parameters,
     // which CLAUDE.md places on the workflow rather than on any family, so
     // they are not this atom's to declare or to mirror.
-    expect(ownFieldKeys().sort()).toEqual(
-      [MCP_FIELD.servers, MCP_FIELD.guide, MCP_FIELD.note].sort(),
+    //
+    // **One key, not three, since production-ready 52.** `mcpGuide` and
+    // `mcpNote` are `readonly` fields — inspector prose declared on the
+    // schema — and they used to be seeded into `data` and saved into the
+    // user's `workflow.json`. A display field is no longer a `data` key at
+    // all, so the node carries only what a person configures.
+    expect(ownFieldKeys().sort()).toEqual([MCP_FIELD.servers]);
+  });
+
+  it('still declares the two read-only blocks, as display', () => {
+    // The other half: not persisted is not deleted. The card must still show
+    // what the machinery already does, read-only beside the field a developer
+    // owns — that is what the ticket which added them was for.
+    const display = mcpServerNode.fields.filter((field) => field.kind === 'readonly');
+
+    expect(display.map((field) => field.key).sort()).toEqual(
+      [MCP_FIELD.guide, MCP_FIELD.note].sort(),
     );
   });
 

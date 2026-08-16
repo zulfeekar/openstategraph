@@ -169,7 +169,28 @@ export interface FileFieldSchema extends FieldSchemaBase<string> {
   readonly actionLabel?: string;
 }
 
-/** Non-editable readout of a computed or upstream value. */
+/**
+ * Non-editable prose the inspector shows beside the fields a developer owns.
+ *
+ * **Display, never data** (production-ready 52). Its text is `defaultValue` —
+ * declared on the schema, identical for every node of the type — so the node's
+ * own `data` has nothing to add and everything to lose by holding a copy:
+ * saving one `tool.mcp` node wrote ~1.5 KB of the inspector's help text into
+ * the user's `workflow.json`, where editing that copy in a future release
+ * would re-diff every saved document for no behavioural change, and where no
+ * shipped example has it. So `defaultsFrom` does not seed one, a node model
+ * drops one it is handed, and the renderer reads the schema.
+ *
+ * That also fixes the general case rather than the two keys that were noticed:
+ * the guardrail's locked-policy note and the memory segment's note are the
+ * same kind used the same way, and the next family to add a note block cannot
+ * reintroduce this.
+ *
+ * If a genuinely *computed* readout is ever needed — a value the node
+ * calculates rather than declares — it is not this kind. It is a derived
+ * value, and deriving it at render time is what keeps it from going stale in
+ * a file.
+ */
 export interface ReadonlyFieldSchema extends FieldSchemaBase<string> {
   readonly kind: 'readonly';
   readonly mono?: boolean;
@@ -270,10 +291,87 @@ export function isInInspector(schema: FieldSchema): boolean {
   return schema.inInspector ?? true;
 }
 
+/**
+ * The id a new repeatable-group row gets — one generator, everywhere.
+ *
+ * Two call sites spelled it `r${Date.now()}` independently (the card's row
+ * renderer and the app-level MCP panel), which is duplicated knowledge with a
+ * real failure attached: two rows added inside the same millisecond get the
+ * same id, and a router branch's edge references a branch *by id*. Ticket 52
+ * found the readable half of the same problem — one MCP node held `"mcp1"`
+ * beside `"r1786857729149"`, so two documents describing the same thing did
+ * not compare equal.
+ *
+ * A counter behind the timestamp keeps it monotonic within a millisecond
+ * without pretending to be a UUID: this is a document-local handle, and a
+ * shorter one is a more readable diff.
+ */
+let rowsIssued = 0;
+export function nextRowId(): string {
+  rowsIssued += 1;
+  return `r${Date.now()}-${rowsIssued}`;
+}
+
+/**
+ * One row, with its keys in the order the schema declares them.
+ *
+ * `withSortedKeys` canonicalises a node's own `data`, and stopped at the
+ * surface: a row is a nested object, so two rows holding the same values
+ * serialised differently depending on which control was touched first
+ * (ticket 52's "Related"). Schema order rather than alphabetical, because a
+ * row is read in a diff beside the card that produced it.
+ */
+export function canonicalRow(
+  row: Readonly<Record<string, FieldValue>>,
+  fields: readonly FieldSchema[],
+): Record<string, FieldValue> {
+  const ordered: Record<string, FieldValue> = {};
+  if ('id' in row) ordered.id = row.id as FieldValue;
+  for (const field of fields) {
+    if (field.key !== 'id' && field.key in row) ordered[field.key] = row[field.key] as FieldValue;
+  }
+  for (const key of Object.keys(row)) {
+    if (!(key in ordered)) ordered[key] = row[key] as FieldValue;
+  }
+  return ordered;
+}
+
+/** Whether this field is prose the inspector shows rather than state a node holds. */
+export function isDisplayOnly(schema: FieldSchema): boolean {
+  return schema.kind === 'readonly';
+}
+
+/** The keys a node type declares but must never persist. See `ReadonlyFieldSchema`. */
+export function displayOnlyKeys(schemas: readonly FieldSchema[]): string[] {
+  return schemas.filter(isDisplayOnly).map((schema) => schema.key);
+}
+
+/**
+ * `data` with every display-only key removed.
+ *
+ * Applied where a node is *constructed*, so a document saved before ticket 52
+ * is cleaned by opening and re-saving it and no schema migration is needed —
+ * the keys never meant anything, so there is nothing for a migration to carry.
+ */
+export function withoutDisplayOnly(
+  data: Readonly<NodeData>,
+  schemas: readonly FieldSchema[],
+): NodeData {
+  const excluded = new Set(displayOnlyKeys(schemas));
+  const kept: NodeData = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!excluded.has(key)) kept[key] = value;
+  }
+  return kept;
+}
+
 /** Builds the initial `data` record for a node type from its schema. */
 export function defaultsFrom(schemas: readonly FieldSchema[]): NodeData {
   const data: NodeData = {};
   for (const schema of schemas) {
+    // Display-only prose is the schema's, not the node's — seeding it here is
+    // what put the inspector's help text into `workflow.json` (ticket 52).
+    if (isDisplayOnly(schema)) continue;
     data[schema.key] = schema.defaultValue ?? null;
     // A file field carries two keys: the display name and the content it
     // was loaded from. Seed both so the node is never half-initialised.

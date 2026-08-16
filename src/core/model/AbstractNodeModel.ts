@@ -1,7 +1,14 @@
 import { nextId } from '@core/kernel/id';
 import { withSortedKeys } from '@core/kernel/ordering';
 import type { Point, Size } from '@core/kernel/geometry';
-import { defaultsFrom, mergeData, type FieldValue, type NodeData } from './contracts/fields';
+import {
+  canonicalRow,
+  defaultsFrom,
+  mergeData,
+  withoutDisplayOnly,
+  type FieldValue,
+  type NodeData,
+} from './contracts/fields';
 import type { IPortDescriptor } from './contracts/ports';
 import {
   IDLE_RUNTIME,
@@ -61,7 +68,17 @@ export abstract class AbstractNodeModel implements INodeModel {
     this._parentId = init.parentId ?? null;
     // Schema defaults first so a node loaded from an older document gains
     // any field added since it was saved.
-    this._data = mergeData(defaultsFrom(definition.fields), init.data);
+    //
+    // `withoutDisplayOnly` is what stops the inspector's help text living in
+    // the user's repository (ticket 52). `defaultsFrom` no longer seeds one,
+    // so this is only about `init.data` — a document saved *before* the fix
+    // still carries the prose, and dropping it here means opening and saving
+    // that document cleans it, with no schema migration for keys that never
+    // meant anything.
+    this._data = mergeData(
+      defaultsFrom(definition.fields),
+      init.data ? withoutDisplayOnly(init.data as NodeData, definition.fields) : undefined,
+    );
     this._title = init.title ?? null;
   }
 
@@ -220,10 +237,37 @@ export abstract class AbstractNodeModel implements INodeModel {
       parentId: this._parentId,
       // Sorted, not spread: `JSON.stringify` follows insertion order, so two
       // nodes holding identical values would serialise differently depending
-      // on which field the user happened to edit first.
-      data: withSortedKeys(this._data),
+      // on which field the user happened to edit first. `canonicalRows`
+      // carries the same rule one level down, into a repeatable group's rows
+      // — where `withSortedKeys` could not reach, so two MCP servers
+      // describing the same thing did not compare equal (ticket 52).
+      data: withSortedKeys(this.canonicalRows(this._data)),
       ...(this._title != null ? { title: this._title } : {}),
     };
+  }
+
+  /**
+   * Every repeatable group's rows, keyed in the order their schema declares.
+   *
+   * Schema order rather than alphabetical: a row is read in a diff beside the
+   * card that wrote it, and `id, url, transport` reads as a server while
+   * `authKind, id, transport, url` reads as a hash. The node's own top-level
+   * keys stay alphabetical — that is `withSortedKeys`, and it is a different
+   * question about a flat record nobody composes by eye.
+   */
+  private canonicalRows(data: Readonly<NodeData>): NodeData {
+    const out: NodeData = { ...data };
+    for (const schema of this.definition.fields) {
+      if (schema.kind !== 'repeatable-group') continue;
+      const rows = out[schema.key];
+      if (!Array.isArray(rows)) continue;
+      out[schema.key] = rows.map((row) =>
+        row && typeof row === 'object' && !Array.isArray(row)
+          ? canonicalRow(row as Record<string, FieldValue>, schema.fields)
+          : row,
+      ) as FieldValue;
+    }
+    return out;
   }
 
   /**

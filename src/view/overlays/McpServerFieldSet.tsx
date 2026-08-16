@@ -1,5 +1,6 @@
 import { Button, DisplayRow, Field, Select, TextInput } from '@design/primitives';
 import {
+  nextRowId,
   resolveOptions,
   type FieldSchema,
   type FieldValue,
@@ -89,10 +90,12 @@ function SchemaField({
       );
 
     case 'readonly':
-      // The locked note: machinery shown, never a pre-filled editable box.
+      // The locked note: machinery shown, never a pre-filled editable box —
+      // and read from the schema first, because since ticket 52 the prose is
+      // deliberately not in anybody's `data`.
       return (
         <Field {...common}>
-          <DisplayRow value={asString(raw) || String(schema.defaultValue ?? '')} />
+          <DisplayRow value={String(schema.defaultValue ?? '') || asString(raw)} />
         </Field>
       );
 
@@ -159,7 +162,7 @@ function RowsField({
             </button>
           </div>
         ))}
-        <Button size="sm" onClick={() => write([...rows, { id: `r${Date.now()}`, name: '' }])}>
+        <Button size="sm" onClick={() => write([...rows, { id: nextRowId(), name: '' }])}>
           {schema.addLabel ?? 'Add'}
         </Button>
       </div>

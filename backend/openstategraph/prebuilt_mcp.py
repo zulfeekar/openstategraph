@@ -91,15 +91,18 @@ KEY_AUTH_KIND = "authKind"
 KEY_AUTH_HEADER_NAME = "authHeaderName"
 KEY_AUTH_TOKEN_ENV = "authTokenEnv"
 KEY_TOOLS = "tools"
-KEY_GUIDE = "mcpGuide"
-KEY_NOTE = "mcpNote"
-
 #: Keys on the **node's own** `data` — what `defaultsFrom(fields)` emits, and
-#: therefore what the generated port table declares. Since ticket 04 that is
-#: the row list plus the two read-only notes; everything a server is described
-#: by moved *into* a row. Compared against the TypeScript declaration by
+#: therefore what the generated port table declares. Since ticket 04
+#: everything a server is described by moved *into* a row, so this is the row
+#: list and nothing else. Compared against the TypeScript declaration by
 #: `test_mcp_field_contract.py`.
-MCP_NODE_KEYS = (KEY_SERVERS, KEY_GUIDE, KEY_NOTE)
+#:
+#: It briefly also held `mcpGuide` and `mcpNote` — the card's two read-only
+#: blocks — because the editor seeded them into every node's `data` and saved
+#: them into the user's `workflow.json` (production-ready 52). They are
+#: inspector prose declared on the schema, not configuration; a `readonly`
+#: field is now display-only on both sides, so there is no key here to mirror.
+MCP_NODE_KEYS = (KEY_SERVERS,)
 
 #: Keys within one server row. The same seven the app-level panel renders flat,
 #: because a row and a panel entry are the same field set in two containers —

@@ -35,6 +35,11 @@ FIELD_SET = ROOT / "src" / "nodes" / "tools" / "mcpServerFields.ts"
 #: to the workflow, not to any family, so they are not this atom's to mirror.
 GRAPH_ASSEMBLY_KEYS = {"maxRetries", "timeoutSeconds"}
 
+#: The card's two read-only blocks. `MCP_FIELD` names them because the schema
+#: has to key them; nothing reads them and nothing stores them, so they are
+#: neither a node key nor a row key. See the test that pins exactly that.
+DISPLAY_ONLY_KEYS = {"mcpGuide", "mcpNote"}
+
 
 def _declared_keys() -> set[str]:
     specs = json.loads(PORT_SPECS.read_text())
@@ -86,9 +91,29 @@ class TestTheCardAndTheToolAgree:
         declared = set(_typescript_keys().values())
         missing = set(MCP_ROW_KEYS) - declared
         assert not missing, f"prebuilt_mcp reads {sorted(missing)} off a row; MCP_FIELD has no such key."
-        # And nothing in the editor's vocabulary that nothing reads.
-        unread = declared - set(MCP_ROW_KEYS) - set(MCP_NODE_KEYS)
+        # And nothing in the editor's vocabulary that nothing reads —
+        # `DISPLAY_ONLY_KEYS` excepted, which is the point of them.
+        unread = declared - set(MCP_ROW_KEYS) - set(MCP_NODE_KEYS) - DISPLAY_ONLY_KEYS
         assert not unread, f"MCP_FIELD declares {sorted(unread)}, which nothing reads."
+
+    def test_the_display_blocks_are_read_by_nobody_and_stored_nowhere(self) -> None:
+        """The two keys that are deliberately outside the contract above.
+
+        `mcpGuide` and `mcpNote` are `readonly` fields: inspector prose,
+        declared on the schema, identical for every node of the type. Until
+        production-ready 52 the editor seeded them into each node's `data` and
+        saved ~1.5 KB of its own help text into the user's `workflow.json`, so
+        they appeared in the generated port table and had to be mirrored here
+        to keep the contract green — a mirror of something that was never
+        configuration.
+
+        Now they are display on both sides. The assertion is that they are
+        *not* in the port table: this is the pin that fails if seeding ever
+        comes back, and it is why the exemption above cannot quietly widen.
+        """
+        assert DISPLAY_ONLY_KEYS <= set(_typescript_keys().values())
+        assert not DISPLAY_ONLY_KEYS & _declared_keys()
+        assert not DISPLAY_ONLY_KEYS & set(MCP_NODE_KEYS)
 
     def test_the_node_type_is_one_string_in_both_languages(self) -> None:
         assert McpTool.node_type == "tool.mcp"

@@ -14,6 +14,7 @@ import {
   type SelectOption,
 } from '@design/primitives';
 import {
+  nextRowId,
   resolveOptions,
   type FieldSchema,
   type FieldValue,
@@ -208,7 +209,13 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
       return <FileField nodeId={nodeId} schema={schema} data={data} labelId={id} />;
 
     case 'readonly': {
-      const value = asString(data[schema.key]);
+      // The schema, not the node. This prose is identical for every node of
+      // the type, so it is declared once and shown from there — and since
+      // ticket 52 it is deliberately absent from `data`, where a copy of it
+      // was being written into the user's `workflow.json`. `data` is still
+      // yet re-saved, renders the same — `defaultValue` is required on this
+      // kind, so the fallback only ever fires for an empty declaration.
+      const value = asString(schema.defaultValue) || asString(data[schema.key]);
       return (
         <Field {...common}>
           <DisplayRow value={value || '—'} />
@@ -360,9 +367,11 @@ function RepeatableGroupField({
     for (const field of schema.fields) {
       newRow[field.key] = field.defaultValue ?? null;
     }
-    // Generate a stable id for new rows.
+    // Generate a stable id for new rows — through the one generator, so the
+    // card and the app-level panel cannot mint them differently, and so two
+    // rows added in the same millisecond cannot collide (ticket 52).
     if (!newRow.id) {
-      newRow.id = `r${Date.now()}`;
+      newRow.id = nextRowId();
     }
     const nextRows = [...rows, newRow];
     controller.nodes.setField(nodeId, schema.key, nextRows);

@@ -260,7 +260,6 @@
         "blockedMessage",
         "maxRetries",
         "policy",
-        "policyNote",
         "timeoutSeconds"
       ]
     },
@@ -448,7 +447,6 @@
         "maxRetries",
         "retention",
         "segment",
-        "segmentNote",
         "timeoutSeconds"
       ]
     },
@@ -910,8 +908,6 @@
       "accepts_skill": false,
       "field_keys": [
         "maxRetries",
-        "mcpGuide",
-        "mcpNote",
         "servers",
         "timeoutSeconds"
       ]
