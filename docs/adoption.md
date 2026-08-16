@@ -24,7 +24,7 @@ deliberately; mixing them is where confusion starts.
 
 **The checkout is no longer the only path.** It was, before 0.3.0, and much of
 this page was written then. Today the backend is a distribution: one wheel, a
-four-package core, a set of named extras, `py.typed`, and an `openstategraph`
+four-dependency core, a set of named extras, `py.typed`, and an `openstategraph`
 console script — verified by a CI job that installs it into an empty virtualenv
 outside the checkout and runs a workflow there. Mode (b) is a first-class path;
 what is still outstanding is the **PyPI** upload, and this page says exactly

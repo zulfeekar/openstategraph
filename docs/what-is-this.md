@@ -62,7 +62,7 @@ an engine.
 
 | | Here |
 | --- | --- |
-| `pip install` + provider extras | four-package core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[postgres]` `[bastion]` `[all]` |
+| `pip install` + provider extras | four-dependency core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[postgres]` `[bastion]` `[all]` |
 | one entry object | `from openstategraph import load_workflow` |
 | a CLI | `openstategraph init · new · run · eval · validate · graph · examples · threads · knowledge · providers · env-example · serve · mcp` |
 | a rich result object, not a string | `RunResult` — `.answer`, `.decisions`, `.outputs`, `.warnings`, `.attempts` |

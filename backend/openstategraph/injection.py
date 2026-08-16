@@ -16,7 +16,7 @@ recalled:
    single strongest reason this is never in `[all]`.
 2. **It is a local model.** `onnxruntime`, `huggingface-hub`, `numpy` and
    `tokenizers` arrive with it, in a product whose install proof currently
-   fits in a clean venv and whose dependency floor is four packages.
+   fits in a clean venv and whose dependency floor is four distributions.
 3. **It runs inside the agent.** Screening happens in `before_model`, which
    fires for the user's turn *and* after tools return — so it covers
    indirect injection carried in a fetched page, which is where the

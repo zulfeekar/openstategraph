@@ -63,7 +63,7 @@ with no commercial packages.
 
 This repository is the editor **and** the framework, and you do not need the
 first to use the second. From 0.3.0 the backend is a proper distribution — one
-wheel, a four-package core, named extras, `py.typed`, and an
+wheel, a four-dependency core, named extras, `py.typed`, and an
 `openstategraph` console script:
 
 ```bash
@@ -187,7 +187,7 @@ examples ship *inside* the install, and `examples copy` puts one in your own
 showcase and stays here rather than in the wheel — `sql-qa` is the same idea
 over the platform's generic SQL atoms, which is why the gallery has it.
 
-The lean core is deliberately four packages, so every one of those commands
+The lean core is deliberately four dependencies, so every one of those commands
 prints one warning: the checkpointer fell back to memory because
 `langgraph-checkpoint-sqlite` is not installed. That is honest rather than
 broken — a run still works, an approval or a follow-up question just will not
@@ -310,7 +310,9 @@ python3 -m pytest -q                # backend + workflow tests — from the REPO
 **Run pytest from the repo root, not from `backend/`.** The root `pytest.ini`
 is what declares `testpaths = workflows backend` and puts the example
 workflow's `tools`/`functions` on `sys.path`; `cd backend && pytest` never
-reads it and quietly runs 49 fewer tests (1637 against 1686 today) — the whole
+reads it and quietly runs 49 fewer tests (3043 against 3092 on 2026-08-16,
+measured with `--collect-only`; it was 1637 against 1686 when this line was
+written, and the gap is the same 49 either way) — the whole
 `workflows/` half, which is exactly the code CI covers and you would then be
 red on. Live-API tests are opt-in either way: `pytest -m live`.
 

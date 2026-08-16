@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
  * and often should.
  */
 const SRC = fileURLToPath(new URL('..', import.meta.url));
+const REPO = fileURLToPath(new URL('../../', import.meta.url));
 
 /** Every non-test source file under `src/`. */
 function sources(dir: string, found: string[] = []): string[] {
@@ -51,6 +52,61 @@ const BANNED: { pattern: RegExp; instead: string }[] = [
   },
 ];
 
+/**
+ * The same guard, over the documents rather than the app.
+ *
+ * `src/` is one surface of several, and the architecture review of 2026-08-16
+ * (F10, F12) found the word `package` used in its forbidden PyPI sense in the
+ * three documents a stranger reads first — outside a guard that has only ever
+ * walked `src/`. So this leg walks the prose trees too.
+ *
+ * **One pattern, not the whole lexicon.** Widening the *roots* is cheap;
+ * widening the *pattern list* to `revise loop` and `instance default` over
+ * these trees is not, because a Python docstring is the internal register in a
+ * way `//` comments make obvious in TypeScript and nothing makes obvious in
+ * `.py` — a distinction that has to be argued before it is asserted, and it is
+ * ticket 43's to argue. What lands here is the one class F10 is about, held
+ * everywhere it can appear rather than in the three places a reviewer noticed.
+ */
+const DOC_ROOTS = ['README.md', 'docs', 'site', 'backend/openstategraph'];
+const DOC_SKIP = /node_modules|__pycache__|[/\\]decisions[/\\]/;
+
+function documents(path: string, found: string[] = []): string[] {
+  if (DOC_SKIP.test(path)) return found;
+  if (statSync(path).isDirectory()) {
+    for (const entry of readdirSync(path)) documents(join(path, entry), found);
+  } else if (/\.(md|html|py|tsx?)$/.test(path) && !/\.test\.tsx?$/.test(path)) {
+    found.push(path);
+  }
+  return found;
+}
+
+/**
+ * `package` in the distribution sense — "a four-package core", where the
+ * settled word means `workflows/<slug>/` and the thing being counted is a
+ * dependency.
+ *
+ * Two shapes, because the counting is what makes it the wrong sense and
+ * counting alone is not enough: **"nine package tests"** and **"two packages
+ * behind one classifier"** are the settled sense counted, and both are in this
+ * repository. So the compound form is caught outright, and the loose form only
+ * beside a word that can only mean the dependency graph.
+ */
+const NUMBER = 'two|three|four|five|six|seven|eight|nine|ten|\\d+';
+const DEPENDENCY = 'floor|lean core|dependenc|venv|wheel|pip install|resolved';
+const DISTRIBUTION_PACKAGE = [
+  new RegExp(`\\b(?:${NUMBER})-packages?\\b`, 'i'),
+  new RegExp(`(?:${DEPENDENCY})[^.\\n]{0,60}?\\b(?:${NUMBER}) packages?\\b`, 'i'),
+  new RegExp(`\\b(?:${NUMBER}) packages?\\b[^.\\n]{0,60}?(?:${DEPENDENCY})`, 'i'),
+];
+
+/**
+ * `docs/decisions/` is excluded above for the reason comment lines are: a
+ * record whose subject is the collision has to be able to name it. This is the
+ * control that stops that exclusion from quietly becoming the whole tree.
+ */
+const KNOWN_DOCUMENT = 'README.md';
+
 describe('the user-facing lexicon', () => {
   it.each(BANNED)('never says $pattern in UI copy', ({ pattern, instead }) => {
     const offenders: string[] = [];
@@ -63,5 +119,40 @@ describe('the user-facing lexicon', () => {
     }
 
     expect(offenders, `use ${instead}`).toEqual([]);
+  });
+
+  describe('in the documents, not only the app', () => {
+    it('walks the trees it claims to', () => {
+      // Anti-vacuity: four roots that resolved to nothing would make the
+      // assertion below true of an empty set, which is the defect F12 names.
+      const walked = DOC_ROOTS.flatMap((root) => documents(join(REPO, root)));
+
+      expect(walked.length).toBeGreaterThan(150);
+      expect(walked.some((path) => path.endsWith(KNOWN_DOCUMENT))).toBe(true);
+      expect(walked.some((path) => path.endsWith('.py'))).toBe(true);
+      expect(walked.some((path) => path.includes('site'))).toBe(true);
+    });
+
+    it('never counts a dependency in packages', () => {
+      const offenders: string[] = [];
+      for (const root of DOC_ROOTS) {
+        for (const path of documents(join(REPO, root))) {
+          readFileSync(path, 'utf8')
+            .split('\n')
+            .forEach((line, index) => {
+              if (DISTRIBUTION_PACKAGE.some((pattern) => pattern.test(line))) {
+                offenders.push(
+                  `${path.slice(REPO.length)}:${index + 1}: ${line.trim().slice(0, 90)}`,
+                );
+              }
+            });
+        }
+      }
+
+      expect(
+        offenders,
+        'a "package" is `workflows/<slug>/` (CLAUDE.md) — say dependencies, or distributions',
+      ).toEqual([]);
+    });
   });
 });

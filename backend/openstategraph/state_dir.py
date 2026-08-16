@@ -40,7 +40,7 @@ Ticket 03 (scale-and-adopt).
   `%LOCALAPPDATA%`. Local rather than Roaming: a sqlite file must not be
   synchronised between machines behind our back.
 
-No `platformdirs` dependency. The lean core is four packages
+No `platformdirs` dependency. The lean core is four dependencies
 (`docs/decisions/framework-packaging.md` §3.1), and this is fifteen lines that
 change roughly never.
 """

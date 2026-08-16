@@ -34,8 +34,8 @@ addendum on one node and a complete persona on another, and a setting readable
 from two places is how a developer ends up with a prompt they cannot predict.
 The consuming node owns it, once, as `rulesMode`.
 
-Parsed by hand rather than with PyYAML on purpose: this package's four-package
-dependency floor is deliberate (see `pyproject.toml`), and the specification's
+Parsed by hand rather than with PyYAML on purpose: this project's four-dependency
+floor is deliberate (see `pyproject.toml`), and the specification's
 frontmatter is a flat string map — `key: value`, plus YAML's folded `>-` for a
 long description. Anything richer is not a skill header.
 """

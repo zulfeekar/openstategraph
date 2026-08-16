@@ -25,8 +25,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# The lean core (docs/decisions/framework-packaging.md §3.1). Four packages,
-# ~36 distributions resolved, down from 79. Everything a `load_workflow`
+# The lean core (docs/decisions/framework-packaging.md §3.1). Four direct
+# dependencies, ~36 distributions resolved, down from 79. "Four dependencies",
+# never "four packages": `package` is a settled word here for `workflows/<slug>/`
+# (CLAUDE.md), and this line is where the other sense kept being copied from. Everything a `load_workflow`
 # consumer may never touch — a web server, an MCP SDK, three provider SDKs and
 # the deepagents harness with its Google GenAI dependency — lives behind an
 # extra below and is already imported lazily at its one call site. Upper bounds

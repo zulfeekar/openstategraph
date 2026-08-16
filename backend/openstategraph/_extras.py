@@ -2,7 +2,7 @@
 
 **Internal — not part of the public API. Stability is not guaranteed.**
 
-The lean core is four packages (`docs/decisions/framework-packaging.md` §3.1).
+The lean core is four dependencies (`docs/decisions/framework-packaging.md` §3.1).
 Everything else — the deepagents harness, the MCP SDK, the web server, the
 three provider SDKs, sqlite persistence — lives behind an extra and is
 imported at its one call site rather than at module scope.

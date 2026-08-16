@@ -18,7 +18,7 @@ and `openstategraph run ./my-workflow "…"` is the demo.
    here that the library does not have, and the CLI has become a second
    implementation of the framework.
 2. **argparse only.** `click` and `rich` are what the reference framework
-   spends half its dependency floor on. A project arguing for a four-package
+   spends half its dependency floor on. A project arguing for a four-dependency
    core cannot then add two for colour and a decorator syntax.
 
 **Exit codes are the API for CI**, so they are fixed and few:

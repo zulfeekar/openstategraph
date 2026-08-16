@@ -8,7 +8,7 @@ which is the useful half of a secret without being a secret.
 
 **Why YAML, given the lean-core rule.** The rule is about *distributions*, and
 YAML costs none: `PyYAML` is already a transitive dependency of
-`langchain-core`, one of the four packages the lean core is made of
+`langchain-core`, one of the four dependencies the lean core is made of
 (`pip show langchain-core` → `Requires: … pyyaml …`). So the honest comparison
 is not "a dependency versus none" but "comments versus no comments", and this
 is a file whose entire purpose is to be read and edited by a human or an agent:
