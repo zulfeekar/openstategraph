@@ -37,6 +37,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from openstategraph.abc.tool import PLUGIN_FIELD_KINDS
+
 logger = logging.getLogger(__name__)
 
 #: Where a developer who did half the job is sent. Named in the message rather
@@ -120,6 +122,19 @@ def _declared_fields(tool: Any, node_type: str, distribution: str) -> tuple[list
                 "there is nowhere for its value to be stored, so it is not shown."
             )
             continue
+        if payload["kind"] not in PLUGIN_FIELD_KINDS:
+            # Said out loud rather than defaulted away (framework-packaging
+            # ticket 11). The field still renders — a card missing a control
+            # is worse than a control of the wrong shape — but a plugin author
+            # who wrote `number` because a docstring said they could used to
+            # get a text box and nothing else. Silence is how the wrong
+            # control looks like the right one.
+            warnings.append(
+                f'{distribution} declared card field "{payload["key"]}" on '
+                f'"{node_type}" with kind "{payload["kind"]}", which this editor '
+                f"does not render; it is shown as a text box. Supported: "
+                f"{', '.join(PLUGIN_FIELD_KINDS)}."
+            )
         fields.append(payload)
     return fields, warnings
 

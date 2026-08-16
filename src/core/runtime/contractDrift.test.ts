@@ -30,8 +30,15 @@ const openapi = JSON.parse(readFileSync(fileURLToPath(new URL('docs/openapi.json
  * surface ceiling (mcp-connect ticket 03), and a pin that watched only the
  * file the routes used to live in would have gone quiet at exactly the moment
  * four new endpoints appeared.
+ *
+ * `WorkflowFileClient.ts` joined for the same argument read the other way
+ * (framework-packaging ticket 11): it builds thirteen more `/api/` paths — the
+ * catalogue, the templates, the examples, the mounts — and was outside the
+ * list because the list named the files in front of its author. Every one of
+ * them was documented on the day it was added, which is the argument for
+ * adding the file now rather than after a fourteenth is not.
  */
-const client = ['RuntimeClient.ts', 'McpRegistryClient.ts']
+const client = ['RuntimeClient.ts', 'McpRegistryClient.ts', 'WorkflowFileClient.ts']
   .map((name) => readFileSync(fileURLToPath(new URL(`src/core/runtime/${name}`, REPO)), 'utf8'))
   .join('\n');
 
@@ -209,6 +216,11 @@ describe('the client and the published contract', () => {
 
     expect(called).toContain('/api/runs');
     expect(called).toContain('/api/runs/stream');
+    // And the third file's own doors, so adding it to the list above is not
+    // three more strings the matcher never reaches (ticket 11).
+    expect(called).toContain('/api/templates');
+    expect(called).toContain('/api/examples');
+    expect(called).toContain('/api/workflows/{}/publish');
     expect(called.length).toBeGreaterThan(5);
   });
 

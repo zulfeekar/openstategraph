@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
 import type { PluginToolCapability } from '@core/runtime/WorkflowFileClient';
 import {
+  PLUGIN_FIELD_KINDS,
   capabilityWarnings,
   forgetPluginNodes,
   onCapabilityWarningsChange,
@@ -102,6 +103,38 @@ describe('registerPluginCapabilities', () => {
     const endpoint = fields.find((f) => f.key === 'endpoint');
     expect(endpoint?.kind).toBe('text');
     expect(endpoint?.label).toBe('Endpoint');
+  });
+
+  it('renders every kind it lists, so the exported set cannot become a fourth membership', () => {
+    // The control that makes `PLUGIN_FIELD_KINDS` mean something
+    // (framework-packaging ticket 11). The Python side is pinned to this
+    // array; this is what pins the array to the switch below it. Without it,
+    // adding a word here would satisfy the cross-language test and still
+    // produce a text box.
+    const workbench = new Workbench();
+
+    registerPluginCapabilities(
+      [
+        pluginTool({
+          fields: PLUGIN_FIELD_KINDS.map((kind) => ({
+            key: kind,
+            label: kind,
+            kind,
+            defaultValue: kind === 'toggle' ? true : '',
+            placeholder: '',
+            hint: '',
+            options: kind === 'select' ? [{ value: 'a', label: 'A' }] : [],
+          })),
+        }),
+      ],
+      workbench.registry,
+      workbench.engine.executors,
+    );
+
+    const fields = workbench.registry.nodeTypes.get('tool.acme-ping')?.fields ?? [];
+    for (const kind of PLUGIN_FIELD_KINDS) {
+      expect(fields.find((f) => f.key === kind)?.kind).toBe(kind);
+    }
   });
 
   it('falls back to a text control for a field kind this editor does not know', () => {

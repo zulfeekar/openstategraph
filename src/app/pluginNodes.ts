@@ -160,11 +160,29 @@ function describe(capability: PluginToolCapability): string {
 }
 
 /**
+ * The `kind`s the switch below actually implements — the editor's half of a
+ * vocabulary whose other half is `PLUGIN_FIELD_KINDS` in
+ * `backend/openstategraph/abc/tool.py`, pinned to it by
+ * `backend/tests/test_the_second_consumer_is_pinned.py`.
+ *
+ * Exported because it had no owner (framework-packaging ticket 11). The set
+ * was written down in a Python docstring, in `docs/building-an-atom.md` and
+ * in this switch, with three different memberships — so a plugin author
+ * following the documented one got a text box and no signal. This file is the
+ * renderer, which makes it the truth; `renders every kind it lists` in
+ * `pluginNodes.test.ts` is what stops this constant from becoming a fourth
+ * membership of its own.
+ */
+export const PLUGIN_FIELD_KINDS = ['text', 'textarea', 'select', 'toggle'] as const;
+
+/**
  * One declared field as a schema the editor renders.
  *
  * An unknown `kind` degrades to `text` rather than failing the card: a plugin
  * built against a newer editor must still be usable in an older one, and a
- * missing card is the exact failure this whole change exists to remove.
+ * missing card is the exact failure this whole change exists to remove. The
+ * backend says so out loud on the capability-warning channel, so degrading is
+ * not the same as saying nothing.
  */
 function toFieldSchema(field: PluginToolField): FieldSchema {
   const base = {

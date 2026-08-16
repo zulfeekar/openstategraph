@@ -501,7 +501,7 @@ class Ping(BaseTool):
         ToolField(
             key="endpoint",                       # where the value lands in node data
             label="Endpoint",
-            kind="text",                          # text | textarea | select | toggle | number
+            kind="text",                          # text | textarea | select | toggle
             default_value="",
             placeholder="https://acme.example/ping",
             hint="Where the ping goes.",

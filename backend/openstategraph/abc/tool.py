@@ -42,6 +42,22 @@ class ToolResult(BaseModel):
         return cls(ok=False, content="", error=message)
 
 
+#: Every `ToolField.kind` the editor renders as the control it names.
+#:
+#: The closed set a plugin author writes against, and the **owner** of that
+#: vocabulary — `src/app/pluginNodes.ts` re-declares the same four and
+#: `backend/tests/test_the_second_consumer_is_pinned.py` fails if the two
+#: disagree. Before framework-packaging ticket 11 the set was a sentence in a
+#: docstring, and the sentence and the renderer had different memberships.
+#:
+#: Narrower than `src/core/model/contracts/fields.ts`, deliberately: that is
+#: the editor's own field vocabulary, nine kinds wide, and several of them
+#: (`repeatable-group`, `file`, `readonly`) mean nothing coming from a tool
+#: that has one flat `data` record and no upload seam. A plugin gets the four
+#: that survive the wire.
+PLUGIN_FIELD_KINDS: tuple[str, ...] = ("text", "textarea", "select", "toggle")
+
+
 @dataclass(frozen=True)
 class ToolField:
     """One control on the tool's editor card, declared by the tool itself.
@@ -60,10 +76,19 @@ class ToolField:
     that declares fields but never overrides `configure` gets a card whose
     values it ignores, which is why `configure` is where the docs point.
 
-    `kind` names an editor control, deliberately from a small closed set:
-    `text`, `textarea`, `select` (with `options`), `toggle`, `number`. An
-    unknown kind renders as text rather than failing the whole card — a
-    plugin built against a newer editor must degrade, not disappear.
+    `kind` names an editor control, deliberately from a small closed set —
+    `PLUGIN_FIELD_KINDS`, above. An unknown kind renders as text rather than
+    failing the whole card: a plugin built against a newer editor must
+    degrade, not disappear. It also earns a capability warning, because
+    degrading silently is how the wrong control looks like the right one.
+
+    **`number` was in this sentence and in no renderer** (framework-packaging
+    ticket 11). It was documented here and in `docs/building-an-atom.md` as a
+    member of the closed set, `src/app/pluginNodes.ts` had no branch for it,
+    and `src/core/model/contracts/fields.ts` — the editor's authoritative
+    field vocabulary — has no such kind at all. A plugin author following the
+    documented set got a text box and no signal. The set is now what the
+    renderer implements, and a test says so in both directions.
     """
 
     #: Key within the node's `data` record — what `configure()` reads.
