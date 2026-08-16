@@ -1,5 +1,21 @@
 # Production audit — 2026-08-15
 
+> **Spent. Read this as a record, not as a list of things to do.**
+> *(Banner added 2026-08-16, production-ready ticket 20.)*
+>
+> All eleven findings are closed, **including both self-declared "Blockers for
+> 10/10"** — spot-checked rather than assumed: `RunRequest.workflow_slug` is
+> now the validated `WorkflowSlug` type with a committed pattern (F1), and the
+> stream lifetime moved out of the panel into `OpenStreams`, which owns the
+> `AbortController` and can be aborted without being unmounted (F2). The
+> §Blockers section below still reads as a live gate; it is not one.
+>
+> Every count in this document is a **measurement of 2026-08-15** and several
+> have moved since — the commit range, the module line counts, the "Ten"
+> findings that became eleven. They are left as measured, because a dated
+> audit whose numbers are quietly refreshed stops being evidence of anything.
+> A number here is a claim about that day and nothing else.
+
 The owner's final sweep before 10/10 (install-experience ticket 05): memory
 leaks, data structures and algorithms, architecture principles, extendability.
 Baseline: `docs/decisions/architecture-audit-2026-08.md` (2026-08-09, commit

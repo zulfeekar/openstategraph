@@ -29,9 +29,19 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**45 gaps · 4 blocks-1.0 · 10 should-precede-launch · 31 fine-to-carry.**
-*(Recounted 2026-08-13 by parsing this file. The old line said 38/24 and
-disagreed with its own section headers, which summed to 45.)*
+**The totals are no longer printed here, and that is deliberate.**
+*(2026-08-16.)* This line said 38 once, was recounted to 45 on 2026-08-13, and
+had drifted again three days later — and every recount disagreed with the
+section headers as well. A cardinal in a register that gains and closes
+entries is a claim that goes stale between edits and is believed anyway.
+Count it when you need it:
+
+```bash
+grep -cE '^\*\*[A-Z]{2}-[0-9]{2} ' docs/decisions/gap-register.md   # entries
+grep -c '^\*\*Verdict: blocks 1.0' docs/decisions/gap-register.md   # by verdict
+```
+
+The verdicts are what this file is for; the arithmetic never was.
 (RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
 `.scratch/docs-and-gaps/`; PK-06, UX-01 and UX-02 closed 2026-08-10 — the
 last two together, since they were one ticket: the terminal-frame contract.
@@ -144,9 +154,12 @@ the one thing standing between here and supported multi-worker: Postgres
 entry and the refusal have to be closed or removed together. **Verdict: fine to
 carry** until someone actually needs a second worker.
 
-**RC-07 — The `node_runtime.py` split is planned and not executed.** 1639
-lines (`backend/openstategraph/compile/node_runtime.py`), no `compile/nodes/`
-package. The full four-part plan — `compile/state.py`, `compile/context.py`,
+**RC-07 — The `node_runtime.py` split is planned and not executed.** No
+`compile/nodes/` package. The line count is the point and it only ever moves
+one way — `wc -l backend/openstategraph/compile/node_runtime.py` is the
+number, and it has been **1639**, then 2150, then 2270, then 2917 in the time
+this entry has been open, each written down somewhere and each stale within
+days. The full four-part plan — `compile/state.py`, `compile/context.py`,
 `compile/nodes/{io,agents,deciders,fanout,mounting,functions}.py`, and a
 re-exporting `node_runtime.py` — is written out in
 `docs/decisions/architecture-audit-2026-08.md` §"node_runtime split — PLANNED,
@@ -245,17 +258,31 @@ one command — plus a name collision contingency that has never been checked).
 **Risk:** every `pip install openstategraph` line in the docs and on the site
 is currently a promise. **Verdict: blocks 1.0.**
 
-**PK-02 — There is no git remote, so `project.urls` is `PLACEHOLDER`.**
-Evidence: `backend/pyproject.toml:44-62` — *"PROVISIONAL, and deliberately
-un-mistakable. This checkout has no configured git remote, so the canonical
-host is not a fact yet"*; verified live (`git remote -v` → empty). The same
-literal appears **31 times** in `site/index.html` (recounted 2026-08-13; this said ~12) plus 6 in `backend/pyproject.toml` (e.g. `:802`, `:873`, `:1049`,
-`:1331`). **Size S** (owner action; `grep -rn PLACEHOLDER` is the whole
-checklist). **Risk:** a published PyPI page with four dead links. **Verdict:
-blocks 1.0.**
+~~**PK-02 — There is no git remote, so `project.urls` is `PLACEHOLDER`.**~~
+**Closed 2026-08-15.** The remote exists and all four `project.urls` are real
+(`backend/pyproject.toml`, verified against `git remote -v`). `grep -c
+PLACEHOLDER` returns **0** in both `site/index.html` and
+`backend/pyproject.toml`; the only survivor anywhere is `.github/CODEOWNERS`,
+which `docs/releasing.md` §4 owns.
+
+> Original entry, kept because a closed gap is part of the record: evidence
+> was `backend/pyproject.toml:44-62` — *"PROVISIONAL, and deliberately
+> un-mistakable. This checkout has no configured git remote, so the canonical
+> host is not a fact yet"* — plus 31 occurrences in `site/index.html` and 6 in
+> `backend/pyproject.toml`. **Risk was:** a published PyPI page with four dead
+> links. **Verdict was: blocks 1.0.**
 
 **PK-03 — `EXTENSION_NAMESPACE = "org.openstategraph"` is a placeholder.**
-Evidence: `backend/openstategraph/plugin_interop.py:37-39` — *"Placeholder-grade:
+
+> **This entry and the code now disagree, and someone has to decide**
+> (flagged 2026-08-16). `plugin_interop.py` describes the value as **pinned**,
+> and `backend/pyproject.toml` says so too; this entry still calls it
+> placeholder-grade and rates it **blocks 1.0**. Both cannot be right. The
+> substantive question is unchanged and unanswered: the spec SHOULDs a
+> reverse-domain namespace on a domain we control, and `openstategraph.org` is
+> not owned. Pinning the string did not acquire the domain.
+
+Evidence as recorded: `backend/openstategraph/plugin_interop.py` — *"Placeholder-grade:
 the spec SHOULDs a domain we control, so pin this before publishing anything
 public."* Restated in `docs/decisions/agent-plugins.md` §4 and §7, and in
 `.scratch/framework-packaging/tickets/05-extension-entry-points.md` (*"pinning
@@ -719,7 +746,8 @@ as **RC-17** in §A rather than left buried inside a closed entry.
    (`src/nodes/portSpecs.test.ts` byte-compares; the `generated-port-specs` job
    regenerates and diffs). Externally visible because `docs/mcp.md` listed it
    as a limitation of `get_node_vocabulary`. The mirror had drifted: it held 10
-   of the 38 node types the editor registers, and `workflow.subgraph` (plus
+   of the node types the editor registers — a fraction, and the total has moved
+   since — and `workflow.subgraph` (plus
    `team.workflow`, which still existed then) were advertised over MCP with
    zero ports.
 8. **RC-02 — the API's human-in-the-loop checkpointer was an `InMemorySaver`.**

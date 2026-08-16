@@ -118,7 +118,10 @@ mapping). A source-level pin now fails the moment a node update grows a
 
 ## node_runtime split — PLANNED, not executed
 
-`node_runtime.py` is ~1.5k lines. Judged against the god-class rule it is
+`node_runtime.py` was ~1.5k lines when this was measured (2026-08-09); it is
+well past twice that now — `wc -l` is the number, and `gap-register.md` RC-07
+records why chasing it through prose was abandoned. Judged against the
+god-class rule it is
 *borderline rather than violating*: `NodeRuntime`'s public surface is small
 (`factory`, the unresolved-\* warning lists, and the injected collaborators);
 the bulk is per-family private builders registered in one `_builders` table,

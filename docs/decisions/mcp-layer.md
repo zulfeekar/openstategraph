@@ -200,7 +200,7 @@ fix rather than an ImportError traceback.
   authoritative TypeScript catalogue by `npm run generate:ports` and gated by
   two CI checks. The mirror is gone, and serving the table over MCP is no
   longer a way to publish drift. What the move surfaced: the hand-written table
-  was missing 28 of the 38 node types the editor actually registers, including
+  was missing all but ten of the node types the editor actually registers, including
   `workflow.subgraph` and the then-still-extant `team.workflow` — which
   `get_node_vocabulary` advertised with **zero ports**, so a client had no way
   to wire a mounted workflow.
