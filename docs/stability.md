@@ -63,7 +63,8 @@ from openstategraph.extensions import (
     plugins_enabled, reset_entry_point_cache,
 )
 from openstategraph.providers import (
-    ProviderSpec, ProviderCatalogue, ProviderDefault, ProviderGap,
+    ProviderSpec, ProviderEnvironment,
+    ProviderCatalogue, ProviderDefault, ProviderGap,
     provider_catalogue, load_provider_catalogue, reset_provider_catalogue,
     builtin_specs, provider_readiness, missing_key_diagnosis,
     credential_env_vars, env_example_section, OPTIONAL_ENV_VARS,
@@ -146,7 +147,8 @@ statement. In short:
 ### What is deliberately *not* public
 
 - **The registries.** `build_tool_registry`, `discover_tool_registry`,
-  `discover_function_callables`, and `WorkflowServices` itself. Extension is a
+  `discover_function_callables`, `CapabilityRegistries`, and
+  `WorkflowServices` itself. Extension is a
   supported *seam*, not a reachable object, and there are now two of them:
   publish `[project.entry-points."openstategraph.tools"]` from your own
   distribution (see

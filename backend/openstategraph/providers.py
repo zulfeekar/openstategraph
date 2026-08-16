@@ -87,7 +87,7 @@ def _is_secret(name: str) -> bool:
     """Whether a variable holds a **secret** rather than an address.
 
     The distinction is load-bearing in two opposite-facing places: a secret
-    must never be *shown* (`key_hint` masks it), and an address must never be
+    must never be *shown* (`ProviderEnvironment.key_hint` masks it), and an address must never be
     *accepted from a client* (`accepted_credential_keys` — a request that
     could name the endpoint could redirect the server's own key to it).
 
@@ -123,13 +123,24 @@ class ProviderSpec:
     `init_chat_model`, a `.env` file or an error message needs, and none of it
     is behaviour. A vendor that needed behaviour would need a client, and
     shipping vendor clients is explicitly out of scope (map.md).
+
+    **And it is now true of the members as well as the fields**
+    (install-experience 20). Every member below derives from this record's own
+    fields — a property whose whole implementation you can read in one line —
+    which is what makes it a record rather than an object that happens to be
+    frozen. The six that asked the *machine* instead (`is_configured`,
+    `is_installed`, `key_hint`, `base_url`, `model_string`, `readiness`) are
+    `ProviderEnvironment` now. `test_provider_registry.py` holds the line by
+    reading this class's own source and refusing to find the environment or
+    the import machinery named in it.
     """
 
     #: The `init_chat_model` prefix — the `anthropic` in `anthropic:claude-…`.
     name: str
 
     #: The model used when this provider is chosen with nothing more specific
-    #: asked for. Bare (no prefix); `model_string` adds the prefix.
+    #: asked for. Bare (no prefix); `ProviderEnvironment.model_string` adds the
+    #: prefix.
     default_model: str
 
     #: The `pip install 'openstategraph[…]'` extra supplying its LangChain
@@ -137,10 +148,11 @@ class ProviderSpec:
     extra: str
 
     #: Environment variables that make this provider usable, most significant
-    #: first. **Any one of them is enough** — see `is_configured` — so a vendor
-    #: reachable two ways lists both, and the first is the one an error message
-    #: tells a developer to set. Empty means the provider needs no credential
-    #: from us at all; no built-in declares that, but a plugin may.
+    #: first. **Any one of them is enough** — see
+    #: `ProviderEnvironment.is_configured` — so a vendor reachable two ways
+    #: lists both, and the first is the one an error message tells a developer
+    #: to set. Empty means the provider needs no credential from us at all; no
+    #: built-in declares that, but a plugin may.
     env_vars: tuple[str, ...] = ()
 
     #: Further model-string prefixes that belong to this provider's extra.
@@ -168,10 +180,11 @@ class ProviderSpec:
     #: else: `langchain-nvidia-ai-endpoints` is not `langchain_nvidia`.
     #:
     #: Empty means **we cannot pre-check this provider**, and that is a
-    #: supported answer rather than a gap — see `is_installed`. Everything the
-    #: readiness check does depends on this being honest, so a spec that
-    #: declares nothing gets `init_chat_model`'s own ImportError, which names
-    #: the package it actually failed on (workflow-gallery ticket 38).
+    #: supported answer rather than a gap — see
+    #: `ProviderEnvironment.is_installed`. Everything the readiness check does
+    #: depends on this being honest, so a spec that declares nothing gets
+    #: `init_chat_model`'s own ImportError, which names the package it actually
+    #: failed on (workflow-gallery ticket 38).
     integration_module: str = ""
 
     def __post_init__(self) -> None:
@@ -215,85 +228,6 @@ class ProviderSpec:
     def prefixes(self) -> tuple[str, ...]:
         """Every model-string prefix that resolves to this provider."""
         return (self.name, *self.aliases)
-
-    def is_configured(self, env: Mapping[str, str] | None = None) -> bool:
-        """Whether this provider could be called right now."""
-        source: Mapping[str, str] = os.environ if env is None else env
-        if not self.requires_key:
-            return True
-        return any(str(source.get(name) or "").strip() for name in self.env_vars)
-
-    def is_installed(self) -> bool:
-        """Whether this provider's integration package is importable.
-
-        `find_spec`, not `import_module`: this is asked on the path of every
-        run and on `openstategraph providers`, and importing three vendor SDKs
-        to discover that all three are present would undo the lean core the
-        extras exist to protect.
-
-        **True for a provider that declares no `integration_module`.** The
-        question this answers is "do we know of a reason this cannot work",
-        and for an undeclared module we do not — so the honest answer is to
-        step aside and let `init_chat_model` fail with the package name it
-        actually reached for.
-        """
-        if not self.integration_module:
-            return True
-        try:
-            return importlib.util.find_spec(self.integration_module) is not None
-        except (ImportError, ValueError):  # pragma: no cover - a broken parent package
-            return False
-
-    def key_hint(self, env: Mapping[str, str] | None = None) -> str | None:
-        """A glance at what configured this, or `None` when nothing did.
-
-        A **secret** variable is reduced to its first two characters and a
-        fixed mask. A **non-secret** one is shown whole: `OLLAMA_HOST` is a
-        URL, and masking it would hide the single thing a developer debugging
-        a mount needs to read.
-        """
-        source: Mapping[str, str] = os.environ if env is None else env
-        for name in self.env_vars:
-            value = str(source.get(name) or "").strip()
-            if not value:
-                continue
-            if not _is_secret(name):
-                return _without_userinfo(value)
-            return value[:HINT_PREFIX] + HINT_MASK
-        return None
-
-    def base_url(self, env: Mapping[str, str] | None = None) -> str | None:
-        """This provider's endpoint, or `None` to leave the SDK's default alone.
-
-        Ollama is why this exists, and it is worth stating because the two
-        variables look interchangeable and are not:
-
-        - `OLLAMA_HOST` — *where my Ollama is*. A daemon the developer runs.
-        - `OLLAMA_ENDPOINT` — *where the cloud is*. Defaulted, rarely set.
-
-        Host first, so a developer who runs a daemon gets it without having to
-        also clear the cloud endpoint. With neither set, `default_endpoint`
-        sends the request to the cloud rather than to `localhost:11434`, which
-        is what `ollama.Client` would otherwise choose — and a silent localhost
-        default is how "Ollama means cloud, never local" was being violated by
-        omission.
-        """
-        source: Mapping[str, str] = os.environ if env is None else env
-        for name in self.endpoint_env:
-            value = str(source.get(name) or "").strip()
-            if value:
-                return value
-        return self.default_endpoint or None
-
-    def model_string(self, env: Mapping[str, str] | None = None) -> str:
-        """The full `provider:model` string, honouring the model env var."""
-        source: Mapping[str, str] = os.environ if env is None else env
-        override = str(source.get(self.model_env_var) or "").strip()
-        if override:
-            # An override may be written either bare or already prefixed; both
-            # spellings appear in the wild and neither is wrong.
-            return override if override.startswith(f"{self.name}:") else f"{self.name}:{override}"
-        return f"{self.name}:{self.default_model}"
 
     def missing_key_message(self) -> str:
         """The exact fix, for a provider named but not configured (ticket 03).
@@ -340,20 +274,6 @@ class ProviderSpec:
             f"{self.install_hint}."
         )
 
-    def readiness(self, env: Mapping[str, str] | None = None) -> "ProviderGap | None":
-        """Everything standing between this provider and a model call.
-
-        `None` when nothing does. Both checks are evaluated, never
-        short-circuited: the whole of ticket 38 is that answering with the
-        first wall you hit sends a developer round the loop once per wall.
-        """
-        gap = ProviderGap(
-            spec=self,
-            missing_package=not self.is_installed(),
-            missing_key=self.requires_key and not self.is_configured(env),
-        )
-        return gap if gap.missing_package or gap.missing_key else None
-
 
 @dataclass(frozen=True)
 class ProviderGap:
@@ -386,6 +306,127 @@ class ProviderGap:
         if self.missing_package:
             return self.spec.missing_package_message()
         return self.spec.missing_key_message()
+
+
+@dataclass(frozen=True)
+class ProviderEnvironment:
+    """One provider **as this machine has it set up** — the half that is not data.
+
+    `ProviderSpec` is a record: every member of it derives from its own fields,
+    and none of them imports anything. Six members used to break that. They
+    reached `os.environ` and `importlib`, which meant a frozen dataclass could
+    not be exercised without arranging an environment first, and meant the same
+    object answered both *"what is Anthropic"* and *"can I call it from here"* —
+    two questions with different reasons to change, since the first moves when a
+    vendor does and the second moves when a machine does (install-experience 20).
+
+    `ProviderGap` was already the result type of the probing half, so the seam
+    was half drawn; this is the other half of it.
+
+    **`env` defaults to `None`, meaning the real process environment.** Passing
+    a mapping is the whole point of the split — a test states the machine it is
+    describing instead of mutating the one it is running on.
+    """
+
+    spec: ProviderSpec
+    #: The environment to read. `None` is `os.environ`, resolved per call rather
+    #: than captured at construction, so one of these held by a long-lived
+    #: object still sees a credential set after it was built.
+    env: Mapping[str, str] | None = None
+
+    @property
+    def _source(self) -> Mapping[str, str]:
+        return os.environ if self.env is None else self.env
+
+    def is_configured(self) -> bool:
+        """Whether this provider could be called right now."""
+        if not self.spec.requires_key:
+            return True
+        return any(str(self._source.get(name) or "").strip() for name in self.spec.env_vars)
+
+    def is_installed(self) -> bool:
+        """Whether this provider's integration package is importable.
+
+        `find_spec`, not `import_module`: this is asked on the path of every
+        run and on `openstategraph providers`, and importing three vendor SDKs
+        to discover that all three are present would undo the lean core the
+        extras exist to protect.
+
+        **True for a provider that declares no `integration_module`.** The
+        question this answers is "do we know of a reason this cannot work",
+        and for an undeclared module we do not — so the honest answer is to
+        step aside and let `init_chat_model` fail with the package name it
+        actually reached for.
+        """
+        if not self.spec.integration_module:
+            return True
+        try:
+            return importlib.util.find_spec(self.spec.integration_module) is not None
+        except (ImportError, ValueError):  # pragma: no cover - a broken parent package
+            return False
+
+    def key_hint(self) -> str | None:
+        """A glance at what configured this, or `None` when nothing did.
+
+        A **secret** variable is reduced to its first two characters and a
+        fixed mask. A **non-secret** one is shown whole: `OLLAMA_HOST` is a
+        URL, and masking it would hide the single thing a developer debugging
+        a mount needs to read.
+        """
+        for name in self.spec.env_vars:
+            value = str(self._source.get(name) or "").strip()
+            if not value:
+                continue
+            if not _is_secret(name):
+                return _without_userinfo(value)
+            return value[:HINT_PREFIX] + HINT_MASK
+        return None
+
+    def base_url(self) -> str | None:
+        """This provider's endpoint, or `None` to leave the SDK's default alone.
+
+        Ollama is why this exists, and it is worth stating because the two
+        variables look interchangeable and are not:
+
+        - `OLLAMA_HOST` — *where my Ollama is*. A daemon the developer runs.
+        - `OLLAMA_ENDPOINT` — *where the cloud is*. Defaulted, rarely set.
+
+        Host first, so a developer who runs a daemon gets it without having to
+        also clear the cloud endpoint. With neither set, `default_endpoint`
+        sends the request to the cloud rather than to `localhost:11434`, which
+        is what `ollama.Client` would otherwise choose — and a silent localhost
+        default is how "Ollama means cloud, never local" was being violated by
+        omission.
+        """
+        for name in self.spec.endpoint_env:
+            value = str(self._source.get(name) or "").strip()
+            if value:
+                return value
+        return self.spec.default_endpoint or None
+
+    def model_string(self) -> str:
+        """The full `provider:model` string, honouring the model env var."""
+        name = self.spec.name
+        override = str(self._source.get(self.spec.model_env_var) or "").strip()
+        if override:
+            # An override may be written either bare or already prefixed; both
+            # spellings appear in the wild and neither is wrong.
+            return override if override.startswith(f"{name}:") else f"{name}:{override}"
+        return f"{name}:{self.spec.default_model}"
+
+    def readiness(self) -> ProviderGap | None:
+        """Everything standing between this provider and a model call.
+
+        `None` when nothing does. Both checks are evaluated, never
+        short-circuited: the whole of ticket 38 is that answering with the
+        first wall you hit sends a developer round the loop once per wall.
+        """
+        gap = ProviderGap(
+            spec=self.spec,
+            missing_package=not self.is_installed(),
+            missing_key=self.spec.requires_key and not self.is_configured(),
+        )
+        return gap if gap.missing_package or gap.missing_key else None
 
 
 @dataclass(frozen=True)
@@ -523,16 +564,17 @@ class ProviderCatalogue:
         elects Anthropic, so the single remaining wall names *their* vendor's
         variable instead of listing three strangers.
         """
-        candidates = [spec for spec in self._specs.values() if spec.is_installed()]
+        here = {spec.name: ProviderEnvironment(spec, env) for spec in self._specs.values()}
+        candidates = [spec for spec in self._specs.values() if here[spec.name].is_installed()]
         if not candidates:
             return ProviderDefault(None, None, self.no_provider_message())
 
-        ready = [spec for spec in candidates if spec.is_configured(env)]
+        ready = [spec for spec in candidates if here[spec.name].is_configured()]
         keyed = [spec for spec in ready if spec.requires_key]
         elected = keyed[0] if keyed else (ready[0] if ready else candidates[0])
         return ProviderDefault(
             spec=elected,
-            model=elected.model_string(env),
+            model=here[elected.name].model_string(),
             reason=_default_reason(candidates, ready, elected),
             configured=any(spec is elected for spec in ready),
         )
@@ -801,7 +843,7 @@ def missing_key_diagnosis(model_string: str) -> str | None:
     keyless provider, which cannot be missing a key.
     """
     spec = provider_catalogue().for_model(model_string)
-    if spec is None or not spec.requires_key or spec.is_configured():
+    if spec is None or not spec.requires_key or ProviderEnvironment(spec).is_configured():
         return None
     return spec.missing_key_message()
 
@@ -815,7 +857,7 @@ def provider_readiness(model_string: str) -> ProviderGap | None:
     confidently wrong install line is worse than saying nothing.
     """
     spec = provider_catalogue().for_model(model_string)
-    return None if spec is None else spec.readiness()
+    return None if spec is None else ProviderEnvironment(spec).readiness()
 
 
 __all__ = [
@@ -825,6 +867,7 @@ __all__ = [
     "PROVIDERS_GROUP",
     "ProviderCatalogue",
     "ProviderDefault",
+    "ProviderEnvironment",
     "ProviderGap",
     "ProviderSpec",
     "builtin_specs",

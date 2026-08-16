@@ -41,25 +41,25 @@ def provider_status() -> list[ProviderStatusResponse]:
     written. Verifying costs a real model call and belongs behind a button
     somebody presses.
     """
-    from openstategraph.providers import provider_catalogue
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     return [
         ProviderStatusResponse(
-            name=spec.name,
-            label=spec.display,
-            configured=spec.is_configured(),
+            name=here.spec.name,
+            label=here.spec.display,
+            configured=here.is_configured(),
             # The variable that actually did it. `is_configured` is
             # `any(env_vars)`, so Ollama is configured by its key *or* its
             # host — naming the first would send a developer running their
             # own daemon looking for a cloud key they do not need.
             configured_by=next(
-                (name for name in spec.env_vars if os.getenv(name, "").strip()), None
+                (name for name in here.spec.env_vars if os.getenv(name, "").strip()), None
             ),
-            env_vars=list(spec.env_vars),
-            default_model=spec.model_string(),
-            key_hint=spec.key_hint(),
+            env_vars=list(here.spec.env_vars),
+            default_model=here.model_string(),
+            key_hint=here.key_hint(),
         )
-        for spec in provider_catalogue().list()
+        for here in map(ProviderEnvironment, provider_catalogue().list())
     ]
 
 @router.post(
@@ -86,12 +86,13 @@ def verify_provider(name: str) -> ProviderVerifyResponse:
     """
     from openstategraph import chat_model
     from openstategraph.compile.workflow_compiler import describe_failure
-    from openstategraph.providers import provider_catalogue
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     spec = provider_catalogue().get(name)
     if spec is None:
         raise HTTPException(status_code=404, detail=f'No provider named "{name}".')
-    if not spec.is_configured():
+    here = ProviderEnvironment(spec)
+    if not here.is_configured():
         return ProviderVerifyResponse(
             name=name, ok=False, detail=spec.missing_key_message()
         )
@@ -99,7 +100,7 @@ def verify_provider(name: str) -> ProviderVerifyResponse:
     try:
         # The smallest thing that proves the credential is accepted. A
         # single token of output is all this needs to learn.
-        chat_model.build_chat_model(spec.model_string()).invoke("hi")
+        chat_model.build_chat_model(here.model_string()).invoke("hi")
     except Exception as exc:  # noqa: BLE001 — reported, never raised at a user
         return ProviderVerifyResponse(name=name, ok=False, detail=describe_failure(exc))
     return ProviderVerifyResponse(name=name, ok=True)

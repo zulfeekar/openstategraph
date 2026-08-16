@@ -74,7 +74,7 @@ exact command:
 > 'openstategraph[bastion]').
 
 The consequence leads and the fix follows, which is the
-`ProviderSpec.readiness()` shape (workflow-gallery ticket 38) applied to a
+`ProviderEnvironment.readiness()` shape (workflow-gallery ticket 38) applied to a
 second wall. Refusing to run because an optional extra is missing would turn a
 dependency gap into an outage; failing with a `ModuleNotFoundError` traceback
 would describe our machinery instead of their system.

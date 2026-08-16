@@ -429,7 +429,7 @@ providers:
         `None` and sent every call back to `127.0.0.1:11434`. The exact
         violation that ticket closed, reachable through a config file.
         """
-        from openstategraph.providers import provider_catalogue
+        from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
         write(tmp_path, "version: 1\nproviders:\n  - name: ollama\n")
         monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(tmp_path / "openstategraph.yaml"))
@@ -440,7 +440,7 @@ providers:
         spec = provider_catalogue().get("ollama")
         assert spec is not None
         assert spec.endpoint_env == ("OLLAMA_HOST", "OLLAMA_ENDPOINT")
-        assert spec.base_url() == "https://ollama.com"
+        assert ProviderEnvironment(spec).base_url() == "https://ollama.com"
 
     def test_no_provider_field_is_silently_dropped(self) -> None:
         """A guard against the next field, rather than only this one.

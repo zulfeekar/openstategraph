@@ -298,6 +298,83 @@ def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, 
 
 
 
+class CapabilityRegistries:
+    """What a run inside a package may reach: tools, functions, middleware.
+
+    One object because it is one question asked three ways, with one rule
+    running through all three answers — **discovery first, the caller's
+    injection last and therefore highest**. Built-in < plugin < package-local <
+    caller: the filesystem describes what a package *shipped*, an argument
+    describes what *this process* is to run, and only the caller can know which
+    of the two is right.
+
+    Extracted from `WorkflowServices` (install-experience 20), where the same
+    three methods were public members with no caller outside the class — three
+    public factories serving one internal `runtime_for` a few lines below them,
+    which is an injection cluster behind a public door. It has its own reason to
+    change (what a capability is, and who outranks whom) and it does not move
+    when the store, the checkpointer or the lifecycle does, which is what makes
+    it a collaborator rather than a grouping invented to satisfy a count.
+    """
+
+    def __init__(
+        self,
+        store: Any,
+        *,
+        tools: dict[str, Any] | None = None,
+        functions: dict[str, Any] | None = None,
+        middleware: dict[str, Any] | None = None,
+    ) -> None:
+        self._store = store
+        # Copied, not aliased: a caller's dict must not become live state that
+        # a later mutation of theirs changes mid-run.
+        self._tools = dict(tools or {})
+        self._functions = dict(functions or {})
+        self._middleware = dict(middleware or {})
+
+    def tools(
+        self,
+        slug: str | None,
+        *,
+        knowledge_dir: Any = None,
+        warnings: list[str] | None = None,
+    ) -> dict[str, Any]:
+        registry = build_tool_registry(
+            self._store, slug, knowledge_dir=knowledge_dir, warnings=warnings
+        )
+        # Last, therefore highest. A collision with a discovered tool is a
+        # deliberate substitution and is deliberately NOT a warning: `warnings`
+        # means "this run lost a capability", and filling it with something the
+        # caller asked for is how a list that matters gets ignored.
+        registry.update(self._tools)
+        return registry
+
+    def functions(self, slug: str | None) -> dict[str, Any]:
+        """`function.<name>` -> callable, discovery then the caller's over it.
+
+        A method rather than a bare `build_function_registry` call at each use
+        site, mirroring `tools`, so the override is applied in one place and
+        the parent runtime and a routed child cannot disagree.
+        """
+        registry = build_function_registry(self._store, slug)
+        registry.update(self._functions)
+        return registry
+
+    def middleware(self, slug: str | None) -> dict[str, Any]:
+        """Slot name -> middleware: the package's `middlewares/`, caller over.
+
+        Keyed by slot name exactly as `discover_middlewares` is, so an
+        injected entry fills or replaces a slot by the same rule a file does
+        (`middlewares/summarization.py`). The base still owns the canonical
+        slot *order*; nothing here expresses a position.
+        """
+        from openstategraph.api.capability_discovery import discover_middlewares
+
+        found = discover_middlewares(self._store.directory_for(slug), slug) if slug else {}
+        found.update(self._middleware)
+        return found
+
+
 def runtime_warnings(runtime: Any) -> list[str]:
     """Every "this step silently lost a capability" condition, spelled out.
 

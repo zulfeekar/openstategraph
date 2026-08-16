@@ -26,10 +26,7 @@ if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.store.base import BaseStore
 
-from openstategraph.api.registries import (
-    build_function_registry,
-    build_tool_registry,
-)
+from openstategraph.api.registries import CapabilityRegistries
 from openstategraph.principal import IPrincipals, principals_from_env
 from openstategraph.schema import normalize_document
 from openstategraph.api.workflow_store import WorkflowStore
@@ -113,6 +110,14 @@ class WorkflowServices:
         #: file a caller was about to replace.
         self._checkpointer = checkpointer
         self._owns_checkpointer = checkpointer is None
+        #: What a run in a package may reach — tools, functions and
+        #: middleware, discovery first and the caller's injection last. One
+        #: collaborator rather than three public factories, which is what these
+        #: were until install-experience 20: three members with no caller
+        #: outside `runtime_for` a hundred lines below them.
+        self.capabilities = CapabilityRegistries(
+            self.store, tools=tools, functions=functions, middleware=middleware
+        )
         #: slug -> the saver `settings.checkpointer: "sqlite"` opened for it.
         #: Always ours, by construction: an entry only exists when this object
         #: opened a per-workflow file.
@@ -126,11 +131,6 @@ class WorkflowServices:
         #: alternative and is worse: evicting means closing, and closing a
         #: saver a live run is checkpointing against fails that run.
         self._workflow_checkpointers: dict[str, BaseCheckpointSaver[Any]] = {}
-        # Copied, not aliased: a caller's dict must not become live state that
-        # a later mutation of theirs changes mid-run.
-        self._injected_tools = dict(tools or {})
-        self._injected_functions = dict(functions or {})
-        self._injected_middleware = dict(middleware or {})
         #: Who a run is for (ticket 01). A collaborator like every other
         #: here — the default refuses to identify anyone unless the
         #: environment named a trusted proxy header, because the value it
@@ -250,48 +250,6 @@ class WorkflowServices:
     def __exit__(self, *_exc: Any) -> None:
         self.close()
 
-    def tool_registry_for(
-        self,
-        slug: str | None,
-        *,
-        knowledge_dir: Any = None,
-        warnings: list[str] | None = None,
-    ) -> dict[str, Any]:
-        registry = build_tool_registry(
-            self.store, slug, knowledge_dir=knowledge_dir, warnings=warnings
-        )
-        # Last, therefore highest. A collision with a discovered tool is a
-        # deliberate substitution and is deliberately NOT a warning: `warnings`
-        # means "this run lost a capability", and filling it with something the
-        # caller asked for is how a list that matters gets ignored.
-        registry.update(self._injected_tools)
-        return registry
-
-    def function_registry_for(self, slug: str | None) -> dict[str, Any]:
-        """`function.<name>` -> callable, discovery then the caller's over it.
-
-        A method rather than a bare `build_function_registry` call at each use
-        site, mirroring `tool_registry_for`, so the override is applied in one
-        place and the parent runtime and a routed child cannot disagree.
-        """
-        registry = build_function_registry(self.store, slug)
-        registry.update(self._injected_functions)
-        return registry
-
-    def middleware_for(self, slug: str | None) -> dict[str, Any]:
-        """Slot name -> middleware: the package's `middlewares/`, caller over.
-
-        Keyed by slot name exactly as `discover_middlewares` is, so an
-        injected entry fills or replaces a slot by the same rule a file does
-        (`middlewares/summarization.py`). The base still owns the canonical
-        slot *order*; nothing here expresses a position.
-        """
-        from openstategraph.api.capability_discovery import discover_middlewares
-
-        found = discover_middlewares(self.store.directory_for(slug), slug) if slug else {}
-        found.update(self._injected_middleware)
-        return found
-
     def runtime_for(
         self,
         slug: str | None,
@@ -351,7 +309,7 @@ class WorkflowServices:
         # for compatibility — such a caller must not then add
         # `runtime_warnings()` on top, or it will report each finding twice.
         capability_warnings: list[str] = []
-        tools = self.tool_registry_for(
+        tools = self.capabilities.tools(
             slug, knowledge_dir=knowledge_dir, warnings=capability_warnings
         )
         # The document's memory declaration, and everything it could not
@@ -375,13 +333,13 @@ class WorkflowServices:
             services=RuntimeServices(
                 model=model,
                 tools=tools,
-                functions=self.function_registry_for(slug),
+                functions=self.capabilities.functions(slug),
                 document_loader=lambda child_slug: normalize_document(packages.load(child_slug)),
                 package_loader=lambda child_slug: PackageAssets(
-                    tools=self.tool_registry_for(child_slug),
-                    functions=self.function_registry_for(child_slug),
+                    tools=self.capabilities.tools(child_slug),
+                    functions=self.capabilities.functions(child_slug),
                     skills_context=discover_skills(packages.directory_for(child_slug)),
-                    workflow_middleware=self.middleware_for(child_slug),
+                    workflow_middleware=self.capabilities.middleware(child_slug),
                     # A routed child seeks ITS OWN second brain, never the
                     # parent's — the same isolation as skills (ticket 67).
                     knowledge_dir=packages.directory_for(child_slug),
@@ -389,7 +347,7 @@ class WorkflowServices:
                 memory_store=self.memory_store,
                 memory=declared,
                 skills_context=(discover_skills(packages.directory_for(slug)) if slug else ""),
-                workflow_middleware=self.middleware_for(slug),
+                workflow_middleware=self.capabilities.middleware(slug),
                 # Ambient knowledge seeking: a non-empty knowledge/ under the
                 # open package auto-binds the lookup tool to every agent.
                 knowledge_package_dir=(packages.directory_for(slug) if slug else None),

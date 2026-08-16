@@ -160,9 +160,11 @@ def health() -> HealthResponse:
     variables and never opens a socket. A configured provider that is down
     is a different question, and one this endpoint has never answered.
     """
-    from openstategraph.providers import provider_catalogue
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
-    configured = any(spec.is_configured() for spec in provider_catalogue().list())
+    configured = any(
+        ProviderEnvironment(spec).is_configured() for spec in provider_catalogue().list()
+    )
     return HealthResponse(ok=True, model_configured=configured)
 
 

@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from openstategraph.errors import NoProviderInstalled, UnknownProvider
-from openstategraph.providers import ProviderSpec, provider_catalogue
+from openstategraph.providers import ProviderEnvironment, ProviderSpec, provider_catalogue
 
 _AMBIENT = (
     "ANTHROPIC_API_KEY",
@@ -83,7 +83,7 @@ class TestABareProviderPrefixResolvesToItsDefault:
     def test_expansion_goes_through_the_providers_own_model_override(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No second table of defaults: `ProviderSpec.model_string` owns it."""
+        """No second table of defaults: `ProviderEnvironment.model_string` owns it."""
         from openstategraph.api.model_resolution import resolve_model
 
         monkeypatch.setenv("OPENSTATEGRAPH_OLLAMA_MODEL", "qwen3-coder:480b-cloud")
@@ -143,8 +143,14 @@ def _installed(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
     exercise candidacy is to answer `is_installed` for a machine that is not
     this one. `find_spec` is the real implementation and is tested where it
     lives; what is under test here is the *rule* that consumes it.
+
+    Patched on `ProviderEnvironment`, which is where "what does this machine
+    have" lives since install-experience 20 — the spec is a record now and
+    answers nothing about a machine.
     """
-    monkeypatch.setattr(ProviderSpec, "is_installed", lambda self: self.name in names)
+    monkeypatch.setattr(
+        ProviderEnvironment, "is_installed", lambda self: self.spec.name in names
+    )
 
 
 class TestTheInstanceDefaultIsElected:
@@ -421,7 +427,7 @@ class TestIntentOutranksInference:
     This does **not** reverse "the environment beats the file" in general.
     `OPENSTATEGRAPH_WORKFLOWS_ROOT` still beats `workflows_dir:`, and
     `OPENSTATEGRAPH_<PROVIDER>_MODEL` is unaffected — it is consumed inside
-    `ProviderSpec.model_string` and modifies whichever provider wins.
+    `ProviderEnvironment.model_string` and modifies whichever provider wins.
     """
 
     def _config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> None:

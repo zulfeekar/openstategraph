@@ -222,11 +222,11 @@ class TestExplicitCapabilitiesOutrankEveryOtherSource:
 
     def test_an_injected_tool_replaces_a_built_in(self, tmp_path: Path) -> None:
         sentinel = RecordingTool()
-        built_in = next(iter(sorted(WorkflowServices(tmp_path).tool_registry_for(None))))
+        built_in = next(iter(sorted(WorkflowServices(tmp_path).capabilities.tools(None))))
 
         services = WorkflowServices(tmp_path, tools={built_in: sentinel})
 
-        assert services.tool_registry_for(None)[built_in] is sentinel
+        assert services.capabilities.tools(None)[built_in] is sentinel
 
     def test_a_deliberate_substitution_is_not_reported_as_a_duplicate(
         self, tmp_path: Path
@@ -277,7 +277,7 @@ class TestExplicitCapabilitiesOutrankEveryOtherSource:
 
         services = WorkflowServices(tmp_path, middleware={"summarization": sentinel})
 
-        assert services.middleware_for("demo-pkg")["summarization"] is sentinel
+        assert services.capabilities.middleware("demo-pkg")["summarization"] is sentinel
 
 
 class TestTheAssemblyPointStaysSingular:

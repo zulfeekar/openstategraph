@@ -47,6 +47,25 @@ finally read by code. Wayfinder tickets 02–04;
 
 ### Changed — breaking
 
+- **`ProviderSpec` is a record again, and asking a machine a question is
+  `ProviderEnvironment`.** Six members moved off the frozen dataclass onto a
+  new Tier 1 collaborator: `is_configured`, `is_installed`, `key_hint`,
+  `base_url`, `model_string` and `readiness`. Where you wrote
+  `spec.is_configured()`, write `ProviderEnvironment(spec).is_configured()`;
+  the optional `env` mapping those methods used to take is now the second
+  constructor argument, so one object answers a whole batch of questions about
+  one machine instead of each call carrying the environment separately.
+
+  The fields — the part a plugin actually writes into its own `pyproject.toml`
+  — are **untouched**, and that is the reason this ships without a shim: a
+  spec is *supplied* by a plugin and *asked* by us, so the irreversible half of
+  the contract is the constructor, which is exactly what
+  `backend/tests/public_api.txt` pins. A frozen dataclass whose members reached
+  `os.environ` and `importlib` could not be exercised without arranging an
+  environment first, and answered both "what is this vendor" and "can I call it
+  from here" — two questions that move on different clocks
+  (install-experience 20).
+
 - **An error knows how it reads.** `OpenStateGraphError` gains
   `developer_message()` and `customer_message()`, and the new
   `CredentialError` groups `MissingProviderKey` with its sibling

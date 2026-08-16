@@ -665,11 +665,11 @@ def no_provider_warning() -> str | None:
     `resolve_model`'s `NoProviderInstalled` — and three copies of a sentence
     is three chances to fix two of them.
     """
-    from openstategraph.providers import provider_catalogue
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     catalogue = provider_catalogue()
     specs = catalogue.list()
-    if not specs or any(spec.is_installed() for spec in specs):
+    if not specs or any(ProviderEnvironment(spec).is_installed() for spec in specs):
         return None
     return catalogue.no_provider_message()
 
@@ -1067,7 +1067,7 @@ def cmd_providers(_args: argparse.Namespace) -> int:
     actually configured on this machine.
     """
     from openstategraph.config_file import find_config_file
-    from openstategraph.providers import provider_catalogue
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     catalogue = provider_catalogue()
     config = find_config_file()
@@ -1089,7 +1089,8 @@ def cmd_providers(_args: argparse.Namespace) -> int:
         # is absent sent a reader to fix the wrong thing, and then round again
         # for the real one — the round trip workflow-gallery ticket 38 exists
         # to end, in the surface it named as already doing this correctly.
-        gap = spec.readiness()
+        here = ProviderEnvironment(spec)
+        gap = here.readiness()
         if gap is None:
             state = "ready"
         elif gap.missing_package:
@@ -1098,7 +1099,7 @@ def cmd_providers(_args: argparse.Namespace) -> int:
             state = "needs a key"
         variables = ", ".join(spec.env_vars) or "(no credential needed)"
         elected = "   (default)" if spec is default.spec else ""
-        print(f"{spec.name:<12} {state:<12} {spec.model_string()}{elected}")
+        print(f"{spec.name:<12} {state:<12} {here.model_string()}{elected}")
         print(f"{'':<12} reads {variables}; extra 'openstategraph[{spec.extra}]'")
     for warning in catalogue.warnings:
         print(f"warning: {warning}", file=sys.stderr)

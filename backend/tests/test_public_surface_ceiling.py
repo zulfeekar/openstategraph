@@ -380,37 +380,6 @@ SCORECARD = """A recorded exception, and the one that most looks like a violatio
     number the scorecard is named after. That is the `WorkflowModel` argument in
     miniature and it lands the same way. Recorded, not deferred."""
 
-PROVIDER_SPEC = """Pinned at fifteen with the split ticketed (install-experience 20), because
-    unlike `Scorecard` this record does have a second reason to change and it is
-    named in its own members: seven are derivations over its own fields
-    (`display`, `requires_key`, `primary_env_var`, `model_env_var`, `prefixes`,
-    `credential_variables`, `install_hint`), and six *read the environment or
-    probe an import* (`is_configured`, `is_installed`, `key_hint`, `base_url`,
-    `model_string`, `readiness`), with two more that render failure prose.
-
-    A frozen dataclass whose members go to `os.environ` and to `importlib` is
-    not a record, and it is why the class cannot be tested without arranging an
-    environment. `ProviderGap` already exists as the result type of the probing
-    half, so the seam is half-drawn. The audit measured this file mid-edit and
-    said to re-measure; re-measured at fifteen behaviour members on
-    2026-08-15."""
-
-WORKFLOW_SERVICES = """Pinned at eleven — one over — with the reduction ticketed
-    (install-experience 20), because the member that takes it over is one
-    nothing outside the class uses. `tool_registry_for`, `function_registry_for`
-    and `middleware_for` have no production caller anywhere in the backend: the
-    only place they are read is `runtime_for` a few lines below them, plus
-    `test_sdk_injection.py`. Three public factories serving one internal caller
-    is an injection cluster that belongs behind `runtime_for`, and collapsing it
-    puts the class at nine.
-
-    What remains is the shape CLAUDE.md asks for: durable collaborators every
-    transport reaches through (`store`, `memory_store`, `checkpointer`,
-    `events`, `principals`), the per-request `checkpointer_for` and
-    `runtime_for`, and `close`. Not done here because ticket 12 moved this
-    class's own vocabulary last week and ticket 11 gave it a lifecycle; a third
-    consecutive rewrite of one class in one wave is how a mistake gets in."""
-
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
@@ -443,8 +412,6 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(12, MCP_TOOL),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
-    "providers.ProviderSpec": Recorded(15, PROVIDER_SPEC),
-    "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),
 }
 
 

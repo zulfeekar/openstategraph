@@ -117,7 +117,8 @@ model needs one of the three provider credentials. Copy `.env.example` to
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
 | `OPENSTATEGRAPH_LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
 
-The two Ollama variables are alternatives, not a pair — `ProviderSpec.is_configured`
+The two Ollama variables are alternatives, not a pair —
+`ProviderEnvironment.is_configured`
 takes **any** of a provider's `env_vars`, so either one alone is enough and
 neither means the provider is skipped. With both set, the host wins for routing
 and the key rides along as a bearer token. Endpoint precedence is tuple order:

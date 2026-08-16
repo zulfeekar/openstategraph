@@ -10,6 +10,7 @@ with a `pyproject.toml` stanza and no fork.
 from __future__ import annotations
 
 import importlib.metadata
+import inspect
 from typing import Any
 
 import pytest
@@ -18,6 +19,7 @@ from openstategraph.extensions import reset_entry_point_cache
 from openstategraph.providers import (
     PROVIDERS_GROUP,
     ProviderCatalogue,
+    ProviderEnvironment,
     ProviderSpec,
     builtin_specs,
     provider_catalogue,
@@ -268,6 +270,51 @@ class TestThreeProvidersCoexist:
         assert resolve_model(None) == "nvidia:meta/llama-3.3-70b-instruct"
 
 
+class TestTheSpecIsARecordAndTheEnvironmentIsNot:
+    """Install-experience 20, pinned as a property rather than as a count.
+
+    `ProviderSpec` is a `frozen=True` dataclass, and six of its members used to
+    read `os.environ` or call `importlib.util.find_spec`. A record that reaches
+    the machine is not a record: it cannot be exercised without arranging an
+    environment, and it answers two questions with different reasons to change
+    — *what is this vendor* moves when a vendor does, *can I call it from here*
+    moves when a machine does.
+
+    The member count is guarded by `test_public_surface_ceiling.py`; a count
+    can be satisfied by moving one member anywhere. This asserts the thing the
+    split was actually for, and it is checkable: the class's own source names
+    neither.
+    """
+
+    def test_the_spec_reads_no_environment_and_imports_nothing(self) -> None:
+        source = inspect.getsource(ProviderSpec)
+
+        assert "os.environ" not in source
+        assert "importlib" not in source
+
+    def test_the_environment_is_the_half_that_does(self) -> None:
+        source = inspect.getsource(ProviderEnvironment)
+
+        assert "os.environ" in source
+        assert "importlib" in source
+
+    def test_an_environment_can_be_stated_rather_than_arranged(self) -> None:
+        """The point of the seam, in one assertion.
+
+        No `monkeypatch`, no `setenv`, no fixture: the machine under test is an
+        argument. That is what could not be written while these lived on the
+        frozen record — `is_configured` took an `env` mapping, but `readiness`
+        passed it to `is_configured` and not to `is_installed`, so half the
+        answer always came from the process this test happens to run in.
+        """
+        spec = ProviderSpec(
+            name="acme", default_model="acme-1", extra="acme", env_vars=("ACME_API_KEY",)
+        )
+
+        assert ProviderEnvironment(spec, {}).is_configured() is False
+        assert ProviderEnvironment(spec, {"ACME_API_KEY": "sk-acme"}).is_configured() is True
+
+
 class TestOllamaHasTwoWaysToBeConfigured:
     """Providers-and-credentials ticket 02.
 
@@ -296,17 +343,20 @@ class TestOllamaHasTwoWaysToBeConfigured:
         assert spec is not None
         return spec
 
+    def _here(self) -> ProviderEnvironment:
+        return ProviderEnvironment(self._ollama())
+
     def test_neither_variable_is_not_configured(self) -> None:
-        assert self._ollama().is_configured() is False
+        assert self._here().is_configured() is False
 
     def test_a_host_alone_is_enough(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Running a local daemon is a legitimate, fully-supported setup."""
         monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
-        assert self._ollama().is_configured() is True
+        assert self._here().is_configured() is True
 
     def test_a_key_alone_is_enough(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OLLAMA_API_KEY", "sk-ollama")
-        assert self._ollama().is_configured() is True
+        assert self._here().is_configured() is True
 
     def test_the_message_names_both_ways_of_fixing_it(self) -> None:
         """Ticket 04: naming only the key sends a daemon user shopping.
@@ -352,24 +402,24 @@ class TestTheEndpointIsCloudUnlessAHostIsNamed:
         for name in ("OLLAMA_HOST", "OLLAMA_ENDPOINT"):
             monkeypatch.delenv(name, raising=False)
 
-    def _ollama(self) -> ProviderSpec:
+    def _here(self) -> ProviderEnvironment:
         spec = provider_catalogue().get("ollama")
         assert spec is not None
-        return spec
+        return ProviderEnvironment(spec)
 
     def test_neither_set_means_the_cloud(self) -> None:
-        assert self._ollama().base_url() == "https://ollama.com"
+        assert self._here().base_url() == "https://ollama.com"
 
     def test_a_host_wins_over_the_cloud_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
         monkeypatch.setenv("OLLAMA_ENDPOINT", "https://ollama.com")
-        assert self._ollama().base_url() == "http://localhost:11434"
+        assert self._here().base_url() == "http://localhost:11434"
 
     def test_the_endpoint_is_used_when_no_host_is_named(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLLAMA_ENDPOINT", "https://ollama.example.internal")
-        assert self._ollama().base_url() == "https://ollama.example.internal"
+        assert self._here().base_url() == "https://ollama.example.internal"
 
     def test_a_provider_that_declares_none_leaves_the_sdk_alone(self) -> None:
         """Anthropic and OpenAI must be untouched by this mechanism.
@@ -388,7 +438,7 @@ class TestTheEndpointIsCloudUnlessAHostIsNamed:
         for name in ("anthropic", "openai"):
             spec = provider_catalogue().get(name)
             assert spec is not None
-            assert spec.base_url() is None
+            assert ProviderEnvironment(spec).base_url() is None
             assert spec.endpoint_env == ()
 
     def test_the_mechanism_is_open_not_ollama_specific(self) -> None:
@@ -401,8 +451,11 @@ class TestTheEndpointIsCloudUnlessAHostIsNamed:
             endpoint_env=("ACME_BASE_URL",),
             default_endpoint="https://api.acme.test",
         )
-        assert spec.base_url({}) == "https://api.acme.test"
-        assert spec.base_url({"ACME_BASE_URL": "http://box.local"}) == "http://box.local"
+        assert ProviderEnvironment(spec, {}).base_url() == "https://api.acme.test"
+        assert (
+            ProviderEnvironment(spec, {"ACME_BASE_URL": "http://box.local"}).base_url()
+            == "http://box.local"
+        )
 
 
 class TestAnyMixOfProvidersWorks:
@@ -426,7 +479,9 @@ class TestAnyMixOfProvidersWorks:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
         catalogue = provider_catalogue()
         configured = {
-            spec.name: spec.is_configured() for spec in catalogue.list() if spec.requires_key
+            spec.name: ProviderEnvironment(spec).is_configured()
+            for spec in catalogue.list()
+            if spec.requires_key
         }
         assert configured == {"anthropic": False, "openai": True, "ollama": False}
 

@@ -1248,7 +1248,7 @@ rather than luckily. **Routers are just providers** —
 `ProviderSpec(name="openrouter", extra="openai", env_vars=(…))` through
 `ProviderCatalogue.register`, **with no code change in `providers.py`**. The doc
 introduced a whole provider *category* and our registry needed nothing. **The
-endpoint seam already exists and is centralised** — `ProviderSpec.base_url()`
+endpoint seam already exists and is centralised** — `ProviderEnvironment.base_url()`
 into the single `model_kwargs()` in `chat_model.py`. **Nothing contradicts the
 Ollama rule and one line quietly supports it**: the doc points Ollama at
 `https://ollama.com/library`, a *hosted* address, and says nothing anywhere about

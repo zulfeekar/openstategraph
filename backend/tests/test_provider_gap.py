@@ -27,6 +27,7 @@ import pytest
 
 from openstategraph.errors import MissingProviderKey, MissingProviderPackage
 from openstategraph.providers import (
+    ProviderEnvironment,
     ProviderSpec,
     provider_catalogue,
     reset_provider_catalogue,
@@ -137,7 +138,7 @@ class TestTheGapIsOneLine:
 
 class TestTheCatalogueKnowsWhatIsInstalled:
     def test_a_declared_module_that_is_absent_reads_as_not_installed(self) -> None:
-        assert GHOST.is_installed() is False
+        assert ProviderEnvironment(GHOST).is_installed() is False
 
     def test_the_built_in_three_declare_their_integration_module(self) -> None:
         """Without this, nothing can be pre-checked and the traceback returns."""
@@ -160,7 +161,7 @@ class TestTheCatalogueKnowsWhatIsInstalled:
         """
         undeclared = ProviderSpec(name="mystery", default_model="m", extra="mystery")
 
-        assert undeclared.is_installed() is True
+        assert ProviderEnvironment(undeclared).is_installed() is True
 
 
 class TestNoTracebackForAGapWeDetected:

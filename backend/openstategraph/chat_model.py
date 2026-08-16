@@ -37,7 +37,11 @@ from openstategraph.errors import (
     OpenStateGraphError,
     ProviderRefusedCredential,
 )
-from openstategraph.providers import provider_catalogue, provider_readiness
+from openstategraph.providers import (
+    ProviderEnvironment,
+    provider_catalogue,
+    provider_readiness,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from langchain_core.language_models import BaseChatModel
@@ -56,7 +60,7 @@ def model_kwargs(model_name: str) -> dict[str, Any]:
     spec = provider_catalogue().for_model(model_name)
     if spec is None:
         return {}
-    base_url = spec.base_url()
+    base_url = ProviderEnvironment(spec).base_url()
     return {"base_url": base_url} if base_url else {}
 
 

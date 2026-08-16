@@ -6,6 +6,7 @@ import os
 from typing import Any, Callable, MutableMapping
 
 from openstategraph.providers import (
+    ProviderEnvironment,
     _is_secret,
     credential_env_vars,
     provider_catalogue,
@@ -72,7 +73,7 @@ def expand_model_reference(requested: str | None) -> str | None:
 
     spec = provider_catalogue().for_prefix(prefix)
     if spec is not None:
-        return spec.model_string()
+        return ProviderEnvironment(spec).model_string()
     if colon:
         from openstategraph.errors import UnknownProvider
 
