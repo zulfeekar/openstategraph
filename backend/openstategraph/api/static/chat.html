@@ -254,6 +254,10 @@
   }
   .steps:empty { display: none; }
   .steps div { font-variant-numeric: tabular-nums; }
+  /* A step talking about itself while it works. One live line, replaced in
+     place and removed the moment the step it belongs to completes — it is the
+     opposite of a step row, which is a fact that stays true. */
+  .steps div.live { color: var(--faint); font-style: italic; }
   /* A spawn is an event in the run, not a step of it — indented under the
      node that spawned, and clipped to one line however long the task is. */
   .steps div.spawn {
@@ -286,6 +290,12 @@
      pushes the answer off the screen. */
   .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
   .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+  /* The model's deliberation, kept visibly apart from the reply it is
+     deliberating towards — see the `block` branch in `stream()`. Fainter and
+     italic, because it is the one text on this page nobody should mistake for
+     the answer. */
+  .reasoning { font-size: var(--font-size-12); color: var(--faint); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 110px; overflow-y: auto; }
+  .reasoning:not(:empty) { border-inline-start: 2px solid var(--line); padding: var(--space-1) var(--space-3); margin-top: var(--space-2); }
   /* Containment (ticket 27). A URL is a normal thing for the Web Researcher
      branch to answer with, and one arrived 400px wider than the card: the
      prose around it wrapped, the link ran off the right edge and stopped
@@ -1005,7 +1015,7 @@ function turnEl(question) {
   el.innerHTML = `<div class="q"></div><div class="steps"></div>`
     + `<details class="tl" hidden><summary>Timeline · <span class="tl-count"></span> · <span class="tl-total"></span></summary>`
     + `<div class="tl-body"></div><p class="tl-note">Durations are gaps between stream frames, not measured spans.</p></details>`
-    + `<div class="thinking"></div><div class="answer" hidden></div>`;
+    + `<div class="reasoning"></div><div class="thinking"></div><div class="answer" hidden></div>`;
   el.querySelector(".q").textContent = question;
   const empty = $("empty");
   if (empty) empty.remove();
@@ -1016,6 +1026,19 @@ function turnEl(question) {
 
 async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
+  const reasoning = el.querySelector(".reasoning");
+  /* The one live line in the strip — what a step says about itself while it is
+   * still working (`progress`). It is never a step row: a step row records
+   * that something finished and stays, this says "still going" and is replaced
+   * or removed. `clearLive` runs at every ending, terminal or not, so a run
+   * that stops mid-tool does not leave "page 3 of 12" on the screen forever. */
+  const liveLine = (text) => {
+    let row = steps.querySelector(":scope > div.live");
+    if (!row) { row = document.createElement("div"); row.className = "live"; }
+    row.textContent = text;
+    steps.appendChild(row); // re-appended: the live line always sits last
+  };
+  const clearLive = () => { const row = steps.querySelector(":scope > div.live"); if (row) row.remove(); };
   const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   if (!resp.ok) {
     finishFlow();
@@ -1023,7 +1046,7 @@ async function stream(path, body, el, signal) {
     return "http-error";
   }
   const reader = resp.body.getReader(); const dec = new TextDecoder();
-  let buf = "", event = null, tokens = "";
+  let buf = "", event = null, tokens = "", thoughts = "";
   // Client-side timestamps, gathered as frames arrive — the stream carries no
   // timing of its own. Ephemeral: this list lives with the turn and is never
   // stored anywhere.
@@ -1076,19 +1099,47 @@ async function stream(path, body, el, signal) {
               // this strip too, and charging a tool loop's steps to it would
               // relabel the announcement as work.
               let last = steps.lastElementChild;
-              while (last && last.classList.contains("spawn")) last = last.previousElementSibling;
+              while (last && (last.classList.contains("spawn") || last.classList.contains("live"))) {
+                last = last.previousElementSibling;
+              }
               if (last) {
                 const n = (Number(last.dataset.internal) || 0) + 1;
                 last.dataset.internal = String(n);
                 last.textContent = last.dataset.base + "  ·  " + n + " steps";
               }
             } else {
+              // A step completed, so whatever it was last saying about itself
+              // is no longer true — the live line goes before the row that
+              // records the finish.
+              clearLive();
               const row = document.createElement("div");
               const base = "▸ " + displayName(d.node) + (d.taskId ? " (" + d.taskId + ")" : "");
               row.dataset.base = base;
               row.textContent = base;
               steps.appendChild(row);
             }
+            el.scrollIntoView({ block: "end" });
+          } else if (event === "progress") {
+            // The frame this page was the reason for, and the one it used to
+            // drop (architecture review 2026-08-16, F2). `update` fires when a
+            // node COMPLETES and `token` exists only while a model types, so a
+            // tool spending forty seconds paging an API produced neither — and
+            // `streaming.py` says who that silence was worst for: "the audience
+            // that cannot open a trace to explain it." That audience is here.
+            //
+            // Not a step row and not a timeline bar: a progress frame is a
+            // step talking about itself mid-work, so it is one live line that
+            // the step's own `update` frame then replaces. It moves the flow
+            // marker for the same reason `token` does — it is the other frame
+            // that arrives while a node is still running.
+            highlightFlow(d.activeNode || d.node);
+            // `current`/`total` are `int | None` independently, so the count is
+            // shown only in the shapes that are actually true: "3/12", or "3"
+            // when nothing knows the total, and nothing at all when neither.
+            const count = typeof d.current === "number"
+              ? (typeof d.total === "number" ? ` (${d.current}/${d.total})` : ` (${d.current})`)
+              : "";
+            liveLine("⋯ " + (d.message || displayName(d.node)) + count);
             el.scrollIntoView({ block: "end" });
           } else if (event === "spawn") {
             // The moment the run created a child worker or subagent. A row of
@@ -1128,13 +1179,30 @@ async function stream(path, body, el, signal) {
             // marker exactly where update frames put it — the behaviour that
             // existed before this line.
             highlightFlow(d.activeNode);
-            tokens += d.content; thinking.textContent = tokens.slice(-600);
+            // `block` says WHAT KIND of text this is — `reasoning` for a
+            // thinking model's deliberation, `text` for the reply it is
+            // deliberating towards. Two buffers, because one buffer is the bug
+            // `7cd90c6` fixed for the editor and left live here: concatenating
+            // them renders a model's private working-out as if it were the
+            // answer, in the one place a customer reads.
+            //
+            // The branch is not dead code on a page that runs `audience:
+            // "customer"`, where `streaming.py` drops reasoning frames rather
+            // than emptying them. `audience` is a request field — one line of
+            // this file away — and a client whose correctness depends on the
+            // server never sending a frame it publishes is not a client of the
+            // contract, it is a client of today's default.
+            //
+            // Missing `block` reads as `text`: that is what an older backend
+            // emitted, and it is what every non-reasoning frame is.
+            if (d.block === "reasoning") { thoughts += d.content; reasoning.textContent = thoughts.slice(-400); }
+            else { tokens += d.content; thinking.textContent = tokens.slice(-600); }
           } else if (event === "error") {
             // Terminal. The run is over, so the diagram stops claiming to be
             // running — the same omission the `interrupt` branch had.
             ended = "error";
             finishFlow();
-            thinking.textContent = "";
+            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
           } else if (event === "interrupt") {
             // Terminal too: this stream really is finished, and the run
@@ -1142,12 +1210,12 @@ async function stream(path, body, el, signal) {
             // the diagram must stop saying "running" here — see `pauseFlow`.
             ended = "interrupt";
             pauseFlow(d.node);
-            thinking.textContent = "";
+            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
             renderInterrupt(el, d);
           } else if (event === "done") {
             ended = "done";
             finishFlow();
-            thinking.textContent = "";
+            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
             answer.hidden = false;
             answer.innerHTML = md(d.answer || "_no answer_");
             // No warnings rendered here any more, and the frame no longer
@@ -1172,7 +1240,7 @@ async function stream(path, body, el, signal) {
       // implying the whole run vanished mid-thought.
       await reader.cancel().catch(() => {});
       finishFlow();
-      thinking.textContent = "";
+      thinking.textContent = ""; reasoning.textContent = ""; clearLive();
       noteStopped(el);
       return "stopped";
     }
@@ -1183,7 +1251,7 @@ async function stream(path, body, el, signal) {
     // frame handling above is still visible rather than dressed up as a
     // network failure.
     finishFlow();
-    thinking.textContent = "";
+    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
     noteDropped(el, String((err && err.message) || err));
     return "dropped";
   }
@@ -1194,7 +1262,7 @@ async function stream(path, body, el, signal) {
   // only thing that separates "the user stopped it" from "the server hung up".
   if (signal && signal.aborted) {
     finishFlow();
-    thinking.textContent = "";
+    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
     noteStopped(el);
     return "stopped";
   }
@@ -1206,7 +1274,7 @@ async function stream(path, body, el, signal) {
   // half-drawn diagram still glowing.
   if (!ended) {
     finishFlow();
-    thinking.textContent = "";
+    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
     noteDropped(el);
     return "dropped";
   }

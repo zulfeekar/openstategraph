@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -34,6 +34,92 @@ const openapi = JSON.parse(readFileSync(fileURLToPath(new URL('docs/openapi.json
 const client = ['RuntimeClient.ts', 'McpRegistryClient.ts']
   .map((name) => readFileSync(fileURLToPath(new URL(`src/core/runtime/${name}`, REPO)), 'utf8'))
   .join('\n');
+
+/**
+ * Every client of the run stream — **discovered, not listed**.
+ *
+ * The listed version of this is what let `progress` and `block` ship to the
+ * editor and not to the customer (architecture review 2026-08-16, F2). The
+ * list above named the two files that were in front of the author;
+ * `chat.html` reads the same frames through `fetch` + `getReader()` and was
+ * outside the pin, so a fully green suite watched the one page the `progress`
+ * frame was built for drop it.
+ *
+ * So the roll is taken by walking the shipped trees for the two things that
+ * make a file a consumer of this stream: it names the endpoint, and it reads
+ * the body itself. That is the `port_specs.json` lesson applied to a seam
+ * that cannot be generated — a fourth client cannot appear without appearing
+ * here, which is the only property that stops this finding recurring.
+ */
+const CLIENT_ROOTS = ['src', 'backend/openstategraph', 'docs', 'site'];
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', '__pycache__', '.git']);
+
+function sourceFilesUnder(dir: string): string[] {
+  let entries;
+  try {
+    entries = readdirSync(fileURLToPath(new URL(dir, REPO)), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (!SKIPPED_DIRS.has(entry.name)) found.push(...sourceFilesUnder(`${dir}/${entry.name}`));
+    } else if (/\.(ts|tsx|js|html)$/.test(entry.name) && !/\.(test|spec)\.tsx?$/.test(entry.name)) {
+      found.push(`${dir}/${entry.name}`);
+    }
+  }
+  return found;
+}
+
+/**
+ * A file is a run-stream client when it posts to the stream door **and**
+ * reads the frames off the body. Both halves matter: `site/gallery.html`
+ * prints `/api/runs/stream` in prose and consumes nothing, and a file that
+ * calls `getReader()` on some other response is not this contract's problem.
+ */
+function streamConsumers(): string[] {
+  return CLIENT_ROOTS.flatMap(sourceFilesUnder).filter((path) => {
+    const source = readFileSync(fileURLToPath(new URL(path, REPO)), 'utf8');
+    return source.includes('/api/runs/stream') && source.includes('getReader(');
+  });
+}
+
+/**
+ * How a consumer spells "I handle this frame".
+ *
+ * Three spellings, because the three clients are a TypeScript module and two
+ * plain-HTML pages: `eventName === 'x'`, `event === "x"`, `name === "x"`. The
+ * lookbehind keeps `err.name === "AbortError"` and `d.kind === 'tool'` out —
+ * a property access is a different question about a different value.
+ */
+function framesHandledBy(source: string): Set<string> {
+  const found = new Set<string>();
+  for (const match of source.matchAll(
+    /(?<![.\w])(?:eventName|event|name)\s*===\s*['"]([a-z]+)['"]/g,
+  )) {
+    found.add(match[1] as string);
+  }
+  return found;
+}
+
+/**
+ * The consumers that deliberately handle less than the whole vocabulary, and
+ * exactly which names they skip.
+ *
+ * Silence is not allowed to be the way a client opts out — that is the defect
+ * this file now exists to catch — so an omission is a recorded decision with
+ * a reason, and the assertion is an **equality**: a new frame name is red for
+ * this file too until somebody either writes the branch or adds the name
+ * here, and a name that is handled after all cannot linger in the record.
+ */
+const IGNORED_BY_DESIGN: Record<string, readonly string[]> = {
+  // The documentation's fifty-line "smallest thing that works" — it renders
+  // the answer, not the run, and `docs/api.md` introduces it as exactly that.
+  // Teaching a reader to handle the progress frames is the *next* page's job;
+  // making this one handle seven events would cost it the property it is for.
+  'docs/examples/minimal-client.html': ['update', 'progress', 'spawn'],
+};
 
 /** Every path the client builds, as a template with `{}` for interpolations. */
 function pathsCalledByTheClient(): string[] {
@@ -107,16 +193,47 @@ describe('the client and the published contract', () => {
       expect(eventNamesDeclaredFor('/api/runs/stream', 'post').length).toBeGreaterThan(4);
     });
 
-    it('is handled frame for frame by the client', () => {
-      const declared = eventNamesDeclaredFor('/api/runs/stream', 'post');
-      const unhandled = declared.filter((name) => !client.includes(`eventName === '${name}'`));
+    it('has more than one client, and the roll finds them all', () => {
+      // The anti-vacuity control for the discovery above, and the finding it
+      // is named after: a walker that quietly found one file would make the
+      // per-consumer assertion below true of a list of one.
+      const consumers = streamConsumers();
 
-      expect(
-        unhandled,
-        `RuntimeClient never handles ${unhandled.join(', ')} — a frame the backend ` +
-          `emits and the client drops. Add the branch, the RunStreamEvent variant ` +
-          `and the row in docs/api.md, or remove it from RUN_EVENTS.`,
-      ).toEqual([]);
+      expect(consumers).toContain('src/core/runtime/RuntimeClient.ts');
+      expect(consumers).toContain('backend/openstategraph/api/static/chat.html');
+      expect(consumers).toContain('docs/examples/minimal-client.html');
+      expect(consumers.length).toBeGreaterThanOrEqual(3);
+
+      // A recorded exemption for a file that is no longer a client is a
+      // record nobody will re-read; it has to fall over when the file moves.
+      for (const path of Object.keys(IGNORED_BY_DESIGN)) {
+        expect(consumers, `${path} is exempted from a pin it is no longer in`).toContain(path);
+      }
+    });
+
+    it('is handled frame for frame by every client', () => {
+      const declared = eventNamesDeclaredFor('/api/runs/stream', 'post');
+
+      for (const path of streamConsumers()) {
+        const handled = framesHandledBy(readFileSync(fileURLToPath(new URL(path, REPO)), 'utf8'));
+
+        // Per file, not against the concatenation of all of them: a name one
+        // client handles said nothing about the others, which is precisely
+        // how `progress` reached the editor and not the customer.
+        const missing = declared.filter((name) => !handled.has(name));
+        const ignored = [...(IGNORED_BY_DESIGN[path] ?? [])];
+
+        expect(
+          missing.length,
+          `${path} matched almost nothing — check the handled-frame matcher, not the client`,
+        ).toBeLessThan(declared.length - 2);
+        expect(
+          missing,
+          `${path} never handles ${missing.join(', ')} — a frame the backend emits ` +
+            `and this client drops. Add the branch, or record the omission and its ` +
+            `reason in IGNORED_BY_DESIGN.`,
+        ).toEqual(ignored);
+      }
     });
 
     it('is the same vocabulary on resume', () => {
