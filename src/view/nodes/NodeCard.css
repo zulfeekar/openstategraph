@@ -442,6 +442,34 @@
   box-shadow: 0 0 0 2px var(--color-border-focus-transparent);
 }
 
+/* A row's own validator, said where the row is. The flat field shows this
+ * under the control through `Field`; a row has no `Field`, so it says it
+ * itself rather than refusing silently. */
+.repeatable-group__error {
+  display: block;
+  margin-top: var(--space-1);
+  font: var(--type-caption);
+  color: var(--color-danger);
+}
+
+/* The per-row probe (mcp-connect ticket 04): a button and the verdict it
+ * earned. Takes its own line at the end of the row rather than a column,
+ * because a badge is not a control and should not be sized like one. */
+.repeatable-group__probe {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The runtime's own sentence, full width under the row's controls. */
+.repeatable-group__detail {
+  flex: 1 0 100%;
+  margin: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
 .repeatable-group__remove {
   flex: none;
   width: 28px;

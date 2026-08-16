@@ -1,8 +1,9 @@
-import { useCallback, useRef, useSyncExternalStore, type ChangeEvent } from 'react';
+import { useCallback, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
 import { Replace } from 'lucide-react';
 import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import type { ComboboxFieldSchema } from '@core/model/contracts/fields';
 import {
+  Badge,
   Button,
   DisplayRow,
   Field,
@@ -19,6 +20,7 @@ import {
   type FieldValue,
   type NodeData,
   type RepeatableGroupSchema,
+  type RowVerdict,
 } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
 import { useController } from '@app/WorkbenchContext';
@@ -296,11 +298,36 @@ const asBoolean = (value: FieldValue | undefined, fallback: boolean): boolean =>
   typeof value === 'boolean' ? value : fallback;
 
 /**
+ * A row field's own validator, applied to that row's value.
+ *
+ * `validate` is declared on the value-bearing schemas rather than on a group
+ * of them, so the union has to be narrowed to reach it — the same switch the
+ * app-level MCP panel runs, deliberately, because a row that accepted what the
+ * flat field refuses would be a second answer to "is this a variable name or
+ * the credential itself".
+ */
+function rowError(field: FieldSchema, value: FieldValue | undefined): string | undefined {
+  switch (field.kind) {
+    case 'text':
+    case 'textarea':
+    case 'select':
+    case 'combobox':
+    case 'file':
+    case 'readonly':
+      return field.validate?.(asString(value)) ?? undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Repeatable group field — a list of rows, each with stable ids.
  *
  * Used for router branches: each row has {id, name} where id is generated
  * once and survives renames, so edges referencing `branch:${id}` don't
- * break when the user renames a branch.
+ * break when the user renames a branch. Since mcp-connect ticket 04 it also
+ * carries whole sub-records — one MCP server per row — which is what put a
+ * validator and an optional per-row probe on rows that had neither.
  */
 function RepeatableGroupField({
   nodeId,
@@ -317,6 +344,17 @@ function RepeatableGroupField({
   htmlFor: string;
 }) {
   const controller = useController();
+  /** Verdicts by row id — `null` while a probe is in flight. */
+  const [verdicts, setVerdicts] = useState<Record<string, RowVerdict | null>>({});
+
+  const probe = schema.rowProbe;
+  const check = (key: string, row: Record<string, FieldValue>) => {
+    if (!probe) return;
+    setVerdicts((current) => ({ ...current, [key]: null }));
+    void probe.run(row).then((verdict) => {
+      setVerdicts((current) => ({ ...current, [key]: verdict }));
+    });
+  };
 
   const addRow = () => {
     const newRow: Record<string, FieldValue> = {};
@@ -347,88 +385,122 @@ function RepeatableGroupField({
     <Field {...common}>
       <div data-no-drag>
         <div className="repeatable-group">
-          {rows.map((row, index) => (
-            <div key={(row.id as string) ?? index} className="repeatable-group__row">
-              {schema.fields.map((field) => (
-                <div key={field.key} className="repeatable-group__field">
-                  {/* Named, since ticket 26. Three unlabelled controls in a
+          {rows.map((row, index) => {
+            const rowKey = (row.id as string) ?? String(index);
+            const verdict = rowKey in verdicts ? verdicts[rowKey] : undefined;
+            return (
+              <div key={rowKey} className="repeatable-group__row">
+                {schema.fields.map((field) => {
+                  // The schema's own validator, run where the schema declared
+                  // it — the same function the app-level panel runs. Without
+                  // this a row could accept what the flat field refuses, and
+                  // the field it refuses is the one holding a credential.
+                  const invalid = rowError(field, row[field.key]);
+                  return (
+                    <div key={field.key} className="repeatable-group__field">
+                      {/* Named, since ticket 26. Three unlabelled controls in a
                       row is a puzzle: the Guardrail card showed a combobox, a
                       select and a monospace box side by side and never said
                       which was the entity, which the strategy and which the
                       pattern. */}
-                  {field.label ? (
-                    <span className="repeatable-group__label">{field.label}</span>
-                  ) : null}
-                  {field.kind === 'text' && (
-                    <TextInput
-                      value={asString(row[field.key])}
-                      placeholder={field.placeholder}
-                      onChange={(e) => updateRow(index, field.key, e.target.value)}
-                      mono={field.mono}
-                    />
-                  )}
-                  {field.kind === 'textarea' && (
-                    <TextArea
-                      value={asString(row[field.key])}
-                      placeholder={field.placeholder}
-                      minRows={field.minRows}
-                      maxRows={field.maxRows}
-                      onChange={(e) => updateRow(index, field.key, e.target.value)}
-                      mono={field.mono}
-                    />
-                  )}
-                  {/* A row's combobox rendered **nothing at all** until ticket
+                      {field.label ? (
+                        <span className="repeatable-group__label">{field.label}</span>
+                      ) : null}
+                      {field.kind === 'text' && (
+                        <TextInput
+                          value={asString(row[field.key])}
+                          placeholder={field.placeholder}
+                          invalid={Boolean(invalid)}
+                          onChange={(e) => updateRow(index, field.key, e.target.value)}
+                          mono={field.mono}
+                        />
+                      )}
+                      {field.kind === 'textarea' && (
+                        <TextArea
+                          value={asString(row[field.key])}
+                          placeholder={field.placeholder}
+                          minRows={field.minRows}
+                          maxRows={field.maxRows}
+                          onChange={(e) => updateRow(index, field.key, e.target.value)}
+                          mono={field.mono}
+                        />
+                      )}
+                      {/* A row's combobox rendered **nothing at all** until ticket
                       26 — the case was simply missing from this list, so the
                       Guardrail's Entity control was an empty gap on the card
                       and a rule could not be told what it was about. Same
                       datalist component the switch above uses, so the two
                       cannot drift. */}
-                  {field.kind === 'combobox' && (
-                    <ComboboxField
-                      id={`${common.htmlFor}-${index}-${field.key}`}
-                      schema={field}
-                      value={asString(row[field.key])}
-                      data={row}
-                      onChange={(val) => updateRow(index, field.key, val)}
-                    />
-                  )}
-                  {field.kind === 'select' && (
-                    <Select
-                      options={resolveOptions(field, row).map((opt) => ({
-                        value: opt.value,
-                        label: opt.label,
-                        group: opt.group,
-                        disabled: opt.disabled,
-                      }))}
-                      value={asString(row[field.key]) || field.defaultValue}
-                      onValueChange={(val) => updateRow(index, field.key, val)}
-                    />
-                  )}
-                  {/* Missing for the same reason `combobox` was: the Grader's
+                      {field.kind === 'combobox' && (
+                        <ComboboxField
+                          id={`${common.htmlFor}-${index}-${field.key}`}
+                          schema={field}
+                          value={asString(row[field.key])}
+                          data={row}
+                          onChange={(val) => updateRow(index, field.key, val)}
+                        />
+                      )}
+                      {field.kind === 'select' && (
+                        <Select
+                          options={resolveOptions(field, row).map((opt) => ({
+                            value: opt.value,
+                            label: opt.label,
+                            group: opt.group,
+                            disabled: opt.disabled,
+                          }))}
+                          value={asString(row[field.key]) || field.defaultValue}
+                          onValueChange={(val) => updateRow(index, field.key, val)}
+                        />
+                      )}
+                      {/* Missing for the same reason `combobox` was: the Grader's
                       rubric rows declare a `required` toggle that has never
                       rendered. */}
-                  {field.kind === 'toggle' && (
+                      {field.kind === 'toggle' && (
+                        <Button
+                          active={asBoolean(row[field.key], field.defaultValue)}
+                          onClick={() =>
+                            updateRow(
+                              index,
+                              field.key,
+                              !asBoolean(row[field.key], field.defaultValue),
+                            )
+                          }
+                        >
+                          {asBoolean(row[field.key], field.defaultValue) ? 'On' : 'Off'}
+                        </Button>
+                      )}
+                      {invalid ? <span className="repeatable-group__error">{invalid}</span> : null}
+                    </div>
+                  );
+                })}
+                {probe ? (
+                  <div className="repeatable-group__probe">
                     <Button
-                      active={asBoolean(row[field.key], field.defaultValue)}
-                      onClick={() =>
-                        updateRow(index, field.key, !asBoolean(row[field.key], field.defaultValue))
-                      }
+                      size="sm"
+                      disabled={verdict === null}
+                      onClick={() => check(rowKey, row)}
                     >
-                      {asBoolean(row[field.key], field.defaultValue) ? 'On' : 'Off'}
+                      {verdict === null ? 'Checking…' : probe.label}
                     </Button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => removeRow(index)}
-                className="repeatable-group__remove"
-                aria-label="Remove row"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+                    {verdict ? (
+                      <Badge tone={verdict.ok ? 'success' : 'danger'}>{verdict.label}</Badge>
+                    ) : null}
+                  </div>
+                ) : null}
+                {verdict?.detail ? (
+                  <p className="repeatable-group__detail">{verdict.detail}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => removeRow(index)}
+                  className="repeatable-group__remove"
+                  aria-label="Remove row"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
           {canAdd && (
             <button type="button" onClick={addRow} className="repeatable-group__add">
               + {schema.addLabel}

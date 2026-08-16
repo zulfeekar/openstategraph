@@ -177,6 +177,45 @@ export interface RepeatableGroupSchema extends Omit<FieldSchemaBase<FieldValue>,
   readonly addLabel: string;
   /** Maximum number of rows. */
   readonly maxRows?: number;
+  /** An on-demand check of one row against the world. See `RowProbe`. */
+  readonly rowProbe?: RowProbe;
+}
+
+/**
+ * What a row's on-demand check answers with.
+ *
+ * `ok` rather than a tone, because a tone is the view's word: green means one
+ * thing only and every failure shares the other colour, so the renderer needs
+ * a boolean and the schema has no business naming a design token. The `label`
+ * is what the badge says and the `detail` is the sentence under the row —
+ * short and long, because "unreachable" and *why* answer different questions.
+ */
+export interface RowVerdict {
+  readonly ok: boolean;
+  /** Two or three words, e.g. `live`, `auth required`. */
+  readonly label: string;
+  /** The full sentence, from whoever actually knows — usually the runtime. */
+  readonly detail?: string;
+}
+
+/**
+ * A per-row check, run when a developer asks for it.
+ *
+ * Declared on the schema for the same reason `validate` and `options` are: a
+ * field group states what it needs and the renderer stays a renderer. The
+ * alternative — the row renderer knowing that a `servers` group means MCP and
+ * which endpoint validates one — is the "extend by editing the engine" the
+ * registry rules forbid.
+ *
+ * **On demand, never on render.** A probe opens a network connection, and a
+ * group that checked every row on every keystroke would hammer somebody's
+ * server from a text box. The verdict is a fact with a timestamp; the button
+ * is what says when it was taken.
+ */
+export interface RowProbe {
+  /** Button text, e.g. `Check`. */
+  readonly label: string;
+  readonly run: (row: Readonly<Record<string, FieldValue>>) => Promise<RowVerdict>;
 }
 
 export type FieldSchema =
