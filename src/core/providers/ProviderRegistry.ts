@@ -9,6 +9,7 @@ import {
   type ReasoningEffortLevels,
 } from './ILLMProvider';
 import { MOCK_SELECTION, workflowModelAsSelection } from './modelSelection';
+import { serverReadiness } from './serverReadiness';
 
 const STORAGE_PREFIX = 'openstategraph.credentials.';
 
@@ -124,7 +125,15 @@ export class ProviderRegistry {
    */
   private workflowDefault = MOCK_SELECTION;
 
-  constructor(private readonly credentials: CredentialStore) {}
+  constructor(private readonly credentials: CredentialStore) {
+    // `onChange` promises "what this registry reports has changed", and since
+    // `modelOptions` and `reasoningEffortLevelsFor` read `serverReadiness`,
+    // the server answering is such a change. Without this the labels are
+    // whatever they were at first paint: verified in a browser, where the
+    // hint vanished on the poll that reported a configured server and every
+    // model in the picker kept its "· needs key" from a second earlier.
+    serverReadiness.onChange(() => this.bus.emit('changed', { providerId: '*' }));
+  }
 
   /**
    * Tells the registry which model the open document runs.
@@ -217,6 +226,20 @@ export class ProviderRegistry {
    * the same reason: not knowing is not the same as knowing there is none.
    */
   reasoningEffortLevelsFor(selection: string): ReasoningEffortLevels {
+    // A node on "Workflow default" in a document that names no model: the
+    // **server** resolves the model, and this editor cannot name it. Falling
+    // through to the simulator here is what put "Not supported by Mock ·
+    // Offline" on every card of an install running `ollama:gpt-oss:120b-cloud`
+    // (providers-and-credentials 06). `undefined` is the answer this method
+    // already reserves for "not known", and the picker already renders it as
+    // the common tiers rather than a refusal.
+    if (
+      !selection.trim() &&
+      this.workflowDefault === MOCK_SELECTION &&
+      serverReadiness.modelConfigured() === true
+    ) {
+      return undefined;
+    }
     const resolved = this.resolve(selection);
     if (!resolved) return undefined;
     const model = resolved.provider.models.find((entry) => entry.id === resolved.modelId);
@@ -232,7 +255,17 @@ export class ProviderRegistry {
     return this.providers.list().flatMap((provider) =>
       provider.models.map((model) => ({
         value: ProviderRegistry.selectionFor(provider.id, model.id),
-        label: provider.isConfigured() ? model.label : `${model.label} · needs key`,
+        // `provider.isConfigured()` is the **browser's** key store, which is
+        // preview-only and can no longer even be typed into. Asking it alone
+        // suffixed every model with "· needs key" on a server with three
+        // working keys (providers-and-credentials 06). `serverReadiness` is
+        // the one resolver the hint and the reasoning row read too, so the
+        // three cannot disagree again — and it answers `unknown`, which
+        // labels nothing, rather than guessing.
+        label:
+          serverReadiness.readinessOf(provider.id, provider.isConfigured()) === 'needs key'
+            ? `${model.label} · needs key`
+            : model.label,
         group: provider.label,
       })),
     );

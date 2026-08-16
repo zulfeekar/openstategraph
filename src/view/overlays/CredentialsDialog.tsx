@@ -3,6 +3,7 @@ import { KeyRound, RotateCcw, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Field, Icon, IconTile, TextInput } from '@design/primitives';
 import { AbstractLLMProvider } from '@core/providers/ILLMProvider';
 import { RuntimeClient, type ProviderStatus } from '@core/runtime/RuntimeClient';
+import { serverReadiness } from '@core/providers/serverReadiness';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { Dialog } from './Dialog';
 import './overlays.css';
@@ -52,7 +53,13 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let live = true;
     void new RuntimeClient().providers().then((result) => {
-      if (live && result.ok) setOnServer(result.value);
+      if (!result.ok) return;
+      // Published as well as held: this dialog was the only surface reading the
+      // server, and the picker, the reasoning row and the onboarding hint went
+      // on contradicting it from browser-local keys. Every answer this dialog
+      // gets is now the answer they read (providers-and-credentials 06).
+      serverReadiness.recordProviders(result.value);
+      if (live) setOnServer(result.value);
     });
     return () => {
       live = false;
