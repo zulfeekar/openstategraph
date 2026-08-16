@@ -55,6 +55,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.knowledge import BaseKnowledge
 from openstategraph.knowledge_engines import ENGINE_ADAPTERS, recognize
+from openstategraph.validation import MOUNT_NODE_TYPES
 
 #: First line prefix of every builder-owned doc. Its absence marks a file as
 #: hand-authored and untouchable — see the module docstring's policy.
@@ -104,7 +105,12 @@ _CHINOOK_DATABASE = "chinook-assistant/data/Chinook_Sqlite.sqlite"
 #: The node types that mount another workflow as a child. Their
 #: ``data.workflow`` slugs ARE ``RootKnowledgeBuilder``'s topics — a parent
 #: writes a routing doc for what it can actually route to, and nothing else.
-_MOUNT_NODE_TYPES = ("workflow.subgraph",)
+#:
+#: Re-exported from ``validation``, which is where the same fact is needed to
+#: resolve a mount against a workflows root (ticket 53). One tuple, because
+#: "which node types hold a cross-package reference" is one piece of
+#: knowledge and a second copy is how a new mount type reaches one reader.
+_MOUNT_NODE_TYPES = MOUNT_NODE_TYPES
 
 #: The node types that make **the project** a source. A workflow wiring these
 #: can enumerate and describe every package on the platform at run time, so

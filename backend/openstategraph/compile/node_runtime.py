@@ -119,6 +119,19 @@ class RunState(TypedDict, total=False):
     task_instruction: str
 
 
+#: What the output node says when it reached the end with nothing to say.
+#:
+#: A named constant, not a literal at the one site that writes it, because a
+#: *consumer* has to be able to tell this apart from a real answer: `run`
+#: exited 0 for a workflow whose mount did not resolve, since "is the answer
+#: empty" was being asked of a sentence saying it was (ticket 53).
+#:
+#: It used to end "Check the run trace to see which step returned nothing" —
+#: printed directly below the line that already names the step, pointing at a
+#: trace the CLI cannot open. Advice a surface cannot honour is worse than
+#: none, so the honest floor is the first sentence alone.
+NO_ANSWER_PRODUCED = "The workflow finished without producing an answer."
+
 #: Node-type prefixes whose step writes text that did not exist before it ran.
 #:
 #: Used by the unguarded-exit check, and by nothing else, so it is stated as
@@ -2940,10 +2953,7 @@ class NodeRuntime:
             # cause this node cannot see, and a confident wrong reason is
             # worse than a plain one.
             if not answer.strip():
-                answer = (
-                    "The workflow finished without producing an answer. "
-                    "Check the run trace to see which step returned nothing."
-                )
+                answer = NO_ANSWER_PRODUCED
 
             # `answer`, not `text`: this node's own output IS the run's answer,
             # and the card on the canvas is fed from `outputs[node]` while the

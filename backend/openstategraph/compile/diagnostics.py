@@ -122,8 +122,14 @@ _SENTENCES: dict[Finding, str] = {
         "passed its input through unchanged, so any answer downstream of it skipped "
         "that work."
     ),
+    # "Subgraph" was a LangGraph name in a sentence a user reads, which
+    # CLAUDE.md forbids — and it was not even internally true: this compiler
+    # emits no LangGraph subgraph (production-ready 37). The settled words are
+    # *mount* and *workflow node*, and the enum member keeps its old name
+    # because it is not a surface (ticket 53).
     Finding.UNRESOLVED_SUBGRAPH: (
-        'Subgraph workflow "{0}" could not be loaded — the node produced nothing.'
+        'The workflow node mounting "{0}" could not load that package — '
+        "the step produced nothing."
     ),
     Finding.OVERRIDE_PROBLEM: "Mount override — {0}",
     Finding.CAPABILITY_FAILED: "{0}",

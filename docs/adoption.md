@@ -368,6 +368,15 @@ run or validation failure, **2** usage error, **3** a required extra is missing
 (the message names the exact `pip install` line). Every command takes its paths
 from its arguments, so it works from any directory.
 
+A **failed run** is one rule, in one place (`cli.run_exit_code`): the run
+produced no answer *and* something went wrong — a step failed, or a capability
+did not resolve. Both halves, deliberately. A workflow that answered despite a
+missing optional tool degraded rather than failed, and a workflow that legally
+answers with nothing did not fail either. `validate` fails on any finding,
+which since production-ready 53 includes a **mount naming a package that is not
+in the workflows root** — checked recursively, so a typo two packages down is
+caught before the run is.
+
 > **Until the wheel is on PyPI** (see *Be honest about the install*, below),
 > `openstategraph` lands on your `PATH` when you `pip install -e
 > "/path/to/openstategraph/backend[ollama]"`. Without installing at all, every

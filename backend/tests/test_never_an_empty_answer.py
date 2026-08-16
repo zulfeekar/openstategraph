@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import Any
 
 from openstategraph.abc.grader import BaseGrader
-from openstategraph.compile.node_runtime import NodeRuntime
+from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED, NodeRuntime
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
 
@@ -65,9 +65,20 @@ class TestTheAnswerIsNeverBlank:
     def test_it_does_not_diagnose_what_it_cannot_see(self) -> None:
         """The floor is honest, not clever. This node cannot know *why* a step
         returned nothing, and a confident wrong reason is worse than a plain
-        one — so it points at the trace instead of guessing."""
+        one — so it names the fact and stops.
+
+        It used to add "Check the run trace to see which step returned
+        nothing", and production-ready 53 took that out: it was printed
+        directly below the line that already names the step, and no surface
+        this message reaches — least of all the CLI — offers a trace to open.
+        Advice a reader cannot act on is the same defect as a guess.
+        """
         answer = _output_run({"a1": ""})["answer"]
-        assert "trace" in answer.lower()
+
+        assert answer == NO_ANSWER_PRODUCED
+        assert "trace" not in answer.lower()
+        # One sentence: the fact, and nothing after it.
+        assert answer.count(".") == 1
 
     def test_a_real_answer_is_passed_through_untouched(self) -> None:
         update = _output_run({"a1": "Rock, with $826.65."})

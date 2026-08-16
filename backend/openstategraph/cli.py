@@ -156,7 +156,11 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def run_exit_code(result: "RunResult") -> int:
-    """`0` unless the run produced nothing *and* a step failed.
+    """`0` unless the run produced no answer *and* something went wrong.
+
+    **This is the one place the rule lives**, which ticket 53 asked for in as
+    many words: two failure modes were exiting with two different codes and
+    the rule was decided per call site, so nobody could say what a `1` meant.
 
     Found by building the wheel and using it: a new user's first `run` after
     `new` has no provider credential, and got back an empty line and a success
@@ -173,12 +177,26 @@ def run_exit_code(result: "RunResult") -> int:
 
     Only the pair is a failed run, and a CLI that calls that success is a CLI
     a script cannot gate on.
+
+    Both halves were being asked too narrowly, which is how a workflow
+    mounting `no-such-package-anywhere` exited 0 (ticket 53):
+
+    - *"produced no answer"* now includes `NO_ANSWER_PRODUCED`. The output
+      node substitutes that sentence when it has nothing, so the string was
+      never empty and the first test short-circuited every time.
+    - *"something went wrong"* now includes `result.warnings`. A failed node
+      leaves a marker in `outputs`; a mount that could not be loaded leaves
+      none — it is a **compile** finding, and it arrives on `warnings`, which
+      this function was not reading.
     """
+    from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED
     from openstategraph.compile.workflow_compiler import node_failure_warnings
 
-    if str(result).strip():
+    answer = str(result).strip()
+    if answer and answer != NO_ANSWER_PRODUCED:
         return EXIT_OK
-    return EXIT_FAILURE if node_failure_warnings(result.outputs) else EXIT_OK
+    went_wrong = bool(node_failure_warnings(result.outputs)) or bool(result.warnings)
+    return EXIT_FAILURE if went_wrong else EXIT_OK
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
@@ -218,6 +236,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     """
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
+    from openstategraph.validation import unresolved_mounts
 
     target = Path(args.target).expanduser().resolve()
     manifest = target if target.is_file() else target / "workflow.json"
@@ -230,8 +249,31 @@ def cmd_validate(args: argparse.Namespace) -> int:
         return _error(f"{type(exc).__name__}: {exc}")
 
     verdict = ValidateWorkflowTool().run(document=json.dumps(document))
-    print(verdict.content if verdict.ok else verdict.error)
-    return EXIT_OK if verdict.ok else EXIT_FAILURE
+    report = verdict.content if verdict.ok else str(verdict.error)
+
+    # The one check the in-memory plan cannot make (ticket 53). A mount is the
+    # only reference a document holds to something outside itself, resolving
+    # it is a filesystem lookup, and until this `validate` answered VALID for
+    # a package mounting a slug that does not exist — the likeliest way there
+    # is to break composition, and the cheapest one to catch.
+    #
+    # The root is where this package's *siblings* live, which is the same
+    # directory the loader will search at run time. Taken from the package's
+    # own location rather than from `workflows_root()`, so validating a
+    # package by path answers about that path.
+    mounts = unresolved_mounts(document, manifest.parent.parent)
+    if mounts:
+        # Folded into the verdict rather than printed after it: one command,
+        # one answer. A VALID followed by a list of problems is the shape this
+        # ticket is about.
+        found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
+        topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
+        report = "\n".join(
+            ["PROBLEMS FOUND:", *(f"- {p}" for p in (*found, *mounts)), "", topology]
+        )
+
+    print(report)
+    return EXIT_OK if verdict.ok and not mounts else EXIT_FAILURE
 
 
 def cmd_graph(args: argparse.Namespace) -> int:
