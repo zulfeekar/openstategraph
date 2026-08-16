@@ -445,14 +445,23 @@ rather than replace so a catalogue-wide stub survives a per-call substitution.
 ### Where it reads, and where it writes
 
 Two questions, deliberately not one answer. **Read** is the workflows root,
-resolved through four layers — later wins:
+resolved through five layers — later wins:
 
 | | |
 | --- | --- |
-| convention | `./workflows` under the working directory (this checkout's own, in-tree) |
+| convention | `./workflows` under the process's working directory |
+| **the checkout** | `<repo>/workflows`, when `workflows_root.py` is genuinely inside an OpenStateGraph source tree (both `workflows/` and `backend/` present beside it) |
 | config file | `workflows_dir:` in `openstategraph.yaml`, resolved **relative to that file**, never to the cwd |
 | environment | `OPENSTATEGRAPH_WORKFLOWS_ROOT` |
 | argument | `Workflows(root)` — or the package path you hand `load_workflow` |
+
+**The checkout rung is the one that used to be missing here, and it is the one
+that decides the answer most often.** Inside this repository it always matches,
+so the cwd convention below it is never reached — which is why running a
+command from a subdirectory of the checkout still finds the repository's own
+`workflows/`, and why an adopter's `./workflows` behaves differently from a
+contributor's. Installed from a wheel it never matches, and the convention is
+the floor.
 
 There is no `set_workflows_root()`, on purpose: process-wide mutable state is
 how two callers in one process come to disagree about which directory they read

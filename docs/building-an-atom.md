@@ -11,12 +11,14 @@ atomic-design tier, declared once in
 | `Inputs · atoms` | `input.text`, `input.skill`, `input.markdown` |
 | `Tools · atoms` | every tool node — the built-ins, the platform family, and anything a workflow or a plugin adds |
 | `Output · atoms` | `output.formatted` |
-| `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
-| `Composition · organisms` | `workflow.subgraph` — the only organism (schema v3 collapsed `team.workflow` into it) |
+| `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `guard.policy`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
+| `Memory · molecules` | `memory.segment` — its own section on purpose: a segment decides what is *remembered*, not what happens next, so filing it under `Reasoning & control` would have made that heading false |
+| `Composition · organisms` | `workflow.subgraph` — the only organism *node type* (schema v3 collapsed `team.workflow` into it). The section also carries the shipped **assemblies**, which are drag-out arrangements of several nodes rather than a type: the revision loop and the starter flow |
 | `Annotate · no tier` | `group`, `note` — canvas furniture, deliberately tier-less |
 
-Atoms sort first, organisms last; the test asserts that ordering, so the
-palette cannot drift from the vocabulary. **This page is about adding to the
+Atoms sort first, then molecules, then organisms, with the tier-less `Annotate`
+section after all of them; the test asserts that ordering, so the palette
+cannot drift from the vocabulary. **This page is about adding to the
 first row: a tool.**
 
 > An agent can run this process end to end via
@@ -64,8 +66,11 @@ fields: [
 
 *(from [`ChinookDatabaseNode.ts`](../src/nodes/tools/ChinookDatabaseNode.ts))*
 
-Available kinds: `text`, `textarea`, `select`, `slider`, `toggle`, `file`,
-`readonly`, `repeatable-group`. Three flags shape where a field appears rather
+Available kinds: `text`, `textarea`, `select`, `combobox`, `slider`, `toggle`,
+`file`, `readonly`, `repeatable-group` — the union in
+[`src/core/model/contracts/fields.ts`](../src/core/model/contracts/fields.ts)
+is the list, and it is the one to check rather than this sentence. Three flags
+shape where a field appears rather
 than what it holds:
 
 - `onCard: false` — inspector only. Use it when the card is already showing
@@ -331,9 +336,16 @@ privilege.
 > paragraph is left here because a guide that was wrong should say when it
 > stopped being wrong.
 
-> **Load order matters.** `WorkflowSerializer.fromJSON` silently skips nodes
-> whose type is not registered yet. Workflow-scoped types must be registered
-> from the raw document *before* it is imported —
+> **Load order still matters, but the penalty changed.** This said
+> `WorkflowSerializer.fromJSON` "silently skips nodes whose type is not
+> registered yet". There is no `fromJSON` — the method is
+> `WorkflowSerializer.load` — and skipping is exactly what it stopped doing:
+> an unregistered type is now **preserved**, wrapped in an unknown-node
+> definition whose ports are recovered from the edges, and reported as a
+> warning (`UnknownNode.ts`: *load then save must never lose a byte*). So
+> forgetting to register no longer destroys a document; it gives you a node
+> you cannot edit in this build. Register workflow-scoped types from the raw
+> document *before* it is imported anyway —
 > `registerNodeTypesForRawDocument` does this, and every load path calls it.
 
 **Discovered (no TypeScript at all).** Drop the tool in
@@ -362,11 +374,19 @@ The exact stanza, in **your** `pyproject.toml`:
 ```toml
 [project]
 name = "openstategraph-acme"          # convention: openstategraph-<you>
-dependencies = ["openstategraph>=0.3"]
+dependencies = ["openstategraph>=0.3"]   # see the note below on pre-releases
 
 [project.entry-points."openstategraph.tools"]
 acme = "acme_osg_tools:TOOLS"          # a list of BaseTool subclasses
 ```
+
+> **`>=0.3` does not match today's version.** The shipped version is
+> `0.3.0rc1`, and pip excludes pre-releases from a plain `>=` specifier — so a
+> plugin declaring that dependency resolves to nothing until a final `0.3.0`
+> is published. Until then use `openstategraph>=0.3.0rc1` (naming a
+> pre-release in the specifier turns pre-release matching on) or install both
+> from a checkout. The line above is written as the shape it takes after the
+> first release, for the same reason `adoption.md`'s headline install is.
 
 The right-hand side may resolve to any of three things, because a plugin
 author should not have to guess which one we take:

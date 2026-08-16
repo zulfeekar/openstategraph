@@ -26,10 +26,11 @@ different clock**:
 
 The code says it more precisely than prose can. `BaseGrader.grade()` runs its
 deterministic checks first and only then asks a model
-(`backend/openstategraph/abc/grader.py`); `runner._grade()` runs deterministic
-checks — recover the SQL, execute the gold query — and never asks a model at
-all (`backend/openstategraph/evaluation/runner.py`). Both end in a fixed
-verdict vocabulary. They are the same function at two time scales.
+(`backend/openstategraph/abc/grader.py`); `runner._grade()` **judges** without
+a model at all — recover the SQL, execute the gold query, compare denotations
+(`backend/openstategraph/evaluation/runner.py`). It does run the workflow first,
+so a model is called in the course of the case; what is model-free is the
+verdict. Both end in a fixed verdict vocabulary. They are the same function at two time scales.
 
 ### Which half of the field we actually hold
 
@@ -69,8 +70,8 @@ every `pytest`.
 | `openstategraph eval` | a dataset of known answers | a model call per case | deliberately |
 | `<package>/tests/` | the document and its plan | nothing | every `pytest` |
 
-That split is why twenty-two of the twenty-three gallery packages carry a
-`tests/` file and only `sql-qa` carries an `evals/` directory: a shape is an
+That split is why all but one of the gallery packages carry a `tests/`
+directory and only `sql-qa` carries an `evals/` directory: a shape is an
 **assertion** (binary, no reference corpus needed), while an answer's quality
 is a **metric** (fuzzy, useful in relative terms). The one without is
 `nested-mounts-mid`, a nested child rather than an example in its own right.
@@ -220,11 +221,14 @@ the order between them is arbitrary and only membership is graded.
 
 3. `PYTHONPATH=backend python3 -m pytest backend/tests/test_eval_dataset.py -q`.
 
-Rules of thumb, all enforced by that test file: keep an expectation under 30
-rows (ask for a top-N instead of everything, or it stops being reviewable in a
-diff); avoid a `LIMIT n` whose cut falls in the middle of a tie, or a correct
-query can return a different — equally correct — set; and write `notes` on
-every unanswerable case saying *why* the database cannot answer it.
+Three rules of thumb. Two are enforced by that test file: keep an expectation
+to **30 rows or fewer** (ask for a top-N instead of everything, or it stops
+being reviewable in a diff), and write `notes` on every unanswerable case
+saying *why* the database cannot answer it. The third is **advice, not a
+gate** — avoid a `LIMIT n` whose cut falls in the middle of a tie, or a correct
+query can return a different, equally correct set. Nothing detects that; the
+committed `m04` case is the worked example of it, and it carries
+`order_matters: false` for exactly this reason.
 
 ## Running it
 

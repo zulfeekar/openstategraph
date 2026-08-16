@@ -16,11 +16,11 @@ confidently, with the adopter's workflows sitting right there in their project
 database path for the same reason, and the email tool's dry-run `.eml` files
 would have been written into the virtualenv.
 
-So the root is resolved **per call**, from four sources in order — the
-project-wide precedence rule, `convention < config file < environment <
-explicit argument`, with the explicit argument owned by the caller
+So the root is resolved **per call**, from five sources in order — the
+project-wide precedence rule, `convention < the checkout < config file <
+environment < explicit argument`, with the explicit argument owned by the caller
 (`Workflows(root)`, `WorkflowStore(root=)`, `load_workflow`'s package path)
-and the other three answered here:
+and the other four answered here:
 
 1. **`OPENSTATEGRAPH_WORKFLOWS_ROOT`** — the deployment's own answer, and the
    only one that works when the workflows live somewhere unguessable.

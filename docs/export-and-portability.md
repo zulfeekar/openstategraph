@@ -29,9 +29,12 @@ graph by calling the real `langgraph.graph.StateGraph` builder API directly —
 Python process that has `openstategraph` imported. Nothing in the backend
 serializes it back out as a `.py` file: a repo-wide search for the usual
 codegen verbs (`to_source`, `generate_module`, `ast.unparse`, `write_python`)
-turns up nothing. The only function in this codebase actually named `export`
-— `plugin_interop.export_plugin()`, also reachable as the MCP `export_plugin`
-tool and `GET /api/workflows/{slug}/plugin-export` — renders `skills/` and
+finds nothing that writes source. (`ast.unparse` does appear, three times, in
+`backend/tests/test_data_key_contract.py` — quoting an expression back into an
+assertion message. That is the opposite direction.) The one **export** in this
+codebase that produces an artifact — `plugin_interop.export_plugin()`, also
+reachable as the MCP `export_plugin` tool and
+`GET /api/workflows/{slug}/plugin-export` — renders `skills/` and
 extension metadata as an **Agent Plugins v1** bundle (`plugin.json` +
 `SKILL.md` files) for tools like Claude/Cursor/Copilot. It explicitly does
 **not** touch the graph: it even writes a note into its own output saying so
