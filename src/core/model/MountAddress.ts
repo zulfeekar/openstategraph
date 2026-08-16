@@ -102,6 +102,26 @@ export function formatMountAddress(address: MountAddress): string {
   return [address.root, ...address.mountPath].join(SEPARATOR);
 }
 
+/**
+ * One mount-path segment as a person should read it.
+ *
+ * A segment is a raw canvas node id — `node:workflow.subgraph-1` — and the
+ * drill-in banner rendered it unchanged, so the bar a user reads to know where
+ * they are said `Editing AI Workflow node:workflow.subgraph-1`
+ * (consistency-sweep ticket 10). That is both an internal id on a user surface
+ * and the leaked LangGraph name the lexicon forbids.
+ *
+ * The ordinal is the only part that identifies *which* mount, and it is the
+ * part a reader can use: two mounts of one package are `mount 1` and
+ * `mount 2`. Anything that does not end in an ordinal is returned untouched —
+ * a label that invents a number it cannot see would be worse than a raw id.
+ */
+export function mountLabel(segment: string): string {
+  const trimmed = segment.trim();
+  const ordinal = /-(\d+)$/.exec(trimmed);
+  return ordinal ? `mount ${ordinal[1]}` : trimmed;
+}
+
 /** Whether this address names a mount rather than the root document. */
 export function isInstance(address: MountAddress): boolean {
   return address.mountPath.length > 0;

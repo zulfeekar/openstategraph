@@ -1138,8 +1138,7 @@ wf = <span class="f">load_workflow</span>(<span class="s">"workflows/chained-sum
             <p class="sub">
               Pointing a mount at its own package is refused before a token is spent, by
               <code>load_workflow</code> rather than by a rule you can forget to run:
-              <em>“Workflow 'nested-mounts' includes itself through its subgraphs
-              (nested-mounts -&gt; nested-mounts); a subgraph cycle can never terminate.”</em>
+              <em>“Workflow 'nested-mounts' mounts itself (nested-mounts -&gt; nested-mounts); a mount cycle can never terminate.”</em>
               Worth knowing that <code>openstategraph validate</code> still reports
               <code>VALID</code> for that document — the zero-token gate cannot dereference a mount.
             </p>

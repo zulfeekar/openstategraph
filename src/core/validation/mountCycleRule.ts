@@ -15,9 +15,12 @@
  *   refuses nothing, because the only way out is to fight the editor.
  * - **The server's own sentence, verbatim.** A user who hits this both ways
  *   reads one sentence, not two that sound like different problems. The Python
- *   is `f"Workflow {slug!r} includes itself through its subgraphs ({chain}); "
- *   "a subgraph cycle can never terminate"` — `!r` on a plain slug is single
- *   quotes, which is why they are single quotes here.
+ *   is `f"Workflow {slug!r} mounts itself ({chain}); "
+ *   "a mount cycle can never terminate"` — `!r` on a plain slug is single
+ *   quotes, which is why they are single quotes here. It said "includes itself
+ *   through its subgraphs … a subgraph cycle" until consistency-sweep ticket
+ *   10: a LangGraph name, twice, in the sentence a user reads most often, and
+ *   describing a construct this compiler does not emit.
  * - **Ancestry, not one slug.** Drill-in makes this more than a self-check: you
  *   can be three levels deep in a mount chain, and the cycle you would create
  *   is not with the document you are looking at.
@@ -45,8 +48,5 @@ export function mountCycleRefusal(
   // `" -> ".join((*self._ancestry, slug))`. Not the trail truncated at the
   // match — the chain a reader needs is the route that produced the cycle.
   const chain = [...trail, candidate].join(' -> ');
-  return (
-    `Workflow '${candidate}' includes itself through its subgraphs (${chain}); ` +
-    'a subgraph cycle can never terminate'
-  );
+  return `Workflow '${candidate}' mounts itself (${chain}); a mount cycle can never terminate`;
 }

@@ -57,8 +57,7 @@ table is checked rather than asserted.
 Point `mount-mid` at `nested-mounts` and the compiler refuses — verbatim:
 
 ```
-Workflow 'nested-mounts' includes itself through its subgraphs
-(nested-mounts -> nested-mounts); a subgraph cycle can never terminate
+Workflow 'nested-mounts' mounts itself (nested-mounts -> nested-mounts); a mount cycle can never terminate
 ```
 
 `openstategraph run` prints exactly that line and nothing else. Two things

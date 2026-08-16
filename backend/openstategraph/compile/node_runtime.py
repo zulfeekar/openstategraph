@@ -2673,9 +2673,15 @@ class NodeRuntime:
 
         if slug and slug in self._ancestry:
             chain = " -> ".join((*self._ancestry, slug))
+            # *Mount*, not "subgraph". This sentence is quoted verbatim by the
+            # editor (`mountCycleRule.ts`), by the palette's hover text and by
+            # the gallery page, so it was the single widest leak of a LangGraph
+            # name into user-facing copy — and it was not even true internally:
+            # this compiler emits no LangGraph subgraph, a mount is a closure
+            # over the child's `invoke()` (consistency-sweep ticket 10).
             raise ValueError(
-                f"Workflow {slug!r} includes itself through its subgraphs ({chain}); "
-                "a subgraph cycle can never terminate"
+                f"Workflow {slug!r} mounts itself ({chain}); "
+                "a mount cycle can never terminate"
             )
 
         child_graph = None

@@ -7,6 +7,7 @@ import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
 import {
   formatMountAddress,
   isInstance,
+  mountLabel,
   parentAddress,
   type MountAddress,
 } from '@core/model/MountAddress';
@@ -71,7 +72,11 @@ export function DrillBanner() {
   if (!address || !isInstance(address)) return null;
 
   const up = parentAddress(address);
-  const mountId = address.mountPath[address.mountPath.length - 1] ?? '';
+  // Named, not spelled out. This used to render the raw canvas node id, so the
+  // bar read `Editing AI Workflow node:workflow.subgraph-1` — an internal id
+  // and a leaked LangGraph name on the one strip whose job is telling a user
+  // where they are (consistency-sweep ticket 10).
+  const mount = mountLabel(address.mountPath[address.mountPath.length - 1] ?? '');
 
   return (
     <div className="drill-banner" role="status">
@@ -82,11 +87,11 @@ export function DrillBanner() {
       <span
         className="drill-banner__shared"
         title={
-          `This is the ${mountId} mount — its own overrides, not the shared package. ` +
+          `This is ${mount} — its own overrides, not the shared package. ` +
           `Field values can differ here; the workflow's shape cannot.`
         }
       >
-        {mountId}
+        {mount}
       </span>
       {up ? (
         <button
@@ -97,7 +102,8 @@ export function DrillBanner() {
           onClick={() => void back()}
         >
           <Icon glyph={ArrowLeft} size="xs" />
-          Back to {isInstance(up) ? (up.mountPath[up.mountPath.length - 1] ?? up.root) : up.root}
+          Back to{' '}
+          {isInstance(up) ? mountLabel(up.mountPath[up.mountPath.length - 1] ?? up.root) : up.root}
         </button>
       ) : null}
     </div>

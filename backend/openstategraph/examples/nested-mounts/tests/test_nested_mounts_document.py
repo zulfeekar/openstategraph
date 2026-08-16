@@ -91,8 +91,7 @@ def test_no_document_in_the_chain_mounts_itself() -> None:
     (gallery ticket 27), so it cannot be left lying on disk to be discovered
     by a run. `NodeRuntime._subgraph` would raise:
 
-        Workflow 'nested-mounts' includes itself through its subgraphs
-        (nested-mounts -> nested-mounts); a subgraph cycle can never terminate
+        Workflow 'nested-mounts' mounts itself (nested-mounts -> nested-mounts); a mount cycle can never terminate
     """
     for slug in CHAIN:
         assert slug not in set(mount_slugs(document(slug)).values()), slug

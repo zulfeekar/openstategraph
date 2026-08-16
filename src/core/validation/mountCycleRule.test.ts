@@ -4,8 +4,8 @@ import { mountCycleRefusal } from './mountCycleRule';
 describe('mountCycleRefusal', () => {
   it('refuses the document you are standing in, in the compiler’s own words', () => {
     expect(mountCycleRefusal('concierge', ['concierge'])).toBe(
-      "Workflow 'concierge' includes itself through its subgraphs " +
-        '(concierge -> concierge); a subgraph cycle can never terminate',
+      "Workflow 'concierge' mounts itself " +
+        '(concierge -> concierge); a mount cycle can never terminate',
     );
   });
 
@@ -13,9 +13,9 @@ describe('mountCycleRefusal', () => {
     // Three deep: the cycle a user would create is not with the document in
     // front of them, which is the whole reason ancestry is a list.
     expect(mountCycleRefusal('concierge', ['concierge', 'chinook-assistant', 'sql-analyst'])).toBe(
-      "Workflow 'concierge' includes itself through its subgraphs " +
+      "Workflow 'concierge' mounts itself " +
         '(concierge -> chinook-assistant -> sql-analyst -> concierge); ' +
-        'a subgraph cycle can never terminate',
+        'a mount cycle can never terminate',
     );
   });
 

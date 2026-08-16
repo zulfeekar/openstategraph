@@ -4,6 +4,7 @@ import {
   childAddress,
   formatMountAddress,
   isInstance,
+  mountLabel,
   parentAddress,
   parseMountAddress,
 } from './MountAddress';
@@ -154,5 +155,35 @@ describe('MountAddress — naming one instance of a reusable workflow', () => {
     const params = new URLSearchParams();
     params.set('w', 'concierge/wf-music');
     expect(new URLSearchParams(params.toString()).get('w')).toBe('concierge/wf-music');
+  });
+});
+
+/**
+ * consistency-sweep ticket 10. The drill-in banner rendered a mount-path
+ * segment raw, so the strip whose entire job is saying where you are read
+ * `Editing AI Workflow node:workflow.subgraph-1` — an internal canvas id and a
+ * LangGraph name the lexicon reserves for nothing.
+ */
+describe('mountLabel', () => {
+  it('names a minted mount by its ordinal, not its node id', () => {
+    expect(mountLabel('node:workflow.subgraph-1')).toBe('mount 1');
+  });
+
+  it('keeps two mounts of one package apart, which is the only job', () => {
+    expect(mountLabel('node:workflow.subgraph-2')).not.toBe(mountLabel('node:workflow.subgraph-1'));
+  });
+
+  it('never says "subgraph"', () => {
+    expect(mountLabel('node:workflow.subgraph-7')).not.toContain('subgraph');
+  });
+
+  it('leaves a hand-authored id alone rather than inventing a number', () => {
+    // Shipped packages address their mounts with words (`wf-music`), and a
+    // label that guessed an ordinal would be worse than the raw id.
+    expect(mountLabel('wf-music')).toBe('wf-music');
+  });
+
+  it('is stable under whitespace', () => {
+    expect(mountLabel('  node:workflow.subgraph-3  ')).toBe('mount 3');
   });
 });

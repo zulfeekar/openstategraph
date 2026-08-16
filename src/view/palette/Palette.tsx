@@ -369,7 +369,12 @@ export function Palette({ onNotify }: PaletteProps) {
             ) : null}
             {packages.length > 0 ? (
               packages.map((row) => (
-                <PackageItem key={row.slug} row={row} onActivate={() => mount(row)} />
+                <PackageItem
+                  key={row.slug}
+                  row={row}
+                  onActivate={() => mount(row)}
+                  onRefuse={onNotify}
+                />
               ))
             ) : (
               <p className="palette-note">
@@ -452,8 +457,26 @@ export function Palette({ onNotify }: PaletteProps) {
  * compiler's own sentence, which is the same one the mount field shows and the
  * same one a failed compile would have printed later.
  */
-function PackageItem({ row, onActivate }: { row: PackageRow; onActivate: () => void }) {
+function PackageItem({
+  row,
+  onActivate,
+  onRefuse,
+}: {
+  row: PackageRow;
+  onActivate: () => void;
+  onRefuse: (message: string) => void;
+}) {
   const refused = row.refusal != null;
+  // **Said once, on the gesture that was refused.** The row looked disabled and
+  // `button.disabled` was `false`, so dragging it was cancelled in silence: the
+  // canvas panned and nothing happened, which reads as a broken palette rather
+  // than as a rule (consistency-sweep ticket 10). Not `disabled`, deliberately
+  // — a disabled button fires no mouse events, so it would also swallow the
+  // hover text, which is the compiler's own sentence and the best thing here.
+  const refuse = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    if (row.refusal) onRefuse(row.refusal);
+  };
   return (
     <button
       type="button"
@@ -464,13 +487,13 @@ function PackageItem({ row, onActivate }: { row: PackageRow; onActivate: () => v
       title={row.refusal ?? `Mount ${row.name} — task in, answer out.`}
       onDragStart={(event) => {
         if (refused) {
-          event.preventDefault();
+          refuse(event);
           return;
         }
         event.dataTransfer.setData(PALETTE_PACKAGE_DRAG_TYPE, encodePackageDrag(row.slug));
         event.dataTransfer.effectAllowed = 'copy';
       }}
-      onClick={onActivate}
+      onClick={(event) => (refused ? refuse(event) : onActivate())}
     >
       <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
       <span className="palette-item__text">

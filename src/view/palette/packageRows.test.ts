@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { packageRows } from './packageRows';
 
@@ -31,16 +33,16 @@ describe('the Packages palette rows', () => {
     it('refuses in the compiler’s own sentence, chain included', () => {
       const rows = packageRows(CATALOGUE, ['concierge'], '');
       expect(rows.find((row) => row.slug === 'concierge')?.refusal).toBe(
-        "Workflow 'concierge' includes itself through its subgraphs (concierge -> concierge); " +
-          'a subgraph cycle can never terminate',
+        "Workflow 'concierge' mounts itself (concierge -> concierge); " +
+          'a mount cycle can never terminate',
       );
     });
 
     it('refuses a drill ancestor too, not only the document on screen', () => {
       const rows = packageRows(CATALOGUE, ['concierge', 'chinook-assistant'], '');
       expect(rows.find((row) => row.slug === 'concierge')?.refusal).toBe(
-        "Workflow 'concierge' includes itself through its subgraphs " +
-          '(concierge -> chinook-assistant -> concierge); a subgraph cycle can never terminate',
+        "Workflow 'concierge' mounts itself " +
+          '(concierge -> chinook-assistant -> concierge); a mount cycle can never terminate',
       );
       expect(rows.find((row) => row.slug === 'morning-brief')?.refusal).toBeNull();
     });
@@ -70,5 +72,35 @@ describe('the Packages palette rows', () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]?.refusal).not.toBeNull();
     });
+  });
+});
+
+/**
+ * consistency-sweep ticket 10, second nit: the refused row *looked* disabled,
+ * `button.disabled` was `false`, and dragging it was cancelled in silence —
+ * the canvas panned and nothing happened, which reads as a broken palette
+ * rather than as a rule. A source assertion, for the reason
+ * `mcpPanelSurface.test.ts` records: there is no seam in a `node` environment
+ * that would catch a handler quietly returning.
+ */
+describe('a refused package row', () => {
+  const palette = readFileSync(fileURLToPath(new URL('./Palette.tsx', import.meta.url)), 'utf8');
+
+  it('says why, once, on the gesture that was refused', () => {
+    expect(palette).toContain('onRefuse');
+    expect(palette).toMatch(/if \(row\.refusal\) onRefuse\(row\.refusal\)/);
+    // Both gestures: dragging was the silent one, and clicking used to run
+    // `onActivate` regardless of the refusal.
+    expect(palette).toMatch(
+      /onClick=\{\(event\) => \(refused \? refuse\(event\) : onActivate\(\)\)\}/,
+    );
+    expect(palette).toMatch(/if \(refused\) \{\s*refuse\(event\);/);
+  });
+
+  it('is not `disabled`, because that would swallow the explanation', () => {
+    // A disabled button fires no mouse events, so the hover text — the
+    // compiler's own sentence, and the best thing on the row — would go too.
+    expect(palette).toContain('aria-disabled={refused}');
+    expect(palette).not.toMatch(/<button[^>]*\n\s*disabled=\{refused\}/);
   });
 });

@@ -96,7 +96,9 @@ function describe(step: {
 }): string {
   const parts = [step.label];
   if (step.visit > 1) parts.push(`visit ${step.visit}`);
-  if (step.namespace) parts.push(`${step.count} steps inside this subgraph`);
+  // "mount", not "subgraph": the settled lexicon, and the compiler emits no
+  // LangGraph subgraph anyway (consistency-sweep ticket 10).
+  if (step.namespace) parts.push(`${step.count} steps inside this mount`);
   if (step.internalSteps > 0) parts.push(`${step.internalSteps} internal steps`);
   if (step.taskId) parts.push(`task ${step.taskId}`);
   return parts.join(' · ');

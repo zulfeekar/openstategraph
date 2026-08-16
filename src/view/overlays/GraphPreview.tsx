@@ -76,8 +76,13 @@ export function GraphPreview({ open, onClose }: { open: boolean; onClose: () => 
       <div className="graph-preview__panel" onClick={(event) => event.stopPropagation()}>
         <header className="graph-preview__header">
           <strong>Compiled graph</strong>
+          {/* Twice wrong, and the second half is the interesting one. "Subgraph"
+              is a LangGraph name in a sentence a user reads, which the lexicon
+              forbids — and nothing was ever expanded: this compiler emits no
+              LangGraph subgraph, so a mount is one box (production-ready 37,
+              consistency-sweep 10). */}
           <span className="graph-preview__hint">
-            what the LangGraph compiler produced — subgraphs expanded
+            what the LangGraph compiler produced — a mount is one box
           </span>
           {state.kind === 'ready' ? (
             <button

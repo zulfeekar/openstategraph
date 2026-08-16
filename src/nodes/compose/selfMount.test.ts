@@ -38,14 +38,14 @@ describe('the workflow combobox refuses a mount that would include itself', () =
   it('refuses the open document with the compiler’s own words', () => {
     standingIn('concierge');
     expect(slugError('concierge')).toBe(
-      "Workflow 'concierge' includes itself through its subgraphs " +
-        '(concierge -> concierge); a subgraph cycle can never terminate',
+      "Workflow 'concierge' mounts itself " +
+        '(concierge -> concierge); a mount cycle can never terminate',
     );
   });
 
   it('refuses an ancestor you drilled through, not just the document on screen', () => {
     standingIn('concierge', 'chinook-assistant');
-    expect(slugError('concierge')).toContain('includes itself through its subgraphs');
+    expect(slugError('concierge')).toContain('mounts itself ');
     expect(slugError('concierge')).toContain('(concierge -> chinook-assistant -> concierge)');
   });
 

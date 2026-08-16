@@ -242,7 +242,7 @@ class TestCycles:
         doc = _document([_mount("wf-self", "narcissus")])
         docs = {"narcissus": doc}
         runtime = NodeRuntime(document_loader=docs.__getitem__)
-        with pytest.raises(ValueError, match="includes itself"):
+        with pytest.raises(ValueError, match="mounts itself"):
             WorkflowCompiler().build(doc, RunState, runtime.factory(doc))
 
     def test_mutual_recursion_is_refused_at_compile_time(self) -> None:
@@ -250,7 +250,7 @@ class TestCycles:
         pong = _document([_mount("to-ping", "ping")])
         docs = {"ping": ping, "pong": pong}
         runtime = NodeRuntime(document_loader=docs.__getitem__)
-        with pytest.raises(ValueError, match="includes itself"):
+        with pytest.raises(ValueError, match="mounts itself"):
             WorkflowCompiler().build(ping, RunState, runtime.factory(ping))
 
     def test_an_override_can_retarget_a_grandchild_mount_into_a_cycle(
