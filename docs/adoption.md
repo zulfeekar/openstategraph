@@ -24,10 +24,12 @@ deliberately; mixing them is where confusion starts.
 
 **The checkout is no longer the only path.** It was, before 0.3.0, and much of
 this page was written then. Today the backend is a distribution: one wheel, a
-four-package core, eight extras, `py.typed`, and an `openstategraph` console
-script — verified by a CI job that installs it into an empty virtualenv outside
-the checkout and runs a workflow there. Mode (b) is a first-class path; what is
-still outstanding is one `twine upload`, and this page says exactly where.
+four-package core, a set of named extras, `py.typed`, and an `openstategraph`
+console script — verified by a CI job that installs it into an empty virtualenv
+outside the checkout and runs a workflow there. Mode (b) is a first-class path;
+what is still outstanding is the **PyPI** upload, and this page says exactly
+where. (`0.3.0rc1` is tagged, built and on **TestPyPI**; the publish step is a
+GitHub environment gate a maintainer approves, not a command anyone types.)
 
 ---
 
@@ -43,6 +45,14 @@ pip install "openstategraph[server,ollama]"
 openstategraph init my_demo && cd my_demo
 openstategraph serve --open
 ```
+
+> **That first line does not work yet.** `openstategraph` is not on PyPI —
+> `0.3.0rc1` reached TestPyPI and the publish gate has not been approved. Until
+> it is, build and install the same artifact from a checkout; the recipe is in
+> [Be honest about the install](#be-honest-about-the-install) below, and the
+> other two lines are unchanged. This line is written as the shape it takes
+> rather than deleted, because it is the shape, and hiding it would leave the
+> page with no headline at all.
 
 That is one process serving the whole product from **one origin**:
 
@@ -340,14 +350,15 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
 | `openstategraph new --list-templates` | the templates and one line on what each is for |
 | `openstategraph examples list` | the worked examples in the wheel, in reading order: slug, the pattern it demonstrates, and its one-line purpose |
-| `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; an existing directory exits **1** and nothing is written |
+| `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; an existing directory exits **1** and nothing is written. `--all` takes the whole gallery instead of one slug, all-or-nothing, printing the size before the first byte |
 | `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
 | `openstategraph threads list\|show` | past runs the checkpointer stored, newest first; `show` replays one checkpoint by checkpoint without re-running it |
 | `openstategraph providers` | which model providers are registered, whether each is configured, its default model, the environment variable it reads and the extra it needs. The first thing to run when a model call fails |
 | `openstategraph env-example` | print the provider block of `.env.example` — names only, never values — to redirect into your own `.env` |
 | `openstategraph knowledge list <package>` | the second brain's topics, their one-line hints, and each doc's owner and stale badge (`--knowledge-dir` to look elsewhere, which drops the badges — a store outside the package has no source to recompute) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
-| `openstategraph serve [--host --port --open]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server,ollama]` — `[server]` is the web layer and carries **no** model integration, so an install without a provider extra serves an editor that cannot run anything, and says so before it binds |
+| `openstategraph init [directory]` | make a directory an OpenStateGraph project — `openstategraph.yaml`, a `workflows/` folder and a starter package. Defaults to the current directory; `--workflows-dir` renames the packages folder, `--empty` skips the starter, `--force` overwrites rather than refusing. The one command that creates a project, and the only thing the install line cannot carry |
+| `openstategraph serve [--host --port --open --workers]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server,ollama]` — `[server]` is the web layer and carries **no** model integration, so an install without a provider extra serves an editor that cannot run anything, and says so before it binds. `--workers` exists only to be **refused** by name: it must be 1, and `--workers 4` exits with the reason rather than silently serving four processes that cannot see each other's drafts, approvals or catalogue events — see [Deploying](deploying.md) |
 | `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
 
 Exit codes are fixed, because they are what CI consumes: **0** success, **1**
@@ -714,26 +725,36 @@ needed if you run the MCP transport.
 
 **The wheel is real; the PyPI upload has not happened yet.** From 0.3.0 the
 backend is a proper distribution — `hatchling`, `LICENSE`, `py.typed`,
-classifiers, a console script, a lean core and eight extras — built, `twine
+classifiers, a console script, a lean core and named extras — built, `twine
 check`-clean, and proven by CI's `clean-install` job, which installs it into an
-empty virtualenv **outside** the checkout and runs a workflow there. What is
-outstanding is one `twine upload` by the maintainer. So the command that will
-be the headline is written here as the shape it takes, clearly flagged:
+empty virtualenv **outside** the checkout and runs a workflow there.
+
+**`0.3.0rc1` has already been through the train**: tagged on the remote, built,
+uploaded to **TestPyPI**, and installed from that index into an empty
+virtualenv outside any checkout by the `rehearsal` job. What is outstanding is
+the **`pypi` job**, which waits on a required reviewer in a GitHub environment
+— an approval, not a `twine upload` anybody types. See
+[Releasing](releasing.md). So the command that will be the headline is written
+here as the shape it takes, clearly flagged:
 
 ```bash
 pip install "openstategraph[ollama]"     # ← after the first release
 ```
 
-Until that tag ships, install exactly the same artifact from a checkout:
+Until that release ships, install exactly the same artifact from a checkout:
 
 ```bash
 # Build the wheel and install it anywhere — this is the artifact CI verifies.
+# The filename carries whatever `backend/pyproject.toml` says the version is
+# (0.3.0rc1 today), so glob it rather than typing it.
 python3 -m build /path/to/openstategraph/backend
-pip install "/path/to/openstategraph/backend/dist/openstategraph-0.3.0-py3-none-any.whl[ollama]"
+pip install "$(echo /path/to/openstategraph/backend/dist/openstategraph-*.whl)[ollama]"
 
 # Or editable, from the checkout. The extras are the install story: the core is
 # four packages and you add only what your workflow uses —
-# [anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp], or [all].
+# [anthropic] [openai] [ollama] [deep] [sqlite] [server] [mcp] [postgres]
+# [bastion], or [all] — which is everything except [bastion], held out
+# because it is AGPL and that is not a licence to hand someone by default.
 pip install -e "/path/to/openstategraph/backend[ollama]"
 
 # Or nothing at all, if you would rather not install.

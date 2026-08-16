@@ -21,7 +21,7 @@ ordering:
 | Tier | Sections | What qualifies |
 | --- | --- | --- |
 | **Atoms** | `Inputs`, `Tools`, `Output` | one thing, made of nothing else. Sources with no logic; one capability bound to an agent; sinks with one input and no decision. |
-| **Molecules** | `Reasoning & control` | one decision step — `agent.llm`, `route.classifier`, `route.grader`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`. |
+| **Molecules** | `Reasoning & control`, `Memory` | one decision step — `agent.llm`, `route.classifier`, `route.grader`, `guard.policy`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`, and `memory.segment`. **Memory is its own section deliberately**: a segment decides what is remembered rather than what happens next, and filing it under `Reasoning & control` would have made that heading false. |
 | **Organisms** | `Composition` | `workflow.subgraph`, and only this: an entire compiled workflow — its own nodes, state and loop — mounted as one step. (`team.workflow` was listed here until schema v3 collapsed it into `workflow.subgraph`; it compiled through the same builder with no branch.) |
 | **No tier** | `Annotate` | `group` and `note`. Never compiled, never executed, so they are not made of anything and nothing is made of them. |
 
@@ -62,9 +62,9 @@ an engine.
 
 | | Here |
 | --- | --- |
-| `pip install` + provider extras | four-package core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[all]` |
+| `pip install` + provider extras | four-package core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[postgres]` `[bastion]` `[all]` |
 | one entry object | `from openstategraph import load_workflow` |
-| a CLI | `openstategraph run · validate · graph · new · knowledge · serve · mcp` |
+| a CLI | `openstategraph init · new · run · eval · validate · graph · examples · threads · knowledge · providers · env-example · serve · mcp` |
 | a rich result object, not a string | `RunResult` — `.answer`, `.decisions`, `.outputs`, `.warnings`, `.attempts` |
 | markdown domain knowledge as a first-class input | `knowledge/*.md` in the package, `--knowledge-dir` to point elsewhere |
 | an optional drop-in for a team already on `create_agent` | `workflow.as_tool(...)` |
@@ -163,13 +163,16 @@ refused rather than best-effort compiled. See [stability.md](stability.md).
 ## The dependency picture, measured
 
 Not estimated. These are `pip list` counts from real clean virtualenvs built
-from the shipped wheel:
+from the shipped wheel — *measured once, on one machine, 2026-08-10. Nothing in
+the repository regenerates them, and several extras have gained dependencies
+since, so read them as the shape of the argument rather than a number you can
+check today.*
 
 | Install | Distributions besides ours |
 | --- | --- |
 | `pip install openstategraph` | **36** |
 | `pip install "openstategraph[ollama]"` | **38** |
-| the same tree before 0.3.0 | **78** |
+| the same tree before 0.3.0 | **79** (the figure `backend/pyproject.toml`'s own dependency comment records; this page said 78 until 2026-08-16) |
 
 The core is exactly four declared dependencies — `langgraph`, `langchain`,
 `langchain-core`, `pydantic`. Everything else is behind an extra you ask for by
@@ -182,7 +185,11 @@ name:
 [server]                        the editor's HTTP API — never on your path,
                                 and no provider: pair it, [server,ollama]
 [mcp]                           the MCP transport
-[all]                           everything, for a checkout
+[postgres]                      a shared checkpoint/memory store for more
+                                than one process
+[bastion]                       prompt-injection screening. AGPL-3.0-or-later,
+                                so it is opt-in by name and NOT in [all]
+[all]                           everything except [bastion], for a checkout
 ```
 
 Read the list the way a sceptic does: of those 36, essentially all are
