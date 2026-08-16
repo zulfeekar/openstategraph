@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MCP_SERVER_TYPE,
   createMcpServerNode,
@@ -22,6 +22,8 @@ import {
 } from './mcpServerFields';
 import { CATEGORY, PORT } from '../vocabulary';
 import { defaultsFrom, resolveOptions } from '@core/model/contracts/fields';
+import { mcpServerCatalogue } from '@core/runtime/mcpServerCatalogue';
+import type { McpServer } from '@core/runtime/McpRegistryClient';
 import { makeWorkbench } from '@core/testing/fixtures';
 
 /**
@@ -177,11 +179,60 @@ describe('the field set is shared, not fused into this card', () => {
     expect(parseToolFilter('  ,  ')).toEqual([]);
   });
 
-  it('suggests the two built-in servers when nothing is registered', () => {
-    const picker = rowField(MCP_FIELD.server);
-    expect(picker?.kind).toBe('combobox');
-    const options = resolveOptions(picker as never, {});
-    expect(options.map((o) => o.value)).toEqual([...DEFAULT_MCP_SERVER_NAMES]);
+  describe('the picker offers what the panel registered', () => {
+    // The assertion that used to live here — `toEqual([...DEFAULT_MCP_SERVER_NAMES])`
+    // against the default declaration — was green while the picker showed the
+    // same two names in every project on every install, including after one of
+    // the two had been deleted in the panel. It was pinning the fallback and
+    // calling it the behaviour (mcp-connect ticket 07).
+    const server = (name: string): McpServer => ({
+      name,
+      url: `https://${name}.test/mcp`,
+      transport: 'streamable_http',
+      auth: { kind: 'none', headerName: '', tokenEnv: '' },
+      origin: 'project',
+      credentialConfigured: false,
+    });
+    const offered = () =>
+      resolveOptions(rowField(MCP_FIELD.server) as never, {}).map((o) => o.value);
+
+    afterEach(() => mcpServerCatalogue.reset());
+
+    it('falls back to the built-ins only until the registry has answered', () => {
+      expect(rowField(MCP_FIELD.server)?.kind).toBe('combobox');
+      expect(offered()).toEqual([...DEFAULT_MCP_SERVER_NAMES]);
+    });
+
+    it('offers a server registered in the panel, on the registered declaration', () => {
+      // The one the ticket was filed against: register `Needs auth`, drop a
+      // card, open the picker. Read off `mcpServerNode` — the definition
+      // `nodes/index.ts` actually registers — because the factory taking an
+      // explicit thunk was always correct and never called.
+      mcpServerCatalogue.set([server('LangChain docs'), server('Needs auth')]);
+      expect(offered()).toEqual(['LangChain docs', 'Needs auth']);
+    });
+
+    it('stops offering a built-in the panel tombstoned', () => {
+      mcpServerCatalogue.set([server('LangChain API reference')]);
+      expect(offered()).not.toContain('LangChain docs');
+    });
+
+    it('an empty registry is empty, not the two defaults again', () => {
+      mcpServerCatalogue.set([]);
+      expect(offered()).toEqual([]);
+    });
+
+    it('tells the renderer which store to redraw on', () => {
+      // Without this the list is only right when the inspector happens to
+      // re-render for some other reason — which is "needs a reload" wearing a
+      // different hat.
+      const picker = rowField(MCP_FIELD.server);
+      const notify = vi.fn();
+      const stop = (picker as { subscribe?: (n: () => void) => () => void }).subscribe?.(notify);
+      mcpServerCatalogue.set([server('Needs auth')]);
+      expect(notify).toHaveBeenCalled();
+      stop?.();
+    });
   });
 
   it('resolves a live server list lazily, so a new one needs no reload', () => {

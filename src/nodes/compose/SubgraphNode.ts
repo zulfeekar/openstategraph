@@ -101,6 +101,11 @@ export const subgraphNode: INodeDefinition = defineNode(
         // `mountCycleRefusal` with `mountAncestry()` through
         // `view/palette/packageRows.ts` rather than comparing slugs again, so
         // the two surfaces cannot drift.
+        // Which store answers this field's question, so the control redraws
+        // when a package is saved or deleted. Declared here rather than
+        // hardcoded in `FieldRenderer`, which is what let a second live
+        // combobox exist at all (mcp-connect ticket 07).
+        subscribe: (notify: () => void) => workflowCatalogue.onChange(notify),
         options: () => {
           const above = new Set(mountAncestry());
           return workflowCatalogue.list().map((choice) => ({

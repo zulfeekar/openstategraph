@@ -5,6 +5,7 @@ import type {
   RepeatableGroupSchema,
   RowProbe,
 } from '@core/model/contracts/fields';
+import { mcpServerCatalogue } from '@core/runtime/mcpServerCatalogue';
 
 /**
  * The MCP-server field set, declared **once** and rendered in two places.
@@ -210,8 +211,36 @@ export interface McpFieldSetOptions {
   readonly group?: string;
 }
 
-const defaultServers = (): readonly FieldOption[] =>
-  DEFAULT_MCP_SERVER_NAMES.map((name) => ({ value: name, label: name }));
+/**
+ * What the picker offers when nobody handed it a list: the live registry.
+ *
+ * The thunk was always the right shape and nothing ever passed one, so every
+ * caller got the two built-in names — in every project, on every install,
+ * including after one of those two was deleted in the panel (mcp-connect
+ * ticket 07). `mcpServerCatalogue` is what the panel's own client publishes
+ * into, so the card and the panel now read one answer.
+ *
+ * The built-ins survive as the **pre-answer** fallback only. `null` means the
+ * registry has not been reached — a project that has configured nothing does
+ * have exactly these two, so offering them is true rather than merely
+ * convenient. An empty *answer* is honoured as empty; that is the deletion
+ * case, and rounding it back to the defaults would restore the ghost entry.
+ */
+const registeredServers = (): readonly FieldOption[] => {
+  const known = mcpServerCatalogue.list() ?? DEFAULT_MCP_SERVER_NAMES;
+  return known.map((name) => ({ value: name, label: name }));
+};
+
+/**
+ * Module-level, not an inline arrow.
+ *
+ * The card's row schemas are compared **by value** against the panel's own —
+ * that is the test keeping one field set from becoming two — and a fresh
+ * closure per call is a fresh identity per call, which fails that comparison
+ * for a difference nobody made.
+ */
+const subscribeToRegistry = (notify: () => void): (() => void) =>
+  mcpServerCatalogue.onChange(notify);
 
 /**
  * The field set, in the order a developer fills it in.
@@ -221,7 +250,7 @@ const defaultServers = (): readonly FieldOption[] =>
  * needs the server to have answered first.
  */
 export function mcpServerFields(options: McpFieldSetOptions = {}): readonly FieldSchema[] {
-  const { servers = defaultServers, includeServerPicker = true, group = 'MCP server' } = options;
+  const { servers = registeredServers, includeServerPicker = true, group = 'MCP server' } = options;
 
   const picker: readonly FieldSchema[] = includeServerPicker
     ? [
@@ -234,6 +263,9 @@ export function mcpServerFields(options: McpFieldSetOptions = {}): readonly Fiel
           key: MCP_FIELD.server,
           label: 'Server',
           options: servers,
+          // Redraw when the panel registers or deletes one, which is what the
+          // thunk's own comment above has promised since ticket 04.
+          subscribe: subscribeToRegistry,
           defaultValue: '',
           placeholder: 'Pick one, or configure below',
           emptyHint: 'No servers registered yet — give this one a URL below.',

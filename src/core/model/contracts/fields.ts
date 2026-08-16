@@ -123,6 +123,20 @@ export interface ComboboxFieldSchema extends FieldSchemaBase<string> {
   readonly mono?: boolean;
   /** Shown under the box when there is nothing to suggest. */
   readonly emptyHint?: string;
+  /**
+   * Where the suggestions come from, so the control re-renders when they move.
+   *
+   * `options` is synchronous because it is called during a render, while every
+   * interesting list — the workflow catalogue, the MCP registry — arrives over
+   * HTTP. Something has to tell React the answer changed, and the field is the
+   * only thing that knows *which* store answers its question. The renderer
+   * subscribed to one hardcoded catalogue before mcp-connect ticket 07, which
+   * meant a second live picker could not be added without editing the
+   * renderer — the closed engine this project's O rule forbids.
+   *
+   * Returns an unsubscribe. Omit it for a list that cannot move.
+   */
+  readonly subscribe?: (notify: () => void) => () => void;
 }
 
 export interface FieldOption {

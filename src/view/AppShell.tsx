@@ -24,6 +24,7 @@ import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
 import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './workflow/createNewWorkflow';
@@ -69,6 +70,15 @@ export function AppShell() {
   // through `resolveOpenRequest`, so exactly one of "restore this tab's
   // autosave" and "fetch the linked workflow" happens.
   useDeepLinkedWorkflow(notify);
+
+  // mcp-connect ticket 07: the `tool.mcp` card's Server picker reads the
+  // registry, and the registry arrives over HTTP. One read here so a card
+  // dropped before the MCP panel has ever been opened still offers the truth;
+  // after that the panel's own client keeps the catalogue current, because
+  // every registry answer publishes on its way through `McpRegistryClient`.
+  useEffect(() => {
+    void new RuntimeClient().mcp.servers();
+  }, []);
 
   // Ticket 42: a gesture refused because it cannot differ per mount. Said out
   // loud, because the alternative is the silent no-op this codebase has a

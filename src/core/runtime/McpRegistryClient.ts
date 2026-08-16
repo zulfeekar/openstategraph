@@ -1,6 +1,7 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
 import { describeFailure, type FetchLike } from './RuntimeClient';
 import { describeRuntimeBase } from './runtimeBaseUrl';
+import { mcpServerCatalogue } from './mcpServerCatalogue';
 
 /**
  * The MCP server registry — a collaborator of `RuntimeClient`, not four more
@@ -235,7 +236,18 @@ export class McpRegistryClient {
     }
   }
 
-  /** The three registry routes all answer with the list; this reads it once. */
+  /**
+   * The three registry routes all answer with the list; this reads it once —
+   * and publishes it, which is the only reason the `tool.mcp` card's picker
+   * knows anything.
+   *
+   * Here rather than at each caller on purpose. The card's picker was designed
+   * to take a live list from the start, and the wiring was simply never done
+   * (mcp-connect ticket 07); a fix that asks every future caller to remember
+   * to publish is the same defect with a longer fuse. This is the one place
+   * every registry answer passes through, so listing, saving and deleting all
+   * keep the catalogue current without knowing it exists.
+   */
   private async list(
     url: string,
     init?: RequestInit,
@@ -244,9 +256,11 @@ export class McpRegistryClient {
       const response = await this.fetchImpl(url, init);
       if (!response.ok) return Err(await describeFailure(response));
       const rows = (await response.json()) as unknown[];
-      return Ok(
-        (Array.isArray(rows) ? rows : []).map((row) => asMcpServer(asRecordOfUnknown(row))),
+      const servers = (Array.isArray(rows) ? rows : []).map((row) =>
+        asMcpServer(asRecordOfUnknown(row)),
       );
+      mcpServerCatalogue.set(servers);
+      return Ok(servers);
     } catch {
       return Err(this.unreachable());
     }

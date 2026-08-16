@@ -1,6 +1,5 @@
-import { useCallback, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, type ChangeEvent } from 'react';
 import { Replace } from 'lucide-react';
-import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import type { ComboboxFieldSchema } from '@core/model/contracts/fields';
 import {
   Badge,
@@ -515,12 +514,18 @@ function RepeatableGroupField({
 /**
  * A text box with suggestions, subscribed to the source of those suggestions.
  *
- * Its own component because it needs a hook: the workflow catalogue arrives
- * over HTTP and moves when a package is saved or deleted, and a `case` in the
- * switch above cannot call `useSyncExternalStore` — hooks may not be
+ * Its own component because it needs a hook: a suggestion list arrives over
+ * HTTP and moves when a package is saved or a server registered, and a `case`
+ * in the switch above cannot call `useSyncExternalStore` — hooks may not be
  * conditional. Extracting it is also what lets the subscription be *narrow*:
- * only the mount's slug field re-renders when the catalogue changes, not every
- * field on the inspector.
+ * only the field whose store moved re-renders, not every field on the
+ * inspector.
+ *
+ * **The field names its own store.** This used to subscribe to
+ * `workflowCatalogue` by name, so the MCP server picker — the second live
+ * combobox — could not be given a live list without editing this file
+ * (mcp-connect ticket 07). A schema declaring `subscribe` extends the renderer
+ * by registering rather than by editing it.
  */
 function ComboboxField({
   id,
@@ -538,10 +543,12 @@ function ComboboxField({
   data: Readonly<NodeData> | Readonly<Record<string, FieldValue>>;
   onChange: (value: string) => void;
 }) {
-  useSyncExternalStore(
-    (notify) => workflowCatalogue.onChange(notify),
-    () => workflowCatalogue.list(),
-  );
+  // A schema is data assembled once at import time, so `subscribe` is stable;
+  // keying the effect on it anyway means a field that swapped stores would
+  // resubscribe rather than keep listening to the old one.
+  const subscribe = schema.subscribe;
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => subscribe?.(redraw), [subscribe]);
 
   // A native `<datalist>`: the browser gives the dropdown, the filtering and
   // the keyboard handling, and the control stays a plain text input — so the
