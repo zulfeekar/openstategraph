@@ -3290,7 +3290,7 @@
     },
     "/api/workflows/{slug}/summary": {
       "get": {
-        "description": "One package's row \u2014 **the existence question** (ticket 21).\n\n`GET /api/workflows` is a *surface*: it omits hidden packages and\nunreadable ones by design, so a client that scans it for its own slug\nand concludes \"deleted\" on a miss is reading a visibility answer as an\nexistence answer. That is exactly what the editor's file watch did, and\nwhy opening `concierge` (`hidden: true`, served 200) raised \"This\nworkflow was deleted on disk\" while the file sat right there.\n\nThis reports every package the store can name, hidden included, with\n`hidden` saying which. **404 is the only \"it is gone\"** \u2014 and it is\nreal, so a stale open copy still gets its warning.",
+        "description": "One package's row \u2014 **the existence question** (ticket 21).\n\n`GET /api/workflows` is a *surface*: it omits unreadable packages on\neither surface and hidden ones on `surface=chat`, so a client that scans\nit for its own slug and concludes \"deleted\" on a miss is reading a\nvisibility answer as an existence answer. That is exactly what the\neditor's file watch did, and why opening `concierge` (`hidden: true`,\nserved 200) raised \"This workflow was deleted on disk\" while the file sat\nright there.\n\nThis reports every package the store can name, hidden included, with\n`hidden` saying which. **404 is the only \"it is gone\"** \u2014 and it is\nreal, so a stale open copy still gets its warning.",
         "operationId": "get_workflow_summary_api_workflows__slug__summary_get",
         "parameters": [
           {

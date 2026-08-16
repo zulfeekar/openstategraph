@@ -95,6 +95,37 @@ describe('WorkflowFileClient.list', () => {
     expect(stub.calls[0]!.url).toBe('http://rt/api/workflows?surface=editor');
   });
 
+  /**
+   * Production-ready ticket 33. The docstring used to say this endpoint omits
+   * hidden packages; it never did on the editor surface, and it must not start
+   * — `WorkflowCatalogue` feeds the mount combobox from `list()`, and the
+   * shipped `concierge` mounts `workflow-architect`, which is hidden. A filter
+   * here makes a composition we ship undrawable.
+   */
+  it('keeps hidden packages, marked, because the editor surface owns them', async () => {
+    const stub = stubFetch(
+      jsonResponse([
+        {
+          slug: 'workflow-architect',
+          name: 'Workflow Architect',
+          saved_at: 't',
+          node_count: 9,
+          edge_count: 8,
+          published: true,
+          hidden: true,
+        },
+      ]),
+    );
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.list();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((row) => row.slug)).toEqual(['workflow-architect']);
+    expect(result.value[0]!.hidden).toBe(true);
+  });
+
   it('treats a row without the published field as published (pre-lifecycle backend)', async () => {
     const stub = stubFetch(
       jsonResponse([{ slug: 'a', name: 'A', saved_at: 't', node_count: 0, edge_count: 0 }]),
@@ -115,8 +146,10 @@ describe('WorkflowFileClient.list', () => {
 
 /**
  * Ticket 21: existence, asked separately from visibility. `list()` is a
- * surface and omits hidden packages; this asks the backend about one slug, so
- * "not advertised" and "not there" stop being the same answer.
+ * surface, and a surface omits things that exist — unreadable packages, and
+ * hidden ones once the question is asked as `surface=chat`. This asks the
+ * backend about one slug, so "not advertised" and "not there" stop being the
+ * same answer.
  */
 describe('WorkflowFileClient.summary', () => {
   it('asks about the one slug, and reports a hidden workflow as existing', async () => {

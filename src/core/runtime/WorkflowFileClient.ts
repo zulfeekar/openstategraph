@@ -39,10 +39,23 @@ export interface WorkflowSummary {
    * published — the same back-compat default the backend applies. */
   readonly published: boolean;
   /**
-   * Ticket 21: whether this package is advertised on any surface. Always
-   * `false` on a row from `list()` — that endpoint omits hidden packages
-   * outright — and meaningful only on `summary()`, which asks whether a
-   * package *exists* rather than whether a surface shows it.
+   * Ticket 21: whether a **customer** surface advertises this package.
+   *
+   * Meaningful on every row, `list()` included. That endpoint is the
+   * *editor's* surface and returns hidden packages with the flag set, so the
+   * UI can mark one rather than pretend it is not there — the backend decided
+   * that deliberately (launch-readiness ticket 04,
+   * `api/routes/workflows.py::list_workflows`), and the editor depends on it:
+   * the mount combobox is fed from `list()` via `WorkflowCatalogue`, and
+   * `concierge` mounts `workflow-architect`, which is hidden. Filtering here
+   * would make a shipped composition undrawable.
+   *
+   * `hidden` is absolute on `surface=chat` only, which is the customer's.
+   *
+   * (Until production-ready ticket 33 this said "always `false` on a row from
+   * `list()` — that endpoint omits hidden packages outright". It never did,
+   * on the editor surface; the Packages palette and the mount combobox both
+   * matched the behaviour, and this sentence was the odd one out.)
    */
   readonly hidden: boolean;
 }
@@ -346,9 +359,10 @@ export class WorkflowFileClient
   async list(): Promise<Result<readonly WorkflowSummary[], string>> {
     let response: Response;
     try {
-      // The editor's surface is explicit: everything non-hidden, drafts
-      // included, each row carrying its `published` flag. `/chat` asks for
-      // `surface=chat` and sees published workflows only.
+      // The editor's surface is explicit: everything the developer owns —
+      // drafts AND hidden packages included, each row carrying `published`
+      // and `hidden` so the UI can mark a package rather than lose it.
+      // `/chat` asks for `surface=chat` and sees published, non-hidden only.
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows?surface=editor`);
     } catch {
       return Err(this.unreachable());
@@ -366,13 +380,13 @@ export class WorkflowFileClient
   /**
    * Does **this one** workflow exist, and when was it last saved?
    *
-   * Ticket 21's seam. `list()` is a *surface* — it answers what the editor
-   * picker should offer, and deliberately omits hidden packages (`concierge`,
-   * `workflow-architect`) and unreadable ones. Scanning that list for your own
-   * slug and concluding "deleted" on a miss reads a visibility answer as an
-   * existence answer, which is precisely how the file watch came to announce
-   * "This workflow was deleted on disk" over a file the backend was serving
-   * 200.
+   * Ticket 21's seam. `list()` is a *surface* — it answers what a picker
+   * should offer, and a surface omits things that exist: unreadable packages
+   * on either surface, and hidden ones (`concierge`, `workflow-architect`) on
+   * `surface=chat`. Scanning that list for your own slug and concluding
+   * "deleted" on a miss reads a visibility answer as an existence answer,
+   * which is precisely how the file watch came to announce "This workflow was
+   * deleted on disk" over a file the backend was serving 200.
    *
    * So this asks the backend about the slug directly, and **`Ok(null)` — a 404
    * — is the only "it is gone"**. An unreachable backend or a 500 stays an

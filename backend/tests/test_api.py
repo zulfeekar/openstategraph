@@ -885,9 +885,13 @@ class TestCapabilities:
 class TestPublishLifecycle:
     """Ticket 04 (launch-readiness): drafts by default, publish gates /chat.
 
-    `GET /api/workflows?surface=editor` (the default) lists everything
-    non-hidden with a `published` flag per row; `?surface=chat` lists only
-    published workflows — the customer surface. `POST
+    `GET /api/workflows?surface=editor` (the default) lists everything the
+    developer owns — drafts and hidden packages included — with `published`
+    and `hidden` per row; `?surface=chat` lists published, non-hidden only —
+    the customer surface. (This paragraph used to say the editor surface was
+    "everything non-hidden", which
+    `test_hidden_trumps_published_on_the_customer_surface` two tests below has
+    always contradicted; corrected under production-ready ticket 33.) `POST
     /api/workflows/{slug}/publish` with `{"published": bool}` flips the flag
     (one endpoint for both directions, the flag being the whole state).
     """

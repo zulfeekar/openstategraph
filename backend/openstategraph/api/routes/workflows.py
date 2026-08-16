@@ -128,12 +128,13 @@ def _summary_response(services: WorkflowServices, s: WorkflowSummary) -> Workflo
 def get_workflow_summary(services: Services, slug: str) -> WorkflowSummaryResponse:
     """One package's row — **the existence question** (ticket 21).
 
-    `GET /api/workflows` is a *surface*: it omits hidden packages and
-    unreadable ones by design, so a client that scans it for its own slug
-    and concludes "deleted" on a miss is reading a visibility answer as an
-    existence answer. That is exactly what the editor's file watch did, and
-    why opening `concierge` (`hidden: true`, served 200) raised "This
-    workflow was deleted on disk" while the file sat right there.
+    `GET /api/workflows` is a *surface*: it omits unreadable packages on
+    either surface and hidden ones on `surface=chat`, so a client that scans
+    it for its own slug and concludes "deleted" on a miss is reading a
+    visibility answer as an existence answer. That is exactly what the
+    editor's file watch did, and why opening `concierge` (`hidden: true`,
+    served 200) raised "This workflow was deleted on disk" while the file sat
+    right there.
 
     This reports every package the store can name, hidden included, with
     `hidden` saying which. **404 is the only "it is gone"** — and it is
