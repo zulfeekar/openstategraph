@@ -79,6 +79,21 @@ def describe(name: str, obj: Any) -> str:
         # everyone to update the snapshot without reading it. What we promise
         # about a re-export is which object it is, so pin that.
         return f"{name} = re-export of {origin}.{getattr(obj, '__qualname__', name)}"
+
+    def _interpreter_neutral(rendered: str) -> str:
+        """One snapshot for every interpreter the matrix runs.
+
+        `str(inspect.signature(...))` renders `typing.Annotated` on 3.11 and
+        bare `Annotated` on 3.12+, so a snapshot taken on either one is red on
+        the other — and the failure reads as "you changed something an adopter
+        imports" on a clean checkout, which is the one thing this gate must
+        never cry wolf about. The `typing.` prefix carries no information the
+        rest of the line does not, so it is normalised away rather than
+        pinning the snapshot to one interpreter (architecture review
+        2026-08-16, F1; the floor is declared `>=3.11` in pyproject).
+        """
+        return rendered.replace("typing.Annotated[", "Annotated[")
+
     if inspect.isclass(obj):
         bases = ",".join(b.__name__ for b in obj.__bases__)
         if is_dataclass(obj):
@@ -88,9 +103,9 @@ def describe(name: str, obj: Any) -> str:
             signature = str(inspect.signature(obj))
         except (TypeError, ValueError):  # pydantic models, Protocols
             signature = "(...)"
-        return f"{name} = class({bases}){signature}"
+        return _interpreter_neutral(f"{name} = class({bases}){signature}")
     if callable(obj):
-        return f"{name} = def{inspect.signature(obj)}"
+        return _interpreter_neutral(f"{name} = def{inspect.signature(obj)}")
     return f"{name} = {type(obj).__name__}"
 
 
@@ -198,9 +213,8 @@ class TestTierOneDoesNotLeanOnTierThree:
         module_scope = [
             node.module
             for node in tree.body
-            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-                "openstategraph.api"
-            )
+            if isinstance(node, ast.ImportFrom)
+            and (node.module or "").startswith("openstategraph.api")
         ]
 
         assert module_scope == []
@@ -220,9 +234,7 @@ class TestTierThreeMakesNoPromise:
             for path in sorted(api_dir.glob("*.py"))
             if any(
                 isinstance(node, ast.Assign)
-                and any(
-                    isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
-                )
+                and any(isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets)
                 for node in ast.parse(path.read_text()).body
             )
         ]
@@ -307,9 +319,7 @@ class TestNoBareAnyWhereARealTypeExists:
     def test_as_tool_declares_the_langchain_base_it_returns(self) -> None:
         from langchain_core.tools import BaseTool
 
-        returned = inspect.signature(
-            openstategraph.CompiledWorkflow.as_tool
-        ).return_annotation
+        returned = inspect.signature(openstategraph.CompiledWorkflow.as_tool).return_annotation
         assert returned == "BaseTool"
         assert BaseTool
 
