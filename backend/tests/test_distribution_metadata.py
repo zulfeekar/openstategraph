@@ -257,15 +257,34 @@ class TestInstalledMetadataAgrees:
     """When the distribution *is* installed, its metadata must say the same.
 
     Skipped rather than failed when it is not: the repo's own suite runs
-    uninstalled from `PYTHONPATH=backend`, and CI's clean-venv job (ticket 06)
-    is where this assertion becomes unconditional.
+    uninstalled from `PYTHONPATH=backend`, and CI's `clean-install` job
+    (`.github/workflows/ci.yml`, ticket 06) is where this assertion becomes
+    unconditional.
+
+    **The skip is a decision, not an omission** (ticket 47). It is the one skip
+    in the suite, so on a developer machine this reports nothing rather than
+    red and a metadata regression is CI-only by construction. That is accepted:
+    the check genuinely needs an installed distribution, and manufacturing one
+    inside the unit suite would be building a venv to test a packaging claim
+    that `clean-install` already tests properly. What was wrong was that the
+    skip said none of this — the reason string named no home, so a reader could
+    not tell a deliberate skip from a forgotten one. It names the job now.
+
+    (Until 2026-08-16 the docstring called that job `clean-venv`. No such job
+    has ever existed; it is `clean-install`. A pointer to a job nobody can find
+    is how a recorded decision quietly becomes folklore.)
     """
 
     def test_requires_dist_matches_the_declaration(self) -> None:
         try:
             requires = metadata.requires(DISTRIBUTION) or []
         except metadata.PackageNotFoundError:
-            pytest.skip(f"{DISTRIBUTION} is not installed in this environment")
+            pytest.skip(
+                f"{DISTRIBUTION} is not installed here — this assertion's home is "
+                "the `clean-install` job in .github/workflows/ci.yml, which "
+                "installs the wheel into a clean venv and runs it unconditionally. "
+                "Deliberate skip, not a gap: see this class's docstring."
+            )
 
         unconditional = {
             requirement_name(r) for r in requires if "extra ==" not in r

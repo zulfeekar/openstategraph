@@ -49,10 +49,32 @@ describe('who may write to a node', () => {
   const ALLOWED = ['model/AbstractNodeModel.ts', 'model/WorkflowModel.ts'];
 
   it('is only the model', () => {
-    const offenders = sources()
+    const writers = sources()
       .filter(({ text }) => /\.write\.(position|size|parent|field|title|runtime)\(/.test(text))
-      .map(({ path }) => path)
-      .filter((path) => !ALLOWED.some((allowed) => path.endsWith(allowed)));
+      .map(({ path }) => path);
+
+    // The positive control (ticket 47). The assertion below is `toEqual([])`,
+    // so the day the seam is renamed the extractor matches nothing,
+    // `offenders` is empty, and this file passes forever while guarding
+    // nothing. Asserting a known writer is found first means a rename turns
+    // the guard red instead of quiet — which is what both siblings of this
+    // test already do (`contractDrift.test.ts`, `test_mcp_field_contract.py`)
+    // and this one did not.
+    //
+    // `WorkflowModel.ts` and not both of `ALLOWED`: that list is who *may*
+    // write, and `AbstractNodeModel.ts` is on it because it **declares**
+    // `write` — it never calls `.write.field(...)` on anything, so it is not a
+    // match and never was. Writing the control against the whole list is how
+    // this was found; the distinction is now in the test rather than implied
+    // by a shared name.
+    expect(
+      writers.some((path) => path.endsWith('model/WorkflowModel.ts')),
+      'WorkflowModel writes through the seam, so the extractor must find it — if this fails the pattern has gone stale, not the codebase clean',
+    ).toBe(true);
+
+    const offenders = writers.filter(
+      (path) => !ALLOWED.some((allowed) => path.endsWith(allowed)),
+    );
 
     expect(
       offenders,

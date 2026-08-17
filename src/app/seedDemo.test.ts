@@ -1,10 +1,30 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Workbench } from './Workbench';
 import { seedDemoWorkflow } from './seedDemo';
 
 const repoRoot = join(__dirname, '..', '..');
+
+/**
+ * The newest mtime anywhere under `dir`, so a tree can be compared to a tree.
+ *
+ * `skipTests` exists because the comparison is "is the bundle built from the
+ * current source" and **a test file is not source the bundle contains**.
+ * Without it, editing any `*.test.ts` marks `dist/` stale and the suite
+ * demands a rebuild that would change nothing in the output — a guard that
+ * cries wolf gets deleted, which is the failure mode ticket 47 is about.
+ */
+function newestMtime(dir: string, skipTests = false): number {
+  let newest = 0;
+  for (const entry of readdirSync(dir)) {
+    if (skipTests && /\.test\.tsx?$/.test(entry)) continue;
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    newest = Math.max(newest, stat.isDirectory() ? newestMtime(full, skipTests) : stat.mtimeMs);
+  }
+  return newest;
+}
 
 /**
  * `seedDemoWorkflow` runs at app startup, before any React tree exists —
@@ -130,6 +150,17 @@ describe('the shipped bundle carries no example document', () => {
     // and the wheel cannot be built without it (backend/hatch_build.py), so
     // the artifact a customer installs has always been through this.
     expect(existsSync(assets), 'run `npm run build` first — dist/ is missing').toBe(true);
+
+    // A *stale* `dist/` was the hole (ticket 47). Missing was already red, but
+    // reintroducing the seed in `src/` without rebuilding left this green —
+    // the test would be reporting on a bundle that predates the change it
+    // exists to catch. Freshness is asserted rather than assumed, so the
+    // answer is either "checked against current source" or red, never
+    // "checked against something else".
+    expect(
+      newestMtime(join(repoRoot, 'dist')),
+      'dist/ is older than src/ — this would be checking a stale bundle. Run `npm run build`.',
+    ).toBeGreaterThanOrEqual(newestMtime(join(repoRoot, 'src'), true));
 
     const offenders = readdirSync(assets)
       .filter((name) => name.endsWith('.js'))
