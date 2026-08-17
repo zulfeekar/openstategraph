@@ -25,7 +25,6 @@ import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
 import { parseMountAddress } from '@core/model/MountAddress';
 import { replayRun, turnToReplay } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
-import { TEXT_INPUT_TYPE } from '@nodes/inputs/TextInputNode';
 import { RichText } from '@view/common/RichText';
 import { Activity, exportTrace, type ActivityRow } from './traceTree';
 import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
@@ -867,11 +866,19 @@ export function AskPanel({
       // what made a second Run look like it had not started.
       resetRunState();
 
-      // The entry Text Input is the workflow's own "first contact" — writing
-      // the message there means the chat and the canvas agree about what was
-      // asked, rather than the question living only inside this panel.
-      const entry = controller.model.nodes().find((node) => node.type === TEXT_INPUT_TYPE);
-      if (entry) controller.nodes.setField(entry.id, 'prompt', trimmed);
+      // The entry Text Input is the workflow's own "first contact", and this
+      // used to write the question onto it so the chat and the canvas agreed
+      // about what was asked. They did agree — and so did autosave, which
+      // carried it to `workflow.json`, so *running* a workflow rewrote the
+      // vendor-neutral artifact `git diff` and the CLI read (ticket 42).
+      //
+      // The question rides in run state instead, exactly as a mounted child's
+      // already did: the SSE `update` frame writes `node.runtime.output` and
+      // `LiveInputBody` projects it above the stored field when the two
+      // differ. `liveInputValue`'s own docblock had held this rule since
+      // ticket 34 — "that would edit a saved document to display a fact about
+      // a run" — and applied it only to children. The open parent was the
+      // exception nobody argued for. Pinned by `runDoesNotEditTheDocument`.
 
       // Read here, at the moment it decides something, rather than watched:
       // whether this question continues the conversation is a question only a
