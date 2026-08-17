@@ -104,8 +104,13 @@ export function createOrchestratorNode(providers: ProviderRegistry): INodeDefini
           kind: 'textarea',
           key: FIELD_RULES,
           label: 'Planning rules',
-          // Rules *only*: `BaseOrchestrator.PREAMBLE` and `OUTPUT_CONTRACT` are
-          // locked on the Python base and are deliberately not fields.
+          // Rules *only*: the preamble and output contract are locked on the
+          // Python base and are deliberately not fields. They live in
+          // `BaseOrchestrator.PROMPT` — one `SystemPrompt` ClassVar since
+          // install-experience 19, which deleted the separate `PREAMBLE` and
+          // `OUTPUT_CONTRACT` symbols this comment used to name (ticket 38).
+          // Unlike the Router and Grader, nothing here mirrors their text, so
+          // there is nothing for `test_prompt_mirror_contract.py` to pin.
           //
           // **This text now steers the split as well as the dispatch**
           // (gallery ticket 15). It used to reach the archetype-*labelling*

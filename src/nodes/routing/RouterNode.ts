@@ -113,10 +113,38 @@ export function branchesOf(data: Readonly<NodeData>): BranchEntry[] {
   return result.length > 0 ? result : [{ id: 'default', name: 'default' }];
 }
 
-/** Locked. Not a field, so it cannot be cleared or contradicted. */
+/**
+ * Locked. Not a field, so it cannot be cleared or contradicted.
+ *
+ * **Mirrors `BaseRouter.PROMPT.preamble` and is pinned to it** by
+ * `backend/tests/test_prompt_mirror_contract.py` (ticket 38). It is a mirror
+ * rather than a fetch because this string is what the inspector shows a
+ * developer *while they type*, with no server necessarily reachable — and
+ * CLAUDE.md's DRY rule allows the hand-mirror only with the pin, which was the
+ * half that was missing. The third sentence below drifted out of existence
+ * here for five days after the Python side gained it.
+ */
 export const ROUTER_PREAMBLE =
   'You are a router. Your only job is to decide which single branch a message ' +
-  'belongs to. You never answer the message itself.';
+  'belongs to. You never answer the message itself. When a conversation is ' +
+  'shown, classify the NEW message in its light: a follow-up about a previous ' +
+  'answer (how did you get it, explain, why, tell me more) belongs to the ' +
+  'branch that produced that answer, not to whichever branch the follow-up’s ' +
+  'words resemble.';
+
+/**
+ * The bottom rules layer every router inherits, so a bare Router works with
+ * nothing typed into it — `BaseRouter.PROMPT.default_rules`.
+ *
+ * TypeScript had **no such layer at all** (ticket 38): the inspector showed a
+ * developer a locked preamble and contract, and silently omitted the rules
+ * their router was actually running under. Rendered between the branch list
+ * and the developer's own rules, which is where `SystemPrompt` puts it.
+ */
+export const ROUTER_DEFAULT_RULES =
+  '- Decide from what the message NEEDS, not from how it is phrased.\n' +
+  '- Exactly one branch. If two fit, take the more specific one.\n' +
+  '- Never answer the message, and never invent a branch name.';
 
 /** Locked, and rendered **last** so developer rules cannot override it. */
 export const ROUTER_OUTPUT_CONTRACT =
@@ -132,11 +160,13 @@ export class RouterNodeModel extends AbstractNodeModel {
   /**
    * The whole prompt, assembled.
    *
-   * Mirrors `BaseRouter.system_prompt()` in Python, and the ordering is the
-   * substance: preamble, then the branch list, then the developer's rules, then
-   * the output contract **last**. Later instructions win ties, so a rule such as
-   * "explain your reasoning" must not be able to come after the contract or
-   * every classification would fail to parse.
+   * Mirrors `BaseRouter.PROMPT` in Python — the ClassVar, not the
+   * `system_prompt()` method this comment used to name, which
+   * install-experience 19 deleted (ticket 38). The ordering is the substance:
+   * preamble, then the branch list, then the inherited default rules, then the
+   * developer's rules, then the output contract **last**. Later instructions
+   * win ties, so a rule such as "explain your reasoning" must not be able to
+   * come after the contract or every classification would fail to parse.
    *
    * Exposed so the inspector can show the locked sections read-only beside the
    * editable one — a developer writing rules needs to see what the machinery
@@ -154,6 +184,7 @@ export class RouterNodeModel extends AbstractNodeModel {
     return [
       ROUTER_PREAMBLE,
       `Branches:\n${listed}`,
+      ROUTER_DEFAULT_RULES,
       ...(rules ? [`Rules:\n${rules}`] : []),
       ROUTER_OUTPUT_CONTRACT,
     ].join('\n\n');

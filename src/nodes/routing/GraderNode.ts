@@ -22,14 +22,26 @@ export const GRADER_PREAMBLE =
 /**
  * Prebuilt criteria, so a grader works before anyone configures it.
  *
- * Mirrors `BaseGrader.DEFAULT_CRITERIA` in Python. A developer **extends** these
- * by default, or **replaces** them by switching the mode — prebuilt behaviour
- * that cannot be overridden is a straitjacket.
+ * **Mirrors `BaseGrader.PROMPT.default_rules`** — the ClassVar, not the
+ * `DEFAULT_CRITERIA` this comment used to name, which install-experience 19
+ * deleted — and is pinned to it by
+ * `backend/tests/test_prompt_mirror_contract.py` (ticket 38). A developer
+ * **extends** these by default, or **replaces** them by switching the mode;
+ * prebuilt behaviour that cannot be overridden is a straitjacket.
+ *
+ * **The fourth bullet is the one that was missing here**, and it was not
+ * cosmetic. It was added to Python after a live trace on 2026-08-11 in which a
+ * correct honest decline was graded FAIL, the retries came back empty, and the
+ * revision loop destroyed the right answer it already held. The editor showed
+ * a developer three bullets while their run obeyed four.
  */
 export const GRADER_DEFAULT_CRITERIA = [
   '- The answer must address the question that was asked.',
   '- Figures must come from the supplied data, never invented.',
   '- An answer that is empty, truncated or an error is a FAIL.',
+  '- An answer that honestly declines — stating it cannot be produced, and ' +
+    'why — is a PASS. It is a correct answer, not a failed one, and retrying ' +
+    'it cannot make the missing capability appear.',
 ].join('\n');
 
 /** Locked, and rendered **last** so criteria cannot countermand it. */
