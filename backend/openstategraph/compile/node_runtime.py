@@ -2530,7 +2530,7 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             from langgraph.config import get_store
 
-            from openstategraph.memory import workflow_scope_slug
+            from openstategraph.memory import UNSAVED_SLUG, workflow_scope_slug
 
             text = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
@@ -2543,7 +2543,16 @@ class NodeRuntime:
                 # model can act on; taking the run down instead would make a
                 # missing optional backend into an outage.
                 store = None
-            crossing = segment.cross(store, workflow_scope_slug(), text=text, node=node_id)
+            # A ledger key, not a memory namespace, so the fallback is spelled
+            # here (2026-08-16). `workflow_scope_slug()` answers None for a run
+            # that does not know its workflow, and `("workflow-memory", ...)`
+            # now refuses rather than bucketing such a run — but a placed
+            # segment card must still record what crossed it on an unsaved
+            # canvas, which is the case the editor exercises most. So this one
+            # keeps the shared bucket, visibly and on purpose. It is the last
+            # place a nameless run shares a key.
+            slug = workflow_scope_slug() or UNSAVED_SLUG
+            crossing = segment.cross(store, slug, text=text, node=node_id)
             # `outputs` only. The node introduces no state key, so there is no
             # multi-writer question to answer and no reducer to name — the
             # cheapest way to satisfy that rule is not to need it.

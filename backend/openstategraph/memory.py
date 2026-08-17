@@ -144,13 +144,27 @@ def _user_namespace() -> tuple[str, str] | None:
     return (USER_MEMORY_NAMESPACE, cleaned) if cleaned else None
 
 
-#: What a run that does not know which workflow it is falls back to. One
+#: What a run that does not know which workflow it is is *labelled* — in a
+#: provenance stamp or a segment ledger, never in a memory namespace. One
 #: literal, because two spellings of it would be two workflows.
+#:
+#: It stopped being a namespace on 2026-08-16. As a namespace it was the exact
+#: merge ticket 01 removed from the user scope one axis over: a real, writable
+#: `("workflow-memory", "unsaved")` that every unsaved canvas — and every run
+#: over MCP, which sets `thread_id` and nothing else — wrote to and read from.
+#: Two documents that had never met shared their findings, while `save_memory`
+#: told the model it was saving a fact about *this workflow*.
 UNSAVED_SLUG = "unsaved"
 
 
-def workflow_scope_slug() -> str:
+def workflow_scope_slug() -> str | None:
     """Which workflow a run belongs to, normalised for a Store namespace.
+
+    **`None` when the run does not know**, symmetrically with
+    `_user_namespace`. Callers that need a *label* rather than a namespace —
+    the app-scope provenance stamp, a segment ledger — spell the fallback
+    themselves as `or UNSAVED_SLUG`, so the one remaining place a nameless run
+    shares a key is visible at the call site instead of hidden in here.
 
     Public because it is the *scope*, not one namespace built from it:
     `_workflow_namespace` below and `memory_segment.MemorySegment.namespace`
@@ -169,16 +183,21 @@ def workflow_scope_slug() -> str:
     try:
         slug = str((get_config().get("configurable") or {}).get("workflow_slug") or "")
     except Exception as exc:
-        _log().debug("no run config to read workflow_slug from (%s); scope is 'unsaved'", exc)
+        _log().debug("no run config to read workflow_slug from (%s); no workflow scope", exc)
     else:
         if not slug:
-            _log().debug("run config carries no workflow_slug; scope is 'unsaved'")
-    return slug.strip().lower().replace(".", "_") or UNSAVED_SLUG
+            _log().debug("run config carries no workflow_slug; no workflow scope")
+    return slug.strip().lower().replace(".", "_") or None
 
 
-def _workflow_namespace() -> tuple[str, str]:
-    """Findings scoped to the running workflow (its slug rides in config)."""
-    return ("workflow-memory", workflow_scope_slug())
+def _workflow_namespace() -> tuple[str, str] | None:
+    """Findings scoped to the running workflow (its slug rides in config).
+
+    `None` when the run carries no slug — see `UNSAVED_SLUG` for what used to
+    happen instead and why it was the same defect as `("memories","anonymous")`.
+    """
+    slug = workflow_scope_slug()
+    return ("workflow-memory", slug) if slug else None
 
 
 #: The shared pool — appwide knowledge and cross-workflow findings, exactly
@@ -202,6 +221,40 @@ SEARCH_CEILING = 200
 def _app_namespace() -> tuple[str, ...]:
     """The app pool, as a resolver so every scope is declared the same way."""
     return APP_NAMESPACE
+
+
+#: What a scope says when this run cannot have it. Declared beside the
+#: resolvers because it answers the same question they do — "can this run bind
+#: this scope?" — and a refusal that drifts from its reason is how a model
+#: ends up told to retry with a scope that will refuse it too.
+#:
+#: Every line does three jobs: refuse in a word a model will not misread
+#: (`NOT SAVED`), forbid the false report, and name the one action that makes
+#: the scope available. `APP` is absent because `_app_namespace` is total.
+_REFUSALS: dict[str, str] = {
+    "user": (
+        "NOT SAVED. This run has no identified user, so there is nowhere "
+        "to keep a fact about a person. Do not tell the user it was "
+        "remembered. Retry with scope='workflow' if this is a finding "
+        "about the workflow's domain rather than about a person."
+    ),
+    "workflow": (
+        "NOT SAVED. This run has no saved workflow, so there is nowhere to "
+        "keep a finding about one — an unsaved document is not a workflow "
+        "anything can remember. Do not tell the user it was remembered. "
+        "Save the workflow and try again, or retry with scope='app' if this "
+        "is true of every workflow rather than only this one."
+    ),
+}
+
+
+def _refusal(scope: MemoryScope) -> str:
+    """Why this run cannot bind `scope`, in words a model can act on."""
+    return _REFUSALS.get(
+        scope.value,
+        f"NOT SAVED. This run cannot bind {scope.value}-scoped memory. "
+        "Do not tell the user it was remembered.",
+    )
 
 
 # `MemoryScope` — the whole scope set, declared once, each member carrying how
@@ -259,9 +312,13 @@ class MemoryScope(str, Enum):
     def namespace(self) -> tuple[str, ...] | None:
         """This scope's Store namespace, or None if this run cannot have one.
 
-        Only `USER` ever answers None, and only when the run resolved no
-        identity. It is a property of the *run*, not of the scope, which is
-        why it cannot be decided when the tools are bound.
+        `USER` answers None when the run resolved no identity, and `WORKFLOW`
+        when it carries no slug (2026-08-16 — until then it merged into
+        `("workflow-memory","unsaved")`). `APP` is total: it is keyed by
+        nothing, so there is nothing for a run to be missing.
+
+        In every case it is a property of the *run*, not of the scope, which
+        is why it cannot be decided when the tools are bound.
         """
         return self._resolver()
 
@@ -429,20 +486,21 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
             return f"This workflow does not use {resolved.value}-scoped memory."
         namespace = resolved.namespace
         if namespace is None:
-            # Ticket 01. The alternative is the merge this refusal replaced:
-            # writing one stranger's fact where the next stranger reads it.
-            return (
-                "NOT SAVED. This run has no identified user, so there is nowhere "
-                "to keep a fact about a person. Do not tell the user it was "
-                "remembered. Retry with scope='workflow' if this is a finding "
-                "about the workflow's domain rather than about a person."
-            )
+            # Ticket 01, and 2026-08-16 for the workflow half. The alternative
+            # is the merge these refusals replaced: writing one stranger's
+            # fact where the next stranger reads it.
+            return _refusal(resolved)
         value: MemoryRecord = {"fact": fact.strip()}
         if resolved is MemoryScope.APP:
             # The spine is auditable: any workflow may deposit an app-wide
             # learning (permissive read, deliberate write — owner decision
             # 2026-08-09), but every deposit records which workflow made it.
-            value["workflow"] = _workflow_namespace()[1]
+            # A *label*, not a namespace — so the fallback is spelled here
+            # rather than in the resolver. A deposit from a nameless run is
+            # stamped "unsaved", which is honest about the origin being
+            # unknown; it is ship-it 47's rider and is unchanged by the
+            # namespace fix above.
+            value["workflow"] = workflow_scope_slug() or UNSAVED_SLUG
         store.put(namespace, str(uuid.uuid4()), dict(value))
         # Names the scope that was *written*, which before this was not
         # guaranteed to be the scope that was asked for.

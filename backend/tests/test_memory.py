@@ -17,6 +17,7 @@ from openstategraph.memory import (
     USER_MEMORY_NAMESPACE,
     MemoryScope,
     _user_namespace,
+    _workflow_namespace,
     build_store,
     checkpointer_for,
     memory_ttl,
@@ -464,6 +465,82 @@ class TestDegradationIsNeverSilent:
 
         assert declined and unreachable
         assert set(declined).isdisjoint(unreachable)
+
+
+class TestAWorkflowWithNoSlugIsNobodysWorkflow:
+    """The merge ticket 01 fixed for `user`, on the axis nobody re-checked.
+
+    `_user_namespace` refuses to bind when nobody is identified, because
+    `("memories", "anonymous")` was not a degradation but a merge: one
+    stranger's fact where the next stranger reads it. `_workflow_namespace`
+    had the identical hole and kept it — a missing `workflow_slug` folded to
+    the literal `("workflow-memory", "unsaved")`, a real, writable, shared
+    bucket. Every unsaved canvas wrote there, and so did every run over the
+    MCP transport, which sets `thread_id` and nothing else.
+
+    The two resolvers now agree: no identity, no namespace, and the caller is
+    told why rather than silently sharing.
+    """
+
+    def test_a_run_with_no_workflow_slug_binds_no_workflow_namespace(self) -> None:
+        assert _workflow_namespace() is None
+
+    def test_the_two_resolvers_agree_about_missing_identity(self) -> None:
+        # The defect was that they disagreed: one refused, one merged.
+        assert (_user_namespace() is None) == (_workflow_namespace() is None)
+
+    def test_a_workflow_fact_with_no_slug_is_refused_not_bucketed(self) -> None:
+        store = InMemoryStore()
+        save, _, _ = memory_tools()
+        result = _run_in_graph(
+            lambda s: {"out": save.invoke(
+                {"fact": "this canvas has no name", "scope": "workflow"})},
+            store=store,
+            # What every transport actually sends for an unsaved document,
+            # and what MCP sends for every run: no slug at all.
+            config={"configurable": {"thread_id": "t"}},
+        )
+        assert "NOT SAVED" in result["out"]
+        # The bucket must not exist. Not empty — absent.
+        assert not store.search(("workflow-memory", "unsaved"))
+
+    def test_the_refusal_tells_the_model_what_to_do_instead(self) -> None:
+        store = InMemoryStore()
+        save, _, _ = memory_tools()
+        result = _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "f", "scope": "workflow"})},
+            store=store, config={"configurable": {"thread_id": "t"}},
+        )
+        out = result["out"]
+        # Same shape as the user refusal: do not claim success, and name the
+        # one action that makes the scope available.
+        assert "Do not tell the user it was remembered." in out
+        assert "save" in out.lower()
+
+    def test_search_skips_the_scope_rather_than_inventing_it(self) -> None:
+        store = InMemoryStore()
+        save, search, _ = memory_tools()
+        # A real workflow deposits a finding.
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "revenue sums InvoiceLine", "scope": "workflow"})},
+            store=store,
+            config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-assistant"}},
+        )
+        # A slugless run must not read it.
+        result = _run_in_graph(lambda s: {"out": search.invoke({"query": "revenue"})},
+                               store=store, config={"configurable": {"thread_id": "t"}})
+        assert "InvoiceLine" not in result["out"]
+
+    def test_a_declared_slug_still_binds(self) -> None:
+        # The refusal must not cost the working case.
+        store = InMemoryStore()
+        save, _, _ = memory_tools()
+        _run_in_graph(
+            lambda s: {"out": save.invoke({"fact": "a real finding", "scope": "workflow"})},
+            store=store,
+            config={"configurable": {"thread_id": "t", "workflow_slug": "chinook-assistant"}},
+        )
+        assert store.search(("workflow-memory", "chinook-assistant"))
 
 
 class TestAgentsAreMemoryCapable:
