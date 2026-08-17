@@ -36,8 +36,23 @@ MCP_SCHEMA_ID = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 
 #: Our reverse-domain client namespace (spec §8). Everything of ours that v1
 #: cannot express travels here — labelled non-portable rather than mangled
-#: into a portable slot. Placeholder-grade: the spec SHOULDs a domain we
-#: control, so pin this before publishing anything public.
+#: into a portable slot.
+#:
+#: **Pinned, and the domain is ours** (owner decision 2026-08-16, ticket 32).
+#: Until then this comment called the value "placeholder-grade" and said to
+#: pin it before publishing anything public, while `backend/pyproject.toml`'s
+#: release checklist already called it pinned and `gap-register.md` PK-03
+#: rated it a 1.0 blocker. All three described the same string and disagreed,
+#: because two different things were being called "pinned": the *value* never
+#: wobbled, and the *domain* was the open question. §8 asks for a
+#: reverse-domain namespace on a domain the publisher controls, and
+#: `openstategraph.org` now is one.
+#:
+#: Do not change this string casually. `export_plugin()` writes an
+#: `org.openstategraph/` directory into every bundle a user exports, and those
+#: bundles land in other people's repositories — the cost of changing it grows
+#: with every export, which is why it was worth settling before 1.0 rather
+#: than after.
 EXTENSION_NAMESPACE = "org.openstategraph"
 
 #: Permitted top-level manifest fields — the schema is *closed* (§5.2).

@@ -130,12 +130,22 @@ file in this repo that knows the strings `plugin.json`, `mcp.json`,
 `SKILL.md`, `${PLUGIN_ROOT}` or the schema identifiers. Delete that file and
 nothing else changes shape.
 
-**Our extension namespace: `org.openstategraph`.** Placeholder-grade — the
-spec SHOULDs a domain we control, and `openstategraph.org` is not owned. Three
-files in this repository disagree about whether that is settled; production-ready
-**ticket 32** is the decision. Pin this before publishing anything
-public. Everything of ours that v1 cannot express travels there, honestly
-labelled as non-portable, rather than being mangled into a portable slot.
+**Our extension namespace: `org.openstategraph`. Pinned — and this document
+is where that was recorded** (owner decision 2026-08-16, production-ready
+ticket 32). The spec SHOULDs a reverse-domain namespace on a domain the
+publisher controls; `openstategraph.org` is ours, so §8 is met rather than
+deviated from. Everything of ours that v1 cannot express travels there,
+honestly labelled as non-portable, rather than being mangled into a portable
+slot.
+
+Until that decision this section called the namespace *placeholder-grade* and
+said to pin it before publishing anything public, while two other files in this
+repository already called it pinned. The word was doing two jobs — the *value*
+had never wobbled, the *domain* was the open question — which is why three
+mutually contradictory statements each read as correct in isolation. Changing
+it now would be expensive rather than merely awkward: `export_plugin()` writes
+an `org.openstategraph/` directory into every bundle a user exports, and those
+bundles live in other people's repositories.
 
 ## 5. The mapping, with every lossy edge named
 

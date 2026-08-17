@@ -272,19 +272,27 @@ which `docs/releasing.md` §4 owns.
 > `backend/pyproject.toml`. **Risk was:** a published PyPI page with four dead
 > links. **Verdict was: blocks 1.0.**
 
-**PK-03 — `EXTENSION_NAMESPACE = "org.openstategraph"` is a placeholder.**
+**PK-03 — `EXTENSION_NAMESPACE = "org.openstategraph"`. RESOLVED 2026-08-16;
+no longer blocks 1.0.**
 
-> **Three files disagree about this and someone has to decide** (flagged
-> 2026-08-16; production-ready **ticket 32**). `backend/pyproject.toml`'s
-> release checklist says the namespace **is pinned**; `plugin_interop.py` still
-> calls it **placeholder-grade** and says to pin it before publishing anything
-> public; this entry rates it **blocks 1.0**. All three cannot be right, and
-> correcting any one of them to match the others would be deciding by editing
-> prose. The substantive question is unchanged and unanswered: the spec SHOULDs
-> a reverse-domain namespace on a domain we control, and `openstategraph.org`
-> is not owned. Pinning the string did not acquire the domain — and the string
-> is written into every exported bundle, so the cost of changing it grows with
-> use.
+> **Settled by the owner, not by editing prose** (production-ready **ticket
+> 32**). `openstategraph.org` is a domain we control, so the namespace meets
+> spec §8's SHOULD and the value is pinned in the full sense — the string and
+> the authority behind it.
+>
+> Recorded rather than deleted, because *how* this sat unresolved is the
+> reusable part. Three files disagreed — `backend/pyproject.toml`'s release
+> checklist said **pinned**, `plugin_interop.py` said **placeholder-grade,
+> pin before publishing**, this entry said **blocks 1.0** — and all three were
+> describing one string. The disagreement survived review because two
+> different things were being called "pinned": the *value*, which never
+> wobbled, and the *domain*, which was the actual question. A reviewer
+> checking any single file found a coherent statement.
+>
+> The reason it was worth settling before 1.0 rather than after:
+> `export_plugin()` writes an `org.openstategraph/` directory into every
+> bundle a user exports, and those bundles land in other people's
+> repositories. The cost of changing the string grows with every export.
 
 Evidence as recorded: `backend/openstategraph/plugin_interop.py` — *"Placeholder-grade:
 the spec SHOULDs a domain we control, so pin this before publishing anything

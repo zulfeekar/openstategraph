@@ -233,9 +233,12 @@ looks like it works.
   outside the repo is therefore quietly different from the one inside it. Any
   adopter whose document binds a `chinook.*` node type inherits a warning
   instead of a tool.
-- **`EXTENSION_NAMESPACE = "org.openstategraph"` in `plugin_interop.py` is
-  labelled "Placeholder-grade… pin this before publishing anything public."**
-  Publishing is what this map is about. It is now due.
+- ~~**`EXTENSION_NAMESPACE = "org.openstategraph"` in `plugin_interop.py` is
+  labelled "Placeholder-grade… pin this before publishing anything public."**~~
+  **Done 2026-08-16** (production-ready ticket 32). The domain is ours, so the
+  namespace meets spec §8 and is pinned in both senses — value and authority.
+  `plugin_interop.py`, `agent-plugins.md` §4 and `gap-register.md` PK-03 now
+  say one thing.
 
 ---
 
