@@ -38,7 +38,7 @@ function registry(): ProviderRegistry {
 }
 
 function status(name: string, configured: boolean): ProviderStatus {
-  return { name, label: name, configured, configuredBy: null, envVars: [], masked: null };
+  return { name, label: name, configured, configuredBy: null, envVars: [], keyHint: null };
 }
 
 const labels = (options: readonly { readonly label: string }[]) =>

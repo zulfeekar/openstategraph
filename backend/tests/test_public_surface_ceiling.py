@@ -243,13 +243,22 @@ class Recorded:
     reason: str
 
 
-#: Seven classes, two bases — down from twelve and four (install-experience 19).
-#: `AbstractAgentNode` (11) and `BaseRouter` (11) declare a family vocabulary
-#: once — CLAUDE.md's rule that a shared concern lives on the base — and every
-#: leaf inherits it whole. `ReactAgentNode` adds nothing at all, `DeepAgentNode`
-#: adds `subagents`, `CustomGraphNode` adds `runnable`, `Router` adds
-#: `destinations`. So this is two bases counted seven times, which is what "what
+#: Five classes, two bases — down from seven when ticket 45 moved the prompt
+#: machinery off `AbstractAgentNode`. `BaseAgentNode` (11) and `BaseRouter` (11)
+#: declare a family vocabulary once — CLAUDE.md's rule that a shared concern
+#: lives on the base — and every leaf inherits it whole. `ReactAgentNode` adds
+#: nothing at all, `DeepAgentNode` adds `subagents`, `Router` adds
+#: `destinations`. So this is two bases counted five times, which is what "what
 #: a consumer can reach" honestly means for a ladder.
+#:
+#: **`AbstractAgentNode` and `CustomGraphNode` left this table** (ticket 45),
+#: and the way they left is the argument for having made the move. Neither was
+#: re-numbered downward by a member being deleted: the prompt machinery
+#: descended one rung to `BaseAgentNode`, where the tiers that *have* a prompt
+#: are, and the two classes that never used it fell under the ceiling as a
+#: consequence. `CustomGraphNode`'s docstring had claimed since it was written
+#: that "prompt machinery must never be forced onto this class"; it was being
+#: forced by inheritance the whole time, and the count is what finally said so.
 PROMPT_LADDER = """**Install-experience 19 landed, and this entry is the smaller half that
     remains.** The four families were 19 / 18 / 16 / 13 and every one of them
     was over the ceiling for the same reason: a node held its prompt's
@@ -275,9 +284,11 @@ PROMPT_LADDER = """**Install-experience 19 landed, and this entry is the smaller
     - **The agent base is eleven**, and every member is load-bearing: the
       tier's identity (`name`, `model`, `tools`, `prompt`), the two ClassVar
       declarations (`PROMPT`, `SLOT_ORDER`), the three resolvers, `build_agent`
-      and `build`. `DeepAgentNode` and `CustomGraphNode` reach twelve by one
-      field each — `subagents`, `runnable` — which is the leaf declaring what
-      makes it that tier.
+      and `build`. That base is now `BaseAgentNode` rather than
+      `AbstractAgentNode` (ticket 45) — the abstract rung above it keeps only
+      what every tier uses, which is why it no longer appears in this table.
+      `DeepAgentNode` reaches twelve by one field, `subagents`, which is the
+      leaf declaring what makes it that tier.
     - **The router base is eleven** because four of them are the *branch*
       vocabulary, not the prompt: `branch_table`, `branches`, `fallback`,
       `route_key`. Collecting those into a `Branches` collaborator would take
@@ -395,11 +406,9 @@ SCORECARD = """A recorded exception, and the one that most looks like a violatio
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
-    "abc.agent.AbstractAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),
-    "abc.agent.CustomGraphNode": Recorded(12, PROMPT_LADDER),
     "abc.router.BaseRouter": Recorded(11, PROMPT_LADDER),
     "abc.router.Router": Recorded(12, PROMPT_LADDER),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),

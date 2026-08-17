@@ -81,6 +81,70 @@ class AbstractAgentNode(ABC):
         "patch-tool-calls",
     )
 
+    def __init__(
+        self,
+        *,
+        name: str,
+        model: Any = None,
+        tools: Any = (),
+        middleware: dict[str, Any] | None = None,
+    ) -> None:
+        self.name = name
+        self.model = model
+        self.tools = list(tools)
+        #: Named slot contributions from config; replacement is by slot name.
+        self._middleware_contributions = dict(middleware or {})
+
+    # -- the three resolvers: the single places config becomes a thing ----- #
+
+    def resolve_model(self) -> Any:
+        return self.model
+
+    def resolve_middleware(self) -> MiddlewareSlotTable:
+        """Config contributions into the canonical slot order, replacement by name.
+
+        A tier with slots of its own overrides *this*, merging them before
+        ``self._middleware_contributions`` so config still replaces by name.
+        There was a separate ``middleware_preset()`` hook for that until
+        install-experience 21; it returned ``{}``, no tier ever overrode it —
+        ``DeepAgentNode`` differs by constructor, and deepagents assembles its
+        own stack internally — and a second named seam onto the same table is
+        one more thing to read and one more place the order could be decided.
+        """
+        table = MiddlewareSlotTable(order=self.SLOT_ORDER)
+        table.merge(self._middleware_contributions)
+        return table
+
+    # -- what a concrete tier supplies ------------------------------------ #
+
+    @abstractmethod
+    def build_agent(
+        self, *, model: Any, tools: list[Any], system_prompt: str | None, middleware: list[Any]
+    ) -> Any:
+        """Calls this tier's constructor. The only abstract member."""
+
+class BaseAgentNode(AbstractAgentNode):
+    """The usable default: a plain ``create_agent`` loop — **and the tier that
+    has a prompt**.
+
+    ``_constructor`` is an instance attribute so a test can record the call
+    without patching the library, and so a subclass swaps constructors by
+    assignment rather than by overriding ``build_agent`` again.
+
+    The prompt machinery lives here rather than on ``AbstractAgentNode``
+    (ticket 45). It sat one level up, so ``CustomGraphNode`` — whose own
+    docstring says "prompt machinery must never be forced onto this class" —
+    inherited ``PROMPT``, ``self.prompt`` and ``resolve_prompt()`` and used
+    none of them. That is the Interface Segregation failure CLAUDE.md names in
+    its argument against an ``AbstractPromptedNode``, committed one class
+    higher than the place it was being argued about.
+
+    The line the base still holds is *capability, not composition*:
+    ``resolve_prompt()`` remains the single place config becomes a prompt for
+    every tier that has one, and the locked order inside ``SystemPrompt`` is
+    still owned by the collaborator rather than by any class in this ladder.
+    """
+
     #: The locked prompt machinery this node type declares, as **one object
     #: rather than three loose strings** (install-experience 19).
     #:
@@ -125,19 +189,14 @@ class AbstractAgentNode(ABC):
     def __init__(
         self,
         *,
-        name: str,
-        model: Any = None,
-        tools: Any = (),
         default_rules: str = "",
         rules: str = "",
         skill: str = "",
         replace_rules: bool = False,
         context: str = "",
-        middleware: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
-        self.name = name
-        self.model = model
-        self.tools = list(tools)
+        super().__init__(**kwargs)
         #: **This node's prompt, composed once and held** — not five loose
         #: attributes and a method that reassembles them on every call
         #: (install-experience 19). The ingredients that used to live here were
@@ -155,13 +214,9 @@ class AbstractAgentNode(ABC):
         if default_rules:
             prompt = prompt.with_defaults(default_rules)
         self.prompt = prompt.with_rules(rules, replace_defaults=replace_rules).with_skill(skill)
-        #: Named slot contributions from config; replacement is by slot name.
-        self._middleware_contributions = dict(middleware or {})
+        from langchain.agents import create_agent
 
-    # -- the three resolvers: the single places config becomes a thing ----- #
-
-    def resolve_model(self) -> Any:
-        return self.model
+        self._constructor = create_agent
 
     def resolve_prompt(self) -> str | None:
         """The string the model sees, or ``None`` when nothing is configured.
@@ -187,29 +242,6 @@ class AbstractAgentNode(ABC):
         rendered = self.prompt.render()
         return rendered or None
 
-    def resolve_middleware(self) -> MiddlewareSlotTable:
-        """Config contributions into the canonical slot order, replacement by name.
-
-        A tier with slots of its own overrides *this*, merging them before
-        ``self._middleware_contributions`` so config still replaces by name.
-        There was a separate ``middleware_preset()`` hook for that until
-        install-experience 21; it returned ``{}``, no tier ever overrode it —
-        ``DeepAgentNode`` differs by constructor, and deepagents assembles its
-        own stack internally — and a second named seam onto the same table is
-        one more thing to read and one more place the order could be decided.
-        """
-        table = MiddlewareSlotTable(order=self.SLOT_ORDER)
-        table.merge(self._middleware_contributions)
-        return table
-
-    # -- what a concrete tier supplies ------------------------------------ #
-
-    @abstractmethod
-    def build_agent(
-        self, *, model: Any, tools: list[Any], system_prompt: str | None, middleware: list[Any]
-    ) -> Any:
-        """Calls this tier's constructor. The only abstract member."""
-
     # -- the template method ---------------------------------------------- #
 
     def build(self) -> Any:
@@ -221,21 +253,6 @@ class AbstractAgentNode(ABC):
             system_prompt=self.resolve_prompt(),
             middleware=self.resolve_middleware().flatten(),
         )
-
-
-class BaseAgentNode(AbstractAgentNode):
-    """The usable default: a plain ``create_agent`` loop.
-
-    ``_constructor`` is an instance attribute so a test can record the call
-    without patching the library, and so a subclass swaps constructors by
-    assignment rather than by overriding ``build_agent`` again.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        from langchain.agents import create_agent
-
-        self._constructor = create_agent
 
     def build_agent(
         self, *, model: Any, tools: list[Any], system_prompt: str | None, middleware: list[Any]

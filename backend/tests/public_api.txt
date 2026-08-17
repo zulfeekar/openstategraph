@@ -11,9 +11,9 @@ openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.Workflows = class(object)(root: 'str | Path | None' = None, *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'None'
 openstategraph.__version__ = str
 openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
-openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', middleware: 'dict[str, Any] | None' = None) -> 'None'
+openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), middleware: 'dict[str, Any] | None' = None) -> 'None'
 openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
-openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(**kwargs: 'Any') -> 'None'
+openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
 openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.BaseGuardrail = class(ABC)(*, rules: 'Sequence[GuardrailRule | Mapping[str, Any]]' = (), refusal: 'str' = '') -> 'None'
 openstategraph.abc.BaseNodeFamily = class(ABC)()
@@ -40,7 +40,7 @@ openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan
 openstategraph.abc.NodeCapabilities = dataclass(object) fields(tools,functions,memory_store)
 openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None) -> 'None'
 openstategraph.abc.Progress = class(BaseModel)(*, message: str, current: Annotated[int | None, Ge(ge=0)] = None, total: Annotated[int | None, Ge(ge=0)] = None, node: str = '') -> None
-openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(**kwargs: 'Any') -> 'None'
+openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
 openstategraph.abc.Redaction = dataclass(object) fields(entity,strategy,count)
 openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, destinations: 'dict[str, str] | None' = None) -> 'None'
 openstategraph.abc.Screening = dataclass(object) fields(text,blocked,blocked_entity,redactions)

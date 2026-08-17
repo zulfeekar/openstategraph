@@ -200,6 +200,31 @@ class TestConcreteTiers:
         with pytest.raises(ValueError):
             CustomGraphNode(name="c1", runnable=None).build()
 
+    def test_custom_graph_has_no_prompt_machinery_at_all(self) -> None:
+        """Ticket 45 — the class docstring's claim, made true of the code.
+
+        `CustomGraphNode` said "prompt machinery must never be forced onto
+        this class (CLAUDE.md's argument against `AbstractPromptedNode`)" while
+        inheriting `PROMPT`, `self.prompt` and `resolve_prompt()` from
+        `AbstractAgentNode`. The developer already built the graph; its harness
+        owns its own prompt, and a `resolve_prompt()` on it is a seam that
+        resolves nothing and an honesty layer nothing applies.
+
+        So the machinery lives on `BaseAgentNode`, where `ReactAgentNode` and
+        `DeepAgentNode` both are, and the tier that has no prompt has none.
+        """
+        node = CustomGraphNode(name="c1", runnable=object())
+        assert not hasattr(node, "PROMPT")
+        assert not hasattr(node, "prompt")
+        assert not hasattr(node, "resolve_prompt")
+
+    def test_the_prompted_tiers_still_have_it(self) -> None:
+        # The move must not cost the two tiers that do compose a prompt.
+        for cls in (ReactAgentNode, DeepAgentNode):
+            node = cls(name="a1", model=object())
+            assert hasattr(node, "PROMPT"), cls.__name__
+            assert node.resolve_prompt(), cls.__name__
+
 
 class TestTierSelection:
     """The one place a canvas `tier` string becomes a class."""
