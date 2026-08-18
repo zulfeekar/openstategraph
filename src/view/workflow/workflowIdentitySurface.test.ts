@@ -28,6 +28,10 @@ const read = (relative: string) =>
 const drawer = read('./WorkflowManager.tsx');
 const drawerCss = read('./WorkflowManager.css');
 const palette = read('../palette/Palette.tsx');
+// The act of saving moved out of the drawer when the toolbar grew its own
+// Save (`say-it-on-the-surface` 01), so the guard is asserted where the
+// knowledge now lives. Two surfaces press it; there is still one of it.
+const saving = read('./saveWorkflow.ts');
 
 describe('the Workflows drawer', () => {
   it('prints the slug on every row, as the palette already does', () => {
@@ -44,11 +48,14 @@ describe('the Workflows drawer', () => {
   });
 
   it('warns before minting a second package of a name that already has one', () => {
-    expect(drawer).toContain('duplicateNameConfirmation');
+    expect(saving).toContain('duplicateNameConfirmation');
     // Only on a create. An overwrite of the workflow you already have open is
     // not a collision with anything.
-    const guard = drawer.split('const open = getOpenSlug();')[1]?.split('setBusy(true);')[0] ?? '';
+    const guard = saving.split('const open = getOpenSlug();')[1]?.split('const document =')[0] ?? '';
     expect(guard).toContain('if (!open)');
     expect(guard).toContain('duplicateNameConfirmation');
+    // And neither surface may grow its own copy of the warning.
+    expect(drawer).not.toContain('duplicateNameConfirmation');
+    expect(read('../AppShell.tsx')).not.toContain('duplicateNameConfirmation');
   });
 });

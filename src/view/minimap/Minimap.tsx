@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Maximize2, Minus, Plus } from 'lucide-react';
 import { Icon, IconButton, Tooltip } from '@design/primitives';
 import { unionRects, type Rect } from '@core/kernel/geometry';
+import { coversAnyNode } from './coverage';
 import { usePaperController, useWorkbench, useWorkflowVersion } from '@app/WorkbenchContext';
 import './Minimap.css';
 
@@ -25,6 +26,7 @@ export function Minimap() {
   const [zoom, setZoom] = useState(1);
   const [viewRect, setViewRect] = useState<Rect | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!paper) return;
@@ -50,6 +52,23 @@ export function Minimap() {
   // The map frames the graph *and* the viewport, so panning away from the
   // nodes still shows where you are rather than an empty box.
   const world = unionRects([...rects, ...(viewRect ? [viewRect] : [])]);
+
+  // Whether the map is currently sitting on a card (ticket 55.8). After paint,
+  // because it needs the map's own laid-out rectangle, and after *every* one:
+  // a camera move or a document change can slide a node underneath.
+  //
+  // Written straight onto the element rather than held as state. It is a fact
+  // about where the DOM ended up that drives nothing but an opacity — routing
+  // it back through React would buy a second render per pan for a value no
+  // other code reads.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.toggleAttribute(
+      'data-covering',
+      paper !== null && coversAnyNode(root.getBoundingClientRect(), rects, paper.viewport),
+    );
+  });
 
   const project = useCallback(
     (rect: Rect) => {
@@ -85,7 +104,7 @@ export function Minimap() {
   const viewBox = viewRect ? project(viewRect) : null;
 
   return (
-    <div className="minimap" data-collapsed={collapsed || undefined}>
+    <div ref={rootRef} className="minimap" data-collapsed={collapsed || undefined}>
       {!collapsed ? (
         <div
           ref={surfaceRef}

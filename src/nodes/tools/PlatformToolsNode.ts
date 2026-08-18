@@ -33,6 +33,8 @@ function backendTool(spec: {
   keywords: readonly string[];
   fields?: readonly FieldSchema[];
   maxInstances?: number;
+  /** See `INodeDefinition.bindsWithoutWiring` — Knowledge is the one case. */
+  bindsWithoutWiring?: boolean;
 }): { definition: INodeDefinition; executor: INodeExecutor } {
   return {
     definition: defineToolNode(
@@ -46,6 +48,7 @@ function backendTool(spec: {
         defaultSize: { width: 252, height: 120 },
         fields: spec.fields ?? [],
         ...(spec.maxInstances != null ? { maxInstances: spec.maxInstances } : {}),
+        ...(spec.bindsWithoutWiring ? { bindsWithoutWiring: true } : {}),
       },
       ToolNodeModel,
     ),
@@ -139,7 +142,7 @@ export const PLATFORM_TOOL_NODES = [
     id: 'tool.knowledge-lookup',
     label: 'Knowledge',
     description:
-      'The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them.',
+      'The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them. The lookup binds to every agent in the package automatically whenever knowledge/ is non-empty — this card is where you see and build the docs, not what connects them.',
     keywords: ['knowledge', 'brain', 'wiki', 'procedural', 'second brain', 'lookup', 'memory'],
     // One per workflow, and `maxInstances` already counts the right thing:
     // `model.countOfType` is over the open document, one document is one
@@ -150,6 +153,10 @@ export const PLATFORM_TOOL_NODES = [
     // different model, so a root and a team may each hold one; that is the
     // designed shape, not a collision (docs/decisions/knowledge-architecture.md).
     maxInstances: 1,
+    // The lookup reaches every agent in the package through
+    // `ambient_knowledge_tool`, with no edge involved, so the orphan
+    // diagnostic must not tell a developer this card is inert (ticket 09).
+    bindsWithoutWiring: true,
   }),
   backendTool({
     id: 'tool.email-send',

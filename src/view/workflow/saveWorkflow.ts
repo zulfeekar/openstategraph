@@ -1,0 +1,230 @@
+import type { Result } from '@core/kernel/Result';
+import { getKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
+import { getOpenAddress } from '@app/openAddress';
+import { isInstance } from '@core/model/MountAddress';
+import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
+import { rememberDiskDocument } from '@app/diskAutosave';
+import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
+import { duplicateNameConfirmation } from './consequences';
+
+/**
+ * Saving a workflow — the knowledge, with no surface attached.
+ *
+ * Extracted from `WorkflowManager.handleSave` for exactly the reason
+ * `createNewWorkflow` was extracted from `handleCreate`: there is now more than
+ * one way to ask for it. `say-it-on-the-surface` 01 found that the only save
+ * affordance in the product lived inside a panel behind a toggle, with no
+ * top-bar control and no `Mod+S`, while the thing filling the gap — autosave —
+ * is **browser-local** and reaches no backend. A person who drew a flow and
+ * never opened the panel had nothing on disk and no way to know it.
+ *
+ * The guard `createNewWorkflow` states applies here unchanged: a second entry
+ * point is a **promotion** of the manager, never a second implementation of
+ * it. So the button moved out and this moved here; the panel and the toolbar
+ * both call this one function and differ only in how they say what happened.
+ *
+ * ## Three acts wear one word, and the caller must not have to know which
+ *
+ * `handleSave` already carried two (`ticket 20`); this adds none and hides
+ * none:
+ *
+ * 1. **An instance is open** — what is on screen is the package plus this
+ *    mount's overrides, so saving it back to the package would burn those
+ *    overrides into the shared definition and hit every other mount. What is
+ *    written is the **parent**. This branch is the reason a bare `Save` button
+ *    is dangerous and the reason `SaveOutcome` names what it did: a toolbar
+ *    that says "Saved" while writing a different document than the one on
+ *    screen is a worse defect than no button at all.
+ * 2. **A slug is held** — an overwrite of that package.
+ * 3. **No slug** — a *creation*, and the slug comes back from the backend,
+ *    never from `slugify(name)` here, which cannot see that another workflow
+ *    already lives at `my-workflow`.
+ */
+
+/** Everything this needs from the runtime, and nothing else. */
+export interface IWorkflowSaving {
+  list(): Promise<Result<readonly WorkflowSummary[], string>>;
+  summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
+  save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
+  create(name: string, document: unknown): Promise<Result<string, string>>;
+}
+
+/**
+ * The document on screen, and the serializer that turns it into bytes.
+ *
+ * Narrower than `Workbench` on purpose (Interface Segregation): saving needs a
+ * name, a way to serialise, a way to canonicalise for the autosave baseline,
+ * and the mount context. Depending on the whole workbench would make this
+ * untestable without one.
+ */
+export interface SavableWorkbench {
+  readonly model: { readonly name: string };
+  readonly serializer: {
+    toJSONString(model: SavableWorkbench['model']): string;
+    canonicalise(document: unknown): unknown;
+  };
+  readonly controller: {
+    readonly document: { mountContext(): MountContext | null | undefined };
+  };
+}
+
+interface MountContext {
+  readonly rootDocument: Record<string, unknown>;
+}
+
+/**
+ * What happened, named — never a bare boolean.
+ *
+ * Every caller has to be able to say the *right* sentence, and the three acts
+ * above produce three different true sentences. `created` carries the minted
+ * slug because it is the one thing the user could not have predicted: a second
+ * "My Workflow" lands at `my-workflow-k7m3qp`, and silently is how you later
+ * wonder which of two rows is yours.
+ */
+export type SaveOutcome =
+  | { readonly kind: 'created'; readonly slug: string; readonly name: string }
+  | { readonly kind: 'saved'; readonly slug: string; readonly name: string }
+  | { readonly kind: 'overrides'; readonly root: string }
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'refused'; readonly message: string };
+
+export interface SaveDeps {
+  readonly client: IWorkflowSaving;
+  readonly workbench: SavableWorkbench;
+  /**
+   * How this surface asks a yes/no question. Injected rather than calling
+   * `confirm` here so the act is testable without a DOM — and so a surface
+   * that has a better dialog than the browser's can supply one.
+   */
+  readonly confirm: (message: string) => boolean;
+}
+
+export async function saveWorkflow({
+  client,
+  workbench,
+  confirm,
+}: SaveDeps): Promise<SaveOutcome> {
+  const address = getOpenAddress();
+  if (address && isInstance(address)) {
+    const mounts = workbench.controller.document.mountContext();
+    if (!mounts) {
+      return {
+        kind: 'refused',
+        message: 'This mount has no parent loaded, so there is nowhere to save its overrides.',
+      };
+    }
+    // Compare-and-set on the parent's `saved_at`. The file watch follows the
+    // *class* while an instance is open, so nothing would otherwise notice the
+    // parent moving — and this save writes a whole retained document, which
+    // would silently revert someone else's parent edit.
+    const current = await client.summary(address.root);
+    const baseline = getKnownSavedAt(address.root);
+    if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
+      return {
+        kind: 'refused',
+        message: `"${address.root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
+      };
+    }
+    const written = await client.save(
+      address.root,
+      (mounts.rootDocument['name'] as string) ?? address.root,
+      mounts.rootDocument,
+    );
+    if (!written.ok) return { kind: 'refused', message: `Could not save: ${written.error}` };
+    const row = await client.summary(address.root);
+    recordKnownSavedAt(address.root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+    return { kind: 'overrides', root: address.root };
+  }
+
+  const open = getOpenSlug();
+  // A create, not an overwrite, is the one path that can mint a second package
+  // of a name that already has one — and it used to do so in silence, which is
+  // how a review ended with three "AI Workflow"s
+  // (the-editor-makes-a-real-package 07). Still allowed, just announced.
+  if (!open) {
+    const listing = await client.list();
+    const wanted = workbench.model.name.trim().toLocaleLowerCase();
+    const clashes = (listing.ok ? listing.value : [])
+      .filter((row) => row.name.trim().toLocaleLowerCase() === wanted)
+      .map((row) => row.slug);
+    if (clashes.length > 0 && !confirm(duplicateNameConfirmation(workbench.model.name, clashes))) {
+      return { kind: 'cancelled' };
+    }
+  }
+
+  const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;
+  let slug = open;
+  let failure: string | null = null;
+  if (open) {
+    const outcome = await client.save(open, workbench.model.name, document);
+    if (!outcome.ok) failure = outcome.error;
+  } else {
+    const outcome = await client.create(workbench.model.name, document);
+    if (outcome.ok) slug = outcome.value;
+    else failure = outcome.error;
+  }
+  if (failure !== null || slug === null) {
+    return {
+      kind: 'refused',
+      message: `Could not save: ${failure ?? 'the runtime did not name the new workflow'}`,
+    };
+  }
+
+  // **Ticket 49, and it must come before `setOpenSlug`.** This is the one
+  // moment a document acquires an identity, so it is the one moment its draft
+  // can follow — a graph drawn before any save autosaves under a minted
+  // `wf-<timestamp>` key, and `setOpenSlug` below moves the autosave key to
+  // `slug-<slug>` from that instant on. Without the rename in between, the key
+  // the next page load reads points at nothing while the user's bytes sit
+  // under a name nobody will ever ask for again: press Save, press ⌘R, and the
+  // canvas comes back empty.
+  adoptSlugForDraft(currentDraftId(), slug);
+  // Storage *and* the address bar — a workflow that has just become real on
+  // the backend is linkable from this moment on.
+  setOpenSlug(slug);
+  // Autosave refuses to write a package it has no baseline for, so an explicit
+  // save has to leave one behind — otherwise a workflow saved for the first
+  // time here would never autosave again, which is precisely the moment a
+  // developer starts expecting it to.
+  rememberDiskDocument(slug, workbench.model.name, document, workbench.serializer);
+  // This tab's own write — recorded as known-good so the file watch never
+  // mistakes this save for an external change. Read back by slug, not looked up
+  // in a refreshed listing: a hidden package is not in that listing, so saving
+  // one used to record no baseline at all (ticket 21).
+  const row = await client.summary(slug);
+  recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+
+  return open
+    ? { kind: 'saved', slug, name: workbench.model.name }
+    : { kind: 'created', slug, name: workbench.model.name };
+}
+
+/**
+ * The sentence a surface says, derived from the outcome rather than written
+ * twice.
+ *
+ * The panel and the toolbar must not be able to describe one act two ways —
+ * the same reason `HIDDEN_PACKAGE_NOTE` is one constant. In particular the
+ * instance branch says *whose* document was written, because that is the one
+ * case where the answer is not the document on screen.
+ */
+export function saveMessage(outcome: SaveOutcome): string | null {
+  switch (outcome.kind) {
+    case 'created':
+      return `Created: ${outcome.name} (${outcome.slug})`;
+    case 'saved':
+      return `Saved: ${outcome.name}`;
+    case 'overrides':
+      return `Saved this mount's overrides to ${outcome.root}`;
+    case 'refused':
+      return outcome.message;
+    case 'cancelled':
+      return null;
+  }
+}
+
+/** True when the save reached the backend. Used to decide whether to refresh. */
+export function saveSucceeded(outcome: SaveOutcome): boolean {
+  return outcome.kind === 'created' || outcome.kind === 'saved' || outcome.kind === 'overrides';
+}

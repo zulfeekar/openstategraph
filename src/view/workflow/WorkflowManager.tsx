@@ -25,10 +25,8 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
-import { forgetKnownSavedAt, getKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
-import { clearOpenSlug, getOpenSlug, setOpenSlug } from '@app/openWorkflow';
-import { getOpenAddress } from '@app/openAddress';
-import { isInstance } from '@core/model/MountAddress';
+import { forgetKnownSavedAt } from '@app/workflowFileWatch';
+import { clearOpenSlug, getOpenSlug } from '@app/openWorkflow';
 import {
   WorkflowFileClient,
   type WorkflowExample,
@@ -36,14 +34,12 @@ import {
   type WorkflowTemplate,
 } from '@core/runtime/WorkflowFileClient';
 import { clearDrillStack } from '@app/drillStack';
-import { rememberDiskDocument } from '@app/diskAutosave';
-import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
+import { saveMessage, saveSucceeded, saveWorkflow } from './saveWorkflow';
 import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './createNewWorkflow';
 import {
   deleteConfirmation,
   deletedMessage,
-  duplicateNameConfirmation,
   publishedMessage,
   unpublishedMessage,
 } from './consequences';
@@ -198,131 +194,20 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     onClose();
   }, [client, controller, workbench, newName, template, onNotify, onClose]);
 
-  // Two different acts wearing one button (ticket 20). Saving a workflow this
-  // tab already holds a slug for overwrites that package. Saving one it does
-  // not is a *creation*, and the slug for it comes back from the backend —
-  // never from `slugify(name)` here, which could not see that another
-  // workflow already lived at `my-workflow` and so overwrote it.
+  // The act itself is `saveWorkflow` — shared with the toolbar's Save
+  // (`say-it-on-the-surface` 01), for the same reason `createNewWorkflow` is
+  // shared with the toolbar's New: a second entry point is a promotion of this
+  // panel, never a second implementation of it. What stays here is the
+  // presentation — the busy flag, the toast, and refreshing the list this
+  // panel is showing.
   const handleSave = useCallback(async () => {
-    // Ticket 42. What is on screen while an instance is open is a *derived*
-    // document — the package plus this mount's overrides — so saving it back
-    // to the package would burn those overrides into the shared definition and
-    // hit every other mount. What is saved instead is the **parent**, whose
-    // mount node the edits were written to as overrides.
-    const address = getOpenAddress();
-    if (address && isInstance(address)) {
-      const mounts = workbench.controller.document.mountContext();
-      if (!mounts) {
-        onNotify('This mount has no parent loaded, so there is nowhere to save its overrides.');
-        return;
-      }
-      setBusy(true);
-      // Compare-and-set on the parent's `saved_at`. The file watch follows the
-      // *class* while an instance is open, so nothing would otherwise notice
-      // the parent moving — and this save writes a whole retained document,
-      // which would silently revert someone else's parent edit.
-      const current = await client.summary(address.root);
-      const baseline = getKnownSavedAt(address.root);
-      if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
-        setBusy(false);
-        onNotify(
-          `"${address.root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
-        );
-        return;
-      }
-      const written = await client.save(
-        address.root,
-        (mounts.rootDocument['name'] as string) ?? address.root,
-        mounts.rootDocument,
-      );
-      setBusy(false);
-      onNotify(
-        written.ok
-          ? `Saved this mount's overrides to ${address.root}`
-          : `Could not save: ${written.error}`,
-      );
-      if (written.ok) {
-        const row = await client.summary(address.root);
-        recordKnownSavedAt(address.root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
-      }
-      return;
-    }
-    const open = getOpenSlug();
-    // A create, not an overwrite, is the one path that can mint a second
-    // package of a name that already has one — and it used to do so in
-    // silence, which is how a review ended with three "AI Workflow"s
-    // (the-editor-makes-a-real-package 07). The listing is already in hand,
-    // so this costs no request. Still allowed, just announced.
-    if (!open) {
-      const wanted = workbench.model.name.trim().toLocaleLowerCase();
-      const clashes = workflows
-        .filter((row) => row.name.trim().toLocaleLowerCase() === wanted)
-        .map((row) => row.slug);
-      if (
-        clashes.length > 0 &&
-        !confirm(duplicateNameConfirmation(workbench.model.name, clashes))
-      ) {
-        return;
-      }
-    }
     setBusy(true);
-    const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;
-    let slug = open;
-    let failure: string | null = null;
-    if (open) {
-      const outcome = await client.save(open, workbench.model.name, document);
-      if (!outcome.ok) failure = outcome.error;
-    } else {
-      const outcome = await client.create(workbench.model.name, document);
-      if (outcome.ok) slug = outcome.value;
-      else failure = outcome.error;
-    }
+    const outcome = await saveWorkflow({ client, workbench, confirm: (m) => confirm(m) });
     setBusy(false);
-    if (failure !== null || slug === null) {
-      onNotify(`Could not save: ${failure ?? 'the runtime did not name the new workflow'}`);
-      return;
-    }
-    // **Ticket 49, and it must come before `setOpenSlug`.** This is the one
-    // moment a document acquires an identity, so it is the one moment its
-    // draft can follow — a graph drawn before any save autosaves under a
-    // minted `wf-<timestamp>` key, and `setOpenSlug` below moves the autosave
-    // key to `slug-<slug>` from that instant on. Without the rename in
-    // between, the key the next page load reads points at nothing while the
-    // user's bytes sit under a name nobody will ever ask for again: press
-    // Save, press ⌘R, and the canvas comes back empty.
-    //
-    // Before, not after, because `setOpenSlug` announces the new key and the
-    // session hook immediately baselines its write guard against whatever is
-    // stored there. Renaming afterwards would hand it a `null` baseline and
-    // then a payload it had never seen — a conflict with itself.
-    //
-    // A no-op on an overwrite (the key is already this slug's) and refused
-    // outright if the destination is occupied; `adoptSlugForDraft` states why.
-    adoptSlugForDraft(currentDraftId(), slug);
-    // Storage *and* the address bar — a workflow that has just become real on
-    // the backend is linkable from this moment on.
-    setOpenSlug(slug);
-    // Autosave refuses to write a package it has no baseline for, so an
-    // explicit save has to leave one behind — otherwise a workflow saved for
-    // the first time here would never autosave again, which is precisely the
-    // moment a developer starts expecting it to (ticket 02). `document` is
-    // what was just written, so it is what disk now holds.
-    rememberDiskDocument(slug, workbench.model.name, document, workbench.serializer);
-    // The minted slug is said out loud on a create, because it is the one
-    // thing the user could not have predicted: a second "My Workflow" lands
-    // at `my-workflow-k7m3qp`, and silently is how you later wonder which of
-    // two rows is yours.
-    onNotify(
-      open ? `Saved: ${workbench.model.name}` : `Created: ${workbench.model.name} (${slug})`,
-    );
-    await refreshList();
-    // This tab's own write — record it as known-good so the file watch never
-    // mistakes this save for an external change. Read back by slug, not looked
-    // up in the refreshed listing: a hidden package is not in that listing, so
-    // saving one used to record no baseline at all (ticket 21).
-    const row = await client.summary(slug);
-    recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
-  }, [client, workbench, onNotify, refreshList, workflows]);
+    const message = saveMessage(outcome);
+    if (message !== null) onNotify(message);
+    if (saveSucceeded(outcome)) await refreshList();
+  }, [client, workbench, onNotify, refreshList]);
 
   const handleLoad = useCallback(
     async (slug: string) => {
@@ -447,7 +332,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   if (!open) return null;
 
   return (
-    <Panel side="left" className="workflow-manager" style={{ width: 320 }}>
+    <Panel side="left" className="workflow-manager" style={{ width: 'var(--layout-drawer-width)' }}>
       <PanelHeader
         title="Workflows"
         actions={<IconButton label="Close" icon={<Icon glyph={X} size="sm" />} onClick={onClose} />}

@@ -13,6 +13,22 @@
     var(--shadow-lg);
 }
 
+/* A card dropped in the bottom-right lands *under* this panel, which is opaque
+ * — so it vanished, and the only remedy on offer was "Hide minimap"
+ * (production-ready 55.8). The map yields while it is covering something:
+ * enough transparency to see the card through it, full strength the moment
+ * you reach for it. Moving the map instead would trade a card that hides for
+ * a control that wanders. */
+.minimap[data-covering] {
+  opacity: 0.4;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.minimap[data-covering]:hover,
+.minimap[data-covering]:focus-within {
+  opacity: 1;
+}
+
 .minimap__surface {
   position: relative;
   margin: var(--space-2) var(--space-2) 0;

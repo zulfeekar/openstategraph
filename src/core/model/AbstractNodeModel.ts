@@ -1,6 +1,6 @@
 import { nextId } from '@core/kernel/id';
 import { withSortedKeys } from '@core/kernel/ordering';
-import type { Point, Size } from '@core/kernel/geometry';
+import { finitePoint, finiteSize, type Point, type Size } from '@core/kernel/geometry';
 import {
   canonicalRow,
   defaultsFrom,
@@ -49,6 +49,9 @@ export interface NodeWrite {
   runtime(patch: Partial<NodeRuntimeState>): void;
 }
 
+/** Where a node lands when the position it was given is not a number. */
+const ORIGIN: Point = { x: 0, y: 0 };
+
 export abstract class AbstractNodeModel implements INodeModel {
   readonly id: NodeId;
   readonly definition: INodeDefinition;
@@ -63,8 +66,13 @@ export abstract class AbstractNodeModel implements INodeModel {
   constructor(definition: INodeDefinition, init: NodeInit) {
     this.definition = definition;
     this.id = init.id ?? nextId('node', definition.id);
-    this._position = { ...init.position };
-    this._size = { ...(init.size ?? definition.defaultSize) };
+    // The third door, and the one a file walks in by: the serializer passes
+    // `serialized.position` here verbatim, so a hand-edited or truncated
+    // document is where a non-finite coordinate is most likely to originate.
+    // The origin is the fallback because at construction there is no previous
+    // value to keep — a node at (0, 0) is findable, a node at NaN is not.
+    this._position = finitePoint(init.position, ORIGIN);
+    this._size = finiteSize(init.size ?? definition.defaultSize, definition.defaultSize);
     this._parentId = init.parentId ?? null;
     // Schema defaults first so a node loaded from an older document gains
     // any field added since it was saved.
@@ -203,11 +211,18 @@ export abstract class AbstractNodeModel implements INodeModel {
    * widening them to the world — which is the thing being prevented.
    */
   readonly write: NodeWrite = {
+    // `finitePoint` / `finiteSize`, not `{...position}`: these two take their
+    // argument straight from a canvas drag, and a `NaN` reaching them would
+    // leave through `toJSON()` as `"x": null` — the standing rule against a
+    // non-finite number in a serialisable field, arriving by the very route
+    // that rule's worked example describes (ticket 46, item 1). `EdgeModel`
+    // has guarded its waypoints all along and calls itself "the one door they
+    // can come through"; these were the other two.
     position: (position: Point) => {
-      this._position = { ...position };
+      this._position = finitePoint(position, this._position);
     },
     size: (size: Size) => {
-      this._size = { ...size };
+      this._size = finiteSize(size, this._size);
     },
     parent: (parentId: NodeId | null) => {
       this._parentId = parentId;

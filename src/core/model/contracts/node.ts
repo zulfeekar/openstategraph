@@ -147,6 +147,21 @@ export interface INodeDefinition extends IIdentifiable {
    */
   readonly scope?: NodeScope;
   /**
+   * True when this node type's capability reaches the run **without being
+   * wired to anything** (ticket 09).
+   *
+   * Knowledge is the worked case: the runtime attaches the lookup tool to
+   * every agent and worker in the package whenever `knowledge/` holds at least
+   * one `.md`, card or no card. The card is a visible declaration and the home
+   * of the build button, not a connection — so "isn't connected to anything",
+   * true of the graph, is false about the consequence, and the canvas is the
+   * one surface this project insists must be a truthful projection.
+   *
+   * A flag on the type rather than a list inside the rule, so the next ambient
+   * capability declares itself instead of needing an edit to `core/`.
+   */
+  readonly bindsWithoutWiring?: boolean;
+  /**
    * Constructs the instance. Concrete node classes are reached only
    * through here, which is what keeps the model open for extension and
    * closed for modification.

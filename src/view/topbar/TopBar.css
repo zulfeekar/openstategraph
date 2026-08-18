@@ -146,3 +146,23 @@
 .topbar__run {
   display: inline-flex;
 }
+
+/* The "not on disk" mark on Save (`say-it-on-the-surface` 01).
+ *
+ * A dot rather than a word: the button already carries a word, and the state
+ * it marks — this document has no folder on the backend yet — is a *warning*
+ * about durability rather than an instruction. `aria-hidden`, because the
+ * sentence a screen reader needs is the tooltip's, not a decoration's.
+ *
+ * Accent rather than danger: nothing is wrong, the work simply is not on disk
+ * yet, and colouring an ordinary first save as an error would teach people to
+ * ignore the colour that does mean danger. */
+.topbar__unsaved {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: var(--space-1, 4px);
+  border-radius: 50%;
+  background: var(--color-accent, currentColor);
+  vertical-align: middle;
+}

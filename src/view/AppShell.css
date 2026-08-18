@@ -38,26 +38,35 @@
   height: 100%;
 }
 
-/* Narrow windows: the panels overlay the canvas rather than squeezing it
- * down to nothing. */
-@media (max-width: 1100px) {
-  .app-shell__body {
-    position: relative;
-  }
+/* When the panels would leave no canvas, they overlay it instead of squeezing
+ * it down to nothing. `data-overlay` is set by the shell from `panelFit`, not
+ * by a media query: the answer depends on which panels are open, and a
+ * breakpoint can only see the window (production-ready 55.4). It replaced
+ * `@media (max-width: 1100px)`, which let four panels share a 1280px row and
+ * leave the canvas 128px wide. */
+.app-shell__body[data-overlay] {
+  position: relative;
+}
 
-  .app-shell__body > .panel--left,
-  .app-shell__body > .app-shell__right-panels {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    box-shadow: var(--shadow-xl);
-  }
+.app-shell__body[data-overlay] > .panel--left,
+.app-shell__body[data-overlay] > .app-shell__right-panels {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-shadow: var(--shadow-xl);
+}
 
-  .app-shell__body > .panel--left {
-    left: 0;
-  }
+.app-shell__body[data-overlay] > .panel--left {
+  left: 0;
+}
 
-  .app-shell__body > .app-shell__right-panels {
-    right: 0;
-  }
+/* The Workflows drawer is a left panel too, so floating it at `left: 0` put
+ * it exactly on top of the palette — two panels, one address, whichever
+ * painted last winning. It stands beside the palette instead. */
+.app-shell__body[data-overlay][data-palette-open] > .workflow-manager {
+  left: var(--layout-palette-width);
+}
+
+.app-shell__body[data-overlay] > .app-shell__right-panels {
+  right: 0;
 }

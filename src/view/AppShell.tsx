@@ -20,6 +20,9 @@ import { McpServersDialog } from './overlays/McpServersDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
+import { panelsMustOverlay } from './layout/panelFit';
+import { useViewportWidth } from './layout/useViewportWidth';
+import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/workflowFileWatch';
@@ -28,9 +31,22 @@ import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
 import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './workflow/createNewWorkflow';
+import { saveMessage, saveSucceeded, saveWorkflow } from './workflow/saveWorkflow';
 import './AppShell.css';
 
 const THEME_STORAGE_KEY = 'openstategraph.theme';
+
+/**
+ * The run this tab was watching when it was last reloaded, if there was one
+ * (ticket 55.6) — read at module scope because it belongs to the *page load*,
+ * not to a component.
+ *
+ * `takeInterruptedRun` clears the mark as it reads it, so there is exactly one
+ * honest reader: an effect would be run twice by StrictMode and the second
+ * pass would find nothing, and a `useState` initialiser is invoked twice for
+ * the same reason. Here it is consumed once, before React starts.
+ */
+const INTERRUPTED_RUN = takeInterruptedRun();
 
 /**
  * The application layout.
@@ -89,16 +105,22 @@ export function AppShell() {
     [workbench, notify],
   );
 
+  const viewportWidth = useViewportWidth();
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [showGrid, setShowGrid] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // A second right-hand panel rather than a mode on the inspector: a developer
   // wants to see a node's config *and* the answer at the same time.
-  const [askOpen, setAskOpen] = useState(false);
+  // Open on arrival when a run was interrupted by the reload: the notice
+  // below explains it, and History — which the panel opens on — is where the
+  // server's record of that run is.
+  const [askOpen, setAskOpen] = useState(INTERRUPTED_RUN !== null);
   // Set when Run hands a graph over to the backend runtime (see the
   // `run:finish` effect below); cleared as soon as the panel is closed.
-  const [askNotice, setAskNotice] = useState<string | null>(null);
+  const [askNotice, setAskNotice] = useState<string | null>(
+    INTERRUPTED_RUN === null ? null : interruptedRunNotice(INTERRUPTED_RUN),
+  );
   const [askFocusNonce, setAskFocusNonce] = useState(0);
   /** A Run press, handed to the Ask panel to execute as a turn (ticket 03). */
   const [askRunRequest, setAskRunRequest] = useState<{
@@ -164,6 +186,34 @@ export function AppShell() {
     }));
   }, []);
 
+  /**
+   * The toolbar's **Save** (`say-it-on-the-surface` 01).
+   *
+   * The act is `saveWorkflow`, the one the Workflows panel calls — this is a
+   * gesture, not a second implementation, the same division `startNewWorkflow`
+   * keeps below. What the shell adds is the one thing a panel already had and
+   * a toolbar did not: a busy flag, so the button cannot be double-pressed
+   * into two creates. The button's own copy re-derives itself — it subscribes
+   * to the slug and address stores rather than being told.
+   *
+   * `window.confirm` is passed in rather than reached for inside the act, so
+   * the act stays testable without a DOM — and so the day this project has a
+   * better dialog than the browser's, one call site changes.
+   */
+  const [saving, setSaving] = useState(false);
+  const saveOpenWorkflow = useCallback(async () => {
+    setSaving(true);
+    const outcome = await saveWorkflow({
+      client: workflowFiles,
+      workbench,
+      confirm: (message) => window.confirm(message),
+    });
+    setSaving(false);
+    const message = saveMessage(outcome);
+    if (message !== null) notify(message);
+    return saveSucceeded(outcome);
+  }, [workflowFiles, workbench, notify]);
+
   const shellShortcuts = useMemo<readonly Shortcut[]>(
     () => [
       {
@@ -206,6 +256,17 @@ export function AppShell() {
         run: () => setWorkflowManagerOpen((value) => !value),
       },
       {
+        // The convention every editor on this machine already trained the
+        // user in. `allowInTextEntry` because a save you have to click out of
+        // a textarea to reach is a save you lose work to — and because the
+        // browser's own Save-Page dialog is what fires otherwise.
+        keys: 'Mod+S',
+        label: 'Save workflow',
+        group: 'Run',
+        allowInTextEntry: true,
+        run: () => void saveOpenWorkflow(),
+      },
+      {
         keys: 'Mod+Enter',
         label: 'Run workflow',
         group: 'Run',
@@ -223,7 +284,7 @@ export function AppShell() {
         run: () => setCredentialsOpen(true),
       },
     ],
-    [workbench, runWorkflow],
+    [workbench, runWorkflow, saveOpenWorkflow],
   );
 
   /* ---------------- run feedback ---------------- */
@@ -293,6 +354,8 @@ export function AppShell() {
         onOpenMcpServers={() => setMcpServersOpen(true)}
         onNotify={onNotify}
         onNewWorkflow={() => void startNewWorkflow()}
+        onSave={() => void saveOpenWorkflow()}
+        saving={saving}
         onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
         workflowsOpen={workflowManagerOpen}
         askOpen={askOpen}
@@ -321,7 +384,23 @@ export function AppShell() {
         runInFlight={backendRunning}
       />
 
-      <div className="app-shell__body">
+      <div
+        className="app-shell__body"
+        // Whether the panels share the row with the canvas or float over it,
+        // decided by what is open rather than by a breakpoint (55.4). Four
+        // panels at 1280 used to leave ~140px of canvas, silently.
+        data-overlay={
+          panelsMustOverlay(viewportWidth, {
+            palette: paletteOpen,
+            ask: askOpen,
+            inspector: inspectorOpen,
+            workflows: workflowManagerOpen,
+          }) || undefined
+        }
+        // The drawer is a second left-hand panel: floating, it must stand
+        // beside the palette rather than on top of it.
+        data-palette-open={paletteOpen || undefined}
+      >
         {paletteOpen ? <Palette onNotify={onNotify} /> : null}
 
         <main className="app-shell__canvas">
@@ -351,6 +430,7 @@ export function AppShell() {
                 runRequest={askRunRequest}
                 stopRequest={askStopRequest}
                 streams={askStreams}
+                openHistory={INTERRUPTED_RUN !== null}
                 onRunningChange={(running) => {
                   setBackendRunning(running);
                   // Ticket 08: a backend-streamed run has no local engine to

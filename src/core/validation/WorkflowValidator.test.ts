@@ -15,6 +15,7 @@ import {
   singleDefaultWorkerRule,
   skillBlanksRule,
   unfilledPlaceholders,
+  orphanNodeRule,
   unknownNodeTypeRule,
 } from './WorkflowValidator';
 
@@ -422,5 +423,57 @@ describe('the escapable-loop notice describes Run rather than instructing the us
       registry: workbench.registry,
     });
     expect(diagnostics.every((d) => d.severity === 'error')).toBe(true);
+  });
+});
+
+/**
+ * The Knowledge card is not the wiring, and the diagnostics must not say it is
+ * (ticket 09).
+ *
+ * Binding is **ambient**: the runtime attaches the lookup tool to every agent
+ * and worker in the package whenever `knowledge/` holds at least one `.md`,
+ * card or no card (`prebuilt_knowledge.ambient_knowledge_tool`). Dropping one
+ * on a canvas nonetheless produced *"Knowledge isn't connected to anything"* —
+ * a true sentence about the graph and a false one about the consequence, on
+ * the one surface this project insists must be a truthful projection.
+ *
+ * Data-driven rather than a special case in the rule: a node type says
+ * `bindsWithoutWiring` and the rule believes it, so the next ambient
+ * capability needs no edit here.
+ */
+describe('orphanNodeRule', () => {
+  it('still flags an ordinary tool nobody wired', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.agent);
+    const tool = addNode(workbench, 'tool.web-search');
+
+    const found = orphanNodeRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+
+    expect(found.map((d) => d.nodeId)).toContain(tool.id);
+  });
+
+  it('says nothing about a node that binds without wiring', () => {
+    const workbench = makeWorkbench();
+    addNode(workbench, TYPE.agent);
+    const knowledge = addNode(workbench, 'tool.knowledge-lookup');
+
+    const found = orphanNodeRule.check({
+      model: workbench.model,
+      registry: workbench.registry,
+    });
+
+    expect(found.map((d) => d.nodeId)).not.toContain(knowledge.id);
+  });
+
+  it('the claim is on the node type, where the runtime rule can be cited', () => {
+    const workbench = makeWorkbench();
+
+    expect(workbench.registry.nodeTypes.require('tool.knowledge-lookup').bindsWithoutWiring).toBe(
+      true,
+    );
+    expect(workbench.registry.nodeTypes.require('tool.web-search').bindsWithoutWiring).toBeUndefined();
   });
 });

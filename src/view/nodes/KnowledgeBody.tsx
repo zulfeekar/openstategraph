@@ -5,6 +5,8 @@ import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { describeRuntimeBase, runtimeBaseUrl } from '@core/runtime/runtimeBaseUrl';
 import { Dialog } from '../overlays/Dialog';
 import type { NodeBodyProps } from './nodeBodyRegistry';
+import { knowledgeBindingNote } from './knowledgeBindingCopy';
+import { topicKind } from './knowledgeTopicKind';
 import './KnowledgeBody.css';
 
 /**
@@ -239,6 +241,13 @@ export function KnowledgeBody(_props: NodeBodyProps) {
       <p className="knowledge__build-time-note">
         Build time, not run time — a run reads these docs, never writes them.
       </p>
+      {/* What this card does *not* do (ticket 09): it is not the wiring. The
+          runtime attaches the lookup to every agent in the package whenever
+          `knowledge/` is non-empty, card or no card, so the canvas must stop
+          implying a connection it does not make. */}
+      <p className="knowledge__build-time-note">
+        {knowledgeBindingNote(slug === null ? null : topics.length)}
+      </p>
       {state.status === 'done' ? (
         <div className="node__composition">
           {state.written} doc{state.written === 1 ? '' : 's'} written
@@ -262,8 +271,12 @@ export function KnowledgeBody(_props: NodeBodyProps) {
               >
                 <span className="knowledge__topic-name">{topic.name}</span>
                 {topic.hint ? <span className="knowledge__topic-hint">{topic.hint}</span> : null}
-                <span className="knowledge__badge">
-                  {topic.generated ? topic.source || 'generated' : 'claimed'}
+                {/* The question this doc answers, not the builder that wrote
+                    it — `root` versus `explorer` is only legible to someone
+                    who knows the builder registry (ticket 13). The builder's
+                    own word is in the hover. */}
+                <span className="knowledge__badge" title={topicKind(topic).title}>
+                  {topicKind(topic).label}
                 </span>
                 {topic.stale ? (
                   <span

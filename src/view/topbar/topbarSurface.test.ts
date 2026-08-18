@@ -86,6 +86,39 @@ describe('the toolbar', () => {
     expect(topbar).toContain('onAskToggle');
     expect(shell).not.toContain('Ask the workflow');
   });
+  it('carries Save, where a person who has just drawn something looks for it', () => {
+    // `say-it-on-the-surface` 01. Saving was reachable only from inside the
+    // Workflows panel — behind a toggle, with no keyboard path — while the
+    // thing filling the gap, autosave, is browser-local and reaches no
+    // backend. So the cost of never finding the panel was lost work. Pinned
+    // as placement, like Create New above it, because placement has no seam a
+    // node-environment test can reach.
+    expect(topbar).toContain("import { saveAffordance } from './saveAffordance'");
+    expect(topbar).toMatch(/Tooltip content=\{save\.hint\} shortcut="Mod\+S"/);
+    expect(topbar).toMatch(/onClick=\{onSave\}/);
+    // Run stays the only filled button: a second `primary` means neither is.
+    expect(topbar).not.toMatch(/variant="primary"[\s\S]{0,200}onClick=\{onSave\}/);
+  });
+
+  it('binds Mod+S in the one table that also feeds the shortcuts drawer', () => {
+    // One binding table drives both the dispatcher and the drawer, so a
+    // shortcut added anywhere else would work and be undiscoverable.
+    expect(shell).toMatch(/keys: 'Mod\+S',\s*\n\s*label: 'Save workflow'/);
+    // In a textarea too: a save you must click out of a field to reach is a
+    // save you lose work to, and the browser's own dialog fires otherwise.
+    expect(shell).toMatch(/keys: 'Mod\+S',[\s\S]{0,200}allowInTextEntry: true/);
+  });
+
+  it('presses the panel’s own act rather than reimplementing it', () => {
+    // The guard `createNewWorkflow` states, applied to the second verb: a new
+    // entry point is a promotion of the manager, never a second save.
+    expect(shell).toContain("from './workflow/saveWorkflow'");
+    const manager = read('../workflow/WorkflowManager.tsx');
+    expect(manager).toContain("from './saveWorkflow'");
+    // And the knowledge is in neither surface.
+    expect(manager).not.toContain('adoptSlugForDraft');
+    expect(topbar).not.toContain('client.create');
+  });
 });
 
 describe('the workflow list', () => {
@@ -113,4 +146,5 @@ describe('the workflow list', () => {
     // the client. Both tickets use the one stream.
     expect(manager).toContain('watchCatalogue');
   });
+
 });

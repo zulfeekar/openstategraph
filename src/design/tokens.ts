@@ -29,6 +29,10 @@ export const LAYOUT = {
   topbarHeight: 48,
   paletteWidth: 232,
   inspectorWidth: 300,
+  /** The Workflows drawer. Here rather than inline in `WorkflowManager`
+   * because `panelFit` has to add it up with the others (55.4), and a width
+   * two places know is a width that drifts. */
+  drawerWidth: 320,
 } as const;
 
 /** Canvas geometry. The single source of truth for the paper. */
@@ -142,6 +146,7 @@ export function applyLayoutTokens(root: HTMLElement = document.documentElement):
   root.style.setProperty('--layout-topbar-height', `${LAYOUT.topbarHeight}px`);
   root.style.setProperty('--layout-palette-width', `${LAYOUT.paletteWidth}px`);
   root.style.setProperty('--layout-inspector-width', `${LAYOUT.inspectorWidth}px`);
+  root.style.setProperty('--layout-drawer-width', `${LAYOUT.drawerWidth}px`);
   root.style.setProperty('--canvas-grid-size', `${CANVAS.gridSize}px`);
   root.style.setProperty('--node-width', `${NODE.width}px`);
 }

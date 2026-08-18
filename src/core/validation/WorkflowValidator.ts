@@ -316,7 +316,8 @@ export const unknownNodeTypeRule: IWorkflowRule = {
   },
 };
 
-/** Nodes wired to nothing at all will never run. */
+/** Nodes wired to nothing at all will never run — unless their capability
+ * binds without wiring, which `bindsWithoutWiring` is how a type says. */
 export const orphanNodeRule: IWorkflowRule = {
   id: 'orphan-nodes',
   check({ model }) {
@@ -324,7 +325,15 @@ export const orphanNodeRule: IWorkflowRule = {
     // A lone node on a fresh canvas is normal, not a warning.
     if (executable.length < 2) return [];
     return executable
-      .filter((node) => node.ports.length > 0 && model.edgesOf(node.id).length === 0)
+      .filter(
+        (node) =>
+          node.ports.length > 0 &&
+          model.edgesOf(node.id).length === 0 &&
+          // A type that binds ambiently is doing its job unwired, so saying it
+          // "isn't connected to anything" describes the graph and misdescribes
+          // the run (ticket 09). Read off the definition, never a list here.
+          !node.definition.bindsWithoutWiring,
+      )
       .map((node) => ({
         code: 'orphan-node',
         severity: 'info' as const,

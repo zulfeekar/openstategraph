@@ -68,14 +68,22 @@ const BANNED: { pattern: RegExp; instead: string }[] = [
  * ticket 43's to argue. What lands here is the one class F10 is about, held
  * everywhere it can appear rather than in the three places a reviewer noticed.
  */
-const DOC_ROOTS = ['README.md', 'docs', 'site', 'backend/openstategraph'];
+const DOC_ROOTS = [
+  'README.md',
+  'docs',
+  'site',
+  'backend/openstategraph',
+  // A commented sample a user copies and reads, and the one place *instance
+  // default* survived a hand sweep of the prose (ticket 43, F9).
+  'openstategraph.example.yaml',
+];
 const DOC_SKIP = /node_modules|__pycache__|[/\\]decisions[/\\]/;
 
 function documents(path: string, found: string[] = []): string[] {
   if (DOC_SKIP.test(path)) return found;
   if (statSync(path).isDirectory()) {
     for (const entry of readdirSync(path)) documents(join(path, entry), found);
-  } else if (/\.(md|html|py|tsx?)$/.test(path) && !/\.test\.tsx?$/.test(path)) {
+  } else if (/\.(md|html|py|ya?ml|tsx?)$/.test(path) && !/\.test\.tsx?$/.test(path)) {
     found.push(path);
   }
   return found;
@@ -98,6 +106,85 @@ const DISTRIBUTION_PACKAGE = [
   new RegExp(`\\b(?:${NUMBER})-packages?\\b`, 'i'),
   new RegExp(`(?:${DEPENDENCY})[^.\\n]{0,60}?\\b(?:${NUMBER}) packages?\\b`, 'i'),
   new RegExp(`\\b(?:${NUMBER}) packages?\\b[^.\\n]{0,60}?(?:${DEPENDENCY})`, 'i'),
+];
+
+/**
+ * The register question F12 left open, answered — and it is a real question,
+ * not a technicality (ticket 43).
+ *
+ * In TypeScript a `//` line is obviously the internal register. In Python the
+ * equivalent is not obvious, because a **docstring is both documentation and
+ * the module\'s own reasoning**: `config_file.py` and `api/model_resolution.py`
+ * spell out the precedence chain *instance default < config file < workflow
+ * settings.model* in prose that is arguing with itself, not addressing a user.
+ * Banning the phrase there would force those modules to misname the thing they
+ * are explaining.
+ *
+ * So the split is: **a `.py` docstring or comment is internal; a quoted string
+ * literal is user copy** — the same rule the `src/` leg has always used, in the
+ * shape Python takes. Triple-quoted blocks are tracked rather than parsed,
+ * which is an approximation and stated as one: a triple-quoted *user-facing*
+ * help string would slip through. None exists today, and a real parser in a
+ * lexicon test would be a second implementation of Python to keep working.
+ *
+ * `.md`, `.html` and `.yaml` are documents a person reads, so every line counts
+ * — including the `AGENTS.md` files that ship *inside* copied examples, which
+ * is where two of F9\'s hits were.
+ */
+function proseLines(path: string): { line: string; number: number }[] {
+  const lines = readFileSync(path, 'utf8').split('\n');
+  if (!path.endsWith('.py')) {
+    return lines.map((line, index) => ({ line, number: index + 1 }));
+  }
+  const kept: { line: string; number: number }[] = [];
+  let inDocstring = false;
+  for (const [index, line] of lines.entries()) {
+    const fences = (line.match(/"""|'''/g) ?? []).length;
+    const opened = inDocstring;
+    if (fences % 2 === 1) inDocstring = !inDocstring;
+    // A line that opens, closes or sits inside a docstring is the module
+    // talking to itself. A `#` comment is the same register.
+    if (opened || fences > 0 || line.trim().startsWith('#')) continue;
+    kept.push({ line, number: index + 1 });
+  }
+  return kept;
+}
+
+/**
+ * The rest of the settled lexicon, over the same four trees (ticket 43, F9/F12).
+ *
+ * **`iterations` is deliberately not banned on its own.** The correct sentence
+ * in this repository is *"`recursion_limit` counts supersteps, not
+ * iterations"* — it appears in `docs/patterns.md`, in `mcp_server.py` and in a
+ * shipped example\'s `AGENTS.md`, and a pattern that matched the word near
+ * `recursion_limit` would fail on all three while catching nothing. What is
+ * wrong is *labelling* the budget with it, so the labels are what is banned.
+ *
+ * **A line that forbids the word may say it.** `docs/patterns.md`,
+ * `site/gallery.html` and two shipped `AGENTS.md` files each contain a sentence
+ * whose whole content is *"never call it max iterations"* — the same allowance
+ * `docs/decisions/` gets one exclusion up, for the same reason: a text whose
+ * subject is the wrong word has to be able to name it. Narrow on purpose: the
+ * marker must be in the phrase's own sentence — approximated as this line and
+ * the one above it, because prose wraps and three of the four real cases put
+ * the "never" on the previous line. A paragraph that says "never" two
+ * sentences earlier and misuses the word later is still caught.
+ */
+const FORBIDS = /\bnever\b|\bnot\b|rather than|instead of|do not|mislabel|misnam|wrong word/i;
+const DOCUMENT_BANNED: { pattern: RegExp; instead: string }[] = [
+  {
+    pattern: /instance default/i,
+    instead:
+      '"installation default" — CLAUDE.md fixes *instance* as one mount of a package',
+  },
+  {
+    pattern: /max(?:imum)? (?:iterations|turns)|iteration (?:limit|budget)/i,
+    instead: '"step budget" — recursion_limit counts supersteps, not laps',
+  },
+  {
+    pattern: /revise loop/i,
+    instead: '"revision loop" — the settled user-facing term',
+  },
 ];
 
 /**
@@ -131,6 +218,39 @@ describe('the user-facing lexicon', () => {
       expect(walked.some((path) => path.endsWith(KNOWN_DOCUMENT))).toBe(true);
       expect(walked.some((path) => path.endsWith('.py'))).toBe(true);
       expect(walked.some((path) => path.includes('site'))).toBe(true);
+    });
+
+    it.each(DOCUMENT_BANNED)('never says $pattern where a user reads', ({ pattern, instead }) => {
+      const offenders: string[] = [];
+      for (const root of DOC_ROOTS) {
+        for (const path of documents(join(REPO, root))) {
+          const lines = proseLines(path);
+          for (const [index, { line, number }] of lines.entries()) {
+            const sentence = `${lines[index - 1]?.line ?? ''} ${line}`;
+            if (pattern.test(line) && !FORBIDS.test(sentence)) {
+              offenders.push(`${path.slice(REPO.length)}:${number}: ${line.trim().slice(0, 90)}`);
+            }
+          }
+        }
+      }
+
+      expect(offenders, `use ${instead}`).toEqual([]);
+    });
+
+    it('reads a python string literal but not a python docstring', () => {
+      // The anti-vacuity control for the register split above: if `proseLines`
+      // dropped every `.py` line, the assertion it guards would be true of an
+      // empty set — which is the defect this whole ticket is about.
+      const python = documents(join(REPO, 'backend/openstategraph')).filter((path) =>
+        path.endsWith('.py'),
+      );
+      const kept = python.flatMap((path) => proseLines(path));
+
+      expect(kept.length).toBeGreaterThan(1000);
+      expect(kept.some(({ line }) => /"[^"]{20,}"/.test(line))).toBe(true);
+      // And the register it must *not* reach: the precedence chain in
+      // `config_file.py`'s docstring names the internal sense on purpose.
+      expect(kept.some(({ line }) => /instance default/i.test(line))).toBe(false);
     });
 
     it('never counts a dependency in packages', () => {

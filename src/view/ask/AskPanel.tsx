@@ -32,6 +32,7 @@ import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
 import { applicableSuggestion, type CapabilitySuggestion } from './suggestion';
 import { continuingThread, rememberThread, type ThreadBinding } from './thread';
+import { clearRunInFlight, markRunInFlight } from './interruptedRun';
 import { progressLine } from './progressLine';
 import './AskPanel.css';
 
@@ -260,6 +261,14 @@ export interface AskPanelProps {
    * see `OpenStreams` for why an unmount effect cannot do that job.
    */
   readonly streams: OpenStreams;
+  /**
+   * Open showing History rather than the live thread (ticket 55.6).
+   *
+   * Set by the shell when this editor came back from a reload that killed a
+   * run: the thread it would show is empty, and the run it is about is on the
+   * server, which is exactly what History reads.
+   */
+  readonly openHistory?: boolean;
 }
 
 export function AskPanel({
@@ -269,6 +278,7 @@ export function AskPanel({
   stopRequest = null,
   onRunningChange,
   streams,
+  openHistory = false,
 }: AskPanelProps) {
   const controller = useController();
   const workbench = useWorkbench();
@@ -283,7 +293,7 @@ export function AskPanel({
    * the conversation that was there — a run streaming in the background keeps
    * streaming into a thread that is merely not on screen.
    */
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(openHistory);
   /**
    * The conversation in progress, or `null` before the first answer comes back
    * and after an explicit reset.
@@ -445,6 +455,11 @@ export function AskPanel({
       // and registered with the *shell's* owner, so closing the panel stops it
       // too. The caller never holds a controller; it only ever gets a signal.
       const signal = streams.begin(id);
+      // A reload from here on would take the panel with it. The mark is what
+      // lets the next load say so instead of coming back blank (55.6); it is
+      // cleared in the same `finally` that settles the stream, so every
+      // ending — answered, stopped, failed, paused — clears it.
+      markRunInFlight({ ...(slug ? { slug } : {}), at: Date.now() });
       // The rules — an empty id leaves what is held alone, a different one
       // rebinds — live in `thread.ts` where they are unit-tested; a thread is
       // a server object, so getting them wrong changes nothing on screen.
@@ -725,6 +740,7 @@ export function AskPanel({
         outcome = await call(onEvent, signal);
       } finally {
         streams.settle(id);
+        clearRunInFlight();
       }
 
       const stopped = outcome.ok && outcome.value != null && isCancelled(outcome.value);
@@ -1273,7 +1289,12 @@ export function AskPanel({
         {historyOpen ? (
           <PastRuns slug={currentWorkflowSlug()} onClose={() => setHistoryOpen(false)} />
         ) : null}
-        {historyOpen ? null : notice ? (
+        {/* Above history too, not only above the live thread (ticket 55.6).
+            The notice explains why the panel opened, and the one case that
+            opens it *on* history — coming back from a reload that killed a
+            run — is precisely the one whose explanation would otherwise be
+            hidden by the view it sent you to. */}
+        {notice ? (
           <p className="ask__notice">
             <Icon glyph={Info} size="sm" />
             <span>{notice}</span>

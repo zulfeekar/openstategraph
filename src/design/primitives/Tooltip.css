@@ -25,6 +25,16 @@
   line-height: var(--line-height-snug);
 }
 
+/* A multiline tooltip is `display: block`, which drops the flex `gap` the
+ * single-line layout used to separate the sentence from its shortcut — so the
+ * two ran together as "…in the address bar.Mod+S". Found while verifying the
+ * toolbar's Save (`say-it-on-the-surface` 01) in a browser, which is the only
+ * place it is visible: the markup was correct the whole time. */
+.tooltip--multiline .tooltip__kbd {
+  display: block;
+  margin-block-start: var(--space-1);
+}
+
 /* Shortcut hint riding along inside the tooltip. */
 .tooltip__kbd {
   display: inline-flex;

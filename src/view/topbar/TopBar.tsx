@@ -16,6 +16,7 @@ import {
   Plus,
   Grid2x2,
   Redo2,
+  Save,
   Square,
   Sun,
   Undo2,
@@ -57,6 +58,9 @@ import { rememberExamplesShelf } from '@view/workflow/examplesShelf';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import { useEntryQuestion } from './useEntryQuestion';
 import { runIntent } from './runIntent';
+import { subscribeOpenSlug } from '@app/openWorkflow';
+import { subscribeOpenAddress } from '@app/openAddress';
+import { saveAffordance } from './saveAffordance';
 import './TopBar.css';
 
 interface TopBarProps {
@@ -85,6 +89,16 @@ interface TopBarProps {
    * so promoting the affordance did not fork the act.
    */
   onNewWorkflow: () => void;
+  /**
+   * Save this document to the backend (`say-it-on-the-surface` 01).
+   *
+   * The toolbar owns the *button* and nothing else: what saving costs and
+   * which of its three acts fires is `saveWorkflow`, shared with the Workflows
+   * panel, exactly as `onNewWorkflow` shares `createNewWorkflow`.
+   */
+  onSave: () => void;
+  /** True while a save is in flight, so the button cannot be pressed twice. */
+  saving: boolean;
   /** Route to the workflow list — open, unpublish, delete, publish, save. */
   onWorkflowsToggle: () => void;
   workflowsOpen: boolean;
@@ -130,6 +144,8 @@ export function TopBar({
   onOpenMcpServers,
   onNotify,
   onNewWorkflow,
+  onSave,
+  saving,
   onWorkflowsToggle,
   workflowsOpen,
   onAskToggle,
@@ -139,6 +155,21 @@ export function TopBar({
   runInFlight,
 }: TopBarProps) {
   const [graphOpen, setGraphOpen] = useState(false);
+  // Re-derived whenever the open workflow's identity moves. The label is a
+  // claim about whether this document has a folder, and that claim changes the
+  // instant one is minted — so it subscribes to the two stores that own the
+  // answer rather than taking a nonce from a parent that would have to
+  // remember to bump it.
+  const [save, setSave] = useState(saveAffordance);
+  useEffect(() => {
+    const refresh = () => setSave(saveAffordance());
+    const offSlug = subscribeOpenSlug(refresh);
+    const offAddress = subscribeOpenAddress(refresh);
+    return () => {
+      offSlug();
+      offAddress();
+    };
+  }, []);
   const workbench = useWorkbench();
   const flowDirection = useFlowDirection();
   const controller = useController();
@@ -301,6 +332,27 @@ export function TopBar({
           <Tooltip content="Start a new workflow" multiline>
             <Button variant="ghost" icon={<Icon glyph={Plus} size="sm" />} onClick={onNewWorkflow}>
               New
+            </Button>
+          </Tooltip>
+          {/* **Save, where a person who has just drawn something looks for
+              it** (`say-it-on-the-surface` 01). It was reachable only from
+              inside the Workflows panel, behind a toggle, with no `Mod+S` —
+              and what filled the gap was autosave, which is browser-local and
+              reaches no backend. So the cost of not finding the panel was
+              lost work, which is why this is the one control here that
+              changes its own copy: `saveAffordance` says which of the three
+              acts is about to fire and whether this document is on disk at
+              all. `secondary`, not `primary` — Run is the primary and a
+              second filled button means neither is. */}
+          <Tooltip content={save.hint} shortcut="Mod+S" multiline>
+            <Button
+              variant="secondary"
+              icon={<Icon glyph={Save} size="sm" />}
+              onClick={onSave}
+              disabled={saving}
+            >
+              {save.label}
+              {save.unsaved ? <span className="topbar__unsaved" aria-hidden="true" /> : null}
             </Button>
           </Tooltip>
           {/* Anchor for the examples pointer (ticket 23), on the control that
