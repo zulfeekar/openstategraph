@@ -136,3 +136,16 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* An explained badge is focusable, so it needs a focus ring and a cursor that
+ * says "there is something here" (`say-it-on-the-surface` 05). A hover-only
+ * explanation is the same defect one input device along, so this state is not
+ * decoration — it is the keyboard half of the affordance. */
+.badge--explained {
+  cursor: help;
+}
+
+.badge--explained:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus-ring, currentColor);
+  outline-offset: 2px;
+}

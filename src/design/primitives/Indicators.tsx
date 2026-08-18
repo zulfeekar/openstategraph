@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import clsx from 'clsx';
 import type { LucideIcon } from 'lucide-react';
 import { Icon, type IconSize } from './Icon';
+import { Tooltip } from './Tooltip';
 import './Indicators.css';
 
 /* ------------------------------------------------------------------ *
@@ -29,28 +30,74 @@ export function StatusDot({ tone = 'idle', label }: { tone?: StatusTone; label?:
  * Badge
  * ------------------------------------------------------------------ */
 
+/**
+ * A short mark beside a name.
+ *
+ * ## A word on a badge is a claim, and a claim owes the reader a sentence
+ *
+ * `say-it-on-the-surface` 05. The palette printed **Hidden** beside two
+ * packages and the owner, driving the product, asked what it meant. The
+ * sentence existed — `HIDDEN_PACKAGE_NOTE`, one constant, deliberately — and
+ * it was hung off the *row's* native `title`: a second of delay, anchored at
+ * the pointer rather than at the word, invisible to touch and to keyboard
+ * focus, and concatenated with the row's own hint so the answer was the second
+ * paragraph of a string nobody waited for.
+ *
+ * The deeper reason nobody fixed it is here, in this component: `Badge` had
+ * `tone`, `numeric`, `children` and `className`, and **no way to carry an
+ * explanation at all**. A badge was structurally incapable of saying what it
+ * meant, so every author who wanted to explain one had to reach past the
+ * primitive. The rule and the means now live together:
+ *
+ * > **A badge whose content is a word takes an `explanation`. A `numeric`
+ * > badge — a count beside the thing it counts — does not.**
+ *
+ * `src/design/badgeExplanations.test.ts` walks every call site and fails on a
+ * word badge that explains nothing, so the rule is a red test rather than a
+ * paragraph. Exceptions are recorded there, each with its argument.
+ *
+ * An explained badge is **focusable** (`tabIndex={0}`) and typed `role="note"`.
+ * A hover-only explanation is the same defect one input device along, which is
+ * the whole complaint restated — so it is not an option this component offers.
+ */
 export function Badge({
   tone = 'neutral',
   numeric,
+  explanation,
   children,
   className,
 }: {
   tone?: 'neutral' | 'accent' | 'success' | 'danger';
   numeric?: boolean;
+  /**
+   * What this mark means, in a sentence. Comes from wherever the claim itself
+   * is owned — never re-worded at the call site, for the reason
+   * `HIDDEN_PACKAGE_NOTE` records: two spellings of one verdict agree on the
+   * day they are written and drift on the first reword.
+   */
+  explanation?: string;
   children: ReactNode;
   className?: string;
 }) {
-  return (
+  const mark = (
     <span
       className={clsx(
         'badge',
         tone !== 'neutral' && `badge--${tone}`,
         numeric && 'badge--numeric',
+        explanation && 'badge--explained',
         className,
       )}
+      {...(explanation ? { tabIndex: 0, role: 'note' as const } : {})}
     >
       {children}
     </span>
+  );
+  if (!explanation) return mark;
+  return (
+    <Tooltip content={explanation} multiline>
+      {mark}
+    </Tooltip>
   );
 }
 

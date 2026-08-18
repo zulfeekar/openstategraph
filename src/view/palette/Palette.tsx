@@ -498,7 +498,13 @@ function PackageItem({
       data-accent="violet"
       draggable={!refused}
       aria-disabled={refused}
-      title={row.hidden ? `${hint}\n\n${HIDDEN_PACKAGE_NOTE}` : hint}
+      // The row's own hint only. The hidden note used to be concatenated on
+      // here with a `\n\n`, which put the answer to "what does Hidden mean"
+      // in the second paragraph of a native tooltip anchored at the pointer —
+      // so the word a reader was looking at explained nothing and the sentence
+      // arrived somewhere else, a second later, if at all
+      // (`say-it-on-the-surface` 05). It now hangs off the mark itself.
+      title={hint}
       onDragStart={(event) => {
         if (refused) {
           refuse(event);
@@ -515,9 +521,13 @@ function PackageItem({
           {row.name}
           {/* A word, not an icon: "hidden" is a claim about who can see this
               package, and the scoped rows next door already spend the glyph
-              vocabulary on provenance. The sentence behind it is on the row's
-              hover text — a palette row has no other room. */}
-          {row.hidden ? <Badge className="palette-item__mark">{HIDDEN_PACKAGE_MARK}</Badge> : null}
+              vocabulary on provenance. The sentence behind it hangs off the
+              mark itself, keyboard-reachable, rather than off the row. */}
+          {row.hidden ? (
+            <Badge className="palette-item__mark" explanation={HIDDEN_PACKAGE_NOTE}>
+              {HIDDEN_PACKAGE_MARK}
+            </Badge>
+          ) : null}
         </span>
         <span className="palette-item__description">
           {/* The slug, because it is what the document stores and what a
