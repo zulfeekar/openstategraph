@@ -117,8 +117,9 @@ The gist of what comes back:
     //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
     //  tool.knowledge-lookup, tool.mcp, tool.platform-describe-workflow,
     //  tool.platform-grep, tool.platform-list-workflows, tool.platform-ls,
-    //  tool.platform-read-file, tool.reddit-search, tool.web-fetch,
-    //  tool.web-search, tool.youtube-transcript.
+    //  tool.platform-read-file, tool.reddit-search, tool.sql-get-schema,
+    //  tool.sql-list-tables, tool.sql-query, tool.validate-workflow,
+    //  tool.web-fetch, tool.web-search, tool.youtube-transcript.
     //
     //  The list is read from the same registry the runtime binds from — which
     //  is what §7 means by "cannot drift" — and `backend/tests/test_mcp_server.py`

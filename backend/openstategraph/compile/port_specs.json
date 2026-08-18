@@ -1083,6 +1083,122 @@
       ]
     },
     {
+      "type": "tool.sql-get-schema",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Get Schema",
+      "description": "Columns, types and foreign keys for one table in the configured SQL database.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "database",
+        "maxRetries",
+        "timeoutSeconds"
+      ]
+    },
+    {
+      "type": "tool.sql-list-tables",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "List Tables",
+      "description": "Every table in the configured SQL database, with row counts. Orientation first — an agent calls this before it knows what exists.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "database",
+        "maxRetries",
+        "timeoutSeconds"
+      ]
+    },
+    {
+      "type": "tool.sql-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Run Query",
+      "description": "Runs one read-only SELECT against the configured SQL database and returns the rows as a table.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "database",
+        "maxRetries",
+        "maxRows",
+        "timeoutSeconds"
+      ]
+    },
+    {
+      "type": "tool.validate-workflow",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Validate Workflow",
+      "description": "Compile-checks a workflow document an agent has composed: entry points, routes, tool bindings, warnings and unknown node types. Plans a graph in memory and throws it away — nothing is saved or run.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "maxRetries",
+        "timeoutSeconds"
+      ]
+    },
+    {
       "type": "tool.web-fetch",
       "kind": "standard",
       "category": "tools",

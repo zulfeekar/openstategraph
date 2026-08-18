@@ -56,7 +56,103 @@ function backendTool(spec: {
   };
 }
 
+/**
+ * ...
+ *
+ * **Four of these arrived late, and the palette said so for months**
+ * (production-ready 61). `tool.sql-list-tables`, `tool.sql-get-schema`,
+ * `tool.sql-query` and `tool.validate-workflow` were registered on the Python
+ * side and had no card here — the two-place authoring failure
+ * `plugin_capabilities` was built to expose, exposing itself. The sharpest of
+ * them was already wired on a canvas this repository *ships*
+ * (`workflows/workflow-architect/workflow.json`, node `t-validate`), so a
+ * shipped package contained a node type its own editor could not render.
+ */
 export const PLATFORM_TOOL_NODES = [
+  backendTool({
+    id: 'tool.sql-list-tables',
+    label: 'List Tables',
+    description:
+      'Every table in the configured SQL database, with row counts. Orientation first — an agent calls this before it knows what exists.',
+    keywords: ['sql', 'sqlite', 'tables', 'schema', 'database', 'explore'],
+    fields: [
+      {
+        key: 'database',
+        label: 'Database file',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'my-flow/data/business.sqlite',
+        mono: true,
+        hint: 'A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.',
+        // Without a value the tool refuses every call with "No readable
+        // database at '(unset)'". Knowable before the run, so it says so.
+        required: true,
+      },
+    ],
+  }),
+  backendTool({
+    id: 'tool.sql-get-schema',
+    label: 'Get Schema',
+    description:
+      'Columns, types and foreign keys for one table in the configured SQL database.',
+    keywords: ['sql', 'sqlite', 'schema', 'columns', 'foreign key', 'database'],
+    fields: [
+      {
+        key: 'database',
+        label: 'Database file',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'my-flow/data/business.sqlite',
+        mono: true,
+        hint: 'A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.',
+        // Without a value the tool refuses every call with "No readable
+        // database at '(unset)'". Knowable before the run, so it says so.
+        required: true,
+      },
+    ],
+  }),
+  backendTool({
+    id: 'tool.sql-query',
+    label: 'Run Query',
+    description:
+      'Runs one read-only SELECT against the configured SQL database and returns the rows as a table.',
+    keywords: ['sql', 'sqlite', 'select', 'query', 'database'],
+    fields: [
+      {
+        key: 'database',
+        label: 'Database file',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'my-flow/data/business.sqlite',
+        mono: true,
+        hint: 'A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.',
+        // Without a value the tool refuses every call with "No readable
+        // database at '(unset)'". Knowable before the run, so it says so.
+        required: true,
+      },
+      {
+        key: 'maxRows',
+        label: 'Max rows',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: '200',
+        // `SqlQueryTool.configure` reads this and falls back to its own
+        // default when it is blank or unparseable, so an empty field is a
+        // legitimate answer and this one is not required.
+        hint: 'Ceiling on rows returned. Leave blank for the tool’s own default; a query asking for more is capped at this.',
+      },
+    ],
+  }),
+  backendTool({
+    id: 'tool.validate-workflow',
+    label: 'Validate Workflow',
+    description:
+      'Compile-checks a workflow document an agent has composed: entry points, routes, tool bindings, warnings and unknown node types. Plans a graph in memory and throws it away — nothing is saved or run.',
+    keywords: ['validate', 'compile', 'check', 'architect', 'workflow'],
+    // No fields, because `ValidateWorkflowTool` overrides no `configure` and
+    // reads no `data`. A card with controls the tool ignores is a card that
+    // lies about what it does.
+  }),
   backendTool({
     id: 'tool.platform-list-workflows',
     label: 'List Workflows',
