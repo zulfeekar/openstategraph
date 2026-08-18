@@ -18,6 +18,8 @@ import {
 } from '@core/runtime/RuntimeClient';
 import type { OpenStreams } from '@core/runtime/OpenStreams';
 import { useController, useWorkbench } from '@app/WorkbenchContext';
+import { entryQuestion } from '@nodes/inputs/entryQuestion';
+import { composerPlaceholder } from './composerPlaceholder';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
@@ -1402,7 +1404,10 @@ export function AskPanel({
             className="ask__composer-input"
             value={question}
             aria-label="Message"
-            placeholder="Which genre earned the most revenue?"
+            // The workflow's own entry question, never a fixed sentence: a
+            // placeholder borrowed from another workflow teaches the wrong
+            // thing about the one in front of you (`every-workflow-green` 04).
+            placeholder={composerPlaceholder(entryQuestion(controller.model))}
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={(event) => {
               // Enter sends it. A message is one line, so a newline would be

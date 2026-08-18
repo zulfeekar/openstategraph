@@ -236,6 +236,12 @@ describe('unfilledPlaceholders', () => {
   });
 });
 
+/**
+ * `tool.not-a-real-type`, deliberately — and it was `tool.validate-workflow`
+ * until 2026-08-19, when that type gained an editor card (production-ready 61)
+ * and stopped being unknown. A fixture that names a *real* type as its example
+ * of an unknown one is a test that expires the day somebody implements it.
+ */
 describe('unknownNodeTypeRule', () => {
   const documentWithUnknownNode = () => {
     const authored = makeWorkbench();
@@ -245,7 +251,7 @@ describe('unknownNodeTypeRule', () => {
     };
     document.nodes.push({
       id: 't-validate',
-      type: 'tool.validate-workflow',
+      type: 'tool.not-a-real-type',
       position: { x: 400, y: 600 },
       size: { width: 240, height: 96 },
       parentId: null,
@@ -267,7 +273,7 @@ describe('unknownNodeTypeRule', () => {
 
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.nodeId).toBe('t-validate');
-    expect(diagnostics[0]?.message).toContain('tool.validate-workflow');
+    expect(diagnostics[0]?.message).toContain('tool.not-a-real-type');
   });
 
   it('is a warning, so a workflow the runtime can still run is not blocked', () => {

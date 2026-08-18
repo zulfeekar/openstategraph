@@ -19,11 +19,11 @@ import { addNode, connect, makeWorkbench, TYPE } from '@core/testing/fixtures';
  */
 /**
  * A node of a type no build registers — modelled on the real one, the
- * `tool.validate-workflow` node `workflow-architect` was losing.
+ * `tool.not-a-real-type` node `workflow-architect` was losing.
  */
 const unknownNodeEntry = (): Record<string, unknown> => ({
   id: 't-validate',
-  type: 'tool.validate-workflow',
+  type: 'tool.not-a-real-type',
   position: { x: 400, y: 600 },
   size: { width: 240, height: 96 },
   parentId: null,
@@ -335,7 +335,7 @@ describe('WorkflowSerializer', () => {
       expect(outcome.ok).toBe(true);
       expect(outcome.message).toMatch(/unknown node type/i);
       expect(reloaded.model.nodeCount).toBe(4);
-      expect(reloaded.model.node('t-validate')?.type).toBe('tool.validate-workflow');
+      expect(reloaded.model.node('t-validate')?.type).toBe('tool.not-a-real-type');
     });
 
     it('keeps the links that touch an unknown node', () => {
