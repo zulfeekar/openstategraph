@@ -86,7 +86,7 @@ export type SaveOutcome =
   | { readonly kind: 'created'; readonly slug: string; readonly name: string }
   | { readonly kind: 'saved'; readonly slug: string; readonly name: string }
   | { readonly kind: 'overrides'; readonly root: string }
-  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'cancelled'; readonly name: string }
   | { readonly kind: 'refused'; readonly message: string };
 
 export interface SaveDeps {
@@ -149,7 +149,7 @@ export async function saveWorkflow({
       .filter((row) => row.name.trim().toLocaleLowerCase() === wanted)
       .map((row) => row.slug);
     if (clashes.length > 0 && !confirm(duplicateNameConfirmation(workbench.model.name, clashes))) {
-      return { kind: 'cancelled' };
+      return { kind: 'cancelled', name: workbench.model.name };
     }
   }
 
@@ -220,7 +220,14 @@ export function saveMessage(outcome: SaveOutcome): string | null {
     case 'refused':
       return outcome.message;
     case 'cancelled':
-      return null;
+      // **Not silent** (`say-it-on-the-surface` 02). A dismissed `confirm`
+      // used to return nothing at all, so pressing Save and answering "no"
+      // left a user with a document that had not saved and no statement that
+      // anything had happened — indistinguishable from a broken button, and
+      // one of the four ways this product could refuse to add a workflow
+      // without naming a rule. Worse in the case nobody chooses: a browser
+      // that suppresses dialogs answers "no" on the user's behalf.
+      return `Not saved — that would have created a second workflow named "${outcome.name}".`;
   }
 }
 

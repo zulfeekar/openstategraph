@@ -397,6 +397,7 @@ export function Palette({ onNotify }: PaletteProps) {
                     definition={definition}
                     disabled={isAtLimit(workbench, definition)}
                     onActivate={() => add(definition)}
+                    onRefuse={onNotify}
                   />
                 ))}
               </>
@@ -485,6 +486,7 @@ export function Palette({ onNotify }: PaletteProps) {
                     definition={definition}
                     disabled={isAtLimit(workbench, definition)}
                     onActivate={() => add(definition)}
+                    onRefuse={onNotify}
                   />
                 ))}
                 {/* Assemblies sit in their category beside the node types,
@@ -673,10 +675,24 @@ function PaletteItem({
   definition,
   disabled,
   onActivate,
+  onRefuse,
 }: {
   definition: INodeDefinition;
   disabled: boolean;
   onActivate: () => void;
+  /**
+   * Says why an activation did nothing.
+   *
+   * A capped row used to be silent by *accident* and harmlessly: a click on it
+   * did nothing, and the flat styling plus the hover text carried the reason.
+   * Once the keyboard became the placement path
+   * (`say-it-on-the-surface` 04) the same silence became a real one — a
+   * keyboard user pressing Enter on a row got nothing at all, no styling to
+   * read and no hover to reach. The refusal has to be audible on the gesture
+   * that was refused, which is exactly what `consistency-sweep` 10 concluded
+   * for a package row.
+   */
+  onRefuse: (message: string) => void;
 }) {
   const scoped = definition.scope === 'workflow';
   return (
@@ -694,7 +710,7 @@ function PaletteItem({
       aria-disabled={disabled}
       title={
         disabled
-          ? `Only one ${definition.label} is allowed`
+          ? atLimitMessage(definition)
           : scoped
             ? `${definition.description}\n\nBelongs to this workflow — not available in others.`
             : definition.description
@@ -712,7 +728,11 @@ function PaletteItem({
       // Tab and what gives Enter and Space their meaning — the keyboard path
       // the accessibility argument was always about.
       onKeyDown={onKeyboardActivate(() => {
-        if (!disabled) onActivate();
+        if (disabled) {
+          onRefuse(atLimitMessage(definition));
+          return;
+        }
+        onActivate();
       })}
     >
       <IconTile glyph={resolveIcon(definition.iconId)} size="md" iconSize="sm" />
@@ -732,6 +752,18 @@ function PaletteItem({
       </span>
     </button>
   );
+}
+
+/**
+ * Why a capped row will not place, in one sentence used by both surfaces that
+ * say it — the row's hover text and the toast a refused keystroke raises. Two
+ * spellings would agree today and drift on the first reword, which is the
+ * failure this codebase keeps finding in prose.
+ */
+function atLimitMessage(definition: INodeDefinition): string {
+  return definition.maxInstances === 1
+    ? `Only one ${definition.label} is allowed in a workflow, and this one already has it.`
+    : `At most ${definition.maxInstances} ${definition.label} nodes are allowed in a workflow.`;
 }
 
 function isAtLimit(

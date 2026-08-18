@@ -133,7 +133,11 @@ describe('saveWorkflow', () => {
     });
 
     expect(asked).toHaveBeenCalledOnce();
-    expect(outcome).toEqual({ kind: 'cancelled' });
+    expect(outcome).toEqual({ kind: 'cancelled', name: 'Draft' });
+    // And it says so. A dismissed confirm used to return nothing at all, so
+    // the button looked broken rather than obeyed.
+    expect(saveMessage(outcome)).toContain('Not saved');
+    expect(saveMessage(outcome)).toContain('Draft');
     // Refused means refused: nothing reached the backend.
     expect(calls).not.toContain('create:Draft');
   });
@@ -172,7 +176,7 @@ describe('saveWorkflow', () => {
     expect(saveSucceeded({ kind: 'created', slug: 's', name: 'n' })).toBe(true);
     expect(saveSucceeded({ kind: 'saved', slug: 's', name: 'n' })).toBe(true);
     expect(saveSucceeded({ kind: 'overrides', root: 'r' })).toBe(true);
-    expect(saveSucceeded({ kind: 'cancelled' })).toBe(false);
+    expect(saveSucceeded({ kind: 'cancelled', name: 'n' })).toBe(false);
     expect(saveSucceeded({ kind: 'refused', message: 'x' })).toBe(false);
   });
 
