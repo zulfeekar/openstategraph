@@ -79,6 +79,26 @@ class AbstractAgentNode(ABC):
         "summarization",
         "limits",
         "patch-tool-calls",
+        # Last, and the position is an argument rather than the default it used
+        # to be (ticket 46, item 3). `node_runtime` has contributed this slot
+        # since deepagents' `RubricMiddleware` was wired up, and the base had
+        # never declared it — so it flattened through `MiddlewareSlotTable`'s
+        # *unknown-slot* bucket, the place reserved for a third party's slot,
+        # landing after `patch-tool-calls` because nobody had said otherwise.
+        #
+        # It belongs there on purpose. `RubricMiddleware` implements
+        # `before_agent` and `after_agent` and nothing else, and `after_*` hooks
+        # run **last to first** — so last in this list means its verdict is
+        # taken first, on what the agent itself produced, before any later
+        # `after_agent` middleware reshapes it. That is the only subject it can
+        # act on: the loop's remedy is "agent, revise your answer", and a
+        # complaint about somebody else's post-processing is one the agent
+        # cannot fix. (It is also, today, the only `after_agent` in this table
+        # — summarization is `before_model`, the limits are `before_model` /
+        # `after_model`, filesystem and subagents are `wrap_*` — so declaring
+        # it changes no flattened list that exists now. What it changes is that
+        # a plugin's unknown slot can no longer land in front of it.)
+        "rubric",
     )
 
     def __init__(

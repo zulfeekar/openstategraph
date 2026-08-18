@@ -861,7 +861,7 @@
       "category": "tools",
       "scope": "app",
       "label": "Knowledge",
-      "description": "The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them.",
+      "description": "The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them. The lookup binds to every agent in the package automatically whenever knowledge/ is non-empty — this card is where you see and build the docs, not what connects them.",
       "ports": [
         {
           "id": "tool",

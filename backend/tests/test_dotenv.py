@@ -173,3 +173,56 @@ class TestTheLibrarySeamDoesNotLoadIt:
             "load_workflow must not populate the environment from a file — "
             "see openstategraph/dotenv.py"
         )
+
+
+class TestEveryWayToLaunchTheProcessReadsIt:
+    """The other half of the same boundary, and the half that was missing.
+
+    `console_main` loads `.env`; `main` deliberately does not, because this
+    project's own tests call `main()` in-process and a function that rewrites
+    `os.environ` from disk poisons every test after it. That split is right.
+
+    But `cli.py`'s `__main__` guard called **`main`**, so
+    `python3 -m openstategraph.cli serve` — a process the user launched, by any
+    reading — silently ran with no `.env`. Two documented ways to start the same
+    CLI, one of them without credentials, and the symptom is not an error: every
+    provider reads "needs key" and workflows run against mock data.
+
+    Found live on 2026-08-18: `.claude/launch.json` starts the backend with
+    `python3 -m uvicorn openstategraph.api.main:app`, which is the same bypass
+    one layer further out. `scripts/dev.sh` has always known — it loads `.env`
+    into the shell itself, in a block that exists for exactly this reason.
+    """
+
+    def test_the_module_entry_point_loads_the_file(self) -> None:
+        import inspect
+
+        from openstategraph import cli
+
+        source = inspect.getsource(cli)
+        # Only the guarded block, not everything after it: `console_main` is
+        # *defined* below the guard, so a naive split matches its `def` line and
+        # the assertion passes while the guard still calls `main`. Found by this
+        # test passing when it should have been red.
+        after = source.split('if __name__ == "__main__"')[-1]
+        guard = "\n".join(
+            line
+            for line in after.splitlines()[1:]
+            if line.startswith((" ", "\t")) or not line.strip()
+        ).strip()
+        assert "console_main()" in guard, (
+            "`python -m openstategraph.cli` is a process the user launched, so it "
+            "must read `.env` like the console script does. Calling `main()` here "
+            "skips `load_env_file` and every provider silently reads 'needs key'."
+        )
+        assert "main()" in guard  # sanity: the guard still runs something
+
+    def test_main_itself_still_does_not(self) -> None:
+        # The half that must not change: `main` is a *function*, and this
+        # project's tests call it in-process.
+        import inspect
+
+        from openstategraph import cli
+
+        body = inspect.getsource(cli.main)
+        assert "load_env_file" not in body

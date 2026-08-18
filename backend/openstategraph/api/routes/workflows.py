@@ -453,6 +453,7 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
         unrenderable_tool_warning,
     )
     from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+    from openstategraph.workflows_root import checkout_root
 
     try:
         workflow_dir = services.store.directory_for(slug)
@@ -476,6 +477,9 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
         bindable=bindable_tool_types(),
         renderable=editor_renderable_types(),
         declared=declared,
+        # `checkout_root()` answers None on an installed wheel, which is
+        # precisely the reader who cannot act on "edit src/nodes/tools/".
+        in_checkout=checkout_root() is not None,
     )
     if half_authored:
         warnings.append(half_authored)

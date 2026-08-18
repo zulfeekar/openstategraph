@@ -59,14 +59,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from openstategraph.validation import MOUNT_NODE_TYPES
+
 #: The package-data directory: this module's own, so it travels with the wheel.
 #: `__file__` is the right answer here for exactly the reason it is the wrong
 #: one in `workflows_root` — these files really are inside `site-packages`.
 DATA = Path(__file__).resolve().parent
 
-#: The node types that mount another package by slug. Same pair the editor's
-#: drill-in and the compiler's mount resolution use.
-MOUNT_TYPES = ("workflow.subgraph", "team.workflow")
+#: The node types that mount another package by slug — the same set the
+#: editor's drill-in and the compiler's mount resolution use.
+#: Derived, not restated (ticket 08) — and this copy is the evidence for that
+#: rule: it still carried `team.workflow` months after schema v3 collapsed it,
+#: because nothing made the two facts one.
+MOUNT_TYPES = MOUNT_NODE_TYPES
 
 
 class UnknownExampleError(ValueError):

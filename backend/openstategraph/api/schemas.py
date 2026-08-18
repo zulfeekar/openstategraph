@@ -78,15 +78,32 @@ class HealthResponse(BaseModel):
 
 
 class NodeContractResponse(BaseModel):
-    """The two LOCKED prompt sections of one model-driven node type.
+    """The prompt layers of one model-driven node type that the developer does
+    not type — served from the Python ladder classes, which are the single
+    source of truth. An editor shows these read-only beside the developer's
+    editable rules; a custom editor should do the same rather than restate them.
 
-    Served from the Python ladder classes, which are the single source of
-    truth. An editor shows these read-only beside the developer's editable
-    rules; a custom editor should do the same rather than restate them.
+    Three fields, and the third is not a third *locked* one (ticket 39):
+
+    - `preamble` — what this node **is**. Locked, and runs first.
+    - `contract` — the shape of the answer. Locked, and always last, because
+      later instructions win ties.
+    - `default_rules` — what the base already tells the model, which the
+      developer's own rules **extend** unless they choose replace mode. Not
+      locked; showing it under a "locked" label would be untrue.
+
+    An agent's `preamble` and `contract` are both empty by design — it answers
+    free-form — so `default_rules` is its *only* non-editable layer. Publishing
+    two fields meant the editor's read-only panel rendered nothing at all for
+    the most-placed node in the product, while 289 characters of honesty and
+    tool-discipline rules were prepended to every one of its prompts.
     """
 
     preamble: str
     contract: str
+    #: Defaulted, so a client written against the two-field version still
+    #: parses this payload.
+    default_rules: str = ""
 
 
 class CompiledGraphResponse(BaseModel):

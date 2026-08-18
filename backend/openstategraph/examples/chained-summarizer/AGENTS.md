@@ -49,7 +49,7 @@ both would have shipped the paragraph *and* the sentence.
 ## The model string
 
 **This document names no model, and that is deliberate.** `settings` carries a
-`purpose` and nothing else, so the run uses the instance default — the provider
+`purpose` and nothing else, so the run uses the installation default — the provider
 integration you installed. That is what makes `pip install
 'openstategraph[anthropic]'` mean "Anthropic is my default" for an example you
 copied. Set `settings.model` if this workflow genuinely needs one vendor.

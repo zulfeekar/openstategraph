@@ -429,6 +429,25 @@ def cmd_examples_list(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+#: Said after every copy, because every shipped example carries
+#: `published: false` (production-ready 55.2).
+#:
+#: The flag is not a mistake to fix in the gallery: publishing is a decision
+#: about *your* package on *your* deployment, and a copy that published itself
+#: would put a stranger's workflow on a customer surface without anybody
+#: choosing it. What was wrong was the silence — `Workflows.published()` and the
+#: `/chat` picker skip the fresh copy, and nothing said why.
+_DRAFT_AFTER_COPY = (
+    "a copy arrives as a draft: `published: false`, so `Workflows.published()` and "
+    "the /chat picker skip it until you publish it — the editor's Workflows panel, "
+    'or `"published": true` in its workflow.json. `Workflows.list()` shows it either way.'
+)
+
+
+def _say_it_is_a_draft() -> None:
+    print(textwrap.fill(_DRAFT_AFTER_COPY, width=88, break_on_hyphens=False))
+
+
 def cmd_examples_copy(args: argparse.Namespace) -> int:
     """`scaffold.copy_example` — the copy that severs it.
 
@@ -457,6 +476,7 @@ def cmd_examples_copy(args: argparse.Namespace) -> int:
     print(f"{args.slug} copied: {written[0]}")
     for path in written[1:]:
         print(f"  also copied (it is mounted): {path.name}")
+    _say_it_is_a_draft()
     print(f'next: openstategraph run {written[0]} "your question"')
     return EXIT_OK
 
@@ -502,6 +522,7 @@ def _copy_every_example(args: argparse.Namespace) -> int:
             break_on_hyphens=False,
         )
     )
+    _say_it_is_a_draft()
     print(f'next: openstategraph run {written[0]} "your question"')
     return EXIT_OK
 
@@ -982,7 +1003,14 @@ def build_parser() -> argparse.ArgumentParser:
     example_group = subparsers.add_parser(
         "examples", help="the worked examples that ship with OpenStateGraph"
     )
-    example_commands = example_group.add_subparsers(dest="examples_command", required=True)
+    # Not `required=True`: the bare verb lists (production-ready 55.1). The
+    # top-level help offers `examples` as "the worked examples that ship with
+    # OpenStateGraph", so the bare word is what a newcomer types first, and an
+    # argparse usage error is a poor answer in a product whose complaint is
+    # that nobody knows the examples exist. Listing costs nothing and writes
+    # nothing, so it is the only subcommand safe to assume.
+    example_group.set_defaults(handler=cmd_examples_list)
+    example_commands = example_group.add_subparsers(dest="examples_command")
 
     example_list = example_commands.add_parser(
         "list", help="print the examples and what each one demonstrates"
@@ -1180,10 +1208,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
-
-
 def console_main() -> int:
     """The installed `openstategraph` command — the **process** entry point.
 
@@ -1202,3 +1226,22 @@ def console_main() -> int:
     """
     load_env_file()
     return main()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # **`console_main`, not `main`** — `python3 -m openstategraph.cli` is a
+    # process the user launched, which is the whole basis of the split above,
+    # and it was calling the function that deliberately does not read `.env`.
+    #
+    # The symptom is not an error. Every provider reads "needs key", the editor
+    # reports "no provider is configured on this server", and workflows run
+    # against mock data — so a wiring gap and a missing credential become the
+    # same thing, which is the failure mode `CLAUDE.md` writes a whole standing
+    # instruction about.
+    #
+    # Found from the other end on 2026-08-18: `.claude/launch.json` starts the
+    # backend with `python3 -m uvicorn openstategraph.api.main:app`, the same
+    # bypass one layer out. `scripts/dev.sh` has always known — it loads `.env`
+    # into the shell itself before launching uvicorn, in a block whose comment
+    # explains why.
+    raise SystemExit(console_main())

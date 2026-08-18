@@ -126,6 +126,34 @@ def mermaid_asset() -> Path | None:
     return None
 
 
+def serves_the_editor(path: str, accept: str) -> bool:
+    """Should this unmatched path answer with the editor rather than a 404?
+
+    The question a mistyped share link asks (production-ready 55.3).
+    `?w=<slug>` is the real form, so `/w/<slug>` — the plausible guess — used
+    to reach `StaticFiles`, miss, and put `{"detail":"Not Found"}` in front of
+    a person in a browser. Three exclusions keep that from becoming a fallback
+    that hides real failures:
+
+    - **`api/`** — every real route is declared before the mount, so an unknown
+      one lands here; HTML at a broken endpoint is a debugging session.
+    - **anything with a file extension** — a stale `<script src>` must fail as
+      a script. A bundle that 200s with a document is the confusing half-hour.
+    - **a request that asked for something other than HTML** — a `fetch`
+      naming `application/json` gets the 404 it can act on. `*/*` counts as
+      willing: it is what curl sends, and what a browser sends for a
+      navigation it has no opinion about.
+
+    Pure, and takes the header rather than the request, so the rule is readable
+    and testable without an HTTP client.
+    """
+    if path.startswith("api/") or path == "api":
+        return False
+    if "." in path.rsplit("/", 1)[-1]:
+        return False
+    return "text/html" in accept or "*/*" in accept or accept == ""
+
+
 def serving_enabled(env: Mapping[str, str] | None = None) -> bool:
     """Off by default so `scripts/dev.sh` and pytest are untouched — Vite
     serves the editor there, and this process must stay a pure API."""
@@ -138,22 +166,60 @@ def editor_missing_html() -> str:
     return EDITOR_MISSING_PAGE.read_text()
 
 
+def _editor_files(directory: Path) -> Any:
+    """`StaticFiles` that answers a person before it answers a 404.
+
+    The class is built inside the function for the same reason the import used
+    to be: `fastapi` is the `[server]` extra, and importing it at module scope
+    would make a compiler-only install pay for a web framework it never uses.
+
+    Starlette signals a miss two ways depending on version and on `html=True`
+    — a 404 response, or a raised `HTTPException` — so both are caught and
+    asked the same question.
+    """
+    from fastapi.staticfiles import StaticFiles
+    from starlette.datastructures import Headers
+
+    # Starlette's, not FastAPI's. `fastapi.HTTPException` is a *subclass*, so
+    # catching it would miss every miss `StaticFiles` itself raises — which is
+    # exactly how the first version of this fallback silently never ran.
+    from starlette.exceptions import HTTPException
+
+    class EditorFiles(StaticFiles):
+        async def get_response(self, path: str, scope: Any) -> Any:
+            try:
+                response = await super().get_response(path, scope)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                response = None
+            if response is not None and response.status_code != 404:
+                return response
+            accept = Headers(scope=scope).get("accept", "")
+            if not serves_the_editor(path, accept):
+                if response is None:
+                    raise HTTPException(status_code=404)
+                return response
+            return await super().get_response("index.html", scope)
+
+    return EditorFiles(directory=directory, html=True)
+
+
 def mount_editor(app: Any, env: Mapping[str, str] | None = None) -> Path | None:
     """Serve the editor at `/`, and return where it came from.
 
     Called last, after every route is declared, so `/api/*`, `/chat` and
     `/chat/mermaid.js` still win — `StaticFiles` only ever sees what nothing
-    else claimed. `html=True` serves `index.html` at `/`; the editor has no
-    client-side router, so it needs no catch-all.
+    else claimed. `html=True` serves `index.html` at `/`; a path that matches
+    no file falls back to the same page when `serves_the_editor` says a person
+    in a browser is asking, and 404s exactly as before when it does not.
     """
     if not serving_enabled(env):
         return None
 
     directory = editor_dir(env)
     if directory is not None:
-        from fastapi.staticfiles import StaticFiles
-
-        app.mount("/", StaticFiles(directory=directory, html=True), name="editor")
+        app.mount("/", _editor_files(directory), name="editor")
         logger.info("editor served from %s", directory)
         return directory
 

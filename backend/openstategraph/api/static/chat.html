@@ -400,7 +400,11 @@
     <main id="log">
       <div class="empty" id="empty">
         <h3>Ask anything</h3>
-        <p>I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.</p>
+        <!-- The no-Auto wording, and the one `describeSelection` reads back
+             out of the DOM as `SELECTED_LINE`. It is the safe thing to paint
+             first: "Auto" exists only where the concierge package is
+             installed, and whether it is takes a request to find out. -->
+        <p>Your question goes to the workflow selected above — and you can watch it run in the live flow.</p>
       </div>
     </main>
     <footer>
@@ -431,11 +435,36 @@ function threadFor(slug) {
   }
   return state.threads[slug];
 }
+// What this page says it does — and it does two different things
+// (production-ready 55.7). The empty state promised to route while the
+// composer, two inches below it, said "Ask the selected workflow", and both
+// said it unconditionally. Only one of them was ever right at a time:
+// **Auto** is offered only where the `concierge` package is installed, and
+// then it is the default; everywhere else the picker is the whole story.
+//
+// So the copy follows the picker rather than picking a side. The "selected"
+// sentence is read out of the markup rather than re-typed, because a second
+// copy of a sentence is how the first one came to be wrong for a version and
+// a half — the duplicate lived in the "New conversation" handler, invisible
+// until somebody pressed it.
+const SELECTED_LINE = $("empty").querySelector("p").innerHTML;
+const ROUTED_LINE = "I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.";
+const routing = () => state.hasAuto && state.workflow === "concierge";
+const emptyHtml = () =>
+  '<div class="empty" id="empty"><h3>Ask anything</h3><p>'
+  + (routing() ? ROUTED_LINE : SELECTED_LINE) + "</p></div>";
+
+/** Re-say what the current selection means. Called on load and on every change. */
+function describeSelection() {
+  $("msg").placeholder = routing() ? "Ask anything — it will be routed…" : "Ask the selected workflow…";
+  const empty = $("empty");
+  if (empty) empty.outerHTML = emptyHtml();
+}
+
 $("newconv").onclick = () => {
   delete state.threads[state.workflow];
   localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
-  $("log").innerHTML = '<div class="empty" id="empty"><h3>Ask anything</h3>'
-    + "<p>I&rsquo;ll route it to the right workflow — and you can watch it run in the live flow.</p></div>";
+  $("log").innerHTML = emptyHtml();
   // The diagram belongs to the conversation being cleared: leaving the run
   // marker (and its glow) behind would claim a run is still in flight in a
   // thread that no longer exists.
@@ -916,9 +945,13 @@ async function loadWorkflows() {
   state.hasAuto = await hasConcierge();
   state.workflow = state.hasAuto ? "concierge" : (list[0] && list[0].slug) || "";
   renderPicker(list);
+  describeSelection();
   $("wf").onchange = async () => {
     state.workflow = $("wf").value; state.doc = null;
     hideNotice();
+    // Auto and a named workflow are different products from where the reader
+    // sits; the page says which one they are looking at (55.7).
+    describeSelection();
     void renderFlow(state.workflow);
   };
   void renderFlow(state.workflow);

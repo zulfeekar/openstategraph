@@ -31,11 +31,11 @@ router = APIRouter()
 @router.get(
     "/api/node-contracts",
     response_model=dict[str, NodeContractResponse],
-    summary="The locked prompt sections, per model-driven node type",
+    summary="The prompt layers a developer does not type, per model-driven node type",
     tags=["Authoring"],
 )
 def node_contracts() -> dict[str, NodeContractResponse]:
-    """The LOCKED prompt sections per model-driven node type (ticket 31).
+    """Every prompt layer a developer does **not** type (tickets 31, 39).
 
     Served from the Python ladder classes — the single source of truth —
     so the editor can show a developer what the machinery already says
@@ -43,29 +43,42 @@ def node_contracts() -> dict[str, NodeContractResponse]:
     duplicate or contradict it. The original RouterNode bug this
     prevents: an editable field pre-filled with the output contract,
     cleared by the first person who wrote their own rules.
+
+    **Three layers, not two, and the docstring above was false for a quarter
+    of the families until it was** (ticket 39). `agent.llm` locks no preamble
+    and no output contract — it answers free-form, deliberately — so a payload
+    of those two fields alone published nothing for it, and the read-only panel
+    disappeared for the most-placed node in the product while its
+    `default_rules` went on being prepended to every prompt. `default_rules` is
+    published as its own field because it is *replaceable*: the developer's
+    rules extend it unless they choose replace mode, and calling that "locked"
+    would be a second untruth in place of the first.
     """
     from openstategraph.abc.agent import BaseAgentNode
     from openstategraph.abc.grader import BaseGrader
     from openstategraph.abc.orchestrator import BaseOrchestrator
     from openstategraph.abc.router import BaseRouter
 
+    def sections(ladder: Any) -> NodeContractResponse:
+        """Every layer of this family's prompt that the developer does not type.
+
+        `default_rules` is here because of ticket 39: for `agent.llm` it is the
+        *only* such layer — preamble and contract are empty by design — so a
+        two-field payload published nothing for the most-placed node in the
+        product, and the panel that exists to stop a developer duplicating the
+        machinery showed them an empty space instead.
+        """
+        return NodeContractResponse(
+            preamble=ladder.PROMPT.preamble,
+            contract=ladder.PROMPT.output_contract,
+            default_rules=ladder.PROMPT.default_rules,
+        )
+
     return {
-        "agent.llm": NodeContractResponse(
-            preamble=BaseAgentNode.PROMPT.preamble,
-            contract=BaseAgentNode.PROMPT.output_contract,
-        ),
-        "route.classifier": NodeContractResponse(
-            preamble=BaseRouter.PROMPT.preamble,
-            contract=BaseRouter.PROMPT.output_contract,
-        ),
-        "route.grader": NodeContractResponse(
-            preamble=BaseGrader.PROMPT.preamble,
-            contract=BaseGrader.PROMPT.output_contract,
-        ),
-        "orchestrate.supervisor": NodeContractResponse(
-            preamble=BaseOrchestrator.PROMPT.preamble,
-            contract=BaseOrchestrator.PROMPT.output_contract,
-        ),
+        "agent.llm": sections(BaseAgentNode),
+        "route.classifier": sections(BaseRouter),
+        "route.grader": sections(BaseGrader),
+        "orchestrate.supervisor": sections(BaseOrchestrator),
     }
 
 

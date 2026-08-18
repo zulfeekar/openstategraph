@@ -39,6 +39,7 @@ from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.reducers import RESET as _RESET
+from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for
 from openstategraph.compile.workflow_compiler import (
     GUARDRAIL_TYPE,
@@ -1230,7 +1231,9 @@ class NodeRuntime:
         # Discovered capabilities resolve by convention, after the
         # explicitly-registered builders so a built-in like
         # `function.format_report` can never be shadowed by accident.
-        if node_type == "workflow.subgraph":
+        # The constant, not the literal (ticket 08): "which node types mount a
+        # child" is one fact, and this was one of four places that spelled it.
+        if node_type in MOUNT_NODE_TYPES:
             return self._subgraph
         if node_type.startswith("function."):
             return self._discovered_function

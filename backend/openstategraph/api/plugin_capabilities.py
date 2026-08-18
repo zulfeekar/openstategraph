@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 #: reader currently has no idea a second place exists.
 AUTHORING_DOC = "docs/building-an-atom.md"
 
+#: The same document, addressed to a reader who has no checkout to find it in.
+#: Same base as `pyproject.toml`'s `Documentation` URL — one repository, two
+#: ways of naming a file in it.
+AUTHORING_DOC_URL = (
+    "https://github.com/zulfeekar/openstategraph-beta/blob/main/docs/building-an-atom.md"
+)
+
 
 @dataclass(frozen=True)
 class PluginToolCapability:
@@ -229,6 +236,8 @@ def unrenderable_tool_warning(
     bindable: Iterable[str],
     renderable: Iterable[str],
     declared: Iterable[str],
+    *,
+    in_checkout: bool,
 ) -> str | None:
     """The half-authored message: bindable by the runtime, invisible in the editor.
 
@@ -241,8 +250,18 @@ def unrenderable_tool_warning(
       `node_fields`, or a workflow-local discovery, which the editor renders
       generically with no TypeScript at all.
 
-    Pure on purpose: the three sets are arguments, so the sentence a developer
-    reads is testable without a registry, an entry point or an HTTP call.
+    **`in_checkout` decides which remedy is offered, and it is not cosmetic**
+    (production-ready 55.5). This sentence renders at the top of the palette,
+    which is the first thing anyone sees — including someone who ran `pip
+    install openstategraph` and has no `src/nodes/tools/`, no `npm`, and no way
+    at all to act on the first half. The *fact* is theirs as much as anyone's:
+    a tool the runtime binds and the editor cannot draw is not wireable, and
+    that is worth knowing. Only the second sentence changes, to the one route
+    that exists without a checkout — a plugin declaring its own card.
+
+    Pure on purpose: the sets and the caller's situation are all arguments, so
+    the sentence a developer reads is testable without a registry, an entry
+    point or an HTTP call.
     """
     renderable = frozenset(renderable)
     declared = frozenset(declared)
@@ -250,14 +269,23 @@ def unrenderable_tool_warning(
     if not missing:
         return None
     listed = ", ".join(missing)
+    remedy = (
+        "A tool is authored in two places — the Python tool and the node definition the "
+        "editor renders. Add one in src/nodes/tools/ and run `npm run generate:ports`, or "
+        f"declare the card from the tool itself with `node_fields` and ship it as a plugin "
+        f"({AUTHORING_DOC}, Part 3)."
+        if in_checkout
+        else (
+            "This build has no editor card for it and none can be added here — a card is "
+            "either bundled with the editor or declared by the tool itself. A plugin can "
+            "carry its own: give the tool `node_fields` and the editor renders it with no "
+            f"rebuild ({AUTHORING_DOC_URL}, Part 3)."
+        )
+    )
     return (
         f"{len(missing)} tool{'s' if len(missing) > 1 else ''} the runtime can bind "
         f"{'have' if len(missing) > 1 else 'has'} no editor card, so no one can wire "
-        f"{'them' if len(missing) > 1 else 'it'} on a canvas: {listed}. A tool is authored "
-        "in two places — the Python tool and the node definition the editor renders. Add "
-        "one in src/nodes/tools/ and run `npm run generate:ports`, or declare the card from "
-        f"the tool itself with `node_fields` and ship it as a plugin ({AUTHORING_DOC}, "
-        "Part 3)."
+        f"{'them' if len(missing) > 1 else 'it'} on a canvas: {listed}. {remedy}"
     )
 
 

@@ -55,7 +55,7 @@ is worth stating where someone will read it:
 **This document sets no `settings.model`** — the row above shows the spelling,
 not this file's contents. Every shipped example dropped its pin so a copied
 example runs on whatever the adopter installed; the two unpinned agents
-therefore run on the instance default, and only `synth1` names a vendor,
+therefore run on the installation default, and only `synth1` names a vendor,
 because this example is *about* mixing two of them. The recorded run below was
 made where this repository pins its own default, `ollama:gpt-oss:120b-cloud`.
 

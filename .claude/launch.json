@@ -19,8 +19,8 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         "-m",
-        "uvicorn",
-        "openstategraph.api.main:app",
+        "openstategraph.cli",
+        "serve",
         "--port",
         "8000"
       ],

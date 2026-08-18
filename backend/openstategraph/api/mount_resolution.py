@@ -24,15 +24,17 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from openstategraph.compile.node_runtime import apply_mount_overrides
+from openstategraph.validation import MOUNT_NODE_TYPES
 
-#: The node types that mount another workflow. Both compile through
-#: `NodeRuntime._subgraph` and both carry `OVERRIDES_FIELD`, so both are
-#: addressable; asking the type registry would couple this module to the
-#: compiler for two string constants.
-#: One id since schema v3 — `team.workflow` collapsed into it, because the
-#: two compiled identically and Team was a property of the mounted document
-#: rather than a kind of node (production-ready ticket 16).
-MOUNT_TYPES = frozenset({"workflow.subgraph"})
+#: The node types that mount another workflow, as a set for membership tests.
+#:
+#: **Derived, never restated** (production-ready ticket 08). This module held
+#: its own literal, and so did three others; the fact is one fact, and the
+#: cost of four copies is that a contributor adding a third organism edits the
+#: two obvious ones and their mount silently fails to resolve in knowledge
+#: building and in the architect's view of the platform — the two nobody
+#: thinks to check. `validation.MOUNT_NODE_TYPES` is the declaration.
+MOUNT_TYPES = frozenset(MOUNT_NODE_TYPES)
 
 
 class MountResolutionError(Exception):

@@ -54,13 +54,31 @@ class MiddlewareSlotTable:
         if name in self._extra_order:
             self._extra_order.remove(name)
 
+    def get(self, name: str) -> Any | None:
+        """What fills a slot, or ``None`` if nothing does.
+
+        The read half of ``set``. It exists because ``merge`` needs to copy a
+        table without reaching into its ``_slots`` — see below.
+        """
+        return self._slots.get(name)
+
     def merge(self, contributions: "dict[str, Any] | MiddlewareSlotTable | None") -> None:
-        """Applies a batch of named contributions, replacement by slot name."""
+        """Applies a batch of named contributions, replacement by slot name.
+
+        A table source is read through ``names()``/``get()`` — its **own**
+        flatten order — rather than through its ``_slots`` dict, which is
+        *set* order (ticket 46, item 4). The two differ as soon as an extra
+        slot is filled before a canonical one, and ordering contributions is
+        the single guarantee this class exists to give: a merge that quietly
+        reordered the source's extras would be the class failing at its one
+        job, through the one path nobody was watching because every live
+        caller happens to pass a plain dict.
+        """
         if not contributions:
             return
         items: Iterable[tuple[str, Any]]
         if isinstance(contributions, MiddlewareSlotTable):
-            items = contributions._slots.items()
+            items = [(name, contributions.get(name)) for name in contributions.names()]
         else:
             items = contributions.items()
         for name, middleware in items:

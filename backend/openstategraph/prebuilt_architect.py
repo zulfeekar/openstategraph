@@ -20,6 +20,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, ToolResult
+from openstategraph.validation import MOUNT_NODE_TYPES
 
 #: Node types the runtime genuinely implements. Kept as data so the check
 #: below cannot drift from `NodeRuntime._builders` silently — the test pins
@@ -29,7 +30,10 @@ KNOWN_NODE_TYPES = frozenset({
     "route.grader", "human.approval", "guard.policy", "memory.segment",
     "orchestrate.supervisor",
     "orchestrate.worker", "function.format_report", "output.formatted",
-    "workflow.subgraph",
+    # Spread, not spelled (ticket 08): a third organism must reach the
+    # architect's own view of the platform without anybody remembering to
+    # come here — this was one of the two sites nobody thinks to check.
+    *MOUNT_NODE_TYPES,
 })
 
 KNOWN_PREFIXES = ("tool.", "function.")

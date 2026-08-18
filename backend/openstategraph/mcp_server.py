@@ -188,13 +188,21 @@ class NodeVocabulary:
                         {
                             "preamble": ladder.PROMPT.preamble,
                             "contract": ladder.PROMPT.output_contract,
+                            # The third layer, published for the reason ticket 39
+                            # gives: `agent.llm` locks no preamble and no contract,
+                            # so a two-field payload told a composing client that
+                            # the most-placed node in the product prepends nothing
+                            # — while it prepends 289 characters of honesty and
+                            # tool-discipline rules to every prompt.
+                            "default_rules": ladder.PROMPT.default_rules,
                             "editable": (
                                 "Only your own rules are editable. The preamble and "
                                 "the output contract are supplied by the runtime and "
                                 "must NOT be restated in the node's config — the "
                                 "contract is appended last and later instructions win. "
-                                "An EMPTY preamble/contract means this node type locks "
-                                "nothing: its prompt is entirely yours."
+                                "An empty preamble/contract does NOT mean the prompt is "
+                                "entirely yours: default_rules is prepended by the base "
+                                "and your rules extend it unless you replace them."
                             ),
                         }
                         if ladder is not None
