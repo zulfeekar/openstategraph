@@ -55,6 +55,45 @@ interface PaletteProps {
 }
 
 /**
+ * **Drag aims; the keyboard places; a mouse click does neither.**
+ *
+ * `say-it-on-the-surface` 04, superseding half of `canvas-feels-right` 01.
+ * That ticket kept click-to-place on two grounds: an e2e test covered it, and
+ * pointer-only placement is an accessibility regression. The second ground is
+ * sound and is honoured here. The first was never a reason — a test covers
+ * behaviour, it does not argue for it — and the ticket's own requirement, that
+ * "the palette says so", never shipped, so click-to-place remained undocumented
+ * behaviour a user could only discover by accident.
+ *
+ * Two facts settled it. The owner hit the same edge twice, months apart, having
+ * been told nothing; and the palette already disagreed with itself —
+ * `AssemblyItem` had `onDragStart` and no `onClick`, so the Revision loop was
+ * drag-only while every atom placed on click. One of the three row kinds
+ * already behaved the way the complaint asked for, and nobody had designed
+ * that.
+ *
+ * So the rule is one rule, and every row obeys it:
+ *
+ * - **Pointer** — drag to the spot you want. A click selects nothing and
+ *   places nothing.
+ * - **Keyboard** — Tab to a row, press Enter or Space. It lands in the centre
+ *   of the view, cascading if that point is taken.
+ *
+ * `preventDefault` on the keydown matters: a `<button>` synthesises a click
+ * from Enter, so without it the placement would fire twice — once here and
+ * once through a click handler that no longer exists, or, worse, silently
+ * double-place if one were ever restored.
+ */
+function onKeyboardActivate(activate: () => void) {
+  return (event: { key: string; preventDefault: () => void }) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    activate();
+  };
+}
+
+
+/**
  * The node palette — the open-source stand-in for the commercial stencil.
  *
  * Contents come entirely from the registry, so it is never out of date with
@@ -238,6 +277,16 @@ export function Palette({ onNotify }: PaletteProps) {
     if (!outcome.ok && outcome.message) onNotify(outcome.message);
   };
 
+  // The keyboard half of an assembly, using the same command the canvas's drop
+  // uses (`clipboard.insertFragment`) — a fragment, never a node type, because
+  // an assembly is an arrangement of several nodes and the edges between them.
+  // A keystroke names no point, so it lands where the other two land.
+  const drop = (assembly: IAssemblyDefinition) => {
+    const preferred = paper?.viewport.center ?? { x: 120, y: 120 };
+    const outcome = controller.clipboard.insertFragment(assembly.fragment, preferred);
+    if (!outcome.ok && outcome.message) onNotify(outcome.message);
+  };
+
   return (
     <Panel side="left" className="palette" style={{ width: 'var(--layout-palette-width)' }}>
       <PanelHeader>
@@ -258,6 +307,20 @@ export function Palette({ onNotify }: PaletteProps) {
             ) : undefined
           }
         />
+        {/* **The palette says how a component gets onto the canvas.**
+            `canvas-feels-right` 01 resolved that click-to-place would stay
+            "and the palette says so"; the mechanical half shipped and this
+            half did not, so the rule lived only in a source comment and every
+            user met it by accident. One line, in the header rather than under
+            a section, because it is true of every row below it — and hidden
+            while searching, for the same reason the sections' own notes are:
+            a filtered palette is a lookup, not a first visit. */}
+        {!searching ? (
+          <p className="palette-howto">
+            Drag any of these onto the canvas to place it where you want it. From the keyboard:
+            Tab to one and press Enter.
+          </p>
+        ) : null}
       </PanelHeader>
 
       <PanelBody>
@@ -421,7 +484,11 @@ export function Palette({ onNotify }: PaletteProps) {
                     same question. They are a different *kind* of item, so
                     they carry their own drag type and their own component. */}
                 {assembliesFor(section.category.id, query).map((assembly) => (
-                  <AssemblyItem key={assembly.id} assembly={assembly} />
+                  <AssemblyItem
+                    key={assembly.id}
+                    assembly={assembly}
+                    onActivate={() => drop(assembly)}
+                  />
                 ))}
               </PanelSection>
             ))}
@@ -513,7 +580,21 @@ function PackageItem({
         event.dataTransfer.setData(PALETTE_PACKAGE_DRAG_TYPE, encodePackageDrag(row.slug));
         event.dataTransfer.effectAllowed = 'copy';
       }}
-      onClick={(event) => (refused ? refuse(event) : onActivate())}
+      // A refused row still speaks when clicked — that is not placement, it is
+      // the compiler's own sentence, and silencing it would restore
+      // `consistency-sweep` 10's "the canvas panned and nothing happened".
+      // A row that is *not* refused does nothing on click, like every other
+      // row in this palette.
+      onClick={(event) => {
+        if (refused) refuse(event);
+      }}
+      onKeyDown={onKeyboardActivate(() => {
+        if (refused) {
+          if (row.refusal) onRefuse(row.refusal);
+          return;
+        }
+        onActivate();
+      })}
     >
       <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
       <span className="palette-item__text">
@@ -547,7 +628,13 @@ function PackageItem({
  * instance cap, no scope and no node id, so half of that component's
  * behaviour would be dead here and the other half would need a branch.
  */
-function AssemblyItem({ assembly }: { assembly: IAssemblyDefinition }) {
+function AssemblyItem({
+  assembly,
+  onActivate,
+}: {
+  assembly: IAssemblyDefinition;
+  onActivate: () => void;
+}) {
   return (
     <button
       type="button"
@@ -559,6 +646,11 @@ function AssemblyItem({ assembly }: { assembly: IAssemblyDefinition }) {
         event.dataTransfer.setData(PALETTE_ASSEMBLY_DRAG_TYPE, assembly.id);
         event.dataTransfer.effectAllowed = 'copy';
       }}
+      // This row had **no** activation handler at all until
+      // `say-it-on-the-surface` 04 — it was drag-only by omission, not by
+      // design, which is how the palette came to hold two placement rules. It
+      // now obeys the same one as every other row, keyboard included.
+      onKeyDown={onKeyboardActivate(onActivate)}
     >
       <IconTile glyph={resolveIcon(assembly.iconId)} size="md" iconSize="sm" />
       <span className="palette-item__text">
@@ -607,9 +699,13 @@ function PaletteItem({
         event.dataTransfer.setData(PALETTE_DRAG_TYPE, definition.id);
         event.dataTransfer.effectAllowed = 'copy';
       }}
-      onClick={() => {
+      // No `onClick`: a click aims at nothing, so it places nothing. The
+      // element stays a `<button>` because that is what makes it reachable by
+      // Tab and what gives Enter and Space their meaning — the keyboard path
+      // the accessibility argument was always about.
+      onKeyDown={onKeyboardActivate(() => {
         if (!disabled) onActivate();
-      }}
+      })}
     >
       <IconTile glyph={resolveIcon(definition.iconId)} size="md" iconSize="sm" />
       <span className="palette-item__text">

@@ -130,25 +130,49 @@ test('auto-arrange works in both flow directions', async ({ page }) => {
   expect(down.y).toBeGreaterThan(down.x);
 });
 
-test('the palette adds a node to the canvas', async ({ page }) => {
+test('the palette adds a node from the keyboard', async ({ page }) => {
+  // Was `.click()` until `say-it-on-the-surface` 04. A mouse click no longer
+  // places anything from any palette row — drag aims, the keyboard places —
+  // and this test is the reason the click was kept once before, so it is the
+  // test that has to move rather than the rule. The *capability* it guards is
+  // unchanged and is the one the accessibility argument was always about: a
+  // person who cannot drag can still put a node on the canvas.
   const before = await page.locator('[data-node-id]').count();
   await page.getByPlaceholder('Search nodes…').fill('Note');
-  await page
+  const item = page
     .locator('.palette [class*=card], .palette button', { hasText: 'Note' })
-    .first()
-    .click();
+    .first();
+  await item.focus();
+  await item.press('Enter');
   await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
 });
 
-test('two clicks make two nodes you can both see', async ({ page }) => {
+test('a plain click on a palette row places nothing', async ({ page }) => {
+  // The complaint, twice over: "on click it appears on the canvas is not
+  // correct". A click aims at nothing, so it places nothing — and the palette
+  // now says so in its own header rather than in a source comment.
+  await page.getByPlaceholder('Search nodes…').fill('Note');
+  const before = await page.locator('[data-node-id]').count();
+  await page.locator('.palette button[draggable]').first().click();
+  // Given a moment to be wrong in: a placement lands a frame or two later, so
+  // an immediate read would pass even if the click still placed.
+  await page.waitForTimeout(300);
+  expect(await page.locator('[data-node-id]').count()).toBe(before);
+  await expect(page.locator('.palette-howto')).toContainText('Drag any of these');
+});
+
+test('two keystrokes make two nodes you can both see', async ({ page }) => {
   // The count-based assertion above cannot see the bug that shipped: three
-  // clicks put three nodes at *exactly* the same coordinate, so a user saw one
-  // card and owned three. `toBeGreaterThan(before)` passes on a perfect stack
-  // (reviews-2026-08-14 ticket 02).
+  // activations put three nodes at *exactly* the same coordinate, so a user
+  // saw one card and owned three. `toBeGreaterThan(before)` passes on a
+  // perfect stack (reviews-2026-08-14 ticket 02). `freePositionNear` is what
+  // fixed it and it is on the *activation* path, so this still guards it —
+  // through the keyboard, which is now that path.
   await page.getByPlaceholder('Search nodes…').fill('Text Input');
   const item = page.locator('.palette button[draggable]').first();
-  await item.click();
-  await item.click();
+  await item.focus();
+  await item.press('Enter');
+  await item.press('Enter');
 
   await expect
     .poll(async () => page.locator('[data-node-id^="node:input.text"]').count())

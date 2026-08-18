@@ -147,11 +147,14 @@ describe('a refused package row', () => {
   it('says why, once, on the gesture that was refused', () => {
     expect(palette).toContain('onRefuse');
     expect(palette).toMatch(/if \(row\.refusal\) onRefuse\(row\.refusal\)/);
-    // Both gestures: dragging was the silent one, and clicking used to run
-    // `onActivate` regardless of the refusal.
-    expect(palette).toMatch(
-      /onClick=\{\(event\) => \(refused \? refuse\(event\) : onActivate\(\)\)\}/,
-    );
+    // **Every** gesture that could have placed this row. Dragging was the
+    // silent one; clicking used to run `onActivate` regardless of the refusal.
+    // Since `say-it-on-the-surface` 04 a click no longer places anything, so
+    // the click handler's only remaining job is to speak the refusal — and
+    // the keyboard, which is now the placement path, must speak it too, or
+    // the rule would be enforced for the mouse and not for Tab+Enter.
+    expect(palette).toMatch(/onClick=\{\(event\) => \{\s*if \(refused\) refuse\(event\);/);
+    expect(palette).toMatch(/onKeyDown=\{onKeyboardActivate\(\(\) => \{\s*if \(refused\)/);
     expect(palette).toMatch(/if \(refused\) \{\s*refuse\(event\);/);
   });
 

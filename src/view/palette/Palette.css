@@ -217,3 +217,14 @@
 .palette-warnings__list li + li {
   margin-top: var(--space-1);
 }
+
+/* How a component gets onto the canvas, said once at the top of the palette
+ * (`say-it-on-the-surface` 04). Sized and toned like the section notes below
+ * it — it is the same kind of sentence, about every row rather than one
+ * section. */
+.palette-howto {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font: var(--type-body-sm);
+  line-height: var(--line-height-snug);
+}
