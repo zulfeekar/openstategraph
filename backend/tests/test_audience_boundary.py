@@ -515,3 +515,35 @@ class TestNoMachineryNameReachesACustomer:
         # The marker is how a developer tells one turn from the next in a
         # thread; removing it from their trace would cost real information.
         assert self._task_ids("developer") == ["__turn_reset__", "task-1", None]
+
+
+class TestAFailingToolIsNotAMissingTool:
+    """`the-agent-asks-for-what-it-cannot-get` 01 — the loop this closes.
+
+    From the owner's transcript: an `Email Send` was added, wired, and returned
+    "No recipient configured. Set the 'to' field on the Email node." The agent
+    then reported that the workflow *"doesn't have an email-sending
+    capability"* and emitted the same suggestion fence again. Accepted, added a
+    second Email Send, failed identically, suggested again. Three times.
+
+    Errors are data (`ToolResult`) exactly so an agent can read one and retry —
+    but `advisor_context` invited a suggestion whenever the agent "cannot
+    properly answer because this workflow lacks a capability", and nothing told
+    it that a tool which *ran and failed* is not a lacked capability. So the
+    fence had no natural end.
+    """
+
+    def test_the_instruction_distinguishes_the_two(self) -> None:
+        from openstategraph.compile.node_runtime import advisor_context
+
+        text = advisor_context("a-account", "tool.email-send — sends a report")
+        assert "returned an error is NOT a missing capability" in text
+        # And says what to do instead, or it is a prohibition with no route.
+        assert "what would fix it" in text
+        assert "never suggest adding a tool you were already given" in text
+
+    def test_it_is_still_silent_with_no_catalogue(self) -> None:
+        # Unchanged: no catalogue, no block, no instruction at all.
+        from openstategraph.compile.node_runtime import advisor_context
+
+        assert advisor_context("a-account", "") == ""

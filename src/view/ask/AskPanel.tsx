@@ -30,7 +30,12 @@ import { Activity, exportTrace, type ActivityRow } from './traceTree';
 import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
 import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
-import { applicableSuggestion, type CapabilitySuggestion } from './suggestion';
+import {
+  busKey,
+  suggestionOutcome,
+  unreadyFields,
+  type CapabilitySuggestion,
+} from './suggestion';
 import { continuingThread, rememberThread, type ThreadBinding } from './thread';
 import { clearRunInFlight, markRunInFlight } from './interruptedRun';
 import { progressLine } from './progressLine';
@@ -810,16 +815,35 @@ export function AskPanel({
         // on every run whatever the audience (`api/audience.py`). All that is
         // left to decide here is whether *this* canvas can honour it: a type
         // the registry does not know or an `attachTo` the document does not
-        // contain comes back `null` and no card is offered.
-        const suggestion = applicableSuggestion(result.developer?.suggestion, {
+        // contain comes back `none` and no card is offered.
+        //
+        // **And a tool already on that bus comes back `duplicate`** — refused
+        // before it is offered rather than after it is pressed
+        // (`the-agent-asks-for-what-it-cannot-get` 01). Accepting the same
+        // suggestion three times produced three Email Send nodes, three
+        // identical failures and no progress; a card that would add a second
+        // copy is a button that cannot help, which is the thing
+        // `suggestion.ts` already refuses to offer.
+        const wired = new Map<string, Set<string>>();
+        for (const edge of controller.model.edges()) {
+          const type = controller.model.node(edge.source.nodeId)?.type;
+          if (type === undefined) continue;
+          const key = busKey(edge.target.nodeId, edge.target.portId);
+          const set = wired.get(key) ?? new Set<string>();
+          set.add(type);
+          wired.set(key, set);
+        }
+        const outcomeForCard = suggestionOutcome(result.developer?.suggestion, {
           nodeTypes: new Set(workbench.registry.nodeTypes.list().map((type) => type.id)),
           nodeIds: new Set(controller.model.nodes().map((node) => node.id)),
+          wired,
         });
         updateTurn(id, {
           running: false,
           result,
           pendingApproval: null,
-          suggestion,
+          suggestion: outcomeForCard.kind === 'apply' ? outcomeForCard.suggestion : null,
+          ...(outcomeForCard.kind === 'duplicate' ? { notice: outcomeForCard.message } : {}),
         });
       } else {
         updateTurn(id, {
@@ -1197,6 +1221,27 @@ export function AskPanel({
       // `TOOL_PORT`), so anywhere else would draw a link back across the card.
       // Shifted right by whatever is already on that bus, so the second
       // suggested tool does not land on top of the first.
+      // **Refused before it is offered, and re-checked here.** Accepting the
+      // same suggestion three times produced three `Email Send` nodes on one
+      // bus, three identical failures and no progress
+      // (`the-agent-asks-for-what-it-cannot-get` 01). The fact needed to refuse
+      // was already computed on the next line and spent on *positioning*.
+      const onBus = new Set(
+        controller.model
+          .edgesInto({ nodeId: suggestion.attachTo, portId: suggestion.port })
+          .map((edge) => controller.model.node(edge.source.nodeId)?.type)
+          .filter((type): type is string => typeof type === 'string'),
+      );
+      if (onBus.has(suggestion.nodeType)) {
+        updateTurn(turnId, {
+          suggestionDecision: 'declined',
+          notice: `${definition.label} is already wired to ${target.title || suggestion.attachTo}. If it is not working, open it and check its settings — a second one would not help.`,
+        });
+        return;
+      }
+
+      // Offsetting stays: two *different* tools on one bus is legitimate and is
+      // exactly what this count was written for.
       const busy = controller.model.edgesInto({
         nodeId: suggestion.attachTo,
         portId: suggestion.port,
@@ -1227,6 +1272,26 @@ export function AskPanel({
           suggestionDecision: 'declined',
           notice: `${definition.label} could not be added to this workflow.`,
         });
+        return;
+      }
+
+      // **Do not re-run something that cannot work.** The suggested Email Send
+      // was added with an empty `to`, wired, and the flow re-run at once —
+      // straight into "No recipient configured". That failure was knowable
+      // before the run and cost a model call to discover. A required field with
+      // no value is a pre-run fact, and `required` on the field schema is what
+      // makes it one.
+      const unready = unreadyFields(
+        definition.fields ?? [],
+        controller.model.node(created)?.data ?? {},
+      );
+      if (unready.length > 0) {
+        controller.selectionActions.selectNodes([created]);
+        updateTurn(turnId, {
+          suggestionDecision: 'accepted',
+          notice: `Added ${definition.label} and wired it to ${target.title || suggestion.attachTo}. It needs ${unready.join(' and ')} before it can run — set that on the card, then ask again.`,
+        });
+        scrollToEnd();
         return;
       }
 

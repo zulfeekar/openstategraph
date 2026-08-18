@@ -172,6 +172,11 @@ export const PLATFORM_TOOL_NODES = [
         defaultValue: '',
         placeholder: 'reports@example.com',
         hint: 'The fixed destination. Agents cannot re-address the mail.',
+        // Without this the node compiles, binds, runs, and returns "No
+        // recipient configured" — a failure knowable before the run and
+        // discovered by spending one. The chat's accept-a-suggestion path
+        // reads it and refuses to re-run until it is filled.
+        required: true,
       },
     ],
   }),

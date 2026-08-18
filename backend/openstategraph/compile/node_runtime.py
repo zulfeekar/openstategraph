@@ -886,6 +886,17 @@ def advisor_context(node_id: str, catalog: str) -> str:
         f"{FENCE_CLOSE}\n"
         "Only suggest when genuinely blocked — never when you can already "
         "answer, and never more than one block.\n"
+        # The third clause, and it closes a loop rather than tightening a rule
+        # (`the-agent-asks-for-what-it-cannot-get` 01). A bound tool returning
+        # an error is not a missing capability — errors are data precisely so
+        # you can read them and retry — but nothing said so, so an agent whose
+        # Email Send answered "No recipient configured" reported that the
+        # workflow "doesn't have an email-sending capability" and emitted the
+        # same fence again. Three times, in the transcript that found this.
+        "A tool that ran and returned an error is NOT a missing capability: "
+        "you have it, and something about it needs fixing. Say what the error "
+        "was and what would fix it — never suggest adding a tool you were "
+        "already given.\n"
         "Tools that could be added to you:\n"
         f"{catalog}"
     )

@@ -45,6 +45,89 @@ export interface EditorFacts {
   readonly nodeTypes: ReadonlySet<string>;
   /** Every node id currently in the document. */
   readonly nodeIds: ReadonlySet<string>;
+  /**
+   * Node type ids already wired into `<attachTo>:<port>`, keyed by that pair.
+   *
+   * Supplied so this module can refuse a duplicate without knowing what a
+   * controller is. See `suggestionOutcome`.
+   */
+  readonly wired?: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/** The key `EditorFacts.wired` is keyed by. One place, so it cannot drift. */
+export function busKey(nodeId: string, portId: string): string {
+  return `${nodeId}:${portId}`;
+}
+
+/**
+ * What the panel should do with an applicable suggestion.
+ *
+ * **Why this exists** (`the-agent-asks-for-what-it-cannot-get` 01). Accepting
+ * a suggestion was not idempotent: the owner accepted the same one three times
+ * and got three `Email Send` nodes on one bus, three identical failures, and no
+ * progress. The fact needed to refuse was already in hand — `applySuggestion`
+ * counted the edges on that bus and spent the number on *positioning*, so the
+ * duplicate came out neatly arranged instead of refused.
+ *
+ * Offsetting is right for two **different** tools and is why that code exists.
+ * The same type on the same bus is a different question and nobody was asking
+ * it.
+ */
+export type SuggestionOutcome =
+  | { readonly kind: 'apply'; readonly suggestion: CapabilitySuggestion }
+  | { readonly kind: 'duplicate'; readonly suggestion: CapabilitySuggestion; readonly message: string }
+  | { readonly kind: 'none' };
+
+export function suggestionOutcome(
+  raw: Readonly<Record<string, unknown>> | null | undefined,
+  facts: EditorFacts,
+): SuggestionOutcome {
+  const suggestion = applicableSuggestion(raw, facts);
+  if (suggestion === null) return { kind: 'none' };
+
+  const already = facts.wired?.get(busKey(suggestion.attachTo, suggestion.port));
+  if (already?.has(suggestion.nodeType)) {
+    return {
+      kind: 'duplicate',
+      suggestion,
+      // Names the thing and the place, because "already added" leaves a reader
+      // hunting a canvas for which one. And it says what to do instead: a tool
+      // that is present and failing needs configuring, not adding again.
+      message: `${suggestion.label} is already wired to this step. If it is not working, open it and check its settings — adding a second one would not help.`,
+    };
+  }
+  return { kind: 'apply', suggestion };
+}
+
+/**
+ * Required fields on a freshly added node that have no value yet.
+ *
+ * The other half of the same transcript: the suggested `Email Send` was added
+ * with an empty `to`, wired, and the flow re-run at once — into "No recipient
+ * configured". That failure was **knowable before the run** and cost a model
+ * call to discover.
+ *
+ * Returns labels rather than keys, because the sentence built from this is read
+ * by a person looking at a card.
+ */
+export function unreadyFields(
+  fields: readonly FieldReadiness[],
+  data: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  return fields
+    .filter((field) => field.required === true)
+    .filter((field) => {
+      const value = data[field.key];
+      return value === undefined || value === null || String(value).trim() === '';
+    })
+    .map((field) => field.label ?? field.key);
+}
+
+/** The slice of a field schema readiness cares about. */
+export interface FieldReadiness {
+  readonly key: string;
+  readonly label?: string | undefined;
+  readonly required?: boolean | undefined;
 }
 
 function asString(value: unknown): string {

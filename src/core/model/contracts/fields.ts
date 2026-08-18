@@ -35,6 +35,24 @@ interface FieldSchemaBase<TValue extends FieldValue> {
   readonly advanced?: boolean;
   /** Return an error string to block the value, or `null` to accept it. */
   readonly validate?: (value: TValue) => string | null;
+  /**
+   * The node cannot run without a value here.
+   *
+   * **Not** the same as `validate`, which judges a value somebody typed. This
+   * says the *absence* of one is already a defect, and it is knowable before
+   * anything runs — which is the whole point of declaring it.
+   *
+   * Added for the case that proved it was missing: a suggested `tool.email-send`
+   * was added with an empty `to`, wired, and the flow re-run immediately —
+   * straight into `prebuilt_email`'s "No recipient configured". The run was
+   * *certain* to fail before it started, and it spent a model call finding out.
+   * Ports have carried `required` since the beginning; fields had no way to say
+   * the same thing.
+   *
+   * Mirrors `IPortDescriptor.required`, deliberately, so the two halves of a
+   * node's contract answer "is this ready?" the same way.
+   */
+  readonly required?: boolean;
 }
 
 export interface TextFieldSchema extends FieldSchemaBase<string> {
