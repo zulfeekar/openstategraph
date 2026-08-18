@@ -101,6 +101,49 @@ def _tool_calls_of(message: Any) -> list[dict[str, Any]]:
     return [c for c in (calls or []) if isinstance(c, dict)]
 
 
+def is_transcript_record(message: Any) -> bool:
+    """Whether this is a node **writing the conversation record**, not the model.
+
+    `_input` logs the user's turn and `_output` logs the answer where every path
+    converges, which is what gives a thread memory (ticket 73). Both are right
+    and stay. But `stream_mode=["updates", "messages", "custom"]` emits every
+    message on that channel — written or streamed — and nothing told them apart,
+    so the record re-entered the token stream and `AskPanel`, which concatenates
+    every token, held the answer twice before the answer block showed it a third
+    time (`every-workflow-green` 02).
+
+    **Measured on the wire**, not inferred, by tapping one real run of
+    `workflow-2026` in the editor:
+
+        AIMessageChunk  AIMessageChunk  model                     744 chars
+        AIMessage       ai              node_output_formatted_1   744 chars
+        HumanMessage    human           node_input_text_1          21 chars
+        ToolMessage     tool            tools                     478 chars
+
+    744 + 744 + 21 = 1509, against 1466 measured in the DOM. The model's own
+    text arrives **only** as chunks; the two settled non-tool messages are
+    exactly the two records.
+
+    So: a settled `ai` or `human` message is the record. A **tool** message is
+    not — a tool produces its output whole rather than token by token, and the
+    developer's per-call result cards are fed from it.
+
+    Duck-typed on `.type` like `_is_tool_message`, for the reason recorded
+    there: this channel yields chunk classes and settled messages, and one test
+    covers the family without importing one of each. Verified against
+    langchain-core 1.5.3, where `AIMessageChunk.type` is the class name and
+    `AIMessage.type` is `"ai"`.
+
+    **The cost, stated rather than discovered.** A provider that does not stream
+    returns its reply as one settled `AIMessage`, which this drops from the
+    *live* stream. Nothing is lost — the answer still arrives on the `updates`
+    fold and the terminal frame — and a provider that does not stream had no
+    live text to offer anyway.
+    """
+    kind = str(getattr(message, "type", ""))
+    return kind in {"ai", "human"}
+
+
 def _is_tool_message(message: Any) -> bool:
     """Whether a streamed message is a tool's *result* rather than model text.
 
@@ -1211,6 +1254,11 @@ def _run_frames(
                 # used to read `if content:` and dropped the one frame
                 # carrying the numbers.
                 usage = usage_of(message)
+                # The record is not a token — see `is_transcript_record`. Usage
+                # still passes: it rides the last chunk of a message, and that
+                # chunk is a chunk.
+                if is_transcript_record(message) and not usage:
+                    continue
                 if content or thinking or usage:
                     raw_name = metadata.get("langgraph_node", "")
                     token_node = node_ids_by_name.get(raw_name, raw_name)
