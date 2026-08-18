@@ -777,12 +777,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
     number, because that is the only way `--port 0` can print the URL it landed
     on *before* the server starts talking.
 
-    Three things are said before anything is bound (scale-and-adopt ticket 06,
-    workflow-gallery ticket 37), because a message printed after a server is
-    listening is a message someone scrolls past: more than one worker is
-    refused outright, an unauthenticated bind to a non-loopback address is
-    warned about by name, and an install with no provider integration is told
-    that every run will fail before it is handed three working URLs.
+    Four things are said before anything is bound (scale-and-adopt ticket 06,
+    workflow-gallery ticket 37, production-ready 60), because a message printed
+    after a server is listening is a message someone scrolls past: more than one
+    worker is refused outright, an unauthenticated bind to a non-loopback
+    address is warned about by name, an install with no provider integration is
+    told that every run will fail, and — in a checkout only — an editor built
+    before the last `src/` change says so, because this process serves `dist/`
+    and the dev server on 5273 does not.
     """
     from openstategraph import deployment
 
@@ -801,6 +803,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
     exposure = auth.exposure_warning(args.host)
     if exposure is not None:
         print(exposure, file=sys.stderr, flush=True)
+
+    # A fourth thing, and it is said here for the reason the other three are:
+    # a message printed after a server is listening is a message somebody
+    # scrolls past. This one is silent for every installed user, because
+    # `editor_is_stale` returns `None` when there is no `src/` to compare
+    # against (production-ready 60).
+    from openstategraph.editor_freshness import warn_if_stale
+
+    stale = warn_if_stale()
+    if stale is not None:
+        print(stale, file=sys.stderr, flush=True)
 
     # The third thing said before anything is bound, and the same rule: the
     # documented install carries a provider extra, and an install that lost it

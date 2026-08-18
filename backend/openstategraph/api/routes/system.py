@@ -175,12 +175,18 @@ def health() -> HealthResponse:
     variables and never opens a socket. A configured provider that is down
     is a different question, and one this endpoint has never answered.
     """
+    from openstategraph.editor_freshness import editor_is_stale
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     configured = any(
         ProviderEnvironment(spec).is_configured() for spec in provider_catalogue().list()
     )
-    return HealthResponse(ok=True, model_configured=configured)
+    # Still cheap: two `stat` walks over a directory the process already sits
+    # in, and `None` the moment there is no source tree to compare against —
+    # which is every installed wheel.
+    return HealthResponse(
+        ok=True, model_configured=configured, editor_stale=editor_is_stale()
+    )
 
 
 @router.get(

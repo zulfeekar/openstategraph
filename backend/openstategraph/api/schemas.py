@@ -63,6 +63,15 @@ class HealthResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
 
     ok: bool
+    #: Whether the editor **this process serves** predates the source it was
+    #: built from — `None` when the question does not apply, which is the
+    #: normal case for an installed wheel with no `src/` beside it
+    #: (production-ready 60).
+    #:
+    #: Three-valued on purpose. `False` claims "this editor is current" and an
+    #: install cannot claim that; a client must treat `None` as *say nothing*
+    #: rather than as a falsy `False`.
+    editor_stale: bool | None = None
     #: Whether **any** registered provider has the environment it needs. This
     #: was hardcoded `True` while Ollama was treated as always-available, which
     #: meant it reported ready on a machine with nothing configured

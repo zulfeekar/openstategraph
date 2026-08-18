@@ -238,6 +238,17 @@
       "HealthResponse": {
         "description": "`GET /api/health` \u2014 is this process up, and does it know a model?\n\nNamed rather than left a bare dict (scale-and-adopt ticket 05): a\npublished contract whose first endpoint answers `{}` teaches a reader\nthat the rest of the document is decoration too.",
         "properties": {
+          "editor_stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Stale"
+          },
           "model_configured": {
             "description": "At least one provider has its credentials set. Not a reachability check.",
             "title": "Model Configured",
