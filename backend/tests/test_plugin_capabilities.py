@@ -215,6 +215,7 @@ class TestTheHalfAuthoredError:
             bindable=("tool.sql-query", "tool.web-search"),
             renderable=frozenset({"tool.web-search"}),
             declared=frozenset(),
+            in_checkout=True,
         )
 
         assert warning is not None
@@ -222,6 +223,32 @@ class TestTheHalfAuthoredError:
         assert "tool.web-search" not in warning
         assert "src/nodes/tools/" in warning
         assert "docs/building-an-atom.md" in warning
+
+    def test_an_installed_wheel_is_told_only_what_it_can_do(self) -> None:
+        """The palette is the first thing a `pip install` user sees, and this
+        warning sat at the top of it telling them to edit `src/nodes/tools/` and
+        run `npm run generate:ports` — a checkout they do not have and a
+        toolchain they never installed (production-ready 55.5).
+
+        The *fact* still belongs there: a bindable tool with no card cannot be
+        wired, and that is worth knowing wherever you installed from. Only the
+        remedy is conditional, and the plugin half of it is the one that works
+        without a checkout.
+        """
+        warning = unrenderable_tool_warning(
+            bindable=("tool.sql-query",),
+            renderable=frozenset(),
+            declared=frozenset(),
+            in_checkout=False,
+        )
+
+        assert warning is not None
+        assert "tool.sql-query" in warning
+        assert "src/nodes/tools/" not in warning
+        assert "npm run" not in warning
+        assert "node_fields" in warning
+        # A path into a repository nobody cloned is not a reference. The URL is.
+        assert "https://" in warning
 
     def test_a_declared_capability_is_not_half_authored(self) -> None:
         """A plugin-contributed or workflow-discovered tool arrives with its own
@@ -231,6 +258,7 @@ class TestTheHalfAuthoredError:
                 bindable=("tool.acme-ping",),
                 renderable=frozenset(),
                 declared=frozenset({"tool.acme-ping"}),
+                in_checkout=True,
             )
             is None
         )
@@ -241,6 +269,7 @@ class TestTheHalfAuthoredError:
                 bindable=("tool.web-search",),
                 renderable=frozenset({"tool.web-search"}),
                 declared=frozenset(),
+                in_checkout=True,
             )
             is None
         )

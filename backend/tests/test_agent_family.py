@@ -62,6 +62,81 @@ class TestMiddlewareSlotTable:
         table.remove("a")
         assert table.flatten() == []
 
+    def test_merging_a_table_preserves_the_source_order_it_promises(self) -> None:
+        """`merge` read the source's private `_slots` — *set* order, not the
+        source's own `flatten()` order (ticket 46, item 4).
+
+        Harmless while every live caller merges a plain dict, and wrong the
+        moment one does not: ordering the contributions is the single
+        guarantee this class exists to give, and a table-to-table merge was
+        the one path that did not honour the source's own answer.
+        """
+        source = MiddlewareSlotTable(order=("core",))
+        extra_first, core, extra_second = (FakeMiddleware(t) for t in ("x", "core", "y"))
+        # An extra set *before* the canonical slot: dict order and flatten
+        # order disagree from here on, which is what makes this observable.
+        source.set("x-extra", extra_first)
+        source.set("core", core)
+        source.set("y-extra", extra_second)
+        assert source.flatten() == [core, extra_first, extra_second]
+
+        # A target that does *not* share the source's canonical order, which is
+        # where the difference shows: with the same order, the target's own
+        # canonical/extra split happens to re-sort the damage away.
+        target = MiddlewareSlotTable(order=())
+        target.merge(source)
+
+        assert target.flatten() == source.flatten()
+        assert target.names() == source.names()
+
+    def test_a_slot_can_be_read_without_reaching_inside(self) -> None:
+        """The accessor `merge` uses. Without one, "iterate names()" has
+        nothing to read the value through and the private reach returns."""
+        table = MiddlewareSlotTable(order=("core",))
+        core = FakeMiddleware("core")
+        table.set("core", core)
+
+        assert table.get("core") is core
+        assert table.get("never-filled") is None
+
+    def test_rubric_is_a_declared_slot_not_an_unknown_one(self) -> None:
+        """`node_runtime` contributes `"rubric"`, and the base had never heard
+        of it (ticket 46, item 3), so it flattened through the unknown-slot
+        bucket — a position chosen by "nobody declared this" rather than by an
+        argument. That bucket is for a third party's slot; a first-party
+        contribution belongs in the declared order, where it can also be
+        replaced by name.
+        """
+        from openstategraph.abc.agent import AbstractAgentNode
+
+        assert "rubric" in AbstractAgentNode.SLOT_ORDER
+
+    def test_rubric_grades_the_agents_own_output_before_any_post_processing(self) -> None:
+        """Last in the order, and the position is the argument.
+
+        `RubricMiddleware` implements `before_agent` and `after_agent` (checked
+        against the installed package; the docs describe it as grading once the
+        agent has finished reasoning and looping it back on `needs_revision`).
+        `after_*` hooks run **last to first**, so last in the list means its
+        verdict is taken *first* — on what the agent itself produced, before
+        any later after_agent middleware reshapes it. That is the right
+        subject: the loop can only ask the agent to revise its own work, and a
+        complaint about someone else's post-processing is one it cannot act on.
+        """
+        from openstategraph.abc.agent import AbstractAgentNode
+
+        assert AbstractAgentNode.SLOT_ORDER[-1] == "rubric"
+
+    def test_a_declared_slot_outranks_a_plugins_unknown_one(self) -> None:
+        """What moving it out of the bucket actually buys — the observable
+        difference, since with rubric alone the flattened list is unchanged."""
+        table = MiddlewareSlotTable(order=("core", "rubric"))
+        plugin, rubric = FakeMiddleware("plugin"), FakeMiddleware("rubric")
+        table.set("rubric", rubric)
+        table.set("some-plugin", plugin)
+
+        assert table.flatten() == [rubric, plugin]
+
     def test_no_numeric_ordering_api_exists(self) -> None:
         """A priority integer would claim to express what before/after/wrap
         semantics make inexpressible; the API must not offer one."""

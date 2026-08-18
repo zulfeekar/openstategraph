@@ -696,10 +696,15 @@
         "type": "object"
       },
       "NodeContractResponse": {
-        "description": "The two LOCKED prompt sections of one model-driven node type.\n\nServed from the Python ladder classes, which are the single source of\ntruth. An editor shows these read-only beside the developer's editable\nrules; a custom editor should do the same rather than restate them.",
+        "description": "The prompt layers of one model-driven node type that the developer does\nnot type \u2014 served from the Python ladder classes, which are the single\nsource of truth. An editor shows these read-only beside the developer's\neditable rules; a custom editor should do the same rather than restate them.\n\nThree fields, and the third is not a third *locked* one (ticket 39):\n\n- `preamble` \u2014 what this node **is**. Locked, and runs first.\n- `contract` \u2014 the shape of the answer. Locked, and always last, because\n  later instructions win ties.\n- `default_rules` \u2014 what the base already tells the model, which the\n  developer's own rules **extend** unless they choose replace mode. Not\n  locked; showing it under a \"locked\" label would be untrue.\n\nAn agent's `preamble` and `contract` are both empty by design \u2014 it answers\nfree-form \u2014 so `default_rules` is its *only* non-editable layer. Publishing\ntwo fields meant the editor's read-only panel rendered nothing at all for\nthe most-placed node in the product, while 289 characters of honesty and\ntool-discipline rules were prepended to every one of its prompts.",
         "properties": {
           "contract": {
             "title": "Contract",
+            "type": "string"
+          },
+          "default_rules": {
+            "default": "",
+            "title": "Default Rules",
             "type": "string"
           },
           "preamble": {
@@ -2065,7 +2070,7 @@
     },
     "/api/node-contracts": {
       "get": {
-        "description": "The LOCKED prompt sections per model-driven node type (ticket 31).\n\nServed from the Python ladder classes \u2014 the single source of truth \u2014\nso the editor can show a developer what the machinery already says\n(read-only, beside their editable rules) instead of letting them\nduplicate or contradict it. The original RouterNode bug this\nprevents: an editable field pre-filled with the output contract,\ncleared by the first person who wrote their own rules.",
+        "description": "Every prompt layer a developer does **not** type (tickets 31, 39).\n\nServed from the Python ladder classes \u2014 the single source of truth \u2014\nso the editor can show a developer what the machinery already says\n(read-only, beside their editable rules) instead of letting them\nduplicate or contradict it. The original RouterNode bug this\nprevents: an editable field pre-filled with the output contract,\ncleared by the first person who wrote their own rules.\n\n**Three layers, not two, and the docstring above was false for a quarter\nof the families until it was** (ticket 39). `agent.llm` locks no preamble\nand no output contract \u2014 it answers free-form, deliberately \u2014 so a payload\nof those two fields alone published nothing for it, and the read-only panel\ndisappeared for the most-placed node in the product while its\n`default_rules` went on being prepended to every prompt. `default_rules` is\npublished as its own field because it is *replaceable*: the developer's\nrules extend it unless they choose replace mode, and calling that \"locked\"\nwould be a second untruth in place of the first.",
         "operationId": "node_contracts_api_node_contracts_get",
         "responses": {
           "200": {
@@ -2083,7 +2088,7 @@
             "description": "Successful Response"
           }
         },
-        "summary": "The locked prompt sections, per model-driven node type",
+        "summary": "The prompt layers a developer does not type, per model-driven node type",
         "tags": [
           "Authoring"
         ]

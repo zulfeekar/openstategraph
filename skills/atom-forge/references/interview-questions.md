@@ -94,10 +94,26 @@ and read the backend off the answer yourself:
 | every run of this workflow, forever | Store, `MemoryScope.WORKFLOW` |
 | this person, across workflows | Store, `MemoryScope.USER` |
 | everything, everywhere | Store, `MemoryScope.APP` |
+| **something this platform does not have** | **stop. Name it, cite the ticket.** |
 | written by hand, read by the workflow | package files in git — `skills/`, `knowledge/` |
 
 `MemoryScope` is `backend/openstategraph/memory.py`. The Store is durable by
 default; the checkpointer writes one sqlite file under the workflows root.
+
+**The last row is the one this table was missing, and a missing row does not
+fail — it misroutes.** Every other row maps to something that exists, so a
+requirement that fits none of them gets a confident answer that fits none of it.
+The live case is **episodic memory**: `memory.py` records it as *"absent,
+deliberately, and the word is here so the absence is findable"* — we hold the
+raw material (thread history, `evals/*.eval.json`) and no mechanism that turns a
+past run into a prompt-time example, because that is a runtime concern and we
+are a compiler. An author asking to *"replay what happened last time"* maps onto
+the Store, which is the wrong backend, and builds something that quietly becomes
+a different feature.
+
+So: **grep for the word before concluding the platform lacks something** —
+absences here are deliberately findable by name — and when it genuinely is
+absent, stop with a **pointer**, not a refusal. A dead end is not a route.
 
 **The gate this dimension trips most often:** if the answer is "it should write
 itself into the package so I can read it later", that is the read-only wheel.

@@ -147,6 +147,72 @@ class TestMounting:
         assert "npm run build" in response.text
         assert "/chat" in response.text
 
+    def test_a_mistyped_share_link_lands_in_the_editor(self, tmp_path: Path) -> None:
+        """`/w/some-slug` served `{"detail":"Not Found"}` as plain text in the
+        browser (production-ready 55.3). The real share URL is `?w=<slug>`, so
+        the guessed form — and every typo of the real one — put a raw JSON body
+        in front of someone who was trying to open a workflow.
+
+        The editor is where they were going, so that is where they land. It
+        reads `?w=` and finds nothing, which is the ordinary empty canvas.
+        """
+        app = FastAPI()
+        editor_assets.mount_editor(
+            app,
+            {
+                "OPENSTATEGRAPH_SERVE_STATIC": "1",
+                "OPENSTATEGRAPH_STATIC_DIR": str(built_editor(tmp_path / "d")),
+            },
+        )
+
+        response = TestClient(app).get("/w/some-slug")
+
+        assert response.status_code == 200
+        assert '<div id="root"></div>' in response.text
+
+    def test_an_unknown_api_path_is_still_a_404(self, tmp_path: Path) -> None:
+        """The fallback must not swallow the API. An unknown `/api/...` reaches
+        the mount too — every real route is declared before it — and answering
+        HTML there would turn a typo'd endpoint into a 200 nobody can debug."""
+        app = FastAPI()
+        editor_assets.mount_editor(
+            app,
+            {
+                "OPENSTATEGRAPH_SERVE_STATIC": "1",
+                "OPENSTATEGRAPH_STATIC_DIR": str(built_editor(tmp_path / "d")),
+            },
+        )
+
+        assert TestClient(app).get("/api/nonesuch").status_code == 404
+
+    def test_a_missing_asset_is_still_a_404(self, tmp_path: Path) -> None:
+        """A stale `<script src>` must fail as a script, not arrive as HTML —
+        a bundle that 200s with a document is the confusing half-hour."""
+        app = FastAPI()
+        editor_assets.mount_editor(
+            app,
+            {
+                "OPENSTATEGRAPH_SERVE_STATIC": "1",
+                "OPENSTATEGRAPH_STATIC_DIR": str(built_editor(tmp_path / "d")),
+            },
+        )
+
+        assert TestClient(app).get("/assets/gone.js").status_code == 404
+
+    def test_the_rule_is_a_function_anyone_can_read(self) -> None:
+        """Pure, so the four cases above are decidable without an HTTP client."""
+        html = "text/html,application/xhtml+xml"
+
+        assert editor_assets.serves_the_editor("w/some-slug", html)
+        assert editor_assets.serves_the_editor("anything/at/all", html)
+        # What curl sends, and a browser navigation with no opinion.
+        assert editor_assets.serves_the_editor("w/some-slug", "*/*")
+        assert not editor_assets.serves_the_editor("api/nonesuch", html)
+        assert not editor_assets.serves_the_editor("assets/gone.js", html)
+        # Not a browser navigating: a fetch that asked for JSON gets the 404 it
+        # can act on rather than a page it cannot parse.
+        assert not editor_assets.serves_the_editor("w/some-slug", "application/json")
+
     def test_the_missing_page_is_a_file_not_a_python_string(self) -> None:
         """Same rule `chat_page.py` already follows — markup lives in markup."""
         assert editor_assets.EDITOR_MISSING_PAGE.is_file()

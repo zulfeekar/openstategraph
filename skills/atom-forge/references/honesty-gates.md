@@ -179,9 +179,120 @@ run it.
 
 ## Running the gates
 
-Read the design against all eleven and write the outcome down. The two legitimate
+Read the design against every gate in the sets that apply — Set A below for anything placed or wired, Set B at the end of this file for anything that touches the world beyond the process — and write the outcome down. The two legitimate
 outcomes are *passes* and *the design changed*. "We'll deal with it later" is
 neither, and it is what gate 6 exists to catch.
 
 Where a gate is tripped, the fix is almost always a smaller promise rather than
 a bigger mechanism.
+
+
+---
+
+# Set B — the outside-contact gates
+
+Added 2026-08-18, after running this skill against ten concepts
+(`.scratch/the-atom-has-no-context/research/01-ten-concepts-through-the-skill.md`).
+The eleven gates above are **the canvas gates**: every one is about packaging,
+serialisation or compile targets. Against a database connector **not one of them
+fires**, so an author could pass the whole list having been asked nothing that
+applies to what they are building — a false green, which is worse than no
+checklist.
+
+Gate 9 above (two writers, one state key, no named reducer) belongs to both
+sets. It is about the state schema rather than the canvas, and it binds anything
+that can write. That it is the only shared gate is the evidence that this split
+is real rather than tidy.
+
+## 12. A vendor is reached through something a person can revoke
+
+**The evidence.** `CLAUDE.md`'s Ollama correction, and it is the strongest in
+this file because the rule was **broken by omission**, not by decision, and
+shipped: `ProviderSpec` declared `env_vars=()` and presented itself as keyless,
+while nothing passed an endpoint at all — so `ollama.Client` dialled
+`127.0.0.1:11434` and the cloud was reached, when it was reached, through a
+local daemon signing with `~/.ollama/id_ed25519`. That credential *"never passes
+through the environment and cannot be seen, moved or revoked from one"*, and on
+a machine with no daemon running `/api/health` still reported
+`model_configured: true`.
+
+**The gate.** Name the variable, in the shape that already exists —
+`env_vars`, `endpoint_env`, `default_endpoint`. Do not restate the rule in a
+second place; two spellings drift.
+
+**The redirect that catches the subtle case:** *"it works without one on my
+machine"* is not evidence of a keyless design. It is an ambient daemon or a
+cached login. The test is a machine that has only what the answer named.
+
+## 13. A credential value is never stored
+
+A document is committed. A field holds the **name** of a variable.
+
+**The evidence, and it is a lesson about validators generally.** `tool.mcp`'s
+`authTokenEnv` refuses a pasted credential, and the first rule was justified by
+a confident argument: *every credential shape contains a hyphen or starts with a
+digit, and neither is legal in a variable name.* It reads as a proof. It is
+false — `ghp_aaaa…` is a GitHub token **and** a legal environment-variable name,
+so the rule admitted exactly the value it existed to refuse. The fix is
+`SECRET_VALUE_PREFIXES` in `config_file.py`: a literal list of known prefixes
+(`sk-`, `ghp_`, `AKIA`, `Bearer `, …), inelegant and correct where the elegant
+argument was neither.
+
+**Do not replace it with a rule again.** The list will always be incomplete;
+that is the trade it was chosen for.
+
+## 14. Running twice is either harmless or handled
+
+`retry_policy` is a `StateGraph.add_node` parameter, applied graph-wide by
+`set_node_defaults` with per-node override — so **the platform will re-run a
+node, by design**. A resumed `interrupt()` re-enters a step for the same reason.
+
+- A **read** repeating is harmless. Record that; it is an answer, not silence.
+- A **send** repeating is a duplicate message to a customer. The design that
+  prevents it — an idempotency key, a dedupe window, opting this node out of the
+  graph's retry default — exists before the module is written or it does not
+  exist at all.
+
+**The fix is never a per-node `retry` field.** That is the cross-family
+violation `CLAUDE.md` names by example: retry is graph assembly, and a duplicate
+on a node base produces two spellings of one feature.
+
+Note that a tool's own failures are **data** (`ToolResult`), so a failing tool
+does not raise and does not trip the graph's retry. The hazard is the retry
+around the *agent*, and the resumed checkpoint — both outside the tool's sight,
+which is why the author will not think of it unasked.
+
+## 15. Content that leaves says so where a person places the node
+
+**The evidence.** `CLAUDE.md`: never send a user's graph to a third party —
+written because `draw_mermaid_png()` defaults to posting the graph to the
+Mermaid.Ink API. That is enforced in exactly one place, the preview, because it
+was a wrong **default**. A tool an author wrote deliberately has no default to
+catch it.
+
+Three answers, three different products, and only one of them needs surfacing:
+
+- **nothing leaves** — often the feature (`draw_mermaid()`, the YouTube atom);
+- **content leaves to a vendor the user configured** — their model provider,
+  ordinary, already covered by the credential they set;
+- **content leaves to a vendor the module author chose** — this is the mermaid
+  shape. Nobody picked it and nobody will find out. It goes in the node's own
+  description, where a person deciding to place it will read it.
+
+A downstream guardrail is **not** an answer here. It redacts; it cannot unsend.
+
+## 16. A pooled resource is scoped to a call, never to a run
+
+`human.approval` compiles to `interrupt()` and the checkpointer is durable on
+purpose, so a run genuinely pauses until a person returns — possibly for days.
+A session scoped "per run" holds a pooled connection for that whole time.
+
+**Why an experienced developer will miss this**: in a web application,
+request-scope and run-scope are the same thing, so the distinction never arises.
+Here they are hours apart. The three scopes are app/lifespan, run/thread, and
+superstep/call; a session belongs to the third.
+
+The small version of this hazard is already recorded in the codebase: one shared
+tool instance per type let two SQL nodes clobber each other's row cap, which is
+why `configure(data)` returns a *fresh* instance. A pooled resource has the same
+shape with worse consequences.

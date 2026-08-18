@@ -1,6 +1,6 @@
 ---
 name: atom-forge
-description: Interview-then-build procedure for adding a new module to OpenStateGraph — a tool atom, a node family, a guard, a memory construct, workflow-specific or generic. Grills the developer one question at a time across eight dimensions (trigger, payload, scope and lifetime, read side, failure modes, tier and family, ports and cardinality, compile target), runs the feasibility honesty gates, scores a 10/10 readiness card, and only then builds TDD through this repository's real pipeline. Use it whenever anyone wants a new node, tool, atom, guardrail, memory segment, cache, summariser or capability on the canvas — including phrasings like "can we have an X node", "build a tool that…", "add memory to this workflow", "I want the graph to remember" — and use it even when they ask only for the code, because the interview is what stops a node being built that compiles to nothing.
+description: Interview-then-build procedure for adding a new module to OpenStateGraph — a tool atom, a node family, a guard, a memory construct, a function, or infrastructure such as a connector or a pool, workflow-specific or generic. Routes first (is this on the canvas, or does something on the canvas use it?), then grills, verifies each answer against this installation rather than taking it on trust, recommends a shape, and says plainly when the platform cannot do what was asked. Grills the developer one question at a time across nine dimensions (trigger, payload, scope and lifetime, read side, failure modes, tier and family, ports and cardinality, compile target, outside contact), runs both honesty-gate sets, scores the readiness card for the route taken, and only then builds TDD through this repository's real pipeline. Use it whenever anyone wants a new node, tool, atom, guardrail, memory segment, cache, summariser or capability on the canvas — including phrasings like "can we have an X node", "build a tool that…", "add memory to this workflow", "I want the graph to remember" — and use it even when they ask only for the code, because the interview is what stops a node being built that compiles to nothing.
 ---
 
 # Atom forge
@@ -32,16 +32,79 @@ A spec form collects fields. An interview finds the one answer that decides the
 design, and it usually arrives two questions after the one you were tempted to
 skip.
 
-## The two phases
+## The three phases
 
-1. **Interview** — eight dimensions, one focused question at a time, each with
-   a redirect that ends the build early when the answer says "this is not a new
-   module".
-2. **Build** — only after the readiness card reads 10/10, and only through the
+0. **Route** — one question, before the interview: *is this thing on the
+   canvas, or does something on the canvas use it?* It costs one turn and it is
+   what makes the rest of the questions honest.
+1. **Interview** — the dimensions for the route taken, one focused question at
+   a time, each with a redirect that ends the build early when the answer says
+   "this is not a new module".
+2. **Build** — only after the readiness card is full, and only through the
    pipeline in the checklist below.
 
-Do not interleave them. Writing code mid-interview is how a dimension goes
+Do not interleave 1 and 2. Writing code mid-interview is how a dimension goes
 unasked and reappears as a rewrite.
+
+## Ask, verify, recommend — and be willing to say "not here"
+
+The interview is four verbs, not one, and three of them are easy to skip:
+
+- **Ask** — one question per turn, wording from `references/interview-questions.md`.
+- **Verify** — do not take an answer on trust. *"It reads `DATABRICKS_TOKEN`"* is
+  checkable: is the variable named anywhere in this repository, is there a
+  `ProviderSpec` shape for it, is it set in this shell? *"It needs the graph
+  state"* is checkable: `grep` whether that family is given state at all —
+  a **function** is deliberately not (`fn(text: str) -> str`, ticket 35). An
+  unverified answer is a hypothesis, and this repository has the recorded case:
+  a validator justified by a confident argument admitted the exact value it
+  existed to refuse.
+- **Recommend** — a redirect that only says *"this is a tool, not a node"* has
+  done half the job. Say what you would build: the rung, the ports, the two or
+  three fields, and why. The developer can then disagree with something
+  concrete.
+- **Say "not here"** — the most likely honest outcome, and the one an interview
+  is most tempted to route around. If the design needs a capability this
+  platform does not have, **stop and name it, with a pointer**. A run that ends
+  *"your module needs a typed `db` handle; this platform has no such thing —
+  see `.scratch/the-atom-has-no-context/`"* is a **correct** outcome, not a
+  failed interview. The law is *do not promise which is not possible*, and it
+  binds the interview as hard as it binds the build.
+
+---
+
+## Phase 0 — route, in one question
+
+> **"Is this thing on the canvas, or does something on the canvas use it?"**
+
+Two routes, and the nine dimensions below assume the first. Asking them of the
+second produces four meaningless answers and a readiness card that cannot pass
+— which reads as *unbuildable* rather than *out of scope*. Recorded case: a
+database connector run through the canvas interview scores about 3/10 and is
+refused at dimension 8 with the wrong reason ("it is configuration"); a
+connection pool is not configuration.
+
+| Route | What it is | Where it goes |
+| --- | --- | --- |
+| **On the canvas** | a node, a tool, a function, a guard, a memory construct — something a person places or wires | dimensions 1–9 below |
+| **Used by something on the canvas** | **infrastructure**: a connector, a pool, a client, a cache backend. App-lifetime, no ports, no compile target | dimension 9 and the infrastructure gates, then **stop** — see below |
+
+**Infrastructure has no authoring path in this repository yet, and that is the
+honest thing to say.** There is no tier for it, no ladder, and no registry it
+can join; whether it becomes a fourth tier or is recorded as outside the tier
+system is an open decision
+(`.scratch/the-atom-has-no-context/tickets/06-*`). So the correct outcome for
+route two today is: run dimension 9, write the answers down as a ticket, and
+say what is missing. Do not build it into a tool — a pool welded inside a tool
+is unshareable, unmockable, and reopened per node.
+
+**Two words, kept apart**, because both were in play at once while this was
+worked out:
+
+| Word | Means | Never means |
+| --- | --- | --- |
+| **Binding** | a wire that plugs a capability into a node with **no step added** — what `tool` and `skill` ports already are | control flow |
+| **Resource** | the pool or client behind it — app-lifetime, off-canvas | anything drawn |
 
 ---
 
@@ -63,6 +126,29 @@ first question.
 | 6 | **Tier & family** | Is it an atom, a molecule, or an organism — and which existing family does it join? | *a new family with one member* → check the ladder earns itself. Shared across two families → **composition**, never a common ancestor. |
 | 7 | **Ports & cardinality** | What comes in, what goes out, what type, how many links each? | *"sometimes one, sometimes a list"* → vary the **number of ports** with config, never a port's type at runtime. |
 | 8 | **Compile target** | Name the LangGraph construct this becomes. | *nothing new* → it is **configuration, a template, or a package to mount** — not a node type. This is the Loop-node refusal, twice recorded: *"A Loop node would compile to nothing new."* (`.scratch/production-ready/tickets/01-a-loop-template.md`) |
+| 9 | **Outside contact** | Does this touch anything beyond the process — and what does that cost, leak, repeat or stall? | *"nothing leaves, nothing is needed"* → **record it as a property**, not as silence. It is often the feature. |
+
+**Dimension 9 is one question with five follow-ups, not five dimensions.** They
+are one subject — what happens at the boundary of the process — and asking them
+as five would turn an interview into a form, which is the failure the top of
+this file describes. Every one of the five was found by running this skill
+against ten concepts on 2026-08-18
+(`.scratch/the-atom-has-no-context/research/01-ten-concepts-through-the-skill.md`);
+two of them came from the two most ordinary atoms anybody writes next — *a tool
+that sends something* and *a tool that calls a vendor*.
+
+| Follow-up | Ask | Redirect | Ticket |
+| --- | --- | --- | --- |
+| **Needs** | "What does this need that the process does not already have — a credential, an endpoint, a binary, a file? For each: what is it **called**, who sets it, how do they revoke it?" | *"it's in the config"* → **which named variable?** *"the user pastes it in the card"* → refused, the document is committed; a field holds the **name**. *"it works without one on my machine"* → that is an ambient daemon, which is the Ollama defect from the other side | 09 |
+| **Repeats** | "What happens if this runs twice with the same input — because it will?" | *"it won't"* → it will. `retry_policy` is graph-wide with per-node override, and a resumed `interrupt()` re-enters. A **send** is not idempotent; a **read** is, and that is a real answer worth recording | 10 |
+| **Leaks** | "Does any user content leave this machine? What, to whom, and does the user know?" | *content leaving to a vendor **the module author** chose* is the one that must be said on the card — nobody picked it and nobody will find out. This is `draw_mermaid_png()`'s shape, and that rule is enforced today in exactly one place | 11 |
+| **Costs** | "What does one call cost that is **not** a token — money, a metered quota, a rate limit? What happens at the limit?" | the limit is a **failure mode**: route the answer into dimension 5 with a sentence a model can act on. A `Send` fan-out multiplies calls, and a per-second cap turns that into a wall nobody simulated | 12 |
+| **Stalls** | "How long does one call take, and what can the user see while it is happening?" | *"about thirty seconds"* → that is a different product from a sub-second one and needs an answer to *"is it stuck?"*. Do not invent a progress channel; `stream_writer` is on the runtime seam | 15 |
+
+**Verify each of these rather than recording it.** A named variable is
+`grep`-able. A vendor endpoint is in the code or it is not. "It's idempotent" is
+a claim about a remote system and usually needs its docs read, not its author's
+recollection.
 
 **The three refusals worth knowing by heart**, because they are the ones a
 developer will push back on:
@@ -84,8 +170,20 @@ developer will push back on:
 Run these *before* promising anything, and again before the commit. The
 owner's phrasing is the law here: **do not promise which is not possible.**
 
+**There are two sets, and running the wrong one returns a false green.** Until
+2026-08-18 there was one list of eleven, presented as *the* gates and in fact
+entirely about packaging, serialisation and compile targets. Run against a
+database connector, **not one of the eleven fires** — so an author could pass
+every gate having been asked nothing that applies to what they are building. A
+checklist that is complete for one shape and empty for another, while being
+named as though it were complete for both, is worse than no checklist.
+
 The full checklist with the evidence behind each gate is
-`references/honesty-gates.md`. In brief, a design fails if it:
+`references/honesty-gates.md`.
+
+### Set A — the canvas gates
+
+For anything that is placed or wired. A design fails if it:
 
 1. **writes into the installed package at run time** — the wheel is read-only,
    shared, and replaced on upgrade;
@@ -107,30 +205,85 @@ The full checklist with the evidence behind each gate is
 11. **cites a measurement without the version it ran on** — and the build must
     re-verify on the version it pins.
 
+### Set B — the outside-contact gates
+
+For anything that touches the world beyond the process — which includes most
+tools, every connector, and any node that calls a vendor. A design fails if it:
+
+12. **reaches a vendor without naming something a person can set, see and
+    revoke.** `CLAUDE.md`'s Ollama correction, recorded because it was broken
+    **by omission** for a release: the spec declared `env_vars=()` and read as
+    keyless while the client reached the cloud through a local daemon signing
+    with an on-disk key that never passes through the environment. Name the
+    variable, in the `ProviderSpec` shape (`env_vars`, `endpoint_env`,
+    `default_endpoint`) — do not restate the rule in a second place.
+13. **stores a credential value anywhere** — a document is committed. A field
+    holds the **name** of a variable; `SECRET_VALUE_PREFIXES` in
+    `config_file.py` refuses pasted values, and it is a maintained literal list
+    because the elegant rule that replaced it once was false: `ghp_aaaa…` is a
+    GitHub token *and* a legal environment-variable name.
+14. **is not safe to run twice, and does nothing about it.** `retry_policy` is a
+    `StateGraph.add_node` parameter applied graph-wide, and a resumed
+    `interrupt()` re-enters a step. A send that duplicates is a defect the
+    author never chose; a read that repeats harmlessly is a property worth
+    recording. The fix is never a per-node `retry` field — that is the
+    cross-family violation `CLAUDE.md` names by example.
+15. **sends user content to a vendor the module author chose, silently.**
+    `CLAUDE.md`: never send a user's graph to a third party. Enforced today in
+    exactly one place, the mermaid preview, because that was a wrong *default*
+    — a tool an author wrote deliberately has no default to catch it. If content
+    leaves, the node's own description says so where a person places it.
+16. **holds a pooled resource across a pause.** `human.approval` compiles to
+    `interrupt()` and the checkpointer is durable on purpose, so a run can sit
+    for days waiting for a person. In a web application request-scope and
+    run-scope are the same thing, so an experienced developer will not be
+    looking for this. Scope a session to a **call**, never to a run.
+
+**Gate 9 belongs to both sets.** Two node types writing one state key with no
+named reducer is a state-schema hazard, not a canvas one, and it binds anything
+that can write. That it is the only shared gate is the evidence the split is
+real rather than tidy.
+
 ---
 
-## The 10/10 readiness card
+## The readiness card
 
 Score before building. Each line is 1 point, awarded when the answer is
 **concrete** — or when it is explicitly deferred *with a stated reason*, which
 is a different thing from unanswered and must be written down as such.
 
 ```
-1. Trigger            — deterministic / predicate / (model-decided → redirected)
-2. Payload            — the exact bytes, and their token cost
-3. Scope & lifetime   — and therefore the backend it implies
-4. Read side          — the surface, and who may edit it
-5. Failure modes      — each with its own sentence
-6. Tier & family      — and the ladder rung it occupies
-7. Ports & cardinality— types, directions, maxConnections
-8. Compile target     — a named LangGraph construct
-9. Honesty gates      — all eleven run, none tripped (or the design changed)
-10. Smoke plan        — the one run that proves it, and what it must show
-                                                        TOTAL: __/10
+CANVAS ROUTE                                            (11 points)
+ 1. Trigger            — deterministic / predicate / (model-decided → redirected)
+ 2. Payload            — the exact bytes, and their token cost
+ 3. Scope & lifetime   — and therefore the backend it implies
+ 4. Read side          — the surface, and who may edit it
+ 5. Failure modes      — each with its own sentence
+ 6. Tier & family      — and the ladder rung it occupies
+ 7. Ports & cardinality— types, directions, maxConnections
+ 8. Compile target     — a named LangGraph construct
+ 9. Outside contact    — needs / repeats / leaks / costs / stalls, each answered
+10. Honesty gates      — Set A and Set B run, none tripped (or the design changed)
+11. Smoke plan         — the one run that proves it, and what it must show
+                                                        TOTAL: __/11
+
+INFRASTRUCTURE ROUTE                                     (4 points)
+ 1. What it is         — the resource, its lifetime, who constructs it
+ 2. Outside contact    — needs / repeats / leaks / costs / stalls
+ 3. Honesty gates      — Set B, plus 9 if it can write state
+ 4. The blocker        — named, with a ticket. There is no authoring path yet
+                                                         TOTAL: __/4
 ```
 
-Below 10, keep grilling. Do not build a 9 — the missing point is the one that
-rewrites the other nine.
+**Score the card for the route you took.** Scoring an infrastructure design
+against the canvas card is how a connector reaches 3/11 and reads as
+*unbuildable* rather than *out of scope* — the card misfiring rather than being
+silent.
+
+Below full marks, keep grilling. Do not build a 10 of 11 — the missing point is
+the one that rewrites the other ten. **An honest "the platform cannot do this
+yet, here is the ticket" is a full card**, not a failure: the answer is
+concrete, and the reason for the deferral is written down.
 
 **Write the card down before building.** The ten settled answers, in the
 developer's own words where possible, become a spec — in this repository a
@@ -167,7 +320,32 @@ and admitted exactly the value it existed to refuse.
 - a new rung on an existing ladder under `backend/openstategraph/abc/`
   (`tool.py`, `agent.py`, `grader.py`, `guardrail.py`, `router.py`,
   `orchestrator.py`, `middleware.py`, `prompt.py`). Implement `_execute`, never
-  `run`.
+  `run`; or
+
+- **a function**, which has a family and a palette tier and **no ladder** —
+  and needs none. `function.` is a declared census term and
+  `function.format_report` is a molecule in *Reasoning & control*, but `abc/`
+  holds no `function.py` because there is nothing to share: the whole contract
+  is one signature.
+
+  ```
+  fn(text: str) -> str
+  ```
+
+  Three facts, all load-bearing, all recorded in `_discovered_function`'s
+  docstring in `compile/node_runtime.py` and nowhere an author would look:
+
+  - it transforms **the node's upstream text**, nothing else;
+  - it gets **no model and no state** — deliberately, ticket 35: *code is
+    referenced by name, never given the raw state to hide control flow in*.
+    Do not widen the signature to `fn(state)` as a convenience; that is the
+    exact thing that was refused;
+  - a raised exception becomes **readable output**, the same errors-are-data
+    rule `BaseTool.run` applies — retrying a deterministic function reproduces
+    the same failure, so the useful move is to carry the message downstream.
+
+  Discovered functions live in `workflows/<slug>/functions/` and arrive by the
+  same `code → canvas` channel as discovered tools.
 
 **3. Did you widen a shared base?** If step 2 added a member to a base class
 rather than to your leaf, three things moved and none of them are in your diff

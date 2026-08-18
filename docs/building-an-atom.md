@@ -817,3 +817,63 @@ above already says. This sentence contradicted it until 2026-08-13.
 
 Then drag it onto the canvas, wire its `tool` port to an agent's `tools` bus,
 and ask the agent to roll something.
+
+
+---
+
+## Appendix — a function is not an atom, and has no ladder
+
+This page is about **tools**. A **function** is the other thing a developer
+writes in Python and places on the canvas, and until 2026-08-18 its contract
+lived only in a compiler docstring — so an author looking for the function path
+found this page, which is about something else.
+
+`function.` is a declared census term in
+[`vocabulary.ts`](../src/nodes/vocabulary.ts) and `function.format_report` is a
+molecule in *Reasoning & control*. There is **no `abc/function.py`**, and there
+should not be: the entire contract is one signature, so a
+`IFunction → AbstractFunction → BaseFunction` ladder would exist to share
+nothing, which this project's rules say to refuse and say so.
+
+```python
+def fn(text: str) -> str: ...
+```
+
+Three facts, all load-bearing, recorded at `_discovered_function` in
+[`node_runtime.py`](../backend/openstategraph/compile/node_runtime.py):
+
+- **It transforms the node's upstream text.** Nothing else reaches it.
+- **It gets no model and no state — deliberately.** Ticket 35: *code is
+  referenced by name, never given the raw state to hide control flow in.* Do
+  not widen the signature to `fn(state)` as a convenience; that is precisely
+  what was refused, and any future runtime-context work inherits this as a
+  constraint rather than an oversight.
+- **A raised exception becomes readable output**, the same errors-are-data rule
+  `BaseTool.run` applies: retrying a deterministic function reproduces the same
+  failure, so the useful move is to carry the message downstream where a grader
+  or a person can read it.
+
+Discovered functions live in `workflows/<slug>/functions/` and arrive by the
+same `code → canvas` channel as discovered tools — the type id is data, and it
+travels with the package.
+
+---
+
+## Appendix — before you build any of this, run the interview
+
+[`skills/atom-forge`](../skills/atom-forge/SKILL.md) is the procedure, and it
+now **routes before it interviews**: *is this thing on the canvas, or does
+something on the canvas use it?* Infrastructure — a connector, a pool, a client
+— has no authoring path in this repository yet, and the skill says so rather
+than taking it through nine questions of which four are meaningless.
+
+Two things it asks that this page does not, both found by running it against
+ten concepts and both from perfectly ordinary atoms:
+
+- **Is it safe to run twice?** `retry_policy` is a `StateGraph.add_node`
+  parameter applied graph-wide, so the platform *will* re-run your node. A read
+  repeating is harmless and worth recording; a send repeating is a duplicate
+  message to a customer.
+- **Does user content leave the machine, and to whom?** If it leaves to a
+  vendor *you* chose rather than one the user configured, that belongs in the
+  node's description, where somebody deciding to place it will read it.

@@ -24,7 +24,24 @@ not have. Run it before trusting any statement about what is left.
 
 **Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
 
-**Before building a new module — a tool atom, a node family, a guard, a memory construct — run `skills/atom-forge/`.** It is the agent-agnostic repo skill (plain markdown, no Claude-specific tooling) that interviews the developer across eight dimensions, runs the honesty gates, scores the 10/10 readiness card, and only then builds through the pipeline in `docs/building-an-atom.md`.
+**Before building a new module — a tool atom, a node family, a guard, a memory
+construct, a function, or infrastructure such as a connector — run
+`skills/atom-forge/`.** It is the agent-agnostic repo skill (plain markdown, no
+Claude-specific tooling). It **routes first** (*is this on the canvas, or does
+something on the canvas use it?*), then interviews across nine dimensions,
+**verifies** each answer against this installation rather than taking it on
+trust, **recommends** a shape, runs both honesty-gate sets, scores the readiness
+card for the route taken, and only then builds through the pipeline in
+`docs/building-an-atom.md`.
+
+An interview that ends *"this platform cannot do that yet — here is the
+ticket"* is a **correct outcome**, not a failed one. The law is *do not promise
+which is not possible*, and it binds the interview as hard as it binds the
+build.
+
+The counts in that paragraph are pinned by `backend/tests/test_atom_forge_is_watertight.py`
+rather than asserted here, for the reason this file records twice already: a
+number in prose has no way to fail.
 
 ---
 

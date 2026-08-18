@@ -419,7 +419,7 @@ picker offers the same set, in the same order, from the same
 | --- | --- | --- |
 | `minimal` *(default)* | input → agent → output | a first run: one model call, and nothing in it that can reject the answer |
 | `loop` | an agent drafts, a grader reviews, weak answers go back | you want the revision loop and nothing else — the smallest thing that shows a cycle |
-| `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revise loop |
+| `routed-qa` | input → router → agent → grader → output, plus a second branch that skips the grader | the shape most assistants end up with, and the one that teaches branches and the revision loop |
 | `team` | supervisor → worker → join → grader | the work splits into parallel subtasks. Mount the result anywhere with the `Workflow` card — "team" is a package shape, not a node type |
 
 Beside the templates sit the **examples**: finished packages, one per pattern

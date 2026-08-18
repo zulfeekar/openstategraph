@@ -326,6 +326,29 @@ class TestExamples:
         assert (tmp_path / "chained-summarizer" / "workflow.json").is_file()
         assert str(tmp_path / "chained-summarizer") in capsys.readouterr().out
 
+    def test_copy_says_the_copy_is_a_draft(self, tmp_path: Path, capsys) -> None:
+        """Every shipped example carries `published: false`, so the documented
+        `Workflows.published()` loop prints nothing after a copy and says
+        nothing about why (production-ready 55.2). The copy is right — publishing
+        is a human decision about a specific package — so the *silence* is the
+        defect, and this line ends it.
+        """
+        import json
+
+        code = cli.main(["examples", "copy", "chained-summarizer", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_OK
+        # The claim is only worth printing while it is true of what was written.
+        envelope = json.loads((tmp_path / "chained-summarizer" / "workflow.json").read_text())
+        assert envelope["published"] is False
+        assert "draft" in capsys.readouterr().out
+
+    def test_copy_all_says_the_copies_are_drafts(self, tmp_path: Path, capsys) -> None:
+        code = cli.main(["examples", "copy", "--all", "--root", str(tmp_path)])
+
+        assert code == cli.EXIT_OK
+        assert "draft" in capsys.readouterr().out
+
     def test_copy_brings_the_packages_it_mounts_and_names_them(
         self, tmp_path: Path, capsys
     ) -> None:
@@ -401,11 +424,24 @@ class TestExamples:
         assert code == cli.EXIT_USAGE
         assert list(tmp_path.iterdir()) == []
 
-    def test_examples_needs_a_subcommand(self) -> None:
-        with pytest.raises(SystemExit) as caught:
-            cli.main(["examples"])
+    def test_the_bare_verb_lists(self, capsys) -> None:
+        """`openstategraph examples` with no subcommand prints the gallery.
 
-        assert caught.value.code == cli.EXIT_USAGE
+        The top-level help calls it *"the worked examples that ship with
+        OpenStateGraph"*, so the bare word is the obvious first thing to type —
+        and it used to answer with an argparse usage error, in a product that
+        has a whole ticket about nobody knowing the examples exist
+        (production-ready 55.1). Listing is the only reading of the bare verb
+        that costs nothing, so it is the default rather than an error.
+        """
+        from openstategraph import examples
+
+        code = cli.main(["examples"])
+
+        assert code == cli.EXIT_OK
+        printed = capsys.readouterr().out
+        for example in examples.catalogue():
+            assert example.slug in printed
 
 
 class TestKnowledge:

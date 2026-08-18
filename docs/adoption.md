@@ -439,6 +439,15 @@ Four members, and that is the whole class:
 | `.published()` | only the published, readable ones — mirrors the HTTP listing's `?surface=chat` |
 | `.load(slug, **overrides)` | the same `CompiledWorkflow` `load_workflow` returns, from the same function |
 
+**A fresh package is a draft**, so the loop above is empty until something is
+published — this is the first thing anyone hits after `openstategraph examples
+copy chained-summarizer`, since every shipped example carries `published:
+false` and the copy is faithful. Publishing is a decision about *your*
+deployment (the editor's Workflows panel, or `"published": true` in
+`workflow.json`), never something a copy does on your behalf. Use `.list()`
+while you are still building — it shows drafts, and the `published` column says
+which is which.
+
 **Listing never compiles.** `.list()` reads one `workflow.json` per package and
 stops: no LangGraph import, no model, no API key, and none of the package's own
 `tools/*.py` executed. Twenty workflows list instantly, and **one broken
@@ -548,7 +557,7 @@ constructor is worse than one that is honest about the line.
 
 | Collaborator | Parameter | Default when omitted | When you'd override |
 | --- | --- | --- | --- |
-| Chat model | `model=` | the document's `settings.model`, else `default_model:` in `openstategraph.yaml`, else the instance default — the provider integration you installed, preferring one whose credential is set (`openstategraph providers` shows which and why). With the key missing you get a stand-in raising `MissingProviderKey` the first time a node uses it, `MissingProviderPackage` when the extra is absent, and `NoProviderInstalled` when no integration is installed at all | a pre-built model object with your own retry, base URL, temperature or gateway |
+| Chat model | `model=` | the document's `settings.model`, else `default_model:` in `openstategraph.yaml`, else the installation default — the provider integration you installed, preferring one whose credential is set (`openstategraph providers` shows which and why). With the key missing you get a stand-in raising `MissingProviderKey` the first time a node uses it, `MissingProviderPackage` when the extra is absent, and `NoProviderInstalled` when no integration is installed at all | a pre-built model object with your own retry, base URL, temperature or gateway |
 | Thread persistence | `checkpointer=` | durable: `<workflows root>/.openstategraph/checkpoints.sqlite` (the package's own `settings.checkpointer: "sqlite"` takes a per-workflow file instead; `OPENSTATEGRAPH_CHECKPOINT_PATH` moves the default, or `=memory` opts out) | a Postgres/Redis saver, so `human.approval` and `ask(thread_id=…)` survive a restart **and** reach more than one process |
 | Long-term memory | `store=` | durable: `<workflows root>/.openstategraph/memory.sqlite`, beside the checkpointer's file (`OPENSTATEGRAPH_MEMORY_PATH` moves it, or `=memory` opts out; `OPENSTATEGRAPH_POSTGRES_URL` puts it in a database) | **the sibling of `checkpointer`.** Supply both or neither: durable threads plus an in-memory store is a deployment that forgets facts it told you it remembered |
 | Tools | `tools=` | built-ins, then installed plugins, then the package's own `tools/` | a vendored or read-only package, a tool that needs a client you already built (a pooled DB handle, an authenticated API session), one tool stubbed in a test with the rest real |
@@ -654,7 +663,7 @@ things you asked for is how a list that matters gets ignored.
   uses, or an already-built LangChain model object, passed through untouched.
   Omit it and you get the document's own `settings.model` if it names one,
   then `default_model:` in `openstategraph.yaml` if the project declares one,
-  then **the instance default**: the provider integration you have installed.
+  then **the installation default**: the provider integration you have installed.
   That last rule is what makes the install line the mental model — `pip
   install 'openstategraph[anthropic]'` and Anthropic is your default, with no
   configuration at all. Among installed integrations, one with a credential
