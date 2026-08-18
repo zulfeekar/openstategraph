@@ -68,10 +68,17 @@ export const HIDDEN_PACKAGE_MARK = 'Hidden';
 /**
  * Why, in one sentence — shown where a surface has room for one. A native
  * `<datalist>` option has no tooltip, so the combobox prints the mark alone;
- * the palette row hangs this off its `title`.
+ * the palette hangs this off the mark itself, keyboard-reachable.
+ *
+ * **Plain words, deliberately.** This read *"no customer surface advertises
+ * this package: it stays out of the /chat picker even when published"* until
+ * the owner asked what it meant — four pieces of internal vocabulary
+ * (*customer surface*, *advertises*, *the /chat picker*, *the shipped
+ * gateway*) in a sentence whose whole job is to explain a word somebody did
+ * not recognise. An explanation that needs an explanation has not been given.
  */
 export const HIDDEN_PACKAGE_NOTE =
-  'Hidden — no customer surface advertises this package: it stays out of the /chat picker even when published. You can still mount it here, which is how the shipped gateway reaches it.';
+  'Hidden — people using the chat app never see this workflow in their list, even after you publish it. It is a building block: other workflows mount it, rather than a person picking it.';
 
 type Listener = () => void;
 

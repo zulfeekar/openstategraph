@@ -307,23 +307,30 @@ export function Palette({ onNotify }: PaletteProps) {
             ) : undefined
           }
         />
+      </PanelHeader>
+
+      <PanelBody>
         {/* **The palette says how a component gets onto the canvas.**
             `canvas-feels-right` 01 resolved that click-to-place would stay
             "and the palette says so"; the mechanical half shipped and this
             half did not, so the rule lived only in a source comment and every
-            user met it by accident. One line, in the header rather than under
-            a section, because it is true of every row below it — and hidden
-            while searching, for the same reason the sections' own notes are:
-            a filtered palette is a lookup, not a first visit. */}
+            user met it by accident. Hidden while searching, for the same
+            reason the sections' own notes are: a filtered palette is a lookup,
+            not a first visit.
+
+            **In the body, not the header.** It was in `PanelHeader` for one
+            commit, which is `display: flex; flex-direction: row` — so the
+            paragraph became a flex item beside the search box, squeezed to
+            56px wide and 227px tall, one word per line, over the canvas. The
+            body is a column and is where every other explanatory note in this
+            panel already lives. */}
         {!searching ? (
           <p className="palette-howto">
             Drag any of these onto the canvas to place it where you want it. From the keyboard:
             Tab to one and press Enter.
           </p>
         ) : null}
-      </PanelHeader>
 
-      <PanelBody>
         {/* The half-authored error, and everything else discovery could not
             deliver (register PK-06). Shown here rather than as a toast because
             it is a *standing* condition — a Python tool with no editor card is

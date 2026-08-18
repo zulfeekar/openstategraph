@@ -221,9 +221,17 @@
 /* How a component gets onto the canvas, said once at the top of the palette
  * (`say-it-on-the-surface` 04). Sized and toned like the section notes below
  * it — it is the same kind of sentence, about every row rather than one
- * section. */
+ * section.
+ *
+ * `max-width: 100%` and `min-width: 0` are not decoration: this paragraph
+ * spent one commit inside `PanelHeader`, which is a flex row, and collapsed to
+ * 56px wide and 227px tall — one word per line, over the canvas. It lives in
+ * the body now, and these two lines mean the same mistake costs nothing if
+ * anybody moves it back. */
 .palette-howto {
-  margin: var(--space-2) 0 0;
+  max-width: 100%;
+  min-width: 0;
+  margin: var(--space-2) 0 var(--space-1);
   color: var(--color-text-muted);
   font: var(--type-body-sm);
   line-height: var(--line-height-snug);

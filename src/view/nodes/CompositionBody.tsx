@@ -205,6 +205,22 @@ function GraphPeek({ slug }: { slug: string }) {
  * invented plumbing to the shell's `Toaster`. Success needs no message: the
  * canvas becomes the other workflow, which is the loudest feedback available.
  */
+/**
+ * Why this mount cannot be opened yet, in words a first-time reader has met.
+ *
+ * It said *"this workflow has no address yet"* until 2026-08-18. **Address** is
+ * internal vocabulary — a `MountAddress` is a chain like
+ * `concierge/wf-music` — and it arrived in a sentence explaining a refusal to
+ * somebody who by definition did not know what was wrong. The same defect
+ * `say-it-on-the-surface` 03 removed from the mount field one commit earlier,
+ * in the file next door.
+ *
+ * Declared once because two surfaces say it: the button's hover text, before
+ * the press, and the inline error, after one.
+ */
+const UNSAVED_PARENT_REFUSAL =
+  'Save this workflow first. Opening a mount edits it inside the workflow that holds it, so that workflow needs a folder on the backend before there is anywhere to put the change.';
+
 function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
   const workbench = useWorkbench();
   const [error, setError] = useState<string | null>(null);
@@ -213,6 +229,21 @@ function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
   // the same string — dead before `team.workflow` was collapsed, and there is
   // now not even a kind to branch on (ticket 16).
   const label = 'Open this mount';
+
+  // **Knowable before the click, so it is said before the click.** This used
+  // to compute the address inside `open()`, so an unsaved workflow presented a
+  // live-looking button, took the press, and only then produced a sentence.
+  // The answer is readable at render — same store, same call — and this
+  // repository already settled the principle twice: "unavailable rather than
+  // merely punished" (ticket 42's mount combobox, and the greyed package rows
+  // that carry their refusal in their hover text).
+  //
+  // Not `disabled`, for the reason `PackageItem` records: a disabled button
+  // fires no mouse events, so it would swallow the hover text that explains
+  // itself. `aria-disabled` plus a title that says why.
+  const rooted =
+    getOpenAddress() ?? parseMountAddress(sessionStorage.getItem(CURRENT_SLUG_KEY) ?? '');
+  const unsaved = rooted === null;
 
   const open = useCallback(async () => {
     setBusy(true);
@@ -226,7 +257,7 @@ function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
     const target = here ? childAddress(here, mountId) : null;
     if (!target) {
       setBusy(false);
-      setError('This workflow has no address yet — save it before opening a mount.');
+      setError(UNSAVED_PARENT_REFUSAL);
       return;
     }
     const outcome = await loadMountIntoEditor(target, new WorkflowFileClient(), workbench);
@@ -240,7 +271,12 @@ function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
         type="button"
         className="node__composition-open"
         disabled={busy}
-        title={`Opens this mount of ${slug} — its own overrides, not the shared definition. Other mounts are unaffected.`}
+        aria-disabled={unsaved}
+        title={
+          unsaved
+            ? UNSAVED_PARENT_REFUSAL
+            : `Opens this mount of ${slug} — its own overrides, not the shared definition. Other mounts are unaffected.`
+        }
         onClick={() => void open()}
       >
         <Icon glyph={Pencil} size="xs" />

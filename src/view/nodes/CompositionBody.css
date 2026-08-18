@@ -93,7 +93,16 @@
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.node__composition-open:hover:not(:disabled) {
+/* Cannot be opened yet — the parent has never been saved, so there is nowhere
+ * to write the change. Greyed, but **not** `disabled`: a disabled button fires
+ * no mouse events and would swallow the hover text that says why, which is the
+ * same reasoning `PackageItem` records for a refused package row. */
+.node__composition-open[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.node__composition-open:hover:not(:disabled):not([aria-disabled='true']) {
   color: var(--color-text-primary);
   background: var(--color-bg-surface-raised);
   border-color: var(--color-border-emphasis);
