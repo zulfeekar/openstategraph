@@ -432,6 +432,14 @@ export function Palette({ onNotify }: PaletteProps) {
               <p className="palette-note">
                 Your saved workflows, each mounted as one isolated step — task in, answer out.
                 Mounted <em>by reference</em>: change the package and every mount of it changes.
+                {/* The word under each name, said once where the section is
+                    introduced (`say-it-on-the-surface` 03). Every row printed
+                    its slug in a `<code>` and nothing anywhere told a reader
+                    what that string was — and it is the string the mount field
+                    asks for, so a reader who cannot connect the two cannot use
+                    either surface. */}{' '}
+                The name in code type is the <strong>slug</strong>: the package’s folder on the
+                backend, and what the mount field asks for.
               </p>
             ) : null}
             {packages.length > 0 ? (

@@ -4,6 +4,24 @@ Visual AI workflow builder. TypeScript editor (JointJS core) + Python LangGraph 
 
 **Before planning anything, read the maps under `.scratch/`** — each is a multi-session plan with its own tickets, and there are several live at once (`production-ready/` is the current one; `fullstack-langgraph/`, `ship-it/` and `memory-hardening/` are others). Resolve one ticket per session (research excepted).
 
+**A resolved ticket is recorded in two places, and the commit is the one that
+survives.** `.scratch/` is gitignored, so a resolution written only into a
+ticket file leaves no diff, and a concurrent session's revert can take it with
+no trace — which is how twenty tickets, including a data-loss blocker, came to
+read `Status: open` for work that had shipped, CI-verified (production-ready
+57). So: write the resolution in the ticket **and** put a trailer on the commit
+that carries the work.
+
+```
+Ticket: production-ready/46
+```
+
+The map name is part of the id — every map numbers from 01. A commit may carry
+several. `python3 scripts/ticket_ledger.py` reports where the ledger and git
+disagree: a trailer whose ticket still says open, a ticket whose file carries a
+resolution its header does not, a header citing a commit this repository does
+not have. Run it before trusting any statement about what is left.
+
 **Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
 
 **Before building a new module — a tool atom, a node family, a guard, a memory construct — run `skills/atom-forge/`.** It is the agent-agnostic repo skill (plain markdown, no Claude-specific tooling) that interviews the developer across eight dimensions, runs the honesty gates, scores the 10/10 readiness card, and only then builds through the pipeline in `docs/building-an-atom.md`.
@@ -189,6 +207,7 @@ reads, so the user-facing words are fixed:
 | **Template** | a starting document; it produces a workflow and stops existing | a node type; a reusable definition |
 | **Package** | the reusable definition — `workflows/<slug>/`, the thing a mount points at | a PyPI distribution, in user-facing copy |
 | **Instance** | one mount of a package, carrying its own `data.overrides` | a copy of the package |
+| **Slug** | a package's folder name — `workflows/<slug>/`, `?w=<slug>`, and what a mount field asks for. **Minted by the backend at first save and frozen**, because a slug that moves renames a directory | a title, a display name, or anything a user chooses or edits |
 | **Eval** | grading a workflow **offline** against a committed dataset of questions whose answers are known — `openstategraph eval`, `<package>/evals/*.eval.json` | the grader node's in-run judgement, which routes rather than scores |
 | *(internal only)* the loop | `create_agent` / ReAct | anything in UI copy |
 
@@ -215,6 +234,26 @@ change the original later, does this change too?*
 | --- | --- | --- |
 | Mount a package | by **reference** | every instance changes |
 | Start from a template | by **copy** | nothing changes; the link was severed |
+
+#### And a slug is a name a user never chose
+
+`say-it-on-the-surface` 03. The word was on **five** surfaces — the mount
+field's label, every Packages palette row's description, the Workflows panel,
+the create toast, and `?w=` — and defined on exactly one, inside a panel a user
+may never open. So a required field asked for a machine name nobody had
+introduced.
+
+The behaviour was never the problem and did not change. What changed is where
+the word appears: it survives where it genuinely *is* the identity — the folder
+path, the URL, and the create toast that names the one thing a user could not
+have predicted — and the mount field is labelled **Workflow**, with the hint
+explaining the identifier. The Packages section introduces it once, beside the
+rows that print it.
+
+Pinned by `src/nodes/compose/slugIsExplained.test.ts`, including the clause
+that must **not** appear: nothing may imply the list is exhaustive, because the
+field is a combobox and not a listbox on purpose — mounting a package you have
+not built yet is a real way to work.
 
 `docs/on-the-canvas.md` is written to this lexicon and is where a user meets it.
 
@@ -346,6 +385,33 @@ We go **deep on LangGraph** deliberately — no `IOrchestrator` abstraction, bec
 3. **The compile seam is one-directional**: `workflow.json` → runtime. Nothing reads runtime objects back into the model.
 4. **Our own runtime vocabulary.** Do not leak LangGraph type names into `workflow.json` or into `core/`.
 
+**There is a third direction, and rule 3 was silent about it.** `code → canvas`
+is real, sanctioned and load-bearing: `api/capability_discovery.py` imports a
+package's `tools/*.py`, and `src/app/capabilityRefresh.ts` →
+`src/nodes/workflowScoped.ts` → `src/nodes/tools/DiscoveredToolNode.ts` mints a
+node **type** whose id is the Python qualified name
+(`<slug>/tools.QueryTool`) — placeable, and therefore writable into a document
+as `"type": "chinook-assistant/tools.QueryTool"`. A reader checking rule 3
+against the code found a channel the rule does not mention, which is how a
+guardrail stops being one (production-ready 46, item 2).
+
+It does not breach rule 3 — that rule is about the *compile* seam, and this is
+neither of its directions: nothing reads a runtime object back into the model.
+Two properties keep it safe, and they are the boundary:
+
+- **The type id is data.** A string in `workflow.json`, exactly like every
+  built-in type id. No Python object, no import path to resolve at load time,
+  nothing host-language about it.
+- **The type travels with the package.** `tools/` sits beside `workflow.json`,
+  so a document naming one of these types is portable to anywhere that carries
+  the package — which is the same promise a built-in type makes about the
+  runtime.
+
+The cost, stated so nobody rediscovers it as a bug: a document can name a type
+absent from `port_specs.json`, resolvable only by importing the package's
+Python. The editor already handles that case as an unknown node type, preserved
+exactly as saved.
+
 Adding a second runtime later is roughly an engineer-quarter, and permanently multiplies the cost of every new node type. Do not pay it speculatively.
 
 ### We are a compiler, not a runtime
@@ -400,9 +466,19 @@ not survive the next run, which is why this correction lives outside them.
 The stamped claim that the scheduled workflow "refreshes the repository wiki"
 describes intent, not observed behaviour:
 
-> **This workflow has never run** — zero executions, still true on 2026-08-16.
-> So "let OpenWiki regenerate" means *a human runs it*, and a generated page
-> you leave stale stays stale.
+> **This workflow has now run, once, and failed** (2026-08-17, scheduled, run
+> `32004530549`, 41s): *"OPENAI_API_KEY is required for non-interactive runs.
+> Run openwiki in an interactive terminal to save credentials."* No model key
+> is configured in the repository's secrets, so the scheduled job cannot
+> produce a page and will fail identically every night until one is. Until
+> 2026-08-17 this line said the workflow had never run at all, and that is the
+> correction: it is no longer "never executed", it is **executing and failing**,
+> which is a different fact with a different fix (add the secret, or retire the
+> schedule).
+>
+> Either way the practical instruction is unchanged: "let OpenWiki regenerate"
+> means *a human runs it locally*, and a generated page you leave stale stays
+> stale.
 >
 > **The blanket version of this warning is itself now stale, and that is the
 > point.** Until 2026-08-16 this block said the repository had "zero git

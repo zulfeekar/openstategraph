@@ -81,10 +81,30 @@ export const subgraphNode: INodeDefinition = defineNode(
         // asked for.
         kind: 'combobox',
         key: FIELD_WORKFLOW,
-        label: 'Workflow slug',
+        // **"Workflow", not "Workflow slug"** — `say-it-on-the-surface` 03.
+        //
+        // The word *slug* was on five surfaces and defined on one: this label,
+        // every Packages palette row's description, the Workflows panel, the
+        // create toast, and `?w=` in the URL. Only the panel explained it, and
+        // a user who never opens that panel meets a required field asking for
+        // a machine name nobody told them about.
+        //
+        // The behaviour behind it is settled and correct and did not change:
+        // the slug is minted by the backend at first save and frozen, because
+        // a slug that moves renames a directory. What changed is where the
+        // word appears. It survives where it genuinely *is* the identity — the
+        // folder path, the URL, and the create toast that names the one thing
+        // a user could not have predicted — and here, where the combobox fills
+        // it in for you, the label names the thing and the hint explains the
+        // identifier.
+        label: 'Workflow',
         placeholder: 'e.g. chinook-assistant',
         defaultValue: '',
         mono: true,
+        // Deliberately does **not** say "pick one of these": the field is a
+        // combobox and not a listbox on purpose (see below), because mounting
+        // a package you have not built yet is a real way to work.
+        hint: 'The package to run here, named by its slug — the folder name the backend minted when it was first saved (workflows/<slug>/), which is also what ?w= carries in the address bar. Pick from the list, or type the slug of a package you have not built yet.',
         emptyHint: 'No saved workflows yet — save one, and it appears here.',
         // A package already above this document says so **in the list**, before
         // it is picked, rather than only after — ticket 42's "unavailable
