@@ -147,6 +147,35 @@ def transcript_text(answer: str) -> str:
     return prose
 
 
+def _closing_brace(text: str, start: int) -> int | None:
+    """Index of the `}` that closes the `{` at `start`, or None if unclosed.
+
+    Depth-counted rather than regex-matched, because a suggestion payload is
+    flat but the prose around it is not — `workflow-architect` streams whole
+    documents, and a nested object must not end the scan early.
+    """
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return None
+
+
+def _is_suggestion(candidate: str) -> bool:
+    """Whether this object is the capability payload, by the same two keys
+    `_split_unfenced` uses. One rule, so the streamed and settled halves of
+    the boundary cannot disagree about what a suggestion is."""
+    try:
+        parsed = json.loads(candidate)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(parsed, dict) and all(key in parsed for key in _SUGGESTION_KEYS)
+
+
 class ProseGuard:
     """Keeps a *streamed* answer free of developer fences, chunk by chunk.
 
@@ -167,6 +196,15 @@ class ProseGuard:
     `split_suggestion` — one code path, so there is no customer-only branch to
     keep audited.
     """
+
+    #: How much text may be held while waiting for a `{` to close.
+    #:
+    #: A suggestion payload is a couple of hundred characters, so this never
+    #: bites on the case it exists for. It bites on a model that opens a brace
+    #: and never closes it, and on a genuinely enormous JSON answer — and in
+    #: both it simply gives up and emits, because withholding a reader's text
+    #: indefinitely would be a worse bug than the one being fixed.
+    MAX_OBJECT_HOLD = 2000
 
     def __init__(self) -> None:
         self._tail = ""
@@ -193,6 +231,32 @@ class ProseGuard:
                 buffer = buffer[start + len(FENCE_OPEN) :]
                 self._inside = True
                 continue
+            # An **unfenced** suggestion, which the marker search above cannot
+            # see (`every-workflow-green` 15). `split_suggestion` learned to
+            # take one out of the settled answer; without this, a customer
+            # still watched it arrive token by token first.
+            brace = buffer.find("{")
+            if brace != -1:
+                closed = _closing_brace(buffer, brace)
+                if closed is not None:
+                    candidate = buffer[brace : closed + 1]
+                    out.append(buffer[:brace])
+                    if not _is_suggestion(candidate):
+                        out.append(candidate)
+                    buffer = buffer[closed + 1 :]
+                    continue
+                if len(buffer) - brace < self.MAX_OBJECT_HOLD:
+                    # Undecided. Hold from the brace and wait for more.
+                    out.append(buffer[:brace])
+                    self._tail = buffer[brace:]
+                    return "".join(out)
+                # Given up — see `MAX_OBJECT_HOLD`. Emit the brace itself and
+                # carry on scanning after it, so a second object later in the
+                # same stream is still caught.
+                out.append(buffer[: brace + 1])
+                buffer = buffer[brace + 1 :]
+                continue
+
             # No marker in hand. Emit everything that cannot become one, and
             # hold back the longest suffix that is still a prefix of it — the
             # only reason this class exists rather than a `str.replace`.
