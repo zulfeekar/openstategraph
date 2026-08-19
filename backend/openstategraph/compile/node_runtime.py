@@ -79,6 +79,15 @@ class RunState(TypedDict, total=False):
     question: str
     #: node id -> branch label chosen. Read by the compiler's `path` functions.
     decisions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: router node id -> **every** branch label it matched, when that router
+    #: runs in `matchMode: "all"` (`every-workflow-green` 27).
+    #:
+    #: Its own channel rather than a widened `decisions`, which stays a single
+    #: label because the compiler's conditional edge dispatches on that exact
+    #: key and every trace row, warning and test reads it. Ticket 09 is the
+    #: record of learning that a new value there changes control flow.
+    #: MERGE, because a document may hold several classifiers.
+    routes: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: node id -> that node's textual output, so a downstream node can read it.
     outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     answer: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
@@ -1896,6 +1905,7 @@ class NodeRuntime:
                 skill=skill,
                 replace_rules=_replaces_rules(data),
                 model=classifying_model,
+                match_mode=_text(data, "matchMode") or "best",
             )
 
         prebuilt = router_for("")
@@ -1924,6 +1934,15 @@ class NodeRuntime:
                 # while the model classified by human-readable *name*.
                 # `route_key` is the one place that mapping lives.
                 "decisions": {node_id: router.route_key(decision.branch)},
+                # Every branch it matched, when it matched more than one. Only
+                # written when there is something extra to say, so a document
+                # that never asked for this carries no such key and takes the
+                # identical path it always did.
+                **(
+                    {"routes": {node_id: [router.route_key(b) for b in decision.branches]}}
+                    if len(decision.branches) > 1
+                    else {}
+                ),
                 "outputs": {node_id: turn},
             }
 
@@ -2699,6 +2718,29 @@ class NodeRuntime:
                 for task in plan_list
             }
             scoped = {k: v for k, v in results.items() if k in current_ids}
+            # No worker fan-out reached this join — so gather what its own
+            # upstream nodes produced instead (`every-workflow-green` 27).
+            #
+            # This is the shape the `empty` message below has always described
+            # and refused: "an edge into `candidate` from anything else
+            # sequences this step without carrying data". It is now the shape a
+            # classifier in `matchMode: "all"` produces on every compound
+            # question, so refusing it would mean two desks running in parallel
+            # and one of them being thrown away by `answer`'s LATEST_NONEMPTY —
+            # the same silent loss the mode exists to end, moved one node
+            # along.
+            #
+            # A fallback rather than a merge, and preferred in that order: an
+            # orchestrator fan-out and a classifier fan-out do not share a join
+            # in practice, and reading `worker_results` first keeps every
+            # shipped report byte-identical.
+            if not scoped:
+                outputs = state.get("outputs") or {}
+                scoped = {
+                    src: str(outputs[src])
+                    for src, dst in plan.edges
+                    if dst == node_id and str(outputs.get(src) or "").strip()
+                }
             # A task that died (retries exhausted → error handler wrote to
             # outputs, which carries no task identity) must appear as a
             # named gap, not vanish from the join (ticket 61 residual #2).

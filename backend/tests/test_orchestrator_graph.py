@@ -572,17 +572,25 @@ class TestTheCeilingIsNoLongerASilentSlice:
 
 
 class TestAJoinThatWasNeverDispatchedToSaysSo:
-    """production-ready ticket 31, the "Also".
+    """production-ready ticket 31, the "Also" — **superseded, and kept as the
+    record of why**.
 
-    `_No results._` was the same sentence for two different situations: a
-    fan-out whose workers genuinely produced nothing, and a join that was
-    never dispatched to at all. The second is the failure mode the documented
-    "intuitive" parallelization shape produces (`docs/patterns.md` §4) — an
-    agent wired straight into `candidate` compiles to a plain sequencing edge,
-    the join reads a `worker_results` nobody wrote, and the run answers with a
-    blank report. The editor now refuses to draw that (`sourceCapabilityRule`),
-    but a hand-authored or generated document still can, so the report says
-    which of the two happened.
+    `_No results._` used to be the same sentence for two situations: a fan-out
+    whose workers produced nothing, and a join nothing was dispatched to. The
+    second was the documented "intuitive" parallelization shape
+    (`docs/patterns.md` §4) — an agent wired straight into `candidate`, a join
+    reading a `worker_results` nobody wrote, and a blank report.
+
+    **That shape now works** (`every-workflow-green` 27). The join falls back
+    to its upstream nodes' `outputs` when no worker fan-out reached it, because
+    a classifier in `matchMode: "all"` produces exactly this shape on every
+    compound question — several desks in parallel, converging on one join — and
+    refusing it would mean throwing one desk's work away to `answer`'s
+    LATEST_NONEMPTY.
+
+    So the warning is no longer correct for this document, and asserting it
+    would be asserting a limitation that has been lifted. What is still worth
+    holding is that the join *gathers* rather than shrugs.
     """
 
     @staticmethod
@@ -604,16 +612,18 @@ class TestAJoinThatWasNeverDispatchedToSaysSo:
             ],
         }
 
-    def test_the_report_names_the_missing_fan_out_rather_than_shrugging(self) -> None:
+    def test_the_report_gathers_the_upstream_agent_rather_than_shrugging(self) -> None:
         model = RespondingModel([], default="an answer")
 
         final = run(self._agents_into_the_join(), "do a thing", model)
 
         report = final["answer"]
-        assert "No results" in report
-        # The sentence has to say *why*, and point somewhere.
-        assert "dispatched" in report
-        assert "supervisor" in report.lower()
+        # The agent's own answer reaches the report now, named by its node.
+        assert "an answer" in report
+        assert "No results" not in report
+        # It names the node whose work it gathered, so a reader can see where
+        # each section came from — the same shape a worker fan-out produces.
+        assert "node:agent.llm-1" in report
 
     def test_a_real_fan_out_still_reports_its_workers(self) -> None:
         model = RespondingModel([], default="an answer")

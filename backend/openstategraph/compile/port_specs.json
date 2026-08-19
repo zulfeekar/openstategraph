@@ -662,6 +662,7 @@
       "field_keys": [
         "branches",
         "fallback",
+        "matchMode",
         "maxRetries",
         "model",
         "reasoningEffort",

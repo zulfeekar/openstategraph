@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **A classifier can route to every branch a question matches, not just one.**
+  A compound message — *"what do you know about music? what is your skill?"* —
+  belongs to more than one desk, and until now one desk ran and the rest of the
+  question was dropped in silence.
+
+  ```python
+  Router(branches=[...], fallback="policy", rules="...", match_mode="all")
+  ```
+
+  `Classification` gains `branches`, the full set in the document's declared
+  order; `branch` still names a single primary because that is what the
+  compiler's conditional edge dispatches on.
+
+  **Opt-in, and `"best"` remains the default.** Routing one ticket to one desk
+  is a real pattern — a billing question must not also run the technical desk —
+  and broadcasting would multiply model cost by the branch count. Every
+  existing workflow behaves exactly as it did. An unrecognised `match_mode` is
+  treated as `"best"`, so a typo cannot silently broadcast.
+
+### Added
 - **A `progress` frame, so a slow tool is no longer a silent gap.** An
   `update` frame arrives when a node *completes* and a `token` frame only
   while a model types, so a tool that spends forty seconds paging an API

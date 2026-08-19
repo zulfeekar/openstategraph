@@ -37,9 +37,23 @@ class Classification(BaseModel):
     """A router's decision. A named shape, never free text."""
 
     branch: str
+    #: **Every** branch the answer matched, in the document's declared order.
+    #:
+    #: Always populated, even in `best` mode where it holds one — so a reader
+    #: never has to ask which mode produced it (`every-workflow-green` 27).
+    #: `branch` stays the single primary, because `decisions[node_id]` is what
+    #: the compiler's conditional edge dispatches on and widening that key
+    #: would change control flow (ticket 09 is the record of learning that).
+    branches: list[str] = Field(default_factory=list)
     #: Set when the model's answer was unusable and the fallback was taken.
     fell_back: bool = False
     reason: str = ""
+
+    def model_post_init(self, _context: Any) -> None:
+        # One place fills it, so no construction site can forget and hand a
+        # caller an empty list that means "one branch" somewhere else.
+        if not self.branches:
+            object.__setattr__(self, "branches", [self.branch])
 
 
 class Branch(BaseModel):
@@ -150,6 +164,43 @@ class BaseRouter(ABC):
         ),
     )
 
+    #: The same machinery, for `match_mode="all"`.
+    #:
+    #: A separate `ClassVar` rather than string surgery on `PROMPT`, because
+    #: both are **locked sections** — a developer cannot edit either, and the
+    #: one thing worse than a wrong contract is one assembled at runtime from
+    #: two half-sentences nobody can read in the source.
+    #:
+    #: The parser and the prompt must agree. `every-workflow-green` 17 is the
+    #: record of them disagreeing: the orchestrator's prompt taught the model a
+    #: shape its own parser could not read, and every subtask fell to the
+    #: default worker. So a mode that accepts several names has to ask for
+    #: several names.
+    PROMPT_ALL: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are a router. Your only job is to decide which branches a "
+            "message belongs to. You never answer the message itself. A message "
+            "often asks more than one thing — name every branch it needs, not "
+            "just the closest one. When a conversation is shown, classify the "
+            "NEW message in its light: a follow-up about a previous answer "
+            "(how did you get it, explain, why, tell me more) belongs to the "
+            "branch that produced that answer, not to whichever branch the "
+            "follow-up's words resemble."
+        ),
+        output_contract=(
+            "Reply with every branch name from the list above that the message "
+            "needs, separated by commas. Most messages need one. "
+            "No punctuation beyond the commas, no explanation, no quotes — the "
+            "branch names alone."
+        ),
+        default_rules=(
+            "- Decide from what the message NEEDS, not from how it is phrased.\n"
+            "- Name a branch only if the message genuinely needs it. Two is "
+            "common for a compound question; naming all of them is almost "
+            "always wrong."
+        ),
+    )
+
     def __init__(
         self,
         branches: "list[str | dict[str, Any] | Branch]",
@@ -159,9 +210,22 @@ class BaseRouter(ABC):
         skill: str = "",
         replace_rules: bool = False,
         model: Any = None,
+        match_mode: str = "best",
     ) -> None:
         if not branches:
             raise ValueError("A router needs at least one branch")
+        #: `"best"` — one destination, the historical and default behaviour.
+        #: `"all"` — every branch the question matched, run in parallel.
+        #:
+        #: Opt-in on purpose. Routing one ticket to one desk is a real pattern
+        #: that `support-triage` depends on, and broadcasting would multiply
+        #: model cost by the branch count. An unrecognised value is treated as
+        #: `"best"`, because a typo in a config field must not silently
+        #: broadcast (`every-workflow-green` 27).
+        #: Private: it is constructor configuration that only `normalise`
+        #: reads, and a public attribute here would grow this class's surface
+        #: for nothing — the ceiling test caught exactly that.
+        self._match_mode = "all" if match_mode == "all" else "best"
         #: The full id/name table. `self.branches` below stays `list[str]`
         #: (names) so `IRouter` and every prompt-side consumer are untouched.
         self.branch_table = [Branch.of(entry) for entry in branches]
@@ -186,7 +250,8 @@ class BaseRouter(ABC):
         #: and never mutated — so a method that rebuilt this on every
         #: `classify()` was rebuilding a constant.
         self.prompt = (
-            self.PROMPT.with_context(self._describe_branches())
+            (self.PROMPT_ALL if self._match_mode == "all" else self.PROMPT)
+            .with_context(self._describe_branches())
             .with_rules(rules, replace_defaults=replace_rules)
             .with_skill(skill)
         )
@@ -257,9 +322,26 @@ class BaseRouter(ABC):
 
         # A chatty model wraps the name in a sentence; find it anyway rather
         # than discarding a decision that was actually made.
+        #
+        # Declared order, not the order the model happened to mention them in:
+        # a reader can predict the document's order and cannot predict a
+        # model's sentence.
         matches = [name for name in self.branches if name.lower() in cleaned]
         if len(matches) == 1:
             return Classification(branch=matches[0], reason="Found in a longer answer")
+
+        # Several matched. In `best` mode that is ambiguity and falls through
+        # to the fallback below, exactly as it always has. In `all` mode it is
+        # the answer: a compound question — "what do you know about music? what
+        # is your skill?" — genuinely belongs to two desks, and running one and
+        # dropping the rest is what this mode exists to stop
+        # (`every-workflow-green` 27).
+        if len(matches) > 1 and self._match_mode == "all":
+            return Classification(
+                branch=matches[0],
+                branches=matches,
+                reason=f"Matched {len(matches)} branches",
+            )
 
         return Classification(
             branch=self.fallback,
@@ -322,6 +404,7 @@ class Router(BaseRouter):
         skill: str = "",
         replace_rules: bool = False,
         model: Any = None,
+        match_mode: str = "best",
         destinations: dict[str, str] | None = None,
     ) -> None:
         super().__init__(
@@ -331,6 +414,7 @@ class Router(BaseRouter):
             skill=skill,
             replace_rules=replace_rules,
             model=model,
+            match_mode=match_mode,
         )
         #: branch name -> graph node name, taken from the canvas wiring.
         self.destinations = destinations or {}

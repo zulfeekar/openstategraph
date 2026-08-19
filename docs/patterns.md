@@ -116,14 +116,25 @@ Independent subtasks run at the same time and an aggregator joins the results.
 Two flavours: **sectioning** (different subtasks) and **voting** (the same
 subtask several times, for confidence).
 
-> **Read this before you draw it.** The shape every parallelization diagram in
-> the literature uses — one source fanning out to *N* drawn agent nodes, whose
-> results converge on one join node — **does not work here**. The canvas now
-> refuses the edge and says why (an agent's `result` into
-> `function.format_report.candidate`), because until it did, the shape failed
+> **This section described a limitation that has been lifted.** The shape
+> every parallelization diagram in the literature uses — one source fanning out
+> to *N* drawn nodes whose results converge on one join — used to fail
 > *silently*: it validated, it ran, and it produced `# Title` followed by
-> `_No results._`. The mechanism is below, under *Why the intuitive shape
-> cannot work*. If you are here to build, skip to the shape that runs.
+> `_No results._`, because `function.format_report` read only `worker_results`
+> and drawn nodes write `outputs`.
+>
+> **The join now gathers its upstream nodes' outputs when no worker fan-out
+> reached it** (`every-workflow-green` 27). It had to: a `route.classifier` in
+> `matchMode: "all"` produces exactly this shape on every compound question —
+> several desks running in parallel, converging on one join — and refusing it
+> would mean throwing one desk's work away, since `answer` is
+> `LATEST_NONEMPTY` and one branch would silently win.
+>
+> Two things below are still true and still worth reading. **A supervisor
+> fan-out is the right tool when the sections are decided by the request** —
+> it dispatches *N* instances of one worker with task identity, which drawn
+> nodes cannot do. And the canvas still guides you there. What is no longer
+> true is that the drawn shape produces nothing.
 
 **Our vocabulary:** there is no `parallel` node, and there is no drawn
 parallelism either. Fan-out is always `orchestrate.supervisor` →

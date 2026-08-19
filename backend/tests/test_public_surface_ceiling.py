@@ -401,6 +401,24 @@ SCORECARD = """A recorded exception, and the one that most looks like a violatio
     number the scorecard is named after. That is the `WorkflowModel` argument in
     miniature and it lands the same way. Recorded, not deferred."""
 
+
+MULTI_MATCH_PROMPT = """**Twelve and thirteen, not eleven and twelve, and the extra member is a
+    second locked prompt.** `every-workflow-green` 27 gave a classifier a
+    `matchMode`: `"best"` names one branch, `"all"` names every branch a
+    compound question needs. A parser that accepts several names is useless if
+    the prompt demands one — ticket 17 is the record of a prompt and its own
+    parser disagreeing — so the mode has to reach the prompt.
+
+    `PROMPT_ALL` is a second `ClassVar` beside `PROMPT` rather than string
+    surgery at runtime, for the reason `PROMPT` is public in the first place:
+    both are **locked sections** the editor renders read-only beside the one
+    editable field, and a contract assembled at runtime from two half-sentences
+    is one nobody can read in the source or on the card.
+
+    The mode itself is deliberately **not** on the surface — it is `_match_mode`,
+    constructor configuration that only `normalise` reads. This census caught it
+    when it was public, which is the census working."""
+
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
@@ -409,8 +427,8 @@ RECORDED: dict[str, Recorded] = {
     "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),
-    "abc.router.BaseRouter": Recorded(11, PROMPT_LADDER),
-    "abc.router.Router": Recorded(12, PROMPT_LADDER),
+    "abc.router.BaseRouter": Recorded(12, MULTI_MATCH_PROMPT),
+    "abc.router.Router": Recorded(13, MULTI_MATCH_PROMPT),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.AbstractWorkflowPointerBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.RootKnowledgeBuilder": Recorded(13, KNOWLEDGE_BUILDERS),

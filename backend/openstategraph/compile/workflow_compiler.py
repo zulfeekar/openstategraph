@@ -907,20 +907,55 @@ class WorkflowCompiler:
         return route
 
     @staticmethod
-    def _router_for(node_id: str, destinations: dict[str, str]) -> Callable[[Any], str]:
+    def _router_for(
+        node_id: str, destinations: dict[str, str]
+    ) -> Callable[[Any], "str | list[str]"]:
         """The `path` function for one conditional edge.
 
         Reads the decision a node already wrote to state rather than deciding
         again. A router node writes `branch`; a grader writes `verdict`. Falling
         back to the first declared destination keeps a run alive when a decision
         is missing — a stall here would be a hang, not an error.
+
+        **May return several destinations** when a classifier ran in
+        `matchMode: "all"` and the question belonged to more than one desk
+        (`every-workflow-green` 27). LangGraph documents both halves of that:
+        a `path` function may return a sequence, and "if a node has multiple
+        outgoing edges, all of those destination nodes will be executed in
+        parallel as part of the next superstep".
+
+        The set is read from its **own** `routes` channel, never from
+        `decisions`. `decisions[node_id]` is a single label that this very
+        function dispatches on and that every trace row, warning and test
+        reads; ticket 09 is the record of what widening it costs. A document
+        with no `routes` entry — which is every workflow shipping today —
+        takes the identical path it always did.
+
+        One destination stays a plain string rather than a one-item list, for
+        the same reason: the callers downstream have always been handed a name.
         """
         default = next(iter(destinations))
 
-        def route(state: Any) -> str:
-            decisions: dict[str, str] = (
-                state.get("decisions") or {} if hasattr(state, "get") else {}
-            )
+        def route(state: Any) -> "str | list[str]":
+            if not hasattr(state, "get"):
+                return default
+            decisions: dict[str, str] = state.get("decisions") or {}
+            routes: dict[str, Any] = state.get("routes") or {}
+
+            requested = routes.get(node_id)
+            if isinstance(requested, (list, tuple)):
+                # Unwired branches are dropped rather than raising: a
+                # half-wired router is already a plan-time warning, and a crash
+                # here would turn a visible gap into a dead run.
+                # Labels, not node names: `add_conditional_edges` is given a
+                # path map, so this function's contract has always been to
+                # return the *label* and let LangGraph resolve it.
+                wired = [key for key in requested if key in destinations]
+                if len(wired) > 1:
+                    return wired
+                if len(wired) == 1:
+                    return wired[0]
+
             chosen = decisions.get(node_id)
             if chosen in destinations:
                 return chosen

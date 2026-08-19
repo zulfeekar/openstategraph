@@ -15,6 +15,8 @@ export const ROUTER_TYPE = 'route.classifier';
 const FIELD_RULES = 'rules';
 const FIELD_BRANCHES = 'branches';
 const FIELD_FALLBACK = 'fallback';
+/** `matchMode` — one desk, or every desk the question needs. */
+const FIELD_MATCH_MODE = 'matchMode';
 const FIELD_TIER = 'tier';
 
 /**
@@ -275,6 +277,26 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
           placeholder: 'Used when nothing matches',
           defaultValue: 'off_topic',
           onCard: false,
+        },
+        {
+          // `every-workflow-green` 27. A compound message — "what do you know
+          // about music? what is your skill?" — belongs to more than one desk,
+          // and one desk running while the rest of the question is dropped is
+          // silent data loss in front of a user.
+          //
+          // A select rather than a checkbox, because the two values name two
+          // behaviours a reader has to choose between, and "best" is the one
+          // every workflow shipping today performs. Broadcasting multiplies
+          // model cost by the branch count, so it is never the default.
+          kind: 'select',
+          key: FIELD_MATCH_MODE,
+          label: 'When several branches match',
+          defaultValue: 'best',
+          onCard: false,
+          options: [
+            { value: 'best', label: 'Run the best one' },
+            { value: 'all', label: 'Run every match, in parallel' },
+          ],
         },
         {
           kind: 'select',
