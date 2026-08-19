@@ -305,6 +305,33 @@ def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
+    """Graders that ran out of budget and passed a candidate they rejected.
+
+    Seen live (`every-workflow-green` 09): `chinook-assistant` answered its own
+    documented question with a raw table schema. The grader rejected it three
+    times, the attempts budget ran out, and the third rejection was force-passed
+    and published. Nothing said so — "the grader approved this" and "the grader
+    gave up" looked identical.
+
+    **The pass is correct and is not changed.** `_grader` argues it: a loop that
+    cannot finish is worse than a mediocre answer, and a candidate the grader
+    merely disliked is still what the workflow produced. Only the silence is
+    the defect.
+
+    Not carried on `decisions`, because the compiler routes on that exact label
+    and a new value there would change control flow. Hence its own state key,
+    and this function beside `silent_node_warnings` — same channel, same
+    reason, and deliberately **not** part of `node_failure_warnings`, which
+    feeds `cli.run_exit_code`. A force-pass is a report, not a failed run.
+    """
+    return [
+        f'Grader "{node}" ran out of attempts and published an answer it had '
+        f"rejected. Its last reason: {str(reason).strip() or 'none given'}"
+        for node, reason in forced.items()
+    ]
+
+
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     """`add_node` kwargs for one node's own retry/timeout override, if set.
 

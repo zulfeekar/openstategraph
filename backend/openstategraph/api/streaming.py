@@ -955,6 +955,9 @@ def _run_frames(
     # once here instead.
     canvas_node_ids = set(node_ids_by_name.values())
     decisions: dict[str, str] = {}
+    # Force-passed graders (`every-workflow-green` 09), accumulated like the
+    # two above so the terminal frame can report them.
+    forced: dict[str, str] = {}
     outputs: dict[str, str] = {}
     #: The same two, for everything below the outermost document — keyed by
     #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
@@ -1083,6 +1086,9 @@ def _run_frames(
                             for k, v in (update.get("decisions") or {}).items()
                             if k != RESET
                         }
+                    )
+                    forced.update(
+                        {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
                     )
                     into_outputs.update(
                         {
@@ -1401,6 +1407,7 @@ def _run_frames(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         node_failure_warnings,
+        forced_pass_warnings,
         silent_node_warnings,
         redact_failure_markers,
     )
@@ -1416,6 +1423,7 @@ def _run_frames(
     # the answer was reached, not a claim the run failed, and only the latter
     # may reach the CLI's exit code.
     silent = silent_node_warnings(outputs) + silent_node_warnings(nested_outputs)
+    silent += forced_pass_warnings(forced)
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded

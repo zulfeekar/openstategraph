@@ -220,6 +220,7 @@ def run_workflow(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         node_failure_warnings,
+        forced_pass_warnings,
         silent_node_warnings,
         redact_failure_markers,
     )
@@ -233,6 +234,9 @@ def run_workflow(
     # the answer was reached, not a claim the run failed, and only the latter
     # may reach the CLI's exit code.
     silent = silent_node_warnings(raw_outputs)
+    # Read straight off the finished state here: this door has `final`, so it
+    # needs no incremental fold the way the streaming one does.
+    silent += forced_pass_warnings(final.get("forced") or {})
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded

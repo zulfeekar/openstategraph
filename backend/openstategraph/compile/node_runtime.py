@@ -91,6 +91,15 @@ class RunState(TypedDict, total=False):
     #: if it were the model's own answer.
     feedback: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
     attempts: Annotated[int, reducer_for(Reducer.MAX)]
+    #: grader node id -> the reason it rejected the answer it was then forced
+    #: to pass (`every-workflow-green` 09). Written only on a force-pass, so
+    #: its presence *is* the signal.
+    #:
+    #: Its own key rather than a `decisions` value, because the compiler routes
+    #: on that exact label and a new one there would change control flow. And a
+    #: reducer because two graders can exhaust in one run — `feedback` is
+    #: `LATEST_NONEMPTY` and would keep only the last.
+    forced: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: guardrail node id -> what its policy did, as `{entity, strategy,
     #: count}` rows. **Counts and entity types, never values** — the whole
     #: point of the channel is that a developer can see "3 emails redacted
@@ -1943,11 +1952,18 @@ class NodeRuntime:
                     f"The last review said: {verdict.feedback or 'no reason given'}"
                 )
 
-            return {
+            # A pass the budget forced, not one the grader gave. `feedback`
+            # is cleared on a pass, so without this the rejection is discarded
+            # here and no surface can ever report it (`every-workflow-green`
+            # 09). What is published does not change.
+            update: dict[str, Any] = {
                 "decisions": {node_id: branch},
                 "feedback": "" if branch == "pass" else verdict.feedback,
                 "outputs": {node_id: outcome},
             }
+            if branch == "pass" and not verdict.passed:
+                update["forced"] = {node_id: verdict.feedback or ""}
+            return update
 
         return run
 
