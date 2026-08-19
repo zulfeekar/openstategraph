@@ -63,6 +63,35 @@ _SUGGESTION_KEYS = ("nodeType", "attachTo")
 _BARE_OBJECT = re.compile(r"\{(?:[^{}]|\{[^{}]*\})*\}", re.DOTALL)
 
 
+#: What a model says when nothing in the catalogue fits.
+#:
+#: `advisor_context` now permits it, and a prompt that permits an answer its
+#: parser cannot read is `every-workflow-green` 17 all over again. So the two
+#: are written together and this constant is the only spelling of it.
+DECLINED = "none"
+
+
+def _offered(parsed: Any) -> dict[str, Any] | None:
+    """The suggestion, or None when the model declined to make one.
+
+    A decline is a *successful* answer: asked to post to Slack with no Slack
+    tool in the catalogue, "nothing here does this" is the correct reply, and
+    proposing `tool.email-send` because it is nearest is a confident wrong turn
+    a developer pays for in a node, an edge and a re-run
+    (`every-workflow-green` 29).
+
+    An empty `nodeType` counts as a decline too. A model that has understood
+    "there is nothing" and left the field blank has said the same thing, and
+    treating that as a malformed suggestion would send it back to guessing.
+    """
+    if not isinstance(parsed, dict):
+        return None
+    node_type = str(parsed.get("nodeType") or "").strip()
+    if not node_type or node_type.lower() == DECLINED:
+        return None
+    return parsed
+
+
 def _split_unfenced(answer: str) -> tuple[str, dict[str, Any] | None]:
     """The same split, for a model that emitted the object without the fence.
 
@@ -92,6 +121,12 @@ def _split_unfenced(answer: str) -> tuple[str, dict[str, Any] | None]:
             continue
         if not all(key in parsed for key in _SUGGESTION_KEYS):
             continue
+        if _offered(parsed) is None:
+            # A decline, unfenced. Still stripped from the prose — the raw
+            # object is machinery either way, and showing it is the thing this
+            # module exists to prevent.
+            prose = re.sub(r"\n{3,}", "\n\n", answer.replace(match.group(0), "", 1))
+            return (re.sub(r"[ \t]{2,}", " ", prose).strip() or NO_PROSE), None
         prose = re.sub(r"\n{3,}", "\n\n", answer.replace(match.group(0), "", 1))
         prose = re.sub(r"[ \t]{2,}", " ", prose).strip()
         return (prose or NO_PROSE), parsed
@@ -127,7 +162,7 @@ def split_suggestion(answer: str) -> tuple[str, dict[str, Any] | None]:
         parsed = json.loads(match.group(1))
     except (ValueError, TypeError):
         return prose, None
-    return prose, parsed if isinstance(parsed, dict) else None
+    return prose, _offered(parsed)
 
 
 def transcript_text(answer: str) -> str:

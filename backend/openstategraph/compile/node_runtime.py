@@ -938,6 +938,25 @@ def advisor_context(node_id: str, catalog: str) -> str:
         f"{FENCE_CLOSE}\n"
         "Only suggest when genuinely blocked — never when you can already "
         "answer, and never more than one block.\n"
+        # Declining has to be sayable, or the model picks the nearest entry.
+        # Observed: asked to post to Slack, it proposed `tool.email-send` and
+        # wrote "No Slack-send capability is available" in its own reason
+        # (`every-workflow-green` 29). A catalogue with no way out is a leading
+        # question, and a developer who accepts the answer wires an email tool
+        # to an agent that was asked to post to Slack.
+        # Both halves are load-bearing and were measured, not guessed. Without
+        # the first, a Slack request drew `tool.email-send` — the nearest entry
+        # — with "no Slack-send capability is available" in its own reason.
+        # With the first alone, the model declined 3 runs in 5 on a gap
+        # `tool.web-search` covers exactly. So declining is narrowed to "no
+        # entry could help *at all*", and preferring an entry is stated as the
+        # default rather than left to inference (`every-workflow-green` 29).
+        "Choose an entry from the catalogue whenever one would help, even "
+        "partly — that is the usual case. Only if no entry could help at "
+        'all, use "none" as the nodeType and say in your sentence what kind of '
+        "capability is missing. Never propose an entry that cannot do the job "
+        "because it is the closest one: a wrong tool costs a node, an edge and "
+        "a re-run to discover.\n"
         # The third clause, and it closes a loop rather than tightening a rule
         # (`the-agent-asks-for-what-it-cannot-get` 01). A bound tool returning
         # an error is not a missing capability — errors are data precisely so
@@ -949,6 +968,17 @@ def advisor_context(node_id: str, catalog: str) -> str:
         "you have it, and something about it needs fixing. Say what the error "
         "was and what would fix it — never suggest adding a tool you were "
         "already given.\n"
+        # The opposite case, and the clause above used to swallow it
+        # (`every-workflow-green` 30). Asked for a live price, the agent called
+        # `web_search` — a name it invented — and the runtime answered "web_search
+        # is not a valid tool, try one of [...]". That reads as "a tool failed",
+        # so the sentence above fired and no card was offered, on the one surface
+        # the card exists for. The premise of that sentence — *you have it* — is
+        # false here, and reaching for a name you do not have is the clearest
+        # signal there is that something is missing.
+        "But an error saying a name is not a valid tool IS a missing "
+        "capability: you reached for something you do not have. That is "
+        "exactly when to suggest one — do not treat it as a tool that broke.\n"
         "Tools that could be added to you:\n"
         f"{catalog}"
     )
