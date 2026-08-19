@@ -231,7 +231,16 @@ class TestADeveloperGetsItOnTheChannelInstead:
         body["audience"] = "developer"
         done = _done(client.post("/api/runs/stream", json=body).text)
 
-        assert done["developer"] == {"warnings": [], "suggestion": None, "redactions": []}
+        # `capabilityGap` joined this payload with `every-workflow-green` 34: the
+        # description a *new* module would be built from, when nothing in the
+        # library provides it. Developer-only for the same reason `suggestion`
+        # is — a customer is never told what the canvas lacks.
+        assert done["developer"] == {
+            "warnings": [],
+            "suggestion": None,
+            "capabilityGap": None,
+            "redactions": [],
+        }
 
 
 class TestTheBlockingEndpointIsNotTheWayAround:
@@ -477,7 +486,12 @@ class TestTheChannelShape:
     def test_a_developer_payload_names_the_channel(self) -> None:
         channel = DeveloperChannel(warnings=["w"], suggestion=None)
         assert channel.payload(Audience.DEVELOPER) == {
-            "developer": {"warnings": ["w"], "suggestion": None, "redactions": []}
+            "developer": {
+                "warnings": ["w"],
+                "suggestion": None,
+                "capabilityGap": None,
+                "redactions": [],
+            }
         }
 
 

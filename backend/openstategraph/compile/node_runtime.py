@@ -960,6 +960,14 @@ def advisor_context(node_id: str, catalog: str) -> str:
         # `tool.web-search` covers exactly. So declining is narrowed to "no
         # entry could help *at all*", and preferring an entry is stated as the
         # default rather than left to inference (`every-workflow-green` 29).
+        # Required, not optional. Told that "none" was available, the model
+        # simply wrote the sentence and skipped the block — so a gap nothing in
+        # the library covers produced no signal at all, and the developer was
+        # left at a dead end with no door (`every-workflow-green` 34). Unlike
+        # ticket 33's case, nothing was called, so nothing was recorded: the
+        # model is the only witness and it has to testify.
+        "Whenever you are blocked for want of a capability you must always "
+        "emit the block — never the sentence alone.\n"
         "Choose an entry from the catalogue whenever one would help, even "
         "partly — that is the usual case. Only if no entry could help at "
         'all, use "none" as the nodeType and say in your sentence what kind of '

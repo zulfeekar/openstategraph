@@ -24,6 +24,7 @@ from openstategraph.api.audience import (
     clean_output,
     redaction_report,
     resolve as resolve_audience,
+    capability_gap,
     split_suggestion,
     with_capability_notice,
 )
@@ -260,6 +261,9 @@ def run_workflow(
         + health.failures
         + health.silent,
         suggestion=suggestion,
+        # Only when nothing could be placed: a gap with a tool that fits is a
+        # suggestion, not something to build (`every-workflow-green` 34).
+        capability_gap=(capability_gap(str(final.get("answer") or "")) if suggestion is None else None),
         redactions=redaction_report(final.get("redactions")),
     )
     developer = channel.payload(audience).get("developer")

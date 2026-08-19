@@ -101,6 +101,7 @@ from typing import Any
 # here (rather than left to each caller to find) because this module is where
 # every *transport* caller already reaches for the split.
 from openstategraph.compile.reducers import RESET
+from openstategraph.developer_channel import capability_gap as capability_gap
 from openstategraph.developer_channel import split_suggestion as split_suggestion
 
 #: Deployment ceiling. Set to `customer` on a process that serves only the
@@ -275,6 +276,18 @@ class DeveloperChannel:
     warnings: list[str] = field(default_factory=list)
     #: The one capability suggestion this run produced, if any.
     suggestion: dict[str, Any] | None = None
+    #: What the run said it needed when **nothing in the library provides it**
+    #: — the description a new, workflow-scoped module would be built from
+    #: (`every-workflow-green` 34).
+    #:
+    #: Separate from `suggestion` because they open different doors: one places
+    #: a tool that already exists, the other starts an interview. Collapsing
+    #: them would make a card that cannot tell the user which of the two is
+    #: about to happen.
+    #:
+    #: Developer only, like `suggestion`, and for the same reason — a customer
+    #: is never offered a tool, and is never told what the canvas lacks.
+    capability_gap: str | None = None
     #: What each Guardrail node did, as `{node, entity, strategy, count}`.
     #: **Counts and entity types, never values** (guardrails ticket 03).
     #:
@@ -308,6 +321,7 @@ class DeveloperChannel:
             "developer": {
                 "warnings": list(self.warnings),
                 "suggestion": self.suggestion,
+                "capabilityGap": self.capability_gap,
                 "redactions": list(self.redactions),
             }
         }

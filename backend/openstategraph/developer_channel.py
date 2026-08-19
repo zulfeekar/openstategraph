@@ -165,6 +165,39 @@ def split_suggestion(answer: str) -> tuple[str, dict[str, Any] | None]:
     return prose, _offered(parsed)
 
 
+def capability_gap(answer: str) -> str | None:
+    """What the model said is missing, when nothing in the catalogue fits.
+
+    The other half of a decline. `_offered` returns None for
+    `nodeType: "none"`, which is right — there is nothing to place — but the
+    `reason` beside it is the only description anyone has of the capability the
+    user actually wanted (`every-workflow-green` 34).
+
+    It is what a *build* offer is made of. Case B's sibling could be resolved
+    deterministically, by reading a tool name the runtime refused (ticket 33);
+    here the agent never called anything, so nothing was recorded and only the
+    model knows what was being asked for.
+
+    Returns `""` for a decline with no reason rather than `None`: the developer
+    is still owed the door, and a terse model must not close it. `None` means
+    *no decline was made at all*.
+    """
+    for parser in (_FENCE.search(answer or ""),):
+        if parser is None:
+            break
+        try:
+            parsed = json.loads(parser.group(1))
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        node_type = str(parsed.get("nodeType") or "").strip().lower()
+        if node_type and node_type != DECLINED:
+            return None
+        return str(parsed.get("reason") or "")
+    return None
+
+
 def transcript_text(answer: str) -> str:
     """What a finished turn contributes to the conversation record.
 
@@ -309,6 +342,7 @@ class ProseGuard:
 
 __all__ = [
     "FENCE_CLOSE",
+    "capability_gap",
     "FENCE_OPEN",
     "NO_PROSE",
     "ProseGuard",
