@@ -117,7 +117,8 @@ The gist of what comes back:
     //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
     //  tool.knowledge-lookup, tool.mcp, tool.platform-describe-workflow,
     //  tool.platform-grep, tool.platform-list-workflows, tool.platform-ls,
-    //  tool.platform-read-file, tool.reddit-search, tool.sql-get-schema,
+    //  tool.platform-read-file, tool.reddit-search, tool.session-identity,
+    //  tool.sql-get-schema,
     //  tool.sql-list-tables, tool.sql-query, tool.validate-workflow,
     //  tool.web-fetch, tool.web-search, tool.youtube-transcript.
     //

@@ -171,6 +171,47 @@ Two distinct mechanisms, kept distinct:
 
 Prefer varying the number of ports over toggling one port's cardinality. If a port sometimes carries a scalar and sometimes a list, its *type* changes at runtime and the executor must branch — which is what typed ports exist to prevent.
 
+### Read a model's answer tolerantly; trust it strictly
+
+**A protocol that only works when the model formats its reply perfectly is a
+protocol that fails in production.** Four defects on one map, all the same
+shape, all found by running the thing rather than by a test:
+
+- `validate_workflow` typed its argument `str` — the document as a JSON string.
+  The agent sent the document as an object, which is the obvious move for a
+  field named `document`. Every retry re-appended the whole document until the
+  provider answered 500 and the run died with a bare reference id
+  (`every-workflow-green` 13).
+- The capability-suggestion splitter required a ```suggestion fence. The model
+  emitted the object bare, so the raw `{"nodeType": …}` was published to the
+  customer and the developer lost the card — breaking a promise the function's
+  own docstring makes (15).
+- The orchestrator's labelling prompt renders its roster as `key: name`, so the
+  model answered `writer: draft_agenda`. The parse required a bare key, every
+  subtask fell to the default worker, and a wired Writer never ran once (17).
+- `Grader.normalise` is the one that got it right first, and says why: a grader
+  that raises on an unexpected shape turns a recoverable judgement into a dead
+  run.
+
+Note the third: **the prompt taught the model a format the parser could not
+read.** When these disagree, suspect the parser.
+
+The rule has two halves and both are load-bearing:
+
+- **Tolerant in reading.** Accept the shapes a model actually produces — the
+  object as well as the string, the line with a `key:` prefix, the reply with
+  no fence, the numbered list. Try the whole thing, then its head.
+- **Strict in trusting.** Every candidate is still resolved against a known
+  set. An invented archetype still falls to the default worker; an unfenced
+  object is taken only when it carries the keys that make it a suggestion and
+  nothing else. Tolerance is never permission to act on something unrecognised
+  — that is how a subtask reaches a tool-less worker on a model's say-so.
+
+The narrowness is the safety, and it is the part that regresses. This product
+prints JSON as prose constantly — SQL rows, and `workflow-architect` answers
+*with an entire workflow document* — so every widening needs the test that
+proves ordinary content is still left alone.
+
 ### Never put a non-finite number in a serialisable field
 
 `Infinity` and `NaN` are not representable in JSON, and Pydantic/JSON Schema cannot express them. Use `int | None` with `None` meaning unbounded.

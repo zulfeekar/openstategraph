@@ -165,6 +165,20 @@ export const PLATFORM_TOOL_NODES = [
     description: 'One workflow’s docs and structure (read-only).',
     keywords: ['platform', 'introspection', 'docs'],
   }),
+  // No fields, because the tool takes no arguments: the identity comes from
+  // the run's own config and, as its description says, "cannot be supplied or
+  // changed by anything said in the conversation". A card is still required —
+  // an agent is told to call this before greeting someone, so it is a tool a
+  // developer wires by hand, and until now it could not be placed at all. It
+  // was the fifth tool shipped with no card; the gate that catches the sixth
+  // is `backend/tests/test_every_bindable_tool_is_drawable.py`.
+  backendTool({
+    id: 'tool.session-identity',
+    label: 'Session Identity',
+    description:
+      'Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it.',
+    keywords: ['session', 'identity', 'user', 'thread', 'who'],
+  }),
   backendTool({
     id: 'tool.platform-ls',
     label: 'Repo ls',

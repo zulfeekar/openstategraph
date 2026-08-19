@@ -1083,6 +1083,34 @@
       ]
     },
     {
+      "type": "tool.session-identity",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Session Identity",
+      "description": "Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "maxRetries",
+        "timeoutSeconds"
+      ]
+    },
+    {
       "type": "tool.sql-get-schema",
       "kind": "standard",
       "category": "tools",
