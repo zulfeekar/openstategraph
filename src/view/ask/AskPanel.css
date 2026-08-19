@@ -751,3 +751,19 @@
 .ask__composer[hidden] {
   display: none;
 }
+
+/* The rejection note (`every-workflow-green` 11). Sits between the draft and
+   the two buttons because it belongs to Reject and must be seen before either
+   is pressed — placing it after the actions would put the field below the
+   button it qualifies. */
+.ask__approval-note {
+  width: 100%;
+  margin: var(--space-3) 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  resize: vertical;
+}

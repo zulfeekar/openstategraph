@@ -21,6 +21,12 @@
  * stop working the day an output node reformats. A rule that depends on the
  * text is a rule that fails without telling anyone.
  *
+ * A pending human decision counts the same way, and is the worse case of the
+ * two: `support-triage` paused at its gate rendered the draft reply as settled
+ * thinking *and* inside the approval card, word for word. The card is a
+ * decision surface — a reviewer who sees the same paragraph twice cannot tell
+ * whether the copy above is a second draft they are also accountable for.
+ *
  * This is the interim. The full fix is to attribute tokens to the node that
  * produced them and fold them into the trace, which removes the flat block
  * rather than choosing when to hide it; a token frame already knows its node.
@@ -29,10 +35,13 @@ export function showsThinking(turn: {
   readonly thinking: string;
   readonly running: boolean;
   readonly answer: string;
+  /** A human gate is holding this turn, and its card is showing the draft. */
+  readonly awaitingApproval: boolean;
 }): boolean {
   if (!turn.thinking) return false;
   if (turn.running) return true;
-  // Settled with nothing published: the tokens are all the user has, and
-  // hiding them would leave a turn that shows no model output at all.
+  if (turn.awaitingApproval) return false;
+  // Settled with nothing presented anywhere: the tokens are all the user has,
+  // and hiding them would leave a turn that shows no model output at all.
   return !turn.answer.trim();
 }

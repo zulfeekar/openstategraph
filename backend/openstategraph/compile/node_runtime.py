@@ -1000,6 +1000,27 @@ def branch_context(node_id: str, plan: CompiledPlan, nodes: dict[str, Any]) -> s
     return ""
 
 
+
+def rejection_feedback(note: str) -> str:
+    """What travels down the `rejected` edge — never an empty string.
+
+    A reviewer may reject without typing anything, and that must stay allowed:
+    blocking a rejection behind a mandatory text field is how a bad draft gets
+    approved instead. But the empty string is not a neutral default. Handed to
+    the agent that writes the held record, it is an invitation — on
+    `support-triage` it produced *"the draft was refused because the reviewer
+    stated that identity verification ... is required"*, a position the
+    reviewer never took, on an account-deletion ticket
+    (`every-workflow-green` 11).
+
+    So silence is reported as silence. The sentence deliberately says only that
+    no reason was given: it names no cause and puts no words in the reviewer's
+    mouth, because a downstream model repeating it verbatim must still be
+    telling the truth.
+    """
+    return note.strip() or "The reviewer rejected this draft and gave no reason."
+
+
 class NodeRuntime:
     """Builds the callable for each node type.
 
@@ -1997,7 +2018,8 @@ class NodeRuntime:
             approved = isinstance(decision, dict) and decision.get("decision") == "approve"
             feedback = ""
             if not approved:
-                feedback = (decision or {}).get("feedback", "") if isinstance(decision, dict) else ""
+                note = (decision or {}).get("feedback", "") if isinstance(decision, dict) else ""
+                feedback = rejection_feedback(str(note))
             return {
                 "decisions": {node_id: "approved" if approved else "rejected"},
                 "feedback": feedback,

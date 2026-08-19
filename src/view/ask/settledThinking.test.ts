@@ -11,6 +11,7 @@ describe('showsThinking', () => {
     thinking: 'Rock earns the most, $826.65.',
     running: false,
     answer: 'Rock earns the most, $826.65.\n\nrouter1 b-music',
+    awaitingApproval: false,
     ...over,
   });
 
@@ -35,5 +36,20 @@ describe('showsThinking', () => {
 
   it('shows nothing when no token ever arrived', () => {
     expect(showsThinking(turn({ thinking: '', running: true, answer: '' }))).toBe(false);
+  });
+
+  /**
+   * `support-triage`, paused at its human gate: the draft reply was rendered
+   * as settled thinking *and* inside the approval card, word for word. Worse
+   * than the answer case, because the card is a decision surface — a reviewer
+   * seeing the same paragraph twice cannot tell whether the one above it is a
+   * different draft they are also accountable for.
+   */
+  it('hides them while a human decision is pending', () => {
+    expect(showsThinking(turn({ answer: '', awaitingApproval: true }))).toBe(false);
+  });
+
+  it('still keeps them for a run that ended with neither an answer nor a gate', () => {
+    expect(showsThinking(turn({ answer: '', awaitingApproval: false }))).toBe(true);
   });
 });

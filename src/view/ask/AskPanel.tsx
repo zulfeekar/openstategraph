@@ -861,7 +861,7 @@ export function AskPanel({
   );
 
   const respondToApproval = useCallback(
-    async (turnId: string, decision: 'approve' | 'reject') => {
+    async (turnId: string, decision: 'approve' | 'reject', note = '') => {
       const turn = turns.find((t) => t.id === turnId);
       if (!turn || !turn.pendingApproval) return;
       const { threadId } = turn.pendingApproval;
@@ -880,6 +880,10 @@ export function AskPanel({
             threadId,
             workflow: document,
             decision,
+            // Only on a rejection, and only when the reviewer wrote something:
+            // the backend states the absence itself rather than being handed
+            // an empty string to interpret (`every-workflow-green` 11).
+            ...(decision === 'reject' && note.trim() ? { feedback: note.trim() } : {}),
             workflowSlug: slug,
             // A resume must be entitled to what the run it continues was, or
             // approving a run silently downgrades it to a customer's.
@@ -1443,7 +1447,7 @@ function Turn({
   onDeclineSuggestion,
 }: {
   turn: ChatTurn;
-  onRespond: (turnId: string, decision: 'approve' | 'reject') => void;
+  onRespond: (turnId: string, decision: 'approve' | 'reject', note?: string) => void;
   onApplySuggestion: (turnId: string, suggestion: CapabilitySuggestion) => void;
   onDeclineSuggestion: (turnId: string) => void;
 }) {
@@ -1521,6 +1525,7 @@ function Turn({
         thinking: turn.thinking,
         running: turn.running,
         answer: turn.result?.answer ?? '',
+        awaitingApproval: turn.pendingApproval !== null,
       }) ? (
         // Raw tokens while streaming (legible mid-arrival), markdown once
         // settled — the "improperly formatted chat" fix (ticket 62).
@@ -1540,7 +1545,7 @@ function Turn({
         <ApprovalPrompt
           approval={turn.pendingApproval}
           onApprove={() => onRespond(turn.id, 'approve')}
-          onReject={() => onRespond(turn.id, 'reject')}
+          onReject={(note) => onRespond(turn.id, 'reject', note)}
         />
       ) : null}
 
@@ -1647,17 +1652,36 @@ function ApprovalPrompt({
 }: {
   approval: PendingApproval;
   onApprove: () => void;
-  onReject: () => void;
+  onReject: (note: string) => void;
 }) {
+  const [note, setNote] = useState('');
+
   return (
     <div className="ask__approval">
       <p className="ask__approval-message">{approval.message}</p>
       {approval.candidate ? <RichText className="ask__answer" text={approval.candidate} /> : null}
+      {/* The card's own message has always told the reviewer to reject with a
+          note, and until `every-workflow-green` 11 there was nowhere to write
+          one — so the held record was written from an empty string, and read
+          as a quotation of a person who had said nothing.
+
+          Optional on purpose. A mandatory field here would stand between a
+          reviewer and stopping a bad reply, which is the one thing this card
+          exists to make easy; the backend states the absence in its own words
+          when nothing is typed. */}
+      <textarea
+        className="ask__approval-note"
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="If you reject: what is wrong with it? (optional)"
+        aria-label="Reason for rejecting, which becomes the reason on the held ticket"
+        rows={2}
+      />
       <div className="ask__approval-actions">
         <Button variant="primary" onClick={onApprove}>
           Approve
         </Button>
-        <Button variant="secondary" onClick={onReject}>
+        <Button variant="secondary" onClick={() => onReject(note)}>
           Reject
         </Button>
       </div>
