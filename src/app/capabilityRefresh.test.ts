@@ -23,7 +23,7 @@ const capability = (id: string): ToolCapability => ({
 
 const clientReturning = (tools: readonly ToolCapability[]) => ({
   capabilities: (): Promise<Result<WorkflowCapabilities, string>> =>
-    Promise.resolve(Ok({ tools, pluginTools: [], warnings: [] })),
+    Promise.resolve(Ok({ tools, pluginTools: [], ambientTools: [], warnings: [] })),
 });
 
 beforeEach(() => {

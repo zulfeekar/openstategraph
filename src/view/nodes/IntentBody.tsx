@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+import { ambientTools, onAmbientToolsChange } from '@app/ambientTools';
 import { promptIntent } from '@core/model/promptIntent';
 import type { NodeBodyProps } from './nodeBodyRegistry';
 import './IntentBody.css';
@@ -30,11 +32,36 @@ import './IntentBody.css';
 export function intentBody(fieldKey: string) {
   return function IntentBody({ node }: NodeBodyProps) {
     const intent = promptIntent(node.getField<string>(fieldKey) ?? '');
-    if (!intent) return null;
+    // Subscribed rather than read once: the answer arrives after a load and
+    // after a Refresh, so a card rendered before the fetch would state a
+    // smaller truth and never correct itself.
+    const ambient = useSyncExternalStore(onAmbientToolsChange, ambientTools);
+    if (!intent && ambient.length === 0) return null;
     return (
-      <div className="node__intent" title={intent}>
-        {intent}
-      </div>
+      <>
+        {intent ? (
+          <div className="node__intent" title={intent}>
+            {intent}
+          </div>
+        ) : null}
+        {/* **What this agent has that nobody wired** (`every-workflow-green`
+            05a). An agent drawn with two tools had five; the extra three bind
+            to every agent when the server has a store, and the canvas said
+            nothing. Now it does — from the server's own answer, because a
+            fixed note would be false on a server with no store.
+
+            Rendered as a *statement*, never as tools: no port, no delete, no
+            drag, `aria-disabled` and non-interactive. Drawing them like wired
+            tools would be a worse lie than the silence this replaced — they
+            cannot be removed, and a control implying otherwise is a promise
+            the canvas cannot keep. */}
+        {ambient.length > 0 ? (
+          <p className="node__ambient" aria-disabled="true">
+            <span className="node__ambient-label">Also available on this server</span>
+            <span className="node__ambient-list">{ambient.join(', ')}</span>
+          </p>
+        ) : null}
+      </>
     );
   };
 }

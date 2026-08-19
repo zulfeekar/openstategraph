@@ -54,7 +54,7 @@ const client: IWorkflowFileClient = {
         warnings: [],
       }),
     ),
-  capabilities: () => Promise.resolve(Ok({ tools: [], pluginTools: [], warnings: [] })),
+  capabilities: () => Promise.resolve(Ok({ tools: [], pluginTools: [], ambientTools: [], warnings: [] })),
   summary: (slug: string) =>
     Promise.resolve(Ok({ slug, name: slug, savedAt: '2026-08-13T00:00:00Z', nodeCount: 1 })),
 } as unknown as IWorkflowFileClient;

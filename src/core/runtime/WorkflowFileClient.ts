@@ -124,6 +124,17 @@ export interface PluginToolCapability {
 
 export interface WorkflowCapabilities {
   readonly tools: readonly ToolCapability[];
+  /**
+   * Tool names **every agent on this server** binds without being wired —
+   * today the prebuilt memory tools, and only when a store is configured
+   * (`every-workflow-green` 05a).
+   *
+   * Empty is a real answer, not a missing one: a server with no store binds
+   * none. Defaulted here rather than left optional so a backend that predates
+   * the field reads as "binds none" instead of `undefined`, which is the same
+   * courtesy `pluginTools` already gets one line down.
+   */
+  readonly ambientTools: readonly string[];
   /** App-scoped tools installed distributions contribute. */
   readonly pluginTools: readonly PluginToolCapability[];
   /**
@@ -783,6 +794,7 @@ export class WorkflowFileClient
       const payload = (await response.json()) as {
         tools?: unknown[];
         plugin_tools?: unknown[];
+        ambient_tools?: unknown[];
         warnings?: unknown[];
       };
       const tools = Array.isArray(payload.tools) ? payload.tools : [];
@@ -791,7 +803,14 @@ export class WorkflowFileClient
       // and a missing key is exactly the "nothing to report" it looks like.
       const pluginTools = Array.isArray(payload.plugin_tools) ? payload.plugin_tools : [];
       const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+      // Same default, same reason: a backend that predates this field binds
+      // nothing ambient as far as this editor can tell, which is the honest
+      // reading of a missing key.
+      const ambientTools = (
+        Array.isArray(payload.ambient_tools) ? payload.ambient_tools : []
+      ).map((entry) => asString(entry));
       return Ok({
+        ambientTools,
         tools: tools.map((entry) => {
           const record = entry as Record<string, unknown>;
           return {

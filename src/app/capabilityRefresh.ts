@@ -4,6 +4,7 @@ import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import { registerDiscoveredCapabilities } from '@nodes/workflowScoped';
 import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
+import { setAmbientTools } from '@app/ambientTools';
 
 /**
  * Ticket 18's hot-discovery gap, closed **on demand rather than on a timer**.
@@ -100,6 +101,13 @@ export async function refreshWorkflowCapabilities(
   // plugin would stay invisible until a full reload.
   registerPluginCapabilities(outcome.ok ? outcome.value.pluginTools : [], registry, executors);
   setCapabilityWarnings(outcome.ok ? outcome.value.warnings : []);
+  // Same rule, same reason: what every agent binds without wiring is a property
+  // of the *server*, not of this workflow's `tools/` folder, so it is refreshed
+  // whatever the workflow-local decision was (`every-workflow-green` 05a). A
+  // failed fetch reports "binds none" rather than keeping a stale answer — an
+  // agent card claiming capabilities the editor can no longer confirm is the
+  // defect this whole ticket is about, one layer along.
+  setAmbientTools(outcome.ok ? outcome.value.ambientTools : []);
 
   if (action.kind === 'unchanged') return { kind: 'unchanged', total: tools.length };
 
