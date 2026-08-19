@@ -58,8 +58,23 @@ def known_node_types() -> frozenset[str]:
 
 class ValidateArgs(BaseModel):
     model_config = {"extra": "forbid"}
-    document: str = Field(
-        description="The complete workflow document as a JSON string: "
+    #: Either the document itself or the same document encoded as JSON text.
+    #:
+    #: It was `str` alone, and that is what killed `workflow-architect`
+    #: (`every-workflow-green` 13). The agent is told to ALWAYS call this
+    #: before presenting a workflow, and it passes the document as an object —
+    #: the obvious move for a field named `document`. Every call came back
+    #: "document: Input should be a valid string", every retry re-appended the
+    #: whole document to the conversation, and the provider eventually answered
+    #: 500. The run died on a `str` where a `dict` would do.
+    #:
+    #: The string shape stays because it is a real caller's shape: `cli.py`
+    #: passes `json.dumps(document)`. But requiring it was never defensible for
+    #: a tool whose first act is `json.loads` — accepting the object removes a
+    #: step rather than adding one.
+    document: str | dict[str, Any] = Field(
+        description="The complete workflow document — either the JSON object "
+        "itself or the same thing as a JSON string: "
         '{"version": 2, "name": ..., "nodes": [...], "edges": [...]}.'
     )
 
@@ -81,10 +96,13 @@ class ValidateWorkflowTool(BaseTool):
         assert isinstance(args, ValidateArgs)
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
-        try:
-            document = json.loads(args.document)
-        except json.JSONDecodeError as exc:
-            return ToolResult.failure(f"Not valid JSON: {exc}")
+        if isinstance(args.document, dict):
+            document: Any = args.document
+        else:
+            try:
+                document = json.loads(args.document)
+            except json.JSONDecodeError as exc:
+                return ToolResult.failure(f"Not valid JSON: {exc}")
         if not isinstance(document, dict):
             return ToolResult.failure("The document must be a JSON object.")
         document = document.get("document", document)
