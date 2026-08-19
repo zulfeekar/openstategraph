@@ -34,19 +34,40 @@ export function useToaster() {
     }
   }, []);
 
-  const notify = useCallback(
-    (message: string) => {
-      if (!message.trim()) return;
-      setToasts((current) => {
-        if (current.some((toast) => toast.message === message)) return current;
-        const id = nextId.current++;
-        const timer = window.setTimeout(() => dismiss(id), LIFETIME_MS);
-        timers.current.set(id, timer);
-        return [...current, { id, message }].slice(-MAX_TOASTS);
-      });
-    },
-    [dismiss],
-  );
+  const notify = useCallback((message: string) => {
+    if (!message.trim()) return;
+    // **The updater is pure.** It used to mint the id and start the dismissal
+    // timer inside `setToasts`, and React is explicitly allowed to call an
+    // updater more than once — so a single `notify` could schedule two timers,
+    // one of them keyed to an id the state never kept, and that stray timer
+    // then dismissed a *different, live* toast by number. Observed in a
+    // production build: every deep-link message was added and removed again in
+    // the same breath, so opening a workflow by link never said anything —
+    // not "Opened", not "restored your unsaved edits", not "could not open
+    // that" (`every-workflow-green` 26).
+    //
+    // Minting the id outside the updater makes one call mean one toast, and
+    // scheduling moved to the effect below, where a side effect belongs.
+    const id = nextId.current++;
+    setToasts((current) =>
+      current.some((toast) => toast.message === message)
+        ? current
+        : [...current, { id, message }].slice(-MAX_TOASTS),
+    );
+  }, []);
+
+  // Dismissal is scheduled *from* state, not from the act of notifying: a
+  // toast that survived into the rendered list is exactly the set that should
+  // expire, and one that was deduplicated away never gets a timer at all.
+  useEffect(() => {
+    for (const toast of toasts) {
+      if (timers.current.has(toast.id)) continue;
+      timers.current.set(
+        toast.id,
+        window.setTimeout(() => dismiss(toast.id), LIFETIME_MS),
+      );
+    }
+  }, [toasts, dismiss]);
 
   useEffect(
     () => () => {
