@@ -37,6 +37,23 @@ const endpointKey = (edge: StoredEdge): string =>
  *
  * Each file is a package envelope (`version`, `name`, `savedAt`, `document`);
  * the editor round-trips the inner document, which is what these read.
+ *
+ * ## This gate only works because a lossy load is no longer written back
+ *
+ * It is half of a pair, and the half that fails loudly. The other half is
+ * `loadWasFaithful` (`every-workflow-green` 22): a load that could not place
+ * every link withholds the disk-autosave baseline, so the file keeps what it
+ * has.
+ *
+ * Without that, this test is **worse than useless** — it certifies the damage.
+ * A hand-written `ops-desk` lost four of twelve links on open, the editor saved
+ * the eight that survived, and by the time this ran the file matched the model
+ * perfectly and every case was green. The loss had already happened and the
+ * evidence was gone.
+ *
+ * Verified as a pair: a workflow whose file contains a link to a port that
+ * does not exist now **fails here**, because the file still contains it.
+ * Delete either half and the other stops meaning anything.
  */
 describe('shipped workflows round-trip without losing a node or a link', () => {
   const root = join(process.cwd(), 'workflows');
