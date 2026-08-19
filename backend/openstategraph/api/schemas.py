@@ -725,6 +725,15 @@ class PluginToolCapabilityResponse(BaseModel):
 
 class CapabilitiesResponse(BaseModel):
     tools: list[ToolCapabilityResponse]
+    #: Tool names **every agent on this server** binds without being wired to
+    #: anything — today the prebuilt memory tools, and only when a store is
+    #: configured (`every-workflow-green` 05a).
+    #:
+    #: Published rather than written on the card because it is conditional on
+    #: the *environment*, not the document: the same `workflow.json` has
+    #: different agents on two installations, so a hardcoded note would be
+    #: false on one of them. Empty is a real answer, not a missing one.
+    ambient_tools: list[str] = []
     functions: list[FunctionCapabilityResponse]
     #: App-scoped: installed distributions (`openstategraph.tools` entry
     #: points), the same objects the runtime binds.

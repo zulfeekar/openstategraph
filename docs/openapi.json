@@ -3,6 +3,14 @@
     "schemas": {
       "CapabilitiesResponse": {
         "properties": {
+          "ambient_tools": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Ambient Tools",
+            "type": "array"
+          },
           "functions": {
             "items": {
               "$ref": "#/components/schemas/FunctionCapabilityResponse"

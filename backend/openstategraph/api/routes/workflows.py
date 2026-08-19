@@ -445,6 +445,7 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
     Requires the workflow to already be saved (so its directory exists);
     an unsaved, canvas-only workflow has no folder to scan yet.
     """
+    from openstategraph.api.ambient_tools import ambient_tool_names
     from openstategraph.api.capability_discovery import discover_functions, discover_tools
     from openstategraph.api.plugin_capabilities import (
         bindable_tool_types,
@@ -485,6 +486,17 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
         warnings.append(half_authored)
 
     return CapabilitiesResponse(
+        # What every agent gets without being wired to it — the answer a
+        # developer could not get from the canvas at all until now, and could
+        # only see when a model hallucinated a tool name and the runtime
+        # listed the real ones (`every-workflow-green` 05a).
+        # `memory_settings` is left to its default: `WorkflowServices` carries
+        # the store (the switch) and not the settings (the shape) — those live
+        # on the runtime's own services, which this credential-free endpoint
+        # does not build. Recorded rather than hidden: a server running
+        # non-default memory scopes would publish the default set here, which
+        # is a narrower claim than the runtime's and never a wider one.
+        ambient_tools=ambient_tool_names(memory_store=services.memory_store),
         tools=[
             ToolCapabilityResponse(id=t.id, name=t.name, description=t.description, args_schema=t.args_schema, node_type=t.node_type)
             for t in tools
