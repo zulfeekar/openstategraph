@@ -67,10 +67,21 @@ class ListWorkflowsTool(BaseTool):
 
     name = "platform_list_workflows"
     node_type = "tool.platform-list-workflows"
+    # Says whose list this is, because the filter below is narrower than the
+    # obvious reading of "what exists". `visible_to_platform_tools` withholds
+    # hidden and unpublished packages, and on a real board that was five of
+    # six — so a description promising "every workflow available on this
+    # platform" led an agent to report "it is the only workflow installed"
+    # (`every-workflow-green` 12). It was not hallucinating; it was quoting.
+    #
+    # The filter is right and stays: these tools speak to /chat users. The
+    # words are what had to change, and they must not swing the other way and
+    # advertise a withheld count on a customer surface.
     description = (
-        "List every workflow available on this platform, with its name and "
-        "what it is for. Call this when the user asks what this system can do "
-        "or which workflows exist."
+        "List the workflows people can use in the chat app, with each one's "
+        "name and what it is for. Call this when the user asks what this "
+        "system can do or which workflows they can run. This is the chat "
+        "app's list, not an inventory of everything installed."
     )
     Args = NoArgs
 
@@ -100,10 +111,20 @@ class ListWorkflowsTool(BaseTool):
                 f"- **{package.name}** ({name}): {summary or 'no description yet'}"
             )
         if not rows:
-            return ToolResult(content="No workflows exist yet.")
-        return ToolResult(
-            content=f"{len(rows)} workflows are available:\n" + "\n".join(rows)
+            return ToolResult(content="No workflows are available in the chat app yet.")
+        # "1 workflows are available" was the literal output whenever exactly
+        # one package was visible, which on the board that found this was
+        # every single run.
+        # The scope travels with the *result*, not only with the description.
+        # Narrowing the description alone was tried and watched to fail: the
+        # agent still answered "the only workflow currently installed on this
+        # platform", because what it summarises is this string.
+        count = (
+            "1 workflow is available in the chat app"
+            if len(rows) == 1
+            else f"{len(rows)} workflows are available in the chat app"
         )
+        return ToolResult(content=f"{count}:\n" + "\n".join(rows))
 
 
 class DescribeWorkflowArgs(BaseModel):
