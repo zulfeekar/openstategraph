@@ -194,6 +194,59 @@ def failing_task_name(exc: Any) -> str | None:
     return found[-1] if found else None
 
 
+@dataclass(frozen=True)
+class RunHealth:
+    """How a run went, in the two categories that are treated differently.
+
+    `failures` are a step that broke while running. They already have a
+    customer-facing floor (`RUN_FAILED_ANSWER`) and they are the only kind that
+    may reach `cli.run_exit_code` — a run that produced nothing because a node
+    died is a failed run.
+
+    `silent` are reports *about how the answer was reached*: a node that ran and
+    produced nothing (`every-workflow-green` 01), and a grader that ran out of
+    attempts and published a candidate it had rejected (09). Neither is a claim
+    that the run failed, and neither may change an exit code.
+    """
+
+    failures: list[str]
+    silent: list[str]
+
+
+def run_health(
+    outputs: Any, nested_outputs: Any = None, forced: Any = None
+) -> RunHealth:
+    """The one place a run's health is assembled, for **both** doors.
+
+    `/api/runs` and `/api/runs/stream` each built this themselves and drifted
+    twice — a silent node inside a mount reported by one and not the other
+    (`every-workflow-green` 16), and a grader that gave up likewise (14). Both
+    were found by using the product, because there was nothing for a test to
+    hold: the logic existed twice, and a test comparing two implementations
+    only ever proves they agree on the day it was written.
+
+    One function cannot disagree with itself. That is the whole argument for
+    this existing, and it is why the doors must not reassemble any part of it
+    locally — including "just this one extra source", which is exactly how the
+    first divergence began.
+
+    Tolerant about its inputs because the two doors read them off different
+    shapes: streaming folds them out of frames, `/api/runs` reads finished
+    state, and either can hand over `None`.
+    """
+    flat = outputs if isinstance(outputs, dict) else {}
+    nested = nested_outputs if isinstance(nested_outputs, dict) else {}
+    exhausted = forced if isinstance(forced, dict) else {}
+    return RunHealth(
+        failures=node_failure_warnings(flat) + node_failure_warnings(nested),
+        silent=(
+            silent_node_warnings(flat)
+            + silent_node_warnings(nested)
+            + forced_pass_warnings(exhausted)
+        ),
+    )
+
+
 def describe_failure(exc: Any) -> str:
     """One line for a **developer**, from an exception.
 

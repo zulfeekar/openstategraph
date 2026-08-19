@@ -1425,13 +1425,15 @@ def _run_frames(
     prose, suggestion = split_suggestion(answer)
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
-        node_failure_warnings,
-        forced_pass_warnings,
-        silent_node_warnings,
         redact_failure_markers,
+        run_health,
     )
 
-    failures = node_failure_warnings(outputs) + node_failure_warnings(nested_outputs)
+    # One assembly for both doors — see `run_health`. Neither endpoint adds a
+    # source locally; that is exactly how these two drifted twice
+    # (`every-workflow-green` 14, 16).
+    health = run_health(outputs, nested_outputs, forced)
+    failures = health.failures
     # The capabilities that did not reach this run, kept as their own list —
     # ticket 51. `failures` are a *step* that broke while running and already
     # have their own customer-facing floor below (`RUN_FAILED_ANSWER`); these
@@ -1441,8 +1443,7 @@ def _run_frames(
     # `failures` rather than inside them: a silent node is a report about how
     # the answer was reached, not a claim the run failed, and only the latter
     # may reach the CLI's exit code.
-    silent = silent_node_warnings(outputs) + silent_node_warnings(nested_outputs)
-    silent += forced_pass_warnings(forced)
+    silent = health.silent
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded

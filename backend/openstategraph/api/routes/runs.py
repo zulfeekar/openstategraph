@@ -219,10 +219,8 @@ def run_workflow(
     prose, suggestion = split_suggestion(str(final.get("answer") or ""))
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
-        node_failure_warnings,
-        forced_pass_warnings,
-        silent_node_warnings,
         redact_failure_markers,
+        run_health,
     )
 
     raw_outputs = final.get("outputs") or {}
@@ -238,11 +236,12 @@ def run_workflow(
     # instead (`every-workflow-green` 16). Without it, a node that went silent
     # or failed inside a mounted workflow was reported when you streamed the
     # run and not when you POSTed it.
-    nested_outputs = final.get("nested_outputs") or {}
-    silent = silent_node_warnings(raw_outputs) + silent_node_warnings(nested_outputs)
-    # Read straight off the finished state here: this door has `final`, so it
-    # needs no incremental fold the way the streaming one does.
-    silent += forced_pass_warnings(final.get("forced") or {})
+    # One assembly for both doors — `run_health`. These two endpoints each built
+    # their own and drifted twice, so the rule is that neither adds a source
+    # locally (`every-workflow-green` 14, 16). This door reads everything
+    # straight off the finished state; the streaming one folds the same three
+    # out of frames.
+    health = run_health(raw_outputs, final.get("nested_outputs"), final.get("forced"))
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded
@@ -251,9 +250,8 @@ def run_workflow(
         # surface renders that map as the node's output, so without this
         # promotion a credential failure returned 200, a blank answer and
         # an empty developer channel (ticket 04).
-        + node_failure_warnings(raw_outputs)
-        + node_failure_warnings(nested_outputs)
-        + silent,
+        + health.failures
+        + health.silent,
         suggestion=suggestion,
         redactions=redaction_report(final.get("redactions")),
     )
@@ -263,7 +261,11 @@ def run_workflow(
     # and a blank string with a 200 is indistinguishable from a broken
     # client — see `RUN_FAILED_ANSWER` for why the never-blank floor in
     # `node_runtime` cannot reach this case.
-    if not prose.strip() and node_failure_warnings(raw_outputs):
+    # `health.failures`, not a second call: this floor used to reassemble the
+    # question locally and so could not see a failure inside a mount — an empty
+    # answer caused by a mounted node dying read as a blank success. One
+    # assembly, one verdict.
+    if not prose.strip() and health.failures:
         prose = RUN_FAILED_ANSWER
 
     # …and the same aside the streaming door appends (ticket 51). This door
