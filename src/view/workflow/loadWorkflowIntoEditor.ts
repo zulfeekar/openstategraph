@@ -235,6 +235,12 @@ export async function loadWorkflowIntoEditor(
       workbench.engine.executors,
     );
     setCapabilityWarnings(capabilities.ok ? capabilities.value.warnings : []);
+    // What every agent binds without an edge (`every-workflow-green` 05a).
+    // **This function, not only `loadMountIntoEditor`** — the first attempt
+    // patched the mount path and left the plain-document path untouched, so a
+    // deep link to a workflow never called it and the card stayed silent. Found
+    // by a store tap: `setAmbientTools` was never invoked at all.
+    setAmbientTools(capabilities.ok ? capabilities.value.ambientTools : []);
     // Baseline for the palette's manual Refresh: without it, the first press
     // after a load would report every tool the load itself registered as new.
     recordKnownCapabilities(slug, tools);
