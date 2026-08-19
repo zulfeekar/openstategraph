@@ -2507,6 +2507,24 @@ class NodeRuntime:
                         # every model-driven node here, not a choice about
                         # this one. Context, and it stays context.
                         self.services.skills_context,
+                        # The same way out of a capability gap `_agent` has
+                        # had all along, and the reason this was added
+                        # (`every-workflow-green` 19): a worker with no tools
+                        # wired had no way to say it was stuck, so it narrated
+                        # instead — "Let's search.Let's actually run the
+                        # search.Search." was published as the report on
+                        # `archetype-orchestrator-report`, which wires no tool
+                        # nodes at all.
+                        #
+                        # An agent in the identical position already answers
+                        # "I don't have a tool that can do that" and emits one
+                        # suggestion the editor turns into an Add & re-run
+                        # card. Nothing about a worker made it deserve less;
+                        # `advisor_context` was simply composed into one
+                        # factory and not the other. Same call, same
+                        # arguments, same position — above the rules, so
+                        # `SystemPrompt` still keeps the output contract last.
+                        advisor_context(node_id, self.services.advisor_catalog),
                     )
                     if part
                 ),
