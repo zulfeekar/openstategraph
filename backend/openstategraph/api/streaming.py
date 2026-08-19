@@ -860,6 +860,7 @@ def _stream_run(
             from openstategraph.compile.workflow_compiler import (
                 describe_failure,
                 describe_failure_for_customer,
+                failing_task_name,
             )
             from openstategraph.api.audience import Audience as _Audience
 
@@ -868,6 +869,24 @@ def _stream_run(
                 if audience == _Audience.DEVELOPER
                 else describe_failure_for_customer(exc)
             )
+            # Name the node, for a developer, the way `/api/runs` already does.
+            #
+            # A node's `error_handler` is bypassed whenever the caller streams
+            # with `subgraphs=True` or `stream_mode="messages"`, which is what
+            # this door asks for — LangGraph's behaviour, reproduced in twenty
+            # lines with no model and no compiler (`every-workflow-green` 14).
+            # So this door cannot recover the run the way the other two do, and
+            # the least it can do is say *which step* died instead of handing
+            # over a provider string and a reference id.
+            #
+            # A customer is deliberately excluded: a canvas node id is not
+            # theirs to act on, and `describe_failure_for_customer` exists to
+            # keep exactly this kind of detail away from them.
+            if audience == _Audience.DEVELOPER:
+                raw_name = failing_task_name(exc)
+                if raw_name:
+                    node = node_ids_by_name.get(raw_name, raw_name)
+                    detail = f'Node "{node}" failed and produced no result. {detail}'
             yield _sse("error", {"threadId": thread_id, "detail": detail})
         return
     finally:

@@ -164,6 +164,36 @@ def as_our_error(exc: Any) -> "OpenStateGraphError | None":
     return credential_error_from(exc)
 
 
+#: LangGraph annotates a propagating exception with the task it died in.
+_TASK_NOTE = re.compile(r"During task with name '([^']+)'")
+
+
+def failing_task_name(exc: Any) -> str | None:
+    """Which node an escaped exception died in, or None.
+
+    Needed because a node's `error_handler` is **bypassed** whenever the caller
+    streams with `subgraphs=True` or `stream_mode="messages"` — reproduced in
+    twenty lines with no model and no compiler, and therefore LangGraph's
+    behaviour rather than this project's (`every-workflow-green` 14). The
+    editor asks for both, so the one door a developer watches is the one door
+    with no net, and it was left showing a provider string and a reference id
+    while `/api/runs` said *Node "router1" failed and produced no result*.
+
+    The name is recoverable: LangGraph appends `During task with name 'x' and
+    id '…'` as an exception note. **The last such note wins** — they are added
+    innermost first, and the outermost is the canvas node, which is the only
+    name a reader can act on. An inner `'model'` task is true and useless.
+
+    Returns None rather than guessing. A failure nobody can attribute is still
+    better reported as a failure than as a wrong node.
+    """
+    notes = getattr(exc, "__notes__", None)
+    if not isinstance(notes, (list, tuple)):
+        return None
+    found = [m.group(1) for note in notes if (m := _TASK_NOTE.search(str(note)))]
+    return found[-1] if found else None
+
+
 def describe_failure(exc: Any) -> str:
     """One line for a **developer**, from an exception.
 
