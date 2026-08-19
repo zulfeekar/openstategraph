@@ -3011,7 +3011,18 @@ class NodeRuntime:
             update: dict[str, Any] = {"outputs": {node_id: answer}, "answer": answer}
             # What happened *inside* the mount, so the blocking door can report
             # on it too — see `nested_record` (`every-workflow-green` 16).
-            inside = nested_record(node_id, final.get("outputs"))
+            # Both the child's own nodes and whatever *its* mounts recorded,
+            # each gaining this mount's segment. That composition is the whole
+            # of depth support: `nested-mounts` → `nested-mounts-mid` →
+            # `chained-summarizer` produces
+            # `mount-mid/mount-inner/summarise1`, which is exactly the key the
+            # streaming door builds from the frame path. Without the second
+            # line the innermost workflow was invisible on this door and
+            # visible on the other — ticket 16 again, one level down.
+            inside = {
+                **nested_record(node_id, final.get("outputs")),
+                **nested_record(node_id, final.get("nested_outputs")),
+            }
             if inside:
                 update["nested_outputs"] = inside
             # And the child's force-passes. Found while verifying 16: the

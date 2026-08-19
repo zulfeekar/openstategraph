@@ -87,3 +87,43 @@ class TestAMountedGraderThatGaveUp:
         assert "mount-web/grader1" in warnings[0]
         assert "too thin" in warnings[0]
 
+
+class TestMountsTwoDeep:
+    """`nested-mounts` → `nested-mounts-mid` → `chained-summarizer`.
+
+    The first fix carried one level and stopped. On the three-level example the
+    doors disagreed again:
+
+        stream  mount-mid/in1, mount-mid/mount-inner/in1,
+                mount-mid/mount-inner/summarise1,
+                mount-mid/mount-inner/shorten1, mount-mid/mount-inner/out1, …
+        state   mount-mid/in1, mount-mid/mount-inner, mount-mid/out1
+
+    The innermost workflow was invisible, because a mount forwarded its child's
+    `outputs` and not the child's own already-nested map. Re-prefixing that map
+    is the whole fix, and it composes to any depth: each mount adds one
+    segment, which is exactly what the frame path does on the other door.
+    """
+
+    def test_a_grandchilds_keys_gain_this_mounts_segment(self) -> None:
+        deeper = nested_record("mount-mid", {"mount-inner/summarise1": "text"})
+        assert deeper == {"mount-mid/mount-inner/summarise1": "text"}
+
+    def test_the_two_maps_merge_without_collision(self) -> None:
+        merged = {
+            **nested_record("mount-mid", {"in1": "q", "mount-inner": "answer"}),
+            **nested_record("mount-mid", {"mount-inner/shorten1": "short"}),
+        }
+        assert merged == {
+            "mount-mid/in1": "q",
+            "mount-mid/mount-inner": "answer",
+            "mount-mid/mount-inner/shorten1": "short",
+        }
+
+    def test_a_silent_grandchild_is_still_reportable(self) -> None:
+        from openstategraph.compile.workflow_compiler import silent_node_warnings
+
+        warnings = silent_node_warnings(nested_record("mount-mid", {"mount-inner/summarise1": ""}))
+        assert warnings
+        assert "mount-mid/mount-inner/summarise1" in warnings[0]
+
