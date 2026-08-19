@@ -14,6 +14,7 @@ import { forgetMountHostDocument, rememberMountHostDocument } from '@app/diskAut
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { clearDrillStack } from '@app/drillStack';
 import { hasDraftFor } from '@app/workflowDrafts';
+import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
 import {
   loadMountIntoEditor,
   loadWorkflowIntoEditor,
@@ -81,6 +82,29 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
       hasDraft: hasDraftFor(openAddress === null ? null : formatMountAddress(openAddress)),
     });
     if (request.action === 'restore') {
+      // **Nothing to fetch is about the *document*, not the capabilities**
+      // (`every-workflow-green` 07). Capabilities were fetched inside
+      // `loadWorkflowIntoEditor`, the function this branch skips, so the two
+      // were welded together by accident: every warm reload ran on whatever
+      // picture the last cold load left behind — a tool added to `tools/`
+      // invisible, a `pip install` invisible, and the capability warnings
+      // stale, which is the channel built so a half-authored tool is never
+      // silent.
+      //
+      // The two have different staleness rules and that is the whole fix. A
+      // document must not be refetched over this tab's unsaved edits; a
+      // capability picture has no local edits to protect. So the guard above
+      // is untouched and this refreshes beside it.
+      //
+      // `refreshWorkflowCapabilities` rather than a fetch written here: it
+      // already unregisters what disappeared and keeps the Refresh baseline
+      // honest, and a private copy would drift from it.
+      void refreshWorkflowCapabilities(
+        getOpenSlug(),
+        workbench.registry,
+        workbench.engine.executors,
+      );
+
       // Nothing to fetch — but if this tab has something open and the URL
       // does not say so, put it there. That is what makes "copy the address
       // bar" work after a plain reload, without anyone pressing anything.
