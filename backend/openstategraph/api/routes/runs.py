@@ -221,6 +221,7 @@ def run_workflow(
         RUN_FAILED_ANSWER,
         redact_failure_markers,
         run_health,
+        suggestion_from_rejection,
     )
 
     raw_outputs = final.get("outputs") or {}
@@ -242,6 +243,12 @@ def run_workflow(
     # straight off the finished state; the streaming one folds the same three
     # out of frames.
     health = run_health(raw_outputs, final.get("nested_outputs"), final.get("forced"))
+    # A fallback, never an override (`every-workflow-green` 33): the model's own
+    # fence wins when it wrote one, and this fills the silence when it did not —
+    # built from a name the runtime itself refused, so it does not depend on the
+    # model choosing to mention the gap it had just announced by calling it.
+    if suggestion is None:
+        suggestion = suggestion_from_rejection(final.get("unmet_tools"))
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded

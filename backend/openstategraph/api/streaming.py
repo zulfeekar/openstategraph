@@ -977,6 +977,10 @@ def _run_frames(
     # Force-passed graders (`every-workflow-green` 09), accumulated like the
     # two above so the terminal frame can report them.
     forced: dict[str, str] = {}
+    #: agent node id -> tool names the runtime refused. Folded like `forced`,
+    #: and read at the end to offer a capability the model did not ask for in
+    #: words (`every-workflow-green` 33).
+    unmet_tools: dict[str, Any] = {}
     outputs: dict[str, str] = {}
     #: The same two, for everything below the outermost document — keyed by
     #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
@@ -1105,6 +1109,9 @@ def _run_frames(
                             for k, v in (update.get("decisions") or {}).items()
                             if k != RESET
                         }
+                    )
+                    unmet_tools.update(
+                        {key(k): v for k, v in (update.get("unmet_tools") or {}).items()}
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
@@ -1427,12 +1434,17 @@ def _run_frames(
         RUN_FAILED_ANSWER,
         redact_failure_markers,
         run_health,
+        suggestion_from_rejection,
     )
 
     # One assembly for both doors — see `run_health`. Neither endpoint adds a
     # source locally; that is exactly how these two drifted twice
     # (`every-workflow-green` 14, 16).
     health = run_health(outputs, nested_outputs, forced)
+    # A fallback, never an override: the model's own fence wins when it wrote
+    # one (ticket 15's card), and this fills the silence when it did not.
+    if suggestion is None:
+        suggestion = suggestion_from_rejection(unmet_tools)
     failures = health.failures
     # The capabilities that did not reach this run, kept as their own list —
     # ticket 51. `failures` are a *step* that broke while running and already

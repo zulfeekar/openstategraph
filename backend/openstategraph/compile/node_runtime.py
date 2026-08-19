@@ -79,6 +79,15 @@ class RunState(TypedDict, total=False):
     question: str
     #: node id -> branch label chosen. Read by the compiler's `path` functions.
     decisions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: agent node id -> tool names the runtime refused, because the model
+    #: called something it was never given (`every-workflow-green` 33).
+    #:
+    #: The deterministic half of the capability offer. `web_fetch is not a
+    #: valid tool` is our own sentence, carrying the name, and `tool.web-fetch`
+    #: is in the catalogue — so the offer can be a lookup rather than a
+    #: sentence a model has to be persuaded to write. MERGE, because several
+    #: agents can each reach for something they do not have.
+    unmet_tools: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: router node id -> **every** branch label it matched, when that router
     #: runs in `matchMode: "all"` (`every-workflow-green` 27).
     #:
@@ -1900,10 +1909,23 @@ class NodeRuntime:
             # and spent the whole retry budget re-asking an answered question.
             text = _final_text(result.get("messages") or [])
             answer = text if isinstance(text, str) else str(text)
+            # Names this agent reached for and was refused. Read from the
+            # messages rather than inferred from the answer, because the answer
+            # is exactly what proved unreliable: the model announced the gap by
+            # name in a tool call and then said it had no way to look anything
+            # up (`every-workflow-green` 33).
+            from openstategraph.compile.workflow_compiler import rejected_tool_names
+
+            refused: list[str] = []
+            for message in result.get("messages") or []:
+                for name in rejected_tool_names(getattr(message, "content", None)):
+                    if name not in refused:
+                        refused.append(name)
             return {
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
+                **({"unmet_tools": {node_id: refused}} if refused else {}),
             }
 
         return run

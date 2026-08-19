@@ -247,6 +247,106 @@ def run_health(
     )
 
 
+#: Our own refusal, written by the agent runtime when a model calls a name it
+#: was never given: "web_fetch is not a valid tool, try one of [...]".
+_REJECTED_TOOL = re.compile(r"([A-Za-z0-9_.-]+) is not a valid tool")
+
+
+def rejected_tool_names(text: Any) -> list[str]:
+    """Tool names the runtime refused, in the order they were asked for.
+
+    This is the signal that was sitting in plain text while two rounds of
+    prompt wording tried to persuade a model to announce the same thing
+    (`every-workflow-green` 33). The agent asked for `web_fetch`, we shipped
+    `tool.web-fetch`, and nothing offered it.
+
+    Deliberately narrow. A tool that **ran and returned an error** is wired,
+    and re-suggesting it is the defect
+    `the-agent-asks-for-what-it-cannot-get` 01 exists to stop — so only this
+    one sentence, which the runtime itself writes, counts as a rejection.
+    Prose that merely mentions a tool name is not one.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    seen: list[str] = []
+    for name in _REJECTED_TOOL.findall(text):
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+def suggestible_node_type(tool_name: str, registry: Any) -> str | None:
+    """The node type a rejected name could be placed as, or None.
+
+    None is a real answer and the important one: a name no shipped tool carries
+    — `slack_post` — must offer nothing rather than the nearest entry, which is
+    exactly the wrong turn ticket 29 removed.
+
+    Gated by the same `SUGGESTIBLE_TOOL_PREFIXES` the advisor's catalogue uses,
+    so a tool that may not be placed by a card is not placed by this path
+    either. One rule, two readers.
+    """
+    from openstategraph.api.registries import SUGGESTIBLE_TOOL_PREFIXES
+
+    if not tool_name or not isinstance(registry, dict):
+        return None
+    for node_type, tool in registry.items():
+        if not str(node_type).startswith(SUGGESTIBLE_TOOL_PREFIXES):
+            continue
+        if str(getattr(tool, "name", "")) == tool_name:
+            return str(node_type)
+    return None
+
+
+def suggestion_from_rejection(unmet: Any, registry: Any = None) -> dict[str, Any] | None:
+    """A capability offer built from what the run recorded, not from the model.
+
+    The card has always come from a fence the model chose to write. That works
+    when it cooperates and fails silently when it does not — and it did not, in
+    the case this exists for: the agent called `web_fetch`, the runtime refused
+    it **by name**, `tool.web-fetch` was in the catalogue, and the user was
+    shown nothing (`every-workflow-green` 33).
+
+    A **fallback, never an override**. A model that emitted a suggestion knows
+    more about its own situation than a name lookup does — it can propose a
+    tool it never got as far as calling — so ticket 15's card keeps winning and
+    this only fills the silence.
+
+    Declines by returning None rather than reaching for the nearest entry: a
+    name no shipped tool carries offers nothing, which is the wrong turn ticket
+    29 removed and must not come back through a different door.
+    """
+    if not isinstance(unmet, dict) or not unmet:
+        return None
+    if registry is None:
+        # The shipped set, which is the whole of what may be *placed by a card*
+        # anyway — `SUGGESTIBLE_TOOL_PREFIXES` excludes a package's own
+        # `tools/`, since those already exist in the package that declares
+        # them. So resolving without a slug loses nothing this path could
+        # offer, and saves threading a registry through two API doors.
+        from openstategraph.api.registries import build_tool_registry
+
+        registry = build_tool_registry(None, None)
+    for node_id, names in unmet.items():
+        if not isinstance(names, (list, tuple)):
+            continue
+        for name in names:
+            node_type = suggestible_node_type(str(name), registry)
+            if not node_type:
+                continue
+            return {
+                "nodeType": node_type,
+                "attachTo": str(node_id),
+                "port": "tools",
+                "label": node_type.removeprefix("tool.").replace("-", " ").title(),
+                "reason": (
+                    f"This step asked for `{name}`, which it does not have. "
+                    f"`{node_type}` provides it."
+                ),
+            }
+    return None
+
+
 def describe_failure(exc: Any) -> str:
     """One line for a **developer**, from an exception.
 
