@@ -51,6 +51,45 @@ def archetype_slug(text: str) -> str:
     return "".join(out).strip("-")
 
 
+def _resolve_label(line: str, valid: set[str], by_name: dict[str, str]) -> str:
+    """One line of the model's reply, resolved to a wired archetype key or "".
+
+    Tolerant, because the prompt taught the model the shape it answered in.
+    The roster is rendered `- {key}: {name} — {description}`, so
+    `archetype-orchestrator-report` was labelled
+
+        researcher: compile_best_practices
+        writer: draft_onboarding_agenda
+
+    and slugifying the whole line matched nothing. **Every** subtask fell to
+    the default worker and the wired Writer never ran once
+    (`every-workflow-green` 17) — a two-archetype graph silently behaving like
+    a one-archetype graph.
+
+    So the line is tried whole, then as its head before a separator, and a
+    leading list marker is dropped. Each candidate is still checked against
+    the wired keys and names: tolerance in *reading* the answer, never in
+    trusting it. An invented label still resolves to "" and still lands on the
+    default, which is ticket 37's rule and the reason a tool-less worker cannot
+    be handed a subtask on a model's say-so.
+    """
+    stripped = line.strip(" \t\"'`.,:;")
+    # "1. researcher" / "- researcher" — the enumeration the prompt asked for.
+    stripped = re.sub(r"^\s*(?:\d+[.)]|[-*])\s*", "", stripped)
+    candidates = [stripped]
+    for separator in (":", " - ", " — ", ","):
+        head, found, _ = stripped.partition(separator)
+        if found and head.strip():
+            candidates.append(head.strip())
+    for candidate in candidates:
+        slug = archetype_slug(candidate)
+        if slug in valid:
+            return slug
+        if slug in by_name:
+            return by_name[slug]
+    return ""
+
+
 def archetype_key(node: dict[str, Any]) -> str:
     """The dispatch key for one worker node — its title, slugified.
 
@@ -208,7 +247,13 @@ class BaseOrchestrator(ABC):
         name says.
         """
 
-    def label(self, subtasks: list[Subtask], archetypes: list[Archetype]) -> list[str]:
+    def label(
+        self,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        *,
+        notes: list[str] | None = None,
+    ) -> list[str]:
         """One archetype key per subtask — hybrid routing (ticket 37).
 
         Model present: one call labels every subtask against the wired
@@ -275,22 +320,32 @@ class BaseOrchestrator(ABC):
             # ticket 17 the run result cannot fix: a whole plan collapsing
             # onto the default worker looked identical whether the model
             # chose it or the call never happened.
-            logger.warning("archetype labelling failed; every subtask falls to the default worker")
+            note = "archetype labelling failed; every subtask falls to the default worker"
+            logger.warning("%s", note)
+            if notes is not None:
+                notes.append(note)
             return ["" for _ in subtasks]
 
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         labels = []
         for line in lines[: len(subtasks)]:
-            candidate = archetype_slug(line.strip(" \t\"'`.,:;"))
-            if candidate in valid:
-                labels.append(candidate)
-            else:
-                resolved = by_name.get(candidate, "")
-                if not resolved:
-                    logger.warning(
-                        "archetype label %r matches no wired worker; using the default", line
-                    )
-                labels.append(resolved)
+            resolved = _resolve_label(line, valid, by_name)
+            if not resolved:
+                # Reported, not just logged. A whole fan-out collapsing onto
+                # one worker is the thing this run most needs to say about
+                # itself, and it was saying it to a logger nobody reads
+                # (`every-workflow-green` 17). `notes` is the caller's sink —
+                # the same one `plan` already uses to reach the developer
+                # channel.
+                note = (
+                    f"The planner labelled a subtask {line.strip()!r}, which matches no "
+                    f"wired worker, so it ran on the default one. Wired: "
+                    f"{', '.join(sorted(valid))}."
+                )
+                logger.warning("%s", note)
+                if notes is not None:
+                    notes.append(note)
+            labels.append(resolved)
         # A short reply pads with the default; a long one was truncated above.
         labels.extend("" for _ in range(len(subtasks) - len(labels)))
         return labels
@@ -370,7 +425,7 @@ class BaseOrchestrator(ABC):
             Subtask(id=f"{prefix}{i + 1}", instruction=text) for i, text in enumerate(truncated)
         ]
         if archetypes:
-            labels = self.label(subtasks, archetypes)
+            labels = self.label(subtasks, archetypes, notes=notes)
             subtasks = [
                 task.model_copy(update={"archetype": label})
                 for task, label in zip(subtasks, labels)
