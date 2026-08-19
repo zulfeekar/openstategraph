@@ -227,6 +227,7 @@ export class WorkflowSerializer {
         model.setNodeParent(serialized.id, serialized.parentId);
       }
 
+      let attempted = 0;
       for (const serialized of document.edges) {
         const source = created.get(serialized.source?.nodeId ?? '');
         const target = created.get(serialized.target?.nodeId ?? '');
@@ -240,6 +241,7 @@ export class WorkflowSerializer {
           warnings.push('Dropped a link to a port that no longer exists');
           continue;
         }
+        attempted += 1;
         model.addEdge(
           new EdgeModel({
             // No id: an edge is identified by its endpoints, so a fresh
@@ -254,6 +256,27 @@ export class WorkflowSerializer {
             // finite pair, so a hand-edited file cannot inject a NaN.
             vertices: Array.isArray(serialized.vertices) ? serialized.vertices : [],
           }),
+        );
+      }
+
+      // A count, not a per-edge check, and deliberately so.
+      //
+      // Every `continue` above pushes its own warning, but `addEdge` can also
+      // decline — a connection rule, a port at capacity — and it declines
+      // *silently*, because refusing a user's gesture on the canvas needs no
+      // narration. On load there is no gesture and no user to see it, so a
+      // rejected edge simply vanished. That is how opening `ops-desk` lost
+      // four of its twelve links and disk autosave then wrote the loss to the
+      // file (`every-workflow-green` 22).
+      //
+      // Counting what survived catches every cause at once, including the next
+      // one somebody adds. The number is the honest thing to report: naming
+      // *which* edges were refused would mean re-deriving each rule's verdict
+      // here, and the rules live where they are enforced.
+      const kept = model.edges().length;
+      if (kept < attempted) {
+        warnings.push(
+          `${attempted - kept} link${attempted - kept === 1 ? '' : 's'} in the file could not be placed on this canvas`,
         );
       }
     });

@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import { loadWasFaithful } from '@app/lossyLoad';
 import type { Workbench } from '@app/Workbench';
 import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
@@ -36,6 +37,14 @@ export interface LoadedWorkflow {
   readonly name: string;
   /** True when this browser's newer draft was loaded instead of the file. */
   readonly restoredDraft: boolean;
+  /**
+   * What the file held that this build could not show, when anything.
+   *
+   * Present means the load was **lossy** and disk autosave has been withheld
+   * for this slug — see `loadWasFaithful`. The caller says so, because silence
+   * is what turned a rendering gap into a deletion (`every-workflow-green` 22).
+   */
+  readonly incomplete?: string;
 }
 
 /** The workflow a drill-in is leaving — recorded only once the load succeeds. */
@@ -265,14 +274,28 @@ export async function loadWorkflowIntoEditor(
     workbench.controller.document.leaveInstance();
     clearOpenAddress();
     setOpenSlug(slug);
-    workbench.controller.document.importJSON(JSON.stringify(outcome.value));
+    let incomplete: string | undefined;
+    const imported = workbench.controller.document.importJSON(JSON.stringify(outcome.value));
     // What disk holds, for disk autosave — recorded here, and *before* the
     // draft restore below. Importing fires `controller.onChange`, which is
     // what autosave listens to, so without this baseline merely opening a
     // workflow rewrote its file with an identical document and a new
     // `savedAt`. A restored draft, by contrast, genuinely differs from the
     // file and should reach it.
-    rememberDiskDocument(slug, workbench.model.name, outcome.value, workbench.serializer);
+    // …but only when the import was faithful. A load that dropped a link to a
+    // port this build does not know produces a model that is *not* what the
+    // file says, and recording it as the baseline is what let disk autosave
+    // overwrite the file with the loss — `ops-desk` lost four of its twelve
+    // edges by being opened (`every-workflow-green` 22). With no baseline,
+    // `writeOpenWorkflowToDisk` skips this slug and the file wins until
+    // somebody saves on purpose.
+    if (loadWasFaithful(imported)) {
+      rememberDiskDocument(slug, workbench.model.name, outcome.value, workbench.serializer);
+    } else {
+      // Said out loud, because silence is what turned a rendering gap into a
+      // deletion: nothing on the canvas mentioned the missing links.
+      incomplete = imported.message;
+    }
     // …and then this browser's own unsaved edits to *this* workflow, if it has
     // any that differ (ticket 23). Opening a second workflow used to discard
     // them with no prompt and no way back, because the draft was keyed on the
@@ -294,7 +317,11 @@ export async function loadWorkflowIntoEditor(
     if (provenance && provenance.fromSlug && provenance.fromSlug !== slug) {
       pushDrillFrame({ slug: provenance.fromSlug, name: provenance.fromName });
     }
-    return Ok({ name: workbench.model.name, restoredDraft: draft.restored });
+    return Ok({
+      name: workbench.model.name,
+      restoredDraft: draft.restored,
+      ...(incomplete ? { incomplete } : {}),
+    });
   } catch (error) {
     // Put back what was open: the identity was recorded before the import so
     // the one `workflow:reset` signal carried a consistent pair, and a

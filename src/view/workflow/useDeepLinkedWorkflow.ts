@@ -30,6 +30,18 @@ import {
  * silently. Neither half is acceptable without a sentence.
  */
 function describeOpened(loaded: LoadedWorkflow): string {
+  // A lossy load comes first, ahead of the draft note: it is the one case
+  // where what is on screen is *less* than what is on disk, and the user needs
+  // to know before they touch anything. Opening `ops-desk` used to drop four
+  // of its twelve links and write that back to the file without a word
+  // (`every-workflow-green` 22); autosave is now withheld, and this is the
+  // sentence that says why.
+  if (loaded.incomplete) {
+    return (
+      `Opened: ${loaded.name} — but not all of the file could be shown ` +
+      `(${loaded.incomplete}). It will not be auto-saved, so the file keeps what it has.`
+    );
+  }
   return loaded.restoredDraft
     ? `Opened: ${loaded.name} — with your unsaved edits from this browser, not the saved file.`
     : `Opened: ${loaded.name}`;
