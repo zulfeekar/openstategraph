@@ -8,7 +8,7 @@ subtask with the archetype best suited to it, and `Send` dispatches it there.
 | --- | --- |
 | `in1` **Brief** | where the brief enters |
 | `lead1` **Planner** | splits the brief, then labels each subtask with an archetype |
-| `worker-research` **Researcher** | facts, options, trade-offs — and the `default` catch-all |
+| `worker-research` **Analyst** | facts, options, trade-offs from what it knows — and the `default` catch-all |
 | `worker-write` **Writer** | finished prose: an agenda, a summary, a message |
 | `join1` **Join** | joins the results, deterministically, no model |
 | `out1` **Report** | renders the joined report |
@@ -18,7 +18,7 @@ wired and the plan decides which one each subtask reaches.
 
 ## The dispatch key is the worker's **title**
 
-Slugified: `Researcher` → `researcher`. Not its node id, not its `role`. Two
+Slugified: `Analyst` → `analyst`. Not its node id, not its `role`. Two
 workers whose titles slugify the same are unreachable and the compiler refuses
 the document; `tests/` refuses it earlier and says why.
 
@@ -74,11 +74,11 @@ not met:
 the result says which:
 
 ```
-task-1  researcher  compile essential onboarding topics, required materials …
+task-1  analyst  compile essential onboarding topics, required materials …
 task-2  writer      draft a 30-minute onboarding agenda with time slots …
 task-3  writer      draft a concise welcome email …
 
-decisions  {"lead1#task-1": "researcher", "lead1#task-2": "writer",
+decisions  {"lead1#task-1": "analyst", "lead1#task-2": "writer",
             "lead1#task-3": "writer"}
 outputs    in1, lead1, worker-research#task-1, worker-write#task-2,
            worker-write#task-3, join1, out1
@@ -93,7 +93,7 @@ default worker.** Same document, same model, same question. The labelling call
 is one model call and it is allowed to come back unusable — what changed is
 that it is no longer *silent*: an unrecognised label logs the label it could
 not place, a failed call logs that it failed, and `decisions` writes
-`"researcher (default)"` rather than `"researcher"` so the run result
+`"analyst (default)"` rather than `"analyst"` so the run result
 distinguishes a choice from a fallback. That distinction is the half of ticket
 17 a run result could not express before.
 
@@ -107,3 +107,22 @@ Two control runs, same package, same day:
 Recorded rather than tidied away. The example is wired exactly as the catalogue
 specifies and validates clean; what the runs found is a platform gap, and four
 tickets carry it.
+
+
+## Why this worker is an *Analyst* and not a *Researcher*
+
+It was titled **Researcher** and wired to no tools at all, so it could look
+nothing up. Asked to research, `gpt-oss:120b-cloud` narrated its attempts —
+*"Let's search.Let's actually run the search.Search."* — and that narration was
+published as the report (`every-workflow-green` 19).
+
+The engine half of that is fixed: a worker can now say it is missing a
+capability, the same way an agent always could. But a title that promises
+lookup over a worker that cannot look anything up is a promise the example
+itself was making, and no engine fix repairs a wrong label.
+
+**Renamed rather than given a tool, deliberately.** This example teaches
+archetype dispatch — one planner, two kinds of worker, one join. A live web
+tool would add a network dependency, a rate limit and a second reason for the
+example to fail, none of which teaches anything about dispatch. The `role` now
+says outright that this worker holds no tools.
