@@ -1401,6 +1401,7 @@ def _run_frames(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         node_failure_warnings,
+        silent_node_warnings,
         redact_failure_markers,
     )
 
@@ -1410,9 +1411,15 @@ def _run_frames(
     # have their own customer-facing floor below (`RUN_FAILED_ANSWER`); these
     # are a capability that never bound at all, which is the case where the run
     # succeeds, reads confident, and is quietly worse than it looks.
+    # Nodes that ran and produced nothing — `every-workflow-green` 01. Beside
+    # `failures` rather than inside them: a silent node is a report about how
+    # the answer was reached, not a claim the run failed, and only the latter
+    # may reach the CLI's exit code.
+    silent = silent_node_warnings(outputs) + silent_node_warnings(nested_outputs)
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded
+        + silent
         # Both doors report it, or `/api/runs` becomes the only one telling
         # the truth — see the same promotion in `api/main.py` (ticket 04).
         + failures,

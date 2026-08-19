@@ -274,6 +274,37 @@ def node_failure_warnings(outputs: Mapping[str, Any]) -> list[str]:
     return warnings
 
 
+def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
+    """Nodes that ran and produced nothing.
+
+    Seen on three workflows while walking them (`every-workflow-green` 01):
+    `two-stage-double-loop/draft1`, `archetype-orchestrator-report/
+    worker-research#task-1`, `chinook-assistant/agent-sql`. Every time the run
+    reported success and every surface showed a confident answer.
+
+    It survives because `answer` uses the `LATEST_NONEMPTY` reducer, so a node
+    producing nothing leaves the previous value standing and everything
+    downstream reads a **stale** answer as fresh. That reducer is right — it is
+    what lets a grader's forced pass have something to hand on — and is not the
+    bug. The silence is.
+
+    **Separate from `node_failure_warnings`, deliberately.** That function's
+    output feeds `cli.run_exit_code`, where a warning plus an empty answer means
+    a failed run. But this project's stated rule is that *"a workflow may
+    legitimately answer with nothing at all"*
+    (`test_a_failed_run_is_not_a_silent_success`), so folding this in flipped
+    that exit code. A silent node is a **report about how the answer was
+    reached**, not a claim that the run failed, and the two must not share a
+    channel that a script gates on.
+    """
+    return [
+        f'Node "{node}" produced no output. The run continued with the previous '
+        "answer, so what you are reading came from an earlier step."
+        for node, value in outputs.items()
+        if not str(value or "").strip()
+    ]
+
+
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     """`add_node` kwargs for one node's own retry/timeout override, if set.
 

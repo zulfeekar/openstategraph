@@ -220,6 +220,7 @@ def run_workflow(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         node_failure_warnings,
+        silent_node_warnings,
         redact_failure_markers,
     )
 
@@ -227,6 +228,11 @@ def run_workflow(
     # Ticket 51 — the capabilities that never bound, kept apart from the steps
     # that broke while running. See the same split in `streaming.py`: only the
     # first kind produces a run that succeeds and reads confident.
+    # Nodes that ran and produced nothing — `every-workflow-green` 01. Beside
+    # `failures` rather than inside them: a silent node is a report about how
+    # the answer was reached, not a claim the run failed, and only the latter
+    # may reach the CLI's exit code.
+    silent = silent_node_warnings(raw_outputs)
     degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded
@@ -235,7 +241,8 @@ def run_workflow(
         # surface renders that map as the node's output, so without this
         # promotion a credential failure returned 200, a blank answer and
         # an empty developer channel (ticket 04).
-        + node_failure_warnings(raw_outputs),
+        + node_failure_warnings(raw_outputs)
+        + silent,
         suggestion=suggestion,
         redactions=redaction_report(final.get("redactions")),
     )
