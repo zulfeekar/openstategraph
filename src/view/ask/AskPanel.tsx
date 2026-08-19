@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showsThinking } from './settledThinking';
 import { attemptsLine } from './attemptsLine';
+import { rectOfAdded } from './revealAdded';
+import { usePaperController } from '@app/WorkbenchContext';
 import {
   History,
   Info,
@@ -1210,6 +1212,8 @@ export function AskPanel({
    * anywhere else in the editor, since this is the one edit the *developer*
    * did not draw.
    */
+  // The canvas, for bringing a newly added node into view (ticket 31).
+  const paper = usePaperController();
   const applySuggestion = useCallback(
     async (turnId: string, suggestion: CapabilitySuggestion) => {
       const target = controller.model.node(suggestion.attachTo);
@@ -1283,6 +1287,20 @@ export function AskPanel({
         return;
       }
 
+      // **Take focus** (`every-workflow-green` 31). The node is placed *below*
+      // the agent it attaches to, so the lower that agent already sits, the
+      // more reliably it lands outside the viewport — measured at 1033px in a
+      // 723px window. Correct, wired, and invisible, which from the chair is
+      // indistinguishable from nothing having happened.
+      //
+      // Before the re-run, not after: the run's own highlight chain starts
+      // immediately and walks the nodes that *ran*, so anything selected
+      // afterwards is overwritten by a path that does not include the new
+      // node.
+      controller.selectionActions.selectNodes([created]);
+      const rect = rectOfAdded(controller.model, created);
+      if (rect) paper?.viewport.centerOn(rect);
+
       // **Do not re-run something that cannot work.** The suggested Email Send
       // was added with an empty `to`, wired, and the flow re-run at once —
       // straight into "No recipient configured". That failure was knowable
@@ -1310,7 +1328,7 @@ export function AskPanel({
       scrollToEnd();
       await ask(turns.find((turn) => turn.id === turnId)?.question ?? '');
     },
-    [ask, controller, scrollToEnd, turns, updateTurn, workbench],
+    [ask, controller, paper, scrollToEnd, turns, updateTurn, workbench],
   );
 
   const declineSuggestion = useCallback(

@@ -977,8 +977,21 @@ def advisor_context(node_id: str, catalog: str) -> str:
         # false here, and reaching for a name you do not have is the clearest
         # signal there is that something is missing.
         "But an error saying a name is not a valid tool IS a missing "
-        "capability: you reached for something you do not have. That is "
-        "exactly when to suggest one — do not treat it as a tool that broke.\n"
+        "capability: you reached for something you do not have. Suggest one "
+        "then — but only if you still cannot answer.\n"
+        # The strongest sentence here, and it is countering an observed
+        # failure rather than tightening a rule. Twice, on two different
+        # questions, the trace was: search failed, an invented name failed,
+        # search **succeeded** — and the answer was still "I don't have the
+        # ability to look that up" (`every-workflow-green` 30). The success was
+        # the *last* event, so this is not a later failure erasing an earlier
+        # one; the agent did not treat a returned result as knowledge at all.
+        # Everything else in this block is about what is missing, which primes
+        # exactly that reading, so the counterweight has to be explicit.
+        "Anything a tool returned in this turn is something you now know: use "
+        "it and answer. Never say you cannot look something up after a tool "
+        "has already returned results — an earlier failed call, or a name that "
+        "did not exist, does not undo a result you were given.\n"
         "Tools that could be added to you:\n"
         f"{catalog}"
     )

@@ -54,3 +54,47 @@ class TestTheTwoErrorsAreDistinguished:
     def test_declining_is_still_available(self) -> None:
         """Ticket 29's clause must survive — the two were written together."""
         assert '"none"' in advisor_context("agent-1", CATALOG)
+
+
+class TestItNeverOverridesAnAnswerYouAlreadyHave:
+    """The regression this ticket caused, caught by the owner in one chat.
+
+    After `tool.web-search` was added it **worked** — six live results with
+    real prices. The agent then called `web_fetch`, a name it does not have,
+    got "not a valid tool", and answered:
+
+        "I'm not able to give the current Bitcoin price because this workflow
+         doesn't have a capability to fetch live web data."
+
+    It had the data. The sentence added above was strong enough to override
+    "only suggest when genuinely blocked", so a failed *second* call erased a
+    successful *first* one. A missing capability only matters when it leaves
+    you unable to answer.
+    """
+
+    def test_the_invalid_name_clause_is_conditional_on_being_blocked(self) -> None:
+        text = advisor_context("agent-1", CATALOG).lower()
+        assert "still cannot answer" in text
+
+    def test_it_says_to_answer_when_another_tool_already_worked(self) -> None:
+        text = advisor_context("agent-1", CATALOG).lower()
+        assert "already" in text and "answer" in text
+
+    def test_only_suggest_when_blocked_survives(self) -> None:
+        assert "never when you can already answer" in advisor_context("agent-1", CATALOG)
+
+    def test_a_tool_result_counts_as_something_you_know(self) -> None:
+        """The observed failure, twice, on two different questions.
+
+        Trace: web_search → HTTP 202, web_fetch → not a valid tool, web_search
+        → **succeeded**, returning the Python 3.13 release notes. The answer:
+        "I don't have the ability to look up current release notes."
+
+        The success was the *last* event, so this is not a later failure
+        erasing an earlier one — the agent simply did not treat a returned
+        result as knowledge. Saying so explicitly is the only lever here.
+        """
+        text = advisor_context("agent-1", CATALOG).lower()
+        assert "a tool returned" in text
+        assert "never say you cannot look something up" in text
+
