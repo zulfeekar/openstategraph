@@ -11,6 +11,7 @@ import {
 import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/MountAddress';
 import { MountContext } from '@core/model/MountContext';
 import { forgetMountHostDocument, rememberMountHostDocument } from '@app/diskAutosave';
+import { restoredDraftNotice } from './restoredDraftNotice';
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { clearDrillStack } from '@app/drillStack';
 import { hasDraftFor } from '@app/workflowDrafts';
@@ -116,6 +117,14 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
         workbench.registry,
         workbench.engine.executors,
       );
+
+      // Say which document is on screen. This branch skips the load *and*,
+      // until now, the toast — so a file edited outside the editor was masked
+      // by this browser's older copy in silence (`every-workflow-green` 25).
+      // The restore itself is unchanged and correct; only the silence was the
+      // defect.
+      const restoredNotice = restoredDraftNotice(getOpenSlug());
+      if (restoredNotice) notifyRef.current(restoredNotice);
 
       // Nothing to fetch — but if this tab has something open and the URL
       // does not say so, put it there. That is what makes "copy the address
