@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { showsThinking } from './settledThinking';
 import {
   History,
   Info,
@@ -1516,9 +1517,18 @@ function Turn({
           region (ticket 02). */}
       <ToolResults results={turn.toolResults} />
 
-      {turn.thinking ? (
+      {showsThinking({
+        thinking: turn.thinking,
+        running: turn.running,
+        answer: turn.result?.answer ?? '',
+      }) ? (
         // Raw tokens while streaming (legible mid-arrival), markdown once
         // settled — the "improperly formatted chat" fix (ticket 62).
+        //
+        // `showsThinking` rather than `turn.thinking`: a settled block ends
+        // with the answer by construction, so rendering both printed the whole
+        // answer twice (`every-workflow-green` 10). It survives only for a turn
+        // that settled without publishing one.
         turn.running ? (
           <pre className="ask__thinking">{turn.thinking}</pre>
         ) : (
