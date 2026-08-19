@@ -442,6 +442,23 @@ def _final_text(messages: list[Any]) -> str:
         # as {"path": ...} in the customer chat.
         if getattr(message, "tool_calls", None):
             continue
+        # And a message that *carries a tool's result* is never the answer
+        # either — the third member of the same family, and the one that got
+        # through (`every-workflow-green` 32). A loop ending on a tool result
+        # published it verbatim: "Error: web_fetch is not a valid tool, try one
+        # of [...]" was shown to the user as the answer to their question.
+        #
+        # A tool result is **evidence for the model, not prose for a person**,
+        # and that holds whether it succeeded or failed: a page of search hits
+        # is no more an answer than an error is.
+        #
+        # When nothing the model said remains, "" is correct. That is a silent
+        # node and `silent_node_warnings` has a sentence for it (ticket 01).
+        # Publishing the nearest string instead is how a completely broken run
+        # looked completely healthy — no node failed, the output was non-empty,
+        # and every health channel on this map saw nothing wrong.
+        if getattr(message, "type", None) == "tool":
+            continue
         text = _content_text(getattr(message, "content", ""))
         if text.strip():
             return text
