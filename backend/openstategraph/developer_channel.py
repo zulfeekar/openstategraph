@@ -52,6 +52,52 @@ _FENCE = re.compile(re.escape(FENCE_OPEN) + r"\s*\n(.*?)" + re.escape(FENCE_CLOS
 NO_PROSE = "I could not answer that with the capabilities this workflow currently has."
 
 
+#: The keys that make a bare JSON object a suggestion rather than data.
+#:
+#: Both, deliberately. `nodeType` alone appears in documents and in prose about
+#: node types; it is `attachTo` — a node id on *this* canvas — that no ordinary
+#: answer carries.
+_SUGGESTION_KEYS = ("nodeType", "attachTo")
+
+#: A brace-balanced JSON object, so a nested `{...}` does not end the match.
+_BARE_OBJECT = re.compile(r"\{(?:[^{}]|\{[^{}]*\})*\}", re.DOTALL)
+
+
+def _split_unfenced(answer: str) -> tuple[str, dict[str, Any] | None]:
+    """The same split, for a model that emitted the object without the fence.
+
+    Found live (`every-workflow-green` 15): `classifier-router-qa` answered
+    "I don't have a tool that can retrieve real-time information" and then
+    printed the raw payload — `{"nodeType": "tool.web-search", "attachTo":
+    "agent-world", ...}` — straight into the prose. Two things went wrong at
+    once. The developer lost the card, because nothing reached the developer
+    channel; and the promise one docstring up, that a customer's answer cannot
+    contain one of these, was simply false.
+
+    The tolerance is the same argument `Grader.normalise` makes and the same
+    one ticket 13 made for `validate_workflow`: a protocol that only works when
+    the model formats it perfectly is a protocol that fails in production.
+
+    **Narrow on purpose.** This product prints JSON as prose constantly — SQL
+    result rows, and `workflow-architect` answers with an entire workflow
+    document — so an object is taken only when it carries both keys in
+    `_SUGGESTION_KEYS`. Everything else is left exactly where the model put it.
+    """
+    for match in _BARE_OBJECT.finditer(answer):
+        try:
+            parsed = json.loads(match.group(0))
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if not all(key in parsed for key in _SUGGESTION_KEYS):
+            continue
+        prose = re.sub(r"\n{3,}", "\n\n", answer.replace(match.group(0), "", 1))
+        prose = re.sub(r"[ \t]{2,}", " ", prose).strip()
+        return (prose or NO_PROSE), parsed
+    return answer, None
+
+
 def split_suggestion(answer: str) -> tuple[str, dict[str, Any] | None]:
     """The prose, and the capability suggestion it carried — separated.
 
@@ -66,10 +112,14 @@ def split_suggestion(answer: str) -> tuple[str, dict[str, Any] | None]:
     is machine-facing scaffolding either way and showing it to a customer is
     the thing this exists to prevent — the editor sees the same nothing and
     simply offers no card.
+
+    With no fence at all, `_split_unfenced` takes over: a model that emits the
+    object bare used to leave it sitting in the prose, which broke the promise
+    two paragraphs up in front of a real user (`every-workflow-green` 15).
     """
     match = _FENCE.search(answer)
     if not match:
-        return answer, None
+        return _split_unfenced(answer)
     prose = re.sub(r"\n{3,}", "\n\n", _FENCE.sub("", answer, count=1)).strip()
     if not prose:
         prose = NO_PROSE
