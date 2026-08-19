@@ -11,6 +11,7 @@ import {
   registerNodeTypesForRawDocument,
 } from '@nodes/workflowScoped';
 import { recordKnownCapabilities } from '@app/capabilityRefresh';
+import { setAmbientTools } from '@app/ambientTools';
 import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 import { pushDrillFrame } from '@app/drillStack';
 import { restoreDraftFor } from '@app/workflowDrafts';
@@ -97,6 +98,13 @@ export async function loadMountIntoEditor(
       workbench.registry,
       workbench.engine.executors,
     );
+    // **The other capability path** (`every-workflow-green` 05a). This module
+    // fetches capabilities itself on load, while `capabilityRefresh` does it on
+    // Refresh — two callers of one endpoint, and wiring only the second left
+    // the agent card silent on every open until somebody pressed Refresh.
+    // Found in the browser: the API returned the three ambient tools and the
+    // card showed none.
+    setAmbientTools(capabilities.ok ? capabilities.value.ambientTools : []);
     setCapabilityWarnings([
       ...(capabilities.ok ? capabilities.value.warnings : []),
       // The merge's own reports ride the same surface: an override naming a
