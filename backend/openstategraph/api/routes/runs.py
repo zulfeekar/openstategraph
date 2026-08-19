@@ -233,7 +233,13 @@ def run_workflow(
     # `failures` rather than inside them: a silent node is a report about how
     # the answer was reached, not a claim the run failed, and only the latter
     # may reach the CLI's exit code.
-    silent = silent_node_warnings(raw_outputs)
+    # What happened inside a mount. `streaming.py` rebuilds this from the frame
+    # stream; this door has no frames, so `_subgraph` records it into state
+    # instead (`every-workflow-green` 16). Without it, a node that went silent
+    # or failed inside a mounted workflow was reported when you streamed the
+    # run and not when you POSTed it.
+    nested_outputs = final.get("nested_outputs") or {}
+    silent = silent_node_warnings(raw_outputs) + silent_node_warnings(nested_outputs)
     # Read straight off the finished state here: this door has `final`, so it
     # needs no incremental fold the way the streaming one does.
     silent += forced_pass_warnings(final.get("forced") or {})
@@ -246,6 +252,7 @@ def run_workflow(
         # promotion a credential failure returned 200, a blank answer and
         # an empty developer channel (ticket 04).
         + node_failure_warnings(raw_outputs)
+        + node_failure_warnings(nested_outputs)
         + silent,
         suggestion=suggestion,
         redactions=redaction_report(final.get("redactions")),

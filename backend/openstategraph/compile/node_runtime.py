@@ -100,6 +100,12 @@ class RunState(TypedDict, total=False):
     #: reducer because two graders can exhaust in one run — `feedback` is
     #: `LATEST_NONEMPTY` and would keep only the last.
     forced: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: `"<mount node id>/<child node id>"` -> that node's output, for every
+    #: node inside a mounted workflow. Written by `_subgraph`; read by
+    #: `/api/runs`, which has no frame stream to rebuild it from the way
+    #: `streaming.py` does (`every-workflow-green` 16). MERGE, because a
+    #: document may mount several packages and each writes its own keys.
+    nested_outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: guardrail node id -> what its policy did, as `{entity, strategy,
     #: count}` rows. **Counts and entity types, never values** — the whole
     #: point of the channel is that a developer can see "3 emails redacted
@@ -855,6 +861,34 @@ class RuntimeServices:
     #: because a flag and its data can disagree and this pair never should:
     #: an advisor with nothing to suggest is not an advisor.
     advisor_catalog: str = ""
+
+
+def nested_record(node_id: str, child_outputs: Any) -> dict[str, Any]:
+    """A mounted child's per-node outputs, keyed the way the parent sees them.
+
+    `every-workflow-green` 16. The two run doors disagreed about the same run:
+    the streaming one rebuilds this map from the frame stream, and the blocking
+    one had nothing to rebuild it from, because a mount returned only the
+    child's answer. So `silent_node_warnings` and `node_failure_warnings` ran
+    over the inside of a mount on one door and over nothing on the other, and
+    `/api/runs` is the door an adopter embeds.
+
+    The prefix is `"<mount node id>/<child node id>"` — the same string
+    `streaming.py` mints from the frame path. Getting that wrong would replace
+    one disagreement with a subtler one.
+
+    **The empty string is kept, deliberately.** It is exactly what
+    `silent_node_warnings` looks for; dropping falsy values would delete the
+    defect this exists to report.
+
+    Recording this does not breach subagent isolation, which is a rule about
+    what the child *receives* — `_subgraph` states it as "receives a task and
+    reports a result". What the parent writes down about that is the parent's
+    business.
+    """
+    if not isinstance(child_outputs, dict):
+        return {}
+    return {f"{node_id}/{key}": value for key, value in child_outputs.items()}
 
 
 def advisor_context(node_id: str, catalog: str) -> str:
@@ -2975,6 +3009,20 @@ class NodeRuntime:
             # The child's loop cost is part of the parent's story: without
             # this, a Team that revised twice reports attempts=0 (ticket 60).
             update: dict[str, Any] = {"outputs": {node_id: answer}, "answer": answer}
+            # What happened *inside* the mount, so the blocking door can report
+            # on it too — see `nested_record` (`every-workflow-green` 16).
+            inside = nested_record(node_id, final.get("outputs"))
+            if inside:
+                update["nested_outputs"] = inside
+            # And the child's force-passes. Found while verifying 16: the
+            # streaming door reported `Grader "mount-web/grader1" ran out of
+            # attempts…` and the blocking door said nothing, because `forced`
+            # was discarded at this boundary exactly as `outputs` was. Same
+            # prefix, same reason — two doors must not disagree about whether
+            # a mounted grader gave up.
+            forced_inside = nested_record(node_id, final.get("forced"))
+            if forced_inside:
+                update["forced"] = forced_inside
             child_attempts = final.get("attempts")
             if isinstance(child_attempts, int) and child_attempts > 0:
                 update["attempts"] = child_attempts
