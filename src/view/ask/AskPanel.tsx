@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showsThinking } from './settledThinking';
+import { attemptsLine } from './attemptsLine';
 import {
   History,
   Info,
@@ -1718,10 +1719,13 @@ function Answer({ result }: { result: RunResult }) {
           second, fence-free copy of the answer to keep in sync here. */}
       <RichText className="ask__answer" text={result.answer || '_No answer was produced._'} />
 
-      {result.attempts > 1 ? (
-        // Surfaced because a silent retry hides real cost and real quality
-        // signal — two attempts means the grader rejected the first.
-        <p className="ask__meta">{result.attempts} attempts before the grader passed it.</p>
+      {attemptsLine(result) ? (
+        // Surfaced because a silent retry hides real cost — but it no longer
+        // names a grader. `attempts` is incremented by every model-driven
+        // node, so `chained-summarizer`, which has no grader at all, printed
+        // "2 attempts before the grader passed it"
+        // (`every-workflow-green` 21). See `attemptsLine`.
+        <p className="ask__meta">{attemptsLine(result)}</p>
       ) : null}
 
       {decisions.length > 0 ? (
