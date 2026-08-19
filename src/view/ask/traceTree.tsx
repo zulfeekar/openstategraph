@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { RunResult } from '@core/runtime/RuntimeClient';
 import { RichText } from '@view/common/RichText';
+import { traceStepKey } from './traceKeys';
 
 /**
  * The execution trace tree (ticket 63), extracted from AskPanel (ticket 72):
@@ -136,7 +137,10 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
       {trace.map((step, index) =>
         step.spawn ? (
           <div
-            key={`spawn-${step.spawn.label}-${step.taskId ?? index}`}
+            // Same root as the step key below: the turn marker cannot
+            // discriminate across turns, because being identical every turn is
+            // what it is for.
+            key={`spawn-${step.spawn.label}-${traceStepKey(step, index)}`}
             className="ask__activity-row ask__activity-row--spawn"
             title={step.spawn.instruction || undefined}
           >
@@ -148,7 +152,10 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
           </div>
         ) : (
           <details
-            key={`${step.node}-${step.taskId ?? index}`}
+            // Index AND task id — see `traceStepKey`. `??` used the turn
+            // marker as a discriminator, and that marker is identical on every
+            // turn by design, so two turns of one node collided.
+            key={traceStepKey(step, index)}
             className="ask__trace-step"
             open={false}
           >
