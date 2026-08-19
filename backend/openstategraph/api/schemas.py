@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field, WithJsonSchema
+from pydantic import AfterValidator, AliasChoices, BaseModel, Field, WithJsonSchema, model_validator
 
 from openstategraph.api.workflow_store import SLUG_PATTERN, is_slug
 
@@ -425,7 +425,37 @@ class ResumeRequest(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    thread_id: str = Field(min_length=1)
+    #: Accepts `threadId` as well, because that is the spelling the **pause
+    #: frame publishes** (`every-workflow-green` 24).
+    #:
+    #: The streaming frames are camelCase throughout — `activeNode`,
+    #: `pathSlugs`, `taskId` — and request bodies are snake, so this is a
+    #: convention boundary rather than one bad field. The boundary stays; what
+    #: changed is that the request *reads* the published spelling too. An
+    #: adopter copying `threadId` out of the frame the product just handed them
+    #: was met with a 422, on the exact call `/api/runs` tells them to make.
+    #:
+    #: Tolerant in reading, strict in trusting: both spellings together are
+    #: refused unless they agree, because two names for one value that can
+    #: differ is worse than one name that is sometimes wrong.
+    thread_id: str = Field(min_length=1, validation_alias=AliasChoices("thread_id", "threadId"))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_thread_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            snake, camel = data.get("thread_id"), data.get("threadId")
+            if snake is not None and camel is not None:
+                if snake != camel:
+                    raise ValueError(
+                        "thread_id and threadId are two spellings of one value and "
+                        f"disagree here: {snake!r} vs {camel!r}"
+                    )
+                # They agree. Drop the alias so `extra: forbid` — which is what
+                # made this a 422 rather than a silent ignore, and stays — does
+                # not then reject the very field this accepts.
+                data = {k: v for k, v in data.items() if k != "threadId"}
+        return data
     #: No `user_email`, for the reason `RunRequest` records: identity is the
     #: server's to determine, never the caller's to assert.
     session_id: str | None = None
