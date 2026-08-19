@@ -91,6 +91,45 @@ def _envelope(slug: str) -> dict[str, Any]:
     return loaded
 
 
+def document_shape(document: Any) -> str:
+    """What a document actually contains, counted by node family.
+
+    The honest half of `every-workflow-green` 03. `settings.purpose` is prose a
+    person wrote once, and nothing reads it back against the graph — so
+    `workflow-2026` advertised "classify the ticket … grade the reply … let a
+    person decide" on a document with no classifier, no grader and no gate. The
+    owner's decision was to **show the shape beside the claim** rather than
+    police the sentence or generate it away: a reader sees both and judges, and
+    nobody's words are rewritten.
+
+    Counted from each type's **family segment** — the part before the first dot
+    in `route.grader`. That is deliberate rather than lazy: the family is
+    already carried in the type id, so this duplicates no vocabulary table and
+    cannot drift from the editor's own census, which documents the identical
+    fallback ("1 agent · 1 route · 3 tool") for a type it has no word for.
+
+    Empty for a document with no readable nodes. A shape nobody can compute is
+    left unsaid rather than printed as "0 nodes", which would read as a broken
+    package rather than an unreadable one.
+    """
+    nodes = document.get("nodes") if isinstance(document, dict) else None
+    if not isinstance(nodes, list):
+        return ""
+    counts: dict[str, int] = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = node.get("type")
+        if not isinstance(node_type, str) or not node_type:
+            continue
+        family = node_type.split(".", 1)[0]
+        counts[family] = counts.get(family, 0) + 1
+    # Document order, not alphabetical: the reader is scanning for what is
+    # *missing* against a sentence, and the graph's own order is the one they
+    # can follow.
+    return " · ".join(f"{count} {family}" for family, count in counts.items())
+
+
 @dataclass(frozen=True)
 class Example:
     """One shipped example. `pattern` is the only thing `index.json` adds."""
@@ -118,6 +157,15 @@ class Example:
         purpose = self.document().get("settings", {}).get("purpose", "")
         assert isinstance(purpose, str)
         return purpose
+
+    @property
+    def shape(self) -> str:
+        """The census of this example's own document — see `document_shape`.
+
+        Printed beside `summary` by `openstategraph examples list`, so the
+        claim and the contents are read together.
+        """
+        return document_shape(self.document())
 
     def document(self) -> dict[str, Any]:
         """The workflow document, exactly as it ships. No substitution: an

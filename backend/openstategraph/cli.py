@@ -426,6 +426,14 @@ def cmd_examples_list(args: argparse.Namespace) -> int:
         also = f"  [+{extra} mounted]" if extra else ""
         print(f"{example.slug.ljust(width)}  {example.pattern}{also}")
         print(f"{' ' * width}  {example.summary}")
+        # The claim and the contents, together (`every-workflow-green` 03).
+        # `summary` is `settings.purpose` — prose a person wrote once, which
+        # nothing reads back against the graph, and which was found advertising
+        # a classifier, a grader and a human gate on a document that had none.
+        # The owner's decision was to show the shape beside the sentence rather
+        # than police it: the reader sees both and judges.
+        if example.shape:
+            print(f"{' ' * width}  {example.shape}")
     return EXIT_OK
 
 
