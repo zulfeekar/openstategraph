@@ -767,3 +767,10 @@
   font: inherit;
   resize: vertical;
 }
+
+/* The build door (`every-workflow-green` 34). Same shape as a suggestion so a
+   reader recognises it as an offer, and a different left edge because the two
+   do different things: one wires a tool that exists, one opens an interview. */
+.ask__suggestion--build {
+  border-left: 3px solid var(--color-border-strong, var(--color-border));
+}

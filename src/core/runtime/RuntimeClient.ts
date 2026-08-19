@@ -163,6 +163,15 @@ export interface DeveloperChannel {
    */
   readonly suggestion: Readonly<Record<string, unknown>> | null;
   /**
+   * What the run said it needed when **nothing in the library provides it**.
+   *
+   * Separate from `suggestion` because they open different doors: one places a
+   * tool that already exists, the other starts an interview to build a new,
+   * workflow-scoped one (`every-workflow-green` 34). A card that cannot tell
+   * the two apart cannot tell the user which is about to happen.
+   */
+  readonly capabilityGap: string | null;
+  /**
    * What each Guardrail node removed from this run: counts and entity types,
    * **never values**.
    *
@@ -1199,6 +1208,7 @@ function asDeveloperChannel(value: unknown): DeveloperChannel | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const suggestion = record['suggestion'];
+  const capabilityGap = record['capabilityGap'];
   const redactions = record['redactions'];
   return {
     warnings: Array.isArray(record['warnings']) ? record['warnings'].map(asString) : [],
@@ -1206,6 +1216,7 @@ function asDeveloperChannel(value: unknown): DeveloperChannel | null {
       typeof suggestion === 'object' && suggestion !== null && !Array.isArray(suggestion)
         ? (suggestion as Record<string, unknown>)
         : null,
+    capabilityGap: typeof capabilityGap === 'string' ? capabilityGap : null,
     // Copied field by field rather than cast: this is a hand mirror of a
     // Pydantic model, and a row the backend later widens must not arrive here
     // carrying something this type promises it never holds.

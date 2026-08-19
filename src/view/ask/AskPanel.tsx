@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showsThinking } from './settledThinking';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
+import { moduleBrief } from './moduleBrief';
 import { usePaperController } from '@app/WorkbenchContext';
 import {
   History,
@@ -157,6 +158,15 @@ interface ChatTurn {
    * honoured, never that a model merely asked for something.
    */
   readonly suggestion: CapabilitySuggestion | null;
+  /**
+   * What the run needed when **nothing in the library provides it**.
+   *
+   * Its own field beside `suggestion`, never folded into it: one places a tool
+   * that exists, the other opens an interview to build a workflow-scoped one
+   * (`every-workflow-green` 34). A card that cannot tell them apart cannot
+   * tell the developer which is about to happen.
+   */
+  readonly capabilityGap: string | null;
   /** How the developer answered the offer. `null` while it still stands. */
   readonly suggestionDecision: 'accepted' | 'declined' | null;
   /**
@@ -849,6 +859,10 @@ export function AskPanel({
           result,
           pendingApproval: null,
           suggestion: outcomeForCard.kind === 'apply' ? outcomeForCard.suggestion : null,
+          // Only when nothing could be placed — a gap with a tool that fits is
+          // a suggestion, not something to build.
+          capabilityGap:
+            outcomeForCard.kind === 'apply' ? null : (result.developer?.capabilityGap ?? null),
           ...(outcomeForCard.kind === 'duplicate' ? { notice: outcomeForCard.message } : {}),
         });
       } else {
@@ -959,6 +973,7 @@ export function AskPanel({
           pendingApproval: null,
           stopped: null,
           suggestion: null,
+          capabilityGap: null,
           suggestionDecision: null,
           notice: null,
           // The document this run is about (ticket 25) — the same value the
@@ -1336,6 +1351,22 @@ export function AskPanel({
     [updateTurn],
   );
 
+  /**
+   * Open the build interview, by putting its first message where the developer
+   * can read and edit it (`every-workflow-green` 34).
+   *
+   * Seeding rather than sending: the brief asks four questions about *their*
+   * business logic, and they know it. Sending it for them would start an
+   * interview with an answer they never gave.
+   */
+  const startBuild = useCallback(
+    (gap: string) => {
+      setQuestion(moduleBrief(gap, currentWorkflowSlug()));
+      scrollToEnd();
+    },
+    [scrollToEnd],
+  );
+
   return (
     <Panel side="right" className="ask" style={{ width: 'var(--layout-inspector-width)' }}>
       <PanelHeader
@@ -1413,6 +1444,7 @@ export function AskPanel({
               onRespond={respondToApproval}
               onApplySuggestion={applySuggestion}
               onDeclineSuggestion={declineSuggestion}
+              onStartBuild={startBuild}
             />
           ))}
         </div>
@@ -1464,11 +1496,14 @@ function Turn({
   onRespond,
   onApplySuggestion,
   onDeclineSuggestion,
+  onStartBuild,
 }: {
   turn: ChatTurn;
   onRespond: (turnId: string, decision: 'approve' | 'reject', note?: string) => void;
   onApplySuggestion: (turnId: string, suggestion: CapabilitySuggestion) => void;
   onDeclineSuggestion: (turnId: string) => void;
+  /** Seeds the composer with the brief that opens the build interview. */
+  onStartBuild: (gap: string) => void;
 }) {
   // Per turn, and ephemeral: a run's timeline is a fact about that run, and
   // nothing about it deserves to be persisted.
@@ -1571,6 +1606,10 @@ function Turn({
       {/* Muted, with no error styling and no warning glyph: the developer
           asked for this, so presenting it as a failure would be the panel
           disagreeing with them. */}
+      {turn.capabilityGap !== null && !turn.suggestion ? (
+        <CapabilityGapCard gap={turn.capabilityGap} onStart={() => onStartBuild(turn.capabilityGap ?? '')} />
+      ) : null}
+
       {turn.stopped ? (
         <p className="ask__stopped">
           {turn.stopped === 'paused'
@@ -1616,6 +1655,37 @@ function Turn({
  * is part of what happened in this turn, and a thread that edits its own
  * history is a thread you cannot trust.
  */
+/**
+ * The other door: nothing in the library does this, so build one.
+ *
+ * A gap with a tool that fits is a `SuggestionCard` — one click and it is
+ * wired. A gap with **no** tool was a dead end until now: an honest refusal
+ * and nowhere to go (`every-workflow-green` 34).
+ *
+ * The button seeds the composer rather than starting a build, and that is
+ * deliberate. A button that promised to write code and did not would be worse
+ * than no card; seeding the chat is a real action the product can honour
+ * today, the developer can edit the brief before sending, and the interview
+ * happens where they are already looking.
+ */
+function CapabilityGapCard({ gap, onStart }: { gap: string; onStart: () => void }) {
+  return (
+    <div className="ask__suggestion ask__suggestion--build">
+      <p className="ask__suggestion-headline">
+        <Icon glyph={Lightbulb} size="sm" />
+        <span>
+          <strong>Nothing here does this.</strong> {gap}
+        </span>
+      </p>
+      <div className="ask__suggestion-actions">
+        <Button variant="secondary" onClick={onStart}>
+          Build one for this workflow
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SuggestionCard({
   suggestion,
   decision,
