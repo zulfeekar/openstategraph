@@ -20,8 +20,22 @@ describe('moduleBrief', () => {
   });
 
   it('scopes it to this workflow and rules out the shipped package', () => {
-    expect(brief).toContain('workflows/ops-desk/tools/');
+    expect(brief).toContain('ops-desk');
     expect(brief).toMatch(/never in the installed package/i);
+  });
+
+  it('does not hardcode the workflows directory', () => {
+    // `workflows/` is only the **convention**. The root is resolved per call
+    // from five sources — `OPENSTATEGRAPH_WORKFLOWS_ROOT`, `workflows_dir:` in
+    // `openstategraph.yaml`, the checkout, then `./workflows` — so a brief
+    // naming a literal `workflows/…` path is wrong for anyone who configured
+    // one, and wrong in an installed wheel, which is exactly the failure
+    // `workflows_root.py` was written to end.
+    //
+    // The package's own folder is the anchor that holds everywhere: `tools/`
+    // sits beside its `workflow.json`, whatever the root is called.
+    expect(brief).not.toMatch(/\bworkflows\//);
+    expect(brief).toMatch(/beside its workflow\.json/i);
   });
 
   it('requires the ToolRuntime seam rather than reaching around it', () => {

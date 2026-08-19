@@ -16,8 +16,19 @@
  * The generated module has to **inherit the architecture rather than sit
  * beside it**, which is the whole point of asking rather than guessing:
  *
- * - it lands in `workflows/<slug>/tools/` — the package the user owns — and
- *   **never** in the installed distribution, which is the framework we ship;
+ * - it lands in the package's own `tools/` folder — beside its
+ *   `workflow.json`, in the package the user owns — and **never** in the
+ *   installed distribution, which is the framework we ship.
+ *
+ *   Said that way on purpose. `workflows/` is only the **convention**: the
+ *   root is resolved per call from `OPENSTATEGRAPH_WORKFLOWS_ROOT`, then
+ *   `workflows_dir:` in `openstategraph.yaml`, then the checkout, then
+ *   `./workflows` — so a brief naming a literal `workflows/…` path is wrong
+ *   for anyone who configured one, and wrong inside an installed wheel. That
+ *   is the exact failure `workflows_root.py` exists to end, where
+ *   `platform_list_workflows` answered "No workflows exist yet" with the
+ *   adopter's workflows sitting right there. "Beside its `workflow.json`" is
+ *   true whatever the root is called;
  * - it takes state, context and memory through `ToolRuntime`, not by reaching
  *   around that seam. `.scratch/the-atom-has-no-context/` exists because "what
  *   is in the context when I extend?" had no answer, and a generated module
@@ -46,7 +57,8 @@ export function moduleBrief(gap: string, slug: string | null | undefined): strin
     '- a name, unique here and close to the business logic',
     '',
     'Then build it to this shape:',
-    `- it lives in workflows/${where}/tools/ — never in the installed package`,
+    `- it lives in the ${where} package's own tools/ folder, beside its `
+      + `workflow.json — never in the installed package`,
     '- it reads state, context and memory through ToolRuntime, not around it',
     '- it is a concrete leaf on the existing tool ladder',
     '- it declares its card fields and its data keys',
