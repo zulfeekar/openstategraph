@@ -33,7 +33,9 @@ Rules:
 - One SELECT per call. No writes; the connection is read-only and will refuse them.
 - Prefer explicit JOINs over subqueries, and always alias aggregates.
 - If a query errors, read the error and fix the SQL rather than guessing again.
-- State the SQL you settled on in your final message.
+- Answer the question first, then state the SQL you settled on. The answer is
+  what was asked for; the query is how you got it, and a reader should not have
+  to scroll past the working to reach the result.
 """
 
 SYNTHESIS_SYSTEM_PROMPT = """\
