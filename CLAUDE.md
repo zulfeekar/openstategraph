@@ -22,6 +22,16 @@ disagree: a trailer whose ticket still says open, a ticket whose file carries a
 resolution its header does not, a header citing a commit this repository does
 not have. Run it before trusting any statement about what is left.
 
+**The session that resolves a ticket has a fixed shape, and it is written down
+in `skills/ticket-loop/`** — orient from the newest `.scratch/HANDOFF-<date>.md`
+and the ledger, reproduce in the browser, TDD, reproduce again, commit with the
+trailer, close the ticket in header *and* body, update the docs, and **write
+today's handoff**. The last step is the one that gets dropped: a ticket closed
+without it is a ticket the next session does not know is closed. Its date rule
+matters too — the handoff is `.scratch/HANDOFF-<YYYY-MM-DD>.md` for *today*, so
+when the date has rolled over you write a new file and carry the live parts
+forward rather than editing yesterday's.
+
 **Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
 
 **Before building a new module — a tool atom, a node family, a guard, a memory
