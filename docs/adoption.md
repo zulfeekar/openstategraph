@@ -385,7 +385,11 @@ A **failed run** is one rule, in one place (`cli.run_exit_code`): the run
 produced no answer *and* something went wrong — a step failed, or a capability
 did not resolve. Both halves, deliberately. A workflow that answered despite a
 missing optional tool degraded rather than failed, and a workflow that legally
-answers with nothing did not fail either. `validate` fails on any finding,
+answers with nothing did not fail either. *"Something went wrong"* means
+`RunResult.failures`, **not** `.warnings`: a run's warnings also carry reports
+about how the answer was reached — a node that produced nothing, a grader that
+ran out of attempts, a `revise` verdict with no edge — and those are printed
+on stderr without ever changing the exit code. `validate` fails on any finding,
 which since production-ready 53 includes a **mount naming a package that is not
 in the workflows root** — checked recursively, so a typo two packages down is
 caught before the run is.
@@ -529,10 +533,17 @@ hand-seeded state:
 | `.answer` | the text — identical to the object itself |
 | `.decisions` | node id → the branch that router or grader chose |
 | `.outputs` | node id → that node's own output |
-| `.warnings` | the workflow's unresolved capabilities, carried along |
+| `.warnings` | everything worth knowing about this run: the workflow's unresolved capabilities, the steps that broke, and how the answer was reached — a node that produced nothing, a grader that ran out of attempts, a `revise` verdict with no edge |
+| `.failures` | the half of `.warnings` that is a claim the run **failed**. This is the one to gate a script on; `openstategraph run`'s exit code reads it |
 | `.attempts` | how many grader revise laps the run took |
 
-> At 1.0 this becomes a plain dataclass with `.answer`. Build on the five
+**The split is the point, and it is why `.warnings` is not what a script
+should test.** A node that produced nothing is a report about *how* the answer
+was reached, not a claim the run failed — a workflow may legally answer with
+nothing. `if result.warnings:` is the reader's question ("is there anything I
+should look at?"); `if result.failures:` is the script's ("did this break?").
+
+> At 1.0 this becomes a plain dataclass with `.answer`. Build on the six
 > attributes above, not on the string methods it also happens to have.
 
 ### Calling a workflow from an agent you already have

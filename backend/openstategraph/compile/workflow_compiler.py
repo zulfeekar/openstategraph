@@ -23,6 +23,7 @@ cycle, which can never terminate.
 
 from __future__ import annotations
 
+import inspect
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Mapping
@@ -247,6 +248,35 @@ def run_health(
             + unrouted_decision_warnings(lost)
         ),
     )
+
+
+#: The state keys a finished run's health is assembled from — derived from
+#: `run_health` itself so the two can never disagree. See
+#: `run_health_from_state`.
+_HEALTH_SOURCES: tuple[str, ...] = tuple(inspect.signature(run_health).parameters)
+
+
+def run_health_from_state(state: Any) -> RunHealth:
+    """`run_health`, for a door that holds the finished state.
+
+    Every source of run health is a parameter of `run_health` named for the
+    state key it is read from, and this reads them **off the signature** rather
+    than listing them. That is the whole point: the sources went missing from
+    the library door one at a time, once per source added here
+    (`workflow-gallery` 49), because each door re-listed them. A door that does
+    not list cannot fall behind.
+
+    So the naming convention is load-bearing — a new source must arrive as a
+    `run_health` parameter whose name is its state key, and
+    `test_the_library_door_reads_the_whole_health_report.py` fails if any door
+    stops reading one.
+
+    Tolerant about its input for the same reason `run_health` is: `/api/runs`
+    reads finished state, `load_workflow` reads what `invoke()` returned, and
+    either can be handed something that is not a mapping at all.
+    """
+    source = state if hasattr(state, "get") else {}
+    return run_health(**{name: source.get(name) for name in _HEALTH_SOURCES})
 
 
 def used_no_tools(tool_use: Any) -> bool:

@@ -202,6 +202,17 @@ def run_exit_code(result: "RunResult") -> int:
       leaves a marker in `outputs`; a mount that could not be loaded leaves
       none — it is a **compile** finding, and it arrives on `warnings`, which
       this function was not reading.
+
+    **It reads `result.failures`, not `result.warnings`, and that is the whole
+    reason the split exists.** `warnings` became the run's full health report
+    when the library door was joined to `run_health` (`workflow-gallery` 49),
+    and that report includes a node that produced nothing — which
+    `silent_node_warnings` says must never reach an exit code: *a silent node
+    is a report about how the answer was reached, not a claim that the run
+    failed*. Gating on `warnings` would have made every legally-empty answer
+    with a quiet node exit 1. `failures` carries both of the things this
+    function ever wanted, so `outputs` is now belt to its braces rather than
+    the only strap.
     """
     from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED
     from openstategraph.compile.workflow_compiler import node_failure_warnings
@@ -209,7 +220,11 @@ def run_exit_code(result: "RunResult") -> int:
     answer = str(result).strip()
     if answer and answer != NO_ANSWER_PRODUCED:
         return EXIT_OK
-    went_wrong = bool(node_failure_warnings(result.outputs)) or bool(result.warnings)
+    # `outputs` is still read directly, even though `failures` already carries
+    # what is in it, because a `RunResult` can be built by hand — a resumed
+    # run, a test — and a failure marker sitting in `outputs` is a failed run
+    # whoever assembled the object.
+    went_wrong = bool(node_failure_warnings(result.outputs)) or bool(result.failures)
     return EXIT_FAILURE if went_wrong else EXIT_OK
 
 

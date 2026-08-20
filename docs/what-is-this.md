@@ -65,7 +65,7 @@ an engine.
 | `pip install` + provider extras | four-dependency core; `[anthropic]` `[openai]` `[ollama]` `[deep]` `[sqlite]` `[server]` `[mcp]` `[postgres]` `[bastion]` `[all]` |
 | one entry object | `from openstategraph import load_workflow` |
 | a CLI | `openstategraph init · new · run · eval · validate · graph · examples · threads · knowledge · providers · env-example · serve · mcp` |
-| a rich result object, not a string | `RunResult` — `.answer`, `.decisions`, `.outputs`, `.warnings`, `.attempts` |
+| a rich result object, not a string | `RunResult` — `.answer`, `.decisions`, `.outputs`, `.warnings`, `.failures`, `.attempts` |
 | markdown domain knowledge as a first-class input | `knowledge/*.md` in the package, `--knowledge-dir` to point elsewhere |
 | an optional drop-in for a team already on `create_agent` | `workflow.as_tool(...)` |
 

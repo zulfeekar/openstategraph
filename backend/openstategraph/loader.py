@@ -202,22 +202,32 @@ class CompiledWorkflow:
                 "workflow_slug": self.slug or "",
             },
         }
+        from openstategraph.compile.workflow_compiler import run_health_from_state
+
         started = time.monotonic()
         final = self.graph.invoke(
             {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
             config,
         )
         outputs = final.get("outputs") or {}
+        # The third door onto `run_health`, and the one that had been reading
+        # a third of it (`workflow-gallery` 49). Derived from the assembly
+        # rather than re-listed here: this door fell behind three times, once
+        # per source added to `run_health`, and each time by re-listing.
+        health = run_health_from_state(final)
         result = RunResult(
             str(final.get("answer") or ""),
             decisions=final.get("decisions") or {},
             outputs=outputs,
-            # A node that failed after retries writes its failure into
-            # `outputs` so downstream nodes still read *something*. Without
-            # promoting it here, the diagnosis stayed in a per-node output map
-            # and `openstategraph run` printed an empty line and exited 0 — a
-            # new user's first run after `new`, silently.
-            warnings=_warnings_with_node_failures(self.warnings, outputs),
+            # A warning about how the workflow was *built* explains one about
+            # how it ran, so compile findings go first; a claim the run failed
+            # goes before a report about how the answer was reached.
+            warnings=[*self.warnings, *health.failures, *health.silent],
+            # Only the failure half — a silent node, a forced pass and an
+            # unrouted verdict must never reach an exit code. A compile
+            # finding does: a mount that could not be loaded leaves no marker
+            # in `outputs` and is still a broken run (`production-ready` 53).
+            failures=[*self.warnings, *health.failures],
             attempts=int(final.get("attempts") or 0),
         )
         self._append_trace(question, result, time.monotonic() - started)
@@ -330,16 +340,13 @@ class CompiledWorkflow:
 def _warnings_with_node_failures(
     warnings: Sequence[str], outputs: Mapping[str, Any]
 ) -> list[str]:
-    """Compile-time findings, then what actually went wrong during the run.
+    """Compile findings, then the steps that broke — the **failure** half.
 
-    The third door onto one behaviour. `api/registries.runtime_warnings` does
-    this for `/api/runs` and `/api/runs/stream`; this is the seam an adopter
-    embeds (`load_workflow`) and the one the CLI uses, and it was reporting
-    only the compile-time half (providers-and-credentials ticket 04 fixed the
-    other two and did not reach here).
-
-    Order matters to a reader: a warning about how the workflow was *built*
-    explains one about how it *ran*, so it goes first.
+    Superseded as the library door's report by `run_health_from_state`, which
+    carries all four sources rather than this one (`workflow-gallery` 49).
+    Kept because this is exactly `RunResult.failures` for a caller that holds
+    outputs and no state, and because deleting a name three tests and the
+    ticket record all cite would lose the chain back.
     """
     from openstategraph.compile.workflow_compiler import node_failure_warnings
 

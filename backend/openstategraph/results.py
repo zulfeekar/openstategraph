@@ -49,10 +49,24 @@ class RunResult(str):
     decisions: dict[str, str]
     #: node id -> that node's own textual output.
     outputs: dict[str, str]
-    #: Capabilities the package named but the process could not resolve,
-    #: carried through from `CompiledWorkflow.warnings` so a caller checking
-    #: one run does not have to hold on to the workflow object as well.
+    #: Everything worth telling a reader about this run: what the package
+    #: could not resolve when it compiled, what broke while it ran, and what
+    #: it is worth knowing about *how* the answer was reached — a node that
+    #: produced nothing, a grader that ran out of attempts, a revise verdict
+    #: with no edge. The same report the HTTP doors carry (`run_health`).
     warnings: list[str]
+    #: The half of `warnings` that is a claim the run **failed** — and the
+    #: only half a script may gate on. `warnings` is the report; this is the
+    #: verdict, and `cli.run_exit_code` reads this one.
+    #:
+    #: The split exists because folding a run's whole health onto `warnings`
+    #: would have flipped `openstategraph run`'s exit code for every run with
+    #: a silent node, which `silent_node_warnings` forbids in as many words:
+    #: a silent node is a report about how the answer was reached, not a claim
+    #: that the run failed, and the two must not share a channel a script
+    #: gates on (`workflow-gallery` 49). `RunHealth` has had this split all
+    #: along; this is the same split at the door.
+    failures: list[str]
     #: How many grader revise laps the run took. 0 for a graph with no loop.
     attempts: int
 
@@ -63,6 +77,7 @@ class RunResult(str):
         decisions: dict[str, str] | None = None,
         outputs: dict[str, str] | None = None,
         warnings: list[str] | None = None,
+        failures: list[str] | None = None,
         attempts: int = 0,
     ) -> "RunResult":
         self = super().__new__(cls, answer)
@@ -72,6 +87,10 @@ class RunResult(str):
         self.decisions = dict(decisions or {})
         self.outputs = dict(outputs or {})
         self.warnings = list(warnings or [])
+        # `None` is not "no failures" — it is a caller that predates the
+        # split, for whom `warnings` *was* the failure channel. Defaulting it
+        # to empty would silently turn every such run into a success.
+        self.failures = list(self.warnings if failures is None else failures)
         self.attempts = int(attempts)
         return self
 
@@ -84,14 +103,21 @@ class RunResult(str):
         """
         return (
             _rebuild,
-            (str(self), self.decisions, self.outputs, self.warnings, self.attempts),
+            (
+                str(self),
+                self.decisions,
+                self.outputs,
+                self.warnings,
+                self.attempts,
+                self.failures,
+            ),
         )
 
     def __repr__(self) -> str:
         return (
             f"RunResult({str.__repr__(self)}, decisions={self.decisions!r}, "
             f"outputs={self.outputs!r}, warnings={self.warnings!r}, "
-            f"attempts={self.attempts!r})"
+            f"failures={self.failures!r}, attempts={self.attempts!r})"
         )
 
 
@@ -101,13 +127,20 @@ def _rebuild(
     outputs: dict[str, str],
     warnings: list[str],
     attempts: int,
+    failures: list[str] | None = None,
 ) -> RunResult:
-    """Module-level so `pickle` can find it by name."""
+    """Module-level so `pickle` can find it by name.
+
+    `failures` is last and optional so a `RunResult` pickled by an older
+    version still unpickles — a five-tuple written before the split lands on
+    the same back-compat path as a caller that never passed it.
+    """
     return RunResult(
         answer,
         decisions=decisions,
         outputs=outputs,
         warnings=warnings,
+        failures=failures,
         attempts=attempts,
     )
 

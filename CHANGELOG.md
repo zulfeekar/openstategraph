@@ -3,6 +3,32 @@
 ## Unreleased
 
 ### Fixed
+- **`openstategraph run` and `load_workflow` now report the whole of a run's
+  health, not a third of it.** `run_health` calls itself the one place a run's
+  health is assembled "for both doors"; there are three, and the third —
+  `CompiledWorkflow.ask()`, what an adopter embeds and what the CLI prints —
+  folded in node failures only. A grader that ran out of attempts and published
+  an answer it had rejected, a node that ran and produced nothing, and a grader
+  whose `revise` verdict reached no wired edge were all reported over HTTP and
+  silent from the library and the CLI. Reproduced live: the HTTP door said
+  *Grader "grader1" ran out of attempts and published an answer it had
+  rejected*, the library door said `[]`, and the CLI printed nothing.
+
+  The sources are no longer listed at each door. `run_health_from_state(state)`
+  derives them from `run_health`'s own signature, so a fourth cannot go missing
+  the way the first three did — once per source added.
+
+### Added
+- **`RunResult.failures`** — the half of `RunResult.warnings` that is a claim
+  the run *failed*, and the only half a script may gate on. `warnings` is now
+  the full report (it grew the three sources above); `failures` is the verdict,
+  and `cli.run_exit_code` reads it. Without the split, folding a run's health
+  onto one list would have made every legally-empty answer with a quiet node
+  exit 1 — which `silent_node_warnings` forbids in as many words. `warnings`
+  keeps its type and its meaning for a reader; a `RunResult` built without
+  `failures` treats `warnings` as the failure channel, exactly as before.
+
+### Fixed
 - **The "build one for this workflow" brief no longer names a seam that does
   not exist.** When a run finds nothing in the library for what it was asked,
   the developer channel offers a door, and pressing it seeds the chat with the

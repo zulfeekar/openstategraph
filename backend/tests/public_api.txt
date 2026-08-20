@@ -4,7 +4,7 @@ openstategraph.DocumentError = class(OpenStateGraphError,ValueError)(...)
 openstategraph.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
 openstategraph.OpenStateGraphError = class(Exception)(...)
 openstategraph.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
-openstategraph.RunResult = class(str)(answer: 'str' = '', *, decisions: 'dict[str, str] | None' = None, outputs: 'dict[str, str] | None' = None, warnings: 'list[str] | None' = None, attempts: 'int' = 0) -> "'RunResult'"
+openstategraph.RunResult = class(str)(answer: 'str' = '', *, decisions: 'dict[str, str] | None' = None, outputs: 'dict[str, str] | None' = None, warnings: 'list[str] | None' = None, failures: 'list[str] | None' = None, attempts: 'int' = 0) -> "'RunResult'"
 openstategraph.SchemaVersionError = class(DocumentError)(...)
 openstategraph.WorkflowInfo = dataclass(object) fields(slug,name,published,node_count,edge_count,saved_at,error)
 openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
