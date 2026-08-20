@@ -764,6 +764,47 @@ def _is_terminal(frame: str) -> bool:
     return any(frame.startswith(f"event: {name}\n") for name in TERMINAL_EVENTS)
 
 
+#: The accumulators the terminal frame is built from that are **also** state
+#: channels — so a resume can seed them from what the thread already holds
+#: (`workflow-gallery` 25). State key -> the local name it seeds.
+#:
+#: `nested_decisions` is deliberately absent: it has no state channel to read.
+#: `_subgraph` records `nested_outputs` into state because `/api/runs` has no
+#: frames to rebuild it from (`every-workflow-green` 16) and never did the same
+#: for decisions, so there is nothing here to seed it with. Recorded as a known
+#: gap rather than implied by a list that looks complete.
+RESUME_SEEDED_KEYS: tuple[str, ...] = (
+    "decisions",
+    "outputs",
+    "nested_outputs",
+    "answer",
+    "attempts",
+    "forced",
+    "unrouted",
+    "unmet_tools",
+    "tool_use",
+    "redactions",
+)
+
+
+def _resumes_a_paused_run(graph_input: Any) -> bool:
+    """Whether this call picks a thread back up rather than starting one.
+
+    A resume arrives as LangGraph's `Command(resume=...)`; a fresh run arrives
+    as the initial state dict. Asked by duck-typing rather than `isinstance`
+    because this fold is also driven by scripted stubs that pass neither.
+
+    Gated on the resume, and this is the load-bearing choice. Seeding *every*
+    call from the checkpoint would fold a previous **turn** of the same
+    conversation into a fresh run's terminal frame — a thread is the
+    conversation, not the approval handle, and second turns into one thread are
+    ordinary. A resume is the only call that is the same run.
+    """
+    if isinstance(graph_input, dict):
+        return False
+    return getattr(graph_input, "resume", None) is not None
+
+
 def _stream_run(
     graph: Any,
     graph_input: Any,
@@ -1004,6 +1045,55 @@ def _run_frames(
     #: the developer reading it wants the total, not a tree.
     redactions: dict[str, Any] = {}
     attempts = 0
+
+    # **The terminal frame reports the run, not this segment** — ticket 25.
+    #
+    # Everything above is filled from the `update` frames of *this* call, and a
+    # resume is a new call: a run that paused for an approval reported
+    # `attempts: 0` with the drafting node's output missing from `outputs`,
+    # while `/api/runs` — which builds its `RunResponse` from `invoke`'s final
+    # state — reported both. Two doors, one run, different answers.
+    #
+    # The streaming *frames* stay per-segment on purpose: a client watching a
+    # resumed run must not be re-sent the first half's tokens. It is only the
+    # accumulators the `done` frame is assembled from that are seeded, from the
+    # checkpointed state — the same state `openstategraph threads show` reads.
+    # Seeded *before* the fold, so this call's own frames still win where they
+    # overlap.
+    if _resumes_a_paused_run(graph_input):
+        prior = getattr(graph.get_state(config), "values", None) or {}
+        if hasattr(prior, "get"):
+            into: dict[str, Any] = {
+                "decisions": decisions,
+                "outputs": outputs,
+                "nested_outputs": nested_outputs,
+                "forced": forced,
+                "unrouted": unrouted,
+                "unmet_tools": unmet_tools,
+                "tool_use": tool_use,
+                "redactions": redactions,
+            }
+            for state_key, target in into.items():
+                held = prior.get(state_key)
+                if not isinstance(held, dict):
+                    continue
+                # Each map is seeded in the shape the fold gives it, never a
+                # third shape: the two output maps are cleaned (a value that is
+                # clean on one path and not the other is the leak that seam
+                # exists to remove), the label maps are stringified as the fold
+                # stringifies them, and the record maps are carried whole.
+                if state_key.endswith("outputs"):
+                    coerce = lambda v: str(_clean_output(str(v)))  # noqa: E731
+                elif state_key in ("decisions", "forced", "unrouted"):
+                    coerce = str
+                else:
+                    coerce = lambda v: v  # noqa: E731
+                target.update(
+                    {str(k): coerce(v) for k, v in held.items() if k != RESET}
+                )
+            answer = keep_latest_nonempty(answer, str(prior.get("answer") or ""))
+            with suppress(TypeError, ValueError):
+                attempts = max(attempts, int(prior.get("attempts") or 0))
     # One guard per streamed text — per node, per message kind — because each
     # is its own sequence of chunks and a shared tail would splice two
     # unrelated streams together. See `ProseGuard`: the settled answer is

@@ -685,8 +685,22 @@ event: token
 data: {"node": "out1", "namespace": [], "content": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
 
 event: done
-data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"approve1": "…", "out1": "…"}, "nested": {}, "attempts": 0, "mermaid": "graph TD;…"}
+data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"in1": "…", "agent1": "…", "approve1": "…", "out1": "…"}, "nested": {}, "attempts": 1, "mermaid": "graph TD;…"}
 ```
+
+**The `done` frame of a resumed run reports the whole run, not the segment you
+just watched.** `in1` and `agent1` ran before the pause and are in `outputs`
+anyway, and `attempts` counts the agent invocations of both halves — the same
+values `GET /api/threads/{id}` and `openstategraph threads show` report for
+that thread, and the same values `POST /api/runs` would return for the run.
+
+The `update` and `token` frames above are the opposite, and deliberately: they
+are per-segment, because a client watching a resume is watching this half
+happen and must not be re-sent the first half's tokens. The rule is that a
+*progress* frame reports the segment and the *terminal* frame reports the run
+(`workflow-gallery` 25 — until it was fixed, a resumed approval reported
+`attempts: 0` and an `outputs` map with the drafting node missing from it,
+while `POST /api/runs` reported both).
 
 ### 6 — The compiled diagram: `GET /api/workflows/{slug}/graph`
 

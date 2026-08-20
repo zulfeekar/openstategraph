@@ -76,19 +76,6 @@ the next step."}`.** The drafter redrafts and the run pauses again:
 There is no `edit` outcome — a person may approve or reject with words, never
 hand back corrected text. That is organisms-first-class 27.
 
-## The terminal frame of a resumed run under-reports
-
-The `done` frame above carried `attempts: 0` and an `outputs` map holding only
-`gate1` and `out1`. The checkpointer, asked the same question, says `attempts:
-2` and holds every node's output:
-
-```
-openstategraph threads show smoke-approval-1 --workflows-root workflows
-```
-
-The resumed stream accumulates its terminal frame from the frames of *that
-segment*, so everything before the pause is missing from it. Gallery ticket 25.
-
 ## It resists both fixture formats, and the reason is the interrupt
 
 `tests/` here asserts the **document** — the cycle, the ports, the pin — the
