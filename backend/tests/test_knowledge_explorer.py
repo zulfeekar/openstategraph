@@ -104,13 +104,24 @@ class TestQualification:
 
 
 class TestWriteSeam:
-    """Invariant 1: the agent's one write capability is the store seam."""
+    """Invariant 1: the agent's one write capability is the store seam.
+
+    Every tool here is built with a provenance, because since
+    `production-ready` 12 a write with none is refused before any of these
+    guards is reached — see `TestGrounding`. `GROUNDED` stands for "this
+    exploration called something", which is the precondition each of these
+    cases is varying *around*.
+    """
+
+    GROUNDED = staticmethod(lambda: ("tool web_search",))
 
     def test_write_topic_writes_a_marked_doc_with_the_explorer_as_owner(
         self, tmp_path: Path
     ) -> None:
         report = ExplorationReport()
-        tool = WriteTopicTool(ExplorerKnowledgeBuilder(), tmp_path / "flow", report)
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, provenance=self.GROUNDED
+        )
         result = tool.run(topic="Weather API", content="weather-api — how to call it.")
         assert result.ok
         text = (tmp_path / "flow" / "knowledge" / "weather-api.md").read_text()
@@ -161,7 +172,9 @@ class TestWriteSeam:
         knowledge.mkdir(parents=True)
         (knowledge / "orders.md").write_text(f"{GENERATED_MARKER} source=sql -->\nsql's doc\n")
         report = ExplorationReport()
-        tool = WriteTopicTool(ExplorerKnowledgeBuilder(), tmp_path / "flow", report)
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, provenance=self.GROUNDED
+        )
         result = tool.run(topic="orders", content="orders — mine now.")
         assert not result.ok and "owned by the 'sql' builder" in str(result.error)
         assert report.collisions and "sql" in report.collisions[0]
@@ -172,7 +185,9 @@ class TestWriteSeam:
         knowledge.mkdir(parents=True)
         (knowledge / "wisdom.md").write_text("# wisdom\nhand-written\n")
         report = ExplorationReport()
-        tool = WriteTopicTool(ExplorerKnowledgeBuilder(), tmp_path / "flow", report)
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, provenance=self.GROUNDED
+        )
         result = tool.run(topic="wisdom", content="wisdom — overwrite attempt.")
         assert not result.ok
         assert report.skipped == ["wisdom"]
@@ -181,7 +196,8 @@ class TestWriteSeam:
     def test_the_topic_budget_is_honored(self, tmp_path: Path) -> None:
         report = ExplorationReport()
         tool = WriteTopicTool(
-            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, topic_cap=2
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, topic_cap=2,
+            provenance=self.GROUNDED,
         )
         assert tool.run(topic="one", content="one — a.").ok
         assert tool.run(topic="two", content="two — b.").ok
@@ -192,7 +208,9 @@ class TestWriteSeam:
 
     def test_a_traversal_shaped_topic_cannot_escape_the_jail(self, tmp_path: Path) -> None:
         report = ExplorationReport()
-        tool = WriteTopicTool(ExplorerKnowledgeBuilder(), tmp_path / "flow", report)
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report, provenance=self.GROUNDED
+        )
         result = tool.run(topic="../../evil", content="evil — nope.")
         # normalization turns separators into hyphens; the write stays inside
         assert result.ok
@@ -216,10 +234,28 @@ class TestPromptComposition:
 
 
 class TestScriptedLoop:
-    """The real `create_agent` loop, driven by a scripted tool-calling model."""
+    """The real `create_agent` loop, driven by a scripted tool-calling model.
+
+    Both scripts here **call the study tool before writing**, and until
+    `production-ready` 12 neither did — they wrote a topic having called
+    nothing, and asserted the resulting doc carried a provenance footer naming
+    `web_search`. That is the fabricated-document shape the ticket is about,
+    pinned as correct behaviour by the tests that were supposed to catch it.
+
+    The search call is allowed to fail: `on_call` records the attempt either
+    way, so these stay deterministic offline. What they pin is the loop and the
+    report, not what a search engine says today.
+    """
 
     def _document(self) -> dict[str, Any]:
         return {"nodes": [{"id": "w", "type": "tool.web-search", "data": {}}], "edges": []}
+
+    def _looked(self) -> AIMessage:
+        """The call that earns the write."""
+        return AIMessage(
+            content="",
+            tool_calls=[{"name": "web_search", "args": {"query": "the domain"}, "id": "c-0"}],
+        )
 
     def test_a_scripted_exploration_writes_topics_and_reports_the_uncovered(
         self, tmp_path: Path
@@ -227,6 +263,7 @@ class TestScriptedLoop:
         package = _save_workflow(tmp_path, "api-flow", self._document())
         model = ToolCallingScriptedModel(
             [
+                self._looked(),
                 AIMessage(
                     content="",
                     tool_calls=[
@@ -254,6 +291,7 @@ class TestScriptedLoop:
         package = _save_workflow(tmp_path, "api-flow", self._document())
         model = ToolCallingScriptedModel(
             [
+                self._looked(),
                 AIMessage(
                     content="",
                     tool_calls=[
@@ -283,6 +321,138 @@ class TestScriptedLoop:
         )
         assert report.written == []
         assert report.warnings and "provider down" in report.warnings[0]
+
+
+class TestGrounding:
+    """production-ready ticket 12 — the class behind ticket 10's instance.
+
+    Ticket 10 caught one mechanical shape: a topic *named after* a tool. The
+    document that started it had a wider defect, and it is the project's stated
+    worst failure mode — *"a wrong sentence in `knowledge/` is not a
+    hallucination any more, it is a fact the model was handed."* The explorer
+    could write a document **without calling anything at all**, and the
+    provenance footer that made the fabrication detectable said `web_search`
+    anyway, because the explorer's provenance was the list of tools it was
+    *offered*, computed before the agent ran.
+
+    So there are two rules here and they are one seam:
+
+    - provenance is **what was called**, never what was available;
+    - a topic with no provenance is refused, because it is by definition a
+      topic that could have been written without looking at anything.
+
+    The second is the ticket's own operational test for parametric knowledge.
+    """
+
+    def _document(self, *types: str) -> dict[str, Any]:
+        return {
+            "nodes": [{"id": f"n{i}", "type": t, "data": {}} for i, t in enumerate(types)],
+            "edges": [],
+        }
+
+    def test_a_topic_with_nothing_behind_it_is_refused(self, tmp_path: Path) -> None:
+        report = ExplorationReport()
+        tool = WriteTopicTool(ExplorerKnowledgeBuilder(), tmp_path / "flow", report)
+        result = tool.run(topic="uk-vat-rates", content="uk-vat-rates — 20% standard.")
+        assert not result.ok
+        assert "call" in str(result.error).lower()
+        assert report.written == []
+        assert not (tmp_path / "flow" / "knowledge" / "uk-vat-rates.md").exists()
+
+    def test_one_call_is_enough_to_earn_the_write(self, tmp_path: Path) -> None:
+        """The rule is grounding, not caution — the explorer's real job must
+        survive it. One genuine call and the domain topic goes through."""
+        report = ExplorationReport()
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report,
+            provenance=lambda: ("tool web_search",),
+        )
+        assert tool.run(topic="uk-vat-rates", content="uk-vat-rates — 20% standard.").ok
+        assert report.written == ["uk-vat-rates"]
+
+    def test_a_model_that_calls_nothing_writes_no_topics(self, tmp_path: Path) -> None:
+        """**The ticket's required test.** A scripted model that calls no study
+        tool and goes straight for `write_topic` produces *no topics* — not a
+        topic with a caveat. This is the exact shape of the run that produced
+        `web-search-tool.md`."""
+        document = self._document("tool.web-search")
+        package = _save_workflow(tmp_path, "api-flow", document)
+        model = ToolCallingScriptedModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "write_topic",
+                            "args": {
+                                "topic": "uk-vat-rates",
+                                "content": "uk-vat-rates — the standard rate is 20%.",
+                            },
+                            "id": "call-1",
+                        }
+                    ],
+                ),
+                AIMessage(content="NOT covered: everything — I called nothing."),
+            ]
+        )
+        report = ExplorerKnowledgeBuilder().explore(package, document, tmp_path, model)
+        assert report.written == []
+        assert not (package / "knowledge" / "uk-vat-rates.md").exists()
+
+    def test_provenance_names_what_was_called_not_what_was_offered(
+        self, tmp_path: Path
+    ) -> None:
+        """Two tools offered, one called. The footer names the one."""
+        document = self._document("tool.web-search", "tool.web-fetch")
+        package = _save_workflow(tmp_path, "api-flow", document)
+        model = ToolCallingScriptedModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"name": "web_search", "args": {"query": "uk vat"}, "id": "c-0"}
+                    ],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "write_topic",
+                            "args": {
+                                "topic": "uk-vat-rates",
+                                "content": "uk-vat-rates — the standard rate is 20%.",
+                            },
+                            "id": "c-1",
+                        }
+                    ],
+                ),
+                AIMessage(content="NOT covered: reduced rates."),
+            ]
+        )
+        report = ExplorerKnowledgeBuilder().explore(package, document, tmp_path, model)
+        assert report.written == ["uk-vat-rates"]
+        doc = (package / "knowledge" / "uk-vat-rates.md").read_text()
+        assert "web_search" in doc
+        assert "web_fetch" not in doc
+
+    def test_a_tool_that_was_offered_but_never_called_still_cannot_be_a_topic(
+        self, tmp_path: Path
+    ) -> None:
+        """Ticket 10's guard must not weaken as a side effect of this one.
+
+        It used to read the provenance tuple, which named every offered tool.
+        Now that provenance means *called*, the guard reads the studied set
+        instead — otherwise calling one tool would license writing vendor
+        documentation about its neighbour."""
+        report = ExplorationReport()
+        tool = WriteTopicTool(
+            ExplorerKnowledgeBuilder(), tmp_path / "flow", report,
+            provenance=lambda: ("tool web_search",),
+            studied=("web_search", "web_fetch"),
+        )
+        result = tool.run(topic="web-fetch-tool", content="web-fetch-tool — vendor docs.")
+        assert not result.ok and "not a topic" in str(result.error)
+        assert report.written == []
 
 
 class TestRegistration:

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, Callable, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -220,15 +220,30 @@ class BaseTool(ABC):
         except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
-    def as_langchain_tool(self) -> Any:
+    def as_langchain_tool(self, on_call: Callable[[str], None] | None = None) -> Any:
         """Adapt to a LangChain ``StructuredTool`` at the boundary.
 
         Imported lazily so the tool catalogue stays importable — and unit
         testable — without LangChain present.
+
+        ``on_call`` is told this tool's name **each time it actually runs**.
+        It exists because a caller that hands out tools it does not own has no
+        other way to learn which of them were used: the knowledge explorer
+        writes a provenance footer, and that footer used to list every tool it
+        had *offered* the agent, which is a claim about availability dressed up
+        as a claim about evidence (`production-ready` 12). The codebase builder
+        already records this way — its read tools note each file into a shared
+        set — so this is the same mechanism for tools resolved out of a
+        registry rather than constructed here.
+
+        Optional, and the default is exactly the previous behaviour, so no
+        existing caller changed.
         """
         from langchain_core.tools import StructuredTool
 
         def _call(**kwargs: Any) -> str:
+            if on_call is not None:
+                on_call(self.name)
             result = self.run(**kwargs)
             return result.content if result.ok else f"Error: {result.error}"
 
