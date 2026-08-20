@@ -226,4 +226,6 @@ class TestRubric:
         from openstategraph.abc.grader import Grader
         grader = Grader(rubric=[{"criterion": "x"}])
         prompt = grader.resolve_system_prompt()
-        assert prompt.rstrip().endswith(grader.PROMPT.output_contract.rstrip())
+        assert prompt.rstrip().endswith(
+            f"{grader.PROMPT.output_contract.rstrip()}\n</output_format>"
+        )

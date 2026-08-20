@@ -40,7 +40,7 @@ class TestTheContractIsLast:
     def test_a_wired_skill_renders_before_the_output_contract(self) -> None:
         rendered = prompt().with_skill("Explain your reasoning at length.").render()
         assert rendered.index("Explain your reasoning") < rendered.index(CONTRACT)
-        assert rendered.rstrip().endswith(CONTRACT)
+        assert rendered.rstrip().endswith(f"{CONTRACT}\n</output_format>")
 
     def test_every_layer_together_still_ends_with_the_contract(self) -> None:
         rendered = (
@@ -51,8 +51,8 @@ class TestTheContractIsLast:
             .with_skill("- from the file")
             .render()
         )
-        assert rendered.rstrip().endswith(CONTRACT)
-        assert rendered.startswith(PREAMBLE)
+        assert rendered.rstrip().endswith(f"{CONTRACT}\n</output_format>")
+        assert rendered.startswith(f"<role>\n{PREAMBLE}")
 
     def test_a_skill_that_tries_to_replace_the_contract_cannot(self) -> None:
         """`replace` reaches the rules layers and stops there."""
@@ -64,7 +64,7 @@ class TestTheContractIsLast:
             .render()
         )
         assert PREAMBLE in rendered
-        assert rendered.rstrip().endswith(CONTRACT)
+        assert rendered.rstrip().endswith(f"{CONTRACT}\n</output_format>")
 
     @pytest.mark.parametrize(
         "assemble",
@@ -88,7 +88,7 @@ class TestTheContractIsLast:
         contract = assembled.output_contract.strip()
         if contract:
             assert rendered.index("SKILL-MARKER") < rendered.index(contract)
-            assert rendered.rstrip().endswith(contract)
+            assert rendered.rstrip().endswith(f"{contract}\n</output_format>")
 
 
 class TestTheSkillIsARulesLayer:

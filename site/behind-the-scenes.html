@@ -447,7 +447,7 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
     <p class="eyebrow">Behind the scenes</p>
     <h1>One workflow, five artifacts</h1>
     <p class="lede">
-      You drew four boxes and one loop. This page follows that drawing all the way down —
+      You drew four boxes and one revision loop. This page follows that drawing all the way down —
       into the file it is stored as, the plan the compiler decided, the LangGraph it became,
       the system prompt a model actually receives, and the Python that runs the whole thing.
       Nothing here is a description of what happens. It <em>is</em> what happens, taken
@@ -813,6 +813,18 @@ graph TD;
         fail. Your rules shape the <em>decision</em>; the base keeps the <em>shape of the
         answer</em>.
       </p>
+      <p>
+        Order alone was not enough, which is why each section below arrives inside an XML
+        tag. <em>Later instructions win ties</em> is a claim about a model's
+        <em>judgement</em>, and it holds only while the model can tell whose text is
+        whose &mdash; a blank line and a bare <code>Rules:</code> label did not tell it.
+        The sharper half is <code>&lt;context&gt;</code>: it carries text this product did
+        not write, such as a table schema or a fetched document, so anything inside it
+        that reads like an instruction was read as one. The tag says <em>this part is
+        data</em>. Rules that try to close a tag and open their own contract are
+        neutralised rather than deleted, so a developer can see their line sitting there,
+        inert.
+      </p>
     </div>
 
     <div class="legend" aria-hidden="true">
@@ -848,7 +860,7 @@ When you are given feedback on a previous attempt, treat it as the specification
             What the model receives, flattened
             <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </summary>
-          <pre><!--bts:rendered-draft1-->Rules:
+          <pre><!--bts:rendered-draft1-->&lt;rules&gt;
 - Answer the question that was asked, and stop there.
 - Where you hold a tool that can establish a fact, use it. Never answer from memory what a tool could check, and never state a figure you did not obtain.
 - If you cannot answer honestly, say what is missing instead of approximating it.
@@ -856,7 +868,8 @@ Write the release note the user asks for: exactly two sentences, past tense, pla
 
 Sentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.
 
-When you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over.<!--/bts:rendered-draft1--></pre>
+When you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over.
+&lt;/rules&gt;<!--/bts:rendered-draft1--></pre>
         </details>
         <details class="reveal">
           <summary>
@@ -905,9 +918,11 @@ When you are given feedback on a previous attempt, treat it as the specification
             What the model receives, flattened
             <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </summary>
-          <pre><!--bts:rendered-grader1-->You are a grader. You judge whether a candidate answer is good enough to return to the user. You never rewrite it yourself.
+          <pre><!--bts:rendered-grader1-->&lt;role&gt;
+You are a grader. You judge whether a candidate answer is good enough to return to the user. You never rewrite it yourself.
+&lt;/role&gt;
 
-Rules:
+&lt;rules&gt;
 - The answer must address the question that was asked.
 - Figures must come from the supplied data, never invented.
 - An answer that is empty, truncated or an error is a FAIL.
@@ -916,8 +931,11 @@ Rules:
 - The first sentence must name the defect; the second must name the fixed behaviour.
 - No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.
 - If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing.
+&lt;/rules&gt;
 
-Reply with PASS or FAIL on the first line. If FAIL, add one short line saying exactly what to change. Nothing else.<!--/bts:rendered-grader1--></pre>
+&lt;output_format&gt;
+Reply with PASS or FAIL on the first line. If FAIL, add one short line saying exactly what to change. Nothing else.
+&lt;/output_format&gt;<!--/bts:rendered-grader1--></pre>
         </details>
         <details class="reveal">
           <summary>

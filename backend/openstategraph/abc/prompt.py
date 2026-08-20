@@ -27,11 +27,51 @@ middleware is: later instructions win ties. If developer text came last, a rule
 like "explain your reasoning" would countermand the output format and every parse
 would fail. Their rules shape the *decision*; the base keeps the *shape of the
 answer*.
+
+Order is not the whole of it, though, because *later instructions win ties* is a
+claim about a model's **judgement** — it holds only while the model can tell
+whose text is whose. So `render()` also **delimits**: every section arrives
+inside an XML tag, which is what stops a developer's rules from impersonating
+the contract and what marks machine-generated `context` as *data* rather than
+instruction. See `render()`; it is the only place either decision is made.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+
+
+#: The section tags ``render()`` emits. Neutralising is scoped to exactly these
+#: names — see ``_neutralise``.
+_SECTION_TAGS = ("role", "context", "rules", "output_format")
+
+_OUR_TAG = re.compile(
+    r"<\s*(/?)\s*(" + "|".join(_SECTION_TAGS) + r")\s*>",
+    re.IGNORECASE,
+)
+
+
+def _neutralise(text: str) -> str:
+    """Stop supplied text from opening or closing one of *our* section tags.
+
+    Only ours. A blanket XML-escape would mangle the perfectly plausible rule
+    *"wrap the name in <brackets>"*, and damaging ordinary content to defend
+    against a rare forgery is the same mistake as refusing to read a model's
+    reply because it arrived unfenced — CLAUDE.md's tolerant-reading rule seen
+    from the writing side. Every other angle bracket passes through exactly as
+    written.
+
+    Neutralised rather than deleted: a developer whose line is silently dropped
+    never learns why, and ``&lt;/rules&gt;`` in the prompt is inert without
+    being invisible.
+    """
+
+    return _OUR_TAG.sub(lambda m: f"&lt;{m.group(1)}{m.group(2)}&gt;", text)
+
+
+def _tagged(tag: str, body: str) -> str:
+    return f"<{tag}>\n{body}\n</{tag}>" if body else ""
 
 
 @dataclass(frozen=True)
@@ -171,12 +211,37 @@ class SystemPrompt:
         return "\n".join(layers)
 
     def render(self) -> str:
-        """Flattens to the string a model sees. The only place order is decided."""
-        parts = [self.preamble.strip(), *self.context]
+        """Flattens to the string a model sees. The only place order is decided.
+
+        Each section is wrapped in an XML tag, which is Anthropic's documented
+        remedy for the failure this whole dataclass exists to prevent: a model
+        that cannot tell instructions from data, or the developer's text from
+        the machinery's. The ordering argument above — *later instructions win
+        ties* — is a claim about a model's **judgement**, and it holds only
+        while the model can tell whose text is whose. A blank line and a bare
+        ``Rules:`` label did not tell it.
+
+        ``context`` is the sharper half. It carries content this product does
+        not author — a table schema, a fetched document, a tool result — so
+        anything inside it that reads like an instruction was read as one.
+        ``<context>`` says *this part is data*.
+
+        One ``<context>`` element holds every section rather than one element
+        each: the sections are independent facts with no hierarchy among them,
+        and repeating the tag would imply an ordering that does not exist.
+
+        The tags belong to this method alone. ``describe()`` keeps publishing
+        plain sections, because a human reading the locked text should not have
+        to read markup to do it.
+        """
+        parts = [_tagged("role", self.preamble.strip())]
+        context = "\n\n".join(_neutralise(section) for section in self.context if section)
+        if context:
+            parts.append(_tagged("context", context))
         rules = self.effective_rules()
         if rules:
-            parts.append(f"Rules:\n{rules}")
-        parts.append(self.output_contract.strip())
+            parts.append(_tagged("rules", _neutralise(rules)))
+        parts.append(_tagged("output_format", self.output_contract.strip()))
         return "\n\n".join(part for part in parts if part)
 
     def describe(self) -> dict[str, object]:
