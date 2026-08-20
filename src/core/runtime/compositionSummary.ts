@@ -148,9 +148,28 @@ export function summarizeComposition(
   }
 
   // Group order first — `CENSUS_GROUPS` is the card's reading order — then
-  // the order the terms were registered in, which `Map` preserves.
+  // the order the terms were **registered** in.
+  //
+  // That second clause was a comment and not a behaviour until
+  // `production-ready` 63. The sort was stable over a `Map` whose insertion is
+  // the *node walk*, so within a group a card read in whatever order the nodes
+  // sat in the JSON: `router` and `grader` are both `control`, and dragging a
+  // node in the editor and pressing Save reordered a mount card. A document's
+  // node order is a layout accident; it must not be a reading order.
+  //
+  // A term no vocabulary claimed falls back to its family segment and has no
+  // place to sort by. It goes last, in the order the document introduced it —
+  // stable, and honest about being the leftover case.
+  const rank = (term: ICompositionTerm) => {
+    const index = vocabulary.indexOf(term);
+    return index === -1 ? vocabulary.length : index;
+  };
   const parts: CompositionPart[] = [...counted.values()]
-    .sort((a, b) => CENSUS_GROUPS.indexOf(a.term.group) - CENSUS_GROUPS.indexOf(b.term.group))
+    .sort(
+      (a, b) =>
+        CENSUS_GROUPS.indexOf(a.term.group) - CENSUS_GROUPS.indexOf(b.term.group) ||
+        rank(a.term) - rank(b.term),
+    )
     .map(({ term, count }) => ({ label: count === 1 ? term.one : term.many, count }));
   if (parts.length === 0) return null;
 

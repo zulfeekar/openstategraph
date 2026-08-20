@@ -14,6 +14,10 @@ import { compositionPurpose, formatComposition, summarizeComposition } from './c
  */
 const VOCABULARY: readonly ICompositionTerm[] = [
   { id: 'agent.', group: 'actor', one: 'agent', many: 'agents' },
+  // Two `control` terms, declared in this order, because that is the only way
+  // to see whether within-group order comes from the vocabulary or from the
+  // document (`production-ready` 63).
+  { id: 'route.classifier', group: 'control', one: 'router', many: 'routers' },
   { id: 'route.grader', group: 'control', one: 'grader', many: 'graders', revisePort: 'revise' },
   { id: 'workflow.subgraph', group: 'held', one: 'workflow', many: 'workflows' },
   { id: 'input.', group: 'boundary', one: 'input', many: 'inputs' },
@@ -191,5 +195,52 @@ describe('a mount whose child cannot enforce its outcome says so', () => {
     // Only a Team promises an outcome, so only a Team can fail to keep one.
     // A `workflow.subgraph` mount never claimed a loop in the first place.
     expect(census(graderless)?.note).toBeUndefined();
+  });
+});
+
+
+describe('the order a census reads in', () => {
+  /**
+   * `production-ready` 63, found by a red test on main rather than by anyone
+   * reading this file.
+   *
+   * `summarizeComposition` sorts by group and its comment said the tie was
+   * broken by *"the order the terms were registered in, which `Map`
+   * preserves"*. `Map` preserves insertion order and the insertion was the
+   * **node walk**, so within a group a card read in whatever order the nodes
+   * happened to sit in the JSON. `router` and `grader` are both `control`, so
+   * dragging a node in the editor and pressing Save silently reordered a mount
+   * card — which is what turned `censusTerms.test.ts` red with no code change.
+   *
+   * The intent was written down and never implemented. These pin it.
+   */
+  const router = { id: 'r1', type: 'route.classifier' };
+  const grader = { id: 'g1', type: 'route.grader' };
+  const labels = (nodes: readonly { id: string; type: string }[]) =>
+    census({ nodes })!.parts.map((part) => part.label);
+
+  it('follows the vocabulary within a group, not the document', () => {
+    expect(labels([grader, router])).toEqual(['router', 'grader']);
+  });
+
+  it('is the same order whichever way the nodes are listed', () => {
+    // The property, stated as a property: reordering a document is not an
+    // edit to what the document *is*.
+    expect(labels([grader, router])).toEqual(labels([router, grader]));
+  });
+
+  it('still reads groups before terms', () => {
+    const agent = { id: 'a1', type: 'agent.llm' };
+
+    expect(labels([grader, agent, router])).toEqual(['agent', 'router', 'grader']);
+  });
+
+  it('puts a word no vocabulary claimed after the ones it did', () => {
+    // An unregistered type falls back to its family segment, so it has no
+    // place in the vocabulary to sort by. Last, in the order the document
+    // introduced it — a stable answer rather than an arbitrary one.
+    const found = labels([{ id: 'x1', type: 'tool.sql' }, grader]);
+
+    expect(found).toEqual(['grader', 'tool']);
   });
 });
