@@ -723,11 +723,19 @@ POST /api/workflows            {"name": "My Workflow", "document": {...}}
 ```
 
 **A name is not an identity, so a client must not derive a slug from one.** The
-first workflow of a name keeps the clean slug; a colliding one gets a short
-random disambiguator, and the response's `slug` is the answer — never something
-to recompute. Suffixing only on collision keeps the common URL clean, and the
-suffix is random rather than a `-2` counter because two clients creating the
-same name at the same moment would both compute `-2` and one would still lose.
+first workflow of a name keeps the clean slug; a colliding one gets an
+ordinal — `my-workflow-2`, `my-workflow-3` — and the response's `slug` is the
+answer, never something to recompute. Suffixing only on collision keeps the
+common URL clean.
+
+(This paragraph said the suffix was *random*, and argued that a counter would
+make two simultaneous clients both compute `-2`. That is true of a counter
+which queries, and `_candidate_slugs` does not: it yields a sequence and
+`create` adjudicates each by `mkdir(exist_ok=False)`, so the loser of a race
+takes `-3` on its next turn and neither can overwrite the other. The random
+token was reverted because the drawer showed no slug at all, leaving two rows
+named "AI Workflow" told apart only by `…/?w=ai-workflow-tsi934` — six
+characters nobody can read, remember or repeat over a call.)
 
 `PUT /api/workflows/{slug}` **addresses a package you already hold a slug for**
 and overwrites its document. It still creates one at a free slug — that is how
@@ -741,11 +749,23 @@ The slug is **frozen at creation**. Renaming a workflow changes the display
 name inside `workflow.json` and never the directory, so every link, mount and
 line of git history keeps resolving.
 
+**A save that changed nothing writes nothing** (`production-ready` 67). If the
+stored envelope already matches what you sent — same document, same name, same
+lifecycle flags — the file is left untouched, `mtime` included, and the
+response is still `200`. So **`saved_at` does not advance on every `PUT`**, and
+a client must not treat an unchanged `saved_at` as a failed save; the response
+status is what reports success. This exists because `saved_at` is a wall clock
+and `workflow.json` is meant to be reviewed as source: without the guard,
+pressing Save with nothing edited produced a real diff containing only a new
+timestamp, in a directory an adopter tracks in git by design. Only the
+timestamp is excluded from the comparison — a rename or a publish is a change
+and is written.
+
 ### Copying — `POST /api/workflows/{slug}/duplicate`
 
 ```
 POST /api/workflows/chinook-assistant/duplicate   {}
-  → 200 {"slug": "chinook-assistant-copy-k7m3qp",
+  → 200 {"slug": "chinook-assistant-copy",
          "name": "Chinook Assistant (copy)",
          "source": "chinook-assistant"}
 
