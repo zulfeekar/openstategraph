@@ -95,6 +95,19 @@ still overwrites nothing it did not write. The confirmation is a flag rather
 than a prompt because exit codes are this CLI's API for CI, and a command that
 blocks on stdin hangs a CI job.
 
+**A `workflows/` that was already there is refused too, and `--force` does not
+waive that one.** It cannot: a non-empty directory is already refused, and a
+directory that does not exist cannot contain a `workflows/`, so `--force` is
+the only way to reach the collision at all — a flag that both reaches a check
+and waives it is a check that never runs. What waives it is the marker instead:
+a target carrying an `openstategraph.yaml` is *ours*, and so is its workflows
+root, which is why re-running `init --force` on a project you made stays
+idempotent. A target with no config file is somebody else's, and the refusal
+names an unused root to pass to `--workflows-dir` and the `mv` that frees the
+name. The reason it matters is what happens next rather than what is
+overwritten — nothing is overwritten — the store scans that root for packages,
+so sharing it means reading directories OpenStateGraph did not write.
+
 `OPENSTATEGRAPH_WORKFLOWS_ROOT` points the workflows root elsewhere, and beats
 the file, for the reason it always did: the file is committed and shared, the
 environment is the machine in front of you.
@@ -359,7 +372,7 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph env-example` | print the provider block of `.env.example` — names only, never values — to redirect into your own `.env` |
 | `openstategraph knowledge list <package>` | the second brain's topics, their one-line hints, and each doc's owner and stale badge (`--knowledge-dir` to look elsewhere, which drops the badges — a store outside the package has no source to recompute) |
 | `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
-| `openstategraph init [directory]` | make a directory an OpenStateGraph project — `openstategraph.yaml`, a `workflows/` folder and a starter package. Defaults to the current directory; `--workflows-dir` renames the packages folder, `--empty` skips the starter, `--force` overwrites rather than refusing. The one command that creates a project, and the only thing the install line cannot carry |
+| `openstategraph init [directory]` | make a directory an OpenStateGraph project — `openstategraph.yaml`, a `workflows/` folder and a starter package. Defaults to the current directory; `--workflows-dir` renames the packages folder, `--empty` skips the starter, `--force` waives the "directory is not empty" refusal and nothing else — it overwrites no file it did not write, and does not waive the refusal to share a pre-existing workflows root. The one command that creates a project, and the only thing the install line cannot carry |
 | `openstategraph serve [--host --port --open --workers]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server,ollama]` — `[server]` is the web layer and carries **no** model integration, so an install without a provider extra serves an editor that cannot run anything, and says so before it binds. `--workers` exists only to be **refused** by name: it must be 1, and `--workers 4` exits with the reason rather than silently serving four processes that cannot see each other's drafts, approvals or catalogue events — see [Deploying](deploying.md) |
 | `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
 

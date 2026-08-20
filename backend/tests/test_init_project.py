@@ -267,6 +267,14 @@ class TestForceAddsAndNeverOverwrites:
         target = tmp_path / "my_demo"
         (target / "workflows" / "starter").mkdir(parents=True)
         (target / "workflows" / "starter" / "workflow.json").write_text("{}")
+        # The config file is what makes this project *ours*, and so its
+        # workflows root is ours too (production-ready/68). Without it, a
+        # pre-existing `workflows/` is somebody else's and `--force` refuses
+        # before reaching the starter at all — a different promise, tested in
+        # `TestAWorkflowsDirectoryThatWasAlreadyThere`. This test's promise is
+        # the one that survives either way: a starter already there is never
+        # overwritten.
+        (target / "openstategraph.yaml").write_text("version: 1\n")
 
         code = cli.main(["init", str(target), "--force"])
         printed = capsys.readouterr().out
@@ -327,3 +335,144 @@ class TestWhatItPrints:
 
         assert code == cli.EXIT_OK
         assert (here / "openstategraph.yaml").is_file()
+
+
+class TestAWorkflowsDirectoryThatWasAlreadyThere:
+    """Ticket production-ready/68.
+
+    `init` is careful about somebody else's *project* directory and was silent
+    about the one directory it is most likely to collide over. Two things would
+    share a root — theirs and ours — and `WorkflowStore.list` would scan their
+    folders from then on.
+
+    The consent question is the whole design, and reproducing it is what
+    settled it: the collision is reachable **only** under `--force`, because a
+    non-empty target is already refused and a target that does not exist cannot
+    contain a `workflows/`. So `--force` cannot also be the waiver — that would
+    make this refusal unreachable. The waiver is instead the marker case two
+    already uses: a target carrying an OpenStateGraph config file is *ours*,
+    its `workflows/` is ours, and re-running `init --force` there stays
+    idempotent. A target with no config is somebody else's, and their
+    `workflows/` is theirs.
+    """
+
+    def test_it_refuses_to_move_into_a_workflows_directory_that_is_not_ours(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        target = tmp_path / "my_demo"
+        (target / "workflows" / "their-thing").mkdir(parents=True)
+        (target / "workflows" / "their-thing" / "README.md").write_text("theirs")
+
+        code = cli.main(["init", str(target), "--force"])
+        printed = capsys.readouterr().err
+
+        assert code == cli.EXIT_FAILURE
+        assert "workflows/" in printed
+        assert "Nothing was written" in printed
+        # Written nothing: not the config, not the starter.
+        assert not (target / "openstategraph.yaml").exists()
+        assert not (target / "workflows" / "starter").exists()
+        assert (target / "workflows" / "their-thing" / "README.md").read_text() == "theirs"
+
+    def test_the_refusal_names_the_exit_that_exists(self, tmp_path: Path, capsys) -> None:
+        """`--workflows-dir` ships today. A refusal that does not name it makes
+        a user go and look for it."""
+        target = tmp_path / "my_demo"
+        (target / "workflows").mkdir(parents=True)
+
+        cli.main(["init", str(target), "--force"])
+
+        assert "--workflows-dir" in capsys.readouterr().err
+
+    def test_the_named_exit_actually_works(self, tmp_path: Path, capsys) -> None:
+        target = tmp_path / "my_demo"
+        (target / "workflows" / "their-thing").mkdir(parents=True)
+
+        code = cli.main(["init", str(target), "--force", "--workflows-dir", "agents"])
+
+        assert code == cli.EXIT_OK
+        assert (target / "agents" / "starter").is_dir()
+        assert not (target / "workflows" / "starter").exists()
+
+    def test_our_own_project_is_not_refused_so_a_re_run_stays_idempotent(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """A target carrying our config file is ours, and so is its
+        `workflows/`. `init x --force` twice must not start refusing."""
+        target = tmp_path / "my_demo"
+        target.mkdir()
+
+        assert cli.main(["init", str(target)]) == cli.EXIT_OK
+        capsys.readouterr()
+
+        code = cli.main(["init", str(target), "--force"])
+
+        assert code == cli.EXIT_OK
+        assert (target / "workflows" / "starter").is_dir()
+
+    def test_it_is_distinguishable_from_the_non_empty_refusal(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Case four sends the reader to *pick another name*; this one sends
+        them to *pick another workflows root*. Different moves, different
+        sentences."""
+        theirs = tmp_path / "theirs"
+        theirs.mkdir()
+        (theirs / "README.md").write_text("x")
+        shared = tmp_path / "shared"
+        (shared / "workflows").mkdir(parents=True)
+
+        cli.main(["init", str(theirs)])
+        non_empty = capsys.readouterr().err
+        cli.main(["init", str(shared), "--force"])
+        collision = capsys.readouterr().err
+
+        assert non_empty != collision
+        assert "pick another name" in non_empty
+        assert "--workflows-dir" not in non_empty
+
+    def test_the_suggested_root_is_never_the_one_that_just_collided(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Found by trying to break it: the refusal printed
+        `--workflows-dir agents` to a user who had just passed
+        `--workflows-dir agents`. A suggestion that repeats the failing input
+        is a loop, not an exit."""
+        target = tmp_path / "my_demo"
+        (target / "agents").mkdir(parents=True)
+
+        cli.main(["init", str(target), "--force", "--workflows-dir", "agents"])
+        printed = capsys.readouterr().err
+
+        assert "--workflows-dir agents\n" not in printed
+        assert "--workflows-dir agents_2" in printed
+
+    def test_the_suggestion_walks_past_names_that_are_also_taken(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        target = tmp_path / "my_demo"
+        (target / "workflows").mkdir(parents=True)
+        (target / "workflows_2").mkdir()
+
+        cli.main(["init", str(target), "--force"])
+
+        assert "--workflows-dir workflows_3" in capsys.readouterr().err
+
+    def test_a_file_standing_where_the_root_should_be_says_so(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """`workflows/` with a trailing slash is a lie when it is a file, and
+        `mv` is the wrong advice. Mirrors the refusal one level up, which
+        already distinguishes a file from a directory."""
+        target = tmp_path / "my_demo"
+        target.mkdir()
+        (target / "workflows").write_text("not a directory")
+
+        code = cli.main(["init", str(target), "--force"])
+        printed = capsys.readouterr().err
+
+        assert code == cli.EXIT_FAILURE
+        assert "is not a directory" in printed
+        assert "Nothing was written" in printed
+        assert not (target / "openstategraph.yaml").exists()
+        assert (target / "workflows").read_text() == "not a directory"

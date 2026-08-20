@@ -371,6 +371,64 @@ def _existing_directory_refusal(target: Path, label: str) -> str | None:
         )
     return None
 
+def _looks_like_our_project(target: Path) -> bool:
+    """Whether `target` carries an OpenStateGraph config file.
+
+    The same marker `_existing_directory_refusal` uses for case two, reused
+    here for a different question: whose `workflows/` is that? A directory
+    with our config file is ours and so is its workflows root, which is what
+    keeps `init x --force` idempotent on a project we made.
+    """
+    from openstategraph.config_file import CONFIG_FILENAMES
+
+    return any((target / name).is_file() for name in CONFIG_FILENAMES)
+
+
+def _shared_workflows_root_refusal(
+    target: Path, workflows_dir: str, label: str
+) -> str | None:
+    """production-ready/68 — the one directory `init` was most likely to
+    collide over, and the only one it said nothing about.
+
+    `WorkflowStore.list` scans this root for packages, so moving in beside
+    somebody else's `workflows/` makes two things share it. Nothing is
+    destroyed; the defect is that the user was never told.
+
+    **This refusal is deliberately not waived by `--force`.** It cannot be:
+    a non-empty target is already refused by
+    `_existing_directory_refusal`, and a target that does not exist cannot
+    contain a `workflows/`, so `--force` is the *only* way to reach this
+    check. A flag that both reaches a check and waives it is a check that
+    never runs. The module already draws this line once — `--force` is
+    consent to use a directory that has things in it — and this is the same
+    line one level down: it is not consent to share the workflows root.
+
+    The waiver is the project marker instead, which is a fact rather than a
+    guess about what the folder holds.
+    """
+    root = target / workflows_dir
+    if not root.exists() or _looks_like_our_project(target):
+        return None
+    if not root.is_dir():
+        return (
+            f"{label}/{workflows_dir} exists and is not a directory. Nothing was written."
+        )
+    # Never suggest the name that just collided — a suggestion that repeats
+    # the failing input is a loop rather than an exit. Ordinals, the same
+    # spelling case four uses for the project directory.
+    ordinal = 2
+    while (target / f"{workflows_dir}_{ordinal}").exists():
+        ordinal += 1
+    return (
+        f"{label}/{workflows_dir}/ already exists and is not ours. Nothing was written.\n"
+        f"  pick another root:  openstategraph init {label} --force"
+        f" --workflows-dir {workflows_dir}_{ordinal}\n"
+        f"  or move theirs:     mv {label}/{workflows_dir} {label}/{workflows_dir}_old\n"
+        f"--force is consent to use a directory with things in it, not consent to share\n"
+        f"the workflows root: OpenStateGraph scans {workflows_dir}/ for packages, so from\n"
+        f"then on it would be reading directories it did not write."
+    )
+
 
 def init_project(
     directory: Path | str,
@@ -418,6 +476,10 @@ def init_project(
         # `--force` is consent to use a directory that has things in it, not
         # consent to delete a file standing where the directory should be.
         raise ScaffoldError(f"{name} exists and is not a directory. Nothing was written.")
+
+    shared = _shared_workflows_root_refusal(target, workflows_dir, name)
+    if shared is not None:
+        raise ScaffoldError(shared)
 
     reused_empty = target.is_dir() and not any(target.iterdir())
     target.mkdir(parents=True, exist_ok=True)
