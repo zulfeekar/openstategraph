@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { History, RotateCcw } from 'lucide-react';
 import { Button, Icon, PanelEmpty } from '@design/primitives';
 import { RuntimeClient, type PastRun, type PastRunHistory } from '@core/runtime/RuntimeClient';
-import { describeRun, laneTitle, lanes, stepLines, stepTitle } from '@core/runtime/pastRunView';
+import {
+  describeRun,
+  laneTitle,
+  lanes,
+  stepLines,
+  stepTitle,
+  toolCallLine,
+} from '@core/runtime/pastRunView';
 import './PastRuns.css';
 
 /**
@@ -219,6 +226,16 @@ function RunHistory({ run }: { run: PastRun }) {
                   <span className="past-runs__wrote">wrote {step.wrote.join(', ')}</span>
                 ) : null}
               </div>
+              {/*
+                Above the state, because it is the cause and the state is the
+                effect — and because a run that answered wrongly usually asked
+                for the wrong thing, or was refused.
+              */}
+              {step.toolCalls.map((call, index) => (
+                <div className="past-runs__tool" key={`${call.name}-${index}`}>
+                  {toolCallLine(call)}
+                </div>
+              ))}
               {stepLines(step).map((line) => (
                 <div className="past-runs__line" key={line.key}>
                   <span className="past-runs__line-key">{line.key}</span>

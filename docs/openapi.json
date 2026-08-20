@@ -1394,6 +1394,13 @@
             "title": "Step",
             "type": "integer"
           },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadToolCall"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          },
           "values": {
             "additionalProperties": {
               "type": "string"
@@ -1475,6 +1482,30 @@
           "status"
         ],
         "title": "ThreadSummary",
+        "type": "object"
+      },
+      "ThreadToolCall": {
+        "description": "One tool this step reached for, and what came back.\n\nThe owner's bar for replay is *\"each execution point traced\"*, and a tool\ncall is the execution point a reader most often came for \u2014 a run that\nanswered wrongly usually asked for the wrong thing, or was refused.\n\nAll of it was stored and none of it was published: an `AIMessage` carries\n`tool_calls` with their arguments and the `ToolMessage` answering each\ncarries the result, and the thread reader flattened both to `role: content`\n(`memory-and-replay` 37).\n\n**Paired, and reported at the step that asked.** LangGraph writes the\nrequest in one superstep and the answer in the next, so reporting them\nwhere each physically landed gives two half-rows that a reader has to\nrejoin by hand.",
+        "properties": {
+          "arguments": {
+            "default": "",
+            "title": "Arguments",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "result": {
+            "default": "",
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ThreadToolCall",
         "type": "object"
       },
       "ToolCapabilityResponse": {

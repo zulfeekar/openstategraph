@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PastRun, PastRunStep } from './RuntimeClient';
-import { describeRun, laneTitle, lanes, relativeTime, stepLines, stepTitle } from './pastRunView';
+import {
+  describeRun,
+  laneTitle,
+  lanes,
+  relativeTime,
+  stepLines,
+  stepTitle,
+  toolCallLine,
+} from './pastRunView';
 
 const NOW = Date.parse('2026-08-11T12:00:00Z');
 
@@ -77,6 +85,7 @@ describe('stepLines', () => {
     namespace: [],
     node: '',
     wrote: [],
+    toolCalls: [],
   });
 
   it('drops a channel that serialized to an empty container', () => {
@@ -122,6 +131,7 @@ describe('stepTitle', () => {
     namespace: [],
     node: '',
     wrote: [],
+    toolCalls: [],
   });
 
   it('names the superstep and where it came from', () => {
@@ -171,6 +181,7 @@ describe('lanes', () => {
     namespace: node ? [node] : [],
     node,
     wrote: [],
+    toolCalls: [],
   });
 
   it('puts the workflow itself in a lane with no owner', () => {
@@ -259,5 +270,41 @@ describe('lanes', () => {
         steps: [],
       }),
     ).toBe('mount1 › model');
+  });
+});
+
+
+describe('toolCallLine', () => {
+  /**
+   * The execution point a reader most often came for. A run that answered
+   * wrongly usually asked for the wrong thing, or was refused — and both of
+   * those are in the arguments and the result, not in the name.
+   */
+  it('reads as a call and its answer', () => {
+    expect(
+      toolCallLine({
+        name: 'web_fetch',
+        arguments: '{"url": "https://example.com"}',
+        result: 'Error: web_fetch is not a valid tool',
+      }),
+    ).toBe('web_fetch({"url": "https://example.com"}) \u2192 Error: web_fetch is not a valid tool');
+  });
+
+  it('says nothing came back rather than inventing an arrow to nowhere', () => {
+    // A run stopped mid-call leaves a request with no answer. That is a fact
+    // about the run, and an empty tail would read as "returned nothing".
+    expect(toolCallLine({ name: 'web_search', arguments: '{"q": "a"}', result: '' })).toBe(
+      'web_search({"q": "a"}) \u2014 no result stored',
+    );
+  });
+
+  it('shows an answer whose request is gone without pretending to know it', () => {
+    expect(toolCallLine({ name: 'counter', arguments: '', result: '42' })).toBe(
+      'counter \u2192 42',
+    );
+  });
+
+  it('names an unnamed call rather than printing a bare arrow', () => {
+    expect(toolCallLine({ name: '', arguments: '', result: '42' })).toBe('a tool \u2192 42');
   });
 });

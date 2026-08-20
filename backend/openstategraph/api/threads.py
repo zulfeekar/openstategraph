@@ -42,7 +42,12 @@ import json
 from typing import Any, Iterable
 
 from openstategraph.developer_channel import transcript_text
-from openstategraph.api.schemas import ThreadHistoryResponse, ThreadStep, ThreadSummary
+from openstategraph.api.schemas import (
+    ThreadHistoryResponse,
+    ThreadStep,
+    ThreadSummary,
+    ThreadToolCall,
+)
 
 #: Checkpoint channels that belong to the scheduler, not to the run. Showing
 #: them would bury the two values anyone actually came for.
@@ -115,7 +120,12 @@ def read_thread(
         if not tuples:
             continue
         summary = _summarize(thread_id, tuples[0], steps=len(tuples))
-        steps = [_step(tuple_) for tuple_ in reversed(tuples)]
+        # Oldest first, and the reader is stateful over that order — it counts
+        # a channel's new messages against what earlier checkpoints already
+        # held, which only means anything walked forwards.
+        oldest_first = list(reversed(tuples))
+        tools = _ToolCallReader(oldest_first)
+        steps = [_step(tuple_, tools) for tuple_ in oldest_first]
         return ThreadHistoryResponse(thread=summary, steps=steps)
     return None
 
@@ -224,7 +234,83 @@ def _namespace(tuple_: Any) -> list[str]:
     ]
 
 
-def _step(tuple_: Any) -> ThreadStep:
+class _ToolCallReader:
+    """Which tool calls belong to which step, across one thread.
+
+    Stateful on purpose, and one instance per `read_thread`, because the two
+    facts it needs cannot be seen from a single checkpoint:
+
+    - **The message channel is cumulative.** Every checkpoint holds the whole
+      history, so "what this step called" is the *new tail*, not the contents.
+      One counter per namespace — a worker's channel is not the workflow's, and
+      sharing a counter would make a second graph's first call look like
+      something already seen.
+    - **A request and its answer land in different supersteps.** LangGraph
+      writes the `AIMessage` in one and the `ToolMessage` in the next, so the
+      results are collected in a first pass over the whole thread and paired
+      onto the step that asked.
+
+    A `ToolMessage` whose request is no longer in the stored history is still
+    reported, with no arguments. It is an execution point, and dropping it
+    would be exactly the quiet loss this exists to end.
+    """
+
+    def __init__(self, tuples: Iterable[Any]) -> None:
+        self._results: dict[str, tuple[str, str]] = {}
+        self._answered: set[str] = set()
+        self._seen: dict[str, int] = {}
+        for tuple_ in tuples:
+            for message in _messages(tuple_):
+                call_id = str(getattr(message, "tool_call_id", "") or "")
+                if not call_id:
+                    continue
+                name = str(getattr(message, "name", "") or "")
+                self._results[call_id] = (name, _text(getattr(message, "content", "")))
+
+    def at(self, tuple_: Any) -> list[ThreadToolCall]:
+        """The calls this checkpoint added, in the order it added them."""
+        key = "|".join(_namespace(tuple_)) or ""
+        messages = _messages(tuple_)
+        already = self._seen.get(key, 0)
+        self._seen[key] = len(messages)
+        found: list[ThreadToolCall] = []
+        for message in messages[already:]:
+            for call in getattr(message, "tool_calls", None) or []:
+                call_id = str(_call_field(call, "id") or "")
+                name, result = self._results.get(call_id, ("", ""))
+                self._answered.add(call_id)
+                found.append(
+                    ThreadToolCall(
+                        name=str(_call_field(call, "name") or name),
+                        arguments=_text(_call_field(call, "args")),
+                        result=result,
+                    )
+                )
+            call_id = str(getattr(message, "tool_call_id", "") or "")
+            if call_id and call_id not in self._answered:
+                # An answer whose request is gone — a truncated history, or a
+                # thread joined mid-run. Reported without arguments rather than
+                # dropped.
+                self._answered.add(call_id)
+                name, result = self._results.get(call_id, ("", ""))
+                found.append(ThreadToolCall(name=name, arguments="", result=result))
+        return found
+
+
+def _call_field(call: Any, key: str) -> Any:
+    """A tool call is a dict on every message class we read, but not on every
+    one that exists — a provider object with attributes reads the same way."""
+    if isinstance(call, dict):
+        return call.get(key)
+    return getattr(call, key, None)
+
+
+def _messages(tuple_: Any) -> list[Any]:
+    value = _values(tuple_).get("messages")
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
+def _step(tuple_: Any, tools: _ToolCallReader | None = None) -> ThreadStep:
     namespace = _namespace(tuple_)
     metadata = _metadata(tuple_)
     return ThreadStep(
@@ -244,6 +330,7 @@ def _step(tuple_: Any) -> ThreadStep:
             for channel in ((tuple_.checkpoint or {}).get("updated_channels") or [])
             if not str(channel).startswith(_PRIVATE_PREFIXES)
         ],
+        tool_calls=tools.at(tuple_) if tools is not None else [],
     )
 
 

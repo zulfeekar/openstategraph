@@ -1,4 +1,4 @@
-import type { PastRun, PastRunStep } from './RuntimeClient';
+import type { PastRun, PastRunStep, PastRunToolCall } from './RuntimeClient';
 
 /**
  * How a past run reads on screen.
@@ -177,4 +177,22 @@ export function laneTitle(lane: PastRunLane): string {
   // graph's node belongs to this canvas.
   const path = lane.namespace.join(' \u203a ');
   return lane.occurrence > 1 ? `${path} · run ${lane.occurrence}` : path;
+}
+
+/**
+ * `web_fetch({"url": "…"}) \u2192 Error: web_fetch is not a valid tool`.
+ *
+ * One line, because a tool call is one event. The arguments and the result are
+ * the parts a reader came for — a run that answered wrongly usually asked for
+ * the wrong thing, or was refused, and the name alone says neither.
+ *
+ * The two degenerate cases are stated rather than smoothed over: a request the
+ * run never got an answer to says so, because an empty tail would read as
+ * "returned nothing"; and an answer whose request is no longer in the stored
+ * history shows the answer without inventing arguments for it.
+ */
+export function toolCallLine(call: PastRunToolCall): string {
+  const name = call.name || 'a tool';
+  const head = call.arguments ? `${name}(${call.arguments})` : name;
+  return call.result ? `${head} \u2192 ${call.result}` : `${head} \u2014 no result stored`;
 }

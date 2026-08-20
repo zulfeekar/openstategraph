@@ -839,6 +839,10 @@ fan-out readable:
   "source": "loop",
   "namespace": ["worker_web"], "node": "worker_web",
   "wrote": ["outputs", "worker_results"],
+  "tool_calls": [
+    { "name": "web_fetch", "arguments": "{\"url\": \"https://example.com\"}",
+      "result": "Error: web_fetch is not a valid tool, try one of […]." }
+  ],
   "values": { "answer": "…" }
 }
 ```
@@ -855,6 +859,14 @@ A node dispatched twice appears under one `node` with two runs of steps: the
 instance is not part of the namespace, because for identity two dispatches are
 one worker. Group by `namespace` and start a new group when `step` returns to
 `-1`.
+
+`tool_calls` are the calls **this** superstep asked for, with their arguments
+and what came back — never the contents of the message channel, which is
+cumulative and holds the whole history at every checkpoint. The request and its
+answer land in different supersteps, and the server pairs them onto the one
+that asked. `arguments` is `""` when the request is no longer in the stored
+history, and `result` is `""` when no answer was stored — which means the run
+ended or was stopped before one arrived, not that the tool returned nothing.
 
 They are honest about their limits: a deployment with no checkpointer, or a
 custom saver that cannot enumerate, returns an empty list rather than an

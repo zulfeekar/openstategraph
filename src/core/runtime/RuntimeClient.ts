@@ -559,6 +559,21 @@ export interface PastRun {
   readonly status: 'paused' | 'finished';
 }
 
+/**
+ * One tool a past run reached for, and what came back.
+ *
+ * Paired by the server and reported at the superstep that **asked**: LangGraph
+ * writes the request in one superstep and the answer in the next, so reporting
+ * them where each landed gives two half-rows to rejoin by hand.
+ */
+export interface PastRunToolCall {
+  readonly name: string;
+  /** The arguments as JSON text; `''` when the request is no longer stored. */
+  readonly arguments: string;
+  /** What came back; `''` means no answer was stored, not "returned nothing". */
+  readonly result: string;
+}
+
 /** One checkpoint of a past run: the state as it stood at that superstep. */
 export interface PastRunStep {
   readonly checkpointId: string;
@@ -583,6 +598,12 @@ export interface PastRunStep {
    * is what the state *was*.
    */
   readonly wrote: readonly string[];
+  /**
+   * Tools **this** superstep asked for. Not what the message channel contains:
+   * the channel is cumulative and holds the whole history at every checkpoint,
+   * so its contents would print every call on every row.
+   */
+  readonly toolCalls: readonly PastRunToolCall[];
 }
 
 export interface PastRunHistory {
@@ -1041,6 +1062,16 @@ export class RuntimeClient implements IRuntimeClient {
             namespace: asPath(row['namespace']),
             node: asString(row['node']),
             wrote: asPath(row['wrote']),
+            toolCalls: (Array.isArray(row['tool_calls']) ? row['tool_calls'] : []).map(
+              (call) => {
+                const entry = asRecordOfUnknown(call);
+                return {
+                  name: asString(entry['name']),
+                  arguments: asString(entry['arguments']),
+                  result: asString(entry['result']),
+                };
+              },
+            ),
           };
         }),
       });

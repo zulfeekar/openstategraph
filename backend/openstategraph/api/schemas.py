@@ -899,6 +899,33 @@ class KnowledgeTopicSaveRequest(BaseModel):
     body: str
 
 
+class ThreadToolCall(BaseModel):
+    """One tool this step reached for, and what came back.
+
+    The owner's bar for replay is *"each execution point traced"*, and a tool
+    call is the execution point a reader most often came for — a run that
+    answered wrongly usually asked for the wrong thing, or was refused.
+
+    All of it was stored and none of it was published: an `AIMessage` carries
+    `tool_calls` with their arguments and the `ToolMessage` answering each
+    carries the result, and the thread reader flattened both to `role: content`
+    (`memory-and-replay` 37).
+
+    **Paired, and reported at the step that asked.** LangGraph writes the
+    request in one superstep and the answer in the next, so reporting them
+    where each physically landed gives two half-rows that a reader has to
+    rejoin by hand.
+    """
+
+    name: str
+    #: The arguments as JSON text, capped like every other value here. `""`
+    #: when the request itself is no longer in the stored history.
+    arguments: str = ""
+    #: What the tool returned, capped. `""` means no answer was stored — the
+    #: run may have ended, or been stopped, before one arrived.
+    result: str = ""
+
+
 class ThreadStep(BaseModel):
     """One checkpoint of a past run — the state as it stood at that moment.
 
@@ -937,6 +964,11 @@ class ThreadStep(BaseModel):
     #: — `values` says what the state *was*, this says what *happened*. Same
     #: exclusions as `values`, for the same reason.
     wrote: list[str] = Field(default_factory=list)
+    #: Tools **this** superstep asked for, with arguments and results. Not what
+    #: the message channel contains: the channel is cumulative and holds the
+    #: whole history at every checkpoint, so reporting its contents would print
+    #: every call on every row.
+    tool_calls: list[ThreadToolCall] = Field(default_factory=list)
 
 
 class ThreadSummary(BaseModel):

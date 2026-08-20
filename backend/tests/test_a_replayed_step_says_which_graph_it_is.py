@@ -119,4 +119,135 @@ class TestTheContractIsPublished:
         repo = Path(__file__).resolve().parents[2]
         published = json.loads((repo / "docs" / "openapi.json").read_text())
         properties = published["components"]["schemas"]["ThreadStep"]["properties"]
-        assert {"namespace", "node", "wrote"} <= set(properties)
+        assert {"namespace", "node", "wrote", "tool_calls"} <= set(properties)
+        call = published["components"]["schemas"]["ThreadToolCall"]["properties"]
+        assert {"name", "arguments", "result"} <= set(call)
+
+
+class _Message:
+    """Only what the reader touches — no LangChain import, no model."""
+
+    def __init__(
+        self,
+        type_: str,
+        content: str = "",
+        tool_calls: list | None = None,
+        tool_call_id: str = "",
+        name: str = "",
+    ) -> None:
+        self.type = type_
+        self.content = content
+        self.tool_calls = tool_calls or []
+        self.tool_call_id = tool_call_id
+        self.name = name
+
+
+def _called(name: str, args: dict, call_id: str) -> _Message:
+    return _Message("ai", "", [{"name": name, "args": args, "id": call_id}])
+
+
+def _returned(text: str, call_id: str) -> _Message:
+    return _Message("tool", text, tool_call_id=call_id)
+
+
+class _Run:
+    """A thread's checkpoints, oldest first, as `read_thread` walks them."""
+
+    def __init__(self, frames: list[tuple[str, int, list]]) -> None:
+        self.tuples = []
+        for index, (namespace, step, messages) in enumerate(frames):
+            tuple_ = _Checkpoint(namespace)
+            tuple_.checkpoint["id"] = f"cp-{index}"
+            tuple_.checkpoint["channel_values"] = {"messages": list(messages)}
+            tuple_.metadata = {"step": step, "source": "loop", "workflow_slug": "s"}
+            self.tuples.append(tuple_)
+
+    def steps(self):
+        # `read_thread` is handed newest-first and reverses; hand it the same.
+        from openstategraph.api import threads as tq
+
+        history = tq.read_thread([_Saver(list(reversed(self.tuples)))], "run-1")
+        assert history is not None
+        return history.steps
+
+
+class _Saver:
+    def __init__(self, tuples: list) -> None:
+        self._tuples = tuples
+
+    def list(self, _config, limit=None):  # noqa: A003 - the saver protocol's name
+        return list(self._tuples)[: limit or len(self._tuples)]
+
+
+class TestEveryToolCallIsAnExecutionPoint:
+    """The owner's words: *"each execution point is traced, replay-able"*.
+
+    The calls are stored — an `AIMessage` carries `tool_calls` with their
+    arguments and the `ToolMessage` that answers each carries the result — and
+    `_text` flattened both to `role: content`, so the arguments were in the
+    store and thrown away in the rendering.
+
+    Paired and reported at the step that **asked**, which is where a reader
+    looks for them: LangGraph writes the request in one superstep and the
+    answer in the next, and two half-rows read worse than one whole one.
+    """
+
+    def test_a_call_is_reported_with_its_arguments(self) -> None:
+        steps = _Run(
+            [
+                ("", 0, []),
+                ("", 1, [_called("web_fetch", {"url": "https://example.com"}, "c1")]),
+            ]
+        ).steps()
+
+        (call,) = steps[1].tool_calls
+        assert call.name == "web_fetch"
+        assert "https://example.com" in call.arguments
+
+    def test_the_result_is_paired_onto_the_call_that_asked(self) -> None:
+        steps = _Run(
+            [
+                ("", 1, [_called("web_fetch", {"url": "x"}, "c1")]),
+                ("", 2, [_called("web_fetch", {"url": "x"}, "c1"), _returned("Error: nope", "c1")]),
+            ]
+        ).steps()
+
+        assert steps[0].tool_calls[0].result == "Error: nope"
+        # And not reported twice — the answering superstep did not ask for it.
+        assert steps[1].tool_calls == []
+
+    def test_a_step_that_called_nothing_says_nothing(self) -> None:
+        steps = _Run([("", 0, [_Message("human", "hello")])]).steps()
+
+        assert steps[0].tool_calls == []
+
+    def test_a_call_is_reported_once_though_messages_are_cumulative(self) -> None:
+        """The channel holds the whole history at every checkpoint. Reporting
+        what the channel *contains* would print every call on every row."""
+        first = _called("web_search", {"q": "a"}, "c1")
+        steps = _Run([("", 1, [first]), ("", 2, [first]), ("", 3, [first])]).steps()
+
+        assert [len(step.tool_calls) for step in steps] == [1, 0, 0]
+
+    def test_each_graph_counts_its_own_messages(self) -> None:
+        """A worker's channel is not the workflow's. Sharing a counter would
+        make the second graph's first call look like something already seen."""
+        steps = _Run(
+            [
+                ("", 1, [_called("a_tool", {}, "c1")]),
+                ("worker_web:abc", 0, [_called("b_tool", {}, "c2")]),
+            ]
+        ).steps()
+
+        assert [call.name for step in steps for call in step.tool_calls] == ["a_tool", "b_tool"]
+
+    def test_a_result_with_no_call_still_reaches_the_reader(self) -> None:
+        """A truncated history can hold an answer whose request is gone. It is
+        still an execution point, and dropping it would be the quiet loss this
+        whole ticket is about."""
+        steps = _Run([("", 1, [_Message("tool", "42", tool_call_id="gone", name="counter")])]).steps()
+
+        (call,) = steps[0].tool_calls
+        assert call.name == "counter"
+        assert call.result == "42"
+        assert call.arguments == ""
