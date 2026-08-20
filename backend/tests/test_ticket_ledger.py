@@ -226,3 +226,39 @@ class TestReadingTheHeaderItself:
     def test_a_file_with_no_header_at_all_still_says_so(self, script: ModuleType) -> None:
         """Unreadable must stay distinguishable from open — it needs a human."""
         assert self._status(script, "# 07 — A ticket\n\nJust prose.\n") == "(no Status line)"
+
+
+class TestAPartialIsExemptFromBothChecks:
+    """`production-ready` 65.
+
+    A half-shipped ticket is open by design *and* carries trailers by design —
+    that is what a partial is. The resolution-section check said so in a
+    comment; the trailer check did not, so recording work honestly produced a
+    drift line. The rule now lives in one place, `is_partial`, and both checks
+    read it.
+    """
+
+    def test_a_partial_is_open_and_carries_commits(self, script: ModuleType) -> None:
+        partial = ticket(script, "partially resolved 2026-08-20 (part 1 shipped; part 2 open)")
+
+        assert partial.is_open
+        assert partial.is_partial
+
+    def test_the_trailer_check_exempts_it(self, script: ModuleType) -> None:
+        partial = ticket(script, "partially resolved (part 2 open)")
+
+        assert not script.is_trailer_drift(partial, ["fcfe3c7"])
+
+    def test_a_plainly_open_ticket_with_a_trailer_is_still_drift(
+        self, script: ModuleType
+    ) -> None:
+        """The exemption must not swallow the defect the check exists for."""
+        drifted = ticket(script, "open")
+
+        assert script.is_trailer_drift(drifted, ["a0eff1a"])
+
+    def test_a_closed_ticket_is_not_drift(self, script: ModuleType) -> None:
+        assert not script.is_trailer_drift(ticket(script, "resolved 2026-08-19"), ["a0eff1a"])
+
+    def test_an_open_ticket_with_no_commits_is_not_drift(self, script: ModuleType) -> None:
+        assert not script.is_trailer_drift(ticket(script, "open"), [])

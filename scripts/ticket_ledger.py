@@ -138,6 +138,20 @@ def tickets(map_filter: str | None = None) -> list[Ticket]:
     return found
 
 
+def is_trailer_drift(ticket: Ticket, commits: list[str]) -> bool:
+    """Does a commit claim to have resolved a ticket whose header says open?
+
+    **A partial is exempt**, and this function exists so that exemption is
+    stated once. It was a comment on the resolution-section check and a silence
+    here, so a half-shipped ticket — open by design, carrying trailers by
+    design, which is what a partial *is* — was reported as drift for being
+    recorded honestly (`production-ready` 65). A rule that punishes the honest
+    spelling teaches the dishonest one: mark it resolved, or leave the trailer
+    off.
+    """
+    return ticket.is_open and not ticket.is_partial and bool(commits)
+
+
 def resolving_commits() -> dict[str, list[str]]:
     """Ticket id → the commits whose trailer names it."""
     log = subprocess.run(
@@ -188,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for ticket in all_tickets:
         commits = claimed.get(ticket.id, [])
-        if ticket.is_open and commits:
+        if is_trailer_drift(ticket, commits):
             shipped_but_open.append((ticket, commits))
         # A partial is exempt: its resolution section describes the half that
         # shipped, which is the honest way to record one.
