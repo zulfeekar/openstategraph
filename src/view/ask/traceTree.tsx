@@ -18,8 +18,10 @@ export interface ActivityRow {
   readonly internal: boolean;
   /** LangGraph's checkpoint namespace — non-empty only inside a true nested
    * subgraph (a mounted Workflow or Team). Carried so the timeline can
-   * collapse a whole subgraph to one lane; the trace tree does not use it,
-   * because its own nesting rule is positional (see `buildTrace`). */
+   * collapse a whole subgraph to one lane. The trace tree reads `path`
+   * rather than this, because `path` is this namespace *already resolved*
+   * to canvas ids by the server (see `traceOwner`); until ticket 72 it read
+   * neither and nested by arrival order instead. */
   readonly namespace?: readonly string[];
   /** Wall-clock gap since the previous frame — the same honest
    * approximation the Inspector's duration badge uses. */
@@ -73,29 +75,139 @@ export interface TraceNode {
   readonly children: readonly Omit<ActivityRow, 'internal'>[];
 }
 
-/** Nests internal steps under the most recent canvas node — the stream is
- * ordered, so ownership is positional (LangGraph reports a namespace only
- * for true nested subgraphs, not for loop internals).
+/**
+ * The canvas node a frame belongs to, or `null` when the frame cannot say.
+ *
+ * The stream already answers this: `path` is `RunPathResolver`'s walk of the
+ * checkpoint namespace against a known name->id map, and it runs **outermost
+ * first** — an agent's inner `model` step arrives with
+ * `namespace: ['agent_sql:<uuid>']` and therefore `path: ['agent-sql']`, and a
+ * step three levels down inside a mount arrives as
+ * `['wf-music', 'agent-sql']`.
+ *
+ * The **first** entry is the one this trace wants, not the last. A trace is a
+ * record of one document — the one that was run and is on screen — and
+ * `path[0]` is always a card on it, while the deeper entries are cards on a
+ * document this reader is not looking at. Taking the last entry gave the
+ * mounted child's `router1` a row of its own on the parent's trace, where the
+ * name lookup resolved it against the *parent's* nodes and printed the
+ * parent's router's title on the child's step: the same id collision
+ * `pathSlugs` exists to warn about. Outermost-first, a whole mounted run
+ * collapses to the mount's own row, which is what a mount is.
+ *
+ * `activeNode` is the server's own top-level answer and says the same thing;
+ * it is the fallback because it is *sticky* across frames that resolve to
+ * nothing, and stickiness is the failure mode this ticket is about.
+ *
+ * `null` means an older frame with neither field, and the caller falls back to
+ * the positional rule this module used to apply to everything.
+ */
+export function traceOwner(row: ActivityRow): string | null {
+  const path = row.path;
+  if (path && path.length > 0) return path[0] ?? null;
+  return row.activeNode ?? null;
+}
+
+/** Ids reach this module from two producers — a frame's `node` and a
+ * resolved `path` entry — and one of them may carry the `node:` prefix the
+ * view strips for display. Comparing them raw is how a match is missed. */
+const same = (id: string) => id.replace(/^node:/, '');
+
+/**
+ * Nests internal steps under the canvas node **that ran them** (ticket 72),
+ * which is not the node above them in the stream.
+ *
+ * The old rule was positional — "charge an internal frame to the last node
+ * row" — and it was wrong in the one direction nobody checks: LangGraph emits
+ * a node's inner frames *before* that node's own completion frame. So every
+ * agent's loop was charged to whatever ran immediately **before** it, and the
+ * agent's own row arrived milliseconds later carrying nothing. On the shipped
+ * `chinook-assistant` that read as a tool-less classifier making eight
+ * database calls in 11 seconds while the SQL agent, which owns those tools,
+ * showed `2 ms`. Read literally the trace sent a developer to optimise the
+ * wrong node.
+ *
+ * So ownership is now a **lookup**, not a position: `traceOwner` reads the
+ * `path` the server already resolves for the canvas highlight, and the first
+ * internal frame of a node *opens* that node's row rather than joining the
+ * previous one. The node's own frame, when it arrives, closes the row it
+ * already has instead of pushing a second one — which is also why a revision
+ * loop still reads as two visits and not one merged blob.
+ *
+ * A frame with no `path` and no `activeNode` keeps the positional rule: it is
+ * an older client's wire format, and guessing is still better than dropping.
  *
  * A spawn row is always top-level, even though it usually arrives while an
  * agent's internal loop is running: it is the announcement of a *new* actor,
  * so burying it under the parent's collapsed step count would hide exactly
- * the moment the user came here to see. */
+ * the moment the user came here to see.
+ */
 export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
-  const tree: TraceNode[] = [];
-  // The owner of internal steps is the last *node*, not the last row: a spawn
-  // row sits in the tree too, and charging a tool loop to it would turn the
-  // announcement into the work.
-  let owner: TraceNode | undefined;
+  interface Mutable {
+    node: string;
+    taskId: string | null;
+    durationMs: number;
+    output: string | null;
+    spawn?: SpawnDetail;
+    children: Omit<ActivityRow, 'internal'>[];
+  }
+  const tree: Mutable[] = [];
+  // Rows opened by an internal frame and still waiting for their node's own
+  // completion frame. Keyed by canvas id: at most one visit of a node can be
+  // open at a time, because its completion frame closes it.
+  const open = new Map<string, Mutable>();
+  // The positional fallback, for frames that carry no path at all.
+  let last: Mutable | undefined;
+
+  const push = (row: ActivityRow): Mutable => {
+    const node: Mutable = {
+      node: row.node,
+      taskId: row.taskId,
+      durationMs: row.durationMs,
+      output: row.output,
+      ...(row.spawn ? { spawn: row.spawn } : {}),
+      children: [],
+    };
+    tree.push(node);
+    return node;
+  };
+
   for (const row of rows) {
     if (row.spawn) {
-      tree.push({ ...row, children: [] });
-    } else if (row.internal) {
-      if (owner) (owner.children as ActivityRow[]).push(row);
-    } else {
-      owner = { ...row, children: [] };
-      tree.push(owner);
+      push(row);
+      continue;
     }
+    const owner = traceOwner(row);
+    if (row.internal) {
+      // The owner's row, opened now if its completion frame has not arrived.
+      const key = owner === null ? null : same(owner);
+      let target = key === null ? last : open.get(key);
+      if (!target && key !== null) {
+        target = push({ ...row, node: owner as string, internal: false, output: null,
+          durationMs: 0, spawn: undefined });
+        open.set(key, target);
+      }
+      if (!target) continue;
+      target.children.push(row);
+      // The steps are where a node's time actually went: the completion
+      // frame's own gap is the millisecond after the last one. Summing them
+      // is what stops a 36-step agent reading `3 ms`.
+      target.durationMs += row.durationMs;
+      continue;
+    }
+    const key = same(owner ?? row.node);
+    const opened = open.get(key);
+    if (opened) {
+      // Close the row its own steps already opened, rather than pushing a
+      // second, empty one directly beneath it.
+      opened.durationMs += row.durationMs;
+      opened.output = row.output ?? opened.output;
+      opened.taskId = opened.taskId ?? row.taskId;
+      open.delete(key);
+      last = opened;
+      continue;
+    }
+    last = push(row);
   }
   return tree;
 }

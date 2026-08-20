@@ -52,3 +52,99 @@ describe('buildTrace', () => {
     expect(trace[0]!.taskId).toBe('t1');
   });
 });
+
+describe('buildTrace ownership (ticket 72)', () => {
+  // The real frame order, taken off the wire on 2026-08-20: an agent's
+  // internal loop frames arrive *before* the agent's own completion frame,
+  // so "the last node row" is always the node that ran *before* it.
+  const chinook = (): ActivityRow[] => [
+    row({ node: 'in1', path: ['in1'], durationMs: 3110 }),
+    row({ node: 'router1', path: ['router1'], durationMs: 632 }),
+    spawn('agent-sql', { node: 'router1', path: ['router1'], durationMs: 0 }),
+    row({
+      node: 'model',
+      internal: true,
+      namespace: ['agent_sql:7ea78ca6'],
+      path: ['agent-sql'],
+      durationMs: 4000,
+    }),
+    row({
+      node: 'tools',
+      internal: true,
+      namespace: ['agent_sql:7ea78ca6'],
+      path: ['agent-sql'],
+      durationMs: 300,
+    }),
+    row({ node: 'agent-sql', path: ['agent-sql'], durationMs: 3, output: 'the answer' }),
+    row({ node: 'grader-sql', path: ['grader-sql'], durationMs: 714 }),
+  ];
+
+  it('credits an agent loop to the agent, not to the node before it', () => {
+    const trace = buildTrace(chinook());
+    expect(trace.map((s) => s.spawn?.label ?? s.node)).toEqual([
+      'in1',
+      'router1',
+      'agent-sql',
+      'agent-sql',
+      'grader-sql',
+    ]);
+    // `router1` is a classifier with no tools wired; it ran nothing.
+    expect(trace[1]!.children).toHaveLength(0);
+    expect(trace[3]!.children.map((c) => c.node)).toEqual(['model', 'tools']);
+    expect(trace[3]!.output).toBe('the answer');
+  });
+
+  it('gives the owning row the time its own steps took', () => {
+    const trace = buildTrace(chinook());
+    expect(trace[1]!.durationMs).toBe(632);
+    expect(trace[3]!.durationMs).toBe(4303);
+  });
+
+  it('opens a fresh row for each visit, so a revision loop reads as two', () => {
+    const internal = (path: string) =>
+      row({ node: 'model', internal: true, path: [path], durationMs: 5 });
+    const trace = buildTrace([
+      internal('agent-sql'),
+      row({ node: 'agent-sql', path: ['agent-sql'], durationMs: 1 }),
+      row({ node: 'grader-sql', path: ['grader-sql'], durationMs: 2 }),
+      internal('agent-sql'),
+      row({ node: 'agent-sql', path: ['agent-sql'], durationMs: 1 }),
+    ]);
+    expect(trace.map((s) => s.node)).toEqual([
+      'agent-sql',
+      'grader-sql',
+      'agent-sql',
+    ]);
+    expect(trace.map((s) => s.children.length)).toEqual([1, 0, 1]);
+  });
+
+  it('collapses a mounted run onto the mount, not onto the child\'s own ids', () => {
+    // `concierge` mounts `chinook-assistant` at `wf-music`. Every frame from
+    // inside the child arrives with the mount at the head of its path — and
+    // the child's ids collide with the parent's (`in1`, `router1`, `out1`),
+    // so a row named from the deep end prints the parent's node titles on the
+    // child's steps.
+    const inside = (node: string, tail: string) =>
+      row({ node, internal: true, path: ['wf-music', tail], durationMs: 20 });
+    const trace = buildTrace([
+      row({ node: 'router1', path: ['router1'], durationMs: 5 }),
+      inside('in1', 'in1'),
+      inside('model', 'agent-sql'),
+      inside('grader_sql', 'grader-sql'),
+      row({ node: 'wf-music', path: ['wf-music'], durationMs: 1 }),
+      row({ node: 'out1', path: ['out1'], durationMs: 2 }),
+    ]);
+    expect(trace.map((s) => s.node)).toEqual(['router1', 'wf-music', 'out1']);
+    expect(trace[1]!.children.map((c) => c.node)).toEqual(['in1', 'model', 'grader_sql']);
+    expect(trace[1]!.durationMs).toBe(61);
+  });
+
+  it('falls back to the positional rule for a frame carrying no path', () => {
+    const trace = buildTrace([
+      row({ node: 'node:agent1' }),
+      row({ node: 'model', internal: true }),
+    ]);
+    expect(trace).toHaveLength(1);
+    expect(trace[0]!.children.map((c) => c.node)).toEqual(['model']);
+  });
+});

@@ -834,11 +834,37 @@ function renderTimeline(el, rows, names) {
   const body = box.querySelector(".tl-body");
   const steps = [];
   const visits = {};
+  // Bars still waiting for their node's own completion frame — see
+  // `frameOwner`. LangGraph emits a node's inner frames BEFORE that node
+  // finishes, so folding an internal frame into "the last bar" charged every
+  // agent's loop to whatever ran before it (ticket 72).
+  const open = {};
   let clock = 0;
   for (const row of rows) {
     const d = Math.max(0, row.ms || 0);
     const last = steps[steps.length - 1];
-    if (row.internal) { if (last) { last.ms += d; last.internal++; } clock += d; continue; }
+    const owner = row.owner || "";
+    if (row.internal) {
+      let target = owner ? open[owner] : last;
+      if (!target && owner) {
+        visits[displayName(owner)] = (visits[displayName(owner)] || 0) + 1;
+        target = { label: displayName(owner), ns: null, taskId: row.taskId, ms: 0,
+                   start: clock, count: 1, internal: 0, visit: visits[displayName(owner)] };
+        steps.push(target);
+        open[owner] = target;
+      }
+      if (target) { target.ms += d; target.internal++; }
+      clock += d;
+      continue;
+    }
+    if (owner && open[owner]) {
+      // Close the bar this node's own steps already opened, rather than
+      // drawing a second, empty one beside it.
+      open[owner].ms += d;
+      delete open[owner];
+      clock += d;
+      continue;
+    }
     const ns = (row.namespace && row.namespace[0]) || null;
     if (ns && last && last.ns === ns && last.taskId === row.taskId) { last.ms += d; last.count++; clock += d; continue; }
     const label = (row.taskId && names["task:" + row.taskId])
@@ -1054,6 +1080,35 @@ function watchCatalogue() {
  * (reviews-2026-08-14 ticket 04). Falls back to the bare id: a node its author
  * never named has no better name to show, and inventing one would be worse.
  */
+/**
+ * The canvas node a frame belongs to (ticket 72).
+ *
+ * `path` is the server's own walk of the checkpoint namespace against a known
+ * name->id map (`RunPathResolver`), and it runs **outermost first**: an
+ * agent's inner `model` step arrives with `namespace: ["agent_sql:<uuid>"]`
+ * and therefore `path: ["agent-sql"]`, while a step inside a mounted workflow
+ * arrives as `["wf-music", "agent-sql"]`.
+ *
+ * The **first** entry is the one this page wants. It shows one document, the
+ * one it is chatting with, and `path[0]` is always a node on it — the deeper
+ * entries are nodes of a document the customer never sees, and `displayName`
+ * would resolve their ids against the wrong `nodes` list and print a
+ * confident, wrong title. Outermost-first, a whole mounted run collapses to
+ * the mount's own line, which is what a mount is.
+ *
+ * `activeNode` is the server's own top-level answer and says the same thing;
+ * it is only the fallback because it is *sticky* across frames that resolve
+ * to nothing.
+ *
+ * Returns "" when the frame cannot say, and the caller keeps the old
+ * positional rule for that case.
+ */
+function frameOwner(d) {
+  const path = d && d.path;
+  if (path && path.length) return path[0] || "";
+  return (d && d.activeNode) || "";
+}
+
 function displayName(nodeId) {
   const bare = String(nodeId || "").replace(/^node:/, "");
   const nodes = (state.doc && state.doc.document && state.doc.document.nodes) || [];
@@ -1137,7 +1192,7 @@ async function stream(path, body, el, signal) {
           const d = JSON.parse(line.slice(6));
           if (event === "update") {
             const now = performance.now();
-            tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], ms: now - lastFrameAt });
+            tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], owner: frameOwner(d), ms: now - lastFrameAt });
             lastFrameAt = now;
             renderTimeline(el, tlRows, tlNames);
             // What lights up is the stream's own `activeNode` (ticket 01) —
@@ -1152,15 +1207,43 @@ async function stream(path, body, el, signal) {
             // `safeName` still applies. Older backends omit it — the previous
             // namespace-head guess is kept as the fallback.
             highlightFlow(d.activeNode || (d.namespace && d.namespace[0] || "").split(":")[0] || d.node);
+            const owner = frameOwner(d);
+            // The row a node's steps hang on, opened by whichever of its
+            // frames arrives first. `[data-open]` marks a row whose node has
+            // not reported finishing yet; at most one visit of a node can be
+            // open at a time, because its own frame closes it.
+            const openRow = (id) => id
+              ? steps.querySelector(':scope > div[data-open="1"][data-owner="' + CSS.escape(id) + '"]')
+              : null;
             if (d.internal) {
               // Internal machinery collapses to a live counter on its owning
               // step — a 20-call tool loop is one line, not twenty.
-              // The *last real step*, not the last row: a spawn row sits in
-              // this strip too, and charging a tool loop's steps to it would
-              // relabel the announcement as work.
-              let last = steps.lastElementChild;
-              while (last && (last.classList.contains("spawn") || last.classList.contains("live"))) {
-                last = last.previousElementSibling;
+              //
+              // Its owner is the node the SERVER resolved for the frame, not
+              // the row above it (ticket 72). An agent's inner frames arrive
+              // before the agent's own `update`, so "the last real step" was
+              // always the node that ran *before* the work: on
+              // `chinook-assistant` a tool-less classifier was shown making
+              // the database calls, and the SQL agent that owns those tools
+              // showed nothing at all.
+              let last = openRow(owner);
+              if (!last && owner) {
+                clearLive();
+                last = document.createElement("div");
+                last.dataset.base = "▸ " + displayName(owner);
+                last.dataset.owner = owner;
+                last.dataset.open = "1";
+                last.textContent = last.dataset.base;
+                steps.appendChild(last);
+              }
+              if (!last) {
+                // A frame that cannot say who it belongs to — an older
+                // backend. The positional rule is kept for it: still better
+                // than dropping the step.
+                last = steps.lastElementChild;
+                while (last && (last.classList.contains("spawn") || last.classList.contains("live"))) {
+                  last = last.previousElementSibling;
+                }
               }
               if (last) {
                 const n = (Number(last.dataset.internal) || 0) + 1;
@@ -1172,11 +1255,15 @@ async function stream(path, body, el, signal) {
               // is no longer true — the live line goes before the row that
               // records the finish.
               clearLive();
-              const row = document.createElement("div");
-              const base = "▸ " + displayName(d.node) + (d.taskId ? " (" + d.taskId + ")" : "");
+              const existing = openRow(owner);
+              const row = existing || document.createElement("div");
+              const base = "▸ " + displayName(owner || d.node) + (d.taskId ? " (" + d.taskId + ")" : "");
               row.dataset.base = base;
-              row.textContent = base;
-              steps.appendChild(row);
+              row.dataset.owner = owner || d.node;
+              row.textContent = base + (Number(row.dataset.internal)
+                ? "  ·  " + row.dataset.internal + " steps" : "");
+              delete row.dataset.open;
+              if (!existing) steps.appendChild(row);
             }
             el.scrollIntoView({ block: "end" });
           } else if (event === "progress") {
