@@ -1,4 +1,5 @@
 import {
+  baselineSlugAfterRestore,
   ensureDiskBaseline,
   writeOpenMountHostToDisk,
   writeOpenWorkflowToDisk,
@@ -28,20 +29,25 @@ import {
   isClaimedByAnother,
   mostRecentWorkflowId,
   newWriteGuard,
-  readWorkflow,
   releaseSession,
   resolveSession,
   saveWorkflow,
   type WriteGuard,
 } from './workflowStore';
-import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import {
   getOpenSlug,
   readSlugFromSearch,
   resolveOpenRequest,
   subscribeOpenSlug,
 } from './openWorkflow';
-import { DRAFT_SESSION_KEY, draftIdForSlug, draftSavedAt, hasDraftFor } from './workflowDrafts';
+import {
+  DRAFT_SESSION_KEY,
+  draftIdForSlug,
+  draftSavedAt,
+  hasDraftFor,
+  restoreSessionDraft,
+  type DraftRestoreReport,
+} from './workflowDrafts';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -254,13 +260,16 @@ export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
  * lose work now ends in a sentence the user sees.
  */
 export function useWorkflowSession(report: (message: string) => void = () => {}): {
-  restored: boolean;
+  restore: DraftRestoreReport;
   workflowId: string | null;
 } {
   const controller = useController();
   const workbench = useWorkbench();
-  const [state, setState] = useState<{ restored: boolean; workflowId: string | null }>({
-    restored: false,
+  const [state, setState] = useState<{
+    restore: DraftRestoreReport;
+    workflowId: string | null;
+  }>({
+    restore: { restored: false },
     workflowId: null,
   });
   // StrictMode mounts effects twice; restoring twice would be visible.
@@ -336,42 +345,16 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
           });
     if (session.notice != null) reportRef.current(session.notice);
 
-    if (session.shouldRestore) {
-      const outcome = readWorkflow(localStorage, session.id);
-      if (outcome.status === 'corrupt') {
-        // Recovered, not crashed: the seeded demo already on screen stays, the
-        // bad bytes are quarantined by the reader, and the user is told —
-        // which is the part that was missing when this returned a bare null.
-        reportRef.current(outcome.reason);
-      } else if (outcome.status === 'ok') {
-        // Remember which version we restored. Without this the first autosave
-        // cannot tell its own lineage from another tab's newer write.
-        writer.lastSeenAt = outcome.savedAt;
-        try {
-          // Same ordering requirement as the named-file Load path: a
-          // workflow-scoped node type must be registered *before* import, or
-          // `fromJSON` silently skips every node of that type.
-          registerNodeTypesForRawDocument(
-            JSON.parse(outcome.json),
-            workbench.registry,
-            workbench.engine.executors,
-          );
-          controller.document.importJSON(outcome.json);
-        } catch (error) {
-          // A structurally valid envelope holding a document this build cannot
-          // import. Same recovery, same duty to say so.
-          const detail = error instanceof Error ? error.message : String(error);
-          reportRef.current(
-            `The autosaved workflow could not be restored (${detail}). ` +
-              'The editor has started from a blank workflow; nothing was deleted.',
-          );
-        }
-      }
-    }
+    // What actually reached the canvas, not what we set out to do
+    // (`production-ready` 71). The two differ exactly when the draft is gone —
+    // cleared site data, an eviction, a key never migrated — and the
+    // difference used to be a package overwritten by a blank document.
+    const restore = restoreSessionDraft(session, workbench, writer, localStorage);
+    if (restore.notice != null) reportRef.current(restore.notice);
 
     sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
-    setState({ restored: session.shouldRestore, workflowId: session.id });
+    setState({ restore, workflowId: session.id });
   }, [controller, workbench]);
 
   // The autosave key follows the open workflow for the rest of the session.
@@ -431,7 +414,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // slug in `sessionStorage` from a previous visit. Baselining there would
     // hand autosave a package it is allowed to write while the model holds a
     // demo, and the next tick would write the demo into that package.
-    const restoredSlug = state.restored ? getOpenSlug() : null;
+    const restoredSlug = baselineSlugAfterRestore(state.restore, getOpenSlug());
     if (restoredSlug) {
       void ensureDiskBaseline(
         restoredSlug,
@@ -520,7 +503,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       if (timer != null) clearTimeout(timer);
       releaseSession(localStorage, workflowId, writer);
     };
-  }, [controller, workbench, workflowId, state.restored]);
+  }, [controller, workbench, workflowId, state.restore]);
 
   return state;
 }

@@ -4,6 +4,7 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
+import type { DraftRestoreReport } from './workflowDrafts';
 import {
   CURRENT_SLUG_KEY,
   forgetKnownSavedAt,
@@ -212,6 +213,27 @@ export function rememberDiskDocument(
  * Does nothing when a baseline already exists, and — importantly — nothing at
  * all when the fetch fails. A failed read must not become a blind write.
  */
+/**
+ * The slug a page load may hand disk autosave, after a restore attempt.
+ *
+ * `production-ready` 71. This exists as a function taking a
+ * **`DraftRestoreReport`** rather than as an `if` on a boolean, because the
+ * boolean is exactly what went wrong: the caller had two of them in scope —
+ * "we intended to restore" and "a document arrived" — and passed the first.
+ * A type the plan cannot satisfy makes that a compile error.
+ *
+ * `null` means *no baseline*, which `writeOpenWorkflowToDisk` reads as
+ * **never write this package** — the correct answer for a canvas holding a
+ * document that did not come from it.
+ */
+export function baselineSlugAfterRestore(
+  report: DraftRestoreReport,
+  openSlug: string | null,
+): string | null {
+  if (!report.restored) return null;
+  return openSlug !== null && openSlug !== '' ? openSlug : null;
+}
+
 export async function ensureDiskBaseline(
   slug: string,
   client: Pick<IWorkflowFileClient, 'load'>,

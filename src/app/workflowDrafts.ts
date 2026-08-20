@@ -1,5 +1,10 @@
 import type { Workbench } from './Workbench';
-import { moveWorkflow, readWorkflow, type KeyValueStore } from './workflowStore';
+import {
+  moveWorkflow,
+  readWorkflow,
+  type KeyValueStore,
+  type WriteGuard,
+} from './workflowStore';
 import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 
 /**
@@ -144,6 +149,78 @@ export function hasDraftFor(subject: string | null, store?: KeyValueStore): bool
 export function draftSavedAt(slug: string, store: KeyValueStore = browserStore()): string | null {
   const draft = readWorkflow(store, draftIdForSlug(slug));
   return draft.status === 'ok' ? draft.savedAt : null;
+}
+
+/**
+ * What actually reached the canvas when a page load tried to restore a draft.
+ *
+ * **A report, not a plan, and the distinction is `production-ready` 71.** The
+ * startup hook used to carry `session.shouldRestore` — the *intent* — into the
+ * decision about whether disk autosave may write the open package. With a slug
+ * surviving in `sessionStorage` and the draft gone, that intent is `true`,
+ * nothing is imported, the canvas stays blank, and the package was handed to
+ * autosave anyway. The next edit wrote an empty document over a real workflow,
+ * with no Save pressed and nothing said.
+ *
+ * So this is a distinct **type**, not a boolean, and `baselineSlugAfterRestore`
+ * accepts only this. Passing the plan is a compile error rather than a data
+ * loss, which is the only version of this guard that cannot rot — the comment
+ * describing the hazard was already correct and already there, and the code
+ * disagreed with it for as long as nobody re-read both.
+ */
+export interface DraftRestoreReport {
+  /** True only when a document was parsed, imported, and is on screen. */
+  readonly restored: boolean;
+  /** What to tell the user, when something was wrong with the stored bytes. */
+  readonly notice?: string;
+}
+
+/**
+ * Put this browser's draft for `plan.id` on screen, and report what happened.
+ *
+ * Every outcome other than a successful import is `restored: false`, including
+ * the two recoverable ones — bytes that will not parse (quarantined by the
+ * reader, which supplies the notice) and a document this build cannot import.
+ * In both the canvas keeps what it already had, which is the right recovery
+ * and is emphatically **not** a restore.
+ */
+export function restoreSessionDraft(
+  plan: { readonly id: string; readonly shouldRestore: boolean },
+  workbench: Workbench,
+  writer: WriteGuard,
+  store: KeyValueStore = browserStore(),
+): DraftRestoreReport {
+  if (!plan.shouldRestore) return { restored: false };
+
+  const outcome = readWorkflow(store, plan.id);
+  // Recovered, not crashed: whatever is already on screen stays, the bad bytes
+  // are quarantined by the reader, and the user is told.
+  if (outcome.status === 'corrupt') return { restored: false, notice: outcome.reason };
+  if (outcome.status !== 'ok') return { restored: false };
+
+  // Remember which version we restored. Without this the first autosave cannot
+  // tell its own lineage from another tab's newer write.
+  writer.lastSeenAt = outcome.savedAt;
+  try {
+    // Same ordering requirement as the named-file Load path: a workflow-scoped
+    // node type must be registered *before* import, or `fromJSON` silently
+    // skips every node of that type.
+    registerNodeTypesForRawDocument(
+      JSON.parse(outcome.json),
+      workbench.registry,
+      workbench.engine.executors,
+    );
+    workbench.controller.document.importJSON(outcome.json);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      restored: false,
+      notice:
+        `The autosaved workflow could not be restored (${detail}). ` +
+        'The editor has started from a blank workflow; nothing was deleted.',
+    };
+  }
+  return { restored: true };
 }
 
 export interface DraftRestoreOutcome {

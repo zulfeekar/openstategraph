@@ -208,6 +208,20 @@ function syncUrl(slug: string | null): void {
  * out. **A missing draft is never an empty canvas** — the fallback is the
  * document the URL names, always. Omitting the field keeps the old behaviour
  * for the one caller that genuinely has no storage question to ask.
+ *
+ * ## …and the branch ticket 49 did not cover (`production-ready` 71)
+ *
+ * That rule was written into the *first* case and gated on `urlSlug !== null`,
+ * so the third one — **no `w=` at all** — kept restoring a draft that was not
+ * there. The canvas stayed blank while `sessionStorage` went on naming a real
+ * package, and that pairing is what let an empty document be written over a
+ * 13-node workflow with no Save pressed.
+ *
+ * The fallback is the same one, and the sentence above did not need changing:
+ * a missing draft is never an empty canvas. Here the document to fall back to
+ * is the one the *open slug* names rather than the one the URL names, because
+ * that is the only claim in play — and it is the same document the caller was
+ * about to write back into the URL anyway.
  */
 export function resolveOpenRequest(input: {
   urlSlug: string | null;
@@ -220,6 +234,9 @@ export function resolveOpenRequest(input: {
   }
   if (input.urlSlug !== null && input.hasDraft === false) {
     return { action: 'fetch', slug: input.urlSlug };
+  }
+  if (input.urlSlug === null && input.openSlug !== null && input.hasDraft === false) {
+    return { action: 'fetch', slug: input.openSlug };
   }
   return { action: 'restore' };
 }

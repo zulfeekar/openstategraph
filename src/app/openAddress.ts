@@ -134,6 +134,13 @@ export function resolveAddressRequest(input: {
   if (urlAddress !== null && input.hasDraft === false) {
     return { action: 'fetch', address: urlAddress };
   }
+  // No parameter, a package already claimed here, and no draft of it — the
+  // same fallback, for the branch ticket 49 left out (`production-ready` 71).
+  // Its twin in `resolveOpenRequest` carries the reasoning; the two must
+  // answer alike and `openAddress.test.ts` pins that they do.
+  if (urlAddress === null && openAddress !== null && input.hasDraft === false) {
+    return { action: 'fetch', address: openAddress };
+  }
   return { action: 'restore' };
 }
 
