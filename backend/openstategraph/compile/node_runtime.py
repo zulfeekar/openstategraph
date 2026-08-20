@@ -464,6 +464,36 @@ def _final_text(messages: list[Any]) -> str:
             return text
     return ""
 
+def unmet_tools_update(node_id: str, messages: list[Any]) -> dict[str, Any]:
+    """What this node reached for and was refused, as a state fragment.
+
+    The seam every tool-binding factory shares. Ticket 33 built the
+    deterministic route — read the name out of **our own** refusal, look it up,
+    offer the tool — and wired it into `_agent` by hand. `_worker` binds tools
+    the same way and got nothing, so `morning-brief` asked for `web_fetch`, was
+    refused by name, and no card appeared for a tool we ship
+    (`every-workflow-green` 36). The worker's own docstring already records
+    this failure once, about `advisor_context`: composed into one factory and
+    not the other.
+
+    Read from the **messages**, never from the answer: the refusal is a
+    `ToolMessage` in the middle and the answer that follows it usually says
+    nothing about it, which is exactly what proved unreliable in 33.
+
+    Returns `{}` rather than an empty map when nothing was refused, so a clean
+    run writes no key — a node that reports `[]` and a node that reports
+    nothing must not look the same to the reducer.
+    """
+    from openstategraph.compile.workflow_compiler import rejected_tool_names
+
+    refused: list[str] = []
+    for message in messages or []:
+        for name in rejected_tool_names(getattr(message, "content", None)):
+            if name not in refused:
+                refused.append(name)
+    return {"unmet_tools": {node_id: refused}} if refused else {}
+
+
 def _text(data: dict[str, Any], key: str, default: str = "") -> str:
     value = data.get(key)
     return value if isinstance(value, str) else default
@@ -1934,23 +1964,15 @@ class NodeRuntime:
             # and spent the whole retry budget re-asking an answered question.
             text = _final_text(result.get("messages") or [])
             answer = text if isinstance(text, str) else str(text)
-            # Names this agent reached for and was refused. Read from the
-            # messages rather than inferred from the answer, because the answer
-            # is exactly what proved unreliable: the model announced the gap by
-            # name in a tool call and then said it had no way to look anything
-            # up (`every-workflow-green` 33).
-            from openstategraph.compile.workflow_compiler import rejected_tool_names
-
-            refused: list[str] = []
-            for message in result.get("messages") or []:
-                for name in rejected_tool_names(getattr(message, "content", None)):
-                    if name not in refused:
-                        refused.append(name)
+            # Names this agent reached for and was refused
+            # (`every-workflow-green` 33). The extraction is
+            # `unmet_tools_update` because `_worker` needs the identical thing
+            # and, for one ticket, did not have it (36).
             return {
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
-                **({"unmet_tools": {node_id: refused}} if refused else {}),
+                **unmet_tools_update(node_id, result.get("messages") or []),
             }
 
         return run
@@ -2677,6 +2699,14 @@ class NodeRuntime:
             text = _final_text(out)
             return {
                 "worker_results": {task_id: text if isinstance(text, str) else str(text)},
+                # What this worker was refused, keyed by **node** id and not by
+                # task id — `suggestion_from_rejection` builds an `attachTo`
+                # out of it, and a card can only be applied if it names a node
+                # that is actually on the canvas. Every dispatched instance
+                # shares one node id, so two subtasks refused the same tool
+                # merge to one offer, which is the right number of cards
+                # (ticket 36).
+                **unmet_tools_update(node_id, out),
                 # Which worker node ran which subtask (ticket 17). Every
                 # dispatched instance shares one node id, so the task id is
                 # what keeps them apart — the same reason `worker_results` is
