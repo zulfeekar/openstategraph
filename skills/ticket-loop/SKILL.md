@@ -158,6 +158,56 @@ resolved, or you learn something about the instruments. When in doubt, write it
 — the cost of a redundant line is nothing against the cost of the next session
 re-deriving it.
 
+## Chaining — when one session may hand to the next with nobody in between
+
+Four sessions ran this way on 2026-08-20 (`production-ready` 72, 83, 78 and
+`workflow-gallery` 31). It works. The rules it produced:
+
+**Sequential, never parallel.** Two sessions on one checkout collide, and
+concretely: `.git/index.lock` is exclusive, so two commits fail or interleave;
+the handoff and the ticket files are read-modify-write, so one silently loses
+the other's edit; `session_guard.py` keeps a single snapshot and a second
+`snapshot` blinds the first; and one server per state directory is enforced by
+the product itself.
+
+**Only some tickets are eligible, and it is derived, not listed.** A list goes
+stale the day it is written — six tickets were filed on the day this paragraph
+was. Three questions:
+
+- **Can its "test as a user" step be done without a browser?** If the
+  reproduction is `?w=`, a canvas, a palette or `/chat`, it is not eligible.
+  The browser pass is the step that catches the incomplete fix; a session that
+  cannot run it has no step 4.
+- **Is the decision already made?** A `grilling` or `question` ticket ends in a
+  judgement. That is a conversation, not unattended work.
+- **Is the blast radius contained?** Anything touching the save/draft path, or
+  machinery several other tickets depend on, gets a person on the diff however
+  headless it looks.
+
+**The gate between tickets is the half that matters**, and it is a script:
+
+```bash
+python3 scripts/loop_gate.py
+```
+
+Trailer, ledger, `session_guard`, both suites, handoff moved. Non-zero stops
+the chain. It cannot tell you the fix is *right* — only the browser pass and a
+reader do that — and it says so on every run.
+
+**Sessions scope correctly and under-file.** All four kept scope honestly; one
+left its second half as a footnote in its report rather than a numbered ticket,
+and a footnote is not something the next session reads. The rule below applies
+to a chained session exactly as it applies to a person: **what you found and
+did not do is a ticket.**
+
+**On model choice**, one measurement rather than a policy: a Sonnet session
+held this repository's standard on two headless, well-specified tickets — it
+found a root cause rather than the two symptoms it was pointed at, and
+mutation-checked in both directions unprompted. That is one data point about
+one kind of ticket. It says nothing yet about a ticket needing judgement, and a
+table here with no evidence under it would be the failure this repository has
+corrected in its own prose three times.
+
 ## Anything found on the way
 
 `/wayfinder` triage into a ticket: what the user saw, the chain back, what was
