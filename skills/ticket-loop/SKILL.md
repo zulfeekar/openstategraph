@@ -25,6 +25,18 @@ This is also the last line of the loop. Finish, write the handoff, **then**
 clear — the handoff is what survives the clear, which is the whole reason
 step 8 is not optional.
 
+**Fingerprint the checkout before you touch it.**
+
+```bash
+python3 scripts/session_guard.py snapshot
+```
+
+Running the product writes files — disk autosave rewrites
+`workflows/<slug>/workflow.json` on every edit the editor makes. That is
+correct behaviour, and it is also how a thirteen-node example was replaced by a
+blank document twice on 2026-08-20, both times noticed by accident. `verify`
+at the end, naming the files you meant to change.
+
 ## 1 — Orient before touching anything
 
 1. **Read the newest `.scratch/HANDOFF-<YYYY-MM-DD>.md`.** Newest by *date in
@@ -56,13 +68,28 @@ would still be green if I fixed the wrong function?*
 
 Then make it pass, and run both suites.
 
+**Then break the fix and watch the test go red.** Comment out the guard you
+just added, re-run, confirm the failure, put it back. It costs a minute and it
+is the only thing that distinguishes a test of the fix from a test of itself —
+`production-ready` 71's first test was green against a completely disabled
+fix, because it restated the gate instead of calling it. A test that
+reimplements the decision it is checking proves only that the test agrees with
+itself.
+
 ## 4 — Test as a user again
 
 Same path, same question, in the browser. **If it is not fixed on screen, it is
 not fixed.** A green suite is not the verification.
 
-Then try to break it. Twice on these maps a fix was incomplete and only a live
-re-run showed it.
+Then try to break it. Three times on these maps a fix was incomplete and only a
+live re-run showed it — most recently `production-ready` 71, whose second
+browser pass found the other half of the same data loss *and destroyed a file
+finding it*.
+
+**Reading the canvas needs a paint.** While the Browser pane is hidden,
+`document.visibilityState` is `"hidden"`, `requestAnimationFrame` never fires
+and `.joint-cells-layer` is an empty string for a document with thirteen nodes
+in it. Take a screenshot first, then assert on the DOM.
 
 ## 5 — Commit with a trailer
 
@@ -153,6 +180,8 @@ different work — is `/grill-me`, not a coin flip.
 - [ ] `scripts/ticket_ledger.py` re-run
 - [ ] docs updated, generated files regenerated
 - [ ] **`.scratch/HANDOFF-<today>.md` updated — done, next, instruments**
+- [ ] `python3 scripts/session_guard.py verify <the files you meant to change>`
+      is clean
 - [ ] nothing pushed
 - [ ] the owner told, in one line, that the session is finished and `/clear` is
       theirs to press
