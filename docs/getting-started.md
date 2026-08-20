@@ -486,6 +486,14 @@ already have open restores this browser's autosave rather than refetching the
 file, so a reload never discards work. Opening a link in a second tab gives
 that tab its own autosaved copy and leaves the first alone.
 
+That rule has one clause worth stating, because getting it wrong cost a
+workflow: *restore* only ever means restoring something. When there is no
+autosave to restore — cleared site data, an eviction, a browser that has never
+seen this workflow — the editor fetches the file, and it does so whether or not
+the URL carries the slug. **A missing autosave is never an empty canvas**
+(`production-ready` 49 and 71). An empty canvas that still believed it was a
+saved workflow is what let a blank document be written over a real one.
+
 That is the value: your flow is **a file in git** — reviewable in a pull
 request, diffable — and the compiled output is an ordinary Python
 `StateGraph`. Import it from a script, exercise it with pytest, deploy it
