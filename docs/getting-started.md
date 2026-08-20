@@ -494,6 +494,12 @@ the URL carries the slug. **A missing autosave is never an empty canvas**
 (`production-ready` 49 and 71). An empty canvas that still believed it was a
 saved workflow is what let a blank document be written over a real one.
 
+The other half of the same rule is what **New** does: a new workflow gets an
+identity of its own from the moment it exists, so nothing you draw in it is
+filed as unsaved edits to the workflow you were just looking at. Your edits to
+that one stay exactly where they were, waiting for you to come back to it
+(`production-ready` 77).
+
 That is the value: your flow is **a file in git** — reviewable in a pull
 request, diffable — and the compiled output is an ordinary Python
 `StateGraph`. Import it from a script, exercise it with pytest, deploy it

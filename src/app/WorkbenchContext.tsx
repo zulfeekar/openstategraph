@@ -38,12 +38,12 @@ import {
   getOpenSlug,
   readSlugFromSearch,
   resolveOpenRequest,
-  subscribeOpenSlug,
 } from './openWorkflow';
 import {
   DRAFT_SESSION_KEY,
   draftIdForSlug,
   draftSavedAt,
+  followOpenSubjectWithDraftKey,
   hasDraftFor,
   restoreSessionDraft,
   type DraftRestoreReport,
@@ -364,25 +364,24 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
   // left, so the very next debounced save writes the *new* graph over the
   // *old* one's draft. Re-keying is what keeps one draft per workflow rather
   // than one per tab.
+  //
+  // **Including when there is nothing open.** `clearOpenSlug` announces `null`
+  // — the gesture behind `New` — and this listener used to answer it with a
+  // bare `return`, so the new document went on autosaving as the *previous*
+  // package's unsaved edits and was restored over it next visit
+  // (`production-ready` 77). The rule, null case and all, lives in
+  // `followOpenSubjectWithDraftKey`, where it can be tested through the real
+  // channel with no DOM.
   useEffect(
     () =>
-      subscribeOpenSlug((slug) => {
-        if (slug == null) return;
-        const id = draftIdForSlug(slug);
-        // Re-baseline for the same reason as the mount path above: the tab is
-        // adopting a key whose stored version it has just been shown.
-        const writer = (writerRef.current ??= newWriteGuard());
-        writer.lastSeenAt = draftSavedAt(slug, localStorage);
-        try {
-          sessionStorage.setItem(DRAFT_SESSION_KEY, id);
-        } catch {
-          // Storage unavailable; the in-memory id below is still correct for
-          // this session, which is what autosave actually writes under.
-        }
-        setState((previous) =>
-          previous.workflowId === id ? previous : { ...previous, workflowId: id },
-        );
-      }),
+      followOpenSubjectWithDraftKey(
+        (writerRef.current ??= newWriteGuard()),
+        (id) =>
+          setState((previous) =>
+            previous.workflowId === id ? previous : { ...previous, workflowId: id },
+          ),
+        localStorage,
+      ),
     [],
   );
 

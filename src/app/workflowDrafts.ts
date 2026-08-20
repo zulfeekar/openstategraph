@@ -1,4 +1,5 @@
 import type { Workbench } from './Workbench';
+import { subscribeOpenSlug } from './openWorkflow';
 import {
   moveWorkflow,
   readWorkflow,
@@ -121,6 +122,64 @@ export function adoptSlugForDraft(
   if (previousId == null || previousId === '') return false;
   if (previousId.startsWith(SLUG_DRAFT_PREFIX)) return false;
   return moveWorkflow(store, previousId, draftIdForSlug(slug));
+}
+
+/**
+ * Keep this tab's autosave key following whatever it has open — **including
+ * when it has nothing open.**
+ *
+ * ## Why the null case is the whole function
+ *
+ * Ticket 23 gave the key a rule: it follows the open workflow, so editing B can
+ * never overwrite A's draft. The listener that implements it began
+ * `if (slug == null) return;`, and that is the announcement `clearOpenSlug`
+ * makes — the one that means *this document has no identity any more*. So on
+ * `New`, the one gesture whose entire point is starting something that is not
+ * the last workflow, the key kept the last workflow's identity. The new
+ * document autosaved as that package's unsaved edits and was restored over it
+ * on the next visit; the file was then written through the ordinary path
+ * (`production-ready` 77, the other half of 71).
+ *
+ * Every other branch of that listener was right. The null case had simply
+ * never been given an answer, and a bare `return` reads like one.
+ *
+ * ## What it does, and the two things it must not do
+ *
+ * A subject re-keys to `slug-<subject>` and re-baselines the write guard
+ * against the stored draft — the tab is adopting a key whose stored version it
+ * has just been shown. No subject mints a fresh `wf-<timestamp>`, the state a
+ * never-saved document is supposed to be in and the one `adoptSlugForDraft` is
+ * written to accept.
+ *
+ * **The previous draft is not moved and not deleted.** Both are somebody's
+ * unsaved work, and `adoptSlugForDraft` states at length why re-filing a
+ * scratch document under another identity is ticket 23's data loss with the
+ * arrow reversed. The new document simply stops writing into it.
+ *
+ * Registered here rather than inline in the hook so the rule is reachable
+ * without a DOM: the test drives `setOpenSlug`/`clearOpenSlug` through the
+ * real channel and leaves only React out.
+ */
+export function followOpenSubjectWithDraftKey(
+  writer: WriteGuard,
+  onId: (id: string) => void,
+  store: KeyValueStore = browserStore(),
+  mintId: () => string = () => `wf-${Date.now()}`,
+): () => void {
+  return subscribeOpenSlug((subject) => {
+    const id = subject == null ? mintId() : draftIdForSlug(subject);
+    // Nothing has been seen under a freshly minted key, and saying otherwise
+    // would have the write guard declare a conflict against a draft that does
+    // not exist.
+    writer.lastSeenAt = subject == null ? null : draftSavedAt(subject, store);
+    try {
+      sessionStorage.setItem(DRAFT_SESSION_KEY, id);
+    } catch {
+      // Storage unavailable; the id handed to `onId` is still correct for this
+      // session, which is what autosave actually writes under.
+    }
+    onId(id);
+  });
 }
 
 /** Whether this browser holds a draft for `subject` (a slug or an address). */
