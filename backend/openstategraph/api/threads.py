@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
+from openstategraph.developer_channel import transcript_text
 from openstategraph.api.schemas import ThreadHistoryResponse, ThreadStep, ThreadSummary
 
 #: Checkpoint channels that belong to the scheduler, not to the run. Showing
@@ -237,17 +238,49 @@ def _matches(
     return True
 
 
+def _scrub(value: Any) -> Any:
+    """The same strip, one level down, for a channel that holds a mapping.
+
+    `outputs` and `worker_results` are dicts of node id → answer text, and they
+    carry the identical fence the top-level `answer` does. Rendering them meant
+    `json.dumps` of the raw strings, so the machinery survived under a key
+    instead of at the top level (`memory-and-replay` 38) — a leak is a leak
+    whichever channel it rides in on.
+    """
+    if isinstance(value, str):
+        return transcript_text(value)
+    if isinstance(value, dict):
+        return {key: _scrub(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub(item) for item in value]
+    return value
+
+
 def _text(value: Any) -> str:
     """One channel value as readable text, bounded.
 
     Messages are the case worth handling by hand: a `messages` channel is a
     list of LangChain objects whose `repr` is unreadable and whose `content`
     is the entire point.
+
+    **Every string passes `transcript_text` first, and before `_cap`.** This is
+    a customer surface, and the checkpointed `answer` keeps its ```suggestion
+    fence on purpose — the live seam splits it, this door read it raw and
+    published the machinery to History and to `GET /api/threads`
+    (`memory-and-replay` 38). Stripping before capping matters on its own: a
+    truncated fence cannot be parsed by anything, so it is worse than a whole
+    one.
+
+    `split_suggestion` beneath it is narrow by design — both `nodeType` and
+    `attachTo`, or nothing — which is what makes it safe over arbitrary channel
+    values in a product whose answers are routinely JSON: SQL result rows, and
+    `workflow-architect` replying with an entire workflow document. That
+    narrowness is pinned in this ticket's test rather than trusted here.
     """
     if value is None:
         return ""
     if isinstance(value, str):
-        return _cap(value)
+        return _cap(transcript_text(value))
     if isinstance(value, (int, float, bool)):
         return str(value)
     if isinstance(value, list):
@@ -255,10 +288,11 @@ def _text(value: Any) -> str:
     content = getattr(value, "content", None)
     if content is not None:
         role = getattr(value, "type", "") or value.__class__.__name__
-        return _cap(f"{role}: {content}" if role else str(content))
+        prose = transcript_text(str(content))
+        return _cap(f"{role}: {prose}" if role else prose)
     if isinstance(value, dict):
         try:
-            return _cap(json.dumps(value, default=str, sort_keys=True))
+            return _cap(json.dumps(_scrub(value), default=str, sort_keys=True))
         except (TypeError, ValueError):  # pragma: no cover - default=str covers it
             return _cap(str(value))
     return _cap(str(value))
