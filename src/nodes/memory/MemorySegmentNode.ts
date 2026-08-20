@@ -26,13 +26,41 @@ export const MEMORY_SEGMENT_DEFAULT_RETENTION = '20';
  * that keeps zero entries is a node whose entire card is untrue, and nobody
  * types `0` meaning "everything".
  */
-export const validateRetention = (value: string): string | null => {
-  if (value.trim() === '') return null;
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0
-    ? null
-    : 'Must be a positive whole number, or blank for everything';
+const DIGITS = /^[0-9]+$/;
+
+/**
+ * The one place this field becomes a number, in the one grammar the ledger
+ * also reads: trimmed, ASCII digits only, above zero, and no larger than a
+ * value both languages hold exactly. Blank and unparseable are the same
+ * answer — `null`, meaning unbounded.
+ *
+ * It was a coercion plus an integer check, which is a far wider grammar
+ * than it looks: `20.0`, `1e3`, `+5` and `0x14` all pass it, so the card accepted
+ * them and its subtitle promised *keeps the last 20 / 1000 / 5 / 20* while
+ * `parse_retention` — `str.isdigit()` — read every one of them as unbounded
+ * (`memory-hardening/10`). The card was the half making a promise, so the card
+ * is the half that narrowed.
+ *
+ * The ceiling is the same reasoning as the blank: a bound must survive the
+ * round trip and mean one thing in both languages. Python holds
+ * `999999999999999999999` exactly; coercion gives `1e+21`, which is what the
+ * card would have printed. Above `MAX_SAFE_INTEGER` no bound can be stated
+ * without the two disagreeing about it, so none is.
+ *
+ * `retentionGrammar.cases.json` is the grammar as data, and it is read by this
+ * file's tests and by `backend/tests/test_retention_grammar_contract.py`.
+ */
+export const parseRetention = (value: string): number | null => {
+  const raw = value.trim();
+  if (!DIGITS.test(raw)) return null;
+  const n = Number.parseInt(raw, 10);
+  return n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
 };
+
+export const validateRetention = (value: string): string | null =>
+  value.trim() === '' || parseRetention(value) !== null
+    ? null
+    : 'Must be a positive whole number in digits, or blank for everything';
 
 /**
  * What the machinery does, shown read-only beside the two things a developer
@@ -59,10 +87,7 @@ export class MemorySegmentNodeModel extends AbstractNodeModel {
 
   /** The configured limit, or `null` for unbounded — never a magic number. */
   get retention(): number | null {
-    const raw = this.getText(FIELD_RETENTION).trim();
-    if (raw === '') return null;
-    const n = Number(raw);
-    return Number.isInteger(n) && n > 0 ? n : null;
+    return parseRetention(this.getText(FIELD_RETENTION));
   }
 
   /**

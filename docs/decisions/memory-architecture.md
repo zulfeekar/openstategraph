@@ -71,6 +71,34 @@ unbuilt work:
   mid-turn. Background formation needs a scheduler, a trigger policy and a
   rescheduling rule — the same runtime we are not.
 
+### The segment's retention field has one grammar, in both languages
+
+`memory-hardening/10`. The limit is parsed on both sides of the seam — by the
+card, so it can validate the field and print the bound in its subtitle, and by
+`parse_retention`, so the ledger knows how much to keep. They are two
+implementations of one rule, and until this ticket they were two *different*
+rules: the card accepted `20.0`, `1e3`, `+5` and `0x14` and promised *keeps the
+last 20 / 1000 / 5 / 20*, while the ledger read all four as unbounded. Less
+visibly the ledger accepted `١٠` — `str.isdigit()` is true of Arabic-Indic
+digits — for a string the card refuses.
+
+The grammar now, on both sides:
+
+> trimmed · ASCII digits only · greater than zero · no larger than
+> `Number.MAX_SAFE_INTEGER` · **blank means unbounded**
+
+The ceiling is the non-finite rule applied to a value that is finite: Python
+holds `999999999999999999999` exactly, JavaScript reads it as `1e+21`, so above
+`MAX_SAFE_INTEGER` there is no single bound for the two to agree on and neither
+may state one.
+
+It is stated as **data** — `src/nodes/memory/retentionGrammar.cases.json`, a
+table of inputs and the bound each must produce — and both suites run their own
+parser over that one file. Pinning the two source texts against each other was
+the alternative and is the mistake `every-workflow-green/39` records: matching
+constants with unmatched assembly diverges anyway. A new spelling is a row in
+the table, and the language that does not implement it goes red.
+
 ## The spine rule
 
 The ROOT workflow (concierge) is the **app spine**: app-wide memory is its

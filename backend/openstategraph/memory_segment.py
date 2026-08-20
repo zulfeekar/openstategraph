@@ -54,6 +54,7 @@ the last N things that crossed one drawn position, furnished verbatim.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -130,6 +131,16 @@ CEILING_REACHED = (
 )
 
 
+#: ASCII digits only. `str.isdigit()` is true for Arabic-Indic and other
+#: Unicode digit forms the card's field cannot express, so the grammar is
+#: spelled out rather than borrowed.
+_DIGITS = re.compile(r"[0-9]+")
+
+#: `Number.MAX_SAFE_INTEGER`. Above it a bound means two different numbers in
+#: the two languages, so it is not a bound either side may state.
+_MAX_SAFE_INTEGER = 2**53 - 1
+
+
 def parse_retention(raw: object) -> int | None:
     """What the card can hold, as `int | None` — `None` meaning unbounded.
 
@@ -142,17 +153,32 @@ def parse_retention(raw: object) -> int | None:
     Everything unparseable becomes unbounded rather than zero. A ledger
     retaining zero entries is a node whose entire card is a lie, and a typo in
     a text box is not a decision to build one.
+
+    The grammar — trimmed, ASCII digits only, above zero, no larger than
+    JavaScript's `MAX_SAFE_INTEGER` — is the card's grammar, and that is the
+    whole point of it. It was `str.isdigit()`, which disagreed with the card's
+    coercion in both directions: the card promised a bound for `20.0`, `1e3`,
+    `+5` and `0x14` that this function read as unbounded, and this function
+    accepted `١٠` (`str.isdigit()` is true for Arabic-Indic digits and `int()`
+    reads them as ten) for a string the card refuses. The ceiling is CLAUDE.md's
+    non-finite rule applied to a value that *is* finite: Python holds
+    `999999999999999999999` exactly and JavaScript gives `1e+21`, so above
+    `MAX_SAFE_INTEGER` the two cannot state one bound.
+
+    `src/nodes/memory/retentionGrammar.cases.json` is the grammar as data, and
+    `backend/tests/test_retention_grammar_contract.py` runs both parsers over
+    it (`memory-hardening/10`).
     """
     if isinstance(raw, bool):
         return None
     if isinstance(raw, int):
-        return raw if raw > 0 else None
+        return raw if 0 < raw <= _MAX_SAFE_INTEGER else None
     if isinstance(raw, str):
         text = raw.strip()
-        if not text.isdigit():
+        if not _DIGITS.fullmatch(text):
             return None
         value = int(text)
-        return value if value > 0 else None
+        return value if 0 < value <= _MAX_SAFE_INTEGER else None
     return None
 
 

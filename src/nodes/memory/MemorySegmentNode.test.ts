@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   MEMORY_SEGMENT_TYPE,
+  parseRetention,
+  validateRetention,
   memorySegmentNode,
   memorySegmentExecutor,
   type MemorySegmentNodeModel,
@@ -9,6 +11,7 @@ import { CATEGORIES, CATEGORY, PORT } from '../vocabulary';
 import { NODE_TYPE } from '../index';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import { makeWorkbench } from '@core/testing/fixtures';
+import retentionCases from './retentionGrammar.cases.json';
 
 /**
  * The tollbooth — install-experience ticket 17, built through
@@ -214,5 +217,45 @@ describe('the browser preview refuses rather than pretending', () => {
     // though it remembered.
     const outcome = await memorySegmentExecutor.execute({ log: () => {} } as never);
     expect(outcome.ok).toBe(false);
+  });
+});
+
+/**
+ * The other half of `backend/tests/test_retention_grammar_contract.py`.
+ *
+ * `memory-hardening/10`. Both files read the same table — one grammar, stated
+ * once as data — so the card and the ledger cannot disagree about what a
+ * retention limit is without one of the two suites going red on the same file.
+ * Asserting a list of accepted spellings here alone would not have caught the
+ * defect: the card was internally consistent and wrong.
+ */
+describe('the retention grammar the ledger also reads', () => {
+  const table = retentionCases as {
+    cases: { input: string; retention: number | null; why: string }[];
+  };
+
+  for (const { input, retention, why } of table.cases) {
+    it(`reads ${JSON.stringify(input)} as ${retention === null ? 'unbounded' : retention} — ${why}`, () => {
+      expect(parseRetention(input)).toBe(retention);
+    });
+  }
+
+  it('refuses every non-blank input the ledger will not keep a bound for', () => {
+    for (const { input, retention } of table.cases) {
+      const blank = input.trim() === '';
+      const error = validateRetention(input);
+      expect(error === null).toBe(blank || retention !== null);
+    }
+  });
+
+  it('never subtitles a bound the ledger would treat as unbounded', () => {
+    const { workbench, node } = placed();
+    for (const { input, retention } of table.cases) {
+      workbench.controller.nodes.setField(node.id, 'segment', 'notes');
+      workbench.controller.nodes.setField(node.id, 'retention', input);
+      expect(node.subtitle).toBe(
+        retention === null ? 'notes · keeps everything' : `notes · keeps the last ${retention}`,
+      );
+    }
   });
 });
