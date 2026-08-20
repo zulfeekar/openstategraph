@@ -1043,6 +1043,21 @@ class ThreadSummary(BaseModel):
     #: with `POST /api/runs/resume` — which *does* execute. `finished` means
     #: there is nothing pending; reading it back is all that is on offer.
     status: Literal["paused", "finished"]
+    #: A node wrote the failure sentinel (`[<node> failed after retries: …]`)
+    #: into `outputs` — the same signal `node_failure_warnings` reports on a
+    #: live run, read back here from the checkpoint.
+    #:
+    #: Deliberately **not** folded into `status`: `status` answers "is this
+    #: waiting on me" (paused vs. finished), a question a failed run answers
+    #: no differently than a clean one — a failed run is not paused, and a
+    #: third `status` value would force every existing reader of `status ==
+    #: "finished"` (the resume gate, the history list) to learn a case that
+    #: has nothing to do with what they are asking. `failed` is also
+    #: deliberately **not** `not answer`: `silent_node_warnings`'s own
+    #: docstring is the reason — "a workflow may legitimately answer with
+    #: nothing at all" — so emptiness alone must never read as failure
+    #: (production-ready/78).
+    failed: bool = False
 
 
 class ThreadListResponse(BaseModel):

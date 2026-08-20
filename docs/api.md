@@ -857,7 +857,7 @@ checkpoint by checkpoint.
       "thread_id": "chat-8f2a1c", "workflow_slug": "chinook-assistant",
       "session_id": "", "user_email": "", "updated_at": "2026-08-11T09:12:04Z",
       "steps": 6, "question": "Which genre earns the most revenue?",
-      "answer": "Rock, $826.65.", "status": "finished"
+      "answer": "Rock, $826.65.", "status": "finished", "failed": false
     }
   ]
 }
@@ -868,6 +868,19 @@ endpoint can start or change a run — a `paused` thread is continued through
 `POST /api/runs/resume` (call 5) and nowhere else. Values are capped
 server-side and private channels are omitted, so a thread carrying a long
 message history does not become a multi-megabyte response.
+
+`status` and `failed` answer two different questions and must not be
+conflated. `status` is `paused` (stopped at an `interrupt()`, resumable) or
+`finished` (nothing pending) — a failed run is `finished`, not a third status
+value, because a failed run is not waiting on anyone. `failed` is `true` when
+a node wrote the failure sentinel (`[<node> failed after retries: …]`) into
+`outputs` — the same signal `node_failure_warnings` reports on a live run —
+read back from the stored checkpoint. It is **not** derived from an empty
+`answer`: a workflow may legitimately answer with nothing, which is a
+different, separately-reported case (`silent_node_warnings`). Before this,
+`threads list`/`threads show` and both endpoints reported every non-paused
+run as `finished` with no way to tell a completed answer from a run that
+produced nothing and exited 1 (production-ready/78).
 
 A step says **which graph it belongs to**, which is what makes a run with any
 fan-out readable:

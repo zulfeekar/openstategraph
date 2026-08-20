@@ -900,7 +900,14 @@ describe('RuntimeClient — past runs', () => {
       question: 'how many tracks?',
       answer: 'Rock earns the most.',
       status: 'paused',
+      failed: false,
     });
+  });
+
+  it('reads a failed node’s sentinel back as `failed`, separately from `status`', async () => {
+    const stub = stubFetch(jsonResponse({ threads: [{ ...ROW, failed: true }] }));
+    const result = await new RuntimeClient('', stub.fetch).pastRuns();
+    expect(result.ok && result.value[0]?.failed).toBe(true);
   });
 
   it('sends the filters as query parameters, not as a body', async () => {

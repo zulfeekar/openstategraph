@@ -37,6 +37,7 @@ const run = (patch: Partial<PastRun> = {}): PastRun => ({
   question: 'Which genre earned the most revenue?',
   answer: 'Rock, $826.65.',
   status: 'finished',
+  failed: false,
   ...patch,
 });
 

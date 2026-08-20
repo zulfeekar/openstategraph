@@ -557,6 +557,13 @@ export interface PastRun {
   readonly answer: string;
   /** `paused` runs can be continued with `resume()`; `finished` ones cannot. */
   readonly status: 'paused' | 'finished';
+  /**
+   * A node wrote the failure sentinel into `outputs` — separate from
+   * `status`, which only answers whether the run is waiting on the user.
+   * Never derived from an empty `answer`: a run may legitimately answer with
+   * nothing (production-ready/78).
+   */
+  readonly failed: boolean;
 }
 
 /**
@@ -1226,6 +1233,7 @@ function asPastRun(row: Record<string, unknown>): PastRun {
     // Anything the backend has not promised is treated as finished: offering
     // a Resume button for a run that cannot be resumed is the worse mistake.
     status: row['status'] === 'paused' ? 'paused' : 'finished',
+    failed: row['failed'] === true,
   };
 }
 

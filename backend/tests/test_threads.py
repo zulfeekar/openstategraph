@@ -28,6 +28,7 @@ from openstategraph.api.threads import list_threads, read_thread, savers_for
 class _State(TypedDict, total=False):
     question: str
     answer: str
+    outputs: dict[str, str]
 
 
 def _graph() -> Any:
@@ -35,6 +36,23 @@ def _graph() -> Any:
     builder.add_node("answer", lambda state: {"answer": f"re: {state['question']}"})
     builder.add_edge(START, "answer")
     builder.add_edge("answer", END)
+    return builder
+
+
+def _failed_graph() -> Any:
+    """One node writes the failure sentinel `node_failure_warnings` matches."""
+    from openstategraph.compile.workflow_compiler import failure_marker
+
+    def fail(state: _State) -> dict[str, Any]:
+        return {
+            "answer": "",
+            "outputs": {"agent1": failure_marker("agent1", 'no credential — set X')},
+        }
+
+    builder: StateGraph = StateGraph(_State)
+    builder.add_node("fail", fail)
+    builder.add_edge(START, "fail")
+    builder.add_edge("fail", END)
     return builder
 
 
@@ -95,6 +113,27 @@ class TestListing:
         assert row.answer == "re: how many tracks?"
         assert row.status == "finished"
         assert row.steps >= 2
+
+    def test_a_run_whose_node_failed_is_marked_failed_not_just_finished(
+        self, saver: InMemorySaver
+    ) -> None:
+        """production-ready/78: `outputs` carries the failure sentinel — history
+        must say so, without repurposing `status`, which stays `finished`
+        (this run is not paused at an interrupt)."""
+        _run(saver, "t-failed", builder=_failed_graph())
+        rows = list_threads([saver])
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.status == "finished"
+        assert row.failed is True
+
+    def test_a_run_that_legitimately_answered_with_nothing_is_not_failed(
+        self, saver: InMemorySaver
+    ) -> None:
+        """The trap named in the ticket: emptiness is not failure."""
+        _run(saver, "t-empty")
+        rows = list_threads([saver])
+        assert rows[0].failed is False
 
     def test_nothing_run_means_nothing_listed(self, saver: InMemorySaver) -> None:
         assert list_threads([saver]) == []

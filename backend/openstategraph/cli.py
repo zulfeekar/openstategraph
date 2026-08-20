@@ -684,8 +684,14 @@ def cmd_threads_list(args: argparse.Namespace) -> int:
         return EXIT_OK
     for row in rows:
         who = row.user_email or "anonymous"
+        # `status` says whether the run is waiting on the user; `failed` is a
+        # separate fact — a node wrote the failure sentinel into `outputs` —
+        # and it is shown alongside status rather than folded into it, so a
+        # run that failed but finished still reads "finished" and additionally
+        # "failed" (production-ready/78).
+        label = f"{row.status} failed" if row.failed else row.status
         print(
-            f"{row.thread_id}  {row.updated_at}  {row.status:8}  "
+            f"{row.thread_id}  {row.updated_at}  {label:15}  "
             f"{row.workflow_slug or '-'}  {who}  {row.question[:60]}"
         )
     return EXIT_OK
@@ -713,7 +719,8 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     thread = history.thread
-    print(f"thread {thread.thread_id} — {thread.status}")
+    status_line = f"{thread.status} — failed" if thread.failed else thread.status
+    print(f"thread {thread.thread_id} — {status_line}")
     print(f"  workflow: {thread.workflow_slug or '-'}")
     print(f"  user:     {thread.user_email or 'anonymous'}")
     print(f"  session:  {thread.session_id or '-'}")

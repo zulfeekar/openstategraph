@@ -43,6 +43,7 @@ from datetime import datetime
 from typing import Any, Iterable
 
 from openstategraph.developer_channel import transcript_text
+from openstategraph.compile.workflow_compiler import node_failure_warnings
 from openstategraph.api.schemas import (
     ThreadHistoryResponse,
     ThreadStep,
@@ -205,6 +206,11 @@ def _summarize(thread_id: str, tuple_: Any, *, steps: int) -> ThreadSummary:
         question=_text(values.get("question")),
         answer=_text(values.get("answer")),
         status="paused" if _is_paused(tuple_) else "finished",
+        # The same sentinel `node_failure_warnings` reports on a live run
+        # (`cli.run_exit_code`'s channel), read back from `outputs` here —
+        # never from emptiness, which `silent_node_warnings` already covers
+        # and which is not a failure (production-ready/78).
+        failed=bool(node_failure_warnings(values.get("outputs") or {})),
     )
 
 

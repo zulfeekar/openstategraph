@@ -1454,6 +1454,11 @@
             "title": "Answer",
             "type": "string"
           },
+          "failed": {
+            "default": false,
+            "title": "Failed",
+            "type": "boolean"
+          },
           "question": {
             "title": "Question",
             "type": "string"
