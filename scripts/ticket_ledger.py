@@ -104,7 +104,29 @@ class Ticket:
     @property
     def is_partial(self) -> bool:
         """Half-shipped, and says so. Open work, but a resolution section is
-        *expected* — it describes the half that landed."""
+        *expected* — it describes the half that landed.
+
+        **It carries a second meaning, learned by sweeping ten of these on
+        2026-08-20, and it is the one that will not be guessed.** A commit's
+        trailer says *this commit's work belongs to that ticket*. It does not
+        say the ticket is finished, and twice in that sweep it emphatically was
+        not: `9be5b53` fixed an impure toast updater under
+        `every-workflow-green/26` and the commit message says in its own words
+        that the symptom survives; `9dcd90d` shipped the selection and centring
+        `31` asked for and the browser check *after* it still read
+        `inView: false`.
+
+        There is no fourth report for that, and there should not be — the
+        script cannot read a commit message. `partially` is its spelling. An
+        `open` header against a trailer is a drift row every run forever, which
+        teaches the two dishonest moves this file exists to prevent: mark it
+        resolved, or leave the trailer off.
+
+        So the word means *a commit landed under this ticket and the ticket is
+        not closed* — whether the half that landed was half the fix or a
+        different defect found on the way. What it must never be read as is a
+        claim that any part of the reported symptom is gone; that belongs in
+        the header sentence, and on 26 and 31 it says so."""
         lowered = self.status.lower()
         # `partial` and `partly` only. "half" was in this list and matched a
         # status whose prose happened to say *"the half the correction names
