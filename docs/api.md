@@ -830,11 +830,37 @@ endpoint can start or change a run — a `paused` thread is continued through
 server-side and private channels are omitted, so a thread carrying a long
 message history does not become a multi-megabyte response.
 
+A step says **which graph it belongs to**, which is what makes a run with any
+fan-out readable:
+
+```json
+{
+  "checkpoint_id": "1f0…", "step": 3, "at": "2026-08-20T06:33:06Z",
+  "source": "loop",
+  "namespace": ["worker_web"], "node": "worker_web",
+  "wrote": ["outputs", "worker_results"],
+  "values": { "answer": "…" }
+}
+```
+
+One thread holds the workflow's own checkpoints **and** those of every agent
+subgraph it ran, and each numbers its supersteps from `-1`. Flat, a run with
+three parallel workers therefore prints `Step 0 · loop` once per graph, as
+though one graph had repeated itself. `namespace` is the workflow's graph path,
+outermost first — `[]` is the workflow itself — read exactly like a stream
+frame's `path`; `node` is its innermost entry; `wrote` names the channels that
+superstep wrote, where `values` is what the state *was*.
+
+A node dispatched twice appears under one `node` with two runs of steps: the
+instance is not part of the namespace, because for identity two dispatches are
+one worker. Group by `namespace` and start a new group when `step` returns to
+`-1`.
+
 They are honest about their limits: a deployment with no checkpointer, or a
 custom saver that cannot enumerate, returns an empty list rather than an
 error — the truthful answer from a store that cannot say is silence. The
 editor's own **History** toggle in the Chat panel is built on exactly these two
-calls and nothing else.
+calls and nothing else, and it draws one lane per graph from these fields.
 
 ---
 
