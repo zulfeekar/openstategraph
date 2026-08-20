@@ -167,3 +167,62 @@ def test_it_runs_against_the_real_maps_without_falling_over(script: ModuleType) 
         pytest.skip("no .scratch/ in this checkout — the maps are not committed")
 
     assert script.main([]) == 0
+
+
+class TestReadingTheHeaderItself:
+    """The untested half, and the one that was wrong — `production-ready` 62.
+
+    Every test above hands `Ticket` a status string and asks what it *means*.
+    Nothing handed the script a header and asked what it *read*. Two header
+    shapes are in use across the maps and the parser knew one, so every ticket
+    written in the other style parsed as `(no Status line)` — which contains no
+    closed word, so it was open forever whatever it said. Twenty-five clean
+    tickets were reported as drift, on the one instrument CLAUDE.md names as
+    the authority over prose.
+    """
+
+    def _status(self, script: ModuleType, header: str) -> str:
+        match = script.STATUS.search(header)
+        return match.group(1).strip() if match else "(no Status line)"
+
+    def test_the_labels_line_shape(self, script: ModuleType) -> None:
+        header = (
+            "# 07 — A ticket\n\n"
+            "Labels: wayfinder:bug · Status: open · Size: M · Map: every-workflow-green\n"
+        )
+        assert self._status(script, header) == "open"
+
+    def test_the_standalone_line_shape(self, script: ModuleType) -> None:
+        """`every-workflow-green` 33 and everything after it are written this way."""
+        header = (
+            "# 33 — It asked for a tool we ship\n\n"
+            "Status: resolved 2026-08-19\n"
+            "Found: 2026-08-19, by the owner reading a chat transcript\n"
+            "Label: wayfinder:bug\n"
+        )
+        assert self._status(script, header) == "resolved 2026-08-19"
+
+    def test_a_ticket_in_the_standalone_shape_can_actually_close(
+        self, script: ModuleType
+    ) -> None:
+        """The consequence, stated as the thing a person cares about."""
+        header = "# 33 — T\n\nStatus: resolved 2026-08-19\nLabel: wayfinder:bug\n"
+        assert not ticket(script, self._status(script, header)).is_open
+
+    def test_a_dot_separator_still_ends_the_status(self, script: ModuleType) -> None:
+        header = "Labels: wayfinder:task · Status: partially resolved · Size: L\n"
+        assert self._status(script, header) == "partially resolved"
+
+    def test_the_word_status_inside_prose_is_not_a_header(self, script: ModuleType) -> None:
+        """A body sentence must not be able to reopen or close a ticket."""
+        body = (
+            "# 07 — A ticket\n\n"
+            "Labels: wayfinder:bug · Status: open · Size: S\n\n"
+            "## Question\n\nThe run reports Status: resolved in its own output, which is\n"
+            "the bug.\n"
+        )
+        assert self._status(script, body) == "open"
+
+    def test_a_file_with_no_header_at_all_still_says_so(self, script: ModuleType) -> None:
+        """Unreadable must stay distinguishable from open — it needs a human."""
+        assert self._status(script, "# 07 — A ticket\n\nJust prose.\n") == "(no Status line)"
