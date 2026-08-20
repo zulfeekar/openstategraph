@@ -24,7 +24,6 @@ from openstategraph.api.audience import (
     clean_output,
     redaction_report,
     resolve as resolve_audience,
-    capability_gap,
     split_suggestion,
     with_capability_notice,
 )
@@ -221,6 +220,7 @@ def run_workflow(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         redact_failure_markers,
+        capability_door,
         run_health,
         suggestion_from_rejection,
     )
@@ -263,7 +263,13 @@ def run_workflow(
         suggestion=suggestion,
         # Only when nothing could be placed: a gap with a tool that fits is a
         # suggestion, not something to build (`every-workflow-green` 34).
-        capability_gap=(capability_gap(str(final.get("answer") or "")) if suggestion is None else None),
+        # One verdict, both doors — `capability_door`. See the identical call
+        # in `streaming.py`: the model's own decline wins when it wrote one,
+        # and the run's shape fills the silence when it did not
+        # (`every-workflow-green` 35).
+        capability_gap=capability_door(
+            str(final.get("answer") or ""), suggestion, final.get("tool_use")
+        ),
         redactions=redaction_report(final.get("redactions")),
     )
     developer = channel.payload(audience).get("developer")

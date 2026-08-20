@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showsThinking } from './settledThinking';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
+import { doorHeadline } from './doorHeadline';
 import { moduleBrief } from './moduleBrief';
 import { usePaperController } from '@app/WorkbenchContext';
 import {
@@ -1700,12 +1701,16 @@ function Turn({
  * happens where they are already looking.
  */
 function CapabilityGapCard({ gap, onStart }: { gap: string; onStart: () => void }) {
+  // Two routes open this door and they know different amounts, so the headline
+  // is `doorHeadline`'s call rather than one fixed sentence — see its own file
+  // for why an over-claiming card is worse than no card.
+  const headline = doorHeadline(gap);
   return (
     <div className="ask__suggestion ask__suggestion--build">
       <p className="ask__suggestion-headline">
         <Icon glyph={Lightbulb} size="sm" />
         <span>
-          <strong>Nothing here does this.</strong> {gap}
+          <strong>{headline.lead}</strong> {headline.detail}
         </span>
       </p>
       <div className="ask__suggestion-actions">

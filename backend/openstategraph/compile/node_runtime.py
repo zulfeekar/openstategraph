@@ -88,6 +88,20 @@ class RunState(TypedDict, total=False):
     #: sentence a model has to be persuaded to write. MERGE, because several
     #: agents can each reach for something they do not have.
     unmet_tools: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: tool-binding node id -> `{"bound": [...], "ran": [...]}` — the shape of
+    #: this run's tool use (`every-workflow-green` 35).
+    #:
+    #: The other half of the capability offer, and the half that needs no
+    #: cooperation at all. `unmet_tools` above reads a name out of our own
+    #: refusal, which only exists when the agent *called* something; here it
+    #: called nothing, and two rounds of prompt wording failed to make the
+    #: model reliably say so. A run that had tools and used none is the case B
+    #: shape whether or not it was announced.
+    #:
+    #: Both lists, not a boolean: "no tools bound" and "tools bound, none used"
+    #: are different runs and only the second is offered a door. MERGE, because
+    #: every agent and worker in the document writes its own row.
+    tool_use: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: router node id -> **every** branch label it matched, when that router
     #: runs in `matchMode: "all"` (`every-workflow-green` 27).
     #:
@@ -464,8 +478,8 @@ def _final_text(messages: list[Any]) -> str:
             return text
     return ""
 
-def unmet_tools_update(node_id: str, messages: list[Any]) -> dict[str, Any]:
-    """What this node reached for and was refused, as a state fragment.
+def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str, Any]:
+    """What this node was given, what it used, and what it was refused.
 
     The seam every tool-binding factory shares. Ticket 33 built the
     deterministic route — read the name out of **our own** refusal, look it up,
@@ -480,18 +494,46 @@ def unmet_tools_update(node_id: str, messages: list[Any]) -> dict[str, Any]:
     `ToolMessage` in the middle and the answer that follows it usually says
     nothing about it, which is exactly what proved unreliable in 33.
 
-    Returns `{}` rather than an empty map when nothing was refused, so a clean
-    run writes no key — a node that reports `[]` and a node that reports
-    nothing must not look the same to the reducer.
+    Returns no `unmet_tools` key rather than an empty map when nothing was
+    refused, so a clean run writes nothing there — a node that reports `[]` and
+    a node that reports nothing must not look the same to the reducer.
+
+    **`tool_use` is written on every run, including the empty one**, and that
+    asymmetry is the point (`every-workflow-green` 35). The verdict this feeds
+    has to tell a workflow whose agent had tools and used none from a workflow
+    that has no tools at all — the first is offered a door and the second must
+    never be, or the card appears on every turn of a writer workflow and
+    becomes something people learn to skip. Absent and empty therefore mean
+    different things here and both have to be sayable.
+
+    One function rather than two calls per site, because the cost of two is on
+    the record: `advisor_context` was composed into `_agent` and not `_worker`,
+    so a worker refused a tool we ship and no card appeared (36). A factory
+    that binds tools now says all three things or none.
     """
     from openstategraph.compile.workflow_compiler import rejected_tool_names
 
     refused: list[str] = []
+    ran: list[str] = []
     for message in messages or []:
-        for name in rejected_tool_names(getattr(message, "content", None)):
+        names = rejected_tool_names(getattr(message, "content", None))
+        for name in names:
             if name not in refused:
                 refused.append(name)
-    return {"unmet_tools": {node_id: refused}} if refused else {}
+        if getattr(message, "type", None) != "tool" or names:
+            # A refusal arrives as a `ToolMessage` too, and counting it as a
+            # use would shut the door on precisely the run that needs it. A
+            # tool that ran and returned an *error* is a use, though: errors
+            # are data, and the tool is wired
+            # (`the-agent-asks-for-what-it-cannot-get` 01).
+            continue
+        used = str(getattr(message, "name", "") or "")
+        if used and used not in ran:
+            ran.append(used)
+    update: dict[str, Any] = {"tool_use": {node_id: {"bound": list(bound), "ran": ran}}}
+    if refused:
+        update["unmet_tools"] = {node_id: refused}
+    return update
 
 
 def _text(data: dict[str, Any], key: str, default: str = "") -> str:
@@ -1768,6 +1810,16 @@ class NodeRuntime:
 
         lc_tools = self._bind_tools(node_id, plan)
 
+        #: The tools **this canvas** wired to the node, snapshotted before the
+        #: ambient ones are appended below. `capability_door` reads it to tell
+        #: a tool-less workflow from one whose tools went untouched, and a
+        #: memory store binds `save_memory` to every agent alive — so counting
+        #: the finished list would have meant almost nothing was tool-less.
+        #: Found in the browser: a rubric workflow that wires no tool at all
+        #: drew the build card on a perfectly good answer
+        #: (`every-workflow-green` 35).
+        wired = [t.name for t in lc_tools]
+
         # A store's presence turns on the prebuilt memory tools for every
         # agent (ticket 65) — capability by configuration, no per-workflow
         # wiring, matching the minimum-viable-prebuilt rule.
@@ -1964,15 +2016,16 @@ class NodeRuntime:
             # and spent the whole retry budget re-asking an answered question.
             text = _final_text(result.get("messages") or [])
             answer = text if isinstance(text, str) else str(text)
-            # Names this agent reached for and was refused
-            # (`every-workflow-green` 33). The extraction is
-            # `unmet_tools_update` because `_worker` needs the identical thing
-            # and, for one ticket, did not have it (36).
+            # What this agent was given, used and was refused. The extraction
+            # is `tool_report` because `_worker` needs the identical thing and,
+            # for one ticket, did not have it (36). `bound` and `ran` are the
+            # shape `capability_door` reads when the model said nothing about
+            # being blocked (`every-workflow-green` 35).
             return {
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
-                **unmet_tools_update(node_id, result.get("messages") or []),
+                **tool_report(node_id, result.get("messages") or [], wired),
             }
 
         return run
@@ -2583,6 +2636,10 @@ class NodeRuntime:
         from langchain_core.messages import HumanMessage
 
         lc_tools = self._bind_tools(node_id, plan)
+        #: Canvas-wired only, snapshotted before the ambient tools below — see
+        #: the identical line in `_agent` for why the finished list would have
+        #: made almost every workflow look tool-bearing.
+        wired = [t.name for t in lc_tools]
 
         # Workers are agents too: the ambient knowledge rule applies (deduped
         # against an explicitly wired atom, same as `_agent`).
@@ -2706,7 +2763,7 @@ class NodeRuntime:
                 # shares one node id, so two subtasks refused the same tool
                 # merge to one offer, which is the right number of cards
                 # (ticket 36).
-                **unmet_tools_update(node_id, out),
+                **tool_report(node_id, out, wired),
                 # Which worker node ran which subtask (ticket 17). Every
                 # dispatched instance shares one node id, so the task id is
                 # what keeps them apart — the same reason `worker_results` is

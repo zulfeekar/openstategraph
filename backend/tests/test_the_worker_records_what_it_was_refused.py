@@ -146,9 +146,13 @@ class TestEveryToolBindingFactoryRecords:
         assert set(self._factories()) == {"_agent", "_worker"}
 
     def test_every_one_of_them_records_what_it_was_refused(self) -> None:
+        """Renamed to `tool_report` by `every-workflow-green` 35, which added a
+        second fact to the same seam — what the node *used*. One function
+        rather than two calls per site, so a family cannot acquire half of it:
+        acquiring half is exactly what ticket 36 was."""
         missing = [
             name
             for name, fn in self._factories().items()
-            if "unmet_tools_update(" not in ast.unparse(fn)
+            if "tool_report(" not in ast.unparse(fn)
         ]
         assert missing == []

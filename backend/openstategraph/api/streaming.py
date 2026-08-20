@@ -17,7 +17,6 @@ from openstategraph.api.audience import (  # noqa: E402
     DeveloperChannel,
     clean_output as _clean_output,
     redaction_report,
-    capability_gap,
     split_suggestion,
     with_capability_notice,
 )
@@ -982,6 +981,11 @@ def _run_frames(
     #: and read at the end to offer a capability the model did not ask for in
     #: words (`every-workflow-green` 33).
     unmet_tools: dict[str, Any] = {}
+    #: node id -> `{"bound": [...], "ran": [...]}`. Folded like `unmet_tools`,
+    #: and read by `capability_door`: a run that had tools and used none is
+    #: offered the build door even when the model announced nothing
+    #: (`every-workflow-green` 35).
+    tool_use: dict[str, Any] = {}
     outputs: dict[str, str] = {}
     #: The same two, for everything below the outermost document — keyed by
     #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
@@ -1113,6 +1117,9 @@ def _run_frames(
                     )
                     unmet_tools.update(
                         {key(k): v for k, v in (update.get("unmet_tools") or {}).items()}
+                    )
+                    tool_use.update(
+                        {key(k): v for k, v in (update.get("tool_use") or {}).items()}
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
@@ -1434,6 +1441,7 @@ def _run_frames(
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         redact_failure_markers,
+        capability_door,
         run_health,
         suggestion_from_rejection,
     )
@@ -1467,7 +1475,11 @@ def _run_frames(
         suggestion=suggestion,
         # Only when nothing could be placed: a gap with a tool that fits is a
         # suggestion, not something to build (`every-workflow-green` 34).
-        capability_gap=(capability_gap(answer) if suggestion is None else None),
+        # One verdict, both doors — `capability_door`. Neither endpoint asks
+        # this locally: the model's own decline wins when it wrote one, and the
+        # run's shape fills the silence when it did not
+        # (`every-workflow-green` 35).
+        capability_gap=capability_door(answer, suggestion, tool_use),
         redactions=redaction_report(redactions),
     )
 

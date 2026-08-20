@@ -247,6 +247,72 @@ def run_health(
     )
 
 
+def used_no_tools(tool_use: Any) -> bool:
+    """Whether this run had tools available and called none of them.
+
+    Both halves are load-bearing. A run with **nothing bound** is not a run
+    that lacked a capability — a writer agent has no tools by design, and
+    "nothing here does this" is not a statement about it. A run with tools it
+    never touched is the shape a blocked agent leaves behind.
+
+    Any single use anywhere defeats it: a document whose SQL agent answered and
+    whose summariser did not is not a document missing a capability.
+
+    Tolerant about its input for the same reason `run_health` is — the two
+    doors read state off different shapes and either can hand over `None`.
+    """
+    rows = tool_use if isinstance(tool_use, dict) else {}
+    bound = 0
+    for row in rows.values():
+        if not isinstance(row, dict):
+            continue
+        bound += len(row.get("bound") or [])
+        if row.get("ran"):
+            return False
+    return bound > 0
+
+
+def capability_door(answer: str, suggestion: Any, tool_use: Any) -> str | None:
+    """What a developer is offered to *build*, or None — one verdict, both doors.
+
+    `every-workflow-green` 35. `advisor_context` requires the block whenever an
+    agent is blocked, and the same question on the same workflow emitted it on
+    one run and not the next. Escalating the wording had already been tried
+    twice; each round changed the rate and none removed the failure, which is
+    the signature of the wrong lever.
+
+    So there are two routes to the door and the model owns only one of them:
+
+    1. **What it said.** A decline carries a `reason`, and that sentence is the
+       only description anyone has of what the user actually wanted. It wins
+       whenever it exists — the shape can never be as good as it.
+    2. **How the run went.** Failing that, a run that had tools and used none
+       is offered the door anyway. It needs no cooperation, no second model
+       call, and no parsing of prose.
+
+    Route 2 cannot know a refusal from a knowledge answer, and that limit is
+    deliberately pushed into the *card* rather than papered over here: an empty
+    string means "the shape says so, nobody said what", and `AskPanel` renders
+    words that claim only that. A gap the model described stays a claim about
+    the gap; a gap the shape inferred stays a claim about the run.
+
+    A placeable suggestion closes both routes. A gap something in the catalogue
+    covers is an Add & re-run card, not an interview (ticket 34).
+
+    Lives here, beside `run_health`, and for the identical reason: `/api/runs`
+    and `/api/runs/stream` each asked this question locally and the pair has
+    already drifted twice (14, 16). One function cannot disagree with itself.
+    """
+    from openstategraph.developer_channel import capability_gap
+
+    if suggestion is not None:
+        return None
+    described = capability_gap(answer or "")
+    if described is not None:
+        return described
+    return "" if used_no_tools(tool_use) else None
+
+
 #: Our own refusal, written by the agent runtime when a model calls a name it
 #: was never given: "web_fetch is not a valid tool, try one of [...]".
 _REJECTED_TOOL = re.compile(r"([A-Za-z0-9_.-]+) is not a valid tool")
