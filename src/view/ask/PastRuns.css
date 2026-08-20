@@ -117,3 +117,43 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* One lane per graph. A run checkpoints the workflow and every agent subgraph
+   under one thread, and each numbers its own supersteps from -1 — flat, that
+   reads as one graph repeating itself (`memory-and-replay` 37). The rule on
+   the left is what says "these steps belong together". */
+.past-runs__lane {
+  display: flex;
+  flex-direction: column;
+  border-left: 2px solid var(--color-border-subtle);
+  padding-left: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.past-runs__lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.past-runs__lane-title {
+  font: var(--type-label);
+  color: var(--color-text-primary);
+}
+
+.past-runs__step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* What this superstep wrote — the question a reader asks of a row before they
+   read its values. Secondary, because `values` is still the substance. */
+.past-runs__wrote {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}

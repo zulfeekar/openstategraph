@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PastRun, PastRunStep } from './RuntimeClient';
-import { describeRun, relativeTime, stepLines, stepTitle } from './pastRunView';
+import { describeRun, laneTitle, lanes, relativeTime, stepLines, stepTitle } from './pastRunView';
 
 const NOW = Date.parse('2026-08-11T12:00:00Z');
 
@@ -74,6 +74,9 @@ describe('stepLines', () => {
     at: '2026-08-11T11:59:00Z',
     source: 'loop',
     values,
+    namespace: [],
+    node: '',
+    wrote: [],
   });
 
   it('drops a channel that serialized to an empty container', () => {
@@ -108,21 +111,153 @@ describe('stepLines', () => {
 });
 
 describe('stepTitle', () => {
+  /** `stepTitle` reads only the counter and the source; the lane above it
+   *  carries the identity, so these literals name the fields it uses. */
+  const titled = (step: number, source: string): PastRunStep => ({
+    checkpointId: 'c',
+    step,
+    at: '',
+    source,
+    values: {},
+    namespace: [],
+    node: '',
+    wrote: [],
+  });
+
   it('names the superstep and where it came from', () => {
-    expect(stepTitle({ checkpointId: 'c', step: 3, at: '', source: 'loop', values: {} })).toBe(
+    expect(stepTitle(titled(3, 'loop'))).toBe(
       'Step 3 · loop',
     );
   });
 
   it('calls the pre-run checkpoint what it is', () => {
-    expect(stepTitle({ checkpointId: 'c', step: -1, at: '', source: 'input', values: {} })).toBe(
+    expect(stepTitle(titled(-1, 'input'))).toBe(
       'Input · input',
     );
   });
 
   it('omits an unrecorded source rather than printing an empty tail', () => {
-    expect(stepTitle({ checkpointId: 'c', step: 1, at: '', source: '', values: {} })).toBe(
+    expect(stepTitle(titled(1, ''))).toBe(
       'Step 1',
     );
+  });
+});
+
+describe('lanes', () => {
+  /**
+   * `memory-and-replay` 37. A `morning-brief` run stores forty checkpoints
+   * under five namespaces — the workflow itself and four agent subgraphs — and
+   * the endpoint returns them in one chronological list. Each subgraph numbers
+   * its own supersteps from `-1`, so the flat list reads:
+   *
+   *     Input · input   ×5
+   *     Step 0 · loop   ×5
+   *     Step 3 · loop   ×5
+   *
+   * Five different graphs, printed as though one graph had repeated itself.
+   * Lanes are what make it readable: each graph's own timeline, in the order
+   * the graphs first appear.
+   *
+   * The real ordering, taken from the stored `example.com` run, is genuinely
+   * interleaved — three workers ran at once — so lanes cannot be built by
+   * grouping neighbours.
+   */
+  const at = (node: string, step: number): PastRunStep => ({
+    checkpointId: `cp-${node}-${step}`,
+    step,
+    at: '2026-08-20T06:33:06Z',
+    source: step < 0 ? 'input' : 'loop',
+    values: {},
+    namespace: node ? [node] : [],
+    node,
+    wrote: [],
+  });
+
+  it('puts the workflow itself in a lane with no owner', () => {
+    const [lane, ...rest] = lanes([at('', -1), at('', 0)]);
+
+    expect(rest).toEqual([]);
+    expect(lane?.node).toBe('');
+    expect(lane?.steps).toHaveLength(2);
+  });
+
+  it('separates interleaved subgraphs that ran at the same time', () => {
+    const found = lanes([
+      at('', 2),
+      at('worker_web', -1),
+      at('worker_handbook', -1),
+      at('worker_web', 0),
+      at('worker_handbook', 0),
+      at('', 3),
+    ]);
+
+    expect(found.map((lane) => lane.node)).toEqual(['', 'worker_web', 'worker_handbook']);
+    expect(found.map((lane) => lane.steps.length)).toEqual([2, 2, 2]);
+  });
+
+  it('orders lanes by when each graph first appears', () => {
+    const found = lanes([at('worker_handbook', -1), at('', -1), at('worker_web', -1)]);
+
+    expect(found.map((lane) => lane.node)).toEqual(['worker_handbook', '', 'worker_web']);
+  });
+
+  it('splits one node dispatched twice into two lanes', () => {
+    // `morning-brief` sent two subtasks to `worker_web`. They are one node
+    // that ran twice, and the step counter restarting is the only evidence
+    // of the boundary — the instance id is deliberately not in `namespace`,
+    // because for *identity* the two are the same worker.
+    const found = lanes([
+      at('worker_web', -1),
+      at('worker_web', 0),
+      at('worker_web', -1),
+      at('worker_web', 0),
+      at('worker_web', 1),
+    ]);
+
+    expect(found).toHaveLength(2);
+    expect(found.map((lane) => lane.occurrence)).toEqual([1, 2]);
+    expect(found.map((lane) => lane.steps.length)).toEqual([2, 3]);
+  });
+
+  it('does not split on a step number that merely repeats within one lane', () => {
+    // A superstep can be written twice — `update` and `fork` sources both do
+    // it. A lane breaks on a **restart**, which is the counter going back to
+    // where a graph begins, not on any non-increase.
+    const found = lanes([at('worker_web', -1), at('worker_web', 0), at('worker_web', 0)]);
+
+    expect(found).toHaveLength(1);
+  });
+
+  it('keeps every step, so nothing is lost by laning', () => {
+    const steps = [at('', -1), at('worker_web', -1), at('', 0), at('worker_web', 0)];
+
+    expect(lanes(steps).flatMap((lane) => lane.steps)).toHaveLength(steps.length);
+  });
+
+  it('has a name for each lane a reader can act on', () => {
+    expect(laneTitle({ node: '', namespace: [], occurrence: 1, steps: [] })).toBe(
+      'The workflow',
+    );
+    expect(
+      laneTitle({ node: 'worker_web', namespace: ['worker_web'], occurrence: 1, steps: [] }),
+    ).toBe('worker_web');
+    // The second dispatch of one worker has to be distinguishable from the
+    // first, or the split above buys nothing on screen.
+    expect(
+      laneTitle({ node: 'worker_web', namespace: ['worker_web'], occurrence: 2, steps: [] }),
+    ).toBe('worker_web · run 2');
+  });
+
+  it('names a nested lane by its whole path', () => {
+    // A mounted workflow's agent is two levels deep and "worker_web" alone
+    // would claim it belongs to this canvas, which it does not.
+    expect(
+      laneTitle({
+        node: 'model',
+        namespace: ['mount1', 'model'],
+        occurrence: 1,
+        steps: [],
+      }),
+    ).toBe('mount1 › model');
   });
 });

@@ -566,6 +566,23 @@ export interface PastRunStep {
   readonly at: string;
   readonly source: string;
   readonly values: Readonly<Record<string, string>>;
+  /**
+   * Which graph this step belongs to, outermost first; `[]` is the workflow
+   * itself.
+   *
+   * Read the same way a live frame's `path` is. Without it a run is a flat
+   * list in which `Step 3 · loop` appears once per graph, because every
+   * subgraph numbers its own supersteps from `-1` — five graphs printed as one
+   * graph repeating itself (`memory-and-replay` 37).
+   */
+  readonly namespace: readonly string[];
+  /** The innermost entry of `namespace`, or `''` for the workflow itself. */
+  readonly node: string;
+  /**
+   * The channels this superstep wrote — what *happened* here, where `values`
+   * is what the state *was*.
+   */
+  readonly wrote: readonly string[];
 }
 
 export interface PastRunHistory {
@@ -1017,6 +1034,13 @@ export class RuntimeClient implements IRuntimeClient {
             at: asString(row['at']),
             source: asString(row['source']),
             values: asRecord(row['values']),
+            // `keepBlanks: false` — unlike `pathSlugs`, a namespace has no
+            // "no claim" entry to preserve: the backend drops empty segments
+            // before publishing, so a blank here is malformed rather than
+            // meaningful.
+            namespace: asPath(row['namespace']),
+            node: asString(row['node']),
+            wrote: asPath(row['wrote']),
           };
         }),
       });

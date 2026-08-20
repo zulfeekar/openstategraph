@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { History, RotateCcw } from 'lucide-react';
 import { Button, Icon, PanelEmpty } from '@design/primitives';
 import { RuntimeClient, type PastRun, type PastRunHistory } from '@core/runtime/RuntimeClient';
-import { describeRun, stepLines, stepTitle } from '@core/runtime/pastRunView';
+import { describeRun, laneTitle, lanes, stepLines, stepTitle } from '@core/runtime/pastRunView';
 import './PastRuns.css';
 
 /**
@@ -196,13 +196,35 @@ function RunHistory({ run }: { run: PastRun }) {
           only reads.
         </p>
       ) : null}
-      {state.history.steps.map((step) => (
-        <div className="past-runs__step" key={step.checkpointId}>
-          <div className="past-runs__step-head">{stepTitle(step)}</div>
-          {stepLines(step).map((line) => (
-            <div className="past-runs__line" key={line.key}>
-              <span className="past-runs__line-key">{line.key}</span>
-              <span className="past-runs__line-value">{line.value}</span>
+      {/*
+        One lane per graph, never one flat list. A run of this workflow
+        checkpoints the workflow itself and every agent subgraph under the same
+        thread, each numbering its own supersteps from -1 — so flat, a
+        `morning-brief` run printed `Step 0 · loop` five times with nothing to
+        say they were five different graphs (`memory-and-replay` 37).
+      */}
+      {lanes(state.history.steps).map((lane) => (
+        <div className="past-runs__lane" key={`${lane.namespace.join('|')}#${lane.occurrence}`}>
+          <div className="past-runs__lane-head">
+            <span className="past-runs__lane-title">{laneTitle(lane)}</span>
+            <span className="ask__meta">
+              {lane.steps.length} {lane.steps.length === 1 ? 'step' : 'steps'}
+            </span>
+          </div>
+          {lane.steps.map((step) => (
+            <div className="past-runs__step" key={step.checkpointId}>
+              <div className="past-runs__step-head">
+                {stepTitle(step)}
+                {step.wrote.length > 0 ? (
+                  <span className="past-runs__wrote">wrote {step.wrote.join(', ')}</span>
+                ) : null}
+              </div>
+              {stepLines(step).map((line) => (
+                <div className="past-runs__line" key={line.key}>
+                  <span className="past-runs__line-key">{line.key}</span>
+                  <span className="past-runs__line-value">{line.value}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
