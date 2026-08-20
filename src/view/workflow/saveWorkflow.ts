@@ -63,6 +63,8 @@ export interface SavableWorkbench {
   readonly serializer: {
     toJSONString(model: SavableWorkbench['model']): string;
     canonicalise(document: unknown): unknown;
+    /** Which types' sizes a write is not worth — see `diskAutosave.comparable`. */
+    sizeIsMeasured(typeId: string): boolean;
   };
   readonly controller: {
     readonly document: { mountContext(): MountContext | null | undefined };

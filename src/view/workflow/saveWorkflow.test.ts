@@ -47,6 +47,9 @@ const workbench = (name: string): SavableWorkbench => ({
   serializer: {
     toJSONString: () => JSON.stringify({ ...DOCUMENT, name }),
     canonicalise: (document: unknown) => document,
+    // Every card but a frame, which is what the real registry answers for the
+    // node types this stub's empty document does not have.
+    sizeIsMeasured: () => true,
   },
   controller: { document: { mountContext: () => null } },
 });

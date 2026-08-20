@@ -310,6 +310,10 @@ describe('the write loop', () => {
           })),
         } as unknown as ReturnType<WorkflowSerializer['serialize']>;
       },
+      // Delegated rather than stubbed: this fake stands in for a serializer,
+      // and `comparable` now asks one which sizes are measured. Answering it
+      // differently from the real one would test a serializer nobody ships.
+      sizeIsMeasured: (typeId: string) => bench.serializer.sizeIsMeasured(typeId),
     } as unknown as WorkflowSerializer;
 
     // The fake serializer stays on the *write* side, where its instability is
@@ -323,6 +327,69 @@ describe('the write loop', () => {
     for (let tick = 0; tick < 4; tick += 1) {
       expect(
         await writeOpenWorkflowToDisk(client, bench.model, remeasuring, storageWith('demo')),
+      ).toEqual({ kind: 'unchanged' });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('writes a frame dragged by its grip', async () => {
+    // `production-ready` 70. The strip above is right about every card whose
+    // height is *measured* — and wrong about the one that is not. A
+    // container's frame has a resize grip and `Arrange` refits it; both are
+    // gestures somebody made, and stripping `size` for every node made a
+    // size-only change the one edit no autosave was worth. Reproduced in the
+    // browser first: the frame resized on screen and `mtime` never moved.
+    const save = vi.fn(async () => Ok(undefined));
+    const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
+    const bench = new Workbench();
+    const frame = addNode(bench as unknown as Parameters<typeof addNode>[0], TYPE.group, {
+      at: { x: 40, y: 40 },
+    });
+
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      bench.serializer.serialize(bench.model),
+      bench.serializer,
+    );
+
+    // Through the controller, because that is the path the grip takes —
+    // `NodeCard`'s `ResizeGrip` calls `controller.nodes.resize`, which is an
+    // authored size and reaches `SerializedNode`.
+    bench.controller.nodes.resize(frame.id, { width: 520, height: 400 });
+
+    expect(
+      await writeOpenWorkflowToDisk(client, bench.model, bench.serializer, storageWith('demo')),
+    ).toEqual({ kind: 'saved' });
+    const written = (save.mock.calls[0] as unknown as [string, string, unknown])[2];
+    expect((written as { nodes: { size: unknown }[] }).nodes[0]!.size).toEqual({
+      width: 520,
+      height: 400,
+    });
+  });
+
+  it('does not write because a frame re-measured itself', async () => {
+    // The other half of 70, and the reason the strip was not simply deleted: a
+    // frame is measured too, and a measurement must stay unable to dirty a
+    // file whichever kind of card produced it.
+    const save = vi.fn(async () => Ok(undefined));
+    const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
+    const bench = new Workbench();
+    const frame = addNode(bench as unknown as Parameters<typeof addNode>[0], TYPE.group, {
+      at: { x: 40, y: 40 },
+    });
+
+    rememberDiskDocument(
+      'demo',
+      bench.model.name,
+      bench.serializer.serialize(bench.model),
+      bench.serializer,
+    );
+
+    for (const height of [401, 399, 402]) {
+      bench.controller.nodes.applyMeasuredSize(frame.id, { width: 520, height });
+      expect(
+        await writeOpenWorkflowToDisk(client, bench.model, bench.serializer, storageWith('demo')),
       ).toEqual({ kind: 'unchanged' });
     }
     expect(save).not.toHaveBeenCalled();
@@ -345,6 +412,7 @@ describe('the write loop', () => {
           (flip ? keys : [...keys].reverse()).map((k) => [k, doc[k]]),
         ) as unknown as ReturnType<WorkflowSerializer['serialize']>;
       },
+      sizeIsMeasured: (typeId: string) => bench.serializer.sizeIsMeasured(typeId),
     } as unknown as WorkflowSerializer;
 
     rememberDiskDocument(

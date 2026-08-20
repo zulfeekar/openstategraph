@@ -118,16 +118,38 @@ function canonical(value: unknown): string {
  * failure this file has produced, and one enforcement point is one bug away
  * from producing it again.
  *
- * It does cost something, stated so nobody rediscovers it as a bug: a
- * container's frame *can* be dragged by its grip, and that authored resize is
- * therefore not worth an autosave. Pressing Save still writes it.
+ * **But it strips only the sizes that are measured** (`production-ready` 70).
+ * A container's frame is the one card nobody measures: its size comes from the
+ * resize grip or from `Arrange` refitting it, both gestures a person made and
+ * expects to survive a reload. Stripping every node's `size` made a frame
+ * resize the one edit no autosave was worth — dragged on screen, `mtime` never
+ * moved, and only pressing Save wrote it. `serializer.sizeIsMeasured` answers
+ * per type, and answers `true` for a type this build cannot resolve, so an
+ * unknown node keeps the old behaviour.
+ *
+ * The second lock therefore still covers every card that reports its own
+ * height, which is the case that produced the loop. What it no longer covers
+ * is a frame — bounded, because a frame's height is not content-driven and so
+ * has nothing to oscillate between.
+ *
+ * `name` and the serializer are both needed on every call because the two
+ * sides of the comparison are built by different callers: whichever form a
+ * document arrives in, it must be reduced by the same rules.
  */
-function comparable(name: string, document: unknown): string {
+function comparable(
+  name: string,
+  document: unknown,
+  serializer: Pick<WorkflowSerializer, 'sizeIsMeasured'>,
+): string {
   const { nodes, ...rest } = document as { nodes?: readonly Record<string, unknown>[] };
   return canonical({
     name,
     ...rest,
-    nodes: (nodes ?? []).map(({ size: _size, ...node }) => node),
+    nodes: (nodes ?? []).map((node) => {
+      if (!serializer.sizeIsMeasured(String(node['type'] ?? ''))) return node;
+      const { size: _size, ...rest } = node;
+      return rest;
+    }),
   });
 }
 
@@ -169,9 +191,9 @@ export function rememberDiskDocument(
   slug: string,
   name: string,
   document: unknown,
-  serializer: Pick<WorkflowSerializer, 'canonicalise'>,
+  serializer: Pick<WorkflowSerializer, 'canonicalise' | 'sizeIsMeasured'>,
 ): void {
-  lastWritten.set(slug, comparable(name, serializer.canonicalise(document)));
+  lastWritten.set(slug, comparable(name, serializer.canonicalise(document), serializer));
 }
 
 /**
@@ -193,7 +215,7 @@ export function rememberDiskDocument(
 export async function ensureDiskBaseline(
   slug: string,
   client: Pick<IWorkflowFileClient, 'load'>,
-  serializer: Pick<WorkflowSerializer, 'canonicalise'>,
+  serializer: Pick<WorkflowSerializer, 'canonicalise' | 'sizeIsMeasured'>,
 ): Promise<void> {
   if (lastWritten.has(slug)) return;
   const disk = await client.load(slug);
@@ -203,7 +225,10 @@ export async function ensureDiskBaseline(
   // Canonicalised for the same reason `rememberDiskDocument` is: what came back
   // is the file's authored form, and what it will be compared against is the
   // model's. See that function for what comparing the two raw cost.
-  lastWritten.set(slug, comparable(document.name ?? '', serializer.canonicalise(disk.value)));
+  lastWritten.set(
+    slug,
+    comparable(document.name ?? '', serializer.canonicalise(disk.value), serializer),
+  );
 }
 
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */
@@ -253,7 +278,7 @@ export async function writeOpenWorkflowToDisk(
   if (prev === undefined) return { kind: 'skipped' };
 
   const document = serializer.serialize(model);
-  const payload = comparable(model.name, document);
+  const payload = comparable(model.name, document, serializer);
   if (prev === payload) return { kind: 'unchanged' };
 
   const result = await client.save(slug, model.name, document);

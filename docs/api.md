@@ -773,6 +773,13 @@ node it created. `size` is optional in a document you write by hand; leave it
 out and the node takes its type's default, which is what the examples above
 do.
 
+Those authoring gestures **autosave like any other edit** (`production-ready`
+70). Until they did, a frame you dragged by its grip was written only if you
+also pressed Save: the editor's autosave ignored `size` entirely, because a
+measurement must never be able to rewrite a package on a loop. It still
+ignores measured sizes — every card but a container's frame — and now compares
+the one size nothing measures.
+
 ### Copying — `POST /api/workflows/{slug}/duplicate`
 
 ```

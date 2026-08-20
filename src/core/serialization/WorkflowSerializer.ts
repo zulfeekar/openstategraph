@@ -4,7 +4,7 @@ import { EdgeModel } from '@core/model/EdgeModel';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import { WORKFLOW_SCHEMA_VERSION, WorkflowModel } from '@core/model/WorkflowModel';
 import type { AbstractNodeModel } from '@core/model/AbstractNodeModel';
-import type { SerializedNode } from '@core/model/contracts/node';
+import { sizeIsMeasured, type NodeTypeId, type SerializedNode } from '@core/model/contracts/node';
 import type { SerializedEdge, SerializedWorkflow } from '@core/model/contracts/workflow';
 import { portsReferencedBy, unknownNodeDefinition } from './UnknownNode';
 
@@ -106,6 +106,24 @@ export class WorkflowSerializer {
     } finally {
       restoreIds(ids);
     }
+  }
+
+  /**
+   * Whether this type's card reports its own height back, for a caller holding
+   * a *document* and no model.
+   *
+   * Serialized nodes carry a type id and nothing about how they are drawn, so
+   * the one consumer that needs the answer — `diskAutosave.comparable`, which
+   * must tell an authored frame resize from a measurement — cannot work it out
+   * alone. Narrower than exposing the registry on purpose: this is the single
+   * question a document-holder has to ask about a type.
+   *
+   * A type this build does not know answers `true`, which is the conservative
+   * side: an unresolvable size is treated as measured and cannot dirty a file.
+   */
+  sizeIsMeasured(typeId: NodeTypeId): boolean {
+    const definition = this.registry.nodeTypes.get(typeId);
+    return definition ? sizeIsMeasured(definition.kind) : true;
   }
 
   parse(text: string): Result<SerializedWorkflow, string> {

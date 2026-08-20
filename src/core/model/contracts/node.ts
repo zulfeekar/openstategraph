@@ -190,6 +190,23 @@ export interface INodeDefinition extends IIdentifiable {
  */
 export type SizeOrigin = 'authored' | 'measured';
 
+/**
+ * Whether a card of this kind reports its own height back to the model.
+ *
+ * Every card but a container's frame is content-driven: `NodeCard` measures
+ * the rendered HTML and calls `applyMeasuredSize`, so its height is a property
+ * of this build's styling rather than of the workflow. A frame is the
+ * exception — its size comes from the resize grip or from `Arrange` refitting
+ * it, and nothing else moves it.
+ *
+ * Stated once here because two places act on it and they must not drift: the
+ * model, which serialises the authored size, and `diskAutosave.comparable`,
+ * which decides whether a size change is worth a write (`production-ready` 70).
+ */
+export function sizeIsMeasured(kind: NodeKind): boolean {
+  return kind !== 'container';
+}
+
 export interface NodeInit {
   readonly id?: NodeId;
   readonly position: Point;
