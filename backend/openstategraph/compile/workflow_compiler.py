@@ -214,7 +214,7 @@ class RunHealth:
 
 
 def run_health(
-    outputs: Any, nested_outputs: Any = None, forced: Any = None
+    outputs: Any, nested_outputs: Any = None, forced: Any = None, unrouted: Any = None
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -237,12 +237,14 @@ def run_health(
     flat = outputs if isinstance(outputs, dict) else {}
     nested = nested_outputs if isinstance(nested_outputs, dict) else {}
     exhausted = forced if isinstance(forced, dict) else {}
+    lost = unrouted if isinstance(unrouted, dict) else {}
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
             silent_node_warnings(flat)
             + silent_node_warnings(nested)
             + forced_pass_warnings(exhausted)
+            + unrouted_decision_warnings(lost)
         ),
     )
 
@@ -578,6 +580,37 @@ def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
         f'Grader "{node}" ran out of attempts and published an answer it had '
         f"rejected. Its last reason: {str(reason).strip() or 'none given'}"
         for node, reason in forced.items()
+    ]
+
+
+def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:
+    """Decisions that were made, understood, and had nowhere to go.
+
+    A grader whose `revise` port is unwired still decides `revise`. The
+    conditional edge is built from the destinations that were *drawn*, so
+    `_router_for` finds no `revise` among them and falls back to the first
+    declared one — `pass`. The answer the grader rejected then reaches the
+    output with `decisions {"grader1": "revise"}` sitting beside it and
+    nothing saying the verdict went nowhere (`workflow-gallery` 31).
+
+    **The fallback is correct and is not changed.** Its own argument holds:
+    for a *missing* decision "a stall here would be a hang, not an error", and
+    `support-triage` relies on it deliberately to reach its human gate. Only
+    the silence is the defect, and only for the case the fallback was never
+    arguing about — a decision that exists and names a branch nobody wired.
+
+    Its own state key rather than a `decisions` value, for the reason
+    `forced_pass_warnings` records: the compiler dispatches on that exact
+    label, so a third one there would change control flow. And beside
+    `silent_node_warnings` rather than inside `node_failure_warnings`, which
+    feeds `cli.run_exit_code` — the run genuinely completed and genuinely
+    produced the answer it published. This is a report about how that answer
+    was reached.
+    """
+    return [
+        f'Grader "{node}" asked for a {str(label).strip() or "different branch"} and no '
+        f"such edge was wired, so the answer shipped as-is."
+        for node, label in unrouted.items()
     ]
 
 
@@ -1082,6 +1115,19 @@ class WorkflowCompiler:
         again. A router node writes `branch`; a grader writes `verdict`. Falling
         back to the first declared destination keeps a run alive when a decision
         is missing — a stall here would be a hang, not an error.
+
+        **That argument is about a decision that is missing, and there is a
+        second case it never covered** (`workflow-gallery` 31): a decision that
+        exists, is understood, and names a branch the author never wired. It
+        took the identical silent fallback, so a grader that judged an answer
+        inadequate sent it to the output anyway. The fallback stays — removing
+        it would turn `support-triage`'s deliberate `pass`-only grader into a
+        dead run — but the case is no longer silent. It is reported twice, and
+        neither report is here: a `path` function returns a label and cannot
+        write state, so the honesty is produced where the decision is, in
+        `node_runtime._grader` (`Finding.UNWIRED_REVISE` at compile time, the
+        `unrouted` state key during the run). Anything added *here* would have
+        to be a channel of its own, which is what this project keeps not doing.
 
         **May return several destinations** when a classifier ran in
         `matchMode: "all"` and the question belonged to more than one desk

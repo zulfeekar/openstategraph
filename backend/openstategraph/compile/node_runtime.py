@@ -132,6 +132,14 @@ class RunState(TypedDict, total=False):
     #: reducer because two graders can exhaust in one run — `feedback` is
     #: `LATEST_NONEMPTY` and would keep only the last.
     forced: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: grader node id -> the branch label it chose that no edge carries
+    #: (`workflow-gallery` 31). Written only when the decision reached nothing,
+    #: so its presence *is* the signal — the same shape as `forced` above.
+    #:
+    #: Not a `decisions` value, for the reason stated there: the compiler
+    #: dispatches on that exact label. MERGE, because a document may hold
+    #: several graders and more than one can lose a verdict in a run.
+    unrouted: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: `"<mount node id>/<child node id>"` -> that node's output, for every
     #: node inside a mounted workflow. Written by `_subgraph`; read by
     #: `/api/runs`, which has no frame stream to rebuild it from the way
@@ -2141,6 +2149,19 @@ class NodeRuntime:
         cap = int(data.get("maxAttempts") or self.services.max_attempts)
         upstream = [src for src, dst in plan.edges if dst == node_id]
         skills = plan.skill_bindings.get(node_id, [])
+        # Whether this grader can actually send anything back
+        # (`workflow-gallery` 31). Read from the plan at build time, which is
+        # the only place both the node id and the drawn destinations are known
+        # — `_router_for` sees the destinations and cannot write state, and the
+        # node sees the state and would otherwise not know what was drawn.
+        #
+        # Reported and not refused: a grader used as a recorder is a legal
+        # graph, and `support-triage` ships exactly that on purpose because
+        # `agent.feedback` is `maxConnections: 1` and a revise edge behind a
+        # three-way classifier would have to pick one desk.
+        revise_wired = "revise" in (plan.conditional.get(node_id) or {})
+        if not revise_wired:
+            self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
 
         def grader_for(skill: str) -> Grader:
             """A grader is cheap to build, so it is built per skill value.
@@ -2202,6 +2223,14 @@ class NodeRuntime:
             }
             if branch == "pass" and not verdict.passed:
                 update["forced"] = {node_id: verdict.feedback or ""}
+            # A verdict with nowhere to go. `_router_for` will fall back to the
+            # first declared destination — correct, and it must not be the only
+            # thing that happens. Only on `revise`: at the cap the branch is
+            # `pass`, the answer really was published, and `forced` above is
+            # already the sentence for that (gallery ticket 22's case, which is
+            # a different mechanism and stays a different key).
+            if branch == "revise" and not revise_wired:
+                update["unrouted"] = {node_id: branch}
             return update
 
         return run
@@ -3253,6 +3282,13 @@ class NodeRuntime:
             forced_inside = nested_record(node_id, final.get("forced"))
             if forced_inside:
                 update["forced"] = forced_inside
+            # And the child's lost verdicts, for the identical reason
+            # (`workflow-gallery` 31): a mounted grader whose revise edge is
+            # unwired is exactly as invisible as a mounted grader that gave up,
+            # and two doors must not disagree about either.
+            unrouted_inside = nested_record(node_id, final.get("unrouted"))
+            if unrouted_inside:
+                update["unrouted"] = unrouted_inside
             child_attempts = final.get("attempts")
             if isinstance(child_attempts, int) and child_attempts > 0:
                 update["attempts"] = child_attempts

@@ -977,6 +977,10 @@ def _run_frames(
     # Force-passed graders (`every-workflow-green` 09), accumulated like the
     # two above so the terminal frame can report them.
     forced: dict[str, str] = {}
+    #: Graders whose `revise` verdict named no wired edge (`workflow-gallery`
+    #: 31). Folded exactly like `forced` — this door has no finished state to
+    #: read, so the terminal frame is assembled from what went past.
+    unrouted: dict[str, str] = {}
     #: agent node id -> tool names the runtime refused. Folded like `forced`,
     #: and read at the end to offer a capability the model did not ask for in
     #: words (`every-workflow-green` 33).
@@ -1123,6 +1127,9 @@ def _run_frames(
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
+                    )
+                    unrouted.update(
+                        {key(k): str(v) for k, v in (update.get("unrouted") or {}).items()}
                     )
                     into_outputs.update(
                         {
@@ -1449,7 +1456,7 @@ def _run_frames(
     # One assembly for both doors — see `run_health`. Neither endpoint adds a
     # source locally; that is exactly how these two drifted twice
     # (`every-workflow-green` 14, 16).
-    health = run_health(outputs, nested_outputs, forced)
+    health = run_health(outputs, nested_outputs, forced, unrouted)
     # A fallback, never an override: the model's own fence wins when it wrote
     # one (ticket 15's card), and this fills the silence when it did not.
     if suggestion is None:

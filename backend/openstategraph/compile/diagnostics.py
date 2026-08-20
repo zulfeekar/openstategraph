@@ -48,6 +48,19 @@ class Finding(str, Enum):
     #: loop is a legal graph that answers questions. What it cannot do is keep
     #: the promise printed on its card (production-ready ticket 03).
     UNENFORCED_OUTCOME = "unenforced_outcome"
+    #: A grader whose `revise` port is wired to nothing (`workflow-gallery` 31).
+    #:
+    #: The compiler's conditional edge is given only the destinations that
+    #: were drawn, and `_router_for` falls back to the first of them when the
+    #: recorded decision names none — which is right for a *missing* decision
+    #: and silent for a decision that exists and was understood. So a grader
+    #: that judged the answer inadequate sent it to the output anyway.
+    #:
+    #: Reported rather than refused, and deliberately not on `plan.warnings`:
+    #: a grader used as a recorder is a legal graph that answers questions,
+    #: `support-triage` ships exactly that shape on purpose, and
+    #: `plan.warnings` is the channel `validate` turns into PROBLEMS FOUND.
+    UNWIRED_REVISE = "unwired_revise"
     #: A node type this build has no factory for, as `(type, node id)`.
     #:
     #: The loud half of a rule that was only half kept. `errors.py` records the
@@ -126,6 +139,12 @@ _SENTENCES: dict[Finding, str] = {
         'Team "{0}" mounts "{1}", whose graph has no grader routing revise — so its '
         "Expected outcome is documentation and nothing in the run checks it. Add a "
         "grader to that workflow and wire revise back, or read the outcome as a note."
+    ),
+    Finding.UNWIRED_REVISE: (
+        'Grader "{0}" has no revise edge — a verdict of revise routes to its pass '
+        "branch instead, so an answer this grader rejected ships as though it had "
+        "been approved. Wire revise back to the node that should redraft, or read "
+        "this grader as a recorder rather than a gate."
     ),
     Finding.UNKNOWN_NODE_TYPE: (
         'Node "{1}" has type "{0}", which this build does not implement — the step '

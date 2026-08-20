@@ -81,6 +81,21 @@ def test_the_grader_can_send_it_back(doc: dict) -> None:
     assert plan.conditional["grader1"] == {"revise": "digest1", "pass": "out1"}
 
 
+def test_a_wired_grader_is_never_warned_about(doc: dict) -> None:
+    """The other half of ticket 31's contract, on the example that wires it.
+
+    `support-triage` ships the unwired shape on purpose and now carries
+    `Finding.UNWIRED_REVISE`. A warning that also fires on the correct wiring
+    is a warning everyone learns to skip, so this pins the quiet side.
+    """
+    from openstategraph.compile.diagnostics import Finding
+    from openstategraph.compile.node_runtime import NodeRuntime, RunState
+
+    runtime = NodeRuntime(model=None)
+    WorkflowCompiler().build(doc, RunState, runtime.factory(doc), compile_graph=False)
+    assert not runtime.diagnostics.any(Finding.UNWIRED_REVISE)
+
+
 def test_the_rubric_demands_a_source_and_forgives_a_failure(doc: dict) -> None:
     """Both halves matter, and the second is the unobvious one.
 

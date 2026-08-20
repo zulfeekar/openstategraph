@@ -243,7 +243,14 @@ def run_workflow(
     # locally (`every-workflow-green` 14, 16). This door reads everything
     # straight off the finished state; the streaming one folds the same three
     # out of frames.
-    health = run_health(raw_outputs, final.get("nested_outputs"), final.get("forced"))
+    health = run_health(
+        raw_outputs,
+        final.get("nested_outputs"),
+        final.get("forced"),
+        # Graders whose `revise` verdict reached no edge (`workflow-gallery`
+        # 31). Read straight off finished state, exactly as `forced` is.
+        final.get("unrouted"),
+    )
     # A fallback, never an override (`every-workflow-green` 33): the model's own
     # fence wins when it wrote one, and this fills the silence when it did not —
     # built from a name the runtime itself refused, so it does not depend on the

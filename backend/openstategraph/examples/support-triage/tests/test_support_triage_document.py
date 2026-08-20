@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+from openstategraph.compile.diagnostics import Finding
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 from openstategraph.package_testing import (
     assert_document_shape,
@@ -86,6 +88,40 @@ class TestTheGraderCannotSendItBack:
         """
         route = WorkflowCompiler._router_for("grader1", plan.conditional["grader1"])
         assert route({"decisions": {"grader1": "revise"}}) == "pass"
+
+    def test_the_compiler_now_says_so_out_loud(self, doc: dict) -> None:
+        """Gallery ticket 31's first fix, asserted on the example that ships
+        the shape. Silence here was what made the two discoveries in that
+        ticket cost anything: `plan.warnings` was `[]` and nothing anywhere
+        said the verdict could not be acted on.
+
+        `Finding`-shaped and not `plan.warnings` — see the test below. This is
+        a document with something worth saying about it, not a broken one.
+        """
+        runtime = NodeRuntime(model=None)
+        WorkflowCompiler().build(
+            doc, RunState, runtime.factory(doc), compile_graph=False
+        )
+        assert runtime.diagnostics.any(Finding.UNWIRED_REVISE)
+        assert any(
+            "grader1" in warning for warning in runtime.diagnostics.warnings()
+        )
+
+    def test_it_is_a_warning_and_not_a_problem(self, plan) -> None:
+        """`assert_document_shape` requires a warning-free plan and
+        `openstategraph validate` reports `plan.warnings` as PROBLEMS FOUND.
+        This example is deliberate, so the finding must not land there —
+        verified on the CLI: `validate` still answers VALID and exits 0.
+        """
+        assert plan.warnings == []
+
+    def test_the_run_says_it_too(self) -> None:
+        """The second fix. A compile-time warning is read once; a run is read
+        every time, and the run is where the answer a grader rejected actually
+        reaches a person. Its own state key, never a third `decisions` label:
+        the compiler dispatches on that exact value.
+        """
+        assert "unrouted" in RunState.__annotations__
 
     def test_no_desk_agent_has_a_feedback_edge(self, doc: dict) -> None:
         """The reason there is no revise edge, stated as a fact about the file.

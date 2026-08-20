@@ -126,7 +126,10 @@ class TestSilencingAModel:
 def _plan() -> Any:
     from types import SimpleNamespace
 
-    return SimpleNamespace(edges=[], skill_bindings={}, warnings=[])
+    # `conditional` because `_grader` reads it to know whether its `revise`
+    # port is wired anywhere (`workflow-gallery` 31). A stub that omits a field
+    # the production plan always has is a stub that drifts.
+    return SimpleNamespace(edges=[], skill_bindings={}, warnings=[], conditional={})
 
 
 def _runtime(model: Any) -> Any:

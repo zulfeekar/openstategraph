@@ -43,8 +43,22 @@ return chosen if chosen in destinations else default
 
 Benign here, and even wanted. **Not benign in general** — the same fallback
 means any grader with an unwired `revise` edge ships an answer its own rubric
-rejected, with no warning at compile time. Gallery ticket 31; `tests/` pins the
-behaviour in both directions.
+rejected. Gallery ticket 31; `tests/` pins the behaviour in both directions.
+
+**Both silences are now closed, and the fallback is unchanged.** This package
+compiles with one warning and is meant to:
+
+    Grader "grader1" has no revise edge — a verdict of revise routes to its
+    pass branch instead … or read this grader as a recorder rather than a gate.
+
+That is `Finding.UNWIRED_REVISE`, the same channel `delegate-by-mount` ships
+`UNENFORCED_OUTCOME` on — deliberately **not** `plan.warnings`, so
+`openstategraph validate` still answers VALID and this document is still a
+valid one. And at run time a `revise` verdict that reached no edge writes the
+`unrouted` state key, which both HTTP doors turn into *"the grader asked for a
+revise and no such edge was wired, so the answer shipped as-is"*. Here that
+sentence is the accurate description of an advisory verdict; elsewhere it is
+the report that was missing.
 
 ### 2. The person is not told what the machine thought
 
