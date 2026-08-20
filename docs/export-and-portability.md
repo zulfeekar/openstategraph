@@ -79,7 +79,11 @@ by OpenStateGraph's own discovery conventions. Skip `load_workflow` and
 compile the document by hand, and — per the same page — "the agent is drawn
 with three tools, bound to none, and confidently answers from parametric
 memory." `load_workflow` exists specifically to report that failure on
-`.warnings` instead of silently producing a broken agent.
+`.warnings` instead of silently producing a broken agent — and, since
+`production-ready/79`, `openstategraph validate` answers the same question for
+free, before a run costs anything: a bound tool with no implementation in this
+installation is a PROBLEM and exit 1, naming the node, the type and the
+`tools/` folder that is missing.
 
 ### Roadmap
 

@@ -138,4 +138,79 @@ def unresolved_mounts(
     return list(dict.fromkeys(findings))
 
 
-__all__ = ["MOUNT_NODE_TYPES", "mount_targets", "unresolved_mounts", "validate_document"]
+def unresolved_tool_bindings(document: dict[str, Any], package_dir: Path) -> list[str]:
+    """Tools this document binds that nothing here implements (ticket 79).
+
+    **Why this is not part of `validate_document`.** Same reason as
+    `unresolved_mounts` above: that function plans the graph *in memory*, and
+    whether a tool type has an implementation is a question about this
+    installation — built-in tools, installed plugins, and the package's own
+    `tools/` directory. A document does not carry the answer, so nothing had
+    ever asked. `validate` therefore answered VALID for a document copied
+    without its package's `tools/`, and printed `Tool bindings: {...}` under
+    it, which reads as confirmation the bindings are real. The run was the
+    only honest surface — three `No implementation for tool` warnings and an
+    agent that correctly refused to invent an answer.
+
+    **The registry is the runtime's own.** `build_tool_registry` is what
+    `NodeRuntime.services.tools` is built from, and the lookup here is
+    `_bound_tool`'s lookup — the same dict, keyed by the same node type. A
+    check that resolved by a different rule would be a second validator, which
+    is the thing `cmd_validate` exists to avoid. It costs an import of the
+    package's `tools/*.py` and no model call: binding is a registry lookup.
+
+    **Only *bound* tool nodes**, again mirroring the runtime: `_bound_tool` is
+    reached for a tool wired to an agent. A tool card parked on the canvas
+    gives nothing a capability, so its absence costs nothing.
+
+    A package-scoped discovered type (`<slug>/tools.QueryTool`) is resolved by
+    exactly this registry too, so it is clean when its package is present and
+    named when it is not — reported, never refused. CLAUDE.md states that cost
+    openly; this is where a person finds out about it before a run.
+    """
+    from openstategraph.api.registries import build_tool_registry
+    from openstategraph.api.workflow_store import WorkflowStore
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+    types = {
+        str(node.get("id") or ""): str(node.get("type") or "")
+        for node in document.get("nodes") or []
+    }
+    try:
+        plan = WorkflowCompiler().plan(document)
+    except Exception:
+        # A document that will not plan has a louder problem, already reported
+        # by the verdict this list is folded into.
+        return []
+    bound = [node_id for ids in plan.tool_bindings.values() for node_id in ids]
+    if not bound:
+        return []
+
+    slug = package_dir.name
+    registry = build_tool_registry(WorkflowStore(root=package_dir.parent), slug)
+
+    findings: list[str] = []
+    seen: set[str] = set()
+    for node_id in bound:
+        tool_type = types.get(node_id, "")
+        if tool_type in registry or tool_type in seen:
+            continue
+        seen.add(tool_type)
+        findings.append(
+            f'Tool "{node_id}" has type "{tool_type}", which nothing in this '
+            "installation implements — the agent it is wired to will run without it, "
+            "so its answer will not be grounded in that data source. Copy the "
+            "package's tools/ folder next to workflow.json, or install the plugin "
+            "that provides it."
+        )
+    # One absent implementation is one thing to fix however many cards name it.
+    return list(dict.fromkeys(findings))
+
+
+__all__ = [
+    "MOUNT_NODE_TYPES",
+    "mount_targets",
+    "unresolved_mounts",
+    "unresolved_tool_bindings",
+    "validate_document",
+]

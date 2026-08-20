@@ -360,7 +360,7 @@ seam the library already has — there is no behaviour in the CLI that
 | Command | What it does |
 | --- | --- |
 | `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
-| `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings. **Exit 1** on blocking findings, so it is a CI gate |
+| `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings, plus the two questions a plan held in memory cannot answer: does every mount name a package that is there, and does every bound tool have an implementation **in this installation** (built-in, an installed plugin, or the package's own `tools/`). **Exit 1** on blocking findings, so it is a CI gate. A document copied without its package's `tools/` fails here rather than at the first run |
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
 | `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `loop`, `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
 | `openstategraph new --list-templates` | the templates and one line on what each is for |

@@ -265,7 +265,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     """
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
-    from openstategraph.validation import unresolved_mounts
+    from openstategraph.validation import unresolved_mounts, unresolved_tool_bindings
 
     target = Path(args.target).expanduser().resolve()
     manifest = target if target.is_file() else target / "workflow.json"
@@ -291,18 +291,36 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # own location rather than from `workflows_root()`, so validating a
     # package by path answers about that path.
     mounts = unresolved_mounts(document, manifest.parent.parent)
-    if mounts:
+    # The second thing an in-memory plan cannot answer (ticket 79), and the
+    # same shape as the first: a bound tool's implementation lives in this
+    # installation — built-in, an installed plugin, or the package's own
+    # `tools/` — and a document that travelled without its package binds tools
+    # nothing here can supply. `validate` answered VALID for exactly that, and
+    # printed `Tool bindings:` beneath it, while the run three warnings later
+    # was the only surface telling the truth.
+    #
+    # It is a PROBLEM rather than a note, deliberately, and the exit code is
+    # the reason: `validate` is the zero-token gate a script runs before a run
+    # costs anything, and its one answer is "is this ready to run **here**".
+    # An agent drawn with three tools and bound to none is not. Priced and
+    # rejected: putting it on `plan.warnings` (that channel is the compiler's,
+    # is asserted empty by every shipped example's own document test, and
+    # carries no root, so it cannot see a package's `tools/` at all), and
+    # reporting it under a VALID heading (which is the shape ticket 53 removed
+    # from this command one paragraph above).
+    tools = unresolved_tool_bindings(document, manifest.parent)
+    if mounts or tools:
         # Folded into the verdict rather than printed after it: one command,
         # one answer. A VALID followed by a list of problems is the shape this
         # ticket is about.
         found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
         topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
         report = "\n".join(
-            ["PROBLEMS FOUND:", *(f"- {p}" for p in (*found, *mounts)), "", topology]
+            ["PROBLEMS FOUND:", *(f"- {p}" for p in (*found, *mounts, *tools)), "", topology]
         )
 
     print(report)
-    return EXIT_OK if verdict.ok and not mounts else EXIT_FAILURE
+    return EXIT_OK if verdict.ok and not mounts and not tools else EXIT_FAILURE
 
 
 def cmd_graph(args: argparse.Namespace) -> int:

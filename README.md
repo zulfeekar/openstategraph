@@ -175,7 +175,7 @@ pip install -e "backend[ollama]"      # a checkout; or the built wheel, from any
 openstategraph examples list                            # the worked examples, in the wheel
 openstategraph examples copy sql-qa                     # take one — the copy is yours
 openstategraph run ./workflows/sql-qa "How many customers are in the database?"
-openstategraph validate ./workflows/sql-qa              # exit 1 if it will not compile
+openstategraph validate ./workflows/sql-qa              # exit 1 if it will not compile or run here
 openstategraph graph ./workflows/sql-qa                 # Mermaid text, no network call
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new my-qa --template routed-qa           # or: --list-templates

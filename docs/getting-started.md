@@ -402,7 +402,7 @@ backend once and the `openstategraph` command is on your `PATH`:
 pip install -e "backend[ollama]"
 
 openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
-openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not compile
+openstategraph validate ./workflows/chinook-assistant   # exit 1 if it will not compile or run here
 openstategraph graph ./workflows/chinook-assistant      # Mermaid text, no network
 openstategraph new my-flow                              # scaffold ./workflows/my-flow
 openstategraph new --list-templates                     # what you can start from
