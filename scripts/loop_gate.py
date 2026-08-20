@@ -18,9 +18,20 @@ Five checks, all of them cheap next to the session they guard:
 2. **The ledger agrees with git.** This subsumes "did the session close its
    ticket": a trailer whose ticket still says open is exactly what check 1 of
    the ledger reports.
-3. **`session_guard.py verify`**, against the files HEAD actually changed.
-   Running the product writes files; this is what catches the ones nobody
-   meant.
+3. **The working tree grew nothing new.** Running the product writes files —
+   disk autosave rewrites a package on every edit the editor makes — and the
+   ones that matter are the ones nobody committed and nobody meant. The first
+   run records what is already dirty (other sessions leave modified and
+   untracked files here constantly, and staging by path is this repository's
+   rule); every run after fails on anything that was not there before.
+
+   This deliberately does **not** use `session_guard.py`'s fingerprint.
+   That tool answers *"what did **my** session move"* from a snapshot taken at
+   its start, and in a chain the snapshot belongs to whichever session ran
+   last — so by the time the gate asks, every earlier session's legitimate
+   commit looks like an intruder. Asked at the wrong moment it fails a clean
+   chain, which is worse than not asking: a gate that cries wolf gets
+   disabled. `session_guard` stays the in-session tool; the gate uses git.
 4. **Both suites.** Not one. A backend fix with a green pytest and an unrun
    vitest has been shipped here more than once.
 5. **The handoff moved.** Checked by mtime against the *previous* commit,
@@ -66,12 +77,22 @@ def main() -> int:
     ok &= _report(agrees, "ledger agrees with git", ledger.stdout.strip().splitlines()[0])
 
     changed = [f for f in _run(["git", "show", "--name-only", "--format=", "HEAD"]).stdout.split() if f]
-    guard = _run([sys.executable, "scripts/session_guard.py", "verify", *changed])
-    ok &= _report(
-        guard.returncode == 0,
-        f"nothing moved outside HEAD's {len(changed)} file(s)",
-        "" if guard.returncode == 0 else guard.stdout.strip().splitlines()[0],
-    )
+    print(f"        HEAD touched {len(changed)} file(s) — read them, no script can")
+
+    dirty = {ln[3:] for ln in _run(["git", "status", "--short"]).stdout.splitlines() if ln[3:]}
+    baseline_file = REPO / ".scratch" / ".loop-gate-baseline"
+    if not baseline_file.exists():
+        baseline_file.parent.mkdir(parents=True, exist_ok=True)
+        baseline_file.write_text("\n".join(sorted(dirty)))
+        _report(True, "working tree baseline recorded", f"{len(dirty)} path(s) already dirty")
+    else:
+        known = {ln for ln in baseline_file.read_text().splitlines() if ln}
+        new_dirty = sorted(dirty - known)
+        ok &= _report(
+            not new_dirty,
+            "the working tree grew nothing new",
+            ", ".join(new_dirty[:3]) if new_dirty else "",
+        )
 
     py = _run([sys.executable, "-m", "pytest", "-q"])
     ok &= _report(py.returncode == 0, "pytest", (py.stdout.strip().splitlines() or [""])[-1])
