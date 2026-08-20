@@ -22,6 +22,13 @@ disagree: a trailer whose ticket still says open, a ticket whose file carries a
 resolution its header does not, a header citing a commit this repository does
 not have. Run it before trusting any statement about what is left.
 
+**A trailer says a commit's work belongs to that ticket — never that the ticket
+is finished.** The header word for the difference is `partially`, and it covers
+both shapes: half the fix shipped, *and* a different defect found on the way
+shipped while the reported symptom survives (`every-workflow-green` 26 and 31,
+swept 2026-08-20). Anything else is a drift row on every future run, which
+teaches the two dishonest moves — mark it resolved, or leave the trailer off.
+
 **The session that resolves a ticket has a fixed shape, and it is written down
 in `skills/ticket-loop/`** — orient from the newest `.scratch/HANDOFF-<date>.md`
 and the ledger, reproduce in the browser, TDD, reproduce again, commit with the
