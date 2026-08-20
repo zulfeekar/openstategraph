@@ -273,6 +273,33 @@ Two nodes of the same tool type with different config in one document must not
 clobber each other. The default `configure` ignores config entirely, which is
 correct for a stateless tool.
 
+### What a tool can reach — and the checker that says so
+
+Three seams, and no fourth:
+
+| What | How |
+| --- | --- |
+| its node's config | `configure(data)`, reading the keys its `node_fields` declare |
+| the run — user, session, thread, workflow slug | `langgraph.config.get_config()["configurable"]`, as `prebuilt_session.SessionIdentityTool` does |
+| memory | `langgraph.config.get_store()`, as `memory.py` does |
+| **graph state** | **not available.** `BaseTool.run` validates `**kwargs` into `Args` and calls `_execute(args)`. A design that needs graph state belongs in a node. |
+
+This is worth stating flatly because the wrong answer shipped. The "build one
+for this workflow" brief — the door a run offers when nothing in the library
+covers what it was asked — told developers to *"read state, context and memory
+through `ToolRuntime`"*, which is a LangChain seam this platform does not
+surface at all. Seven tests held the sentence and every one was green, because
+they asked whether the words were there rather than whether the thing existed.
+
+The list above is now data —
+[`generated_module_contract.py`](../backend/openstategraph/generated_module_contract.py)
+— published for the build skill as
+`skills/atom-forge/references/generated-module-contract.md` and enforced by
+`check_generated_module()`, which reads a candidate module with `ast` and
+returns one violation per clause it breaks. Every clause names the symbols in
+*this* installation it depends on, and a test resolves each of them, so the
+next fictional seam fails a test instead of reaching a developer.
+
 ### Wrap LangChain, never subclass it
 
 `BaseTool` is ours. `as_langchain_tool()` adapts to a `StructuredTool` at the

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Fixed
+- **The "build one for this workflow" brief no longer names a seam that does
+  not exist.** When a run finds nothing in the library for what it was asked,
+  the developer channel offers a door, and pressing it seeds the chat with the
+  shape the new module must have. One of its five rules read *"it reads state,
+  context and memory through `ToolRuntime`, not around it"* — and `ToolRuntime`
+  is a LangChain construct this platform does not surface anywhere. A developer
+  following the brief would have gone looking for a seam that is not here.
+
+  It now names the three that are: config through `configure(data)`, the run
+  through `langgraph.config.get_config()`, memory through `get_store()` — and
+  says plainly that a tool cannot read graph state.
+
+### Added
+- **The shape a generated module must have is data, and checkable.**
+  `openstategraph.generated_module_contract` holds the five clauses in one
+  place; `check_generated_module()` reads a candidate module with `ast` and
+  returns one violation per clause it breaks (the ladder, the seams, declared
+  card fields and data keys, the package's own `tools/` folder, no credential
+  value). The clause list is published for the build skill as
+  `skills/atom-forge/references/generated-module-contract.md` and mirrored into
+  the brief, both pinned by drift tests.
+
+  Every clause names the symbols in *this* installation it depends on, and a
+  test resolves each of them — the gate that would have caught `ToolRuntime`,
+  which seven green tests did not, because all of them asked whether the words
+  were present rather than whether the thing existed.
+
 ### Added
 - **A classifier can route to every branch a question matches, not just one.**
   A compound message — *"what do you know about music? what is your skill?"* —

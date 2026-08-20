@@ -8,11 +8,11 @@ import { moduleBrief } from './moduleBrief';
 describe('moduleBrief', () => {
   const brief = moduleBrief('a tool that can query the GitHub API', 'ops-desk');
 
-  it('names what is missing, in the run\'s own words', () => {
+  it("names what is missing, in the run's own words", () => {
     expect(brief).toContain('a tool that can query the GitHub API');
   });
 
-  it('asks the owner\'s four questions before any code', () => {
+  it("asks the owner's four questions before any code", () => {
     expect(brief).toMatch(/what it does/i);
     expect(brief).toMatch(/which kind of module/i);
     expect(brief).toMatch(/state, context, memory/i);
@@ -38,14 +38,27 @@ describe('moduleBrief', () => {
     expect(brief).toMatch(/beside its workflow\.json/i);
   });
 
-  it('requires the ToolRuntime seam rather than reaching around it', () => {
-    // `.scratch/the-atom-has-no-context/` exists because this had no answer.
-    expect(brief).toMatch(/through ToolRuntime, not around it/i);
+  it('names the seams this installation actually has', () => {
+    // This assertion used to read `/through ToolRuntime, not around it/` and
+    // was green for a day while `ToolRuntime` existed nowhere in the product —
+    // a LangChain construct we do not surface, recorded in
+    // `docs/decisions/special-agents-2026-08.md` as "flagged, not decided".
+    // A tool here gets its validated `Args` and nothing else.
+    //
+    // The real gate is `backend/tests/test_a_generated_module_is_checkable.py`,
+    // which resolves every symbol a clause names against this installation.
+    // Asserting the words here is fine as long as nobody mistakes it for that.
+    expect(brief).toMatch(/configure\(data\)/);
+    expect(brief).toMatch(/langgraph\.config\.get_config\(\)/);
+    expect(brief).toMatch(/get_store\(\)/);
+    expect(brief).toMatch(/cannot read graph state/i);
+    expect(brief).not.toMatch(/ToolRuntime/);
   });
 
   it('requires the ladder and the declarations the gates read', () => {
     expect(brief).toMatch(/concrete leaf/i);
-    expect(brief).toMatch(/declares its card fields and its data keys/i);
+    expect(brief).toMatch(/implements _execute/);
+    expect(brief).toMatch(/declares its card fields in node_fields/i);
   });
 
   it('never lets a credential value into the document', () => {

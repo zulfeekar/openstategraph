@@ -181,6 +181,15 @@ named as though it were complete for both, is worse than no checklist.
 The full checklist with the evidence behind each gate is
 `references/honesty-gates.md`.
 
+The gates decide whether a design is **possible**. What the built module must
+**be** is a separate list and a checkable one —
+`references/generated-module-contract.md`, published from the same clause data
+that `check_generated_module()` enforces. Read it before writing, and run the
+checker before accepting. Its own first gate is the reason it exists: every
+clause names symbols in *this* installation, because the rule it replaced named
+`ToolRuntime`, which this platform does not surface, and nothing noticed for a
+day.
+
 ### Set A — the canvas gates
 
 For anything that is placed or wired. A design fails if it:
@@ -444,6 +453,7 @@ surface says `docs: not-needed — <reason>`.
 | --- | --- |
 | `references/interview-questions.md` | before the first question — full wordings, the reasoning each carries, the scope→backend map, follow-ups |
 | `references/honesty-gates.md` | before promising anything, and again before the commit |
+| `references/generated-module-contract.md` | **before the first line of a module is written, and again before it is accepted** — the shape a built module must have, published from `openstategraph.generated_module_contract` and enforced by `check_generated_module()`. It is where the seams a tool can actually reach are named; a design that needs graph state fails there, not in review |
 | `references/worked-example-tollbooth.md` | to see a real interview end to end: the 2026-08-15 memory-module session, each answer and what it decided, and the spec that came out — plus the honesty notes each live client has added since, which say what this skill did not have when they ran it |
 
 The governing rules this skill enforces are in `CLAUDE.md` at the repository
