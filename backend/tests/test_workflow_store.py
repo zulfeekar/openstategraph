@@ -571,3 +571,83 @@ class TestDuplicate:
     ) -> None:
         with pytest.raises(InvalidSlugError):
             store.duplicate("../etc", name="Copy", saved_at="2026-02-02T00:00:00")
+
+
+class TestASaveThatChangedNothing:
+    """A no-op save must not produce a diff — `production-ready` 67.
+
+    The module's own first paragraph is what this protects: a `workflow.json`
+    is *"the source of truth, diffable and git-reviewable"*. A diff is only
+    reviewable if it holds what somebody authored, and `savedAt` is a wall
+    clock — so pressing Save twice with nothing touched in between rewrote the
+    file and produced a commit-worthy change containing nothing. Reproduced in
+    the browser on the real board file before this was written.
+
+    The guard compares the **document**, which is the thing a user authors.
+    `name`, `published` and `hidden` are envelope fields with their own
+    deliberate edits, and a change to one of those is still a save.
+    """
+
+    def test_a_resave_of_an_identical_document_does_not_touch_the_file(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        document = {"version": 3, "nodes": [{"id": "n1", "type": "agent.llm"}], "edges": []}
+        store.save("flow", name="Flow", document=document, saved_at="2026-01-01T00:00:00")
+        path = tmp_path / "flow" / "workflow.json"
+        before, stamped = path.read_text(), path.stat().st_mtime_ns
+
+        store.save("flow", name="Flow", document=dict(document), saved_at="2026-06-06T12:00:00")
+
+        assert path.read_text() == before, "a no-op save rewrote the file"
+        assert path.stat().st_mtime_ns == stamped, "a no-op save touched the file's mtime"
+
+    def test_the_clock_alone_never_counts_as_a_change(self, store: WorkflowStore) -> None:
+        # Said as the property rather than as bytes: the stored `savedAt` is
+        # the first one, because the second save never happened.
+        document = {"version": 3, "nodes": [], "edges": []}
+        store.save("flow", name="Flow", document=document, saved_at="2026-01-01T00:00:00")
+        store.save("flow", name="Flow", document=document, saved_at="2026-06-06T12:00:00")
+
+        assert store.describe("flow").saved_at == "2026-01-01T00:00:00"
+
+    def test_a_document_that_actually_changed_is_written(self, store: WorkflowStore) -> None:
+        store.save("flow", name="Flow", document={"nodes": []}, saved_at="2026-01-01T00:00:00")
+
+        store.save("flow", name="Flow", document={"nodes": [{"id": "n1"}]}, saved_at="2026-06-06T00:00:00")
+
+        assert store.load("flow") == {"nodes": [{"id": "n1"}]}
+        assert store.describe("flow").saved_at == "2026-06-06T00:00:00"
+
+    def test_a_rename_is_a_change_even_when_the_document_is_not(
+        self, store: WorkflowStore
+    ) -> None:
+        # The envelope is not the document. Renaming touches no node, and it
+        # is still an edit somebody made on purpose.
+        document = {"nodes": []}
+        store.save("flow", name="Flow", document=document, saved_at="2026-01-01T00:00:00")
+
+        store.save("flow", name="Renamed", document=document, saved_at="2026-06-06T00:00:00")
+
+        summary = store.describe("flow")
+        assert summary.name == "Renamed"
+        assert summary.saved_at == "2026-06-06T00:00:00"
+
+    def test_an_unreadable_previous_file_is_rewritten_rather_than_trusted(
+        self, store: WorkflowStore, tmp_path: Path
+    ) -> None:
+        # The guard reads the previous envelope. When that read fails there is
+        # nothing to compare against, and the safe answer is to write — a
+        # corrupt file must be repairable by pressing Save.
+        store.save("flow", name="Flow", document={"nodes": []}, saved_at="2026-01-01T00:00:00")
+        path = tmp_path / "flow" / "workflow.json"
+        path.write_text("{ this is not json")
+
+        store.save("flow", name="Flow", document={"nodes": []}, saved_at="2026-06-06T00:00:00")
+
+        assert store.load("flow") == {"nodes": []}
+
+    def test_a_first_save_always_writes(self, store: WorkflowStore, tmp_path: Path) -> None:
+        store.save("flow", name="Flow", document={"nodes": []}, saved_at="2026-01-01T00:00:00")
+
+        assert (tmp_path / "flow" / "workflow.json").is_file()
+        assert (tmp_path / "flow" / "AGENTS.md").is_file()

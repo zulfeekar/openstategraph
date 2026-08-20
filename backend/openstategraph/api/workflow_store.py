@@ -113,6 +113,16 @@ def is_slug(value: str) -> bool:
     return bool(value) and value == slugify(value) and "/" not in value and "\\" not in value
 
 
+def _without_clock(envelope: dict[str, Any]) -> dict[str, Any]:
+    """An envelope with `savedAt` dropped — everything a save is *about*.
+
+    A free function rather than a method, because it is a fact about the
+    envelope shape and `WorkflowStore` is already at nine public members
+    against a ceiling of about ten (CLAUDE.md, no god classes).
+    """
+    return {key: value for key, value in envelope.items() if key != "savedAt"}
+
+
 def _candidate_slugs(name: str) -> Iterator[str]:
     """The bare slug first, then disambiguated variants of it.
 
@@ -449,6 +459,7 @@ class WorkflowStore:
         """
         slug = directory.name
         payload = {"version": 1, "name": name, "savedAt": saved_at, "document": document}
+        previous: dict[str, Any] = {}
         if is_new:
             # Ticket 04: a workflow born in the editor is a DRAFT. Publishing
             # (set_published) is a deliberate, separate act.
@@ -464,6 +475,30 @@ class WorkflowStore:
             for key in ("published", "hidden"):
                 if key in previous:
                     payload[key] = previous[key]
+        # **A save that changed nothing writes nothing** (`production-ready` 67).
+        #
+        # This module's first paragraph promises a file that is "diffable and
+        # git-reviewable", and `savedAt` is a wall clock — so pressing Save
+        # twice with nothing touched in between rewrote the file and produced a
+        # commit-worthy change containing nothing. An adopter's workflows are
+        # tracked by design (`init`'s `.gitignore` omits `workflows/` on
+        # purpose), so that noise is charged to everyone, not just this
+        # checkout. Every one of the twenty-three shipped examples carries a
+        # hand-frozen midnight `savedAt` — somebody had already worked around
+        # this by hand.
+        #
+        # The comparison is the whole envelope **except the clock**, not the
+        # document alone: a rename touches no node and is still an edit
+        # somebody made on purpose, and so is a publish. Only the timestamp is
+        # excluded, because only the timestamp moves without anybody asking.
+        #
+        # Returning before the write leaves `mtime` untouched too, which is
+        # what keeps `git status` clean rather than merely keeping the diff
+        # empty. An unreadable previous file leaves `previous` empty and so
+        # never matches — a corrupt `workflow.json` stays repairable by
+        # pressing Save.
+        if previous and _without_clock(previous) == _without_clock(payload):
+            return
         # Two-space indent, trailing newline, sorted-by-the-serializer-not-here
         # keys: `workflow.json`'s own determinism is ticket 19's job upstream
         # of this — this just needs to not *add* nondeterminism on top of a
