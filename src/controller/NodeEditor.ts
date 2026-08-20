@@ -162,9 +162,15 @@ export class NodeEditor implements INodeEditor {
    * reports the height back. That is a consequence of a change the user already
    * made, so it must not become its own undo step — it goes straight to the
    * model, bypassing the command stack deliberately.
+   *
+   * **And without reaching the document.** `'measured'` moves the card on the
+   * canvas and leaves `SerializedNode.size` alone, because the height is a
+   * property of this build's card styling rather than of the workflow — a
+   * shorter card body silently rewrote five heights in a saved package
+   * (`production-ready` 69).
    */
   applyMeasuredSize(nodeId: NodeId, size: Size): void {
-    this.ctx.model.resizeNode(nodeId, size);
+    this.ctx.model.resizeNode(nodeId, size, 'measured');
   }
 
   /**

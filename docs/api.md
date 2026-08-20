@@ -761,6 +761,18 @@ timestamp, in a directory an adopter tracks in git by design. Only the
 timestamp is excluded from the comparison — a rename or a publish is a change
 and is written.
 
+**And a node's `size` is what somebody set, not what the browser measured**
+(`production-ready` 69). Card heights are measured off the rendered HTML on
+every layout, so while they were written back, a change to card styling
+rewrote every stored workflow the next time it was opened and saved — five
+heights moved in `chinook-assistant` with nobody having touched a node. The
+editor now keeps the two apart: the rendered size drives the canvas, and the
+document carries only sizes an authoring gesture produced — a container frame
+dragged by its grip, a frame `Arrange` refitted, the size an assembly gave a
+node it created. `size` is optional in a document you write by hand; leave it
+out and the node takes its type's default, which is what the examples above
+do.
+
 ### Copying — `POST /api/workflows/{slug}/duplicate`
 
 ```

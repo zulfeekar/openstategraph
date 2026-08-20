@@ -19,6 +19,7 @@ import {
   type NodeKind,
   type NodeRuntimeState,
   type SerializedNode,
+  type SizeOrigin,
 } from './contracts/node';
 
 /**
@@ -42,7 +43,7 @@ import {
  */
 export interface NodeWrite {
   position(position: Point): void;
-  size(size: Size): void;
+  size(size: Size, origin?: SizeOrigin): void;
   parent(parentId: NodeId | null): void;
   field(key: string, value: FieldValue): void;
   title(title: string): void;
@@ -58,6 +59,21 @@ export abstract class AbstractNodeModel implements INodeModel {
 
   protected _position: Point;
   protected _size: Size;
+  /**
+   * The size the *document* carries, which is not always the one on screen.
+   *
+   * `_size` is what the canvas draws — and for every card but a container's
+   * frame that is a measurement of the rendered HTML, taken fresh on each
+   * layout. Writing it to the file made a change to card styling rewrite
+   * every saved workflow the next time it was opened and saved: five heights
+   * moved in `chinook-assistant`, four by exactly 25 and one by 245, with
+   * nobody having touched a node (`production-ready` 69).
+   *
+   * So the two are kept apart. An authoring gesture — the resize grip,
+   * `Arrange` refitting a frame, the size an assembly gives a node it creates
+   * — writes both. A measurement writes only `_size`.
+   */
+  protected _authoredSize: Size;
   protected _parentId: NodeId | null;
   protected _data: NodeData;
   protected _runtime: NodeRuntimeState = IDLE_RUNTIME;
@@ -73,6 +89,9 @@ export abstract class AbstractNodeModel implements INodeModel {
     // value to keep — a node at (0, 0) is findable, a node at NaN is not.
     this._position = finitePoint(init.position, ORIGIN);
     this._size = finiteSize(init.size ?? definition.defaultSize, definition.defaultSize);
+    // A node arrives authored: whatever the file said, or whatever the type
+    // declares for a fresh one. Only a measurement can move the two apart.
+    this._authoredSize = this._size;
     this._parentId = init.parentId ?? null;
     // Schema defaults first so a node loaded from an older document gains
     // any field added since it was saved.
@@ -221,8 +240,9 @@ export abstract class AbstractNodeModel implements INodeModel {
     position: (position: Point) => {
       this._position = finitePoint(position, this._position);
     },
-    size: (size: Size) => {
+    size: (size: Size, origin: SizeOrigin = 'authored') => {
       this._size = finiteSize(size, this._size);
+      if (origin === 'authored') this._authoredSize = this._size;
     },
     parent: (parentId: NodeId | null) => {
       this._parentId = parentId;
@@ -248,7 +268,12 @@ export abstract class AbstractNodeModel implements INodeModel {
       id: this.id,
       type: this.type,
       position: { ...this._position },
-      size: { ...this._size },
+      // The authored size, never the measured one. See `_authoredSize`: the
+      // model keeps the rendered height because the minimap, `Arrange` and
+      // node placement all need what is actually on screen, but a
+      // measurement is a property of the build and has no business in a
+      // portable document.
+      size: { ...this._authoredSize },
       parentId: this._parentId,
       // Sorted, not spread: `JSON.stringify` follows insertion order, so two
       // nodes holding identical values would serialise differently depending

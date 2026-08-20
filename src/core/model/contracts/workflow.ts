@@ -2,7 +2,14 @@ import type { Unsubscribe } from '@core/kernel/Disposable';
 import type { Point, Rect, Size } from '@core/kernel/geometry';
 import type { FieldValue, NodeData } from './fields';
 import type { PortRef } from './ports';
-import type { INodeModel, NodeId, NodeRuntimeState, NodeTypeId, SerializedNode } from './node';
+import type {
+  INodeModel,
+  NodeId,
+  NodeRuntimeState,
+  NodeTypeId,
+  SerializedNode,
+  SizeOrigin,
+} from './node';
 
 export type EdgeId = string;
 
@@ -132,7 +139,11 @@ export interface IWorkflowModel {
   addNode(node: INodeModel): void;
   removeNode(id: NodeId): INodeModel | undefined;
   moveNode(id: NodeId, position: Point): void;
-  resizeNode(id: NodeId, size: Size): void;
+  /**
+   * `origin` decides whether the document records the new size. A measurement
+   * moves the card on screen and nothing else; see `SizeOrigin`.
+   */
+  resizeNode(id: NodeId, size: Size, origin?: SizeOrigin): void;
   setNodeData(id: NodeId, key: string, value: FieldValue): void;
   setNodeDataBulk(id: NodeId, patch: Partial<NodeData>): void;
   setNodeTitle(id: NodeId, title: string): void;

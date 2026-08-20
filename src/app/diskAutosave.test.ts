@@ -4,6 +4,7 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
 import { Workbench } from '@app/Workbench';
+import { addNode, TYPE } from '@core/testing/fixtures';
 import {
   diskAutosaveTarget,
   forgetDiskDocument,
@@ -286,6 +287,13 @@ describe('the write loop', () => {
     const save = vi.fn(async () => Ok(undefined));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
+    // A node, because the injection below rewrites `doc.nodes` — and on an
+    // empty model that maps over nothing. The test was green for years
+    // without one and would have stayed green with the strip removed
+    // (`production-ready` 69).
+    addNode(bench as unknown as Parameters<typeof addNode>[0], TYPE.agent, {
+      at: { x: 40, y: 200 },
+    });
 
     let tall = false;
     const remeasuring = {

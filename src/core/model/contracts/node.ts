@@ -180,6 +180,16 @@ export interface INodeDefinition extends IIdentifiable {
   readonly create: (init: NodeInit) => INodeModel;
 }
 
+/**
+ * Where a size came from, which decides whether the document records it.
+ *
+ * `'authored'` — somebody set it: the resize grip, `Arrange` refitting a
+ * frame, an assembly sizing a node it creates. `'measured'` — the view read
+ * the rendered card's height and reported it back, which the model needs and
+ * the file must not carry.
+ */
+export type SizeOrigin = 'authored' | 'measured';
+
 export interface NodeInit {
   readonly id?: NodeId;
   readonly position: Point;
@@ -200,7 +210,16 @@ export interface SerializedNode {
   readonly id: NodeId;
   readonly type: NodeTypeId;
   readonly position: Point;
-  readonly size: Size;
+  /**
+   * The *authored* size — what a grip, an `Arrange` refit or the assembly
+   * that created the node set. Never the height the browser measured off the
+   * rendered card, which is a property of the build (`production-ready` 69).
+   *
+   * Optional because a hand-written document may leave it out; the loader
+   * falls back to the type's `defaultSize`, which is what the examples in
+   * `docs/api.md` and `docs/mcp.md` already rely on.
+   */
+  readonly size?: Size;
   readonly parentId: NodeId | null;
   readonly data: NodeData;
   readonly title?: string;

@@ -8,7 +8,13 @@ import type { AbstractNodeModel } from './AbstractNodeModel';
 import type { EdgeModel } from './EdgeModel';
 import type { FieldValue, NodeData } from './contracts/fields';
 import type { PortRef } from './contracts/ports';
-import type { INodeModel, NodeId, NodeRuntimeState, NodeTypeId } from './contracts/node';
+import type {
+  INodeModel,
+  NodeId,
+  NodeRuntimeState,
+  NodeTypeId,
+  SizeOrigin,
+} from './contracts/node';
 import type {
   EdgeId,
   IEdgeModel,
@@ -186,12 +192,18 @@ export class WorkflowModel implements IWorkflowModel {
     this.bus.emit('node:moved', { nodeId: id, position: node.position, previous });
   }
 
-  resizeNode(id: NodeId, size: Size): void {
+  resizeNode(id: NodeId, size: Size, origin: SizeOrigin = 'authored'): void {
     const node = this.nodeMap.get(id);
     if (!node) return;
     const previous = node.size;
-    if (previous.width === size.width && previous.height === size.height) return;
-    node.write.size(size);
+    const unchanged = previous.width === size.width && previous.height === size.height;
+    // A measurement that agrees with the card already on screen has nothing to
+    // say. An *authored* one still does even when the pixels match: it is the
+    // gesture that promotes the current size to document state, which is the
+    // whole of the measured/authored split.
+    if (unchanged && origin === 'measured') return;
+    node.write.size(size, origin);
+    if (unchanged) return;
     this.bus.emit('node:resized', { nodeId: id, size: node.size, previous });
   }
 

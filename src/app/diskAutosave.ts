@@ -98,8 +98,8 @@ function canonical(value: unknown): string {
  *
  * **`size` is measured, not authored.** `JointGraphAdapter.applyGeometry`
  * writes card geometry back from a `ResizeObserver` on the rendered React
- * card. Nobody types it and nobody drags it — the card reports how tall it
- * ended up. Left in the comparison, an idle editor rewrote
+ * card. Nobody types it — the card reports how tall it ended up. Left in the
+ * comparison, an idle editor rewrote
  * `workflows/chinook-assistant/workflow.json` every few seconds forever: the
  * Get Table Schema card alternates between 118px and 200px as its schema list
  * settles, each measurement counted as an edit, and each write moved
@@ -109,6 +109,18 @@ function canonical(value: unknown): string {
  *
  * `position` stays in: dragging a node *is* an edit, and one a developer
  * expects to survive a reload.
+ *
+ * **Kept even though the model now enforces the same rule.** Since
+ * `production-ready` 69 a measured size cannot reach `SerializedNode` at all
+ * — `AbstractNodeModel` serialises the *authored* size and keeps the rendered
+ * one to itself — so this strip is a second lock on a door already shut. It
+ * stays because an idle editor rewriting a package on a loop is the worst
+ * failure this file has produced, and one enforcement point is one bug away
+ * from producing it again.
+ *
+ * It does cost something, stated so nobody rediscovers it as a bug: a
+ * container's frame *can* be dragged by its grip, and that authored resize is
+ * therefore not worth an autosave. Pressing Save still writes it.
  */
 function comparable(name: string, document: unknown): string {
   const { nodes, ...rest } = document as { nodes?: readonly Record<string, unknown>[] };
