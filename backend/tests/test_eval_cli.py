@@ -131,6 +131,24 @@ def test_a_package_with_no_dataset_says_so(tmp_path: Path) -> None:
         default_dataset_path(tmp_path)
 
 
+def test_the_cli_reports_a_missing_dataset_without_the_exception_class_name(
+    package: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`cmd_eval` lets `evaluate_package`'s `FileNotFoundError` reach `main`'s
+    catch-all uncaught. The message it prints names the path and the fix
+    (ticket 83) — it must not also open with the Python exception's class
+    name, which is what happened before that ticket."""
+    for dataset in (package / "evals").glob("*.eval.json"):
+        dataset.unlink()
+
+    code = main(["eval", str(package)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "eval.json" in err
+    assert not err.startswith("FileNotFoundError")
+
+
 def test_limit_stops_early(package: Path, scripted: RespondingModel) -> None:
     scorecard = evaluate_package(package, model=scripted, limit=1)
     assert len(scorecard.items) == 1

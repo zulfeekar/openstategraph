@@ -93,7 +93,12 @@ class TestRun:
         code = cli.main(["run", str(tmp_path / "nope"), "q"])
 
         assert code == cli.EXIT_FAILURE
-        assert "workflow.json" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "workflow.json" in err
+        # `PackageNotFound` is the developer-facing exception type; a person
+        # reading the terminal is told what happened, not handed the name of
+        # the Python class that reported it (ticket 83).
+        assert not err.startswith("PackageNotFound")
 
     def test_the_trace_file_flag_reaches_the_loader(self, package: Path, tmp_path: Path) -> None:
         trace = tmp_path / "traces" / "runs.jsonl"

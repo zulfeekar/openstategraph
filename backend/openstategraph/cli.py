@@ -71,6 +71,20 @@ def _error(message: str) -> int:
     return EXIT_FAILURE
 
 
+def _terminal_message(exc: Exception) -> str:
+    """What an uncaught exception says at the terminal — the message it was
+    raised with, never the name of the Python class that carries it.
+
+    Every exception this project raises on purpose already writes its own
+    sentence (`PackageNotFound`, `FileNotFoundError` from a missing eval
+    dataset, `ValueError` from a bad document) — that is the whole point of
+    `errors.py` existing. Prefixing it with `type(exc).__name__` does not add
+    information a reader can act on; it just makes half the CLI's errors open
+    in a different voice than the other half (ticket 83).
+    """
+    return str(exc)
+
+
 def _usage(message: str) -> int:
     """A bad *invocation*, not a failed run — argparse's own code, so CI can
     tell "you typed it wrong" from "it did not work"."""
@@ -246,7 +260,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     try:
         document = normalize_document(json.loads(manifest.read_text()))
     except Exception as exc:
-        return _error(f"{type(exc).__name__}: {exc}")
+        return _error(_terminal_message(exc))
 
     verdict = ValidateWorkflowTool().run(document=json.dumps(document))
     report = verdict.content if verdict.ok else str(verdict.error)
@@ -1226,7 +1240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         return EXIT_FAILURE
     except Exception as exc:
-        return _error(f"{type(exc).__name__}: {exc}")
+        return _error(_terminal_message(exc))
 
 
 def console_main() -> int:
