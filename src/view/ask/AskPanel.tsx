@@ -22,7 +22,7 @@ import {
   type RunStreamEvent,
 } from '@core/runtime/RuntimeClient';
 import type { OpenStreams } from '@core/runtime/OpenStreams';
-import { useController, useWorkbench } from '@app/WorkbenchContext';
+import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { entryQuestion } from '@nodes/inputs/entryQuestion';
 import { composerPlaceholder } from './composerPlaceholder';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
@@ -37,6 +37,7 @@ import { Activity, exportTrace, type ActivityRow } from './traceTree';
 import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
 import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
+import { displayNamesByGraphName } from '@core/runtime/graphName';
 import {
   busKey,
   suggestionOutcome,
@@ -239,6 +240,13 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * know what LangGraph is; it serialises the document, posts it, and renders
  * what streams back (ticket 07).
  */
+/**
+ * The document changes that can change a lane's name: a node appearing,
+ * disappearing, or being renamed. Hoisted to a module constant because
+ * `useModelEvents` keys its subscription on the array's contents.
+ */
+const NAMING_EVENTS = ['node:added', 'node:removed', 'node:title'] as const;
+
 export interface AskPanelProps {
   /**
    * A one-line explanation of *why* the panel just opened, when something
@@ -315,6 +323,25 @@ export function AskPanel({
    * streaming into a thread that is merely not on screen.
    */
   const [historyOpen, setHistoryOpen] = useState(openHistory);
+  /**
+   * What the open canvas calls each node the runtime named, for History's
+   * lane headers (`memory-and-replay` 39).
+   *
+   * Computed here rather than in `PastRuns` because this is where the document
+   * is. A stored run is read against whatever the document says **now** — that
+   * is the whole point of resolving it client-side rather than in the
+   * checkpointer, which has never seen this canvas — so it has to follow a
+   * rename while the panel is open, which is what the subscription buys.
+   *
+   * Three events, not `useWorkflowVersion`: the map depends on which nodes
+   * exist and what they are called, and re-rendering on every drag would cost
+   * a pass over the panel per mouse-move for a map that cannot have changed.
+   * The hook is called for the re-render, not for a value — the same shape
+   * `DrillBanner` and `WorkflowManager` use — and the map is then derived
+   * plainly, being one pass over a document of tens of nodes.
+   */
+  useModelEvents(NAMING_EVENTS);
+  const laneNames = displayNamesByGraphName(workbench.model.nodes());
   /**
    * The conversation in progress, or `null` before the first answer comes back
    * and after an explicit reset.
@@ -1409,7 +1436,11 @@ export function AskPanel({
       />
       <PanelBody>
         {historyOpen ? (
-          <PastRuns slug={currentWorkflowSlug()} onClose={() => setHistoryOpen(false)} />
+          <PastRuns
+            slug={currentWorkflowSlug()}
+            names={laneNames}
+            onClose={() => setHistoryOpen(false)}
+          />
         ) : null}
         {/* Above history too, not only above the live thread (ticket 55.6).
             The notice explains why the panel opened, and the one case that

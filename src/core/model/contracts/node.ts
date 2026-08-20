@@ -92,6 +92,17 @@ export interface INodeModel {
   readonly ports: readonly IPortDescriptor[];
   /** Card title; may be overridden per-instance. */
   readonly title: string;
+  /**
+   * Whether `title` is this node's own name or its type's label.
+   *
+   * On the contract rather than only on `AbstractNodeModel` because the
+   * distinction is a consumer's question, not an implementation detail: a
+   * document with three untitled workers has three nodes whose `title` is
+   * `"Worker"`, and anything naming one of them — a run's lane header, a
+   * diagnostic, a diff — has to be able to tell "unnamed" from "named
+   * Worker" (`memory-and-replay` 39).
+   */
+  readonly hasCustomTitle: boolean;
   readonly subtitle: string;
 
   getField<T extends FieldValue>(key: string): T;

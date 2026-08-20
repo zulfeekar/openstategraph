@@ -35,7 +35,21 @@ type Listing =
   | { status: 'ready'; runs: readonly PastRun[]; at: number }
   | { status: 'failed'; message: string };
 
-export function PastRuns({ slug, onClose }: { slug: string | undefined; onClose: () => void }) {
+export function PastRuns({
+  slug,
+  names,
+  onClose,
+}: {
+  slug: string | undefined;
+  /**
+   * Graph node name -> what the open document calls that node
+   * (`displayNamesByGraphName`). Optional, and an absent map is not a
+   * degraded mode: every lane then reads exactly what the run stored, which
+   * is what this panel did before `memory-and-replay` 39.
+   */
+  names?: ReadonlyMap<string, string>;
+  onClose: () => void;
+}) {
   const [state, setState] = useState<Listing>({ status: 'loading' });
   const [open, setOpen] = useState<string | null>(null);
   /**
@@ -109,6 +123,7 @@ export function PastRuns({ slug, onClose }: { slug: string | undefined; onClose:
               key={run.threadId}
               run={run}
               at={state.at}
+              names={names}
               showWorkflow={!slug}
               expanded={open === run.threadId}
               onToggle={() =>
@@ -124,6 +139,7 @@ export function PastRuns({ slug, onClose }: { slug: string | undefined; onClose:
 function RunRow({
   run,
   at,
+  names,
   showWorkflow,
   expanded,
   onToggle,
@@ -131,6 +147,8 @@ function RunRow({
   run: PastRun;
   /** When the list was fetched — the reference instant for "20 min ago". */
   at: number;
+  /** Passed straight through to the lane headers; see `PastRuns`. */
+  names?: ReadonlyMap<string, string>;
   /** Only when the list is unfiltered, where the row would otherwise not say
    * which workflow it belongs to. */
   showWorkflow: boolean;
@@ -154,7 +172,7 @@ function RunRow({
           {run.status === 'paused' ? ` · ${described.statusLabel}` : ''}
         </span>
       </button>
-      {expanded ? <RunHistory run={run} /> : null}
+      {expanded ? <RunHistory run={run} names={names} /> : null}
     </div>
   );
 }
@@ -163,7 +181,13 @@ function RunRow({
  * One run, checkpoint by checkpoint — fetched only when a row is opened, so a
  * list of fifty runs costs one request rather than fifty-one.
  */
-function RunHistory({ run }: { run: PastRun }) {
+function RunHistory({
+  run,
+  names,
+}: {
+  run: PastRun;
+  names?: ReadonlyMap<string, string>;
+}) {
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'ready'; history: PastRunHistory }
@@ -213,7 +237,7 @@ function RunHistory({ run }: { run: PastRun }) {
       {lanes(state.history.steps).map((lane) => (
         <div className="past-runs__lane" key={`${lane.namespace.join('|')}#${lane.occurrence}`}>
           <div className="past-runs__lane-head">
-            <span className="past-runs__lane-title">{laneTitle(lane)}</span>
+            <span className="past-runs__lane-title">{laneTitle(lane, names)}</span>
             <span className="ask__meta">
               {lane.steps.length} {lane.steps.length === 1 ? 'step' : 'steps'}
             </span>

@@ -161,21 +161,27 @@ export function lanes(steps: readonly PastRunStep[]): readonly PastRunLane[] {
 }
 
 /**
- * `The workflow` · `worker_web` · `worker_web · run 2` · `mount1 › model`.
+ * `The workflow` · `worker-web` · `worker-web · run 2` · `Chinook › model`.
  *
- * The name is the **graph-node name**, which is not always the canvas node id:
- * the compiler mangles hyphens, so `worker-web` is stored as `worker_web`. It
- * is shown as stored rather than guessed back, because the reverse is
- * ambiguous — a node id may legitimately contain an underscore — and a label
- * that quietly names the wrong node is worse than one that looks technical.
- * Resolving it properly needs the document, which this surface does not have;
- * that is a follow-up, recorded on the ticket rather than approximated here.
+ * A lane is stored under its **graph-node name**, which is not the canvas node
+ * id: the compiler mangles every non-alphanumeric character, so `worker-web`
+ * is checkpointed as `worker_web`. `names` is how the open document answers
+ * for its own nodes — built by `displayNamesByGraphName`, which reads the
+ * mangling *forward* and therefore guesses nothing.
+ *
+ * Each segment is resolved on its own, and an unresolved one is shown exactly
+ * as stored. That is not a fallback so much as the rule: a segment belonging
+ * to a *mounted* document is not in this document's map, and the honest thing
+ * to print for a node this canvas does not contain is what the run called it.
+ *
+ * `names` is optional so a caller with no document — a test, or a surface that
+ * genuinely has none — reads what the run stored, as before.
  */
-export function laneTitle(lane: PastRunLane): string {
+export function laneTitle(lane: PastRunLane, names?: ReadonlyMap<string, string>): string {
   if (lane.namespace.length === 0) return 'The workflow';
   // The whole path, because the innermost name alone would claim a nested
   // graph's node belongs to this canvas.
-  const path = lane.namespace.join(' \u203a ');
+  const path = lane.namespace.map((name) => names?.get(name) ?? name).join(' \u203a ');
   return lane.occurrence > 1 ? `${path} · run ${lane.occurrence}` : path;
 }
 

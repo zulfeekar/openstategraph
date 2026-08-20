@@ -259,6 +259,38 @@ describe('lanes', () => {
     ).toBe('worker_web · run 2');
   });
 
+  /**
+   * `memory-and-replay` 39. Given the open document, the compiler's mangling
+   * is read *forward* — never guessed back — so a lane is called what the card
+   * is called.
+   */
+  it('says what the open document calls the node, when it can', () => {
+    const names = new Map([['worker_web', 'Web researcher']]);
+    expect(
+      laneTitle({ node: 'worker_web', namespace: ['worker_web'], occurrence: 1, steps: [] }, names),
+    ).toBe('Web researcher');
+    expect(
+      laneTitle({ node: 'worker_web', namespace: ['worker_web'], occurrence: 2, steps: [] }, names),
+    ).toBe('Web researcher · run 2');
+  });
+
+  it('leaves a name it cannot resolve exactly as stored', () => {
+    // A namespace segment from inside a *mounted* document: the parent's node
+    // map does not contain the child's ids, and inventing one would name the
+    // wrong card.
+    const names = new Map([['worker_web', 'Web researcher']]);
+    expect(
+      laneTitle({ node: 'model', namespace: ['mount1', 'model'], occurrence: 1, steps: [] }, names),
+    ).toBe('mount1 \u203a model');
+  });
+
+  it('resolves each segment of a path independently', () => {
+    const names = new Map([['mount1', 'Chinook']]);
+    expect(
+      laneTitle({ node: 'model', namespace: ['mount1', 'model'], occurrence: 1, steps: [] }, names),
+    ).toBe('Chinook \u203a model');
+  });
+
   it('names a nested lane by its whole path', () => {
     // A mounted workflow's agent is two levels deep and "worker_web" alone
     // would claim it belongs to this canvas, which it does not.

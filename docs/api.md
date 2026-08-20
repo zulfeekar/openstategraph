@@ -874,6 +874,18 @@ error — the truthful answer from a store that cannot say is silence. The
 editor's own **History** toggle in the Chat panel is built on exactly these two
 calls and nothing else, and it draws one lane per graph from these fields.
 
+`namespace` and `node` are **compiled** names: the compiler rewrites every
+non-alphanumeric character of a canvas node id so LangGraph will accept it, so
+the node a document calls `worker-web` is stored here as `worker_web`. Read
+that back **forward** — mangle the ids of the document you have open the same
+way and look the stored name up in the result. Do not try to reverse it: the
+mangling is not injective (`worker-web`, `worker.web` and `worker_web` all
+land on `worker_web`), and a label that quietly names the wrong node is worse
+than one that looks technical. A name your document does not account for
+belongs to some other document — a mounted package's node — and should be
+shown as stored. The editor does exactly this in
+`src/core/runtime/graphName.ts`.
+
 ---
 
 ## 4. A whole client, in one file
