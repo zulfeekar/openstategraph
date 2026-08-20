@@ -65,13 +65,18 @@ about *when* it arrives are worth knowing before you rely on it:
 
 - It is a **build-time** refusal (`NodeRuntime._subgraph`, walking
   `_ancestry`), so it costs no tokens and cannot be reached at run time.
-- **`openstategraph validate` does not catch it.** The validator plans one
-  document and has no document loader, so a self-mounting package reports
-  `VALID` — as does a mount naming a package that does not exist. Measured
-  while building this example; gallery ticket 27.
+- **`openstategraph validate` catches it too, and says the same sentence.**
+  Until gallery ticket 27 it did not: the validator plans one document and has
+  no document loader, so a self-mounting package reported `VALID`, exit 0 —
+  the cheap gate saying yes while the expensive one said no. `validation.py`
+  now walks the mount chain on disk and reports the cycle from the same
+  f-string the compiler raises, so the words never drift. A mount naming a
+  package that does not exist is reported there as well (production-ready 53).
 
-The editor-side guard — refusing the drag before it becomes a node — is
-organisms-first-class ticket 10, and is not built.
+The compiler stays the authority in all three places. The editor's guard —
+refusing the drag before it becomes a node — is organisms-first-class ticket
+10, and lives in `src/core/validation/mountCycleRule.ts`, quoting the same
+sentence verbatim.
 
 ## Smoke run
 

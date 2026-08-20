@@ -290,7 +290,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # directory the loader will search at run time. Taken from the package's
     # own location rather than from `workflows_root()`, so validating a
     # package by path answers about that path.
-    mounts = unresolved_mounts(document, manifest.parent.parent)
+    # `slug=` is the package's own folder name, so a mount naming it closes a
+    # cycle *here* and is refused by the same sentence the build raises rather
+    # than by a later, more expensive surface (ticket 27).
+    mounts = unresolved_mounts(document, manifest.parent.parent, slug=manifest.parent.name)
     # The second thing an in-memory plan cannot answer (ticket 79), and the
     # same shape as the first: a bound tool's implementation lives in this
     # installation — built-in, an installed plugin, or the package's own

@@ -126,12 +126,20 @@ class TestTheCheckItself:
         assert "mid" in findings[0]
 
     def test_a_cycle_terminates_rather_than_recursing_forever(self, tmp_path: Path) -> None:
-        # A self-including mount is refused at compile time with its own
-        # error; this check runs *before* that and must not hang first.
+        # Termination is still the requirement, and it is still met — but the
+        # cycle is now *reported* on the way out rather than passed over in
+        # silence (workflow-gallery 27). This test asserted `== []` until
+        # then, on the argument that the compile-time refusal was the better
+        # message; it arrives too late to be a gate, which is what 27 is about.
+        # The words are pinned against `node_runtime`'s own in
+        # `test_validate_sees_a_mount_cycle.py`.
         _package(tmp_path, "a", mounts="b")
         _package(tmp_path, "b", mounts="a")
 
-        assert unresolved_mounts(_document(mounts="a"), tmp_path) == []
+        findings = unresolved_mounts(_document(mounts="a"), tmp_path)
+
+        assert len(findings) == 1
+        assert "mounts itself" in findings[0]
 
     def test_each_missing_slug_is_reported_once(self, tmp_path: Path) -> None:
         # Two mounts of one absent package is one typo, not two problems.

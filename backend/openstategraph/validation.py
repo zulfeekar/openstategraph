@@ -87,8 +87,26 @@ def _read_package(root: Path, slug: str) -> dict[str, Any] | None:
         return {}
 
 
+#: The refusal `compile/node_runtime.py::_subgraph` raises when a mount closes
+#: a cycle, and the sentence `src/core/validation/mountCycleRule.ts` already
+#: quotes verbatim so a user meets one sentence rather than three that sound
+#: like different problems. The compiler stays the authority; this module and
+#: the editor report the same verdict earlier.
+def mount_cycle_refusal(slug: str, chain: tuple[str, ...]) -> str:
+    """`_subgraph`'s sentence for `slug` closing `chain`, built its way."""
+    return (
+        f"Workflow {slug!r} mounts itself ({' -> '.join((*chain, slug))}); "
+        "a mount cycle can never terminate"
+    )
+
+
 def unresolved_mounts(
-    document: dict[str, Any], root: Path, *, _seen: frozenset[str] = frozenset(), _chain: str = ""
+    document: dict[str, Any],
+    root: Path,
+    *,
+    slug: str | None = None,
+    _ancestry: tuple[str, ...] = (),
+    _chain: str = "",
 ) -> list[str]:
     """Mounts this document cannot reach, named — recursively (ticket 53).
 
@@ -100,12 +118,26 @@ def unresolved_mounts(
     was wrong, but because nothing had ever asked the question.
 
     Recursive, because the defect is a typo and a typo two packages down
-    breaks the run just as completely. `_seen` closes the cycle: a
-    self-including mount is refused at compile time with its own error, and
-    this runs first, so it must terminate rather than let the better message
-    never arrive.
+    breaks the run just as completely.
+
+    **A cycle is reported here too, and stops the descent (ticket 27).** The
+    walk has always had to close the loop or hang; until this it closed it by
+    `continue`, so a package mounting itself validated clean and learned about
+    it from `load_workflow` instead. Termination was the guard's argument, and
+    silence was never part of it — `_ancestry` gives both: the chain that led
+    here, so a repeat can be *named* before the descent stops.
+
+    `slug` is this document's own package name, so a top-level self-mount
+    reads `selfmount -> selfmount` rather than starting one level in. Optional,
+    because a bare document validated by path has no folder to take it from.
+
+    **Ancestry, not "every slug seen".** A package mounted twice down two
+    branches is a diamond, not a cycle, and a run terminates through it
+    perfectly well.
     """
     findings: list[str] = []
+    if slug and not _ancestry:
+        _ancestry = (slug.strip(),)
     for node_id, slug in mount_targets(document):
         if not slug:
             where = f"{_chain} -> {node_id}" if _chain else node_id
@@ -114,7 +146,8 @@ def unresolved_mounts(
                 "produces nothing. Pick a package on the node, or delete it."
             )
             continue
-        if slug in _seen:
+        if slug in _ancestry:
+            findings.append(mount_cycle_refusal(slug, _ancestry))
             continue
         child = _read_package(root, slug)
         if child is None:
@@ -128,7 +161,7 @@ def unresolved_mounts(
             unresolved_mounts(
                 child,
                 root,
-                _seen=_seen | {slug},
+                _ancestry=(*_ancestry, slug),
                 _chain=f"{_chain} -> {slug}" if _chain else slug,
             )
         )
