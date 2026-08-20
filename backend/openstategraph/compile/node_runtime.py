@@ -140,6 +140,24 @@ class RunState(TypedDict, total=False):
     #: dispatches on that exact label. MERGE, because a document may hold
     #: several graders and more than one can lose a verdict in a run.
     unrouted: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: grader node id -> `{"verdict": "pass"|"revise", "reason": str}` — what
+    #: the grader actually **thought**, written on every judgement rather than
+    #: only on an exceptional one (`workflow-gallery` 32).
+    #:
+    #: Not readable from `decisions`, and that is the whole reason it exists:
+    #: `decisions` holds the *branch* the compiler dispatches on, and at the
+    #: attempt cap a grader writes `pass` there for an answer it rejected. A
+    #: reviewer told "pass" about an answer nothing passed is worse informed
+    #: than one told nothing (gallery ticket 22's hazard, arriving at the one
+    #: surface where a person acts on it).
+    #:
+    #: Not `feedback` either: that is `LATEST_NONEMPTY`, cleared to `""` on a
+    #: pass and addressed to the *producer* — `reason` is the sentence written
+    #: for a human reading the judgement, which is exactly this reader.
+    #:
+    #: MERGE, for the reason `forced` and `unrouted` give: a document may hold
+    #: several graders and a fan-out can schedule two in one superstep.
+    verdicts: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: `"<mount node id>/<child node id>"` -> that node's output, for every
     #: node inside a mounted workflow. Written by `_subgraph`; read by
     #: `/api/runs`, which has no frame stream to rebuild it from the way
@@ -766,6 +784,36 @@ def apply_mount_overrides(
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
+
+
+def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:
+    """What the grader that produced this node's input thought of it.
+
+    `workflow-gallery` 32. Returns `{"verdict", "reason"}`, or an empty dict
+    when no grader is immediately upstream — so a caller adds nothing rather
+    than adding two empty keys, and a client can read absence as "no machine
+    opinion exists" instead of "the machine had nothing to say".
+
+    **Immediate producers only, and no walk further back.** Several graders can
+    sit upstream of one gate along a chain, and a judgement of *some earlier
+    text* captioning *this* text would be a confident wrong statement rather
+    than a missing one. The same `node_ids` list `_upstream_text` uses to build
+    the candidate builds the verdict, so the text and its judgement can never
+    come from different places.
+
+    First match in that list wins where a node has more than one graded
+    producer. That is a genuine choice and not an accident: the alternative —
+    concatenating verdicts the way `_upstream_text` concatenates text — would
+    give a `verdict` field two values, and the field is what a reviewer acts
+    on. A fan-in of several graders into one gate is `workflow-gallery` 48's
+    territory and is not drawable today.
+    """
+    verdicts = state.get("verdicts") or {}
+    for node_id in node_ids:
+        row = verdicts.get(node_id)
+        if isinstance(row, dict) and row.get("verdict"):
+            return {"verdict": str(row["verdict"]), "reason": str(row.get("reason") or "")}
+    return {}
 
 
 def _wired_skill(
@@ -2220,6 +2268,22 @@ class NodeRuntime:
                 "decisions": {node_id: branch},
                 "feedback": "" if branch == "pass" else verdict.feedback,
                 "outputs": {node_id: outcome},
+                # The judgement itself, beside the branch it produced. Written
+                # unconditionally — unlike `forced` and `unrouted`, whose
+                # presence is the signal — because a downstream reader asking
+                # "what did the machine think of this text" needs an answer for
+                # an ordinary pass too (`workflow-gallery` 32).
+                #
+                # `reason` first, `feedback` as the fallback: `Verdict` splits
+                # them deliberately (the reason explains the verdict to a human,
+                # the feedback is written for the agent that must retry), and a
+                # deterministic rejection fills only one of the two.
+                "verdicts": {
+                    node_id: {
+                        "verdict": "pass" if verdict.passed else "revise",
+                        "reason": verdict.reason or verdict.feedback,
+                    }
+                },
             }
             if branch == "pass" and not verdict.passed:
                 update["forced"] = {node_id: verdict.feedback or ""}
@@ -2255,12 +2319,27 @@ class NodeRuntime:
         data = node.get("data") or {}
         message = _text(data, "message") or "Approve this result?"
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A grader reaches a gate along its `pass` branch, which is a
+        # **conditional** edge and therefore absent from `plan.edges` — the
+        # list above is empty for the shape this whole feature is about
+        # (`workflow-gallery` 32, found by running it: the verdict was in state
+        # and the lookup had nowhere to look). Static producers first, so the
+        # node that actually wrote the candidate is preferred where both exist.
+        producers = upstream + [
+            src
+            for src, branches in (plan.conditional or {}).items()
+            if node_id in (branches or {}).values()
+        ]
 
         def run(state: RunState) -> dict[str, Any]:
             from langgraph.types import interrupt
 
             candidate = _upstream_text(state, upstream) or state.get("answer", "")
-            decision = interrupt({"message": message, "candidate": candidate})
+            payload = {"message": message, "candidate": candidate}
+            judgement = _upstream_verdict(state, producers)
+            if judgement:
+                payload.update(judgement)
+            decision = interrupt(payload)
 
             approved = isinstance(decision, dict) and decision.get("decision") == "approve"
             feedback = ""

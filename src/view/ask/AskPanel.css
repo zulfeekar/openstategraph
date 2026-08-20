@@ -407,6 +407,14 @@
   color: var(--color-text-primary);
 }
 
+/* The grader's opinion of the draft (`workflow-gallery` 32). Secondary to the
+   candidate deliberately: it informs the decision, it does not make it. */
+.ask__approval-verdict {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
 .ask__approval-actions {
   display: flex;
   gap: var(--space-2);

@@ -340,6 +340,9 @@
   .hitl--approval > p { margin: 0 0 var(--space-3); }
   .hitl--approval b { color: color-mix(in srgb, var(--paused) 80%, var(--text)); }
   .hitl--approval .answer { margin-bottom: var(--space-3); }
+  /* The grader's opinion of the draft (`workflow-gallery` 32) — secondary to
+     the candidate, because it informs the decision and does not make it. */
+  .hitl__verdict { margin: 0 0 var(--space-2); font-size: 0.9em; color: var(--color-text-secondary); }
   .hitl__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   /* Padding, radius and weight identical to `#send`, so the three controls a
      customer can press on this page agree with each other. */
@@ -1501,7 +1504,23 @@ function offerSave(el, answerText) {
 function renderInterrupt(el, d) {
   const box = document.createElement("div");
   box.className = "hitl hitl--approval";
+  // What the grader that produced this text thought of it
+  // (`workflow-gallery` 32). Both fields arrive together or not at all, and
+  // their absence means no grader judged the candidate — so nothing is drawn
+  // rather than a neutral line implying a machine looked at it. The label is
+  // the grader's real judgement, not the branch it routed down: at its attempt
+  // cap a grader routes `pass` for an answer it rejected.
+  const verdict = String(d.verdict || "");
+  const reason = String(d.reason || "");
+  const verdictLine = !verdict
+    ? ""
+    : verdict === "pass"
+      ? "The grader passed this" + (reason ? " — " + esc(reason) : ".")
+      : verdict === "revise"
+        ? "The grader asked for a revision" + (reason ? " — " + esc(reason) : ".")
+        : esc(reason);
   box.innerHTML = `<p><b>Approval needed:</b> ${esc(d.message || "")}</p><div class="answer">${md(d.candidate || "")}</div>
+    ${verdictLine ? `<p class="hitl__verdict">${verdictLine}</p>` : ""}
     <div class="hitl__actions">
       <button type="button" class="btn-approve" data-d="approve">Approve</button>
       <button type="button" class="btn-reject" data-d="reject">Reject</button>

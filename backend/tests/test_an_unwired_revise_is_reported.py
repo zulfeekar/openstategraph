@@ -64,6 +64,9 @@ class _StubGrader:
         verdict = type("_Verdict", (), {})()
         verdict.passed = self.passed
         verdict.feedback = "" if self.passed else "not good enough"
+        # Declared on `Verdict`, and read by `_grader` since
+        # `workflow-gallery` 32. A double stands in for the whole type.
+        verdict.reason = "passed" if self.passed else "not good enough"
         return verdict
 
 

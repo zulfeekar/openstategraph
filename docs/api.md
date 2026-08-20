@@ -97,7 +97,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
-| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate` |
+| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate** |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |
 
@@ -661,6 +661,37 @@ data: {"threadId": "chat-8f2a1c", "node": "approve1", "message": "Send this brie
 
 The stream ended on `interrupt`, so the run is paused and waiting — not
 finished, and not broken.
+
+#### When a grader judged the candidate
+
+Grade-then-gate — the machine checks it, then a person decides — is the natural
+shape for anything a person signs off. Where the node that produced the
+candidate is a grader, the frame carries what that grader thought, so the
+reviewer is not asked to stand behind a draft while the only existing machine
+opinion of it stays in state:
+
+```
+event: interrupt
+data: {"threadId": "smoke-triage-2", "node": "gate1",
+       "message": "This reply goes to a customer under your name.",
+       "candidate": "I'm sorry your invoice contains an error. …",
+       "verdict": "revise",
+       "reason": "'if appropriate' is a hedge and the rubric forbids holding phrases."}
+```
+
+Three things about those two fields:
+
+- **They travel together or not at all.** A gate whose candidate came from an
+  agent, a router or another gate carries neither key. Absence is a value: it
+  says no machine opinion exists, not that the machine had nothing to say.
+- **`verdict` is what the grader thought, not the branch it took.** A grader at
+  its attempt cap writes `pass` to `decisions` — the compiler dispatches on
+  that label — for an answer it rejected. This frame reports `revise` in that
+  case, which is the whole reason a person is being asked.
+- **The grader is the candidate's immediate producer.** Where several graders
+  sit upstream along a chain, no walk is made further back: a judgement of some
+  earlier text captioning this text would be a confident wrong statement rather
+  than a missing one.
 
 ### 5 — Answer the approval: `POST /api/runs/resume`
 

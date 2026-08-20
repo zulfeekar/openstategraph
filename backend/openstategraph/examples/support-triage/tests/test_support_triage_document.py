@@ -164,3 +164,35 @@ class TestNothingReachesACustomerWithoutTheGate:
         assert len(incoming) == 1
         assert incoming[0]["target"]["portId"] == "feedback"
         assert incoming[0]["source"]["portId"] == "rejected"
+
+
+class TestTheGateIsToldWhatTheGraderThought:
+    """Gallery ticket 32. This example is the first in the twenty to draw a
+    grader immediately upstream of a `human.approval`, so it is where the
+    interrupt payload's two-key shape first cost somebody something: the
+    reviewer was asked to stand behind a draft while `grader1`'s verdict and
+    reason stayed in state.
+
+    Asserted from the compiled plan and the frame contract rather than by
+    driving a model, in the manner of the rest of this file. The behaviour
+    itself is pinned at the layer it lives at, in
+    `backend/tests/test_the_gate_says_what_the_grader_thought.py`.
+    """
+
+    def test_the_graders_verdict_has_a_channel_of_its_own(self) -> None:
+        """Not readable from `decisions`, which holds the branch the compiler
+        dispatches on — and at the cap that is `pass` for a rejected answer."""
+        assert "verdicts" in RunState.__annotations__
+
+    def test_the_interrupt_frame_may_carry_it(self) -> None:
+        from openstategraph.api.streaming import FRAME_FIELDS
+
+        assert "verdict" in FRAME_FIELDS["interrupt"]
+        assert "reason" in FRAME_FIELDS["interrupt"]
+
+    def test_the_gate_is_reachable_only_along_the_graders_pass_branch(self) -> None:
+        """Which is what makes `grader1` the candidate's immediate producer
+        here, and therefore the grader whose opinion the frame reports."""
+        plan = WorkflowCompiler().plan(load_document(PACKAGE))
+        assert plan.conditional["grader1"]["pass"] == "gate1"
+        assert [src for src, dst in plan.edges if dst == "gate1"] == []

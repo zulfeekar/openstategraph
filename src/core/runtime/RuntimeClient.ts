@@ -208,6 +208,19 @@ export interface RunInterrupted {
   readonly message: string;
   readonly candidate: string;
   /**
+   * What the grader that produced `candidate` thought of it: `'pass'` or
+   * `'revise'` (`workflow-gallery` 32). `''` when no grader produced it — the
+   * server omits both this and `reason` together, and absence is a value: it
+   * says no machine opinion exists, not that the machine had nothing to say.
+   *
+   * **The judgement, not the branch.** A grader at its attempt cap routes
+   * `pass` for an answer it rejected; this field reports `revise` there,
+   * which is the whole reason a person is being asked.
+   */
+  readonly verdict: string;
+  /** The grader's sentence explaining `verdict`. `''` alongside it. */
+  readonly reason: string;
+  /**
    * The canvas node the run is parked on — the approval node itself.
    *
    * It never appears in an `update` frame, because `updates` reports a node
@@ -970,6 +983,8 @@ export class RuntimeClient implements IRuntimeClient {
           threadId: asString(payload['threadId']),
           message: asString(payload['message']),
           candidate: asString(payload['candidate']),
+          verdict: asString(payload['verdict']),
+          reason: asString(payload['reason']),
           node: asString(payload['node']),
         };
       } else if (eventName === 'done') {

@@ -1614,12 +1614,13 @@ wf = <span class="f">load_workflow</span>(<span class="s">"workflows/chained-sum
               runs; an agent cannot hand a live conversation to another agent.
             </p>
             <p class="sub">
-              Two limits this example cannot design around, both recorded. Three desks fanning into
-              one grader means the grader has no expressible revision loop — <code>agent.feedback</code>
-              takes one link, so a <code>revise</code> verdict falls through to the first declared
-              destination. And the person at the gate is not told what the grader thought: the
-              interrupt payload is <code>{message, candidate}</code>, and the verdict written
-              seconds earlier about that exact text is discarded.
+              One limit this example cannot design around, and one it exposed. Three desks fanning
+              into one grader means the grader has no expressible revision loop —
+              <code>agent.feedback</code> takes one link, so a <code>revise</code> verdict falls
+              through to the first declared destination. The second is fixed: the person at the gate
+              used to be shown the draft alone, so the interrupt payload now carries
+              <code>verdict</code> and <code>reason</code> from the grader that produced the
+              candidate — the judgement it reached, not the branch it routed down.
             </p>
 
             <h4>Use it</h4>

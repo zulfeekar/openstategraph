@@ -60,16 +60,30 @@ revise and no such edge was wired, so the answer shipped as-is"*. Here that
 sentence is the accurate description of an advisory verdict; elsewhere it is
 the report that was missing.
 
-### 2. The person is not told what the machine thought
+### 2. The person at the gate is told what the machine thought
 
-The interrupt payload is `{message, candidate}` — the gate's own field, and the
-text. `grader1` has just judged that text against five criteria and written a
-reason, and **none of it reaches the interrupt**. The reviewer is asked to
-stand behind a draft while the one existing machine opinion of it is left in
-state. Gallery ticket 32.
+The interrupt payload used to be `{message, candidate}` — the gate's own field,
+and the text — so `grader1` judged that text against five criteria, wrote a
+reason, and none of it reached the person deciding. Gallery ticket 32 closed
+that: the frame now carries `verdict` and `reason` when a grader produced the
+candidate, which here it always does, because `gate1`'s only way in is
+`grader1`'s `pass` branch.
+
+Three things it deliberately does **not** do:
+
+- **It does not report the branch.** `decisions["grader1"]` is `pass` for an
+  answer the grader rejected once the attempt cap is reached; the frame says
+  `revise` in that case, because what a reviewer needs is the judgement, not
+  the route.
+- **It does not walk further back.** The grader reported is the candidate's
+  *immediate* producer. A judgement of some earlier text captioning this text
+  would be a confident wrong statement rather than a missing one.
+- **It does not grow.** The verdict and its reason, and nothing else. The
+  payload's small size is a feature — a gate is not a trace viewer, and a
+  mount's isolation rule still applies.
 
 That is why the grader's rubric ends with *"Your verdict is read by the person
-deciding whether to send it"* — a sentence that is, today, aspirational.
+deciding whether to send it"* — a sentence that is now true.
 
 ### 3. The rejected sink cannot be an output
 

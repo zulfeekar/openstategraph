@@ -35,6 +35,11 @@ class _StubGrader:
     def grade(self, candidate: str, question: str = "") -> Any:  # noqa: ARG002
         class _Verdict:
             passed = False
+            # `Verdict` declares `reason` beside `feedback` and `_grader`
+            # reads it (`workflow-gallery` 32). A double missing a field of
+            # the type it stands in for is a Liskov failure in the test, not
+            # a reason to make the runtime defensive.
+            reason = "the ceiling case"
 
         verdict = _Verdict()
         verdict.feedback = self.feedback  # type: ignore[attr-defined]

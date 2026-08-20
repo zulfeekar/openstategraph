@@ -3,6 +3,7 @@ import { showsThinking } from './settledThinking';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
 import { doorHeadline } from './doorHeadline';
+import { graderVerdictLine } from './graderVerdictLine';
 import { moduleBrief } from './moduleBrief';
 import { usePaperController } from '@app/WorkbenchContext';
 import {
@@ -85,6 +86,9 @@ interface PendingApproval {
   readonly threadId: string;
   readonly message: string;
   readonly candidate: string;
+  /** The upstream grader's judgement of `candidate`, or `''` if none judged it. */
+  readonly verdict: string;
+  readonly reason: string;
 }
 
 /** One question-and-answer exchange in the chat thread. */
@@ -838,6 +842,8 @@ export function AskPanel({
             threadId: outcome.value.threadId,
             message: outcome.value.message,
             candidate: outcome.value.candidate,
+            verdict: outcome.value.verdict,
+            reason: outcome.value.reason,
           },
         });
         scrollToEnd();
@@ -1780,11 +1786,18 @@ function ApprovalPrompt({
   onReject: (note: string) => void;
 }) {
   const [note, setNote] = useState('');
+  const verdictLine = graderVerdictLine(approval);
 
   return (
     <div className="ask__approval">
       <p className="ask__approval-message">{approval.message}</p>
       {approval.candidate ? <RichText className="ask__answer" text={approval.candidate} /> : null}
+      {/* What the machine that just judged this text thought of it
+          (`workflow-gallery` 32). Below the draft and above the note field,
+          which is the order the reviewer reads in: the thing being decided,
+          the existing opinion of it, then their own. Absent entirely when no
+          grader produced the candidate — see `graderVerdictLine`. */}
+      {verdictLine ? <p className="ask__approval-verdict">{verdictLine}</p> : null}
       {/* The card's own message has always told the reviewer to reject with a
           note, and until `every-workflow-green` 11 there was nowhere to write
           one — so the held record was written from an empty string, and read

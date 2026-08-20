@@ -750,7 +750,7 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
         "activeNode", "path", "pathSlugs",
     ),
     "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
-    "interrupt": ("threadId", "node", "message", "candidate"),
+    "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason"),
     "done": (
         "threadId", "answer", "decisions", "outputs",
         "nested", "attempts", "mermaid", "developer",
@@ -1527,6 +1527,25 @@ def _run_frames(
                 # the candidate text a model produced, so it is prose on a
                 # customer surface exactly like `answer` is.
                 "candidate": _clean_output((payload_value or {}).get("candidate", "")) or "",
+                # What the grader immediately upstream thought of that exact
+                # text (`workflow-gallery` 32). Optional, like `withheld` on a
+                # token frame: both keys are absent together when no grader
+                # produced the candidate, and absence is the value — it says no
+                # machine opinion exists, not that the machine said nothing.
+                #
+                # The reason is model prose on the same surface as the
+                # candidate, so it is cleaned the same way.
+                **(
+                    {
+                        "verdict": str((payload_value or {}).get("verdict") or ""),
+                        "reason": _clean_output(
+                            str((payload_value or {}).get("reason") or "")
+                        )
+                        or "",
+                    }
+                    if (payload_value or {}).get("verdict")
+                    else {}
+                ),
             },
         )
         return

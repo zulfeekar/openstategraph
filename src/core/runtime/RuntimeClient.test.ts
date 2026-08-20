@@ -787,6 +787,48 @@ describe('RuntimeClient.runStream — how a stream ended', () => {
     expect(result.value.node).toBe('node:human.approval-1');
   });
 
+  it('carries the upstream grader\u2019s verdict and reason when the frame has them', async () => {
+    // `workflow-gallery` 32. Grade-then-gate is the natural shape for anything
+    // a person signs off, and the reviewer was shown the draft with the one
+    // existing machine opinion of it discarded.
+    const text = sseBody([
+      [
+        'interrupt',
+        {
+          threadId: 'th-1',
+          node: 'node:human.approval-1',
+          message: 'Approve this?',
+          candidate: 'the draft',
+          verdict: 'revise',
+          reason: "'if appropriate' is a hedge the rubric forbids.",
+        },
+      ],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    if (!result.ok || !('interrupted' in result.value)) throw new Error('expected a pause');
+    expect(result.value.verdict).toBe('revise');
+    expect(result.value.reason).toBe("'if appropriate' is a hedge the rubric forbids.");
+  });
+
+  it('leaves the verdict empty when no grader produced the candidate', async () => {
+    // Both keys are absent together, and absence is a value: no machine
+    // opinion exists. An empty string is how this client says that \u2014 the
+    // same shape every other optional string field takes here.
+    const text = sseBody([
+      ['interrupt', { threadId: 'th-1', message: 'Approve this?', candidate: 'the draft' }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const result = await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    if (!result.ok || !('interrupted' in result.value)) throw new Error('expected a pause');
+    expect(result.value.verdict).toBe('');
+    expect(result.value.reason).toBe('');
+  });
+
   it('leaves the paused node empty rather than inventing one', async () => {
     const text = sseBody([['interrupt', { threadId: 'th-1', message: 'Approve this?' }]]);
     const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
