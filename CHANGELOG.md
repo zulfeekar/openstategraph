@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Fixed
+- **A dispatched worker with no model configured no longer vanishes from the
+  run's record.** `_worker` returned `{"worker_results": {task_id: ""}}` for a
+  `None` model and wrote no `outputs` entry at all, so the step was invisible
+  to every surface — not even the silent channel could see it — and was in any
+  case indistinguishable from a worker whose model answered with nothing. A
+  live model-less run of `archetype-orchestrator-report` printed
+  `_(this member produced no result)_` for both subtasks with `warnings: []`.
+  It now writes a marker into `outputs`, and `silent_node_warnings` gives that
+  case its own sentence naming the node and the subtask id. On the **silent**
+  half deliberately: `.failures` and the exit code are unchanged, because a
+  step nobody gave a model to is a report about how the answer was reached,
+  not a claim the run broke (`workflow-gallery` 18).
 - **`openstategraph run` and `load_workflow` now report the whole of a run's
   health, not a third of it.** `run_health` calls itself the one place a run's
   health is assembled "for both doors"; there are three, and the third —

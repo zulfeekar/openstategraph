@@ -2723,7 +2723,20 @@ class NodeRuntime:
             instruction = state.get("task_instruction", "")
 
             if model is None:
-                return {"worker_results": {task_id: ""}}
+                # `worker_results` stays empty — it is the join's input, and a
+                # sentence about our configuration published there would reach
+                # `format_report` as if it were the subtask's answer. The
+                # record of the step goes in `outputs`, where every surface
+                # already reads it, carrying the marker that tells the silent
+                # channel *which* kind of nothing this is. Before this the
+                # branch wrote no `outputs` entry at all, so the step was
+                # invisible everywhere (`workflow-gallery` 18).
+                from openstategraph.compile.workflow_compiler import NO_MODEL_MARKER
+
+                return {
+                    "worker_results": {task_id: ""},
+                    "outputs": {f"{node_id}#{task_id}": NO_MODEL_MARKER},
+                }
 
             # Same ladder as `_agent`: the family owns construction, this
             # factory owns state plumbing. The workflow's skills text is

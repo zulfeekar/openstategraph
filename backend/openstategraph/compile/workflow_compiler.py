@@ -500,6 +500,23 @@ def failure_marker(node: str, message: str) -> str:
     return _FAILURE.format(node=node, message=message)
 
 
+#: What a model-driven node publishes when no model was configured for it.
+#:
+#: `_worker` returned `{"worker_results": {task_id: ""}}` for a `None` model and
+#: wrote **no** `outputs` entry, so the step was absent from the run's record
+#: entirely — not even the silent channel could see it — and was in any case
+#: indistinguishable from a worker whose model answered with nothing
+#: (`workflow-gallery` 18).
+#:
+#: A marker in `outputs` rather than a new state channel, for the reason
+#: `_FAILURE` is one: reader and writer stay together, and downstream still
+#: reads *something*. On the **silent** half rather than the failure half —
+#: `silent_node_warnings` argues that boundary in as many words, and
+#: `cli.run_exit_code` reads `.failures`. A step nobody gave a model to is a
+#: report about how the answer was reached; the run did not break.
+NO_MODEL_MARKER = "[no model was configured for this step]"
+
+
 #: What a failed step says to someone who cannot fix it.
 #:
 #: No variable, no provider, no file — that is developer guidance, and the
@@ -578,12 +595,25 @@ def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
     reached**, not a claim that the run failed, and the two must not share a
     channel that a script gates on.
     """
-    return [
-        f'Node "{node}" produced no output. The run continued with the previous '
-        "answer, so what you are reading came from an earlier step."
-        for node, value in outputs.items()
-        if not str(value or "").strip()
-    ]
+    warnings: list[str] = []
+    for node, value in outputs.items():
+        text = str(value or "").strip()
+        if text == NO_MODEL_MARKER:
+            # The two are different questions with different fixes — "the
+            # model answered with nothing" is a run to re-try, "no model was
+            # configured" is a setting to change — and they arrived at every
+            # surface as the same sentence (`workflow-gallery` 18).
+            warnings.append(
+                f'Node "{node}" had no model configured, so it never called one '
+                "and produced nothing. Set a model on the node or a default for "
+                "the workflow."
+            )
+        elif not text:
+            warnings.append(
+                f'Node "{node}" produced no output. The run continued with the previous '
+                "answer, so what you are reading came from an earlier step."
+            )
+    return warnings
 
 
 def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
