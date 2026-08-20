@@ -977,6 +977,13 @@ class ThreadStep(BaseModel):
     #: Same shape and the same reading order as a live frame's `path`: a
     #: consumer walks it outermost-first. `[]` rather than `[""]` — a level
     #: that does not exist is not a blank level.
+    #:
+    #: **Every entry is a name.** The dispatched-instance id is dropped, and so
+    #: is LangGraph's subgraph counter — the `|1`, `|2` it appends when one
+    #: task invokes a subgraph more than once. Both discriminate instances
+    #: rather than naming graphs, and a counter left in reads on screen as a
+    #: nested graph called `1` (`memory-and-replay` 40). Two invocations of one
+    #: node arrive here as one namespace, twice, which is what they are.
     namespace: list[str] = Field(default_factory=list)
     #: The innermost entry of `namespace`, or `""` for the workflow itself.
     #: A dispatched worker's instance id is deliberately **not** part of it:

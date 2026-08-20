@@ -229,13 +229,30 @@ def _namespace(tuple_: Any) -> list[str]:
     The instance id is dropped. Two subtasks dispatched to one `worker_web`
     land in two namespaces, and they are one node that ran twice — a panel
     grouping by name should say so.
+
+    **So is the subgraph counter**, for the same reason and by the same
+    sentence. When one task invokes a subgraph more than once, LangGraph
+    appends `|1`, `|2`, … to the namespace (`PregelLoop.__init__` asks the
+    task's `PregelScratchpad.subgraph_counter()`, which returns 0 the first
+    time). Kept, that segment reads on screen as `Data Analyst › 1` — a nested
+    graph called `1`, which no document contains and no reader can act on
+    (`memory-and-replay` 40). Dropped, the invocations key alike and the panel
+    calls them `· run 2`, `· run 3`, which is what they are.
+
+    Narrow, because the narrowness is the safety: a counter is **all digits
+    and carries no `_NS_END`**, and every genuine segment carries one — the
+    scheduler builds `f"{name}{NS_END}{task_id}"` before a task ever sees it.
+    Anything else is left exactly as stored.
     """
     raw = str(((tuple_.config or {}).get("configurable") or {}).get("checkpoint_ns") or "")
-    return [
-        segment.split(_NS_END)[0]
-        for segment in raw.split(_NS_SEP)
-        if segment.split(_NS_END)[0]
-    ]
+    names = []
+    for segment in raw.split(_NS_SEP):
+        if _NS_END not in segment and segment.isdigit():
+            continue
+        head = segment.split(_NS_END)[0]
+        if head:
+            names.append(head)
+    return names
 
 
 class _ToolCallReader:
