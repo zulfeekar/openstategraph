@@ -8,7 +8,24 @@ This skill is the *spine*. It calls the others — `skills/test-as-a-user/` for
 the browser work, `/wayfinder` for filing, `/grill-me` for ambiguity,
 `/graphify` for finding code. It does not repeat what they say.
 
-## 0 — Orient before touching anything
+## 0 — A cleared context, and the owner is the one who clears it
+
+**`/clear` first, then invoke this skill.** In that order — clearing *after*
+invoking wipes this file out of context along with everything else, and the
+skill has to be invoked again.
+
+A skill cannot run `/clear`; it is a command the app executes, not something an
+agent can call. So this step is a **reminder, not a gate**: if the context is
+already dirty when you read it, say so out loud and let the owner decide
+whether to clear and start over. Do not pretend a stale context is a fresh one
+— the specific failure it causes is confident, wrong statements about a ticket
+that closed an hour ago.
+
+This is also the last line of the loop. Finish, write the handoff, **then**
+clear — the handoff is what survives the clear, which is the whole reason
+step 8 is not optional.
+
+## 1 — Orient before touching anything
 
 1. **Read the newest `.scratch/HANDOFF-<YYYY-MM-DD>.md`.** Newest by *date in
    the filename*, not by mtime. It carries the priority list, and its
@@ -24,12 +41,12 @@ the browser work, `/wayfinder` for filing, `/grill-me` for ambiguity,
 
 Do not read source to orient. `graphify explain "X"` / `graphify path "A" "B"`.
 
-## 1 — Reproduce as a person
+## 2 — Reproduce as a person
 
 `skills/test-as-a-user/`. Open the browser, use the product, see the defect on
 screen. A ticket you cannot reproduce is a ticket to re-scope, not to fix.
 
-## 2 — TDD
+## 3 — TDD
 
 Failing test first, **at the layer the defect actually lives**. The trap this
 repo has paid for twice: a green test at the wrong layer. Ticket 33's fix was
@@ -39,7 +56,7 @@ would still be green if I fixed the wrong function?*
 
 Then make it pass, and run both suites.
 
-## 3 — Test as a user again
+## 4 — Test as a user again
 
 Same path, same question, in the browser. **If it is not fixed on screen, it is
 not fixed.** A green suite is not the verification.
@@ -47,7 +64,7 @@ not fixed.** A green suite is not the verification.
 Then try to break it. Twice on these maps a fix was incomplete and only a live
 re-run showed it.
 
-## 4 — Commit with a trailer
+## 5 — Commit with a trailer
 
 ```
 Ticket: <map>/<nn>
@@ -60,7 +77,7 @@ what was ruled out, what was priced and rejected.
 **Never push.** Never `git stash` — other sessions edit this repo at the same
 time and a stash swallows their work.
 
-## 5 — Close the ticket in both places
+## 6 — Close the ticket in both places
 
 `.scratch/` is gitignored, so a resolution written only in the ticket leaves no
 diff and a concurrent revert takes it with no trace. So both:
@@ -71,9 +88,9 @@ diff and a concurrent revert takes it with no trace. So both:
 - the **body** — the resolution, and the commit that carries it.
 
 Re-run `python3 scripts/ticket_ledger.py`. It should be quieter than it was in
-step 0, not louder.
+step 1, not louder.
 
-## 6 — Update the docs
+## 7 — Update the docs
 
 If the behaviour a document describes changed, the document changed in the same
 commit. Regenerate what is generated (`docs/openapi.json` and friends) rather
@@ -83,7 +100,7 @@ A number stated in prose has no way to fail — pin it in a test instead, the wa
 `src/publicSurfaceCeiling.test.ts` pins the class ceilings. That rule is why
 `CLAUDE.md` carries three corrections of its own claims.
 
-## 7 — Update `HANDOFF-<latest date>.md` — this is the step that gets dropped
+## 8 — Update `HANDOFF-<latest date>.md` — this is the step that gets dropped
 
 **The handoff is the only thing the next session reads first. A ticket closed
 without it is a ticket nobody knows is closed.**
@@ -137,3 +154,5 @@ different work — is `/grill-me`, not a coin flip.
 - [ ] docs updated, generated files regenerated
 - [ ] **`.scratch/HANDOFF-<today>.md` updated — done, next, instruments**
 - [ ] nothing pushed
+- [ ] the owner told, in one line, that the session is finished and `/clear` is
+      theirs to press
