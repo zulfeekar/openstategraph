@@ -6,6 +6,7 @@ import {
   describeRun,
   laneTitle,
   lanes,
+  stepCost,
   stepLines,
   stepTitle,
   toolCallLine,
@@ -246,6 +247,15 @@ function RunHistory({
             <div className="past-runs__step" key={step.checkpointId}>
               <div className="past-runs__step-head">
                 {stepTitle(step)}
+                {/*
+                  How long, and what it cost. Empty when neither is known —
+                  a step with nothing to measure against prints nothing rather
+                  than `0 ms`, which would be a claim
+                  (`memory-and-replay` 37, part 2).
+                */}
+                {stepCost(step) ? (
+                  <span className="past-runs__cost">{stepCost(step)}</span>
+                ) : null}
                 {step.wrote.length > 0 ? (
                   <span className="past-runs__wrote">wrote {step.wrote.join(', ')}</span>
                 ) : null}

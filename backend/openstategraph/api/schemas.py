@@ -926,6 +926,29 @@ class ThreadToolCall(BaseModel):
     result: str = ""
 
 
+class ThreadTokens(BaseModel):
+    """What one superstep's model call cost, as the provider reported it.
+
+    Read off `AIMessage.usage_metadata`, which LangChain populates for every
+    provider that reports usage — so this needed **no new storage**. Ticket 37
+    priced token counts as the half of replay that would require a frame
+    table; against the stored file that pricing was wrong, and the ticket
+    carries the correction (`memory-and-replay` 37, part 2).
+
+    **This step's call, not the run's total.** The message channel is
+    cumulative — every checkpoint holds the whole history — so a reader that
+    sums the channel charges the last row for the entire run and produces
+    numbers that climb plausibly and are wrong on every row but the last.
+
+    A provider that reports nothing gets no object at all rather than a zeroed
+    one: `0` is a claim that a call was free, and silence is not that claim.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
 class ThreadStep(BaseModel):
     """One checkpoint of a past run — the state as it stood at that moment.
 
@@ -969,6 +992,26 @@ class ThreadStep(BaseModel):
     #: whole history at every checkpoint, so reporting its contents would print
     #: every call on every row.
     tool_calls: list[ThreadToolCall] = Field(default_factory=list)
+    #: How long this superstep took, in milliseconds — the gap between this
+    #: checkpoint's `ts` and the previous checkpoint's **in the same
+    #: namespace**. A checkpoint is written after its superstep runs, so that
+    #: difference is the superstep's own elapsed time; per namespace because a
+    #: worker's supersteps are not the workflow's.
+    #:
+    #: `None`, never `0`, when there is nothing to measure against — the first
+    #: step of a graph, an unreadable timestamp, or a clock that went
+    #: backwards. Zero is the claim *this took no time*, and a panel has to be
+    #: able to tell that from *nobody knows*.
+    #:
+    #: Note what it includes: a parent superstep that dispatched a worker spans
+    #: the worker's whole run, because it did.
+    #:
+    #: A `source: "input"` step is never timed — it records what was handed in
+    #: rather than running anything, so its gap from the previous turn is how
+    #: long the *person* took to type.
+    duration_ms: int | None = None
+    #: What this superstep's model call cost, or `None` if it made none.
+    tokens: ThreadTokens | None = None
 
 
 class ThreadSummary(BaseModel):

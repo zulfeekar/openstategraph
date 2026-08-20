@@ -1374,6 +1374,17 @@
             "title": "Checkpoint Id",
             "type": "string"
           },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
           "namespace": {
             "items": {
               "type": "string"
@@ -1393,6 +1404,16 @@
           "step": {
             "title": "Step",
             "type": "integer"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadTokens"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "tool_calls": {
             "items": {
@@ -1482,6 +1503,28 @@
           "status"
         ],
         "title": "ThreadSummary",
+        "type": "object"
+      },
+      "ThreadTokens": {
+        "description": "What one superstep's model call cost, as the provider reported it.\n\nRead off `AIMessage.usage_metadata`, which LangChain populates for every\nprovider that reports usage \u2014 so this needed **no new storage**. Ticket 37\npriced token counts as the half of replay that would require a frame\ntable; against the stored file that pricing was wrong, and the ticket\ncarries the correction (`memory-and-replay` 37, part 2).\n\n**This step's call, not the run's total.** The message channel is\ncumulative \u2014 every checkpoint holds the whole history \u2014 so a reader that\nsums the channel charges the last row for the entire run and produces\nnumbers that climb plausibly and are wrong on every row but the last.\n\nA provider that reports nothing gets no object at all rather than a zeroed\none: `0` is a claim that a call was free, and silence is not that claim.",
+        "properties": {
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ThreadTokens",
         "type": "object"
       },
       "ThreadToolCall": {

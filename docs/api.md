@@ -882,6 +882,8 @@ fan-out readable:
     { "name": "web_fetch", "arguments": "{\"url\": \"https://example.com\"}",
       "result": "Error: web_fetch is not a valid tool, try one of […]." }
   ],
+  "duration_ms": 1791,
+  "tokens": { "input_tokens": 1436, "output_tokens": 86, "total_tokens": 1522 },
   "values": { "answer": "…" }
 }
 ```
@@ -906,6 +908,26 @@ answer land in different supersteps, and the server pairs them onto the one
 that asked. `arguments` is `""` when the request is no longer in the stored
 history, and `result` is `""` when no answer was stored — which means the run
 ended or was stopped before one arrived, not that the tool returned nothing.
+
+`duration_ms` and `tokens` are **how long this superstep took and what it
+cost** — the two numbers a profiler exists for, and both read straight out of
+the checkpoints. A checkpoint is written after its superstep runs, so the gap
+between consecutive `ts` values *within one namespace* is that superstep's
+elapsed time; token counts ride on the `AIMessage` in `usage_metadata` for
+every provider that reports usage. Neither needed a new store.
+
+**Both are `null` rather than `0` when they are not known, and a client must
+not coalesce them.** `duration_ms` is `null` for the first step of a graph,
+for an unreadable timestamp, and for a `source: "input"` step — that one
+records what was handed in rather than running anything, so on a second turn
+its gap from the previous turn measures how long the *person* took to type.
+`tokens` is `null` on a superstep that called no model. Zero is the claim
+*this was instant* or *this was free*, and none of those cases support it.
+
+Read `duration_ms` for what it is: a parent superstep that dispatched workers
+spans their whole run, because it did. What is genuinely **not** recoverable,
+and is not published rather than guessed, is the split of one superstep between
+model time and tool time.
 
 They are honest about their limits: a deployment with no checkpointer, or a
 custom saver that cannot enumerate, returns an empty list rather than an

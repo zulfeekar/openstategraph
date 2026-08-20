@@ -39,6 +39,7 @@ to fail for reasons that have nothing to do with the run being read.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Iterable
 
 from openstategraph.developer_channel import transcript_text
@@ -46,6 +47,7 @@ from openstategraph.api.schemas import (
     ThreadHistoryResponse,
     ThreadStep,
     ThreadSummary,
+    ThreadTokens,
     ThreadToolCall,
 )
 
@@ -125,7 +127,9 @@ def read_thread(
         # held, which only means anything walked forwards.
         oldest_first = list(reversed(tuples))
         tools = _ToolCallReader(oldest_first)
-        steps = [_step(tuple_, tools) for tuple_ in oldest_first]
+        clock = _ClockReader()
+        usage = _UsageReader()
+        steps = [_step(tuple_, tools, clock, usage) for tuple_ in oldest_first]
         return ThreadHistoryResponse(thread=summary, steps=steps)
     return None
 
@@ -297,6 +301,118 @@ class _ToolCallReader:
         return found
 
 
+
+class _ClockReader:
+    """How long each superstep took, from the timestamps already stored.
+
+    A checkpoint is written *after* its superstep runs, so the gap between one
+    checkpoint's `ts` and the previous one's is that superstep's own elapsed
+    time. No frame table, no write-side change — the ticket priced durations as
+    the expensive half of replay and the store already had them
+    (`memory-and-replay` 37, part 2).
+
+    **Per namespace**, for the same reason the tool-call reader counts per
+    namespace: an agent subgraph's supersteps are interleaved with its parent's
+    in one list, so differencing against whatever row happens to precede this
+    one would charge the parent a worker's time and the worker the gap since
+    the parent.
+
+    Silence rather than a zero wherever the arithmetic cannot be done — a first
+    step, an unreadable `ts`, a clock that went backwards. `0` is the claim
+    *this took no time*, and none of those three support it.
+
+    **A `source: "input"` checkpoint is not timed at all.** It records what was
+    handed in; no superstep ran. On a thread carrying a second turn, the gap
+    from the previous turn's last checkpoint is how long the *person* took to
+    type — `morning-brief`'s stored run read `Step 6 · input — 1m 36s` in the
+    column that everywhere else means how long the graph took. It still
+    advances the clock, so the superstep after it is timed from the moment the
+    turn began, which is right.
+    """
+
+    def __init__(self) -> None:
+        self._last: dict[str, datetime] = {}
+
+    def at(self, tuple_: Any) -> int | None:
+        moment = _moment(tuple_)
+        if moment is None:
+            return None
+        key = "|".join(_namespace(tuple_))
+        previous = self._last.get(key)
+        self._last[key] = moment
+        if previous is None or _source(tuple_) == "input":
+            return None
+        elapsed = (moment - previous).total_seconds()
+        if elapsed < 0:
+            return None
+        return int(round(elapsed * 1000))
+
+
+def _source(tuple_: Any) -> str:
+    return str(_metadata(tuple_).get("source") or "")
+
+
+def _moment(tuple_: Any) -> datetime | None:
+    raw = str((tuple_.checkpoint or {}).get("ts") or "")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+class _UsageReader:
+    """What each superstep's model call cost, off `AIMessage.usage_metadata`.
+
+    LangChain populates it for every provider that reports usage, and it has
+    ridden in the checkpoints since the message channel did. Same two rules as
+    the tool-call reader, and for the same reasons:
+
+    - **The channel is cumulative**, so this counts the *new tail* only.
+      Summing the channel would charge the last row for the whole run.
+    - **One counter per namespace** — a worker's channel is not the workflow's.
+
+    A superstep whose new messages report no usage gets `None`, not a zeroed
+    row: a bookkeeping step did not spend zero tokens, it called no model.
+    """
+
+    def __init__(self) -> None:
+        self._seen: dict[str, int] = {}
+
+    def at(self, tuple_: Any) -> ThreadTokens | None:
+        key = "|".join(_namespace(tuple_))
+        messages = _messages(tuple_)
+        already = self._seen.get(key, 0)
+        self._seen[key] = len(messages)
+        totals = [0, 0, 0]
+        found = False
+        for message in messages[already:]:
+            usage = getattr(message, "usage_metadata", None)
+            if not isinstance(usage, dict):
+                continue
+            found = True
+            for index, field in enumerate(("input_tokens", "output_tokens", "total_tokens")):
+                totals[index] += _count(usage.get(field))
+        if not found:
+            return None
+        return ThreadTokens(
+            input_tokens=totals[0], output_tokens=totals[1], total_tokens=totals[2]
+        )
+
+
+def _count(value: Any) -> int:
+    """A usage field as a whole number, tolerating a provider that omits it.
+
+    Read tolerantly, trusted strictly: anything that is not a number counts as
+    nothing rather than raising, because a malformed usage block must not turn
+    a readable run into a 500.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return int(value)
+
+
 def _call_field(call: Any, key: str) -> Any:
     """A tool call is a dict on every message class we read, but not on every
     one that exists — a provider object with attributes reads the same way."""
@@ -310,7 +426,12 @@ def _messages(tuple_: Any) -> list[Any]:
     return list(value) if isinstance(value, (list, tuple)) else []
 
 
-def _step(tuple_: Any, tools: _ToolCallReader | None = None) -> ThreadStep:
+def _step(
+    tuple_: Any,
+    tools: _ToolCallReader | None = None,
+    clock: _ClockReader | None = None,
+    usage: _UsageReader | None = None,
+) -> ThreadStep:
     namespace = _namespace(tuple_)
     metadata = _metadata(tuple_)
     return ThreadStep(
@@ -331,6 +452,8 @@ def _step(tuple_: Any, tools: _ToolCallReader | None = None) -> ThreadStep:
             if not str(channel).startswith(_PRIVATE_PREFIXES)
         ],
         tool_calls=tools.at(tuple_) if tools is not None else [],
+        duration_ms=clock.at(tuple_) if clock is not None else None,
+        tokens=usage.at(tuple_) if usage is not None else None,
     )
 
 

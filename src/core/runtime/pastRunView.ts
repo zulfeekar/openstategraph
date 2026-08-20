@@ -202,3 +202,40 @@ export function toolCallLine(call: PastRunToolCall): string {
   const head = call.arguments ? `${name}(${call.arguments})` : name;
   return call.result ? `${head} \u2192 ${call.result}` : `${head} \u2014 no result stored`;
 }
+
+/**
+ * The two numbers a profiler exists for, on one line: how long, and what it
+ * cost (`memory-and-replay` 37, part 2).
+ *
+ * **Empty when neither is known, and never a zero.** The endpoint withholds a
+ * duration it could not measure — the first step of a graph, an unreadable
+ * timestamp — and printing `0 ms` there would make up the one claim it
+ * declined to make. Same for tokens: a bookkeeping superstep did not spend
+ * nothing, it called no model.
+ *
+ * Units chosen for what a person can hold rather than for precision: a
+ * sub-second step is the milliseconds it was, a normal step is one decimal of
+ * seconds, and anything past a minute is minutes — nobody reads `195000ms`.
+ */
+export function stepCost(step: PastRunStep): string {
+  const parts: string[] = [];
+  if (step.durationMs !== null) parts.push(duration(step.durationMs));
+  if (step.tokens) {
+    const { inputTokens, outputTokens, totalTokens } = step.tokens;
+    parts.push(
+      `${count(totalTokens)} tokens (${count(inputTokens)} in \u00b7 ${count(outputTokens)} out)`,
+    );
+  }
+  return parts.join(' \u00b7 ');
+}
+
+function duration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function count(value: number): string {
+  return value.toLocaleString('en-US');
+}

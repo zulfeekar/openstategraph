@@ -574,6 +574,22 @@ export interface PastRunToolCall {
   readonly result: string;
 }
 
+/**
+ * What one superstep's model call cost, as the provider reported it.
+ *
+ * Read off `AIMessage.usage_metadata`, which has ridden in the checkpoints
+ * since the message channel did — ticket 37 priced token counts as the half of
+ * replay needing a frame table, and against the stored file that was wrong.
+ *
+ * This step's call, not the run's total: the message channel is cumulative, so
+ * a reader that sums it charges the last row for the whole run.
+ */
+export interface PastRunTokens {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
 /** One checkpoint of a past run: the state as it stood at that superstep. */
 export interface PastRunStep {
   readonly checkpointId: string;
@@ -604,6 +620,20 @@ export interface PastRunStep {
    * so its contents would print every call on every row.
    */
   readonly toolCalls: readonly PastRunToolCall[];
+  /**
+   * How long this superstep took, in milliseconds.
+   *
+   * `null`, never `0`, when there was nothing to measure against — the first
+   * step of a graph, an unreadable timestamp, a clock that went backwards. A
+   * renderer must be able to tell *instant* from *unknown*, so it must not
+   * coalesce this to zero.
+   *
+   * A parent superstep that dispatched a worker spans the worker's whole run,
+   * because it did.
+   */
+  readonly durationMs: number | null;
+  /** What this superstep's model call cost, or `null` if it made none. */
+  readonly tokens: PastRunTokens | null;
 }
 
 export interface PastRunHistory {
@@ -1072,6 +1102,11 @@ export class RuntimeClient implements IRuntimeClient {
                 };
               },
             ),
+            // `?? null` and never `?? 0`: the server withholds a duration it
+            // could not measure, and a client that defaults it to zero
+            // reinstates exactly the claim the server declined to make.
+            durationMs: typeof row['duration_ms'] === 'number' ? row['duration_ms'] : null,
+            tokens: asTokens(row['tokens']),
           };
         }),
       });
@@ -1158,6 +1193,23 @@ function asTokenUsage(value: unknown): TokenUsage {
     inputTokens: count('inputTokens'),
     outputTokens: count('outputTokens'),
     totalTokens: count('totalTokens'),
+  };
+}
+
+/**
+ * A usage block, or `null`.
+ *
+ * Absent means *no model was called here*, which is a different fact from
+ * *a call that cost nothing* — so a missing block never becomes a zeroed one.
+ */
+function asTokens(value: unknown): PastRunTokens | null {
+  if (value === null || value === undefined) return null;
+  const row = asRecordOfUnknown(value);
+  const count = (key: string): number => (typeof row[key] === 'number' ? row[key] : 0);
+  return {
+    inputTokens: count('input_tokens'),
+    outputTokens: count('output_tokens'),
+    totalTokens: count('total_tokens'),
   };
 }
 

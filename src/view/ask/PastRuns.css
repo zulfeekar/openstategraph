@@ -151,6 +151,17 @@
 
 /* What this superstep wrote — the question a reader asks of a row before they
    read its values. Secondary, because `values` is still the substance. */
+/* How long, and what it cost. Sits beside the step title rather than at the
+   far right: it is a property of *this* step, where `wrote` is a list that
+   reads as a right-hand column. `margin-right: auto` keeps it against the
+   title whether or not a `wrote` follows it. */
+.past-runs__cost {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+  margin-right: auto;
+  white-space: nowrap;
+}
+
 .past-runs__wrote {
   font: var(--type-caption);
   color: var(--color-text-secondary);

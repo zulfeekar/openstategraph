@@ -6,11 +6,26 @@ import {
   lanes,
   relativeTime,
   stepLines,
+  stepCost,
   stepTitle,
   toolCallLine,
 } from './pastRunView';
 
 const NOW = Date.parse('2026-08-11T12:00:00Z');
+
+const aStep: PastRunStep = {
+  checkpointId: 'cp-1',
+  step: 2,
+  at: '2026-08-11T11:59:00Z',
+  source: 'loop',
+  values: {},
+  namespace: [],
+  node: '',
+  wrote: [],
+  toolCalls: [],
+  durationMs: null,
+  tokens: null,
+};
 
 const run = (patch: Partial<PastRun> = {}): PastRun => ({
   threadId: 'th-1',
@@ -86,6 +101,8 @@ describe('stepLines', () => {
     node: '',
     wrote: [],
     toolCalls: [],
+    durationMs: null,
+    tokens: null,
   });
 
   it('drops a channel that serialized to an empty container', () => {
@@ -132,6 +149,8 @@ describe('stepTitle', () => {
     node: '',
     wrote: [],
     toolCalls: [],
+    durationMs: null,
+    tokens: null,
   });
 
   it('names the superstep and where it came from', () => {
@@ -182,6 +201,8 @@ describe('lanes', () => {
     node,
     wrote: [],
     toolCalls: [],
+    durationMs: null,
+    tokens: null,
   });
 
   it('puts the workflow itself in a lane with no owner', () => {
@@ -338,5 +359,50 @@ describe('toolCallLine', () => {
 
   it('names an unnamed call rather than printing a bare arrow', () => {
     expect(toolCallLine({ name: '', arguments: '', result: '42' })).toBe('a tool \u2192 42');
+  });
+});
+
+/**
+ * `memory-and-replay` 37, part 2 — the two numbers a profiler exists for.
+ *
+ * Both are read straight off the checkpoints (`ts` deltas per namespace,
+ * `AIMessage.usage_metadata`), so what is left here is purely how a row *reads*
+ * — and the thing worth pinning is the distinction the backend went to trouble
+ * to preserve: **unknown is not zero.** A step with nothing to measure against
+ * must not print `0 ms`, because `0 ms` is a claim.
+ */
+describe('stepCost', () => {
+  it('reads a duration in the unit a person can hold', () => {
+    expect(stepCost({ ...aStep, durationMs: 1791, tokens: null })).toBe('1.8s');
+    expect(stepCost({ ...aStep, durationMs: 86, tokens: null })).toBe('86ms');
+    expect(stepCost({ ...aStep, durationMs: 195_000, tokens: null })).toBe('3m 15s');
+  });
+
+  it('says nothing at all when nothing was measured', () => {
+    expect(stepCost({ ...aStep, durationMs: null, tokens: null })).toBe('');
+  });
+
+  it('never prints a zero for a step it could not time', () => {
+    expect(stepCost({ ...aStep, durationMs: null, tokens: null })).not.toContain('0');
+  });
+
+  it('reports what the call cost, in and out', () => {
+    expect(
+      stepCost({
+        ...aStep,
+        durationMs: 5000,
+        tokens: { inputTokens: 1436, outputTokens: 86, totalTokens: 1522 },
+      }),
+    ).toBe('5.0s · 1,522 tokens (1,436 in · 86 out)');
+  });
+
+  it('reports tokens on a step that was never timed', () => {
+    expect(
+      stepCost({
+        ...aStep,
+        durationMs: null,
+        tokens: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      }),
+    ).toBe('12 tokens (10 in · 2 out)');
   });
 });
