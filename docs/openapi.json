@@ -1374,6 +1374,18 @@
             "title": "Checkpoint Id",
             "type": "string"
           },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Namespace",
+            "type": "array"
+          },
+          "node": {
+            "default": "",
+            "title": "Node",
+            "type": "string"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -1388,6 +1400,13 @@
             },
             "title": "Values",
             "type": "object"
+          },
+          "wrote": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Wrote",
+            "type": "array"
           }
         },
         "required": [

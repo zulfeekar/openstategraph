@@ -918,6 +918,25 @@ class ThreadStep(BaseModel):
     #: Internal channels (`__*`, `branch:to:*`) are left out — they are the
     #: scheduler's bookkeeping, not the run's story.
     values: dict[str, str]
+    #: Which graph this step belongs to, outermost first; `[]` is the workflow
+    #: itself. Each entry is a **graph-node name** — an agent's loop and a
+    #: mounted workflow are both checkpointed under a namespace naming the node
+    #: that owns them, so this is what tells one graph's supersteps from
+    #: another's (`memory-and-replay` 37).
+    #:
+    #: Same shape and the same reading order as a live frame's `path`: a
+    #: consumer walks it outermost-first. `[]` rather than `[""]` — a level
+    #: that does not exist is not a blank level.
+    namespace: list[str] = Field(default_factory=list)
+    #: The innermost entry of `namespace`, or `""` for the workflow itself.
+    #: A dispatched worker's instance id is deliberately **not** part of it:
+    #: `morning-brief` sends two subtasks to one `worker_web`, and those are
+    #: one node that ran twice, not two nodes.
+    node: str = ""
+    #: The channels this superstep wrote. The other half of what a row is for
+    #: — `values` says what the state *was*, this says what *happened*. Same
+    #: exclusions as `values`, for the same reason.
+    wrote: list[str] = Field(default_factory=list)
 
 
 class ThreadSummary(BaseModel):

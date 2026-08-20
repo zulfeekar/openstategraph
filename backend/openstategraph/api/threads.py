@@ -194,7 +194,38 @@ def _summarize(thread_id: str, tuple_: Any, *, steps: int) -> ThreadSummary:
     )
 
 
+#: How LangGraph spells a checkpoint namespace: segments joined by `|`, each
+#: `<graph-node-name>:<instance-id>`. Written out rather than imported —
+#: `NS_SEP` and `NS_END` were made private and deprecated in LangGraph 1.0, and
+#: `streaming.py` already reads the same shape by hand.
+_NS_SEP = "|"
+_NS_END = ":"
+
+
+def _namespace(tuple_: Any) -> list[str]:
+    """Which graph this checkpoint belongs to, outermost first.
+
+    The parent graph checkpoints under `""` and every agent loop or mounted
+    workflow under a namespace that **names the node owning it**, so this is
+    the field that tells one graph's supersteps from another's. Without it the
+    `morning-brief` replay is forty rows in which `Step 3 · loop` appears five
+    times with nothing to say they are five different graphs
+    (`memory-and-replay` 37).
+
+    The instance id is dropped. Two subtasks dispatched to one `worker_web`
+    land in two namespaces, and they are one node that ran twice — a panel
+    grouping by name should say so.
+    """
+    raw = str(((tuple_.config or {}).get("configurable") or {}).get("checkpoint_ns") or "")
+    return [
+        segment.split(_NS_END)[0]
+        for segment in raw.split(_NS_SEP)
+        if segment.split(_NS_END)[0]
+    ]
+
+
 def _step(tuple_: Any) -> ThreadStep:
+    namespace = _namespace(tuple_)
     metadata = _metadata(tuple_)
     return ThreadStep(
         checkpoint_id=str((tuple_.checkpoint or {}).get("id") or ""),
@@ -206,6 +237,13 @@ def _step(tuple_: Any) -> ThreadStep:
             for key, value in sorted(_values(tuple_).items())
             if not key.startswith(_PRIVATE_PREFIXES)
         },
+        namespace=namespace,
+        node=namespace[-1] if namespace else "",
+        wrote=[
+            str(channel)
+            for channel in ((tuple_.checkpoint or {}).get("updated_channels") or [])
+            if not str(channel).startswith(_PRIVATE_PREFIXES)
+        ],
     )
 
 
