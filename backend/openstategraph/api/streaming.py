@@ -1614,7 +1614,11 @@ def _run_frames(
     # One assembly for both doors — see `run_health`. Neither endpoint adds a
     # source locally; that is exactly how these two drifted twice
     # (`every-workflow-green` 14, 16).
-    health = run_health(outputs, nested_outputs, forced, unrouted)
+    # `tool_use` distinguishes a node that never started from one whose loop
+    # ran tools and then went quiet — `production-ready` 96. `retries` is
+    # still not passed, and that is not an oversight of this change: this
+    # door never folds one out of its frames. Filed as production-ready/97.
+    health = run_health(outputs, nested_outputs, forced, unrouted, None, tool_use)
     # A fallback, never an override: the model's own fence wins when it wrote
     # one (ticket 15's card), and this fills the silence when it did not.
     if suggestion is None:

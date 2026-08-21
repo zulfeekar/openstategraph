@@ -220,6 +220,7 @@ def run_health(
     forced: Any = None,
     unrouted: Any = None,
     retries: Any = None,
+    tool_use: Any = None,
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -244,11 +245,15 @@ def run_health(
     exhausted = forced if isinstance(forced, dict) else {}
     lost = unrouted if isinstance(unrouted, dict) else {}
     retried = retries if isinstance(retries, dict) else {}
+    # Named `tool_use` because that is its state key — the convention
+    # `run_health_from_state` derives the library door from. A source added
+    # under any other name goes missing from that door on the day it lands.
+    used = tool_use if isinstance(tool_use, dict) else {}
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
-            silent_node_warnings(flat)
-            + silent_node_warnings(nested)
+            silent_node_warnings(flat, used)
+            + silent_node_warnings(nested, used)
             + forced_pass_warnings(exhausted)
             + unrouted_decision_warnings(lost)
             + retry_warnings(retried)
@@ -593,7 +598,9 @@ def node_failure_warnings(outputs: Mapping[str, Any]) -> list[str]:
     return warnings
 
 
-def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
+def silent_node_warnings(
+    outputs: Mapping[str, Any], tool_use: Any = None
+) -> list[str]:
     """Nodes that ran and produced nothing.
 
     Seen on three workflows while walking them (`every-workflow-green` 01):
@@ -615,7 +622,28 @@ def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
     that exit code. A silent node is a **report about how the answer was
     reached**, not a claim that the run failed, and the two must not share a
     channel that a script gates on.
+
+    **`tool_use` splits the silence into the two reports it always was**
+    (`production-ready` 96). A node that never got started and a node that
+    called three tools, read their results, and then had its model end the turn
+    without writing anything are opposite situations with opposite fixes, and
+    until this they were the same sentence. The second was measured off the raw
+    Ollama wire — `content=''`, `thinking=None`, `tool_calls=None`,
+    `done_reason='stop'` — so nothing is being lost in extraction and there is
+    no channel to widen towards; the model genuinely stopped, and the only
+    defect left is a report that cannot say so.
+
+    Read from `tool_use[node]["ran"]`, which `tool_report` writes on every run
+    including the empty one. **`ran`, never `bound`**: an agent with tools it
+    never touched is a *capability* report with its own door (`used_no_tools`),
+    and borrowing this sentence for it would say a loop got somewhere it never
+    reached.
+
+    Optional, and tolerant about its shape, for the reason `run_health` is: the
+    doors read state off different shapes and any of them can hand over `None`.
+    A caller that passes nothing gets exactly the sentences it got before.
     """
+    used = tool_use if isinstance(tool_use, Mapping) else {}
     warnings: list[str] = []
     for node, value in outputs.items():
         text = str(value or "").strip()
@@ -630,10 +658,20 @@ def silent_node_warnings(outputs: Mapping[str, Any]) -> list[str]:
                 "the workflow."
             )
         elif not text:
-            warnings.append(
-                f'Node "{node}" produced no output. The run continued with the previous '
-                "answer, so what you are reading came from an earlier step."
-            )
+            record = used.get(node)
+            ran = record.get("ran") if isinstance(record, Mapping) else None
+            names = [str(name) for name in ran] if isinstance(ran, (list, tuple)) else []
+            if names:
+                warnings.append(
+                    f'Node "{node}" ran {", ".join(names)} and then ended its turn '
+                    "without writing an answer. The run continued with the previous "
+                    "answer, so what you are reading came from an earlier step."
+                )
+            else:
+                warnings.append(
+                    f'Node "{node}" produced no output. The run continued with the previous '
+                    "answer, so what you are reading came from an earlier step."
+                )
     return warnings
 
 
