@@ -38,16 +38,46 @@ a loop that never loops. At 2 the edge is taken exactly once and the run still
 ends with `attempts == maxAttempts`, which is the property the row is actually
 asserting. Deliberate deviation, recorded here and in the ticket resolution.
 
-## What the run does *not* tell you
+## What the run tells you, and what it cannot
 
-`decisions` reads `{"grader1": "pass"}` and `warnings` is empty — a forced pass
-is indistinguishable from a real one in `RunResult`. The catalogue expected "a
-warning-shaped record that the grader never passed"; there is none. Gallery
-ticket 22.
+`decisions` reads `{"grader1": "pass"}`, because it must: the compiler dispatches
+on that exact label and `plan.conditional[grader1]` has the keys `pass` and
+`revise` and no third one. So the branch is not where the distinction lives.
 
-The only trace left in the result is the stale `feedback` string, and only
-because `LATEST_NONEMPTY` refuses to overwrite it with the `""` a pass writes.
-That is an accident, not a report.
+It lives beside it. The forced pass writes its own state key, and the run
+reports itself on every door — `RunResult.warnings`, both HTTP doors, and the
+CLI's stderr:
+
+```
+warning: Grader "grader1" ran out of attempts and published an answer it had
+rejected. Its last reason: Add a reasoning explanation of at least forty words.
+```
+
+**It is a report, not a failure.** `RunResult.failures` stays empty and
+`openstategraph run` still exits 0 — the workflow answered. And the sentence
+says the grader never satisfied its rubric, which is a weaker claim than the
+answer being wrong.
+
+**`attempts` alone could never have carried this**, which is why the counter was
+not the answer. `RunResult` publishes no `maxAttempts` to compare it against;
+and even holding this document, a grader that *genuinely* passes on lap two —
+the last lap this budget allows — ends with `attempts: 2` and
+`decisions: {"grader1": "pass"}`, identical to the exhausted run in every field.
+Only the warning tells them apart, and a genuine last-lap pass writes none.
+
+The stale `feedback` string is still in the result, and is still an accident:
+`LATEST_NONEMPTY` refuses to overwrite it with the `""` a pass writes, so a
+genuine pass on lap two would leave lap one's feedback there just the same.
+Read the warning, never that.
+
+## Where this example is asserted
+
+The document properties that make exhaustion inevitable are pinned in
+`tests/` here. The *run* is pinned in the backend suite, at
+`backend/tests/test_an_exhausted_grader_is_not_a_pass.py`, which compiles this
+package with a scripted grader and reads `RunResult` — a package's own `tests/`
+asserts the document and calls no model, deliberately, so the end-to-end
+assertion belongs in the only suite that may drive a graph. Gallery ticket 22.
 
 ## Smoke run
 
