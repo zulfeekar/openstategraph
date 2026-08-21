@@ -54,6 +54,7 @@ appears on disk.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -138,6 +139,19 @@ class Example:
     #: The catalogue's own label — "revision loop", "orchestrator-worker".
     #: Not derivable from the document, which is why it is declared.
     pattern: str
+    #: Findings this example ships **on purpose**, as `(kind, subjects)`.
+    #:
+    #: Declared, not derived, for the same reason `pattern` is: it is the
+    #: author's intent, and the whole question is whether the warning the
+    #: compiler produced is the one somebody meant. `support-triage` is the
+    #: shipped case — three desk agents behind a classifier and a grader used
+    #: as a recorder, so its `revise` port is wired to nothing deliberately
+    #: (`workflow-gallery` 31, and its `AGENTS.md` says so in prose).
+    #:
+    #: By kind and subject rather than by pasted prose, so rewording a
+    #: sentence in `diagnostics._SENTENCES` cannot turn a correct declaration
+    #: into drift. See `warning_drift`.
+    expected_findings: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     @property
     def directory(self) -> Path:
@@ -210,12 +224,45 @@ class Example:
         return tuple(order)
 
 
+
+def warning_drift(example: Example, actual: Sequence[str]) -> tuple[list[str], list[str]]:
+    """Compare what an example compiled with against what it declared.
+
+    Returns `(undeclared, absent)` — warnings this example produced and never
+    declared, and declarations that produced nothing. Both are drift, and both
+    matter: the first is a defect nobody has looked at, the second is an
+    expectation that has stopped gating anything.
+
+    "No warnings at all" was the old rule, and it was defensible only while
+    every warning meant something was wrong. `Finding.UNWIRED_REVISE` exists to
+    say a graph is legal and less capable than it looks, so the rule that
+    replaces it is *fail on any warning the package has not declared*
+    (`workflow-gallery` 55).
+    """
+    from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
+
+    declared = [
+        CompileDiagnostics.sentence_for(Finding(kind)).format(*subjects)
+        for kind, subjects in example.expected_findings
+    ]
+    undeclared = [warning for warning in actual if warning not in declared]
+    absent = [sentence for sentence in declared if sentence not in actual]
+    return undeclared, absent
+
 @lru_cache(maxsize=1)
 def catalogue() -> tuple[Example, ...]:
     """Every example, in the order they should be read: simplest first."""
     index = json.loads((DATA / "index.json").read_text())
     return tuple(
-        Example(slug=entry["slug"], pattern=entry["pattern"]) for entry in index["examples"]
+        Example(
+            slug=entry["slug"],
+            pattern=entry["pattern"],
+            expected_findings=tuple(
+                (finding["finding"], tuple(finding.get("subjects", ())))
+                for finding in entry.get("expectedFindings", ())
+            ),
+        )
+        for entry in index["examples"]
     )
 
 

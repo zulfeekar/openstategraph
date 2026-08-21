@@ -9,6 +9,15 @@ produced** — ``CompiledWorkflow.mermaid()`` on each package under
 mount opened (see the note on ``ALIASES`` below). Compiling needs no credentials and
 calls no model, so this script is free to run.
 
+An example is refused if it compiles with a warning it did not **declare**
+(``expectedFindings`` in ``examples/index.json``), and equally if it declares
+one it no longer produces. Not "no warnings at all": ``Finding`` exists to say
+a graph is legal and less capable than it looks, and ``support-triage`` ships
+one on purpose — under the old rule this script exited 1 on a clean checkout
+and the committed diagrams went stale (``workflow-gallery`` 55). The same
+comparison runs in ``backend/tests/test_example_warnings_are_declared.py``, so
+a new warning in a broken example fails a suite and not only this script.
+
 ``draw_mermaid()``, never ``draw_mermaid_png()``: the PNG helper posts the graph
 to the Mermaid.Ink API, and we do not send a user's graph to a third party. The
 same rule is why the rendering below happens on this machine, against the
@@ -87,11 +96,16 @@ def mermaid_sources() -> dict[str, str]:
     sys.path.insert(0, str(REPO / "backend"))
     from openstategraph import load_workflow  # noqa: PLC0415
 
+    from openstategraph.examples import get, warning_drift  # noqa: PLC0415
+
     sources: dict[str, str] = {}
     for slug in slugs():
         workflow = load_workflow(EXAMPLES / slug)
-        if workflow.warnings:
-            raise SystemExit(f"{slug} compiled with warnings: {workflow.warnings}")
+        undeclared, absent = warning_drift(get(slug), workflow.warnings)
+        if undeclared:
+            raise SystemExit(f"{slug} compiled with a warning it never declared: {undeclared}")
+        if absent:
+            raise SystemExit(f"{slug} declares a finding it no longer produces: {absent}")
         sources[slug] = workflow.mermaid()
     for alias, slug in ALIASES.items():
         sources[alias] = sources[slug]
