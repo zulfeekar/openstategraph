@@ -16,16 +16,20 @@ TypeScript with no excuse for untested logic.
 | Backend unit | `cd backend && pytest` | [`backend/tests/`](../backend/tests) and `workflows/<slug>/tests/` |
 | Browser E2E | `npx playwright test` | [`e2e/canvas.smoke.spec.ts`](../e2e/canvas.smoke.spec.ts) |
 
-CI is *configured* to run all three as separate jobs
+CI runs all three as separate jobs
 ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), with `ruff` on the
 backend.
 
-> **No GitHub Actions workflow in this repository has ever executed.** The
-> checkout has six workflow files under `.github/workflows/` and **zero git
-> remotes**, so nothing is pushed and nothing is triggered (`CLAUDE.md`).
-> Every gate on this page — and every claim elsewhere in the wiki that a check
-> "runs" or "is enforced" — describes intent. The only checks that have
-> actually run are the ones you run locally.
+> **CI does run and does pass** — this repository has a `beta` git remote,
+> and `gh run list` against it shows real, repeated `CI` workflow runs,
+> including successes (`CLAUDE.md` records the count as of its last check;
+> re-run `gh run list` for the current one rather than trusting a number
+> here). Two named exceptions: `openwiki-update.yml` (this page's own
+> generator) has run on schedule and failed for a missing `OPENAI_API_KEY`
+> secret, and `docs-freshness` is PR-only in a repo that pushes straight to
+> `main`, so it has run just once. See `CLAUDE.md`'s OpenWiki correction
+> block for the full, sourced account — it is hand-owned and does not get
+> overwritten by this generator.
 
 ## pytest conventions ([`pytest.ini`](../pytest.ini))
 
