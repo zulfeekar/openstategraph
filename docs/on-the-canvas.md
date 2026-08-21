@@ -62,6 +62,15 @@ The grader's `revise` output connects back to the agent's `feedback` input.
 That is the whole mechanism. There is no Loop node, and there does not need to
 be — a loop is a **cycle in the graph**, not a wrapper around one.
 
+**What the agent is handed on the way back round** is the grader's reason
+*and* the answer that was rejected, in full — the text the grader judged,
+arriving over the `revise` edge that caused the lap. Without the second half a
+retry is not a revision: the agent has no memory of its own last attempt, so it
+starts the same work from the same standing start and the grader's objection
+never moves (`production-ready` 73). When the previous attempt genuinely
+produced nothing there is nothing to quote, and the agent is told only why it
+was rejected.
+
 Two things the editor does for you here:
 
 - **You cannot draw a loop by accident.** A cycle is only legal when it closes

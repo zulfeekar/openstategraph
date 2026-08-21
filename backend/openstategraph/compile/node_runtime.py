@@ -1345,6 +1345,41 @@ def rejection_feedback(note: str) -> str:
     return note.strip() or "The reviewer rejected this draft and gave no reason."
 
 
+def revision_request(rejected: str, feedback: str) -> str:
+    """What an agent is told when its answer came back over a `revise` edge.
+
+    **The rejected answer travels with the complaint, or the lap is a repeat**
+    (`production-ready` 73). `_agent` writes no `messages`, so the conversation
+    state a revise lap starts from holds the user's question and nothing else;
+    appending only the reviewer's sentence asks a model to correct a text it
+    has never been shown. Printed off a live `chinook-assistant` run, the whole
+    payload of attempt three was two human turns:
+
+        human | 'top artists by revenue'
+        human | 'Your previous answer was rejected: The answer is empty.'
+
+    From that standing start the model re-runs the same investigation and
+    stops the same way, so a three-attempt budget buys three identical first
+    attempts and the grader's objection never moves.
+
+    The rejected text is not a new channel: it is `outputs[<the grader>]`,
+    already delivered over the edge that caused this lap.
+
+    **Silence stays silence.** When the previous attempt genuinely produced
+    nothing there is nothing to show, and the sentence is exactly what it was
+    — inventing a placeholder here would hand the model a fiction to revise.
+    """
+    asked = f"Your previous answer was rejected: {feedback}"
+    if not rejected.strip():
+        return asked
+    return (
+        f"{asked}\n\n"
+        "This is the answer that was rejected, in full. Revise it — do not "
+        "start again from nothing:\n\n"
+        f"{rejected}"
+    )
+
+
 class NodeRuntime:
     """Builds the callable for each node type.
 
@@ -2204,8 +2239,21 @@ class NodeRuntime:
             # before. Long threads are bounded by the summarize toggle.
             payload = list(state.get("messages") or [])
             if feedback:
+                # The text the rejecting node actually judged, taken from the
+                # sources still standing by their rejection — never from
+                # `prompt`, which falls back to the question when the
+                # candidate was empty, and never from `state["answer"]`, which
+                # in a multi-agent document may belong to somebody else.
+                rejected = _upstream_text(
+                    state,
+                    [
+                        src
+                        for src in feedback_sources
+                        if decisions.get(src) in ("revise", "rejected")
+                    ],
+                )
                 payload.append(
-                    HumanMessage(content=f"Your previous answer was rejected: {feedback}")
+                    HumanMessage(content=revision_request(rejected, feedback))
                 )
             elif not payload or payload[-1].type != "human" or payload[-1].content != prompt:
                 payload.append(HumanMessage(content=prompt))
