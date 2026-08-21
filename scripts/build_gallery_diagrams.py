@@ -18,6 +18,21 @@ and the committed diagrams went stale (``workflow-gallery`` 55). The same
 comparison runs in ``backend/tests/test_example_warnings_are_declared.py``, so
 a new warning in a broken example fails a suite and not only this script.
 
+Every box carries the **title its author gave the node**, not the id the
+compiler used. That is the same relabelling ``workflow-gallery`` 56 wrote for a
+customer's preview (``api/customer_graph.py``), reached through the same seam,
+because a reader of this page is that reader: ``draft1`` is the compiler's word
+and *Draft* is the author's. It is also what stops two different examples from
+being one picture — ``evaluator-optimizer`` and ``budget-exhaustion`` compile to
+byte-identical Mermaid and their authors had already told them apart
+(``workflow-gallery`` 69). Where a node has no title its id survives, because
+inventing a friendly name is the lie 56 refused.
+
+``CompiledWorkflow.mermaid()`` itself is unchanged: a developer asking the
+compiler what it built still gets ``__start__`` and every id, which is
+``workflow-gallery`` 62's deliberate behaviour and the vocabulary a mount bug is
+reported under.
+
 ``draw_mermaid()``, never ``draw_mermaid_png()``: the PNG helper posts the graph
 to the Mermaid.Ink API, and we do not send a user's graph to a third party. The
 same rule is why the rendering below happens on this machine, against the
@@ -92,16 +107,42 @@ def slugs() -> list[str]:
     return [entry["slug"] for entry in index["examples"]]
 
 
+def as_the_author_named_it(text: str, document, mounts) -> str:
+    """One diagram in the vocabulary of the person who drew it.
+
+    A thin, named wrapper over ``api/customer_graph.customer_mermaid`` so the
+    page reaches the relabelling through the seam that already exists rather
+    than growing a second one — the rule that a diagram is rewritten in exactly
+    one place is worth more here than the two saved lines. ``mounts`` maps a
+    mount's graph node name to the child's own document, so a node three levels
+    down is named by *its* author (a title map keyed by bare id would answer the
+    parent's word for the three different ``in1``s in ``nested-mounts``).
+
+    Imported inside the function for the same reason ``mermaid_sources`` does:
+    ``--help`` must work without the backend installed.
+    """
+    from openstategraph.api.customer_graph import customer_mermaid  # noqa: PLC0415
+
+    return customer_mermaid(text, document, mounts)
+
+
 def mermaid_sources() -> dict[str, str]:
-    """Compile every example and return its Mermaid text.
+    """Compile every example and return its Mermaid text, named by its author.
 
     Imported here rather than at module scope so ``--help`` works without the
     backend installed.
     """
     sys.path.insert(0, str(REPO / "backend"))
     from openstategraph import load_workflow  # noqa: PLC0415
+    from openstategraph.api.diagram import mounted_documents  # noqa: PLC0415
+    from openstategraph.api.workflow_store import WorkflowStore  # noqa: PLC0415
 
     from openstategraph.examples import get, warning_drift  # noqa: PLC0415
+
+    # An example's mounts resolve to sibling packages under `examples/`, so the
+    # store the labeller loads child documents from is rooted there and reaches
+    # nothing of this developer's own `workflows/` tree.
+    store = WorkflowStore(EXAMPLES)
 
     sources: dict[str, str] = {}
     for slug in slugs():
@@ -111,7 +152,11 @@ def mermaid_sources() -> dict[str, str]:
             raise SystemExit(f"{slug} compiled with a warning it never declared: {undeclared}")
         if absent:
             raise SystemExit(f"{slug} declares a finding it no longer produces: {absent}")
-        sources[slug] = workflow.mermaid()
+        # `_mounts` is what the compiler recorded while it built each child, and
+        # it is what `mermaid()` itself expands from; the labeller needs the same
+        # map to join each mount to the document that names its nodes.
+        mounts = mounted_documents(getattr(workflow, "_mounts", {}), store)
+        sources[slug] = as_the_author_named_it(workflow.mermaid(), workflow.document, mounts)
     for alias, (slug, _reason) in ALIASES.items():
         sources[alias] = sources[slug]
     return sources

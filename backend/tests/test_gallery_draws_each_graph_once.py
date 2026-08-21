@@ -40,18 +40,19 @@ REPO = Path(__file__).resolve().parents[2]
 PAGE = REPO / "site" / "gallery.html"
 SCRIPT = REPO / "scripts" / "build_gallery_diagrams.py"
 
-# Pairs of *different* packages that nonetheless compile to a byte-identical
-# picture — found by the check below rather than by anyone looking, which is the
-# best argument for having it. Everything that makes each pair two examples lives
-# in prompts, rubrics and tool wiring, none of which a diagram draws; and the
-# node **titles** their authors chose ("Draft"/"Review" against "Answer"/
-# "Impossible rubric") would have separated them, except `mermaid()` prints node
-# *ids*. Filed as `workflow-gallery` 69, and declared here rather than deleted so
-# the fact is written down and a *third* collision still fails this test.
-KNOWN_TWINS = {
-    frozenset({"evaluator-optimizer", "budget-exhaustion"}),  # 4 and 7 — the revision loop
-    frozenset({"knowledge-lookup-qa", "sql-qa"}),  # 15 and 17 — in1 -> answer1 -> out1
-}
+# Two pairs of *different* packages used to compile to a byte-identical picture
+# — `evaluator-optimizer`/`budget-exhaustion` and `knowledge-lookup-qa`/`sql-qa`,
+# found by the check below rather than by anyone looking, which is the best
+# argument for having it. **Empty since `workflow-gallery` 69**: everything that
+# made each pair two examples lived in prompts, rubrics and tool wiring, but
+# their authors had *also* named the nodes apart ("Draft"/"Review" against
+# "Answer"/"Impossible rubric"), and the page threw those away because it drew
+# ids. It draws titles now, and the four graphs separate on their own.
+#
+# Kept as an empty declaration rather than deleted: a future collision between
+# two examples whose authors chose the same words is a real possibility, and
+# this is where the reason for tolerating one gets written down.
+KNOWN_TWINS: set[frozenset[str]] = set()
 
 
 def _builder():
