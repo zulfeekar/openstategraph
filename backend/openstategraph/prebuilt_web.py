@@ -8,6 +8,8 @@ fetch, both read-only GETs, both keyless.
 Guard rails, structural as always:
 - ``web_fetch`` refuses private/loopback/link-local addresses (SSRF), only
   http(s), and truncates hard — a fetch is a briefing, not an archive.
+- ``web_fetch`` keeps the page's links, written inline as ``text (url)``
+  (`workflow-gallery` 34, and ``_inline_links`` below for the narrowness).
 - ``web_search`` uses DuckDuckGo's HTML endpoint (no key, no tracking
   params); results are titles + URLs + snippets, and the model follows up
   with ``web_fetch`` on what looks right.
@@ -55,6 +57,19 @@ USER_AGENT = "openstategraph/0.1 (+local dev tool)"
 FETCH_TIMEOUT = 15
 MAX_FETCH_CHARS = 8_000
 MAX_RESULTS = 6
+
+#: How many distinct URLs one fetched page may spell out inline.
+#:
+#: A cap rather than "all of them" because a page can be mostly links — a
+#: nav-heavy aggregator or an ad farm — and the tool's whole job is to hand a
+#: model the *readable* part of a page inside a budget. Past this many, the
+#: remaining anchors render as their text alone, exactly as they always did.
+MAX_FETCH_LINKS = 50
+
+#: A URL longer than this is a session blob or a tracking payload, not
+#: something a model is going to act on; its anchor keeps its text and loses
+#: its address.
+MAX_LINK_URL_CHARS = 200
 
 #: DuckDuckGo's HTML endpoint and the method its own form uses. Named here
 #: rather than built inline so the tool's transport is one readable fact.
@@ -174,6 +189,48 @@ def _search(url: str, query: str) -> tuple[int, str]:
     )
 
 
+#: An `<a>` open tag carrying an `href`, and everything up to its close.
+#: Deliberately the only thing here that yields a URL: nothing scans the
+#: *text* for URL-shaped substrings, because that is how ordinary prose
+#: ("see example.com/watch?v=x") turns into a link that does not exist.
+_ANCHOR = re.compile(r'(?is)<a\b[^>]*?\bhref\s*=\s*["\']([^"\']*)["\'][^>]*>(.*?)</a>')
+
+
+def _inline_links(raw: str, base_url: str) -> str:
+    """Rewrite `<a href=U>text</a>` to `text (U)` before the tags are stripped.
+
+    `workflow-gallery` 34. `_strip_html` deletes a tag *with its attributes*,
+    so a document whose value is "this title points there" arrived as titles
+    and nothing else, and a `watch?v=` id could not be recovered from a
+    ranking that plainly contained one.
+
+    Tolerant in reading — single or double quotes, any attribute order, a
+    relative href resolved against the page it came from. Strict in trusting —
+    the URL is taken only from an `href` attribute of an `<a>`, it must be
+    http(s) *after* resolution (so `javascript:` and `mailto:` keep their text
+    and lose nothing else), each address is spelled out at most once, and the
+    whole page gets `MAX_FETCH_LINKS` of them.
+    """
+    seen: set[str] = set()
+
+    def replace(match: re.Match[str]) -> str:
+        href, inner = match.group(1), match.group(2)
+        try:
+            url = urllib.parse.urljoin(base_url, html.unescape(href.strip()))
+        except ValueError:
+            return inner
+        if urllib.parse.urlparse(url).scheme not in ("http", "https"):
+            return inner
+        if len(url) > MAX_LINK_URL_CHARS or url in seen:
+            return inner
+        if len(seen) >= MAX_FETCH_LINKS:
+            return inner
+        seen.add(url)
+        return f"{inner} ({url})"
+
+    return _ANCHOR.sub(replace, raw)
+
+
 def _strip_html(raw: str) -> str:
     raw = re.sub(r"(?is)<(script|style|noscript|svg|nav|footer|header)[^>]*>.*?</\1>", " ", raw)
     raw = re.sub(r"(?s)<[^>]+>", " ", raw)
@@ -264,8 +321,10 @@ class WebFetchTool(BaseTool):
     name = "web_fetch"
     node_type = "tool.web-fetch"
     description = (
-        "Fetch one public web page and return its readable text (truncated). "
-        "Use after web_search, or when the user gives a URL."
+        "Fetch one public web page and return its readable text (truncated), "
+        "with each link written inline as `text (url)`. Use after "
+        "web_search, when the user gives a URL, or to pick a link out of a "
+        "page you were pointed at."
     )
     Args = FetchArgs
 
@@ -285,7 +344,10 @@ class WebFetchTool(BaseTool):
             raw = self._fetch(url)
         except Exception as exc:
             return ToolResult.failure(f"Fetch failed: {exc}")
-        text = _strip_html(raw)
+        # Links first, then the tags: `_strip_html` is shared with the search
+        # parser, which strips *fragments* (a title, a snippet) where an
+        # inlined URL would be noise. Only a whole fetched page gets this.
+        text = _strip_html(_inline_links(raw, url))
         if not text:
             return ToolResult.failure("The page had no readable text.")
         suffix = " …(truncated)" if len(text) > MAX_FETCH_CHARS else ""
@@ -293,3 +355,27 @@ class WebFetchTool(BaseTool):
 
 
 WEB_TOOLS = [WebSearchTool(), WebFetchTool()]
+
+
+# ## The link, and why it is inline (`workflow-gallery` 34)
+#
+# `_strip_html` deletes a tag *with its attributes*, which is right for a
+# fragment and wrong for a page: the flagship gallery example fetched 8 013
+# characters of a YouTube ranking and could not recover one `watch?v=` id,
+# because every id lived in an `href`. A fetch that silently discards every
+# URL in the document it just read is lying about what it fetched.
+#
+# **Inline, not appended.** A link index at the end of the text was the
+# obvious alternative and is the wrong one twice over: `MAX_FETCH_CHARS`
+# truncates the *tail*, so on exactly the long pages that carry a hundred
+# links the index is the half that gets cut; and an index separates the URL
+# from the row it belongs to, which is the association the model actually
+# needs ("the id for *that* title").
+#
+# **Rejected: a `links=` argument.** It moves the decision to the model, and
+# the model that needs this is the one that does not know to ask — example 16
+# asked for a ranking, not for a link mode. It also widens a tool schema that
+# `extra="forbid"` keeps deliberately small.
+#
+# **Rejected: returning structured JSON.** Every consumer of `web_fetch` is a
+# prompt, and this is the tool every shipped example binds.

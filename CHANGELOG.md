@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **`web_fetch` keeps the page's links.** It stripped every tag *with its
+  attributes*, so a document whose value is "these titles point there" arrived
+  as titles alone — the flagship gallery example read 8 013 characters of a
+  YouTube ranking and could not recover a single `watch?v=` id, and fell back
+  onto a search endpoint that was refusing every request. Each link is now
+  written inline as `text (url)`: relative hrefs resolved against the page,
+  `javascript:`/`mailto:` dropped to their text, each address spelled out
+  once, fifty per page so a link farm cannot drown the prose, and nothing in
+  the *text* is ever scanned for URL-shaped strings. `web_search`'s own
+  output is unchanged (`workflow-gallery` 34).
 - **A prompt that denies the tools its node now holds is reported.**
   `production-ready` 88 fixed the run — an agent is handed a generated,
   authoritative list of what it holds, which overrules a stale authored denial

@@ -113,11 +113,17 @@ example's first step. Ticket 01's route is *`web_search` → `web_fetch` an
 aggregator → `web_search` the title for the `watch?v=` id*, and **two of its
 three rungs are the tool that is down.** `web_fetch` is fine — the aggregator
 came back with today's ranking, 8 013 characters of rank/category/channel/
-title/views — but `_strip_html` deletes attributes with their tags, so the page
-carries no link and no id. Nine other candidate sources were probed and not one
-put a `watch?v=` id in its text.
+title/views — but `_strip_html` deleted attributes with their tags, so the page
+carried no link and no id. Nine other candidate sources were probed and not one
+put a `watch?v=` id in its *text*.
 
-The full failure, and the fallback it names, is gallery ticket 34.
+**That second half is fixed** (`workflow-gallery` 34): `web_fetch` now writes
+each link inline as `text (url)`, so the same `kworb.net/youtube/trending.html`
+fetch measured on 2026-08-21 carries a `watch?v=` id where the day before it
+carried none. **The third rung no longer needs a search at all** — the fetch
+that gets the ranking gets the id with it. The *first* rung still does, and
+`html.duckduckgo.com` was still answering HTTP 202 on 2026-08-21, so a second
+search backend is still owed: gallery ticket **67**.
 
 ### Run 2 — seeded at the id, and everything downstream is real
 
