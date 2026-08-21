@@ -41,6 +41,23 @@ extension metadata as an **Agent Plugins v1** bundle (`plugin.json` +
 (`"No mcp.json emitted: this runtime models no MCP servers…"`). It's a
 different kind of export than the one these questions are asking about.
 
+Since `export-and-eject/06` that bundle also carries a generated `README.md`,
+and it is the one place the two halves of this page meet a stranger: the
+`pip install` line naming exactly the extras *that document* asks for —
+derived from its own model strings (both spellings), its `tier: deep` nodes and
+its `settings.checkpointer` — and a "what did not come with it" section that is
+the export's own `notes` rendered as Markdown rather than prose written beside
+them. When the bundle carries `tools/`, `functions/`, `middlewares/`,
+`knowledge/` or `skills/`, the README says the paragraph below in the reader's
+own terms, because that is exactly the reader who is about to lose the wiring.
+A package carrying none of them is told none of it.
+
+It also prints the recipe that actually works rather than the obvious one:
+`org.openstategraph/` holds the payload but cannot be loaded under its own name
+— `load_workflow` refuses a directory name that is not a slug, and a reverse
+domain has a period in it — so the README says to copy it out under the
+plugin's name first.
+
 ### What you get instead, and what it costs
 
 ```python

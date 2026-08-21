@@ -18,7 +18,9 @@ silent" rule the loader already follows for unresolved capabilities.
 from __future__ import annotations
 
 import importlib
+from dataclasses import dataclass
 from types import ModuleType
+from typing import Any
 
 def provider_extras() -> dict[str, str]:
     """Model-string prefix -> the extra supplying its LangChain integration.
@@ -37,6 +39,88 @@ def provider_extras() -> dict[str, str]:
     return provider_catalogue().extras_by_prefix()
 
 
+
+
+@dataclass(frozen=True)
+class DocumentRequirements:
+    """Which extras one document asks for, and which prefixes we could not place.
+
+    Derived from the document alone — no import, no installation, no model call
+    — so it answers for a package on a machine that has never run it. The two
+    halves are the tolerant/strict pair CLAUDE.md asks for: every model string
+    is read in both spellings the product accepts, and a prefix the provider
+    catalogue does not know is *reported* rather than turned into a guessed
+    install line.
+    """
+
+    #: Sorted extra names, e.g. `("anthropic", "deep")`.
+    extras: tuple[str, ...] = ()
+    #: Sorted prefixes that looked like a provider and are not one here.
+    unknown_providers: tuple[str, ...] = ()
+    #: Human-readable "why", one per extra: extra -> what in the document asks.
+    reasons: tuple[tuple[str, str], ...] = ()
+
+
+def _nodes(document: dict[str, Any]) -> list[dict[str, Any]]:
+    nodes = document.get("nodes")
+    return [n for n in nodes if isinstance(n, dict)] if isinstance(nodes, list) else []
+
+
+def document_extras(document: dict[str, Any]) -> DocumentRequirements:
+    """The extras a document needs to run, from the document's own text.
+
+    Three sources, and each is the one the runtime itself reads:
+
+    - **`settings.model`** is the colon spelling `init_chat_model` takes.
+    - **`data.model` on a node** is the *slash* spelling, and the two are not
+      interchangeable (`examples/youtube-trend-digest/AGENTS.md`). A value with
+      no `/`, or the provider `mock`, falls back to the document default at run
+      time — `NodeRuntime._base_model` — so it names no provider here either.
+    - **`data.tier == "deep"`** is the only thing that needs `[deep]`, and
+      `settings.checkpointer == "sqlite"` the only thing that needs `[sqlite]`.
+    """
+    catalogue = provider_extras()
+    found: dict[str, str] = {}
+    unknown: dict[str, str] = {}
+
+    def _provider(prefix: str, source: str) -> None:
+        prefix = prefix.strip().lower()
+        if not prefix or prefix == "mock":
+            return
+        extra = catalogue.get(prefix)
+        if extra:
+            found.setdefault(extra, source)
+        else:
+            unknown.setdefault(prefix, source)
+
+    settings = document.get("settings")
+    settings = settings if isinstance(settings, dict) else {}
+    default_model = str(settings.get("model") or "")
+    if default_model:
+        _provider(default_model.split(":", 1)[0], f"settings.model: {default_model}")
+
+    deep_nodes: list[str] = []
+    for node in _nodes(document):
+        data = node.get("data")
+        data = data if isinstance(data, dict) else {}
+        node_id = str(node.get("id") or "?")
+        selection = str(data.get("model") or "")
+        provider, sep, model_id = selection.partition("/")
+        if sep and model_id:
+            _provider(provider, f"node {node_id}: {selection}")
+        if str(data.get("tier") or "") == "deep":
+            deep_nodes.append(node_id)
+
+    if deep_nodes:
+        found["deep"] = f"deep-tier node(s): {', '.join(sorted(deep_nodes))}"
+    if str(settings.get("checkpointer") or "") == "sqlite":
+        found["sqlite"] = 'settings.checkpointer: "sqlite"'
+
+    return DocumentRequirements(
+        extras=tuple(sorted(found)),
+        unknown_providers=tuple(sorted(unknown)),
+        reasons=tuple((extra, found[extra]) for extra in sorted(found)),
+    )
 
 
 def install_hint(extra: str) -> str:
@@ -77,6 +161,8 @@ def provider_extra_hint(model_name: str) -> str | None:
 #: module is internal (see the docstring), nothing imported the name, and
 #: `provider_extras()` answers the same question against the live catalogue.
 __all__ = [
+    "DocumentRequirements",
+    "document_extras",
     "install_hint",
     "provider_extra_hint",
     "provider_extras",
