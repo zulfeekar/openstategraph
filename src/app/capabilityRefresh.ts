@@ -1,4 +1,4 @@
-import { WorkflowFileClient, type ToolCapability } from '@core/runtime/WorkflowFileClient';
+import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
@@ -43,13 +43,20 @@ export type CapabilityRefreshAction =
 
 /**
  * The pure half: given what the backend reports now and what this tab last
- * knew, did the workflow's discovered-tool set change, and what is new.
+ * knew, did the workflow's discovered set change, and what is new.
  *
  * Order-independent (`Set`, not array equality) because the backend's own
  * discovery order carries no promise of stability.
+ *
+ * **Anything with an id, not tools specifically** (`export-and-eject/01`).
+ * This decides whether `registerDiscoveredCapabilities` runs at all, and that
+ * call replaces the package's whole contribution — so a version of it that
+ * only watched `tools` would answer "unchanged" for a package whose only
+ * change was a new file in `functions/`, and the Refresh button would do
+ * nothing for exactly the developer who had just pressed it.
  */
 export function decideCapabilityRefresh(
-  fresh: readonly ToolCapability[],
+  fresh: readonly { readonly id: string }[],
   known: readonly string[] | undefined,
 ): CapabilityRefreshAction {
   const ids = fresh.map((c) => c.id);
@@ -102,7 +109,8 @@ export async function refreshWorkflowCapabilities(
 
   const outcome = await client.capabilities(slug);
   const tools = outcome.ok ? outcome.value.tools : [];
-  const action = decideCapabilityRefresh(tools, knownCapabilityIds.get(slug));
+  const functions = outcome.ok ? outcome.value.functions : [];
+  const action = decideCapabilityRefresh([...tools, ...functions], knownCapabilityIds.get(slug));
 
   // Both of these run whatever the workflow-local decision was. An installed
   // plugin's tools and the capability warnings are not keyed to this
@@ -120,13 +128,14 @@ export async function refreshWorkflowCapabilities(
   // defect this whole ticket is about, one layer along.
   setAmbientTools(outcome.ok ? outcome.value.ambientTools : []);
 
-  if (action.kind === 'unchanged') return { kind: 'unchanged', total: tools.length };
+  const total = tools.length + functions.length;
+  if (action.kind === 'unchanged') return { kind: 'unchanged', total };
 
   knownCapabilityIds.set(slug, action.ids);
-  registerDiscoveredCapabilities(tools, registry, executors);
+  registerDiscoveredCapabilities({ tools, functions }, registry, executors);
   return action.kind === 'changed'
-    ? { kind: 'changed', total: tools.length, added: action.added }
-    : { kind: 'unchanged', total: tools.length };
+    ? { kind: 'changed', total, added: action.added }
+    : { kind: 'unchanged', total };
 }
 
 /**
@@ -136,7 +145,7 @@ export async function refreshWorkflowCapabilities(
  */
 export function recordKnownCapabilities(
   slug: string,
-  capabilities: readonly ToolCapability[],
+  capabilities: readonly { readonly id: string }[],
 ): void {
   knownCapabilityIds.set(
     slug,

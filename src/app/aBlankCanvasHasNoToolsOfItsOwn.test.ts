@@ -60,7 +60,7 @@ describe('a document with no package has no tools of its own', () => {
     setOpenSlug('bespoke');
     const stop = followOpenPackage();
     registerDiscoveredCapabilities(
-      [bespoke],
+      { tools: [bespoke], functions: [] },
       workbench.registry,
       workbench.engine.executors,
     );
@@ -81,7 +81,11 @@ describe('a document with no package has no tools of its own', () => {
     const workbench = new Workbench();
     setOpenSlug('bespoke');
     const stop = followOpenPackage();
-    registerDiscoveredCapabilities([bespoke], workbench.registry, workbench.engine.executors);
+    registerDiscoveredCapabilities(
+      { tools: [bespoke], functions: [] },
+      workbench.registry,
+      workbench.engine.executors,
+    );
 
     // Opening another package announces its slug before its capabilities have
     // been fetched. That is an in-flight state, not an answer, and it must not
@@ -96,7 +100,11 @@ describe('a document with no package has no tools of its own', () => {
 
   it('empties the section when a refresh is asked for with no slug to ask about', async () => {
     const workbench = new Workbench();
-    registerDiscoveredCapabilities([bespoke], workbench.registry, workbench.engine.executors);
+    registerDiscoveredCapabilities(
+      { tools: [bespoke], functions: [] },
+      workbench.registry,
+      workbench.engine.executors,
+    );
 
     const outcome = await refreshWorkflowCapabilities(
       null,

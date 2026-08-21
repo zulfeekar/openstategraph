@@ -54,7 +54,9 @@ describe('loadWorkflowIntoEditor', () => {
     ({
       load: (): Promise<Result<unknown, string>> => Promise.resolve(Ok(CHINOOK_DOCUMENT)),
       capabilities: (): Promise<Result<WorkflowCapabilities, string>> =>
-        Promise.resolve(Ok({ tools, pluginTools: [], ambientTools: [], warnings: [] })),
+        Promise.resolve(
+          Ok({ tools, functions: [], pluginTools: [], ambientTools: [], warnings: [] }),
+        ),
       summary: (): Promise<Result<WorkflowSummary | null, string>> => Promise.resolve(Ok(null)),
     }) as unknown as IWorkflowFileClient;
 

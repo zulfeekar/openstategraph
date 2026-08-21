@@ -419,8 +419,9 @@ export function Palette({ onNotify }: PaletteProps) {
               </>
             ) : (
               <p className="palette-note">
-                This workflow has no tools of its own yet. Python tools in its <code>tools/</code>{' '}
-                folder show up here as nodes you can wire in — just added one? Press Refresh.
+                This workflow ships nothing of its own yet. Python tools in its <code>tools/</code>{' '}
+                folder and plain functions in its <code>functions/</code> folder show up here as
+                nodes you can wire in — just added one? Press Refresh.
               </p>
             )}
           </PanelSection>

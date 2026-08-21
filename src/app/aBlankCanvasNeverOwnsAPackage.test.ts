@@ -15,7 +15,12 @@ import {
   hasDraftFor,
   restoreSessionDraft,
 } from '@app/workflowDrafts';
-import { getOpenSlug, readSlugFromSearch, resolveOpenRequest, setOpenSlug } from '@app/openWorkflow';
+import {
+  getOpenSlug,
+  readSlugFromSearch,
+  resolveOpenRequest,
+  setOpenSlug,
+} from '@app/openWorkflow';
 import {
   baselineSlugAfterRestore,
   ensureDiskBaseline,
@@ -116,7 +121,10 @@ describe('production-ready 71 — a blank canvas must not own a package', () => 
   function backend(document: unknown): IWorkflowFileClient {
     return {
       load: (): Promise<Result<unknown, string>> => Promise.resolve(Ok(document)),
-      capabilities: () => Promise.resolve(Ok({ tools: [], pluginTools: [], ambientTools: [], warnings: [] })),
+      capabilities: () =>
+        Promise.resolve(
+          Ok({ tools: [], functions: [], pluginTools: [], ambientTools: [], warnings: [] }),
+        ),
       summary: () => Promise.resolve(Ok(null)),
       save: (slug: string, _name: string, doc: unknown): Promise<Result<unknown, string>> => {
         const nodes = (doc as { nodes?: unknown[] })?.nodes?.length ?? 0;

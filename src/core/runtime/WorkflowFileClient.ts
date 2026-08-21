@@ -87,6 +87,27 @@ export interface ToolCapability {
   readonly nodeType: string;
 }
 
+/**
+ * One top-level callable discovered in a workflow's `functions/` folder.
+ *
+ * Reported by the backend since ticket 18 and dropped on the floor by this
+ * client until `export-and-eject/01` — which is the whole of why a function
+ * that ran perfectly well could not be put on a canvas.
+ *
+ * Note what is **not** here: a `nodeType`. A tool declares the card meant to
+ * represent it; a function's identity is its name, and the node type a
+ * document must name is derived from it by the runtime's own convention —
+ * see `nodes/functions/DiscoveredFunctionNode.ts`.
+ */
+export interface FunctionCapability {
+  readonly id: string;
+  readonly name: string;
+  /** The function's own docstring, or `''`. Becomes card copy, never config. */
+  readonly docstring: string;
+  /** `(text: str) -> str` — the contract, shown verbatim rather than parsed. */
+  readonly signature: string;
+}
+
 /** One control a plugin's tool asks the editor to put on its card. */
 export interface PluginToolField {
   readonly key: string;
@@ -135,6 +156,14 @@ export interface WorkflowCapabilities {
    * courtesy `pluginTools` already gets one line down.
    */
   readonly ambientTools: readonly string[];
+  /**
+   * The package's own `functions/` folder — plain Python between two nodes.
+   *
+   * Same lifetime as `tools`: a function belongs to the open package and
+   * leaves the palette when another one is opened. Defaulted to empty for a
+   * backend that predates the field, exactly as the lists around it are.
+   */
+  readonly functions: readonly FunctionCapability[];
   /** App-scoped tools installed distributions contribute. */
   readonly pluginTools: readonly PluginToolCapability[];
   /**
@@ -793,6 +822,7 @@ export class WorkflowFileClient
     try {
       const payload = (await response.json()) as {
         tools?: unknown[];
+        functions?: unknown[];
         plugin_tools?: unknown[];
         ambient_tools?: unknown[];
         warnings?: unknown[];
@@ -801,14 +831,15 @@ export class WorkflowFileClient
       // Every list defaults to empty rather than failing the parse: an older
       // backend that predates plugin capabilities must still load a workflow,
       // and a missing key is exactly the "nothing to report" it looks like.
+      const functions = Array.isArray(payload.functions) ? payload.functions : [];
       const pluginTools = Array.isArray(payload.plugin_tools) ? payload.plugin_tools : [];
       const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
       // Same default, same reason: a backend that predates this field binds
       // nothing ambient as far as this editor can tell, which is the honest
       // reading of a missing key.
-      const ambientTools = (
-        Array.isArray(payload.ambient_tools) ? payload.ambient_tools : []
-      ).map((entry) => asString(entry));
+      const ambientTools = (Array.isArray(payload.ambient_tools) ? payload.ambient_tools : []).map(
+        (entry) => asString(entry),
+      );
       return Ok({
         ambientTools,
         tools: tools.map((entry) => {
@@ -825,6 +856,7 @@ export class WorkflowFileClient
             nodeType: asString(record['node_type']),
           };
         }),
+        functions: functions.map((entry) => asFunction(entry as Record<string, unknown>)),
         pluginTools: pluginTools.map((entry) => asPluginTool(entry as Record<string, unknown>)),
         warnings: warnings.filter((w): w is string => typeof w === 'string'),
       });
@@ -914,6 +946,16 @@ function asSummary(record: Record<string, unknown>): WorkflowSummary {
     edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
     published: record['published'] !== false,
     hidden: record['hidden'] === true,
+  };
+}
+
+/** One `functions` row. Every field is text; nothing here is parsed. */
+function asFunction(record: Record<string, unknown>): FunctionCapability {
+  return {
+    id: asString(record['id']),
+    name: asString(record['name']),
+    docstring: asString(record['docstring']),
+    signature: asString(record['signature']),
   };
 }
 

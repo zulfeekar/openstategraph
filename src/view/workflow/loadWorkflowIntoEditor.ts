@@ -101,7 +101,13 @@ export async function loadMountIntoEditor(
     registerNodeTypesForRawDocument(document, workbench.registry, workbench.engine.executors);
     const capabilities = await client.capabilities(slug);
     const tools = capabilities.ok ? capabilities.value.tools : [];
-    registerDiscoveredCapabilities(tools, workbench.registry, workbench.engine.executors);
+    // Functions ride the same fetch and the same registration — `export-and-eject/01`.
+    const functions = capabilities.ok ? capabilities.value.functions : [];
+    registerDiscoveredCapabilities(
+      { tools, functions },
+      workbench.registry,
+      workbench.engine.executors,
+    );
     registerPluginCapabilities(
       capabilities.ok ? capabilities.value.pluginTools : [],
       workbench.registry,
@@ -121,7 +127,9 @@ export async function loadMountIntoEditor(
       // person looking at the instance is the one who can fix it.
       ...outcome.value.warnings,
     ]);
-    recordKnownCapabilities(slug, tools);
+    // Both lists, or the first Refresh after a load announces every function
+    // the load had already registered as brand new.
+    recordKnownCapabilities(slug, [...tools, ...functions]);
 
     // The address and the mount context are recorded **before** the import,
     // and that ordering is load-bearing rather than tidy.
@@ -234,7 +242,13 @@ export async function loadWorkflowIntoEditor(
     registerNodeTypesForRawDocument(outcome.value, workbench.registry, workbench.engine.executors);
     const capabilities = await client.capabilities(slug);
     const tools = capabilities.ok ? capabilities.value.tools : [];
-    registerDiscoveredCapabilities(tools, workbench.registry, workbench.engine.executors);
+    // Functions ride the same fetch and the same registration — `export-and-eject/01`.
+    const functions = capabilities.ok ? capabilities.value.functions : [];
+    registerDiscoveredCapabilities(
+      { tools, functions },
+      workbench.registry,
+      workbench.engine.executors,
+    );
     // The other source, same moment and for the same reason (register PK-06):
     // a tool an installed distribution ships is bindable by the runtime, so a
     // saved document may already reference it.
@@ -252,7 +266,9 @@ export async function loadWorkflowIntoEditor(
     setAmbientTools(capabilities.ok ? capabilities.value.ambientTools : []);
     // Baseline for the palette's manual Refresh: without it, the first press
     // after a load would report every tool the load itself registered as new.
-    recordKnownCapabilities(slug, tools);
+    // Both lists, or the first Refresh after a load announces every function
+    // the load had already registered as brand new.
+    recordKnownCapabilities(slug, [...tools, ...functions]);
     // **Which document this is, recorded before the import** — the same
     // load-bearing ordering `loadMountIntoEditor` documents above, and ticket
     // 25's other half.

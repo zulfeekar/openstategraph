@@ -133,15 +133,18 @@ describe('workflow-scoped node types announce their scope', () => {
   it('stamps scope: workflow on a discovered capability', () => {
     const workbench = new Workbench();
     registerDiscoveredCapabilities(
-      [
-        {
-          id: 'a/tools.One',
-          name: 'One',
-          description: 'discovered',
-          argsSchema: { type: 'object', properties: {} },
-          nodeType: '',
-        },
-      ],
+      {
+        tools: [
+          {
+            id: 'a/tools.One',
+            name: 'One',
+            description: 'discovered',
+            argsSchema: { type: 'object', properties: {} },
+            nodeType: '',
+          },
+        ],
+        functions: [],
+      },
       workbench.registry,
       workbench.engine.executors,
     );
@@ -191,7 +194,7 @@ describe('workflow-scoped node types announce their scope', () => {
       expect(before).toBeDefined();
 
       registerDiscoveredCapabilities(
-        [capability({ nodeType: 'tool.chinook-execute-sql' })],
+        { tools: [capability({ nodeType: 'tool.chinook-execute-sql' })], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
@@ -210,7 +213,7 @@ describe('workflow-scoped node types announce their scope', () => {
       // `node_type` no TS module ships must still reach the palette.
       const workbench = new Workbench();
       registerDiscoveredCapabilities(
-        [capability({ nodeType: 'tool.nobody-wrote-this' })],
+        { tools: [capability({ nodeType: 'tool.nobody-wrote-this' })], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
@@ -222,7 +225,7 @@ describe('workflow-scoped node types announce their scope', () => {
     it('is still minted when the capability declares no node_type at all', () => {
       const workbench = new Workbench();
       registerDiscoveredCapabilities(
-        [capability({ nodeType: '' })],
+        { tools: [capability({ nodeType: '' })], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
@@ -239,11 +242,15 @@ describe('workflow-scoped node types announce their scope', () => {
       const workbench = new Workbench();
       registerScopedFamily('chinook', workbench.registry, workbench.engine.executors);
       registerDiscoveredCapabilities(
-        [capability({ nodeType: 'tool.chinook-execute-sql' })],
+        { tools: [capability({ nodeType: 'tool.chinook-execute-sql' })], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
-      registerDiscoveredCapabilities([], workbench.registry, workbench.engine.executors);
+      registerDiscoveredCapabilities(
+        { tools: [], functions: [] },
+        workbench.registry,
+        workbench.engine.executors,
+      );
 
       expectUsable(workbench, 'tool.chinook-execute-sql');
     });
@@ -340,7 +347,7 @@ describe('registerDiscoveredCapabilities', () => {
   it('registers one node type per discovered capability', () => {
     const workbench = new Workbench();
     registerDiscoveredCapabilities(
-      [capability('a/tools.One'), capability('a/tools.Two')],
+      { tools: [capability('a/tools.One'), capability('a/tools.Two')], functions: [] },
       workbench.registry,
       workbench.engine.executors,
     );
@@ -352,13 +359,13 @@ describe('registerDiscoveredCapabilities', () => {
   it('unregisters the previous workflow’s capabilities when a new one is opened', () => {
     const workbench = new Workbench();
     registerDiscoveredCapabilities(
-      [capability('a/tools.One')],
+      { tools: [capability('a/tools.One')], functions: [] },
       workbench.registry,
       workbench.engine.executors,
     );
 
     registerDiscoveredCapabilities(
-      [capability('b/tools.Two')],
+      { tools: [capability('b/tools.Two')], functions: [] },
       workbench.registry,
       workbench.engine.executors,
     );
@@ -370,12 +377,16 @@ describe('registerDiscoveredCapabilities', () => {
   it('an empty list clears whatever was registered, without leaving it stranded', () => {
     const workbench = new Workbench();
     registerDiscoveredCapabilities(
-      [capability('a/tools.One')],
+      { tools: [capability('a/tools.One')], functions: [] },
       workbench.registry,
       workbench.engine.executors,
     );
 
-    registerDiscoveredCapabilities([], workbench.registry, workbench.engine.executors);
+    registerDiscoveredCapabilities(
+      { tools: [], functions: [] },
+      workbench.registry,
+      workbench.engine.executors,
+    );
 
     expect(workbench.registry.nodeTypes.get('a/tools.One')).toBeUndefined();
   });
@@ -384,12 +395,12 @@ describe('registerDiscoveredCapabilities', () => {
     const workbench = new Workbench();
     expect(() => {
       registerDiscoveredCapabilities(
-        [capability('a/tools.One')],
+        { tools: [capability('a/tools.One')], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
       registerDiscoveredCapabilities(
-        [capability('a/tools.One')],
+        { tools: [capability('a/tools.One')], functions: [] },
         workbench.registry,
         workbench.engine.executors,
       );
@@ -441,7 +452,11 @@ describe('the "This workflow" section follows the package, not the document', ()
       workbench.registry,
       workbench.engine.executors,
     );
-    registerDiscoveredCapabilities(capabilities, workbench.registry, workbench.engine.executors);
+    registerDiscoveredCapabilities(
+      { tools: capabilities, functions: [] },
+      workbench.registry,
+      workbench.engine.executors,
+    );
     return workbench;
   }
 

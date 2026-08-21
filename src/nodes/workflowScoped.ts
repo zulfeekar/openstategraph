@@ -3,9 +3,13 @@ import { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { WorkflowModel } from '@core/model/WorkflowModel';
-import type { ToolCapability } from '@core/runtime/WorkflowFileClient';
+import type { FunctionCapability, ToolCapability } from '@core/runtime/WorkflowFileClient';
 import { CHINOOK_NODES } from './tools/ChinookDatabaseNode';
 import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
+import {
+  createDiscoveredFunctionNode,
+  discoveredFunctionNodeType,
+} from './functions/DiscoveredFunctionNode';
 
 /**
  * One family of node types that belongs to a workflow package rather than to
@@ -159,6 +163,22 @@ export function registerScopedFamily(
 let registeredDiscoveredToolIds: readonly string[] = [];
 
 /**
+ * Everything one package's discovery call reports about itself.
+ *
+ * One argument rather than two positional lists, because the two are one
+ * answer: `registerDiscoveredCapabilities` replaces *the open package's whole
+ * contribution*, and a caller that passed tools and forgot functions would
+ * leave the previous package's functions standing under a heading that reads
+ * "From this workflow's own package" — the exact defect ticket 75 fixed for
+ * tools. A named field cannot be forgotten silently the way a trailing
+ * optional parameter can.
+ */
+export interface PackageCapabilities {
+  readonly tools: readonly ToolCapability[];
+  readonly functions: readonly FunctionCapability[];
+}
+
+/**
  * Ticket 18's node-type-discovery half: registers one workflow-scoped node
  * type per `ToolCapability` the backend discovered in that workflow's
  * `tools/` folder (`WorkflowFileClient.capabilities`), so a hand-written
@@ -175,7 +195,7 @@ let registeredDiscoveredToolIds: readonly string[] = [];
  * registered rather than leaving it stranded in the palette.
  */
 export function registerDiscoveredCapabilities(
-  capabilities: readonly ToolCapability[],
+  capabilities: PackageCapabilities,
   registry: ModelRegistry,
   executors: Registry<INodeExecutor>,
 ): void {
@@ -188,7 +208,7 @@ export function registerDiscoveredCapabilities(
 
   const minted: string[] = [];
   const backed: string[] = [];
-  for (const capability of capabilities) {
+  for (const capability of capabilities.tools) {
     if (isAlreadyHandAuthored(capability, registry)) {
       backed.push(capability.nodeType);
       continue;
@@ -198,6 +218,27 @@ export function registerDiscoveredCapabilities(
     executors.upsert(executor);
     minted.push(capability.id);
     backed.push(capability.id);
+  }
+  // Functions, on the same seam and by the same rules — `export-and-eject/01`.
+  // The one difference is which string is the node type: a tool declares it,
+  // a function's is derived from its name because that is what the compiler
+  // binds (`NodeRuntime.builder_for`'s `function.` convention).
+  for (const capability of capabilities.functions) {
+    const nodeType = discoveredFunctionNodeType(capability);
+    // Hand-authored wins, exactly as it does for tools. `function.format_report`
+    // is the live case: a package that happened to define `def format_report`
+    // must not replace the built-in card with a generic one, and the compiler
+    // agrees at the other end — its explicit builder table is consulted before
+    // the `function.` convention, so the built-in is what would actually run.
+    if (registry.nodeTypes.get(nodeType) != null && !minted.includes(nodeType)) {
+      backed.push(nodeType);
+      continue;
+    }
+    const { definition, executor } = createDiscoveredFunctionNode(capability);
+    registry.nodeTypes.upsert(asWorkflowScoped(definition));
+    executors.upsert(executor);
+    minted.push(nodeType);
+    backed.push(nodeType);
   }
   // Only what was actually minted, so the teardown above cannot unregister a
   // hand-authored card that discovery merely declined to duplicate.

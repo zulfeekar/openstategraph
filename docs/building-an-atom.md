@@ -898,6 +898,38 @@ Discovered functions live in `workflows/<slug>/functions/` and arrive by the
 same `code → canvas` channel as discovered tools — the type id is data, and it
 travels with the package.
 
+### Putting one on a canvas
+
+Drop a top-level, non-underscore `def` into `workflows/<slug>/functions/*.py`,
+open the package (or press **Refresh** in the palette's *This workflow*
+section), and it is there as a card with one `text` in-port and one `result`
+out-port. Nothing to register, no TypeScript to write —
+[`DiscoveredFunctionNode.ts`](../src/nodes/functions/DiscoveredFunctionNode.ts)
+mints the type from what `discover_functions` reports, on the same seam
+`DiscoveredToolNode` uses (`export-and-eject/01`; before it, the editor parsed
+the endpoint's `tools` and dropped its `functions`, so the only way to run one
+was to hand-edit `workflow.json`).
+
+Two things about it that are not guesses:
+
+- **The node type is `function.<name>`, not the capability id.** The backend
+  *reports* `<slug>/functions.<name>`, but the compiler dispatches on a
+  `function.` prefix and `discover_function_callables` keys its registry by the
+  bare name — so that is what a document names. It is therefore **not**
+  slug-qualified, unlike a discovered tool's; harmless in the editor, where only
+  the open package's functions are ever registered, and a real property of the
+  runtime rather than of the card.
+- **The card has no fields.** The compiled step reads nothing from `data`, so a
+  control here would be one the compiler ignores. The signature and the first
+  line of the docstring become the card's subtitle instead, where they cannot
+  lie about what gets passed. A field schema derived from the signature was
+  considered for v1 and refused: the signature is fixed at `(text: str) -> str`,
+  so there is nothing to derive.
+
+The browser preview cannot run one — the implementation is Python on the
+backend, and the executor says so rather than inventing a result. Press **Run**
+(or use Chat) and it runs for real.
+
 ---
 
 ## Appendix — before you build any of this, run the interview

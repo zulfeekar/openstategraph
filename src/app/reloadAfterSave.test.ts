@@ -91,7 +91,9 @@ function backendServing(slug: string, document: unknown): IWorkflowFileClient {
     load: (asked: string): Promise<Result<unknown, string>> =>
       Promise.resolve(asked === slug ? Ok(document) : Ok(document)),
     capabilities: (): Promise<Result<WorkflowCapabilities, string>> =>
-      Promise.resolve(Ok({ tools: [], pluginTools: [], ambientTools: [], warnings: [] })),
+      Promise.resolve(
+        Ok({ tools: [], functions: [], pluginTools: [], ambientTools: [], warnings: [] }),
+      ),
     summary: (): Promise<Result<WorkflowSummary | null, string>> => Promise.resolve(Ok(null)),
   } as unknown as IWorkflowFileClient;
 }
