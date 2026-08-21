@@ -248,6 +248,43 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
 
+  # workflow-gallery 57: `scripts/build_gallery_diagrams.py --check` and
+  # `scripts/build_behind_the_scenes.py --check` both exist to fail when a
+  # committed page (`site/gallery.html`, `site/behind-the-scenes.html`) has
+  # drifted from what the compiler now produces, and until this job neither
+  # ran anywhere — not here, not vitest, not pytest. That is how gallery 55
+  # happened: the script was red on a clean checkout for as long as
+  # `support-triage` carried its declared finding, and nobody was told because
+  # nobody was asking.
+  #
+  # This runs on every push to main and every pull request, same as every
+  # other job in this file — deliberately not copied onto `docs-freshness`'s
+  # `if: pull_request` restriction, because this repository pushes straight to
+  # main and a PR-only gate here would be a gate nobody has for the second
+  # time (see `docs-freshness` above, which already fires once, ever).
+  #
+  # Both scripts render Mermaid through `scripts/render_mermaid.mjs`, which
+  # drives the vendored mermaid build inside Playwright chromium rather than
+  # calling out to a CDN — so this job needs the same `npm ci` +
+  # `playwright install --with-deps chromium` as `e2e` above, plus the backend
+  # install the compiler itself needs. Rendering 27 diagrams is a different
+  # cost and a different dependency from compiling 23 documents, which is why
+  # this lives in its own CI job rather than inside `npm run verify` or
+  # `pytest` (workflow-gallery 57's own reasoning, carried from ticket 55).
+  gallery-diagrams-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: pip install -e "backend[all,dev]"
+      - run: python3 scripts/build_gallery_diagrams.py --check
+      - run: python3 scripts/build_behind_the_scenes.py --check
+
   # ONE status check to require in branch protection, instead of six that have
   # to be re-listed by hand every time a job is added, renamed or given a
   # matrix. Adding a job to `needs:` below is how it becomes mandatory.
@@ -259,7 +296,7 @@ jobs:
   # skips on push-to-main; `cancelled` is not.
   ci-success:
     if: always()
-    needs: [frontend, generated-port-specs, generated-openapi, backend, clean-install, docs-freshness, e2e]
+    needs: [frontend, generated-port-specs, generated-openapi, backend, clean-install, docs-freshness, e2e, gallery-diagrams-check]
     runs-on: ubuntu-latest
     steps:
       - name: Every check must have passed
