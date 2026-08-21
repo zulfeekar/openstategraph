@@ -1036,6 +1036,12 @@ def _run_frames(
     #: offered the build door even when the model announced nothing
     #: (`every-workflow-green` 35).
     tool_use: dict[str, Any] = {}
+    #: node id -> the attempt number that finally returned. Folded like
+    #: `tool_use`, and the reason this door stopped listing `run_health`'s
+    #: sources by hand: it was the only one of six this door never collected,
+    #: so a recovered retry was reported by the other two doors and not by the
+    #: one both shipped UIs read (`production-ready` 97).
+    retries: dict[str, Any] = {}
     outputs: dict[str, str] = {}
     #: The same two, for everything below the outermost document — keyed by
     #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
@@ -1065,20 +1071,31 @@ def _run_frames(
     # checkpointed state — the same state `openstategraph threads show` reads.
     # Seeded *before* the fold, so this call's own frames still win where they
     # overlap.
+    #: **State key -> the accumulator this door folds it into**, and the reason
+    #: it is one mapping rather than two lists: the resume seed reads it, and
+    #: so does the terminal frame's health report. `run_health_from_state`
+    #: takes its sources off `run_health`'s own signature, so handing it this
+    #: mapping is what stops this door falling behind a seventh source the way
+    #: it fell behind `retries` (`production-ready` 97) — the sixth, after
+    #: `every-workflow-green` 14 and 16 and `workflow-gallery` 49 fixed the
+    #: same drift for the other two doors. Keys this door folds that are not
+    #: health sources (`decisions`, `unmet_tools`, `redactions`) are simply not
+    #: read by that function; the mapping is the door's, not the report's.
+    folded: dict[str, Any] = {
+        "decisions": decisions,
+        "outputs": outputs,
+        "nested_outputs": nested_outputs,
+        "forced": forced,
+        "unrouted": unrouted,
+        "retries": retries,
+        "unmet_tools": unmet_tools,
+        "tool_use": tool_use,
+        "redactions": redactions,
+    }
     if _resumes_a_paused_run(graph_input):
         prior = getattr(graph.get_state(config), "values", None) or {}
         if hasattr(prior, "get"):
-            into: dict[str, Any] = {
-                "decisions": decisions,
-                "outputs": outputs,
-                "nested_outputs": nested_outputs,
-                "forced": forced,
-                "unrouted": unrouted,
-                "unmet_tools": unmet_tools,
-                "tool_use": tool_use,
-                "redactions": redactions,
-            }
-            for state_key, target in into.items():
+            for state_key, target in folded.items():
                 held = prior.get(state_key)
                 if not isinstance(held, dict):
                     continue
@@ -1219,6 +1236,9 @@ def _run_frames(
                     )
                     tool_use.update(
                         {key(k): v for k, v in (update.get("tool_use") or {}).items()}
+                    )
+                    retries.update(
+                        {key(k): v for k, v in (update.get("retries") or {}).items()}
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
@@ -1607,18 +1627,24 @@ def _run_frames(
         RUN_FAILED_ANSWER,
         redact_failure_markers,
         capability_door,
-        run_health,
+        run_health_from_state,
         suggestion_from_rejection,
     )
 
-    # One assembly for both doors — see `run_health`. Neither endpoint adds a
-    # source locally; that is exactly how these two drifted twice
+    # One assembly for all three doors — see `run_health`. Neither endpoint
+    # adds a source locally; that is exactly how these drifted twice
     # (`every-workflow-green` 14, 16).
-    # `tool_use` distinguishes a node that never started from one whose loop
-    # ran tools and then went quiet — `production-ready` 96. `retries` is
-    # still not passed, and that is not an oversight of this change: this
-    # door never folds one out of its frames. Filed as production-ready/97.
-    health = run_health(outputs, nested_outputs, forced, unrouted, None, tool_use)
+    #
+    # **Off the signature, not by hand.** This door used to call `run_health`
+    # positionally, which made it the one door that could silently fall behind
+    # — and it had: `retries` was passed as `None` because the fold never
+    # collected it, so a recovered retry reached `/api/runs` and the library
+    # door and never the door both shipped UIs read (`production-ready` 97).
+    # `folded` is keyed by state key, so a seventh source arriving as a
+    # `run_health` parameter is either folded here or a red test
+    # (`test_the_streaming_door_cannot_fall_behind_a_health_source`), never a
+    # missing sentence nobody notices.
+    health = run_health_from_state(folded)
     # A fallback, never an override: the model's own fence wins when it wrote
     # one (ticket 15's card), and this fills the silence when it did not.
     if suggestion is None:

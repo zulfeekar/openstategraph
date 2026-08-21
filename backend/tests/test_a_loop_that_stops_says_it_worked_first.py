@@ -142,18 +142,20 @@ class TestBothDoorsReadIt:
         assert "ended its turn without writing an answer" in health.silent[0]
 
     def test_the_streaming_door_reads_it_too(self) -> None:
-        """`/api/runs/stream` calls `run_health` positionally rather than off
-        the signature, so it is the one door that can silently fall behind —
-        which is exactly how this assembly drifted twice before
-        (`every-workflow-green` 14, 16)."""
-        import inspect
+        """`/api/runs/stream` used to call `run_health` positionally rather
+        than off the signature, so it was the one door that could silently fall
+        behind — which is exactly how this assembly drifted twice before
+        (`every-workflow-green` 14, 16), and once more afterwards
+        (`production-ready` 97, `retries`). It now folds its health sources
+        into a mapping keyed by state key and hands that to
+        `run_health_from_state`, so this asks the mapping rather than the
+        argument list."""
+        from test_the_streaming_door_reports_a_recovered_retry import (
+            TestTheDoorCannotFallBehind,
+        )
 
-        from openstategraph.api import streaming
-
-        source = inspect.getsource(streaming)
-        call = source.split("health = run_health(")[1].split(")")[0]
-        assert "tool_use" in call, (
-            "the streaming door does not pass tool_use, so a loop that stopped "
+        assert "tool_use" in TestTheDoorCannotFallBehind()._folded_keys(), (
+            "the streaming door does not fold tool_use, so a loop that stopped "
             "reads as a node that never ran on the door both shipped UIs use"
         )
 

@@ -222,6 +222,13 @@ second full model call, billed, and until this line existed nothing said so.
 A node that got it right first time writes nothing, so an ordinary run's list
 is empty.
 
+**Every door reports it.** `openstategraph run`, `CompiledWorkflow.ask()`,
+`/api/runs` and `/api/runs/stream` assemble one health report from one
+function, so a step that had to be retried reads the same wherever you are
+watching from. Until `production-ready/97` the streaming door — the one the
+editor and `/chat` use — was the exception, and it was the only surface most
+people ever look at.
+
 ---
 
 ## Deprecation policy
