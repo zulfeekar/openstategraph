@@ -390,3 +390,14 @@ def runtime_warnings(runtime: Any) -> list[str]:
     """
     return list(runtime.diagnostics.warnings())
 
+
+def runtime_failure_warnings(runtime: Any) -> list[str]:
+    """`runtime_warnings` minus the findings that are reports (ticket 89).
+
+    A sibling rather than a flag, for the reason the pass-through above exists:
+    the callers should not have to know what a warning *is*, and the one caller
+    that gates on this — `loader.ask()`, which fills `RunResult.failures` — is
+    asking a different question, not the same question with an option.
+    """
+    return list(runtime.diagnostics.failure_warnings())
+

@@ -426,11 +426,33 @@ MULTI_MATCH_PROMPT = """**Twelve and thirteen, not eleven and twelve, and the ex
     constructor configuration that only `normalise` reads. This census caught it
     when it was public, which is the census working."""
 
+
+FINDING_KINDS = """**An enum of eleven, and the ceiling is asking the wrong question of it.**
+    `Finding` has no methods and no state — every member is one *value*, and the
+    number of them is the number of ways a compiled graph has been observed to
+    come out less capable than it was drawn. There is no "and" to split on: a
+    `Finding` with six members and a `SecondFinding` with five is one concept
+    filed in two drawers, and `warnings()` would have to walk both.
+
+    The reason to change is genuinely singular and it is the module docstring's:
+    *the ways a graph can be incomplete*. That list grows every time a node type
+    learns a new way to be silent, and the whole design of `diagnostics.py` is
+    that such growth is a table entry rather than another attribute on
+    `NodeRuntime` plus another loop in `runtime_warnings` — which is exactly the
+    seven-field sprawl this module was extracted to end.
+
+    Recorded rather than argued away: the eleventh member (`STALE_TOOL_DENIAL`,
+    production-ready 89) is what took it over, and the honest statement is that
+    an enum's member count is not the ceiling's subject. If a future member
+    describes something that is not a lost capability, that is the split — by
+    meaning, never by count."""
+
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
+    "compile.diagnostics.Finding": Recorded(11, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),

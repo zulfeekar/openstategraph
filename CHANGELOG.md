@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Added
+- **A prompt that denies the tools its node now holds is reported.**
+  `production-ready` 88 fixed the run — an agent is handed a generated,
+  authoritative list of what it holds, which overrules a stale authored denial
+  — and that is precisely why nobody would ever be prompted to fix the
+  sentence: the answer is right, so nothing looks wrong.
+  `chinook-assistant`'s front desk still opens *"You hold no tools and no
+  database access"*. The compiler now notices, at build time, an agent or
+  worker whose **authored** rules deny holding any tools while the canvas has
+  tools wired to it, and says so on the finding channel — the run response,
+  `openstategraph run`'s report and `CompiledWorkflow.warnings`. The field is
+  never rewritten: it is the developer's, and 88's decision stands. The match
+  is deliberately narrow and its false-positive set is the load-bearing test —
+  "you have no internet access", "you have no web-search tools", "you have no
+  tools for booking travel" and "the user has no tools installed" are ordinary
+  correct prose and are left alone (`production-ready` 89).
+- **`CompiledWorkflow.failure_warnings`** — the subset of `warnings` that is a
+  claim the run came out less capable, and the only part that may reach an exit
+  code. `ask()` used to put every compile finding on `RunResult.failures`, a
+  rule written for a mount that would not load; a *report* about a stale
+  sentence is not a broken run, and `openstategraph validate` still exits 0 for
+  one. Additive: the field is appended after `trace_file` and defaults to
+  empty (`production-ready` 89).
+
 ### Changed
 - **`CompiledWorkflow.mermaid()` opens every mount, to any depth.**
   `nested-mounts` — three documents, three levels, six nodes below the top —

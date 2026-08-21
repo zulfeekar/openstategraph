@@ -22,6 +22,7 @@ because some run looked like it worked and had not.
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 
 
@@ -115,6 +116,22 @@ class Finding(str, Enum):
     #: happens — a guardrail that fails open is the one failure worse than
     #: noisy — but the developer is told at compile time, in a sentence.
     INVALID_GUARDRAIL_RULE = "invalid_guardrail_rule"
+    #: An agent or worker whose **authored** rules deny holding any tools while
+    #: the canvas has tools wired to it, as `(node id, the offending phrase)`.
+    #:
+    #: The half of production-ready 88 that survived its own fix. That ticket
+    #: made the *run* right — `held_tools_context` hands the node an
+    #: authoritative list that overrules the stale sentence — which is exactly
+    #: why nobody will ever be prompted to look at the sentence again. The
+    #: document stays wrong, silently, in a field the developer owns.
+    #:
+    #: Reported and never rewritten: 88 decided the prompt field is theirs, and
+    #: a platform that edits a prompt is one nobody can predict. Reported on
+    #: this channel rather than `plan.warnings` for `UNWIRED_REVISE`'s reason,
+    #: and deliberately **not** on `validate`'s exit code: that command's one
+    #: question is "is this ready to run here", and the answer is yes — the
+    #: tool is bound, and it is called.
+    STALE_TOOL_DENIAL = "stale_tool_denial"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -168,12 +185,26 @@ _SENTENCES: dict[Finding, str] = {
         "policy the rest of the document keeps. Wire a Guardrail before it, or delete "
         "the one that suggests it should be there."
     ),
+    Finding.STALE_TOOL_DENIAL: (
+        'Agent "{0}" has tools wired to it, but its own rules still say "{1}" — the '
+        "run overrules that with the generated list of what the node holds, so the "
+        "answer is right and the sentence is stale. Update the line, or expect every "
+        "reader of this document to believe it."
+    ),
     Finding.INVALID_GUARDRAIL_RULE: (
         'Guardrail "{0}" has a row for "{1}" that {2} — that row protects nothing, '
         "and the node refuses everything rather than letting text past a policy it "
         "cannot apply. Fix the row or remove it."
     ),
 }
+
+
+#: Findings that are a *report* about the document rather than a claim that a
+#: capability was lost. They ride `warnings()` with everything else and are
+#: kept off `failure_warnings()`, so no surface can turn one into an exit code.
+#: Membership is a decision about meaning: everything else here describes work
+#: the run did not do.
+REPORT_ONLY: frozenset[Finding] = frozenset({Finding.STALE_TOOL_DENIAL})
 
 
 class CompileDiagnostics:
@@ -214,6 +245,30 @@ class CompileDiagnostics:
         """Whether anything of this kind was recorded."""
         return bool(self._findings.get(finding))
 
+    def failure_warnings(self) -> list[str]:
+        """The findings that may reach an exit code — everything but a report.
+
+        `loader.ask()` put the whole of `warnings()` on `RunResult.failures`,
+        a rule written for a mount that would not load: that is a broken run,
+        it leaves no marker in `outputs`, and a `1` is the honest answer
+        (`production-ready` 53). `STALE_TOOL_DENIAL` is the first finding that
+        is not a claim about capability at all — the tool is bound, the run
+        calls it, and the report says so in its own sentence. Found by running
+        it: the CLI printed *"the answer is right and the sentence is stale"*
+        prefixed `error:`, because the prefix is derived from this same
+        membership (`workflow-gallery` 44).
+
+        The split, not the removal: a report goes on `warnings()` like every
+        other finding, and `8bda508`'s rule — a report cannot move an exit
+        code — is what decides which list it is *also* on.
+        """
+        return [
+            _SENTENCES[finding].format(*subjects)
+            for finding in Finding
+            if finding not in REPORT_ONLY
+            for subjects in self._findings.get(finding, ())
+        ]
+
     def warnings(self) -> list[str]:
         """Every finding, spelled out, grouped in `Finding` declaration order."""
         return [
@@ -221,3 +276,44 @@ class CompileDiagnostics:
             for finding in Finding
             for subjects in self._findings.get(finding, ())
         ]
+
+
+#: The phrasings that count as *"this node holds no tools at all"*, and nothing
+#: wider.
+#:
+#: `CLAUDE.md`'s rule reads both ways here. **Tolerant**: the observed prose is
+#: matched however it is spelt — `hold`/`have`, contracted or not, wherever in
+#: the sentence the subject sits. **Strict**: only a denial of *tools*, bare,
+#: about *this* node, in *one* sentence. Everything the second half excludes is
+#: ordinary correct prose on a node that holds something — "you have no
+#: internet access", "you have no web-search tools", "you have no tools for
+#: booking travel", "the user has no tools installed". A warning that fires on
+#: any of those is a warning a developer learns to skip, which is worse than
+#: the silence this finding replaces.
+#:
+#: So the shape is fixed and narrow: the subject `you`, a negation, and the
+#: bare word `tools` — no qualifier in front of it, no purpose clause after it,
+#: and no sentence boundary crossed between the subject and the claim.
+_TOOL_DENIALS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\byou\b[^.!?\n]{0,40}?\bno\s+tools\b(?!\s+(?:for|to)\b)", re.IGNORECASE),
+    re.compile(
+        r"\byou\b[^.!?\n]{0,40}?\b(?:do\s+not|don[\u2019']t|cannot|can[\u2019']t|will\s+not|"
+        r"won[\u2019']t)\s+(?:have|hold)\s+any\s+tools\b(?!\s+(?:for|to)\b)",
+        re.IGNORECASE,
+    ),
+)
+
+
+def denies_holding_tools(text: str) -> str:
+    """The phrase in `text` claiming this node holds no tools, or `""`.
+
+    Returns the offending phrase rather than a bool so the finding can quote
+    it: a warning naming the sentence is one a developer can act on without
+    re-reading the whole field, and the quote is the node's own words rather
+    than our paraphrase of them.
+    """
+    for pattern in _TOOL_DENIALS:
+        found = pattern.search(text or "")
+        if found:
+            return found.group(0).strip()
+    return ""

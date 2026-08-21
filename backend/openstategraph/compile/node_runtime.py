@@ -37,7 +37,11 @@ from openstategraph.abc.router import Router
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
-from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
+from openstategraph.compile.diagnostics import (
+    CompileDiagnostics,
+    Finding,
+    denies_holding_tools,
+)
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for
@@ -1919,6 +1923,37 @@ class NodeRuntime:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, message)
         return lc_tools
 
+    def _report_stale_tool_denial(
+        self, node_id: str, data: dict[str, Any], wired: list[str]
+    ) -> None:
+        """Note a node whose authored prose denies the tools the canvas wired.
+
+        On the runtime rather than in either factory because it is the same
+        statement about an agent and about a worker, and a sentence that exists
+        in one factory and not the other is the defect `held_tools_context`'s
+        own comment records one paragraph away.
+
+        **`wired`, not the finished tool list.** The ambient rules append
+        `save_memory` and a knowledge lookup to nearly every agent alive, so
+        counting the finished list would flag every honest prompt in any
+        package that has a memory store — and the fix a developer would reach
+        for is on the canvas, which is what `wired` describes. Same
+        distinction, same reason, as the `wired` snapshot `capability_door`
+        reads.
+
+        Both authored fields, because the families keep their prose in
+        different places: an agent's rules are `systemPrompt`, a worker's
+        identity is `role`. Generated context is never scanned — it is ours,
+        and it says the opposite.
+        """
+        if not wired:
+            return
+        for key in ("systemPrompt", "role"):
+            phrase = denies_holding_tools(_text(data, key))
+            if phrase:
+                self.diagnostics.record(Finding.STALE_TOOL_DENIAL, node_id, phrase)
+                return
+
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """An agent-family loop with the tools the canvas bound to it.
 
@@ -1964,6 +1999,10 @@ class NodeRuntime:
         self._attach_ambient_knowledge(lc_tools)
 
         data = node.get("data") or {}
+        # The other half of production-ready 88 (ticket 89): the run is right
+        # because `held_tools_context` overrules the stale sentence, which is
+        # precisely why nothing would ever prompt the author to fix it.
+        self._report_stale_tool_denial(node_id, data, wired)
         model = self._resolve_model(data)
         #: Exposed so a test can assert the wiring produced the tools, without
         #: needing a model to prove it.
@@ -2839,6 +2878,9 @@ class NodeRuntime:
         # exactly this class of bug — a visible per-node choice silently
         # ignored for the graph-wide default (audit 2026-08).
         data = node.get("data") or {}
+        # Same statement about a worker as about an agent (ticket 89); a
+        # worker writes its prose in `role`.
+        self._report_stale_tool_denial(node_id, data, wired)
         model = self._resolve_model(data)
         # **The `role` field reaches the worker itself** (ticket 16). It used
         # to reach exactly one place — `_orchestrator`, which packs it into

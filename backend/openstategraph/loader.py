@@ -89,6 +89,15 @@ class CompiledWorkflow:
     #: Set through `load_workflow(..., trace_file=...)`; see `_append_trace`
     #: for exactly what is written and — more importantly — what is not.
     trace_file: Path | None = None
+
+    #: The subset of `warnings` that is a claim this run came out **less
+    #: capable**, and therefore the only part that may reach an exit code.
+    #: Everything on `warnings` and not here is a *report* about the document —
+    #: today, an agent whose authored rules deny the tools it holds, which is a
+    #: stale sentence in a graph that runs correctly (ticket 89). Empty is not
+    #: the same as `warnings` being empty, and `cli.run_report_lines` derives
+    #: `error:` versus `warning:` from exactly this distinction.
+    failure_warnings: list[str] = field(default_factory=list)
     #: What `load_workflow` opened on this object's behalf and must therefore
     #: release: the `WorkflowServices` (checkpointer + memory store) and, when
     #: the document asked for `settings.checkpointer: "sqlite"`, that
@@ -248,7 +257,7 @@ class CompiledWorkflow:
             # unrouted verdict must never reach an exit code. A compile
             # finding does: a mount that could not be loaded leaves no marker
             # in `outputs` and is still a broken run (`production-ready` 53).
-            failures=[*self.warnings, *health.failures],
+            failures=[*self.failure_warnings, *health.failures],
             attempts=int(final.get("attempts") or 0),
         )
         self._append_trace(question, result, time.monotonic() - started)
@@ -464,7 +473,7 @@ def load_workflow(
 
     # Lazy, all of it: this is where a consumer opts into the runtime.
     from openstategraph.api.model_resolution import resolve_model, workflow_default_model
-    from openstategraph.api.registries import runtime_warnings
+    from openstategraph.api.registries import runtime_failure_warnings, runtime_warnings
     from openstategraph.api.services import WorkflowServices
     from openstategraph.api.workflow_store import slugify
     from openstategraph.compile.node_runtime import RunState
@@ -549,6 +558,9 @@ def load_workflow(
     )
 
     warnings = list(plan.warnings) + runtime_warnings(runtime)
+    # The half of that list a failed run may be blamed on. `plan.warnings` is
+    # whole-document and has no report-only kind; the split is the runtime's.
+    failure_warnings = list(plan.warnings) + runtime_failure_warnings(runtime)
     if warnings:
         # Degrade loud, never silent — the same rule the run endpoints follow.
         logger.warning(
@@ -561,6 +573,7 @@ def load_workflow(
     return CompiledWorkflow(
         graph=graph,
         warnings=warnings,
+        failure_warnings=failure_warnings,
         slug=slug,
         package_dir=directory,
         document=document,

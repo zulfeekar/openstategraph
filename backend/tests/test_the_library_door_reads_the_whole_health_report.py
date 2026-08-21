@@ -60,10 +60,19 @@ class _StubGraph:
         return self.final
 
 
-def _workflow(final: Any, warnings: list[str] | None = None) -> CompiledWorkflow:
+def _workflow(
+    final: Any,
+    warnings: list[str] | None = None,
+    failure_warnings: list[str] | None = None,
+) -> CompiledWorkflow:
+    """`failure_warnings` defaults to all of `warnings`, which is what
+    `load_workflow` produced before ticket 89 split the two — so every case
+    below keeps asking exactly what it asked. A finding that is only a *report*
+    is the new case, and it says so by passing the two lists separately."""
     return CompiledWorkflow(
         graph=_StubGraph(final),
         warnings=list(warnings or []),
+        failure_warnings=list(warnings or [] if failure_warnings is None else failure_warnings),
         slug="probe",
         package_dir=Path("."),
         document={},
@@ -120,6 +129,16 @@ class TestOnlyTheFailureHalfIsAClaimThatTheRunFailed:
         """Ticket 53 — a mount that could not be loaded leaves no marker."""
         result = _workflow(_RecordingState(answer="", outputs={}), ["mount missing"]).ask("q")
         assert result.failures == ["mount missing"]
+
+    def test_a_report_only_finding_does_not(self) -> None:
+        """Ticket 89's other side, at this door: a finding on `warnings` and
+        off `failure_warnings` is reported and never blamed."""
+        workflow = _workflow(
+            _RecordingState(answer="", outputs={}), ["rules say no tools"], failure_warnings=[]
+        )
+        result = workflow.ask("q")
+        assert result.warnings == ["rules say no tools"]
+        assert result.failures == []
 
     def test_an_empty_answer_with_only_reports_still_exits_zero(self) -> None:
         """The case the CLI's short circuit was hiding: a legally empty answer."""
