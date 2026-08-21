@@ -2,12 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleAlert, X } from 'lucide-react';
 import { Icon, IconButton } from '@design/primitives';
+import { appendToast, type Toast } from './toastList';
 import './overlays.css';
-
-interface Toast {
-  readonly id: number;
-  readonly message: string;
-}
 
 /** Simultaneous toasts. Beyond this the oldest is dropped. */
 const MAX_TOASTS = 3;
@@ -48,12 +44,12 @@ export function useToaster() {
     //
     // Minting the id outside the updater makes one call mean one toast, and
     // scheduling moved to the effect below, where a side effect belongs.
+    // The updater is `appendToast` and nothing else — pure, idempotent, and
+    // unit-tested in `toastList.test.ts`, which is the only level at which
+    // this rule can be run: vitest here is `environment: 'node'`, so the hook
+    // itself cannot be rendered.
     const id = nextId.current++;
-    setToasts((current) =>
-      current.some((toast) => toast.message === message)
-        ? current
-        : [...current, { id, message }].slice(-MAX_TOASTS),
-    );
+    setToasts((current) => appendToast(current, { id, message }, MAX_TOASTS));
   }, []);
 
   // Dismissal is scheduled *from* state, not from the act of notifying: a
