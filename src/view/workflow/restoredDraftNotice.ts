@@ -21,6 +21,21 @@
  *
  * Empty string when there is nothing to say, so the caller can skip the toast
  * rather than show a blank one.
+ *
+ * **Verified against the case it was written for**, 2026-08-21, in a production
+ * build: a package open with an unsaved edit, its `workflow.json` then changed
+ * on disk from three nodes to five, then reloaded. The canvas restores the
+ * three-node draft and this sentence appears. Worth recording here because the
+ * ticket sat `partially resolved` for two days on the belief that the sentence
+ * was unreachable — it was reachable from `9be5b53`, and nobody had run the
+ * changed-on-disk reproduction rather than an ordinary warm reload.
+ *
+ * The hedge in the second sentence — *if* the file changed elsewhere — is the
+ * known limit, not an oversight. After a reload `workflowFileWatch`'s
+ * `knownSavedAt` map is empty, so its first poll re-baselines silently and its
+ * definite "changed on disk" banner never returns; this is the only thing said.
+ * Making it definite is `every-workflow-green` 41, and it is a change to what
+ * is *said*, never to which document wins.
  */
 export function restoredDraftNotice(slug: string | null | undefined): string {
   const name = (slug ?? '').trim();
