@@ -18,6 +18,14 @@ import { groupFieldsForInspector, validateFields } from '@core/model/contracts/f
 import { describeEdge } from '@core/model/edgeDescription';
 import { LockedPromptSections } from './LockedPromptSections';
 import { useDraftValue } from '@view/hooks/useDraftValue';
+import {
+  parseStepBudget,
+  readStepBudget,
+  STEP_BUDGET_HINT,
+  STEP_BUDGET_KEY,
+  STEP_BUDGET_LABEL,
+  STEP_BUDGET_PLACEHOLDER,
+} from '@view/workflow/stepBudget';
 import type { Diagnostic } from '@core/validation/WorkflowValidator';
 import {
   useController,
@@ -290,6 +298,7 @@ function WorkflowInspector({ count }: { count: number }) {
           <Field label="Name">
             <WorkflowNameInput name={workbench.model.name} />
           </Field>
+          <StepBudgetInput settings={workbench.model.settings} />
           <div className="inspector__stats">
             <span>
               {workbench.model.nodeCount} node{workbench.model.nodeCount === 1 ? '' : 's'}
@@ -426,6 +435,49 @@ function NodeTitleInput({
       onChange={(event) => draft.onChange(event.target.value)}
       onBlur={draft.onBlur}
     />
+  );
+}
+
+/**
+ * The document's step budget — `workflow-gallery` 58.
+ *
+ * Beside the name because it is the same kind of thing: a property of the
+ * document rather than of anything on the canvas, committed through a command
+ * so it undoes like every other gesture.
+ *
+ * The window is enforced here rather than left to the runtime, which clamps.
+ * A box that accepted `5` would show `5` and run `10`, and a number that lies
+ * is worse than a refusal — so an out-of-range draft shows the error and
+ * writes nothing.
+ */
+function StepBudgetInput({ settings }: { settings: Readonly<Record<string, unknown>> }) {
+  const controller = useController();
+  const saved = readStepBudget(settings);
+  const commit = useCallback(
+    (text: string) => {
+      const parsed = parseStepBudget(text);
+      if (!parsed.ok) return;
+      controller.document.setSetting(STEP_BUDGET_KEY, parsed.value ?? undefined);
+    },
+    [controller],
+  );
+  const draft = useDraftValue(saved == null ? '' : String(saved), commit);
+  const parsed = parseStepBudget(draft.value);
+
+  return (
+    <Field
+      label={STEP_BUDGET_LABEL}
+      hint={STEP_BUDGET_HINT}
+      error={parsed.ok ? undefined : parsed.error}
+    >
+      <TextInput
+        value={draft.value}
+        inputMode="numeric"
+        placeholder={STEP_BUDGET_PLACEHOLDER}
+        onChange={(event) => draft.onChange(event.target.value)}
+        onBlur={draft.onBlur}
+      />
+    </Field>
   );
 }
 

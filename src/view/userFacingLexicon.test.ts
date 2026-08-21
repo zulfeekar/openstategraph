@@ -101,3 +101,39 @@ describe('the word a user never reads', () => {
     );
   });
 });
+
+/**
+ * `workflow-gallery` 58 — the step budget's own two words.
+ *
+ * The lexicon fixes **step budget** for `recursion_limit` and forbids "max
+ * iterations" and "max turns", because the number counts *supersteps* and a
+ * reader's first guess is laps. That was safe to state in prose only while
+ * nothing in the editor could set it; now that a field can, the words are
+ * shipped copy and the copy is what regresses.
+ *
+ * Asserted against the module's exports rather than against source bytes: a
+ * formatter may re-wrap a string constant, and `6a8154f` is the commit that
+ * paid for testing bytes a formatter can move.
+ */
+describe('the number that is not a lap count', () => {
+  it('is never called iterations or turns anywhere a person reads', () => {
+    const offences = [
+      ...sourceFiles(join(HERE)),
+      ...sourceFiles(join(HERE, '..', 'core')),
+    ].flatMap((path) => {
+      const source = code(readFileSync(path, 'utf8'));
+      const found: string[] = [];
+      for (const match of source.matchAll(LITERALS)) {
+        const text = match[1] ?? match[2] ?? match[3] ?? '';
+        if (!/max iterations|max turns|maximum iterations/i.test(text)) continue;
+        found.push(`${path}: ${text.trim()}`);
+      }
+      return found;
+    });
+
+    expect(
+      offences,
+      `the step budget was called something the lexicon forbids:\n${offences.join('\n')}`,
+    ).toEqual([]);
+  });
+});

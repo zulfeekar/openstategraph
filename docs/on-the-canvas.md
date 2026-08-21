@@ -84,6 +84,14 @@ The safety net underneath is the **step budget**. It is counted in
 *supersteps*, not laps: with a fan-out, one lap can cost several. Do not read
 it as "maximum retries" — the grader's own attempt limit is that.
 
+Set it with nothing selected: the **Workflow** inspector's *Document* section
+has a **Step budget** box beside the name. Leave it empty and every run takes
+the default of 50; a number between 10 and 1000 is saved into the document's
+`settings` and honoured everywhere the workflow runs — the canvas, `/chat`,
+`openstategraph run` and the MCP `run` tool. A caller that names its own
+number still overrides it. Raising it is rarely the fix for a loop that will
+not settle; a grader that can actually pass is.
+
 > Starting from `openstategraph new my-thing --template routed-qa` gives you
 > this shape already wired, with a router in front of it.
 

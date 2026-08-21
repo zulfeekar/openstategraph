@@ -265,3 +265,56 @@ export class RenameWorkflowCommand implements ICommand {
     return this;
   }
 }
+
+/**
+ * Sets or removes one workflow-level setting — `workflow-gallery` 58.
+ *
+ * Generic in the key rather than named for the step budget, because
+ * `organisms-first-class/34` brings siblings (a cache policy, a durability
+ * mode) to the same `settings` object, and a command per key would be four
+ * commands that differ by a string. What is *not* generic is the meaning of
+ * a value: `undefined` removes the key, which is how "unset" is expressed
+ * without putting a sentinel number into a serialisable field.
+ *
+ * `perInstance` is deliberately absent. A mount's own state is
+ * `data.overrides` — a field's value can differ per instance, a document's
+ * settings cannot — so this is refused while an instance is displayed, which
+ * is the safe default `ICommand` documents.
+ */
+export class SetWorkflowSettingCommand implements ICommand {
+  readonly label = 'Change workflow setting';
+  readonly coalesceKey: string;
+  /**
+   * The whole settings object, not the one key.
+   *
+   * `setSettings` replaces rather than merges, so the honest inverse of this
+   * change is the object as it stood — and a snapshot cannot be confused by
+   * a key that was absent versus one that held `undefined`.
+   */
+  private previous: Readonly<Record<string, unknown>> | null = null;
+
+  constructor(
+    private readonly key: string,
+    private value: unknown,
+  ) {
+    this.coalesceKey = `workflow:settings:${key}`;
+  }
+
+  execute(ctx: CommandContext): void {
+    this.previous ??= { ...ctx.model.settings };
+    const next = { ...ctx.model.settings };
+    if (this.value === undefined) delete next[this.key];
+    else next[this.key] = this.value;
+    ctx.model.setSettings(next);
+  }
+
+  undo(ctx: CommandContext): void {
+    if (this.previous) ctx.model.setSettings(this.previous);
+  }
+
+  mergeWith(next: ICommand): ICommand | null {
+    if (!(next instanceof SetWorkflowSettingCommand) || next.key !== this.key) return null;
+    this.value = next.value;
+    return this;
+  }
+}

@@ -23,7 +23,13 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from openstategraph.api.main import create_app
-from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
+from openstategraph.step_budget import (
+    DEFAULT_STEP_BUDGET,
+    MAX_STEP_BUDGET,
+    MIN_STEP_BUDGET,
+    resolve_step_budget,
+    workflow_step_budget,
+)
 
 REPO = Path(__file__).resolve().parent.parent.parent
 
@@ -230,3 +236,52 @@ class TestTheCli:
         )[1]
         compiled.ask("hello", recursion_limit=99)
         assert seen[-1]["recursion_limit"] == 99
+
+
+class TestTheEditorWritesWhatThisReads:
+    """The seam `workflow-gallery` 58 closed, asserted from the reading side.
+
+    26 built the read half and 58 built the write half, in two languages,
+    against a key spelled out by hand in each. Nothing crossed the seam: a
+    rename on the editor's side would leave every test on both sides green,
+    every document round-tripping faithfully, and every run taking 50.
+
+    So this reads the editor's constant rather than restating it. It asserts
+    on source text, which `6a8154f` warns about — but on a `const` *name* and
+    its quoted value, which a formatter has nowhere to move to, rather than on
+    a wrapped sentence.
+    """
+
+    def _editor_key(self) -> str:
+        import re
+        from pathlib import Path
+
+        source = (
+            Path(__file__).resolve().parents[2] / "src" / "view" / "workflow" / "stepBudget.ts"
+        ).read_text()
+        match = re.search(r"STEP_BUDGET_KEY\s*=\s*'([^']+)'", source)
+        assert match, "the editor no longer declares STEP_BUDGET_KEY"
+        return match.group(1)
+
+    def test_the_key_the_editor_saves_is_the_key_this_module_reads(self) -> None:
+        key = self._editor_key()
+        assert workflow_step_budget({"settings": {key: 175}}) == 175
+
+    def test_the_window_the_field_enforces_is_this_modules_window(self) -> None:
+        import re
+        from pathlib import Path
+
+        source = (
+            Path(__file__).resolve().parents[2] / "src" / "view" / "workflow" / "stepBudget.ts"
+        ).read_text()
+        bounds = {
+            name: int(value)
+            for name, value in re.findall(
+                r"STEP_BUDGET_(MIN|MAX|DEFAULT)\s*=\s*(\d+)", source
+            )
+        }
+        assert bounds == {
+            "MIN": MIN_STEP_BUDGET,
+            "MAX": MAX_STEP_BUDGET,
+            "DEFAULT": DEFAULT_STEP_BUDGET,
+        }

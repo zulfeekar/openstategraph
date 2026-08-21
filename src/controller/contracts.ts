@@ -150,6 +150,12 @@ export interface IDocumentController {
   clear(): void;
   setName(name: string): void;
   /**
+   * One workflow-level setting — the step budget today, a cache policy and a
+   * durability mode when `organisms-first-class/34` lands. `undefined`
+   * removes the key, which is how *unset* is said without a sentinel number.
+   */
+  setSetting(key: string, value: unknown): void;
+  /**
    * The document now on screen is the **instance** mounted at `mountId`, not a
    * package — ticket 42. Structural changes are refused while it is, because a
    * mount's own state (`data.overrides`) can carry a field's value and not the
