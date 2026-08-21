@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { RunResult } from '@core/runtime/RuntimeClient';
 import { RichText } from '@view/common/RichText';
 import { traceStepKey } from './traceKeys';
+import { formatDuration } from './traceDuration';
 
 /**
  * The execution trace tree (ticket 63), extracted from AskPanel (ticket 72):
@@ -183,8 +184,14 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
       const key = owner === null ? null : same(owner);
       let target = key === null ? last : open.get(key);
       if (!target && key !== null) {
-        target = push({ ...row, node: owner as string, internal: false, output: null,
-          durationMs: 0, spawn: undefined });
+        target = push({
+          ...row,
+          node: owner as string,
+          internal: false,
+          output: null,
+          durationMs: 0,
+          spawn: undefined,
+        });
         open.set(key, target);
       }
       if (!target) continue;
@@ -274,7 +281,7 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
             <summary className="ask__activity-row">
               <span className="ask__activity-node">{step.node.replace(/^node:/, '')}</span>
               {step.taskId ? <span className="ask__activity-task">{step.taskId}</span> : null}
-              <span className="ask__activity-ms">{step.durationMs} ms</span>
+              <span className="ask__activity-ms">{formatDuration(step.durationMs)}</span>
               {step.children.length > 0 ? (
                 <span className="ask__activity-count">{step.children.length} steps</span>
               ) : null}
@@ -282,7 +289,7 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
             {step.children.map((child, childIndex) => (
               <div key={childIndex} className="ask__activity-row ask__activity-row--child">
                 <span className="ask__activity-node">{child.node}</span>
-                <span className="ask__activity-ms">{child.durationMs} ms</span>
+                <span className="ask__activity-ms">{formatDuration(child.durationMs)}</span>
               </div>
             ))}
             {step.output ? <RichText className="ask__trace-output" text={step.output} /> : null}
