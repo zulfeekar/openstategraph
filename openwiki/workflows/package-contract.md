@@ -7,7 +7,9 @@ type: page
 # The workflow package contract
 
 A workflow is a **directory**, not a database row: `workflows/<slug>/`.
-Scaffold one with `openstategraph new <slug> [--template minimal|routed-qa|team]`
+Scaffold one with `openstategraph new <slug> [--template minimal|loop|routed-qa|team]`
+(`--list-templates` prints the set from
+[`templates/index.json`](../../backend/openstategraph/templates/index.json))
 — or, from a checkout, [`scripts/new_workflow.py`](../../scripts/new_workflow.py)
 and [`scripts/new_team.py`](../../scripts/new_team.py), which call the same code.
 
@@ -47,6 +49,11 @@ An envelope around the document:
   environment default.
 - `settings.checkpointer: "sqlite"` opts into durable threads
   (see [memory](../architecture/memory.md)).
+- `settings.recursionLimit` is the run's **step budget** (supersteps, not
+  iterations): read out of the saved document by
+  [`step_budget.py`](../../backend/openstategraph/step_budget.py), clamped to
+  10–1000 with a default of 50, and honoured by both HTTP doors and
+  `CompiledWorkflow.ask` (`openstategraph run`).
 - Serialization is canonical (sorted nodes, content-addressed edges, no written
   edge ids) — edit through the editor rather than by hand.
 

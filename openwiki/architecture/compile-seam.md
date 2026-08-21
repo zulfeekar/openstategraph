@@ -58,19 +58,34 @@ literal port ids `approved`/`rejected`.
 
 `retry_policy`, `timeout`, `error_handler` and `cache_policy` are `add_node` /
 `set_node_defaults` concerns, never node-family concerns. `build` sets a
-graph-wide default and `_node_overrides()` applies the canvas's per-node
+graph-wide default (`max_attempts=3`, exponential backoff) and
+`_node_overrides()` applies the canvas's per-node
 `maxRetries` / `timeoutSeconds`. `_default_error_handler` writes the failure
 into `outputs[node]` so an exhausted node still produces evidence instead of
 aborting the run.
+
+A **recovered** retry is reported rather than swallowed: the wrapper the
+compiler installs beside `retry_policy` records the attempt number (read from
+LangGraph's own retry loop) into state, and `retry_warnings()` turns that into
+run warnings. A step that failed and then succeeded says so. Failures are
+likewise not labelled warnings — [`results.py`](../../backend/openstategraph/results.py)
+separates them, and a failed run names the slot it broke.
+
+The run's **step budget** (supersteps, not iterations) comes from one place,
+[`step_budget.py`](../../backend/openstategraph/step_budget.py): the document's
+`settings.recursionLimit`, clamped to 10–1000, default 50, honoured identically
+by `api/routes/runs.py`, `CompiledWorkflow.ask` in `loader.py`, and the MCP
+server.
 
 ## Node builders
 
 `NodeRuntime._builders` (in `node_runtime.py`) is a registry keyed by node
 type, so adding a node type is a registration:
 
-`input.text`, `input.markdown`, `agent.llm`, `route.classifier`,
-`route.grader`, `human.approval`, `orchestrate.supervisor`,
-`orchestrate.worker`, `function.format_report`, `output.formatted`.
+`input.text`, `input.markdown`, `input.skill`, `agent.llm`, `route.classifier`,
+`route.grader`, `human.approval`, `guard.policy`, `memory.segment`,
+`orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`,
+`output.formatted`.
 
 Resolved after the registry, by convention: `workflow.subgraph` (`_subgraph`
 — it was joined by `team.workflow` until schema v3 collapsed the two into it),

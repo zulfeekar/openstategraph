@@ -30,14 +30,24 @@ backend.
 ## pytest conventions ([`pytest.ini`](../pytest.ini))
 
 - Two roots: `backend` and `workflows/chinook-assistant` on `pythonpath`;
-  `testpaths = workflows backend`.
+  `testpaths = backend workflows/chinook-assistant`. **`workflows/` as a whole
+  is not swept** (workflow-gallery ticket 46): a package copied out of
+  `backend/openstategraph/examples/` brings a `tests/test_<slug>_document.py`
+  whose basename collides with the original's under two roots and no
+  `__init__.py`. A package's own tests run under
+  `openstategraph test <package>`; its *document* is read by the every-package
+  sweep in `backend/tests/test_the_one_example.py`. Pinned by
+  `backend/tests/test_collection_policy.py`.
 - **Live-network tests are opt-in.** Mark them `@pytest.mark.live`; the default
   run is `-m "not live"` and must pass offline.
 - Test directories deliberately have **no `__init__.py`** — two roots would
   otherwise collide on a package named `tests`.
-- `norecursedirs` excludes `data`, `scratch` and `output` — generic
-  jail/generated-output conventions for workflow packages, and what keeps a
-  package's own fixtures (the Chinook SQLite lives in
+- `norecursedirs` excludes `data`, `scratch`, `output` and `templates` —
+  generic jail/generated-output conventions for workflow packages, plus the
+  scaffold templates, whose four `tests/test_shape.py` files are package data
+  (exercised for real by `backend/tests/test_templates.py`, which scaffolds
+  each template into a `tmp_path` and runs pytest on the rendered copy). This
+  is what keeps a package's own fixtures (the Chinook SQLite lives in
   `workflows/chinook-assistant/data/`) out of collection.
 
 ## Isolation seams

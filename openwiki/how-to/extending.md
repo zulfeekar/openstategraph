@@ -81,14 +81,20 @@ expose an ordering number to a user.
 ## Add a workflow
 
 ```bash
-openstategraph new my-flow "My Flow"              # or --template routed-qa|team
+openstategraph new my-flow "My Flow"              # or --template loop|routed-qa|team
 python3 scripts/new_workflow.py my-flow "My Flow" # the same code, from a checkout
 ```
 
-Creates the contract's required files plus the conventional directories. Then
+Creates the contract's required files plus the conventional directories, and a
+`tests/test_shape.py` so a freshly scaffolded package already has a test that
+asserts its own document's shape. Then
 open the slug in the editor and author it, or hand-write the document if you
 know the canonical serialization rules. See
 [the package contract](../workflows/package-contract.md).
+
+The other supported start is copying a gallery example —
+`GET /api/examples` / `POST /api/examples/{slug}/copy`, or the directories
+under [`backend/openstategraph/examples/`](../../backend/openstategraph/examples).
 
 ## Add a Team
 
@@ -98,11 +104,12 @@ openstategraph new research-team --template team    # or scripts/new_team.py
 
 Scaffolds the prebuilt minimum-viable Team: supervisor + one default worker +
 a grader closing the revise loop. **Edit the grader's criteria first** — they
-*are* the team's outcome contract. Mount it anywhere with a **Team** node
-pointing at the slug
-([`TeamNode.ts`](../../src/nodes/compose/TeamNode.ts)). Add members by adding
-workers (each new title is a new archetype) and binding tools from the
-package's `tools/`.
+*are* the team's outcome contract. Mount it anywhere with a
+`workflow.subgraph` node pointing at the slug
+([`SubgraphNode.ts`](../../src/nodes/compose/SubgraphNode.ts) — there is no
+separate Team node type; see [the catalogue](../workflows/catalogue.md)). Add
+members by adding workers (each new title is a new archetype) and binding tools
+from the package's `tools/`.
 
 ## Other registries
 

@@ -26,6 +26,20 @@ to `/api/runs/stream` with `workflow_slug: <slug>`.
 Each package's own `AGENTS.md` is the authoritative per-workflow note; the
 table above is an index, not a replacement.
 
+## The gallery
+
+`workflows/` is the *user's* workspace, so the shipped teaching packages live
+inside the wheel instead, under
+[`backend/openstategraph/examples/`](../../backend/openstategraph/examples)
+with [`index.json`](../../backend/openstategraph/examples/index.json) as their
+catalogue — one package per pattern (`sql-qa`, `classifier-router-qa`,
+`evaluator-optimizer`, `parallel-workers-join`, `fanout-in-a-loop`,
+`approval-in-the-loop`, `nested-mounts`, `remembers-across-runs`,
+`knowledge-lookup-qa`, and more). They are listed by `GET /api/examples` and
+copied into a workspace by `POST /api/examples/{slug}/copy`. An example that
+compiles with a warning must **declare** that warning in the index, or the
+gallery build fails.
+
 ## Composition
 
 `workflow.subgraph` is the one mount type: a slug as data, compiled by
@@ -55,6 +69,15 @@ entry naming the node and the slug. Loud, never fatal.
 
 Self-inclusion is refused at build time via the runtime's `_ancestry` chain,
 not discovered by recursing forever at run time.
+
+**A mount is a boundary you can look inside.** Because `_subgraph` returns a
+closure rather than a LangGraph subgraph node, `xray=True` cannot see through
+it — three nested documents drew as three featureless boxes. So the compiler
+renders the composition itself, in
+[`compile/composition.py`](../../backend/openstategraph/compile/composition.py),
+performing the same splice LangGraph performs for a genuine subgraph; nothing
+in that module is on a run path. `GET /api/workflows/{root}/mounts/{path}` is
+the HTTP door onto one mount.
 
 ## The concierge gateway
 

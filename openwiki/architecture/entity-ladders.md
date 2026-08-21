@@ -18,7 +18,7 @@ concretes are leaves.
 | [`agent.py`](../../backend/openstategraph/abc/agent.py) | `IAgent` | `AbstractAgentNode`, `BaseAgentNode` | `ReactAgentNode`, `DeepAgentNode`, `CustomGraphNode` |
 | [`router.py`](../../backend/openstategraph/abc/router.py) | `IRouter` | `BaseRouter` | `Router` |
 | [`grader.py`](../../backend/openstategraph/abc/grader.py) | `IGrader` | `BaseGrader` | `Grader` |
-| [`orchestrator.py`](../../backend/openstategraph/abc/orchestrator.py) | `IOrchestrator` | `BaseOrchestrator` | `Orchestrator` |
+| [`orchestrator.py`](../../backend/openstategraph/abc/orchestrator.py) | `IOrchestrator` | `BaseOrchestrator` | `Orchestrator`, `PlanningOrchestrator` |
 | [`tool.py`](../../backend/openstategraph/abc/tool.py) | `ITool` | `BaseTool` | per-workflow tools |
 
 Interfaces are `Protocol`s, so a plain callable or a third-party object can
@@ -27,8 +27,10 @@ satisfy them without inheriting.
 Two rules the agent ladder enforces:
 
 - **The base holds the minimum.** `AbstractAgentNode` owns `resolve_model` /
-  `resolve_prompt` / `resolve_middleware` plus the template method that
-  sequences them. A concrete supplies only its constructor and its slot preset.
+  `resolve_middleware` plus the template method that sequences them;
+  `resolve_prompt` lives one rung down on `BaseAgentNode`, the tier that has a
+  prompt at all (`CustomGraphNode` extends the abstract directly and has
+  none). A concrete supplies only its constructor and its slot preset.
 - **`DeepAgentNode` is a sibling of `ReactAgentNode`, never a subclass.**
   `create_deep_agent` is `create_agent` plus a fixed slot assembly — the
   relationship is data, so it is a preset, not inheritance.
@@ -46,9 +48,22 @@ the graph node dying.
 ### Locked prompt sections
 
 `SystemPrompt` ([`prompt.py`](../../backend/openstategraph/abc/prompt.py)) composes a
-prompt from a locked machinery part and an editable rules part. The locked
-`PREAMBLE`/`OUTPUT_CONTRACT` of each base is served read-only to the editor by
-`GET /api/node-contracts`, rendered by
+prompt from a locked machinery part (`preamble`, `output_contract`), a
+machine-generated `context` layer, and the rules layers (`default_rules` →
+`rules` → `skill`). Each base declares **one** class attribute —
+`PROMPT: ClassVar[SystemPrompt]` — rather than loose `PREAMBLE` /
+`OUTPUT_CONTRACT` strings a caller had to recombine; a node composes
+`self.prompt` once in `__init__` with `with_context(...)` / `with_rules(...)`.
+Where a family needs a second call it declares a second whole prompt, not a
+variant string: `BaseRouter.PROMPT_ALL` for multi-match, and
+`BaseOrchestrator.LABEL_PROMPT` for labelling.
+
+Those layers are served read-only to the editor by
+`GET /api/node-contracts` ([`api/routes/system.py`](../../backend/openstategraph/api/routes/system.py))
+as **three** fields — `preamble`, `contract` and `default_rules`, the last
+because it is replaceable rather than locked, and because `agent.llm` locks
+neither preamble nor contract so the panel would otherwise be empty for the
+most-placed node. Rendered by
 [`src/view/inspector/LockedPromptSections.tsx`](../../src/view/inspector/LockedPromptSections.tsx),
 so nobody can duplicate or contradict it in an editable field.
 
@@ -74,8 +89,11 @@ expresses something that does not exist.
 Therefore `MiddlewareSlotTable` is an ordered, **name-keyed** table:
 
 - The base owns the canonical order —
-  `AbstractAgentNode.SLOT_ORDER = ("skills", "filesystem", "subagents",
-  "summarization", "limits", "patch-tool-calls")`.
+  `AbstractAgentNode.SLOT_ORDER = ("injection-screening", "skills",
+  "filesystem", "subagents", "summarization", "limits", "patch-tool-calls",
+  "rubric")`. `injection-screening` is first because `before_*` hooks run
+  first-to-last; `rubric` is last because its `after_agent` verdict is taken
+  first (`after_*` runs last-to-first).
 - A contributor `set(name, middleware)`s a slot; replacement is by name.
 - Unknown slot names flatten *after* the canonical ones, in first-set order.
 - `flatten()` produces the list handed to `create_agent(middleware=[...])` at

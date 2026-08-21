@@ -41,6 +41,25 @@ Three kinds, each mapped to the LangGraph construct that owns it. Source:
 - **Retention:** `OPENSTATEGRAPH_MEMORY_TTL_MINUTES`, `int | None` with unset
   meaning never expire. Durable stores only; `refresh_on_read` is deliberately
   `False`.
+- **`search_memory` does not claim a ranking it did not compute.** Only a store
+  that actually ranks by relevance is reported as ordered; otherwise the answer
+  says so, so a model does not treat "first" as "best".
+
+## The crossing ledger — `memory.segment`
+
+[`memory_segment.py`](../../backend/openstategraph/memory_segment.py) is a
+separate, deliberately ladder-less collaborator: a named, retention-bounded
+record of what crossed one point in the graph, plumbed by
+`NodeRuntime._memory_segment`. It **furnishes** the entries as they stood on
+arrival, **records** the crossing verbatim (no model is reachable from the
+module, so "zero tokens" is true by construction), and shows only name and
+retention on the card. Its namespace is its own — writing crossings into
+`("workflow-memory", slug)` would make every crossing come back out of
+`search_memory` as if it were a fact somebody chose to save. Retention is one
+grammar shared by the card and the ledger
+([`src/nodes/memory/MemorySegmentNode.ts`](../../src/nodes/memory/MemorySegmentNode.ts)
+and `retentionGrammar.cases.json`), so a card cannot promise a bound the ledger
+drops.
 
 ## Episodic — checkpointer threads
 
