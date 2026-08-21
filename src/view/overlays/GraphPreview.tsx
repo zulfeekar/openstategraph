@@ -76,13 +76,16 @@ export function GraphPreview({ open, onClose }: { open: boolean; onClose: () => 
       <div className="graph-preview__panel" onClick={(event) => event.stopPropagation()}>
         <header className="graph-preview__header">
           <strong>Compiled graph</strong>
-          {/* Twice wrong, and the second half is the interesting one. "Subgraph"
-              is a LangGraph name in a sentence a user reads, which the lexicon
-              forbids — and nothing was ever expanded: this compiler emits no
-              LangGraph subgraph, so a mount is one box (production-ready 37,
-              consistency-sweep 10). */}
+          {/* Three times wrong now, and each correction is a different kind.
+              "Subgraph" was a LangGraph name in a sentence a user reads, which
+              the lexicon forbids (production-ready 37, consistency-sweep 10).
+              "A mount is one box" replaced it and was true until
+              `workflow-gallery` 56 taught this route to splice the composition
+              from what the compiler recorded — so it became the stale claim it
+              had been written to fix. A mount is a block you can look inside;
+              an agent is still one box, having no second document to show. */}
           <span className="graph-preview__hint">
-            what the LangGraph compiler produced — a mount is one box
+            what the compiler produced — every mount opened
           </span>
           {state.kind === 'ready' ? (
             <button

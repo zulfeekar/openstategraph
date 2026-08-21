@@ -386,8 +386,16 @@ class WorkflowArtifacts:
         """The COMPILED topology, plus every capability the compile could
         not resolve.
 
-        `xray=True` is asked for and expands nothing today: agents and mounts
-        are closures, not LangGraph subgraphs (see `CompiledWorkflow.mermaid`).
+        `xray=True` is asked for and expands nothing here, and **that is the
+        honest answer on this path rather than a gap left open**. A mount
+        compiles to a closure, not a LangGraph subgraph, so LangGraph cannot
+        see through it; `CompiledWorkflow.mermaid()` and the editor's own
+        preview splice the composition from what the compiler recorded while
+        it built each child. This path is **stateless** — it holds no workflow
+        library — so a `workflow.subgraph` resolves to nothing, there *is* no
+        child graph to splice, and one flat box is the true picture of what
+        would compile here. The `warnings` below say so in words; the diagram
+        says so in shape (`workflow-gallery` 56).
 
         `model=None` on purpose: the compiler owns topology and knows nothing
         about models, so the whole structure compiles without a key. Text, never
@@ -837,7 +845,9 @@ def build_mcp_server(
 
         A VALID document returns: `document` (the normalized workflow.json
         envelope, ready to commit to your own repository), `mermaid` (the
-        topology the compiler actually produced, with subgraphs expanded),
+        topology the compiler actually produced — a mounted child is **one
+        box**, because this path holds no workflow library and so has no
+        child to draw; see `warnings`),
         `run_snippet` (how to run it without this editor) and
         `package_skeleton` (the full package layout).
 

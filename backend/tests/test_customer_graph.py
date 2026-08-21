@@ -126,3 +126,95 @@ class TestItDegradesQuietly:
 
     def test_text_that_is_not_a_diagram_is_returned_unharmed(self) -> None:
         assert customer_mermaid("", DOCUMENT) == ""
+
+
+class TestATitleIsScopedToTheDocumentItLivesIn:
+    """`workflow-gallery` 56. Every document in `nested-mounts` calls its
+    entry node `in1`, and each author titled it for their own workflow — so a
+    flat id -> title map answers the *parent's* word for a child's node, and
+    does it silently, because the two are plausible.
+    """
+
+    NESTED = """graph TD;
+\tin1(in1)
+\tsubgraph mount_mid
+\tmount_mid\\3ain1(in1)
+\tmount_mid\\3a__default_error_handler__(<p>__default_error_handler__</p>)
+\tend
+"""
+
+    PARENT = {"nodes": [{"id": "in1", "title": "Question"}]}
+    CHILD = {"nodes": [{"id": "in1", "title": "Ticket body"}]}
+
+    def _rendered(self) -> str:
+        from openstategraph.api.customer_graph import MountedDocument
+
+        return customer_mermaid(
+            self.NESTED,
+            self.PARENT,
+            {"mount_mid": MountedDocument(document=self.CHILD)},
+        )
+
+    def test_the_child_keeps_its_own_authors_word(self) -> None:
+        assert r"mount_mid\3ain1(Ticket body)" in self._rendered()
+
+    def test_the_parents_word_stays_on_the_parents_node(self) -> None:
+        assert "\tin1(Question)" in self._rendered()
+
+    def test_an_error_handler_below_the_top_level_is_gone(self) -> None:
+        assert "__default_error_handler__" not in self._rendered()
+
+    def test_a_composition_with_no_documents_still_draws(self) -> None:
+        """The route drops a child it cannot load rather than raising. The
+        subtree then keeps the compiler's labels, and nothing else moves."""
+        drawn = customer_mermaid(self.NESTED, self.PARENT)
+        assert "subgraph mount_mid" in drawn
+        assert r"mount_mid\3ain1(in1)" in drawn
+        assert "__default_error_handler__" not in drawn
+
+
+class TestTwoMountsSideBySide:
+    """The block stack has to *close*, not only open. Nesting alone cannot
+    show that: `nested-mounts` never has two mounts at one level, so a path
+    that is never popped renders it perfectly and is wrong for the first
+    document that mounts twice.
+    """
+
+    SIBLINGS = """graph TD;
+\tsubgraph mount_a
+\tmount_a\\3ain1(in1)
+\tend
+\tsubgraph mount_b
+\tmount_b\\3ain1(in1)
+\tend
+"""
+
+    def _rendered(self) -> str:
+        from openstategraph.api.customer_graph import MountedDocument
+
+        return customer_mermaid(
+            self.SIBLINGS,
+            {
+                "nodes": [
+                    {"id": "mount-a", "title": "Billing"},
+                    {"id": "mount-b", "title": "Shipping"},
+                ]
+            },
+            {
+                "mount_a": MountedDocument({"nodes": [{"id": "in1", "title": "First"}]}),
+                "mount_b": MountedDocument({"nodes": [{"id": "in1", "title": "Second"}]}),
+            },
+        )
+
+    def test_each_sibling_gets_its_own_documents_word(self) -> None:
+        drawn = self._rendered()
+        assert r"mount_a\3ain1(First)" in drawn
+        assert r"mount_b\3ain1(Second)" in drawn
+
+    def test_the_second_block_is_titled_as_itself(self) -> None:
+        """A stack that opens and never closes reads the second `subgraph` as
+        nested inside the first, and looks up `mount_a:mount_b` — a path no
+        document has, so the block falls back to the compiler's name."""
+        drawn = self._rendered()
+        assert 'subgraph mount_a["Billing"]' in drawn
+        assert 'subgraph mount_b["Shipping"]' in drawn

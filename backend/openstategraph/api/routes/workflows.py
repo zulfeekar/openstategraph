@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 
 from openstategraph.api.audience import Audience, resolve as resolve_audience
 from openstategraph.api.catalogue_events import CatalogueEvent, ChangeReason
-from openstategraph.api.customer_graph import customer_mermaid
+from openstategraph.api.customer_graph import MountedDocument, customer_mermaid
 from openstategraph.api.deps import Services
 from openstategraph.api.model_resolution import workflow_default_model
 from openstategraph.api.schemas import (
@@ -814,20 +814,29 @@ def compiled_graph(
     """The COMPILED topology as Mermaid text (ticket 54) — what the
     compiler actually produced, not a hand-drawn approximation.
 
-    `xray=True` is asked for, and expands nothing today — a concierge's
-    routed children and a Team's members are closures, not LangGraph
-    subgraphs, so each renders as one flat box (see
-    `CompiledWorkflow.mermaid`). Text, never a PNG —
+    **Every mount is opened, to any depth.** LangGraph's own `xray=True`
+    expands nothing here and never will — a mount compiles to a closure
+    over the child's `invoke()`, and a function is opaque — so the
+    composition is spliced from what the compiler recorded while it built
+    each child (`compile/composition.py`). An agent stays one box either
+    way: it has no second document to show. Text, never a PNG —
     `draw_mermaid_png()` posts the graph to a third-party API.
 
     `audience=customer` hides the compiler's own vocabulary — `__start__`,
     `__default_error_handler__`, `safe_name`d ids, branch ids — and labels
-    each node with the name its author gave it. The default is
-    **developer**, deliberately: an existing caller keeps the ids, which
-    are what a mount bug gets reported under, and only the customer page
-    opts out (reviews-2026-08-14 ticket 04).
+    each node with the name its author gave it. **Inside an opened mount
+    that means the child's own document**, which is why the child
+    documents are loaded here and not only compiled: `mount_mid:in1` is a
+    name no author chose, and the parent's document cannot answer for it
+    (`workflow-gallery` 56). A child that cannot be loaded costs the
+    labels below it and nothing else — the composition is still drawn.
+
+    The default is **developer**, deliberately: an existing caller keeps
+    the ids, which are what a mount bug gets reported under, and only the
+    customer page opts out (reviews-2026-08-14 ticket 04).
     """
     from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+    from openstategraph.compile.composition import expand_mounts
     from openstategraph.compile.node_runtime import RunState
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -844,9 +853,40 @@ def compiled_graph(
         graph = compiler.build(
             document, RunState, runtime.factory(document), store=services.memory_store
         )
-        mermaid_text = graph.get_graph(xray=True).draw_mermaid()
+        drawable = graph.get_graph(xray=True)
+        mounts = dict(runtime.mounted_graphs)
+        if mounts:
+            drawable = expand_mounts(drawable, mounts)
+        mermaid_text = drawable.draw_mermaid()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}")
     if resolve_audience(audience) is Audience.CUSTOMER:
-        mermaid_text = customer_mermaid(mermaid_text, document)
+        mermaid_text = customer_mermaid(
+            mermaid_text, document, _mounted_documents(mounts, services.store)
+        )
     return CompiledGraphResponse(mermaid=mermaid_text)
+
+
+def _mounted_documents(mounts: Any, store: Any) -> dict[str, MountedDocument]:
+    """The compiler's map of mounts, with each child's *document* beside it.
+
+    The compiler records which package a mount runs; a package's document is
+    the only thing that knows what its author called the nodes inside it. Both
+    halves are needed to relabel an opened composition for a customer, and
+    they live in different places, so they are joined here — at the one route
+    that has a store to load from.
+
+    A child that will not load is dropped rather than raised on: its subtree
+    keeps the compiler's labels, which is worse than a title and much better
+    than a 502 on a picture.
+    """
+    resolved: dict[str, MountedDocument] = {}
+    for name, mounted in (mounts or {}).items():
+        try:
+            child = store.load(mounted.slug)
+        except Exception:
+            continue
+        resolved[name] = MountedDocument(
+            document=child, mounts=_mounted_documents(mounted.mounts, store)
+        )
+    return resolved

@@ -427,7 +427,26 @@ What it is **not** is a reason for a composition to render as one featureless bo
 
 Two sentences of this paragraph have now been wrong in opposite directions — before 2026-08-16 it claimed the expansion happened; after it, the correction read as a statement about the *preview* rather than about LangGraph. That is why the behaviour is pinned in `backend/tests/test_mount_composition_preview.py` against a package that actually mounts, rather than described here.
 
-**The HTTP and MCP preview endpoints still render mounts flat** (`api/routes/workflows.py`, `mcp_server.py`), because the customer-audience relabelling reads node ids out of the *parent* document and a spliced child's ids are not in it — `workflow-gallery` 56.
+**The editor's preview endpoint now opens mounts too, in both audiences**
+(`api/routes/workflows.py`, `workflow-gallery` 56). The obstacle that held it
+back was real and was solved rather than routed around: the customer-audience
+relabelling read node ids out of the *parent* document, and a spliced child's
+ids are not in it, so a nested diagram would have kept the compiler's own
+vocabulary for every node below the top. The route therefore **loads the child
+documents** — the compiler says which package each mount runs, the package's
+document says what its author called the nodes inside it — and titles are
+scoped by mount path, because `in1` exists in all three of `nested-mounts`'
+documents. A block carries the title the parent's author gave the mount. A
+child that will not load costs the labels below it and nothing else.
+
+**`mcp_server.py` stays flat, and that is the honest answer there.** That path
+is stateless and holds no workflow library, so a mount resolves to nothing and
+there is no child graph to splice; its docstrings say so, and its `warnings`
+already name the capability that did not resolve.
+
+The **run** surfaces — `RunResponse.mermaid`, the terminal SSE frame, and
+`run_workflow` — still draw one box per mount and are not relabelled per
+audience at all. Filed as `workflow-gallery` 62 rather than swept in here.
 
 ### Cycles are gated by port *type*, and the step budget is not an iteration count
 
