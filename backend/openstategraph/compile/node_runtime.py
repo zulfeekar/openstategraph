@@ -3589,6 +3589,67 @@ class NodeRuntime:
             return False
         return any("revise" in branches for branches in plan.conditional.values())
 
+    def _report_inherited_functions(
+        self, slug: str, child_document: dict[str, Any], child_assets: PackageAssets
+    ) -> None:
+        """Say when a mounted child bound a function its own package does not ship.
+
+        The merge below — `{**parent.functions, **child.functions}` — settles a
+        *collision*: two packages both shipping `shout` do not cross, because
+        the child's is last and therefore highest (`export-and-eject/11`, and
+        it is a test). It says nothing about a name only the **parent** ships.
+        `function.` is a flat namespace and the parent's registry is the base
+        of the child's, so a child naming `function.parent_only` runs the
+        parent's Python — and the identical document, run on its own, reports
+        `UNRESOLVED_FUNCTION` and passes its input through unchanged.
+
+        That is the "this run silently reached outside its package" condition
+        `runtime_warnings()` exists for, and it was the one case of it with no
+        sentence. Whether the inheritance should exist at all is a separate,
+        owner-level decision (`export-and-eject/14`): skills and knowledge are
+        isolated to the child a few lines below the merge, tools and functions
+        are not, and nothing shipped relies on the difference. This function
+        does not settle that. It settles the silence, which is worse than
+        either answer to it.
+
+        Recorded on `CAPABILITY_FAILED` rather than as a twelfth `Finding`.
+        The channel already carries "a capability you wrote is not where you
+        think it is" — including the built-in shadow recorded in `__init__`, which is
+        the same question about the other end of the same flat
+        namespace — and a new member would have to earn its way past
+        `test_public_surface_ceiling`'s recorded exception for `Finding`.
+
+        Reported on the **parent's** diagnostics, not the child's, and that is
+        not a shortcut: a child runtime's findings are never absorbed upward,
+        so a sentence recorded there reaches nobody. It is also the honest
+        owner — the leak is a property of *this mount*, not of the child
+        package, which is why the sentence names the mounted slug.
+
+        Silent in the two cases that are not leaks: a child that ships the
+        name binds its own, and a built-in (`function.format_report`) is in
+        neither registry, so nobody's package was reached past.
+        """
+        parent_functions = self.services.functions
+        if not parent_functions:
+            return
+        for node in child_document.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            node_type = str(node.get("type") or "")
+            if not node_type.startswith("function."):
+                continue
+            if node_type in child_assets.functions or node_type not in parent_functions:
+                continue
+            self.diagnostics.record(
+                Finding.CAPABILITY_FAILED,
+                f'Mounted workflow "{slug}" uses "{node_type}", which its own '
+                "package does not ship — it bound the mounting workflow's "
+                "function instead, so this step does something the child "
+                "package cannot do on its own. Move the function into "
+                f'"{slug}", or read that step as belonging to this document '
+                "rather than to that package.",
+            )
+
     def _subgraph(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Another workflow, compiled and invoked as one node of this graph.
 
@@ -3672,11 +3733,15 @@ class NodeRuntime:
                     workflow_middleware=self.services.workflow_middleware,
                     knowledge_dir=self.services.knowledge_package_dir,
                 )
+                child_owns_its_assets = False
                 if self.services.package_loader is not None:
                     try:
                         child_assets = self.services.package_loader(slug)
+                        child_owns_its_assets = True
                     except Exception:
                         pass  # the parent assets remain the honest fallback
+                if child_owns_its_assets:
+                    self._report_inherited_functions(slug, child_document, child_assets)
                 child_runtime = NodeRuntime(
                     services=RuntimeServices(
                         model=self.services.model,

@@ -207,3 +207,149 @@ class TestAFunctionShadowedByABuiltIn:
 
     def test_a_runtime_with_no_package_functions_reports_nothing(self) -> None:
         assert runtime_warnings(NodeRuntime(model=None)) == []
+
+
+class TestAChildBindingAFunctionItsOwnPackageDoesNotShip:
+    """`export-and-eject/13` — the gap the merge leaves, and it was silent.
+
+    The merge above (`{**parent.functions, **child.functions}`) settles a
+    *collision*: two packages shipping `shout` do not cross. It says nothing
+    about a name only one side ships. `function.` is flat and the parent's
+    registry is the base of the child's, so a child naming a function its own
+    package does not ship falls through to whatever the parent happens to
+    have — and the same document answers differently depending on who mounted
+    it, which is exactly the condition `runtime_warnings()` exists for.
+
+    Whether the inheritance should exist at all is `export-and-eject/14`.
+    What is settled here is that it cannot happen quietly.
+    """
+
+    @staticmethod
+    def _parent_and_empty_child(tmp_path: Path) -> tuple[Path, Path, dict]:
+        parent = _package(
+            tmp_path,
+            "parent",
+            'def parent_only(text: str) -> str:\n    return text + " [PARENT-LEAKED]"\n',
+        )
+        child = tmp_path / "child"
+        (child / "functions").mkdir(parents=True)
+        return parent, child, _document("child", "function.parent_only")
+
+    @staticmethod
+    def _runtime(parent: Path, child: Path, child_document: dict) -> NodeRuntime:
+        return NodeRuntime(
+            functions=discover_function_callables(parent, "parent"),
+            document_loader=lambda slug: child_document,
+            package_loader=lambda slug: PackageAssets(
+                tools={},
+                functions=discover_function_callables(child, "child"),
+                skills_context="",
+                workflow_middleware={},
+                knowledge_dir=None,
+            ),
+        )
+
+    def test_the_same_document_answers_differently_depending_on_who_mounted_it(
+        self, tmp_path: Path
+    ) -> None:
+        """The leak itself, kept as the measurement the ticket was filed on."""
+        parent, child, child_document = self._parent_and_empty_child(tmp_path)
+
+        mounted = self._runtime(parent, child, child_document)
+        assert _answer(_mount_document("child"), mounted) == "hi [PARENT-LEAKED]"
+
+        alone = NodeRuntime(functions=discover_function_callables(child, "child"))
+        assert _answer(child_document, alone) == "hi"
+
+    def test_the_developer_is_told_which_function_reached_outside_the_package(
+        self, tmp_path: Path
+    ) -> None:
+        parent, child, child_document = self._parent_and_empty_child(tmp_path)
+        runtime = self._runtime(parent, child, child_document)
+
+        _answer(_mount_document("child"), runtime)
+
+        leaked = [w for w in runtime_warnings(runtime) if "parent_only" in w]
+        assert len(leaked) == 1, runtime_warnings(runtime)
+        assert "function.parent_only" in leaked[0]
+        assert "child" in leaked[0]
+
+    def test_a_child_binding_its_own_function_stays_silent(self, tmp_path: Path) -> None:
+        """The inverse that makes the report worth having."""
+        parent = _package(
+            tmp_path, "parent", 'def shout(text: str) -> str:\n    return text + " [PARENT]"\n'
+        )
+        child = _package(
+            tmp_path, "child", 'def shout(text: str) -> str:\n    return text + " [CHILD]"\n'
+        )
+        child_document = _document("child", "function.shout")
+        runtime = self._runtime(parent, child, child_document)
+
+        assert _answer(_mount_document("child"), runtime) == "hi [CHILD]"
+        assert runtime_warnings(runtime) == []
+
+    def test_a_built_in_named_by_a_child_is_not_a_leak(self, tmp_path: Path) -> None:
+        """`function.format_report` is nobody's package, so nothing leaked."""
+        parent = _package(
+            tmp_path, "parent", "def unrelated(text: str) -> str:\n    return text\n"
+        )
+        child = tmp_path / "child"
+        (child / "functions").mkdir(parents=True)
+        child_document = _document("child", "function.format_report")
+        child_document["nodes"][1]["data"] = {"reportTitle": "Answer"}
+        runtime = self._runtime(parent, child, child_document)
+
+        _answer(_mount_document("child"), runtime)
+        assert runtime_warnings(runtime) == []
+
+    def test_the_parents_own_function_node_is_unaffected(self, tmp_path: Path) -> None:
+        """A parent binding its own function is not a mount question at all."""
+        parent = _package(
+            tmp_path, "parent", 'def shout(text: str) -> str:\n    return text + " [PARENT]"\n'
+        )
+        runtime = NodeRuntime(functions=discover_function_callables(parent, "parent"))
+
+        assert _answer(_document("parent", "function.shout"), runtime) == "hi [PARENT]"
+        assert runtime_warnings(runtime) == []
+
+    def test_the_built_in_shadow_finding_is_a_different_sentence(self, tmp_path: Path) -> None:
+        """`997337a`'s finding must still fire, and must not read as this one.
+
+        Both are `CAPABILITY_FAILED` and both name a function, so the thing
+        that separates them is the sentence. One says a package's code will
+        never be called; the other says a child called somebody else's.
+        """
+        directory = _package(
+            tmp_path,
+            "pkg-a",
+            'def format_report(text: str) -> str:\n    return "PKG " + text\n',
+        )
+        runtime = NodeRuntime(functions=discover_function_callables(directory, "pkg-a"))
+
+        warnings = runtime_warnings(runtime)
+        assert len(warnings) == 1, warnings
+        assert "never be called" in warnings[0]
+        assert "mounted" not in warnings[0]
+
+    def test_a_child_falling_back_to_the_parents_assets_wholesale_is_not_reported(
+        self, tmp_path: Path
+    ) -> None:
+        """No `package_loader` is the documented honest fallback, not a leak.
+
+        When the loader is absent the child is built from the parent's own
+        assets deliberately — there is no child registry to have reached
+        outside of, so there is nothing here a developer could act on.
+        """
+        parent = _package(
+            tmp_path,
+            "parent",
+            'def parent_only(text: str) -> str:\n    return text + " [PARENT-LEAKED]"\n',
+        )
+        child_document = _document("child", "function.parent_only")
+        runtime = NodeRuntime(
+            functions=discover_function_callables(parent, "parent"),
+            document_loader=lambda slug: child_document,
+        )
+
+        assert _answer(_mount_document("child"), runtime) == "hi [PARENT-LEAKED]"
+        assert runtime_warnings(runtime) == []

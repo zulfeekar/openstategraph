@@ -940,6 +940,20 @@ Two things about it that are not guesses:
   used to be silent; the compiler now says so on `runtime_warnings()`, naming
   the function and telling you to rename it, because the alternative is a
   developer's function that never runs and never explains itself.
+- **Across a mount, a function registry is inherited; a skill or a knowledge
+  folder is not.** The child runtime is built with
+  `{**parent.functions, **child.functions}`, so the merge settles a *collision*
+  and leaves a gap either side of it: a name **only the parent** ships is
+  reached by the child anyway. The same document therefore answers differently
+  depending on who mounted it — standalone it reports `UNRESOLVED_FUNCTION` and
+  passes its input through, mounted it runs the parent's Python. That is real,
+  and as of `export-and-eject/13` it is **reported**: the mount records a
+  `runtime_warnings()` sentence naming the function and the mounted package,
+  and telling you to move the function into that package. It is reported and
+  not refused because it is a legal graph that answers questions, and because
+  whether the inheritance should exist at all is a separate decision — skills
+  and knowledge are explicitly isolated to the child a few lines below the
+  merge, and functions and tools are the exception (`export-and-eject/14`).
 - **The card has no fields.** The compiled step reads nothing from `data`, so a
   control here would be one the compiler ignores. The signature and the first
   line of the docstring become the card's subtitle instead, where they cannot
