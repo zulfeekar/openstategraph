@@ -315,6 +315,97 @@ def used_no_tools(tool_use: Any) -> bool:
     return bound > 0
 
 
+#: A SQL statement, as opposed to the English word "select". Both halves are
+#: needed and neither is sufficient: `FROM` alone is a preposition, and `SELECT`
+#: alone is an imperative verb people write to each other constantly.
+#:
+#: The span between them may carry `ar.Name` — dotted identifiers are ordinary
+#: SQL — but it may not carry a sentence break. That is what separates
+#: "SELECT ar.Name, SUM(...) FROM InvoiceLine" from "Select any 3 of the 12
+#: playlists; 4 of them are far from complete", which contains both words and
+#: is not a query.
+_SQL_STATEMENT = re.compile(
+    r"\bselect\b[^;:!?]{0,400}?\bfrom\s+[A-Za-z_][\w.]*",
+    re.IGNORECASE | re.DOTALL,
+)
+
+#: A *figure* — a decimal or a currency amount. Deliberately not "any digit":
+#: an id, a row count and a `NVARCHAR(120)` are digits, and a workflow document
+#: quoted back as prose is full of them. What this check is about is an answer
+#: presenting **results**.
+_FIGURE = re.compile(r"(?:[$\u20ac\u00a3]\s*\d[\d,]*(?:\.\d+)?)|(?:\d[\d,]*\.\d+)")
+
+
+def looks_like_sql_query(text: Any) -> bool:
+    """Whether this string contains a SQL statement, not merely the words."""
+    return bool(_SQL_STATEMENT.search(str(text or "")))
+
+
+def unrun_query_claim(candidate: str, tool_use: Any, nodes: Any = ()) -> str | None:
+    """"This answer shows a query nothing ever sent" — or None.
+
+    `production-ready` 95. `chinook-assistant`'s analyst answered *"top artists
+    by revenue"* with a ten-row table and a `SELECT` beside it, having listed
+    the tables, read two schemas, and never called `chinook_execute_sql`. Eight
+    live runs, eight skipped queries. The figures were right to the cent, which
+    is what parametric recall of a famous public fixture produces — and the
+    model grader's *"the provided figures appear invented"* was accurate rather
+    than a guess. This is that same rejection reached as a **fact**, off the
+    run's own `tool_use`, with no model call.
+
+    The class generalises past this package — any agent that cites evidence it
+    never gathered is the same defect — and the narrowness is the safety. Four
+    conjuncts, every one of them load-bearing:
+
+    1. **The candidate contains a SQL statement**, by `_SQL_STATEMENT` above.
+    2. **It presents figures** — two or more decimals or currency amounts. An
+       honest decline that shows the query you *would* need has none, and
+       rejecting a decline is a failure this repository has already paid for
+       once (see `BaseGrader.PROMPT`'s refusal clause).
+    3. **A node investigated and stopped short** — it ran at least one tool and
+       left at least one bound tool untouched. A node that ran *nothing* is a
+       capability report and belongs to `used_no_tools`/`capability_door`; that
+       is the same `ran`-versus-`bound` split `production-ready` 96 drew, and
+       it is why a scripted agent that calls no tools is never accused here.
+    4. **No node in the run sent a query to anything.** This is the conjunct
+       that needs no tool-name heuristic: `tool_use[node]["queried"]` names the
+       tools a `SELECT` was actually handed to, whatever they are called. Any
+       query anywhere clears the whole run — a document whose second agent did
+       the reading is not one citing evidence it never gathered.
+
+    Tolerant in reading, strict in trusting: the shapes are read leniently, and
+    the rejection is only ever made about a run whose own record says the query
+    never left the building.
+    """
+    rows = tool_use if isinstance(tool_use, dict) else {}
+    if any(
+        isinstance(row, dict) and row.get("queried") for row in rows.values()
+    ):
+        return None
+
+    text = str(candidate or "")
+    if not looks_like_sql_query(text):
+        return None
+    if len(_FIGURE.findall(text)) < 2:
+        return None
+
+    named = [str(n) for n in (nodes or []) if str(n) in rows]
+    considered = named or list(rows)
+    for node_id in considered:
+        row = rows.get(node_id)
+        if not isinstance(row, dict):
+            continue
+        ran = [str(n) for n in (row.get("ran") or [])]
+        unused = [str(n) for n in (row.get("bound") or []) if str(n) not in ran]
+        if ran and unused:
+            return (
+                f'The answer presents figures from a SQL query, but "{node_id}" '
+                f"ran {', '.join(ran)} and never called {', '.join(unused)}. "
+                "Run the query and quote its rows, or say the data is unavailable."
+            )
+    return None
+
+
 def capability_door(answer: str, suggestion: Any, tool_use: Any) -> str | None:
     """What a developer is offered to *build*, or None — one verdict, both doors.
 

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 from langgraph.constants import TAG_NOSTREAM
 
-from openstategraph.abc.grader import Grader
+from openstategraph.abc.grader import Grader, Verdict
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
@@ -50,6 +50,7 @@ from openstategraph.compile.workflow_compiler import (
     ROUTER_TYPE,
     CompiledPlan,
     failure_marker,
+    unrun_query_claim,
 )
 from openstategraph import injection
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
@@ -555,11 +556,29 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     so a worker refused a tool we ship and no card appeared (36). A factory
     that binds tools now says all three things or none.
     """
-    from openstategraph.compile.workflow_compiler import rejected_tool_names
+    from openstategraph.compile.workflow_compiler import (
+        looks_like_sql_query,
+        rejected_tool_names,
+    )
 
     refused: list[str] = []
     ran: list[str] = []
+    #: Tools a **query** was actually handed to, read off the call arguments
+    #: rather than the tool's name (`production-ready` 95). A name pattern —
+    #: `execute_sql`, `query`, `run_*` — is a guess about how somebody spelled
+    #: their tool; the argument is the query itself, so this says what happened
+    #: for a tool called `warehouse` exactly as well as for `chinook_execute_sql`.
+    queried: list[str] = []
     for message in messages or []:
+        for call in getattr(message, "tool_calls", None) or []:
+            args = call.get("args") if isinstance(call, dict) else None
+            if not isinstance(args, dict):
+                continue
+            if not any(looks_like_sql_query(value) for value in args.values()):
+                continue
+            name = str((call.get("name") if isinstance(call, dict) else "") or "")
+            if name and name not in queried:
+                queried.append(name)
         names = rejected_tool_names(getattr(message, "content", None))
         for name in names:
             if name not in refused:
@@ -574,7 +593,13 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
         used = str(getattr(message, "name", "") or "")
         if used and used not in ran:
             ran.append(used)
-    update: dict[str, Any] = {"tool_use": {node_id: {"bound": list(bound), "ran": ran}}}
+    row: dict[str, Any] = {"bound": list(bound), "ran": ran}
+    # Absent rather than empty, for the reason the docstring gives about
+    # `unmet_tools`: a node that sent no query and a node with no query to send
+    # must not look the same, and only presence is a claim.
+    if queried:
+        row["queried"] = queried
+    update: dict[str, Any] = {"tool_use": {node_id: row}}
     if refused:
         update["unmet_tools"] = {node_id: refused}
     return update
@@ -2430,7 +2455,24 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             candidate = _upstream_text(state, upstream) or state.get("answer", "")
             grader = grader_for(_wired_skill(state, skills, self._nodes))
-            verdict = grader.grade(candidate, question=state.get("question", ""))
+
+            # A deterministic check the *grader* cannot make, because it needs
+            # the run and a `BaseGrader` sees only the candidate
+            # (`production-ready` 95). "The answer shows a SELECT and nothing
+            # ever sent one" is a fact about `tool_use`, so it is answered here
+            # and dressed as an ordinary `Verdict.reject` — which is what makes
+            # it print like every other rule-based rejection, `check` and all.
+            #
+            # It belongs beside `deterministic_checks` in spirit and cannot
+            # live there in code: putting state on `BaseGrader.grade` would
+            # teach the grader ladder about `tool_use`, and a grader is a
+            # judgement over a text.
+            unrun = unrun_query_claim(candidate, state.get("tool_use"), upstream)
+            verdict = (
+                Verdict.reject(unrun, check="unrun_query")
+                if unrun
+                else grader.grade(candidate, question=state.get("question", ""))
+            )
 
             # Budget check before routing: a grader that keeps rejecting must
             # still let the run finish with an honest answer rather than spin.
@@ -2488,7 +2530,8 @@ class NodeRuntime:
                 #
                 # The marker travels beside the reason rather than instead of
                 # it: the check name is an internal token an open set of
-                # subclasses may extend (`Grader` adds `no_figure`), so no
+                # subclasses may extend (`test_grader.py`'s stricter grader
+                # adds `no_figure`; this node adds `unrun_query`), so no
                 # reader may map it to a sentence — the sentence is `reason`,
                 # and `check` is only the fact that no model was asked.
                 "verdicts": {

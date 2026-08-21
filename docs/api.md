@@ -723,9 +723,30 @@ invoking a model** (`production-ready` 92). `BaseGrader.grade` runs
 `Error`/`Traceback`/`Exception` — and returns before `self.model.invoke`, at
 0.021 ms against 719-2024 ms for a judged verdict on a live run. Its value
 names the check that fired (`empty`, `error`, and whatever a subclass overriding
-`deterministic_checks` adds; the built-in `Grader` adds `no_figure`), so it is
-an **open set**: read its presence, never look its value up in a table. The
-sentence to show a reader is `reason`, which the grader wrote for exactly that.
+`deterministic_checks` adds), so it is an **open set**: read its presence, never
+look its value up in a table. The sentence to show a reader is `reason`, which
+the grader wrote for exactly that.
+
+(Until 2026-08-21 this sentence also said "the built-in `Grader` adds
+`no_figure`". It does not and never has — `Grader` overrides `revise_payload`
+and nothing else, which is the demonstration that a working grader is a
+sentence of criteria rather than a new class. A check name stated in prose has
+no way to fail; the ones below are named by the tests that produce them.)
+
+One check does **not** come from `deterministic_checks`, and the difference is
+worth knowing rather than hiding. `unrun_query` (`production-ready` 95) rejects
+an answer that presents a SQL statement and figures when the run's own
+`tool_use` says the query was never sent to anything. That is a fact about the
+*run*, and a `BaseGrader` sees only a candidate string — so the grader **node**
+decides it and dresses it as an ordinary rejection, which is why it prints like
+every other rule-based verdict. Four conditions must hold together, and the
+narrowness is the point: a SQL statement (not the English word "select"), two
+or more figures (so an honest decline showing the query you *would* need is
+untouched), a node that ran at least one tool and left one bound tool unused
+(a node that ran *nothing* is a capability report and belongs to the developer
+channel's `capability_gap`), and no node anywhere in the run having handed a
+query to a tool. The last of those reads `tool_use[node]["queried"]`, which
+names tools by what they were *given* rather than by what they are called.
 
 The same pair rides an `update` frame, which is what a trace is built from. A
 grader row that returned instantly used to have one available explanation and
