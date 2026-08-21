@@ -316,6 +316,26 @@ def _run_override_message(class_name: str) -> str:
     )
 
 
+def _missing_args_message(class_name: str) -> str:
+    """The 87 diagnosis: named class, named ClassVar, named lookalike.
+
+    Same voice as `_run_override_message` and for the same reason — a
+    developer should learn what they forgot from a sentence, not from a
+    traceback. It names `args_schema` explicitly because that is the spelling
+    that *causes* the mistake: `ToolCapability`'s field and the
+    `StructuredTool.from_function` keyword are both called `args_schema`, so
+    writing it in a tool body reads right and leaves `Args` undeclared.
+    """
+    return (
+        f"{class_name} declares no Args, so it can be neither described nor bound — "
+        "BaseTool.Args is the Pydantic model run() validates against and "
+        "as_langchain_tool() hands the model, and it has no default. Add "
+        f"`Args = NoArgs` to {class_name} (or your own BaseModel). If you wrote "
+        "`args_schema`, that is the name on the *other* side of the seam: the class "
+        "attribute is `Args`."
+    )
+
+
 def _abstract_tool_diagnosis(cls: type) -> str:
     """Why this ``BaseTool`` subclass could not be instantiated.
 

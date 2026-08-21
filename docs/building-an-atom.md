@@ -440,13 +440,22 @@ class Ping(BaseTool):
     name = "acme_ping"
     description = "Answers with a pong."
     node_type = "tool.acme-ping"       # required: this IS the wiring identity
-    Args = NoArgs
+    Args = NoArgs                      # required: NOT `args_schema` — see below
 
     def _execute(self, args) -> ToolResult:
         return ToolResult(content="pong")
 
 TOOLS = [Ping]        # a list — or `= Ping`, or `= Ping()`. All three work.
 ```
+
+> **`Args`, never `args_schema`.** The class attribute is `Args`; `args_schema`
+> is the name on the *other* side of the seam — the capabilities payload's
+> field, and the keyword `as_langchain_tool()` passes to LangChain — so
+> writing it in a tool body reads right and leaves `Args` undeclared. It has
+> no default, and a tool without it can be neither described nor bound.
+> Discovery names such a class, its file and the fix in the capabilities
+> `warnings`, and drops that one tool; before `production-ready` 87 it
+> answered the whole endpoint with a 500.
 
 Three more groups exist, with the same rules:
 

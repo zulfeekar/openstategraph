@@ -39,7 +39,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from openstategraph.abc.tool import BaseTool, _abstract_tool_diagnosis, _is_deliberate_base
+from openstategraph.abc.tool import (
+    BaseTool,
+    _abstract_tool_diagnosis,
+    _is_deliberate_base,
+    _missing_args_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +180,7 @@ def discover_tool_instances(
     | already seen | **ignore** — one class, two names in one module |
     | abstract, deliberately named a base | **ignore** — see `_is_deliberate_base` |
     | abstract for any other reason | **surface**, with a specific diagnosis |
+    | declares no `Args` | **surface** — undescribable *and* unbindable (87) |
     | constructor raised | **surface** — names the tool and the exception |
     | duplicate `node_type` | **surface** — names both classes and the winner |
     | empty `node_type` | **ignore** — documented as "not placeable" |
@@ -239,6 +245,18 @@ def discover_tool_instances(
                     _note(warnings, f"{_abstract_tool_diagnosis(obj)} (in tools/{path.name})")
                 continue
             seen_classes.add(obj)
+            if not hasattr(obj, "Args"):
+                # SURFACED, and dropped rather than degraded. `Args` has no
+                # default, so such a class describes itself with an
+                # AttributeError (`instance.Args.model_json_schema()`) *and*
+                # binds with one (`as_langchain_tool` passes `args_schema=
+                # self.Args`) — it is not a tool that works less well, it is a
+                # tool that cannot work. Dropping it here is what makes the
+                # three surfaces agree: before 87 the endpoint returned 500,
+                # `validate` printed the binding as resolved, and the run died
+                # inside the agent node. Now all three say "absent", once.
+                _note(warnings, f"{_missing_args_message(obj.__name__)} (in tools/{path.name})")
+                continue
             try:
                 instance = obj()
             except Exception as exc:
@@ -289,6 +307,17 @@ def _source_file(cls: type) -> Path | None:
         return Path(inspect.getfile(cls)).resolve()
     except (TypeError, OSError):
         return None
+
+
+def _where(instance: BaseTool) -> str:
+    """`tools/<file>.py` for a warning, or the folder when the file is unknown.
+
+    Warnings name the file because that is what a developer opens; the
+    fallback exists so a diagnosis is never *worse* than it was — an unnamed
+    location still beats a 500.
+    """
+    origin = _source_file(type(instance))
+    return f"tools/{origin.name}" if origin is not None else "this workflow's tools/"
 
 
 def _warn_about_unreachable_reexports(
@@ -363,18 +392,29 @@ def discover_tools(
     was a WARNING in a server log and an empty palette in the editor — the
     silence register PK-06 names. The capabilities endpoint passes one.
     """
-    return [
-        ToolCapability(
-            id=qualified_id,
-            name=instance.name,
-            description=instance.description,
-            args_schema=instance.Args.model_json_schema(),
-            node_type=instance.node_type,
+    described: list[ToolCapability] = []
+    for qualified_id, instance in discover_tool_instances(workflow_dir, slug, warnings=warnings):
+        try:
+            args_schema = instance.Args.model_json_schema()
+        except Exception as exc:
+            _note(
+                warnings,
+                f"Tool {type(instance).__name__} in {_where(instance)} has an argument model "
+                f"the editor cannot read ({type(exc).__name__}: {exc}) — it is missing from "
+                "the palette.",
+                exc_info=True,
+            )
+            continue
+        described.append(
+            ToolCapability(
+                id=qualified_id,
+                name=instance.name,
+                description=instance.description,
+                args_schema=args_schema,
+                node_type=instance.node_type,
+            )
         )
-        for qualified_id, instance in discover_tool_instances(
-            workflow_dir, slug, warnings=warnings
-        )
-    ]
+    return described
 
 
 def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability]:
