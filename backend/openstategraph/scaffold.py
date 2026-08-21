@@ -103,6 +103,9 @@ def new_package(
             json.dumps(_envelope(display, document), indent=2) + "\n"
         )
         (target / "AGENTS.md").write_text(chosen.agents_md(display, slug, outcome=outcome))
+        test_shape = chosen.test_shape_py(display, slug, outcome=outcome)
+        if test_shape is not None:
+            (target / "tests" / "test_shape.py").write_text(test_shape)
     except Exception:
         # A package with directories and no document is not a package; it is
         # debris the next `new` run would then refuse to overwrite.

@@ -22,6 +22,9 @@ this checkout proves nothing about package data.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -108,8 +111,20 @@ class TestEveryTemplateCompiles:
     def test_nothing_is_left_unsubstituted(self, name: str, tmp_path: Path) -> None:
         package = scaffolded(tmp_path, name)
 
-        for file in ("workflow.json", "AGENTS.md"):
+        for file in ("workflow.json", "AGENTS.md", "tests/test_shape.py"):
             assert "{{" not in (package / file).read_text(), file
+
+    def test_it_ships_a_shape_test(self, name: str, tmp_path: Path) -> None:
+        """workflow-gallery ticket 36. A scaffolded package is born with the
+        same kind of test the whole gallery was migrated onto in ticket 19 —
+        `assert_document_shape` over the document, not the template that
+        produced it, which is why it names no template at all."""
+        text = (scaffolded(tmp_path, name) / "tests" / "test_shape.py").read_text()
+
+        assert "assert_document_shape" in text
+        assert "load_document" in text
+        assert name not in text, "the test must survive the template's own severing"
+
 
     def test_the_document_carries_the_display_name(self, name: str, tmp_path: Path) -> None:
         envelope = json.loads((scaffolded(tmp_path, name) / "workflow.json").read_text())
@@ -160,7 +175,7 @@ class TestMinimalStaysTheCheapFirstRun:
         from openstategraph.scaffold import starter_document
 
         assert starter_document("My Flow") == {
-            "version": 2,
+            "version": 3,
             "name": "My Flow",
             "settings": {},
             "nodes": [
@@ -318,3 +333,52 @@ class TestScaffoldingRefuses:
     def test_a_slug_that_cannot_name_a_package(self, tmp_path: Path) -> None:
         with pytest.raises(ScaffoldError):
             new_package(tmp_path, "My Flow")
+
+
+@pytest.mark.parametrize("name", NAMES)
+class TestTheScaffoldedShapeTestRunsForReal:
+    """workflow-gallery ticket 36. `TestEveryTemplateCompiles` checks the
+    file exists and names the right helper; that is a test of the template,
+    not of "a package scaffolded by `openstategraph new` produces a package
+    whose test passes" — the ticket's own done-when clause. So this actually
+    invokes `pytest` as a subprocess, cwd inside the scaffolded package, the
+    same way `AGENTS.md`'s next step tells a developer to. `sys.path` here
+    already carries `backend` (this suite's own collection needs it), so the
+    subprocess inherits the same `PYTHONPATH` a real install would supply
+    another way — this repeats the manual scratch-project check without
+    trusting a hand-typed report of it.
+    """
+
+    def _run(self, package: Path) -> subprocess.CompletedProcess[str]:
+        env = {
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(sys.path),
+        }
+        for key in ("OLLAMA_API_KEY", "OLLAMA_HOST", "OLLAMA_ENDPOINT", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+            env.pop(key, None)
+        return subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_shape.py"],
+            cwd=package,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_it_passes_as_scaffolded(self, name: str, tmp_path: Path) -> None:
+        package = scaffolded(tmp_path, name)
+
+        result = self._run(package)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_it_goes_red_when_the_document_is_broken(self, name: str, tmp_path: Path) -> None:
+        """The other half of "can fail": a test that would stay green no
+        matter what the document says is decoration, not a test."""
+        package = scaffolded(tmp_path, name)
+        envelope = json.loads((package / "workflow.json").read_text())
+        envelope["document"]["nodes"][0]["type"] = "not.a.real.type"
+        (package / "workflow.json").write_text(json.dumps(envelope, indent=2))
+
+        result = self._run(package)
+
+        assert result.returncode != 0, "a broken document must fail its own scaffolded test"

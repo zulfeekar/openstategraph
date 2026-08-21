@@ -206,7 +206,11 @@ is the authoritative list; this table is the reading order.
 | `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow. The `Workflow` card runs it — "team" names a package *shape*, not a node type | several — a fan-out per subtask |
 
 Every scaffolded package carries an `AGENTS.md` that names what was created and
-the next step for that particular shape. `--team` still works as a deprecated
+the next step for that particular shape, plus a `tests/test_shape.py` — the
+document loads, its node types are what got scaffolded, and it compiles clean
+under the strict default. It asserts the document, not the template, so it
+keeps working after you have edited the workflow past recognition; run it with
+plain `pytest` from inside the package. `--team` still works as a deprecated
 alias for `--template team`.
 
 ### Or start from a worked example

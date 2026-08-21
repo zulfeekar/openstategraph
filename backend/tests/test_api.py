@@ -1045,7 +1045,7 @@ class TestTemplates:
     def test_each_entry_carries_an_importable_document(self, client: TestClient) -> None:
         for entry in client.get("/api/templates").json():
             document = entry["document"]
-            assert document["version"] == 2
+            assert document["version"] == 3
             assert document["nodes"] and document["edges"]
             assert "{{" not in str(document)
 

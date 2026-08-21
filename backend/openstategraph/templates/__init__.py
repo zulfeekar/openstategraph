@@ -84,6 +84,24 @@ class Template:
         assert isinstance(rendered, str)
         return rendered
 
+    def test_shape_py(self, name: str, slug: str, **overrides: str | None) -> str | None:
+        """`tests/test_shape.py`, rendered — or `None` for a template that
+        predates workflow-gallery ticket 36 and has not been given one yet.
+
+        Substituted the same way `agents_md` is, even though none of the
+        shipped files use `{{name}}`/`{{slug}}`: the test asserts the
+        *document* `load_document(Path(__file__).resolve().parents[1])`
+        produces, not anything that names the template back, so it keeps
+        working after the template that wrote it has stopped existing.
+        """
+        path = self.directory / "tests" / "test_shape.py"
+        if not path.exists():
+            return None
+        text = path.read_text()
+        rendered = _substitute(text, self._values(name, overrides, slug=slug))
+        assert isinstance(rendered, str)
+        return rendered
+
     def _values(
         self, name: str, overrides: Mapping[str, str | None], **extra: str
     ) -> dict[str, str]:
