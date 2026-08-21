@@ -2606,7 +2606,30 @@ class NodeRuntime:
             )
 
         def run(state: RunState) -> dict[str, Any]:
-            candidate = _upstream_text(state, upstream) or state.get("answer", "")
+            # The best candidate *this* grader has already seen, when the
+            # producer has just gone quiet (`one-chinook-honest` 25).
+            #
+            # A revise lap can return less than the lap before it — the traced
+            # run refused honestly on attempt one and returned `""` on two and
+            # three — and an empty candidate at the cap would publish nothing
+            # over an answer the workflow genuinely produced.
+            #
+            # `outputs[node_id]` is this node's own last outcome, so the text
+            # kept is the one this grader judged, on the branch that reached
+            # it, this turn — `_input` resets `outputs` at the turn boundary
+            # with every other per-run channel.
+            #
+            # **Not `state["answer"]`, which is what this line used to read.**
+            # That saved the traced run only by accident of shape: the
+            # document has one agent, so the graph-wide answer happened to be
+            # that agent's own attempt one. `_agent` already refuses the same
+            # key a few hundred lines up, and names why — in a multi-agent
+            # document it "may belong to somebody else". Measured, it does: a
+            # chain whose *second* agent returned nothing had this grader
+            # judge, force-pass and publish the **first** agent's text as the
+            # second's answer, with `outputs[a2]` still empty beside it.
+            previous = str((state.get("outputs") or {}).get(node_id) or "")
+            candidate = _upstream_text(state, upstream) or previous
             grader = grader_for(_wired_skill(state, skills, self._nodes))
 
             # A deterministic check the *grader* cannot make, because it needs
