@@ -781,6 +781,7 @@ RESUME_SEEDED_KEYS: tuple[str, ...] = (
     "attempts",
     "forced",
     "unrouted",
+    "retries",
     "unmet_tools",
     "tool_use",
     "redactions",

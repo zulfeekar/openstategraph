@@ -215,7 +215,11 @@ class RunHealth:
 
 
 def run_health(
-    outputs: Any, nested_outputs: Any = None, forced: Any = None, unrouted: Any = None
+    outputs: Any,
+    nested_outputs: Any = None,
+    forced: Any = None,
+    unrouted: Any = None,
+    retries: Any = None,
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -239,6 +243,7 @@ def run_health(
     nested = nested_outputs if isinstance(nested_outputs, dict) else {}
     exhausted = forced if isinstance(forced, dict) else {}
     lost = unrouted if isinstance(unrouted, dict) else {}
+    retried = retries if isinstance(retries, dict) else {}
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
@@ -246,6 +251,7 @@ def run_health(
             + silent_node_warnings(nested)
             + forced_pass_warnings(exhausted)
             + unrouted_decision_warnings(lost)
+            + retry_warnings(retried)
         ),
     )
 
@@ -674,6 +680,112 @@ def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:
     ]
 
 
+#: The state key a recovered retry is recorded under. Named here rather than
+#: spelled at each site because it is one word in four places: the schema, the
+#: wrapper below, `run_health`'s parameter list, and the resume seed.
+RETRIES_KEY = "retries"
+
+
+def recording_attempts(node_id: str, fn: Any) -> Any:
+    """`fn`, wrapped so a **recovered** retry leaves a record in state.
+
+    Here, at graph assembly, and deliberately not in any node factory. Retry is
+    a graph-assembly parameter and not a node concern (`CLAUDE.md`), so the one
+    place that knows a node has a `retry_policy` is the one place that reports
+    the policy firing — otherwise every node family reimplements it and one of
+    them forgets, which is how `_agent` got a fix that `_worker` did not
+    (`skills/ticket-loop`, ticket 33).
+
+    The attempt number comes from LangGraph itself.  `run_with_retry` patches
+    `node_attempt` into the runtime's `ExecutionInfo` before every attempt
+    (`pregel/_retry.py`), 1-indexed, so a node reading it on the attempt that
+    finally returned knows how many it took. Nothing is inferred and nothing is
+    counted here — a counter of our own would be a second source of a number
+    the library already publishes.
+
+    Silent by construction in three cases, each on purpose:
+
+    - **First attempt succeeded** — no row, because presence is the signal.
+    - **Every attempt failed** — the callable never returns, so this never
+      runs. `node_failure_warnings` carries that case already, on the failure
+      half where it belongs.
+    - **The node returned something that is not a state dict** (`None`, or a
+      `Command`). Recording would mean rewriting a control-flow instruction to
+      carry a report, and a report is never worth changing what a node said.
+
+    Tolerant about the runtime for the same reason `run_health` is tolerant
+    about its inputs: `build` is driven by scripted stubs and by
+    `langgraph<1.2` in tests, and a missing `ExecutionInfo` must cost a report,
+    never a run.
+    """
+
+    def attempt_number() -> int:
+        try:
+            from langgraph.runtime import get_runtime
+
+            info = getattr(get_runtime(), "execution_info", None)
+            attempt = getattr(info, "node_attempt", 1)
+        except Exception:
+            return 1
+        return attempt if isinstance(attempt, int) else 1
+
+    def record(result: Any) -> Any:
+        attempt = attempt_number()
+        if attempt <= 1 or not isinstance(result, dict):
+            return result
+        merged = dict(result)
+        existing = merged.get(RETRIES_KEY)
+        rows = dict(existing) if isinstance(existing, dict) else {}
+        rows[node_id] = attempt
+        merged[RETRIES_KEY] = rows
+        return merged
+
+    if inspect.iscoroutinefunction(fn):
+
+        async def recorded_async(*args: Any, **kwargs: Any) -> Any:
+            return record(await fn(*args, **kwargs))
+
+        return recorded_async
+
+    def recorded(*args: Any, **kwargs: Any) -> Any:
+        return record(fn(*args, **kwargs))
+
+    return recorded
+
+
+def retry_warnings(retries: Mapping[str, Any]) -> list[str]:
+    """Nodes that failed, were retried, and then succeeded.
+
+    The compiler gives every node `RetryPolicy(max_attempts=3)` as a
+    graph-assembly parameter, so a transient provider failure is silently
+    re-run. The **exhausted** case has always been reported —
+    `node_failure_warnings` carries it, and the run's answer is missing so
+    somebody notices. The **recovered** case had nothing at all: a second (or
+    third) full model run, paid for, with the right answer at the end of it and
+    no surface saying it took more than one go (`memory-and-replay` 41).
+
+    It was not entirely invisible, which is how it was found: LangGraph
+    appends `|1`, `|2` to `checkpoint_ns` when one task invokes a subgraph
+    again, and a retried agent re-invokes its own compiled graph. Ticket 40
+    read that segment; this is the report it should always have had.
+
+    **On the silent half, and that is a decision rather than a default.** The
+    run completed and published the answer it was asked for; `cli.run_exit_code`
+    reads `.failures`, and a script that gated on a recovered transient would
+    fail builds for a provider hiccup that the policy exists to absorb
+    (`workflow-gallery` 49 split `RunResult` for exactly this). A retry is a
+    report about *how* the answer was reached.
+
+    Presence is the signal — the same shape as `forced` and `unrouted`. A node
+    that got it right first time writes no row, so this list is empty on an
+    ordinary run and no reader has to filter `attempt 1`.
+    """
+    return [
+        f'Node "{node}" failed and was retried; attempt {attempt} produced the result.'
+        for node, attempt in retries.items()
+    ]
+
+
 def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     """`add_node` kwargs for one node's own retry/timeout override, if set.
 
@@ -1071,7 +1183,12 @@ class WorkflowCompiler:
                 # applied per node instead; an explicit override still wins.
                 overrides = {**overrides, "retry_policy": default_retry}
             builder.add_node(
-                safe_name(node_id), node_factory(node_id, nodes[node_id], plan), **overrides
+                safe_name(node_id),
+                # Wrapped here, beside `retry_policy` itself: the policy and
+                # the report of it firing are one concern and must not drift
+                # apart into the node factories (`recording_attempts`).
+                recording_attempts(node_id, node_factory(node_id, nodes[node_id], plan)),
+                **overrides,
             )
 
         for src, dst in plan.edges:

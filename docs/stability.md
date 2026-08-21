@@ -200,6 +200,28 @@ run's whole health report and grows whenever a new kind of finding is added;
 `.failures` is the subset that claims the run broke, and it is what
 `openstategraph run` exits non-zero on.
 
+### A retried step is a warning, never a failure
+
+Every node compiles with `RetryPolicy(max_attempts=3)` — a graph-assembly
+parameter applied graph-wide, so a transient provider failure (a cloud 500, a
+dropped connection) is re-run rather than ending the run. LangGraph's own
+`default_retry_on` excludes programming errors, so a `ValueError` in your tool
+is *not* retried.
+
+Two outcomes, on two different halves:
+
+| | Where it lands |
+| --- | --- |
+| Some attempt succeeded | `.warnings` — *Node "x" failed and was retried; attempt 2 produced the result.* |
+| Every attempt failed | `.warnings` **and** `.failures`, and the run's answer is missing |
+
+The recovered case is on the report half deliberately. The run completed and
+published the answer it was asked for; gating a build on it would fail on the
+provider hiccup the policy exists to absorb. **But read it** — each retry is a
+second full model call, billed, and until this line existed nothing said so.
+A node that got it right first time writes nothing, so an ordinary run's list
+is empty.
+
 ---
 
 ## Deprecation policy

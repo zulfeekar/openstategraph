@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Fixed
+- **A step that failed and was retried now says so.** Every node compiles with
+  a graph-wide `RetryPolicy(max_attempts=3)`, so a transient provider failure
+  is re-run — and a *recovered* retry left no trace on any surface: a second or
+  third full model call, billed, with the right answer at the end of it and
+  nothing to read. It was not quite invisible, which is how it was found —
+  LangGraph appends `|1`, `|2` to `checkpoint_ns` when one task re-invokes a
+  subgraph, and across this repository's stored history those segments stop at
+  `|2`, exactly `max_attempts=3`. Confirmed by rigging a live run's model to
+  fail once, twice, then three times. A recovered retry now writes the attempt
+  number into the run's state and `run_health` reports it. On the **warning**
+  half deliberately: `.failures` and the exit code are unchanged, because the
+  run completed and published its answer, and gating a build on a recovered
+  transient would fail on exactly what the retry policy exists to absorb
+  (`memory-and-replay` 41).
 - **A dispatched worker with no model configured no longer vanishes from the
   run's record.** `_worker` returned `{"worker_results": {task_id: ""}}` for a
   `None` model and wrote no `outputs` entry at all, so the step was invisible

@@ -140,6 +140,20 @@ class RunState(TypedDict, total=False):
     #: dispatches on that exact label. MERGE, because a document may hold
     #: several graders and more than one can lose a verdict in a run.
     unrouted: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: node id -> the 1-indexed attempt on which that node finally succeeded,
+    #: written only when it was more than the first (`memory-and-replay` 41).
+    #:
+    #: Not written by any node factory. The compiler wraps every node callable
+    #: in `recording_attempts` at `add_node`, beside the `retry_policy` that
+    #: causes this, because retry is a graph-assembly parameter and not a node
+    #: concern — a per-family implementation is one family away from being
+    #: forgotten.
+    #:
+    #: Presence is the signal, the same shape as `forced` and `unrouted`: a
+    #: node that got it right first time writes no row. MERGE, because several
+    #: nodes can each hit a transient failure in one run and a fan-out can
+    #: schedule two of them in the same superstep.
+    retries: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: grader node id -> `{"verdict": "pass"|"revise", "reason": str}` — what
     #: the grader actually **thought**, written on every judgement rather than
     #: only on an exceptional one (`workflow-gallery` 32).
