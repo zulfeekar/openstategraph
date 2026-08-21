@@ -97,7 +97,6 @@ function onKeyboardActivate(activate: () => void) {
   };
 }
 
-
 /**
  * The node palette — the open-source stand-in for the commercial stencil.
  *
@@ -335,8 +334,8 @@ export function Palette({ onNotify }: PaletteProps) {
             panel already lives. */}
         {!searching ? (
           <p className="palette-howto">
-            Drag any of these onto the canvas to place it where you want it. From the keyboard:
-            Tab to one and press Enter.
+            Drag any of these onto the canvas to place it where you want it. From the keyboard: Tab
+            to one and press Enter.
           </p>
         ) : null}
 

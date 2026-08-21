@@ -24,6 +24,21 @@ import { describe, expect, it } from 'vitest';
  */
 const palette = readFileSync(fileURLToPath(new URL('./Palette.tsx', import.meta.url)), 'utf8');
 
+/**
+ * The howto paragraph's rendered text, collapsed to single spaces.
+ *
+ * Prettier is free to move the line break inside this JSX text node — it did,
+ * moving `Tab` to the end of the previous line (`production-ready` 91) — and
+ * a browser collapses that whitespace identically either way. So the source
+ * bytes are not what a user reads; the collapsed text is. Matching *that*
+ * keeps the test asserting the copy's meaning rather than its line-wrapping,
+ * which is the only thing distinguishing this from the bug it replaces: a
+ * reflow must stay green, and a reworded sentence must still go red.
+ */
+function collapsedWhitespace(source: string): string {
+  return source.replace(/\s+/g, ' ').trim();
+}
+
 /** The opening tag of each of the three row components. */
 function rowSource(component: string): string {
   const at = palette.indexOf(`function ${component}(`);
@@ -77,7 +92,8 @@ describe('the palette’s placement rule', () => {
     // mechanical half landed; this half lived in a source comment, so every
     // user met the rule by accident.
     expect(palette).toContain('palette-howto');
-    expect(palette).toMatch(/Drag any of these onto the canvas/);
-    expect(palette).toMatch(/Tab to one and press Enter/);
+    const howto = collapsedWhitespace(rowSource('Palette').match(/<p className="palette-howto">([\s\S]*?)<\/p>/)?.[1] ?? '');
+    expect(howto).toMatch(/Drag any of these onto the canvas/);
+    expect(howto).toMatch(/Tab to one and press Enter/);
   });
 });
