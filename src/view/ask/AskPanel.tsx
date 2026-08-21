@@ -28,6 +28,7 @@ import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchConte
 import { entryQuestion } from '@nodes/inputs/entryQuestion';
 import { composerPlaceholder } from './composerPlaceholder';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
+import { defaultsFrom } from '@core/model/contracts/fields';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
 import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
@@ -46,6 +47,7 @@ import {
   unreadyFields,
   type CapabilitySuggestion,
 } from './suggestion';
+import { acceptAction, type AcceptAction } from './acceptAction';
 import { continuingThread, rememberThread, type ThreadBinding } from './thread';
 import { clearRunInFlight, markRunInFlight } from './interruptedRun';
 import { progressLine } from './progressLine';
@@ -1263,6 +1265,22 @@ export function AskPanel({
    */
   // The canvas, for bringing a newly added node into view (ticket 31).
   const paper = usePaperController();
+
+  /**
+   * What the card's primary button will really do (ticket 74).
+   *
+   * Computed from the node *type*, before the press: a required field with no
+   * default is a fact about the type, so a card can say "Add & set Recipient"
+   * instead of promising a re-run `applySuggestion` will decline to start.
+   */
+  const acceptActionFor = useCallback(
+    (suggestion: CapabilitySuggestion) => {
+      const definition = workbench.registry.nodeTypes.get(suggestion.nodeType);
+      const fields = definition?.fields ?? [];
+      return acceptAction(definition?.label ?? suggestion.label, fields, defaultsFrom(fields));
+    },
+    [workbench],
+  );
   const applySuggestion = useCallback(
     async (turnId: string, suggestion: CapabilitySuggestion) => {
       const target = controller.model.node(suggestion.attachTo);
@@ -1481,6 +1499,7 @@ export function AskPanel({
               turn={turn}
               onRespond={respondToApproval}
               onApplySuggestion={applySuggestion}
+              acceptActionFor={acceptActionFor}
               onDeclineSuggestion={declineSuggestion}
               onStartBuild={startBuild}
             />
@@ -1533,12 +1552,15 @@ function Turn({
   turn,
   onRespond,
   onApplySuggestion,
+  acceptActionFor,
   onDeclineSuggestion,
   onStartBuild,
 }: {
   turn: ChatTurn;
   onRespond: (turnId: string, decision: 'approve' | 'reject', note?: string) => void;
   onApplySuggestion: (turnId: string, suggestion: CapabilitySuggestion) => void;
+  /** What accepting this suggestion would really do — see `acceptAction`. */
+  acceptActionFor: (suggestion: CapabilitySuggestion) => AcceptAction;
   onDeclineSuggestion: (turnId: string) => void;
   /** Seeds the composer with the brief that opens the build interview. */
   onStartBuild: (gap: string) => void;
@@ -1668,6 +1690,7 @@ function Turn({
       {turn.suggestion ? (
         <SuggestionCard
           suggestion={turn.suggestion}
+          accept={acceptActionFor(turn.suggestion as CapabilitySuggestion)}
           decision={turn.suggestionDecision}
           onAccept={() => onApplySuggestion(turn.id, turn.suggestion as CapabilitySuggestion)}
           onDecline={() => onDeclineSuggestion(turn.id)}
@@ -1730,11 +1753,13 @@ function CapabilityGapCard({ gap, onStart }: { gap: string; onStart: () => void 
 
 function SuggestionCard({
   suggestion,
+  accept,
   decision,
   onAccept,
   onDecline,
 }: {
   suggestion: CapabilitySuggestion;
+  accept: AcceptAction;
   decision: 'accepted' | 'declined' | null;
   onAccept: () => void;
   onDecline: () => void;
@@ -1755,9 +1780,10 @@ function SuggestionCard({
           <strong>{suggestion.label}</strong> — {suggestion.reason}
         </span>
       </p>
+      {accept.note ? <p className="ask__suggestion-note">{accept.note}</p> : null}
       <div className="ask__suggestion-actions">
         <Button variant="primary" onClick={onAccept}>
-          Add &amp; re-run
+          {accept.label}
         </Button>
         <Button variant="secondary" onClick={onDecline}>
           No thanks

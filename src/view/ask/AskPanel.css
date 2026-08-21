@@ -449,6 +449,14 @@
   color: var(--color-text-primary);
 }
 
+/* Said before the press, not in the notice after it (ticket 74): a card whose
+   button cannot re-run has to say why while there is still a choice. */
+.ask__suggestion-note {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
 .ask__suggestion-actions {
   display: flex;
   gap: var(--space-2);
