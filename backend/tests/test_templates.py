@@ -356,13 +356,26 @@ class TestTheScaffoldedShapeTestRunsForReal:
         }
         for key in ("OLLAMA_API_KEY", "OLLAMA_HOST", "OLLAMA_ENDPOINT", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
             env.pop(key, None)
-        return subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "tests/test_shape.py"],
-            cwd=package,
-            env=env,
-            capture_output=True,
-            text=True,
-        )
+        # A deadline, because there was not one and it cost three sessions.
+        # `pytest` on a one-file scaffold takes about a second; 120 is a
+        # hundred-fold margin no healthy machine reaches. Without it a stalled
+        # child hangs the whole suite — silently, since `capture_output` eats
+        # whatever it was about to say — and `scripts/loop_gate.py` runs this
+        # suite, so the hang reached the one check standing between an
+        # unattended session and `main` (`workflow-gallery` 60).
+        try:
+            return subprocess.run(
+                [sys.executable, "-m", "pytest", "-q", "tests/test_shape.py"],
+                cwd=package,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            # A scaffolded package whose own test hangs is a defect in the
+            # scaffold. Say which template, and go red rather than quiet.
+            pytest.fail(f"{package.name}: the scaffolded shape test did not finish in 120s")
 
     def test_it_passes_as_scaffolded(self, name: str, tmp_path: Path) -> None:
         package = scaffolded(tmp_path, name)

@@ -52,8 +52,32 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 
-def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, **kw)
+#: Seconds a gate step may take before it is reported rather than waited on.
+#: The suites take 85–95s and ~10s respectively, measured five times, so these
+#: are large multiples: a slow machine must never trip them, and a hang must
+#: never be indistinguishable from patience. `workflow-gallery` 60 is why they
+#: exist — a nested `pytest` with no deadline stalled this gate through four
+#: attempts, and a gate that hangs teaches whoever runs the loop to stop
+#: trusting it, which is worse than one that fails.
+DEADLINES = {"pytest": 600, "vitest": 300, "default": 180}
+
+
+class _TimedOut(Exception):
+    """A step that ran out of time. Distinct from a step that failed."""
+
+
+def _run(cmd: list[str], *, deadline: int | None = None, **kw) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=deadline or DEADLINES["default"],
+            **kw,
+        )
+    except subprocess.TimeoutExpired as expired:
+        raise _TimedOut(f"no answer in {expired.timeout:.0f}s") from expired
 
 
 def _report(ok: bool, label: str, detail: str = "") -> bool:
@@ -94,11 +118,17 @@ def main() -> int:
             ", ".join(new_dirty[:3]) if new_dirty else "",
         )
 
-    py = _run([sys.executable, "-m", "pytest", "-q"])
-    ok &= _report(py.returncode == 0, "pytest", (py.stdout.strip().splitlines() or [""])[-1])
+    try:
+        py = _run([sys.executable, "-m", "pytest", "-q"], deadline=DEADLINES["pytest"])
+        ok &= _report(py.returncode == 0, "pytest", (py.stdout.strip().splitlines() or [""])[-1])
+    except _TimedOut as timed_out:
+        ok &= _report(False, "pytest TIMED OUT", f"{timed_out} — see workflow-gallery 60")
 
-    ts = _run(["npx", "vitest", "run"])
-    ok &= _report(ts.returncode == 0, "vitest", "green" if ts.returncode == 0 else "red")
+    try:
+        ts = _run(["npx", "vitest", "run"], deadline=DEADLINES["vitest"])
+        ok &= _report(ts.returncode == 0, "vitest", "green" if ts.returncode == 0 else "red")
+    except _TimedOut as timed_out:
+        ok &= _report(False, "vitest TIMED OUT", str(timed_out))
 
     handoffs = sorted((REPO / ".scratch").glob("HANDOFF-*.md"))
     if not handoffs:
