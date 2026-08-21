@@ -639,9 +639,24 @@ function PackageItem({
         <span className="palette-item__description">
           {/* The slug, because it is what the document stores and what a
               developer types into the mount field — the name alone leaves a
-              reader unable to connect this row to `workflows/<slug>/`. */}
-          {refused ? row.refusal : <code className="palette-item__slug">{row.slug}</code>}
+              reader unable to connect this row to `workflows/<slug>/`.
+              **Unconditional since `workflow-gallery` 74**: it used to be
+              swapped out for the refusal, which took the row's identity away
+              at exactly the moment a reader needs it to understand the
+              chain the refusal is about. */}
+          <code className="palette-item__slug">{row.slug}</code>
         </span>
+        {/* Beneath the slug and *outside* the two-line clamp, because the
+            clamp is right for a description and fatal for a diagnosis: the
+            reason may wrap, and the chain — the actionable half — gets its
+            own line and is never cut. The hover and the toast still carry the
+            whole sentence, as a supplement rather than as its only home. */}
+        {row.refusalRow ? (
+          <span className="palette-item__refusal">
+            {row.refusalRow.reason}
+            <code className="palette-item__refusal-path">{row.refusalRow.path}</code>
+          </span>
+        ) : null}
       </span>
     </button>
   );

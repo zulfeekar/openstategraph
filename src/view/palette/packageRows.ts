@@ -1,4 +1,8 @@
-import { mountGestureRefusal } from '@core/validation/mountCycleRule';
+import {
+  MOUNT_CYCLE_NEVER_TERMINATES,
+  mountCycleChain,
+  mountGestureRefusal,
+} from '@core/validation/mountCycleRule';
 import type { WorkflowChoice } from '@core/runtime/workflowCatalogue';
 
 /** One saved package as the palette shows it, and why it may refuse the drag. */
@@ -9,6 +13,30 @@ export interface PackageRow extends WorkflowChoice {
    * whole of "greyed out": the row still renders, it just cannot be picked up.
    */
   readonly refusal: string | null;
+  /**
+   * The same refusal, split for the **row body**, `null` when free.
+   *
+   * `workflow-gallery` 74. `refusal` is one sentence, and the row printed it
+   * where the slug goes, in a body clamped to two lines — so on a 1440x900
+   * palette a reader got "Mounting 'routed-demo' here would make it mount
+   * itself…" and the chain, the only part that says *what to do*, fell off the
+   * end. It survived in the `title` and in the toast, which means a mouse user
+   * who hovers was told and nobody else was.
+   *
+   * Two values rather than one, because the two want different treatment: a
+   * short reason that may wrap, and a path that must not be cut. Composing
+   * them here rather than in `Palette.tsx` keeps the copy testable in a `node`
+   * environment, and keeps `core/` free of the row's presentation.
+   */
+  readonly refusalRow: PackageRowRefusal | null;
+}
+
+/** A refused row's two readable parts — see {@link PackageRow.refusalRow}. */
+export interface PackageRowRefusal {
+  /** Why the gesture is unavailable. Deliberately carries no path. */
+  readonly reason: string;
+  /** The cycle the drop would create, verbatim as the compiler spells it. */
+  readonly path: string;
 }
 
 /**
@@ -54,5 +82,20 @@ export function packageRows(
         choice.slug.toLowerCase().includes(needle) ||
         choice.name.toLowerCase().includes(needle),
     )
-    .map((choice) => ({ ...choice, refusal: mountGestureRefusal(choice.slug, ancestry) }));
+    .map((choice) => {
+      const cycle = mountCycleChain(choice.slug, ancestry);
+      return {
+        ...choice,
+        refusal: mountGestureRefusal(choice.slug, ancestry),
+        // Both from `mountCycleChain`, so the row and the sentence cannot
+        // print two different paths for one comparison.
+        refusalRow:
+          cycle === null
+            ? null
+            : {
+                reason: `Would mount itself here — ${MOUNT_CYCLE_NEVER_TERMINATES}`,
+                path: cycle.path,
+              },
+      };
+    });
 }

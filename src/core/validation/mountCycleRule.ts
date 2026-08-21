@@ -38,9 +38,9 @@ export function mountCycleRefusal(
   /** The slugs above this document, oldest first — the drill trail then here. */
   ancestry: readonly string[],
 ): string | null {
-  const chain = cycleChain(candidateSlug, ancestry);
+  const chain = mountCycleChain(candidateSlug, ancestry);
   if (chain === null) return null;
-  return `Workflow '${chain.candidate}' mounts itself (${chain.path}); ${NEVER_TERMINATES}`;
+  return `Workflow '${chain.candidate}' mounts itself (${chain.path}); ${MOUNT_CYCLE_NEVER_TERMINATES}`;
 }
 
 /**
@@ -74,13 +74,19 @@ export function mountGestureRefusal(
   /** The slugs above this document, oldest first — the drill trail then here. */
   ancestry: readonly string[],
 ): string | null {
-  const chain = cycleChain(candidateSlug, ancestry);
+  const chain = mountCycleChain(candidateSlug, ancestry);
   if (chain === null) return null;
-  return `Mounting '${chain.candidate}' here would make it mount itself (${chain.path}); ${NEVER_TERMINATES}`;
+  return `Mounting '${chain.candidate}' here would make it mount itself (${chain.path}); ${MOUNT_CYCLE_NEVER_TERMINATES}`;
 }
 
 /** The compiler's closing clause, shared so the two moods cannot drift apart. */
-const NEVER_TERMINATES = 'a mount cycle can never terminate';
+export const MOUNT_CYCLE_NEVER_TERMINATES = 'a mount cycle can never terminate';
+
+/** A cycle a mount would create: the package, and the route that produces it. */
+export interface MountCycle {
+  readonly candidate: string;
+  readonly path: string;
+}
 
 /**
  * The one comparison both sentences are made of: is the candidate already on
@@ -88,11 +94,16 @@ const NEVER_TERMINATES = 'a mount cycle can never terminate';
  *
  * Single-sourced deliberately. Two spellings of this would agree on the day
  * they were written and disagree on the first edit to either.
+ *
+ * **Exported since `workflow-gallery` 74**, because a palette row needs the
+ * path as a *value* and not only inside a sentence: the row prints the chain on
+ * its own line, and lifting it back out of the prose with a regular expression
+ * would be exactly the second spelling this function exists to prevent.
  */
-function cycleChain(
+export function mountCycleChain(
   candidateSlug: string,
   ancestry: readonly string[],
-): { candidate: string; path: string } | null {
+): MountCycle | null {
   const candidate = candidateSlug.trim();
   if (!candidate) return null;
 

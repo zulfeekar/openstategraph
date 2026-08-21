@@ -236,3 +236,30 @@
   font: var(--type-body-sm);
   line-height: var(--line-height-snug);
 }
+
+/* A refused package row's diagnosis, under the slug rather than in place of
+   it (`workflow-gallery` 74). Deliberately *not* `.palette-item__description`:
+   that one clamps to two lines, which is right for a description and fatal
+   for a refusal whose last clause is the path a reader has to act on. This
+   wraps instead — a greyed row is allowed to be taller than a droppable one,
+   and there is never more than one of them in view. */
+.palette-item__refusal {
+  display: block;
+  margin-top: var(--space-0-5);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-tertiary);
+  text-wrap: pretty;
+}
+
+/* The cycle itself, on its own line and in the type the slug wears, because
+   it is made of slugs. `anywhere` rather than a clamp: a three-rung chain in
+   a 200px column has to break somewhere, and breaking is readable where
+   truncating is not. */
+.palette-item__refusal-path {
+  display: block;
+  margin-top: var(--space-0-5);
+  font: var(--type-mono-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
