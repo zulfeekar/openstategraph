@@ -427,8 +427,8 @@ print(answer.decisions)               # ...and which branch each router took
 | | |
 | --- | --- |
 | `.graph` | the compiled LangGraph `StateGraph` — **the escape hatch** |
-| `.warnings` | everything the compiler noticed: capabilities it could not resolve, and reports about the document — an agent whose authored rules still deny the tools wired to it |
-| `.failure_warnings` | the half of `.warnings` that is a claim the graph came out **less capable**, and the only half `ask()` puts on `RunResult.failures`. A stale prompt sentence is on `.warnings` and not here: the run calls the tool |
+| `.warnings` | everything the compiler noticed: capabilities it could not resolve, and reports about the document — an agent whose authored rules still deny the tools wired to it, a grader with no `revise` edge |
+| `.failure_warnings` | the half of `.warnings` that is a claim the graph came out **less capable**, and the only half `ask()` puts on `RunResult.failures` — so the only half that can reach an exit code. A stale prompt sentence and an unwired `revise` are on `.warnings` and not here: both describe how the document is *drawn*, and the run does everything it was drawn to do. An unloadable mount is on both |
 | `.ask(question, *, thread_id=None, user_email=None, session_id=None, recursion_limit=None)` | run it once, get a `RunResult`. **`user_email` is who the run is for** — omit it and per-person memory does not bind (see [`deploying.md` §1b](deploying.md)); over HTTP a client may not send it, but here you are the server. `workflow_slug` needs no argument: it comes from the package |
 | `.as_tool(name=…, description=…)` | this workflow as one LangChain tool (see below) |
 | `.mermaid()` | the compiled topology as text, no network call |

@@ -61,6 +61,11 @@ class Finding(str, Enum):
     #: a grader used as a recorder is a legal graph that answers questions,
     #: `support-triage` ships exactly that shape on purpose, and
     #: `plan.warnings` is the channel `validate` turns into PROBLEMS FOUND.
+    #:
+    #: For the same reason it is a **report**, not a failure — see
+    #: `REPORT_ONLY` below. The run does everything it was drawn to do; this
+    #: sentence is advice about the drawing, and it is the identical
+    #: observation `run_health` publishes as `unrouted` (`workflow-gallery` 50).
     UNWIRED_REVISE = "unwired_revise"
     #: A node type this build has no factory for, as `(type, node id)`.
     #:
@@ -204,7 +209,30 @@ _SENTENCES: dict[Finding, str] = {
 #: kept off `failure_warnings()`, so no surface can turn one into an exit code.
 #: Membership is a decision about meaning: everything else here describes work
 #: the run did not do.
-REPORT_ONLY: frozenset[Finding] = frozenset({Finding.STALE_TOOL_DENIAL})
+#:
+#: `UNWIRED_REVISE` joined it in `workflow-gallery` 50, which is the
+#: classification pass ticket 89 left with one member. The argument is not that
+#: an unwired grader is harmless — it is that **the runtime already publishes
+#: the identical observation as a report**. `run_health`'s `unrouted` says a
+#: verdict of revise reached no edge; this finding says the edge was never
+#: drawn. Ticket 49 put `unrouted` on the report side deliberately, so leaving
+#: this one on the failure side made one observation a failure when the
+#: compiler noticed it and a report when the run did — and on any run that
+#: answered with nothing, the compile half alone exited 1 for a graph
+#: `support-triage` ships on purpose.
+#:
+#: The other eight stay failures, and two of them are close enough to say so
+#: out loud. `UNENFORCED_OUTCOME` is the same shape one level up — a Team card
+#: promising an outcome whose child graph cannot check it — and
+#: `UNGUARDED_EXIT` is likewise about how a document is drawn. Both were left
+#: here because each names a *promise the document makes and the run cannot
+#: keep*, which is the failure side's own definition, and because the safe
+#: direction of error for an exit code is to keep exiting 1: the opposite
+#: green-lights a broken graph in somebody's CI. Neither is a settled call, and
+#: `workflow-gallery` 51 carries the argument.
+REPORT_ONLY: frozenset[Finding] = frozenset(
+    {Finding.UNWIRED_REVISE, Finding.STALE_TOOL_DENIAL}
+)
 
 
 class CompileDiagnostics:

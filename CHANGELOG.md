@@ -27,6 +27,18 @@
   empty (`production-ready` 89).
 
 ### Changed
+- **A grader with no `revise` edge no longer fails a run's exit code.**
+  `CompiledWorkflow.failure_warnings` — the half of `warnings` that may reach
+  an exit code — was `warnings` minus one member, so every other *authoring*
+  finding still counted as "the run failed". An unwired grader is the sharp
+  case: the runtime already publishes the identical observation as `unrouted`,
+  which is a report, so one finding was a failure when the compiler noticed it
+  and a report when the run did — and on any run that answered with nothing it
+  alone exited `1`, for a shape `support-triage` ships on purpose. It is now a
+  report on both sides. Still printed, still `warning:`, and every other
+  finding — an unloadable mount above all — stays a failure and still exits `1`
+  (`workflow-gallery` 50).
+
 - **`CompiledWorkflow.mermaid()` opens every mount, to any depth.**
   `nested-mounts` — three documents, three levels, six nodes below the top —
   drew three featureless boxes, and so did every composed example on the
