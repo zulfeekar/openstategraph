@@ -6,8 +6,8 @@
 Every diagram on the gallery page is the Mermaid the **compiler actually
 produced** — ``CompiledWorkflow.mermaid()`` on each package under
 ``backend/openstategraph/examples/``, which is ``draw_mermaid()`` with every
-mount opened (see the note on ``ALIASES`` below). Compiling needs no credentials and
-calls no model, so this script is free to run.
+mount opened to any depth. Compiling needs no credentials and calls no model, so
+this script is free to run.
 
 An example is refused if it compiles with a warning it did not **declare**
 (``expectedFindings`` in ``examples/index.json``), and equally if it declares
@@ -65,21 +65,26 @@ COLOUR_MAP = {
 # reads them, and `data-points` alone is a base64 blob per edge.
 NOISE_ATTRS = re.compile(r'\s(?:data-points|data-look|data-edge|data-et|data-id)="[^"]*"')
 
-# The three composition examples show their children beside them. That began as
-# a workaround: a mount rendered as one featureless box, because `xray=True`
-# opens a LangGraph subgraph and the parent holds a *closure* over the child.
-# `CompiledWorkflow.mermaid()` now opens it (`workflow-gallery` 28), so the
-# parent diagram carries the nesting itself and these siblings are a second,
-# unnested look at the same child rather than the only way to see it. Whether
-# the page still wants them is a reader's question, filed as gallery 54.
-# A child therefore appears on the page more than once, and each appearance is
-# rendered separately so its element ids stay unique in the document.
-ALIASES = {
-    "chained-summarizer-l3": "chained-summarizer",  # 11, level 3
-    "chained-summarizer-x2": "chained-summarizer",  # 12, both mounts
-    "sql-qa-mounted": "sql-qa",  # 13, the `database` branch
-    "web-research-digest-mounted": "web-research-digest",  # 13, the `web` branch
-}
+# A second rendering of a graph the page already draws under another name, so
+# its element ids stay unique in the document: alias -> (slug, why a reader
+# needs this picture twice).
+#
+# **Empty on purpose.** It used to hold four entries, and they were a workaround:
+# a mount rendered as one featureless box, because `xray=True` opens a LangGraph
+# subgraph and the parent holds a *closure* over the child, so drawing the child
+# again beside its parent was the only way to show what was inside. Gallery 28
+# taught `CompiledWorkflow.mermaid()` to splice the child in to any depth, and
+# gallery 54 took the four to the rendered page one at a time. All four lost the
+# same argument: the parent already draws that graph, the child is also its own
+# numbered example further down, and the third copy was costing the parent the
+# width it needed to be legible.
+#
+# The rule that survives is not "no aliases" — a flat, unnested look at a child
+# is a legitimate second view. It is that the reason has to be *written down*
+# here, where the next person deciding will read it, rather than inferred from a
+# mapping. `backend/tests/test_gallery_draws_each_graph_once.py` refuses an entry
+# that carries no reason, and refuses an undeclared duplicate.
+ALIASES: dict[str, tuple[str, str]] = {}
 
 
 def slugs() -> list[str]:
@@ -107,7 +112,7 @@ def mermaid_sources() -> dict[str, str]:
         if absent:
             raise SystemExit(f"{slug} declares a finding it no longer produces: {absent}")
         sources[slug] = workflow.mermaid()
-    for alias, slug in ALIASES.items():
+    for alias, (slug, _reason) in ALIASES.items():
         sources[alias] = sources[slug]
     return sources
 
@@ -129,8 +134,8 @@ def render(sources: dict[str, str]) -> dict[str, str]:
 def tidy(svg: str) -> str:
     """Strip what a static, theme-aware page does not need from mermaid's SVG.
 
-    Mermaid scopes a ~9 KB stylesheet by element id into every diagram. Twenty-one
-    copies of it is most of the page, so it is dropped for one shared block in
+    Mermaid scopes a ~9 KB stylesheet by element id into every diagram. One copy
+    per diagram is most of the page, so it is dropped for one shared block in
     the page's own CSS (`.mmd svg …`), which is also what lets the tokens above
     do their work.
     """
