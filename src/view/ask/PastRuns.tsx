@@ -157,8 +157,11 @@ function RunRow({
   onToggle: () => void;
 }) {
   const described = describeRun(run, at);
+  // Shown whenever there is something to say beyond "it finished cleanly" —
+  // paused, failed, or both — never a bare "finished" tacked onto every row.
+  const showStatus = run.status === 'paused' || run.failed;
   return (
-    <div className="past-runs__run" data-status={run.status}>
+    <div className="past-runs__run" data-status={run.status} data-failed={run.failed}>
       <button
         type="button"
         className="past-runs__run-head"
@@ -170,7 +173,7 @@ function RunRow({
           {showWorkflow && run.workflowSlug ? `${run.workflowSlug} · ` : ''}
           {described.meta}
           {described.identity ? ` · ${described.identity}` : ''}
-          {run.status === 'paused' ? ` · ${described.statusLabel}` : ''}
+          {showStatus ? ` · ${described.statusLabel}` : ''}
         </span>
       </button>
       {expanded ? <RunHistory run={run} names={names} /> : null}

@@ -57,7 +57,21 @@ export function describeRun(run: PastRun, now: number): RunDescription {
     meta: when ? `${steps} · ${when}` : steps,
     // "waiting for you" rather than "paused": paused describes the server,
     // and the only thing a reader can act on is that it wants an answer.
-    statusLabel: run.status === 'paused' ? 'waiting for you' : 'finished',
+    //
+    // `failed` is a sibling of `status`, not a third value of it — a run can
+    // be paused *and* have a failed node — so both read independently rather
+    // than one crowding the other out. "ask again" rather than a bare
+    // "failed" badge for the same reason "waiting for you" beat "paused":
+    // the only thing a reader can do about a failed node is re-ask, and the
+    // reason is in the steps below.
+    statusLabel:
+      run.status === 'paused'
+        ? run.failed
+          ? 'waiting for you · a step failed'
+          : 'waiting for you'
+        : run.failed
+          ? 'ask again — a step failed'
+          : 'finished',
   };
 }
 

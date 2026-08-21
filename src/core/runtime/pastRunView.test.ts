@@ -85,6 +85,16 @@ describe('describeRun', () => {
     expect(describeRun(run(), NOW).statusLabel).toBe('finished');
   });
 
+  it('reads a failed run as something to re-ask, not a bare status word', () => {
+    expect(describeRun(run({ failed: true }), NOW).statusLabel).toBe('ask again — a step failed');
+  });
+
+  it('keeps paused and failed independent — a run can be both at once', () => {
+    expect(describeRun(run({ status: 'paused', failed: true }), NOW).statusLabel).toBe(
+      'waiting for you · a step failed',
+    );
+  });
+
   it('counts steps in words a reader can act on', () => {
     expect(describeRun(run({ steps: 1 }), NOW).meta).toBe('1 step · just now');
     expect(describeRun(run({ steps: 4 }), NOW).meta).toBe('4 steps · just now');
