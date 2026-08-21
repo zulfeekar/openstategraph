@@ -96,6 +96,37 @@ export function setOpenAddress(address: MountAddress, classSlug: string): void {
   announceOpenSubject(formatMountAddress(address));
 }
 
+/**
+ * The name a startup hook compares a URL's `?w=` against.
+ *
+ * Two hooks decide, on every page load, which of them owns the document:
+ * `WorkbenchContext` through `resolveOpenRequest` (slugs) and
+ * `useDeepLinkedWorkflow` through `resolveAddressRequest` (addresses). The two
+ * resolvers agree — `openAddress.test.ts` walks them — but agreement only
+ * holds while they are asked about the *same* name, and for a mount they were
+ * not. `CURRENT_SLUG_KEY` deliberately holds the **class** slug
+ * (`chinook-assistant`) while the URL and `OPEN_ADDRESS_KEY` hold the
+ * **address** (`concierge/wf-music`); the storage split above says so at
+ * length, and it is right. Reading the class slug as if it were the URL's
+ * subject is what was wrong.
+ *
+ * The two are never equal for an instance, so the slug hook called every
+ * reload of an open mount a fresh arrival while the address hook called it a
+ * reload. Each declined the work it believed the other was doing and the
+ * canvas came up empty — 0 nodes, no answer card, which is how
+ * `production-ready` 07 was reported ("a mount's answer is not rendered").
+ *
+ * The fallback to the class slug is not a compromise: for a package the two
+ * keys hold the same string, and a tab predating `OPEN_ADDRESS_KEY` has only
+ * the one.
+ */
+export function openSubject(input: {
+  openAddress: string | null;
+  classSlug: string | null;
+}): string | null {
+  return input.openAddress ?? input.classSlug;
+}
+
 /** Forget the open instance: a new, never-saved document has no address. */
 export function clearOpenAddress(): void {
   try {

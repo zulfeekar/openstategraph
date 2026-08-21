@@ -34,11 +34,9 @@ import {
   saveWorkflow,
   type WriteGuard,
 } from './workflowStore';
-import {
-  getOpenSlug,
-  readSlugFromSearch,
-  resolveOpenRequest,
-} from './openWorkflow';
+import { getOpenSlug, readSlugFromSearch, resolveOpenRequest } from './openWorkflow';
+import { formatMountAddress } from '@core/model/MountAddress';
+import { getOpenAddress, openSubject } from './openAddress';
 import {
   DRAFT_SESSION_KEY,
   draftIdForSlug,
@@ -307,7 +305,19 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // autosave" restores nothing and the canvas stays blank. Both startup hooks
     // ask the same question of the same storage so they keep agreeing in
     // advance about which of them owns the document.
-    const openSlug = getOpenSlug();
+    // The **address**, not the class slug — `openSubject` carries the whole
+    // argument. `CURRENT_SLUG_KEY` holds `chinook-assistant` while the URL
+    // holds `concierge/wf-music`, so comparing against it called every reload
+    // of an open mount a fresh arrival, while the address hook next door
+    // called the same load a reload. Both then stood aside and the canvas came
+    // up with no document at all (`production-ready` 07).
+    const openSlug = openSubject({
+      openAddress: (() => {
+        const open = getOpenAddress();
+        return open === null ? null : formatMountAddress(open);
+      })(),
+      classSlug: getOpenSlug(),
+    });
     const request = resolveOpenRequest({
       urlSlug: readSlugFromSearch(window.location.search),
       openSlug,

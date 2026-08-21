@@ -6,6 +6,7 @@ import {
   OPEN_ADDRESS_KEY,
   getOpenAddress,
   readAddressFromSearch,
+  openSubject,
   resolveAddressRequest,
   setOpenAddress,
   urlWithAddress,
@@ -226,5 +227,52 @@ describe('resolveAddressRequest', () => {
         }
       }
     }
+  });
+});
+
+describe('openSubject — the name a startup hook compares `?w=` against', () => {
+  /**
+   * `production-ready` 07, reproduced live on 2026-08-21.
+   *
+   * The two resolvers agree, and the test above pins that they do — but it
+   * only ever feeds them bare slugs, where a tab's address and its class slug
+   * are the same string. For a *mount* they are two different names for two
+   * different things, and `WorkbenchContext` was reading the class slug out of
+   * `CURRENT_SLUG_KEY` while the URL carried the address. `chinook-assistant`
+   * is never equal to `concierge/wf-music`, so the slug hook called every
+   * reload of an open mount a fresh arrival ("fetch") in the same tick the
+   * address hook called it a reload ("restore"). Each then declined the work
+   * it thought the other was doing, and the canvas came up with **0 nodes** —
+   * no document, and so no answer card either, which is what the ticket was
+   * reported as.
+   */
+  it('is the address, not the class slug, while a mount is open', () => {
+    expect(openSubject({ openAddress: 'concierge/wf-music', classSlug: 'chinook-assistant' })).toBe(
+      'concierge/wf-music',
+    );
+  });
+
+  it('falls back to the class slug when no address was ever recorded', () => {
+    // A tab that predates the address key, and every plain package, where the
+    // two keys hold the same string anyway.
+    expect(openSubject({ openAddress: null, classSlug: 'concierge' })).toBe('concierge');
+    expect(openSubject({ openAddress: null, classSlug: null })).toBeNull();
+  });
+
+  it('keeps the two startup hooks agreeing on a reload of an open mount', () => {
+    const stored = { openAddress: 'concierge/wf-music', classSlug: 'chinook-assistant' };
+    const url = 'concierge/wf-music';
+    const bySlug = resolveOpenRequest({
+      urlSlug: url,
+      openSlug: openSubject(stored),
+      hasDraft: true,
+    });
+    const byAddress = resolveAddressRequest({
+      urlAddress: address(url),
+      openAddress: address(url),
+      hasDraft: true,
+    });
+    expect(bySlug.action).toBe(byAddress.action);
+    expect(bySlug.action).toBe('restore');
   });
 });
