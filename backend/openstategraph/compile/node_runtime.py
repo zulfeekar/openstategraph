@@ -1249,6 +1249,16 @@ def advisor_context(node_id: str, catalog: str) -> str:
     reply is what a prompt is for, so the requirement belongs here —
     `developer_channel.NO_PROSE` is the guarantee, and this is what keeps it
     from ever being needed.
+
+    **And the sentence is constrained, because nothing else constrains it**
+    (`the-agent-asks-for-what-it-cannot-get` 04). The block is validated
+    against a catalogue of node types that exist; the sentence is prose, so a
+    model asked to explain what it cannot do offered to build it, and there is
+    nothing on the other side of a developer's "yes" — no tool here writes a
+    file. The prohibition is stated here rather than matched afterwards: a
+    matcher for an offer-to-build in ordinary prose is exactly the shape this
+    repository has watched rot, and its false-positive set is every sentence
+    containing "I can".
     """
     if not catalog:
         return ""
@@ -1327,6 +1337,24 @@ def advisor_context(node_id: str, catalog: str) -> str:
         "it and answer. Never say you cannot look something up after a tool "
         "has already returned results — an earlier failed call, or a name that "
         "did not exist, does not undo a result you were given.\n"
+        # The sentence channel, which nothing validated
+        # (`the-agent-asks-for-what-it-cannot-get` 04, sharpened by the owner
+        # from their own transcript). The fence above is constrained to node
+        # types that exist; the plain-words sentence this block *requires* was
+        # constrained by nothing, and a model told to explain what it cannot do
+        # offers to fix it — that is what a helpful assistant does. A developer
+        # answers "yes" and there is nothing on the other side of yes: no tool
+        # here writes a file, and an agent has no capability to create a
+        # capability. `CLAUDE.md`'s law — do not promise which is not possible
+        # — was being broken by an instruction we wrote. `branch_context`'s
+        # "never offer a capability no branch above provides" is the precedent:
+        # prose the parser cannot police is constrained where it is invited.
+        "You cannot create a capability, write code, or change this workflow: "
+        "the block above is a suggestion, and a developer applies it. So "
+        "never offer to build, write, add or wire anything yourself, and "
+        "never ask whether you should — there is no next turn in which you "
+        "could do it, so an offer taken up is a dead end. Say what is missing "
+        "and stop.\n"
         "Tools that could be added to you:\n"
         f"{catalog}"
     )
