@@ -562,9 +562,15 @@ def cmd_examples_copy(args: argparse.Namespace) -> int:
     except ScaffoldError as exc:
         return _error(str(exc))
 
-    print(f"{args.slug} copied: {written[0]}")
+    if written[0] in written.kept:
+        print(f"{args.slug} already yours, unchanged — kept: {written[0]}")
+    else:
+        print(f"{args.slug} copied: {written[0]}")
     for path in written[1:]:
-        print(f"  also copied (it is mounted): {path.name}")
+        if path in written.kept:
+            print(f"  already yours, unchanged — kept: {path.name}")
+        else:
+            print(f"  also copied (it is mounted): {path.name}")
     _say_it_is_a_draft()
     print(f'next: openstategraph run {written[0]} "your question"')
     return EXIT_OK

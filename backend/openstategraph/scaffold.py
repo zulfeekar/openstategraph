@@ -27,6 +27,7 @@ literal here is what would have made this file a catalogue by accident.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -141,7 +142,54 @@ def new_team(root: Path | str, slug: str, outcome: str | None = None) -> Path:
     return new_package(root, slug, template="team", outcome=outcome)
 
 
-def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
+def _package_digest(directory: Path) -> dict[str, str]:
+    """Every file under `directory`, keyed by its path relative to it, hashed.
+
+    The comparison install-experience 20b needed a defensible definition for.
+    Included: `workflow.json`, `AGENTS.md`, `tools/`, `tests/`, `knowledge/`,
+    `data/` — everything a package actually ships, because a difference in any
+    of them is a difference a `requires()`-er would inherit. Excluded:
+    `__pycache__` and `*.pyc` (bytecode, never shipped — `copy_example` itself
+    already strips them on the way out) and `.DS_Store` (Finder noise, not
+    package content). File **mtimes are never read** — only bytes — so two
+    copies made minutes apart still compare identical.
+    """
+    digests: dict[str, str] = {}
+    for path in directory.rglob("*"):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc" or path.name == ".DS_Store":
+            continue
+        digests[str(path.relative_to(directory))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digests
+
+
+def _is_unedited(existing: Path, shipped: Path) -> bool:
+    """Whether `existing` (already on disk) is byte-identical to `shipped`
+    (what the gallery would copy). See `_package_digest` for what counts."""
+    return _package_digest(existing) == _package_digest(shipped)
+
+
+class CopyResult(tuple):
+    """`tuple[Path, ...]` — every existing caller keeps working unchanged —
+    plus which of those paths were already there, byte-identical to what
+    ships, and so were left alone rather than overwritten.
+
+    A plain tuple subclass rather than a dataclass: `copy_example` has always
+    returned "the paths now present", and that contract does not change here
+    — this only adds a way to ask which of them `copy_example` did not
+    actually touch.
+    """
+
+    kept: frozenset[Path]
+
+    def __new__(cls, paths: tuple[Path, ...], kept: frozenset[Path]) -> "CopyResult":
+        result = super().__new__(cls, paths)
+        result.kept = kept
+        return result
+
+
+def copy_example(root: Path | str, slug: str) -> CopyResult:
     """Copy a shipped example, and everything it mounts, into `root`.
 
     Gallery ticket 07. The counterpart to `new_package`: a template is
@@ -163,8 +211,23 @@ def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
 
     Raises `examples.UnknownExampleError` for a slug that is not in the
     gallery, and `ScaffoldError` when any directory it would write already
-    exists — checked for the *whole* set before the first byte is written, so a
-    refusal never leaves half a dependency chain behind.
+    exists **and differs** from what would be copied — checked for the *whole*
+    set before the first byte is written, so a refusal never leaves half a
+    dependency chain behind.
+
+    install-experience 20b: a *transitive* requirement already on disk is not
+    automatically a clash — only the package `slug` itself names directly. A
+    dependency that is byte-identical to the shipped copy (`_is_unedited`) is
+    already satisfied — skipped rather than refused, named in the result's
+    `.kept`. The requested slug itself keeps the old, stricter behaviour:
+    asking to copy `chained-summarizer` a second time still refuses, even
+    byte-identical, because a repeated direct request is a question the caller
+    gets to ask again rather than a transitive detail this call is entitled to
+    silently satisfy on its behalf. This stays all-or-nothing: the moment
+    *any* dependency actually differs, the whole copy is refused exactly as
+    before, identical ones included, because "copy the rest" is only safe when
+    nothing on the set differs. Ticket 08's protection is unchanged — an
+    *edited* dependency still refuses, same message, nothing written.
     """
     from openstategraph import examples
 
@@ -172,7 +235,15 @@ def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
     root = Path(root)
     targets = [(name, root / name) for name in needed]
 
-    clashes = [str(path) for _, path in targets if path.exists()]
+    clashes: list[str] = []
+    kept: set[Path] = set()
+    for name, path in targets:
+        if not path.exists():
+            continue
+        if name != slug and _is_unedited(path, examples.get(name).directory):
+            kept.add(path)
+        else:
+            clashes.append(str(path))
     if clashes:
         raise ScaffoldError(
             f"{', '.join(clashes)} already exists — "
@@ -181,19 +252,24 @@ def copy_example(root: Path | str, slug: str) -> tuple[Path, ...]:
 
     root.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
+    newly_written: list[Path] = []
     try:
         for name, path in targets:
+            if path in kept:
+                written.append(path)
+                continue
             shutil.copytree(
                 examples.get(name).directory,
                 path,
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
             )
             written.append(path)
+            newly_written.append(path)
     except Exception:
-        for path in written:
+        for path in newly_written:
             shutil.rmtree(path, ignore_errors=True)
         raise
-    return tuple(written)
+    return CopyResult(tuple(written), frozenset(kept))
 
 
 @dataclass(frozen=True)

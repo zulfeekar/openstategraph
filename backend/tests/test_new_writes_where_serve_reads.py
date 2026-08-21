@@ -57,8 +57,13 @@ class TestBothWritersAskTheResolver:
             seen["root"] = Path(root)
             written = Path(root) / "captured"
             # `new_package` answers with the package it created; `copy_example`
-            # answers with every path it wrote, the mount closure included.
-            return [written] if target == "copy_example" else written
+            # answers with every path it wrote, the mount closure included,
+            # plus which of them were already there unchanged (`.kept`).
+            if target == "copy_example":
+                from openstategraph.scaffold import CopyResult
+
+                return CopyResult((written,), frozenset())
+            return written
 
         monkeypatch.setattr(f"openstategraph.scaffold.{target}", capture)
         assert cli.main(argv) == cli.EXIT_OK

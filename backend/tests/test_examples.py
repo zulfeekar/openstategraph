@@ -197,6 +197,65 @@ class TestCopyingSeversIt:
         copy_example(tmp_path, "chained-summarizer")
         assert digest(source) == before
 
+    def test_a_byte_identical_existing_dependency_is_skipped_not_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """install-experience 20b. The rehearsal's own sequence: copy the
+        dependency first (byte-identical to what ships, because nothing
+        touched it), then copy the package that requires it transitively.
+        The second copy must proceed and say the dependency was kept as-is,
+        never refuse over a directory nobody edited."""
+        copy_example(tmp_path, "chained-summarizer")
+
+        result = copy_example(tmp_path, "nested-mounts")
+
+        assert [p.name for p in result] == [
+            "nested-mounts",
+            "nested-mounts-mid",
+            "chained-summarizer",
+        ]
+        assert result.kept == frozenset({tmp_path / "chained-summarizer"})
+        # untouched — the skip must not have rewritten it
+        source = examples.get("chained-summarizer").directory
+        for original in source.rglob("*"):
+            if original.is_file() and "__pycache__" not in original.parts:
+                rel = original.relative_to(source)
+                assert digest(tmp_path / "chained-summarizer" / rel) == digest(original)
+
+    def test_an_edited_existing_dependency_still_refuses_everything(
+        self, tmp_path: Path
+    ) -> None:
+        """The protection this ticket must not weaken: a dependency that has
+        actually been changed is still an all-or-nothing refusal, with the
+        same message as before, and nothing new is written."""
+        copy_example(tmp_path, "chained-summarizer")
+        edited = tmp_path / "chained-summarizer" / "workflow.json"
+        edited.write_bytes(edited.read_bytes() + b"\n// edited\n")
+
+        with pytest.raises(ScaffoldError) as excinfo:
+            copy_example(tmp_path, "nested-mounts")
+
+        assert "chained-summarizer" in str(excinfo.value)
+        assert "already exists" in str(excinfo.value)
+        assert not (tmp_path / "nested-mounts").exists()
+        assert not (tmp_path / "nested-mounts-mid").exists()
+
+    def test_copying_the_same_slug_again_still_refuses_even_if_identical(
+        self, tmp_path: Path
+    ) -> None:
+        """The skip is for a *transitive* requirement pulled in on the way to
+        something else — never for the package the caller named directly.
+        Asking to copy `chained-summarizer` a second time is a question the
+        caller gets to ask again, not a detail this call may silently
+        satisfy on its behalf."""
+        copy_example(tmp_path, "chained-summarizer")
+
+        with pytest.raises(ScaffoldError) as excinfo:
+            copy_example(tmp_path, "chained-summarizer")
+
+        assert "chained-summarizer" in str(excinfo.value)
+        assert "already exists" in str(excinfo.value)
+
 
 class TestCopyingAllOfThem:
     """`examples copy --all` — install-experience T8.
