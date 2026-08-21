@@ -216,9 +216,13 @@ export function followOpenSubjectWithDraftKey(
  * that the write itself had not already replaced — the host document is the
  * one this browser loaded from that same file when the drill-in began.
  *
- * Called by **both** host writers, and that is the part a fix can get half
- * right: `writeOpenMountHostToDisk` (the drill-in's autosave) and
- * `saveWorkflow`'s instance branch (the Save mount button).
+ * **Called from exactly one place**, and that is `production-ready` 102 rather
+ * than a detail: until then it was called from *both* host writers by
+ * convention, which a third writer would have joined only if its author knew
+ * to. The whole host-write protocol now lives in `app/hostPackageWrite`, and
+ * this rule is one of its four steps. Do not call it from anywhere else —
+ * `aThirdHostWriterCannotForget.test.ts` says so out loud, and the reason is
+ * that a supersede *without* the write beside it deletes unsaved work.
  */
 export function supersedeDraftAfterHostWrite(
   root: string,

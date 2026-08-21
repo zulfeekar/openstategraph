@@ -1,15 +1,12 @@
 import type { Result } from '@core/kernel/Result';
-import { getKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import { recordKnownSavedAt } from '@app/workflowFileWatch';
+import { writeHostPackage } from '@app/hostPackageWrite';
 import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import { getOpenAddress } from '@app/openAddress';
 import { isInstance } from '@core/model/MountAddress';
 import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { rememberDiskDocument } from '@app/diskAutosave';
-import {
-  adoptSlugForDraft,
-  currentDraftId,
-  supersedeDraftAfterHostWrite,
-} from '@app/workflowDrafts';
+import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
 import { duplicateNameConfirmation } from './consequences';
 
 /**
@@ -120,32 +117,21 @@ export async function saveWorkflow({
         message: 'This mount has no parent loaded, so there is nowhere to save its overrides.',
       };
     }
-    // Compare-and-set on the parent's `saved_at`. The file watch follows the
-    // *class* while an instance is open, so nothing would otherwise notice the
-    // parent moving — and this save writes a whole retained document, which
-    // would silently revert someone else's parent edit.
-    const current = await client.summary(address.root);
-    const baseline = getKnownSavedAt(address.root);
-    if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
-      return {
-        kind: 'refused',
-        message: `"${address.root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
-      };
-    }
-    const written = await client.save(
-      address.root,
-      (mounts.rootDocument['name'] as string) ?? address.root,
-      mounts.rootDocument,
-    );
-    if (!written.ok) return { kind: 'refused', message: `Could not save: ${written.error}` };
-    // **The parent's draft is now a lie** (`production-ready` 101), the same
-    // reason and the same call as the drill-in's autosave in `diskAutosave`.
-    // Wiring only one of the two writers leaves Save-mount-then-Back losing
-    // the override exactly as before.
-    supersedeDraftAfterHostWrite(address.root);
-    const row = await client.summary(address.root);
-    recordKnownSavedAt(address.root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
-    return { kind: 'overrides', root: address.root };
+    // **Through the seam, not beside it** (`production-ready` 102). The
+    // compare-and-set on the parent's `saved_at` — the file watch follows the
+    // *class* while an instance is open, so nothing else notices the parent
+    // moving — the write, the draft supersede 101 was filed for, and the
+    // baseline adoption are one protocol, and this branch used to carry its
+    // own copy of it. A third writer of a host package now gets all four by
+    // construction instead of by review.
+    const outcome = await writeHostPackage(client, {
+      address,
+      rootDocument: mounts.rootDocument,
+    });
+    if (outcome.kind === 'refused') return { kind: 'refused', message: outcome.reason };
+    if (outcome.kind === 'failed')
+      return { kind: 'refused', message: `Could not save: ${outcome.error}` };
+    return { kind: 'overrides', root: outcome.root };
   }
 
   const open = getOpenSlug();

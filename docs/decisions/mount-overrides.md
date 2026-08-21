@@ -99,12 +99,23 @@ edits the field as JSON with the same validation.
 > A draft means *this browser's unsaved edits to a package*, and it stops
 > meaning that the moment this same browser writes that package from somewhere
 > else — which is exactly what a mount save does, since the override lives on
-> the parent. `workflowDrafts.supersedeDraftAfterHostWrite` drops it, and
-> **both** host writers call it: the drill-in's autosave
-> (`writeOpenMountHostToDisk`) and the **Save mount** button
-> (`saveWorkflow`'s instance branch). Deliberately not a timestamp comparison
-> inside `restoreDraftFor` — that function compares canonical bytes and not
-> clocks on purpose, and the clocks here belong to two machines.
+> the parent. `workflowDrafts.supersedeDraftAfterHostWrite` drops it.
+> Deliberately not a timestamp comparison inside `restoreDraftFor` — that
+> function compares canonical bytes and not clocks on purpose, and the clocks
+> here belong to two machines.
+>
+> **One seam, not two conventions** (`production-ready` 102). Until that ticket
+> this passage read *"both host writers call it"*, which was true and was the
+> whole of the guarantee: a third writer of a host package would have compiled,
+> passed review and reintroduced the deletion — measured, by adding one and
+> watching all 2495 tests stay green. Every host write now passes through
+> `app/hostPackageWrite.writeHostPackage`, which owns the whole protocol: the
+> compare-and-set on the parent's `saved_at`, the write, the supersede, and the
+> adoption of this tab's own write as the next baseline. The two writers keep
+> only what is theirs — autosave's change detection, and the button's sentence.
+> `src/app/aThirdHostWriterCannotForget.test.ts` reads `src/` and goes red when
+> a host document reaches a `save` call anywhere else, because no signature can
+> stop code calling the client directly.
 
 ## Rejected alternatives
 

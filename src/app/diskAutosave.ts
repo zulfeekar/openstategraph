@@ -4,16 +4,9 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
-import {
-  supersedeDraftAfterHostWrite,
-  type DraftRestoreReport,
-} from './workflowDrafts';
-import {
-  CURRENT_SLUG_KEY,
-  forgetKnownSavedAt,
-  getKnownSavedAt,
-  recordKnownSavedAt,
-} from './workflowFileWatch';
+import { type DraftRestoreReport } from './workflowDrafts';
+import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
+import { writeHostPackage } from './hostPackageWrite';
 
 /**
  * Whether an edit should be written to `workflows/<slug>/` right now.
@@ -379,30 +372,17 @@ export async function writeOpenMountHostToDisk(
   const payload = canonical(mounts.rootDocument);
   if (prev === payload) return { kind: 'unchanged' };
 
-  const baseline = getKnownSavedAt(root);
-  const current = await client.summary(root);
-  if (current.ok && current.value?.savedAt && baseline && current.value.savedAt !== baseline) {
-    return {
-      kind: 'failed',
-      reason: `"${root}" changed since this mount was opened. Reopen it to pick up the change, then edit again.`,
-    };
-  }
-
-  const name = (mounts.rootDocument['name'] as string) || root;
-  const result = await client.save(root, name, mounts.rootDocument);
-  if (!result.ok) return { kind: 'failed', reason: result.error };
+  // **One seam, not one convention** (`production-ready` 102). The
+  // compare-and-set on the parent's `saved_at`, the write, the draft supersede
+  // that 101 was filed for, and the adoption of our own write as the next
+  // baseline are one protocol, and this writer used to spell it out itself
+  // alongside a second hand-written copy in the Save mount button. Getting
+  // different halves of it right at two sites is what 101 did, and what it
+  // said it had not fixed.
+  const outcome = await writeHostPackage(client, mounts);
+  if (outcome.kind === 'refused') return { kind: 'failed', reason: outcome.reason };
+  if (outcome.kind === 'failed') return { kind: 'failed', reason: outcome.error };
 
   lastHostWritten.set(root, payload);
-  // **The parent's draft is now a lie** (`production-ready` 101). It was
-  // written when the parent was opened, before this drill-in existed, so it
-  // does not carry the override this call has just put in the file — and Back
-  // re-reads the file and then restores that draft over it.
-  supersedeDraftAfterHostWrite(root);
-  // Adopt our own write as the new baseline. Forgetting it — what the class
-  // path does — would disable the guard above from the second edit onwards,
-  // and recording nothing would make every later write look like somebody
-  // else's and refuse for ever.
-  const row = await client.summary(root);
-  recordKnownSavedAt(root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
   return { kind: 'saved' };
 }
