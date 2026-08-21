@@ -160,37 +160,20 @@ export class RouterNodeModel extends AbstractNodeModel {
   }
 
   /**
-   * The whole prompt, assembled.
+   * There is deliberately no `systemPrompt` getter here (ticket 39).
    *
-   * Mirrors `BaseRouter.PROMPT` in Python — the ClassVar, not the
-   * `system_prompt()` method this comment used to name, which
-   * install-experience 19 deleted (ticket 38). The ordering is the substance:
-   * preamble, then the branch list, then the inherited default rules, then the
-   * developer's rules, then the output contract **last**. Later instructions
-   * win ties, so a rule such as "explain your reasoning" must not be able to
-   * come after the contract or every classification would fail to parse.
+   * One existed, and it hand-mirrored `SystemPrompt.render()`: the same
+   * layers joined with blank lines under a bare `Rules:` label. Ticket 37
+   * wrapped every section of `render()` in an XML element and the mirror was
+   * not updated, because nothing read it — the inspector's locked sections
+   * come from `/api/node-contracts`, which serves Python's own. A second copy
+   * of the prompt order with no consumer could only ever be wrong, so it was
+   * deleted rather than re-mirrored, and
+   * `backend/tests/test_prompt_mirror_contract.py` fails if it comes back.
    *
-   * Exposed so the inspector can show the locked sections read-only beside the
-   * editable one — a developer writing rules needs to see what the machinery
-   * already says, or they duplicate and contradict it.
+   * The constants above stay: they are the locked *text*, pinned to Python by
+   * that same file. The *order* they go in is decided in one place only.
    */
-  get systemPrompt(): string {
-    const listed = this.branches
-      .map((entry) =>
-        entry.name === this.fallback
-          ? `- ${entry.name}  (used when nothing else matches)`
-          : `- ${entry.name}`,
-      )
-      .join('\n');
-    const rules = this.rules.trim();
-    return [
-      ROUTER_PREAMBLE,
-      `Branches:\n${listed}`,
-      ROUTER_DEFAULT_RULES,
-      ...(rules ? [`Rules:\n${rules}`] : []),
-      ROUTER_OUTPUT_CONTRACT,
-    ].join('\n\n');
-  }
 
   get branches(): readonly BranchEntry[] {
     return branchesOf(this.data);

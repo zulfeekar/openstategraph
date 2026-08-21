@@ -86,17 +86,10 @@ export class GraderNodeModel extends AbstractNodeModel {
   }
 
   /**
-   * The whole prompt, assembled — preamble, criteria, contract **last**.
-   *
-   * Exposed so the inspector can show the locked parts read-only beside the
-   * editable one. A developer writing criteria needs to see what the machinery
-   * already says, or they duplicate and contradict it.
+   * There is deliberately no `systemPrompt` getter here (ticket 39). See the
+   * note in `RouterNode.ts`: the editor assembles no prompt of its own, and
+   * `backend/tests/test_prompt_mirror_contract.py` fails if one returns.
    */
-  get systemPrompt(): string {
-    return [GRADER_PREAMBLE, `Criteria:\n${this.effectiveCriteria}`, GRADER_OUTPUT_CONTRACT].join(
-      '\n\n',
-    );
-  }
 }
 
 /**

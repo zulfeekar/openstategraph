@@ -6,8 +6,6 @@ import type { Workbench } from '@app/Workbench';
 import {
   branchesOf,
   createRouterNode,
-  ROUTER_OUTPUT_CONTRACT,
-  ROUTER_PREAMBLE,
   ROUTER_TYPE,
   type RouterNodeModel,
 } from './RouterNode';
@@ -266,41 +264,26 @@ describe('router prompt composition', () => {
     expect(router().rules).toBe('');
   });
 
-  it('still produces a complete prompt with no rules at all', () => {
-    const prompt = router().systemPrompt;
-    expect(prompt).toContain(ROUTER_PREAMBLE);
-    expect(prompt).toContain(ROUTER_OUTPUT_CONTRACT);
-    expect(prompt).toContain('dataquery');
-  });
+  /**
+   * The prompt *assembly* is no longer asserted here, because the editor no
+   * longer has one (ticket 39). `RouterNodeModel.systemPrompt` hand-mirrored
+   * `SystemPrompt.render()` for nobody — the inspector's locked sections come
+   * from `/api/node-contracts` — and it silently disagreed with Python for a
+   * day after ticket 37 added XML delimiters. Order, the branch list and the
+   * fallback label are Python's, pinned in
+   * `backend/tests/test_prompt_sections_are_delimited.py`; what is still this
+   * model's to promise is which parts a developer can reach.
+   */
 
-  it('includes the developer rules verbatim', () => {
+  it('stores the developer rules verbatim', () => {
     const node = router();
     workbench.controller.nodes.setField(node.id, 'rules', 'Revenue questions are dataquery.');
     const fresh = workbench.model.node(node.id) as RouterNodeModel;
-    expect(fresh.systemPrompt).toContain('Revenue questions are dataquery.');
+    expect(fresh.rules).toBe('Revenue questions are dataquery.');
   });
 
-  it('keeps the output contract even when the rules field is cleared', () => {
-    const node = router();
-    workbench.controller.nodes.setField(node.id, 'rules', '');
-    const fresh = workbench.model.node(node.id) as RouterNodeModel;
-    // The reason the contract is not a field at all.
-    expect(fresh.systemPrompt).toContain(ROUTER_OUTPUT_CONTRACT);
-  });
-
-  it('puts the output contract AFTER the rules, so rules cannot countermand it', () => {
-    const node = router();
-    workbench.controller.nodes.setField(node.id, 'rules', 'Explain your reasoning at length.');
-    const prompt = (workbench.model.node(node.id) as RouterNodeModel).systemPrompt;
-
-    // Later instructions win ties. Contract last, or that rule breaks parsing.
-    expect(prompt.indexOf('Explain your reasoning')).toBeLessThan(
-      prompt.indexOf(ROUTER_OUTPUT_CONTRACT),
-    );
-  });
-
-  it('names the fallback in the prompt so the model knows the escape hatch', () => {
-    expect(router().systemPrompt).toContain('nothing else matches');
+  it('names a fallback branch, so the runtime has an escape hatch to label', () => {
+    expect(router().branches.map((b) => b.name)).toContain(router().fallback);
   });
 
   it('exposes no field that can delete the machinery', () => {

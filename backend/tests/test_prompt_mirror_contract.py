@@ -21,17 +21,24 @@ drift test pins it: "a new hand-mirror **without** that pin is what this rule
 forbids." These constants are the mirror; this is the pin that was never
 written.
 
-The mirror earns its place because of *when* the string is needed. It is what
-the inspector shows a developer **while they type**, so that they can see what
-the machinery already says instead of duplicating or contradicting it — the
-locked-sections rule. That has to render with no server necessarily reachable,
-so fetching it from `/api/node-contracts` at edit time is not available.
+The mirror is *for* the locked-sections rule: a developer writing rules needs to
+see what the machinery already says instead of duplicating or contradicting it,
+and the constant is the form that renders with no server reachable.
 
-The consequence of the drift is therefore not a wrong run — the run always used
-Python's copy. It is worse in a quieter way: **the editor showed the developer a
-prompt their workflow was not running.** A grader card promising three rules
-while the grader obeyed four is a lie told by the one surface built to prevent
-exactly that.
+**Read that as the intent it is.** Until ticket 39 this paragraph said the
+inspector shows these strings while a developer types, and it does not:
+`src/view/inspector/LockedPromptSections.tsx` fetches `/api/node-contracts` and
+renders Python's own sections, so a dead backend means the panel is absent
+rather than served from here. Nothing in `src/` reads these five constants
+except the two nodes' unit tests. That is the same defect this repository has
+corrected in its own prose several times — a claim about a mirror that had
+stopped being true — and it is corrected rather than deleted, because the
+drift the file below pins is real either way: if the offline surface is ever
+written, it must not show a prompt the runtime is not running.
+
+The consequence of the drift was therefore never a wrong run — the run always
+used Python's copy. It was that the strings a future surface would show had
+quietly stopped being the strings the runtime obeys.
 
 ## What is compared
 
@@ -114,3 +121,51 @@ def test_the_extractor_would_notice_a_rename() -> None:
     """
     with pytest.raises(AssertionError, match="not found"):
         _ts_constant(ROUTER_TS, "ROUTER_PREAMBLE_THAT_DOES_NOT_EXIST")
+
+
+class TestTheEditorAssemblesNoPromptOfItsOwn:
+    """The constants are mirrored; the **assembly** is not, and must not be (39).
+
+    `RouterNodeModel.systemPrompt` and `GraderNodeModel.systemPrompt` used to
+    hand-mirror `SystemPrompt.render()` — the same layers joined with blank
+    lines under a bare `Rules:` / `Criteria:` label. Ticket 37 wrapped every
+    section of `render()` in an XML element, the five constants above still
+    matched, this file stayed green, and the two assemblies silently disagreed
+    for a day:
+
+        Python      <role>…</role> <context>…</context> <rules>…</rules> …
+        TypeScript  preamble \\n\\n Branches:… \\n\\n Rules:… \\n\\n contract
+
+    Both getters were deleted rather than re-mirrored (ticket 39). Nothing
+    consumed either one: the inspector's `LockedPromptSections.tsx` fetches
+    `/api/node-contracts`, which serves Python's own sections, so the only
+    callers were the two nodes' own unit tests. Re-mirroring would have meant
+    porting `effective_rules()` — its three layers and its replace/extend
+    switch — into TypeScript to settle the difference, growing the mirror in
+    order to pin it, for zero consumers. The constants stay because they are
+    the *text* a future offline surface would show; the *order* they go in is
+    Python's alone.
+
+    This is the pin that "one of them no longer exists" needs: a deleted mirror
+    cannot drift, so the test is that it stays deleted.
+    """
+
+    def test_neither_routing_node_assembles_a_whole_prompt(self) -> None:
+        for source in (ROUTER_TS, GRADER_TS):
+            assert not re.search(r"\bget\s+systemPrompt\b", source.read_text()), (
+                f"{source.name} has grown a client-side prompt assembly again. "
+                "Prompt order is decided in exactly one place — "
+                "`SystemPrompt.render()` — and a second copy in TypeScript has "
+                "no consumer and no way to fail. If the editor genuinely needs "
+                "a whole prompt, read it from /api/node-contracts, which serves "
+                "Python's."
+            )
+
+    def test_the_constants_the_mirror_kept_are_still_there(self) -> None:
+        """The positive control for the deletion.
+
+        A file emptied by accident would also satisfy the assertion above. This
+        says the five pinned constants survived it.
+        """
+        assert _ts_constant(ROUTER_TS, "ROUTER_PREAMBLE")
+        assert _ts_constant(GRADER_TS, "GRADER_OUTPUT_CONTRACT")

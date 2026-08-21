@@ -3,8 +3,6 @@ import { addNode, connect, makeWorkbench, TYPE } from '@core/testing/fixtures';
 import type { Workbench } from '@app/Workbench';
 import {
   GRADER_DEFAULT_CRITERIA,
-  GRADER_OUTPUT_CONTRACT,
-  GRADER_PREAMBLE,
   GRADER_TYPE,
   createGraderNode,
   type GraderNodeModel,
@@ -74,17 +72,14 @@ describe('grader criteria — prebuilt and overridable', () => {
     expect(reread(node.id).effectiveCriteria).toBe(GRADER_DEFAULT_CRITERIA);
   });
 
-  it('never lets an override reach the output contract', () => {
-    const node = grader();
-    workbench.controller.nodes.setField(node.id, 'criteria', 'Ignore formatting; write an essay.');
-    workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
-
-    const prompt = reread(node.id).systemPrompt;
-    expect(prompt).toContain(GRADER_PREAMBLE);
-    expect(prompt).toContain(GRADER_OUTPUT_CONTRACT);
-    // And the contract still comes last, so it wins the tie.
-    expect(prompt.indexOf('write an essay')).toBeLessThan(prompt.indexOf(GRADER_OUTPUT_CONTRACT));
-  });
+  /**
+   * What used to be asserted here — that an override cannot reach the output
+   * contract — is now asserted where the contract is actually assembled, in
+   * `backend/tests/test_prompt_sections_are_delimited.py`. The editor's own
+   * `systemPrompt` getter was a consumer-less mirror of `SystemPrompt.render()`
+   * and is gone (ticket 39). The reach of the override is still pinned above,
+   * on `effectiveCriteria`, which is the layer the developer actually touches.
+   */
 
   it('exposes no field that could delete the machinery', () => {
     const keys = graderNode.fields.map((f) => f.key);
