@@ -161,6 +161,33 @@ class TestTheEditorAssemblesNoPromptOfItsOwn:
                 "Python's."
             )
 
+    def test_the_grader_composes_no_rules_layers_of_its_own(self) -> None:
+        """The layering half of the same mirror (ticket 42).
+
+        `GraderNodeModel.effectiveCriteria` reimplemented
+        `SystemPrompt.effective_rules()` in TypeScript — extend by newline,
+        replace keeps the developer's text, an empty override falls back — and
+        it knew **two** of the three layers Python composes. The Grader has a
+        `skill` port, so a grader with a skill wired had no TypeScript answer
+        at all; the mirror was not merely unpinned, it was already behind.
+
+        Pinning it would have meant porting the third layer and the shared
+        replace/extend switch into TypeScript to settle the difference —
+        growing the mirror in order to pin it, for zero consumers, exactly the
+        trade 39 refused one layer up. Deleted instead. Its four promises are
+        asserted against the runtime in `test_grader.py` and, for the skill
+        layer, `test_skill_layer.py::TestBothSupplied`.
+        """
+        assert not re.search(r"\bget\s+effectiveCriteria\b", GRADER_TS.read_text()), (
+            "GraderNode.ts has grown a client-side rules composition again. "
+            "Rules layers are composed in exactly one place — "
+            "`SystemPrompt.effective_rules()`, which knows three of them — and "
+            "a TypeScript copy that knows two is a card that lies the moment a "
+            "skill is wired. If the editor genuinely needs the composed rules, "
+            "read `effective_rules` from /api/node-contracts, which serves "
+            "Python's."
+        )
+
     def test_the_constants_the_mirror_kept_are_still_there(self) -> None:
         """The positive control for the deletion.
 

@@ -39,47 +39,46 @@ describe('grader criteria — prebuilt and overridable', () => {
     workbench = makeWorkbench();
   });
 
-  it('works before anyone configures it', () => {
-    // Prebuilt criteria, not a blank field.
-    expect(grader().effectiveCriteria).toBe(GRADER_DEFAULT_CRITERIA);
+  /**
+   * What used to be asserted here — the four layering promises (works
+   * unconfigured, extend adds, replace drops, an empty replace falls back) —
+   * was asserted against `effectiveCriteria`, the editor's own reimplementation
+   * of `SystemPrompt.effective_rules()`. It knew two of Python's three layers
+   * and nothing but this file read it, so it was deleted rather than grown to
+   * three (ticket 42, following 39).
+   *
+   * The promises did not go with it. All four are asserted against the code
+   * that actually runs them, in `backend/tests/test_grader.py`
+   * (`test_it_works_before_anyone_configures_it`,
+   * `test_developer_criteria_are_added_to_the_defaults`,
+   * `test_developer_criteria_can_replace_the_defaults`,
+   * `test_replacing_with_nothing_keeps_the_defaults`) and, for the skill layer TypeScript never had,
+   * `backend/tests/test_skill_layer.py::TestBothSupplied`. The reach of an
+   * override against the output contract is pinned in
+   * `backend/tests/test_prompt_sections_are_delimited.py`.
+   *
+   * What remains here is what is genuinely the editor's: the field schema, and
+   * the `criteriaMode` → `rulesMode` document migration below.
+   */
+
+  it('still ships the prebuilt criteria the runtime runs', () => {
+    // The constant stays — it is the *text* an offline surface would show, and
+    // `backend/tests/test_prompt_mirror_contract.py` pins it to Python's. Only
+    // the composition of the layers went.
+    expect(GRADER_DEFAULT_CRITERIA).toContain('never invented');
+    expect(grader().data['criteria']).toBe('');
   });
 
-  it('adds the developer criteria to the built-ins by default', () => {
+  it('lets the developer set criteria and a mode, and stores both verbatim', () => {
     const node = grader();
     workbench.controller.nodes.setField(node.id, 'criteria', '- Must name a genre.');
-
-    const criteria = reread(node.id).effectiveCriteria;
-    expect(criteria).toContain('- Must name a genre.');
-    // Extending is the safe direction — nothing the node already knew is lost.
-    expect(criteria).toContain('never invented');
-  });
-
-  it('replaces the built-ins when the mode says so', () => {
-    const node = grader();
-    workbench.controller.nodes.setField(node.id, 'criteria', '- Only the genre matters.');
     workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
 
-    const criteria = reread(node.id).effectiveCriteria;
-    expect(criteria).toBe('- Only the genre matters.');
-    // Prebuilt behaviour that cannot be overridden is a straitjacket.
-    expect(criteria).not.toContain('never invented');
+    // The document carries what was typed; what the model sees is composed
+    // once, in Python, from exactly these two values.
+    expect(reread(node.id).data['criteria']).toBe('- Must name a genre.');
+    expect(reread(node.id).replacesDefaults).toBe(true);
   });
-
-  it('keeps the built-ins when replace is chosen but nothing is written', () => {
-    const node = grader();
-    workbench.controller.nodes.setField(node.id, 'rulesMode', 'replace');
-    // Clearing a field is far more often a slip than a request for no criteria.
-    expect(reread(node.id).effectiveCriteria).toBe(GRADER_DEFAULT_CRITERIA);
-  });
-
-  /**
-   * What used to be asserted here — that an override cannot reach the output
-   * contract — is now asserted where the contract is actually assembled, in
-   * `backend/tests/test_prompt_sections_are_delimited.py`. The editor's own
-   * `systemPrompt` getter was a consumer-less mirror of `SystemPrompt.render()`
-   * and is gone (ticket 39). The reach of the override is still pinned above,
-   * on `effectiveCriteria`, which is the layer the developer actually touches.
-   */
 
   it('exposes no field that could delete the machinery', () => {
     const keys = graderNode.fields.map((f) => f.key);
@@ -111,7 +110,7 @@ describe('grader criteria — prebuilt and overridable', () => {
     }) as GraderNodeModel;
 
     expect(restored.replacesDefaults).toBe(true);
-    expect(restored.effectiveCriteria).toBe('- Only the genre matters.');
+    expect(restored.data['criteria']).toBe('- Only the genre matters.');
   });
 
   it('and re-saves it under the one key, so the two can never disagree', () => {

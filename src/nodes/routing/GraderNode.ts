@@ -62,33 +62,33 @@ export class GraderNodeModel extends AbstractNodeModel {
     super(definition, withMigratedRulesMode(init));
   }
 
-  /** The developer's criteria. The only authorable part of the prompt. */
-  get criteria(): string {
-    return this.getText(FIELD_CRITERIA);
-  }
-
-  /** True when the developer's criteria replace the prebuilt ones. */
+  /**
+   * True when the developer's criteria replace the prebuilt ones.
+   *
+   * The one derived read that stays: it is not a mirror of anything Python
+   * composes, it is the editor reading its **own** document — `rulesMode`
+   * with the pre-generalisation `criteriaMode` as a fallback — which is the
+   * migration the constructor above depends on.
+   */
   get replacesDefaults(): boolean {
     return replacesRules(this.data);
   }
 
   /**
-   * The criteria the model actually sees.
+   * There is deliberately no `systemPrompt` getter here (ticket 39), and no
+   * `effectiveCriteria` either (ticket 42). See the note in `RouterNode.ts`:
+   * the editor assembles no prompt of its own and composes no rules layers of
+   * its own, and `backend/tests/test_prompt_mirror_contract.py` fails if
+   * either returns.
    *
-   * Replacing with an *empty* string falls back to the defaults: clearing a
-   * field is far more often a slip than a deliberate request for no criteria.
-   */
-  get effectiveCriteria(): string {
-    const mine = this.criteria.trim();
-    if (this.replacesDefaults && mine) return mine;
-    if (!mine) return GRADER_DEFAULT_CRITERIA;
-    return `${GRADER_DEFAULT_CRITERIA}\n${mine}`;
-  }
-
-  /**
-   * There is deliberately no `systemPrompt` getter here (ticket 39). See the
-   * note in `RouterNode.ts`: the editor assembles no prompt of its own, and
-   * `backend/tests/test_prompt_mirror_contract.py` fails if one returns.
+   * `effectiveCriteria` was the layering half of the same mirror — extend by
+   * newline, replace keeps the developer's text, an empty override falls back
+   * — and it knew **two** of Python's three layers. `effective_rules()`
+   * composes `default_rules` → `rules` → `skill` under one replace/extend
+   * switch, and this Grader has a `skill` port, so a grader with a wired skill
+   * had no TypeScript answer at all. Nothing read it but its own unit test;
+   * every promise it made is asserted against the runtime in
+   * `backend/tests/test_grader.py` and `backend/tests/test_skill_layer.py`.
    */
 }
 
