@@ -26,6 +26,7 @@ without ambient memory tools bound the agent has none and never guesses.
 
 from __future__ import annotations
 
+from openstategraph.abc.prompt import SystemPrompt
 from openstategraph.compile.node_runtime import advisor_context
 
 CATALOG = "- tool.web-search — searches the web"
@@ -98,3 +99,44 @@ class TestItNeverOverridesAnAnswerYouAlreadyHave:
         assert "a tool returned" in text
         assert "never say you cannot look something up" in text
 
+
+
+class TestBothSentencesSurviveReplaceMode:
+    """The fourth test this ticket asked for, and the one never written.
+
+    The ticket's own test list ends *"both sentences survive `rulesMode:
+    "replace"`, because this is machinery"* — and nothing pinned it. The two
+    clauses above were measured live on 2026-08-21 and both hold (the offer
+    appears on an invented name; a returned result is used rather than denied),
+    so the wording is now known-good — which makes the way it could be lost
+    the only remaining risk, and `replace` is that way.
+
+    It is safe today for a structural reason rather than a careful one:
+    `advisor_context` is composed into `SystemPrompt.context`, and
+    `replace_defaults` governs only the rules layers
+    (`default_rules` → `rules` → `skill`). A developer clearing the rules
+    field therefore cannot take the machinery with it. That is a claim about a
+    seam, so it is pinned at the seam: move this block into a rules layer to
+    save a line, and these go red.
+    """
+
+    def _prompt(self, *, replace: bool) -> str:
+        return (
+            SystemPrompt(preamble="You are an agent.", output_contract="Answer plainly.")
+            .with_context(advisor_context("agent-1", CATALOG))
+            .with_defaults("Prebuilt rules the node shipped with.")
+            .with_rules("Only ever answer in French.", replace_defaults=replace)
+            .render()
+        )
+
+    def test_the_invalid_name_clause_survives_replace(self) -> None:
+        assert "is not a valid tool" in self._prompt(replace=True)
+
+    def test_the_counterweight_survives_replace(self) -> None:
+        assert "never say you cannot look something up" in self._prompt(replace=True).lower()
+
+    def test_replace_really_did_drop_the_rules_layer_beneath(self) -> None:
+        """Otherwise the two above would pass for the wrong reason."""
+        replaced = self._prompt(replace=True)
+        assert "Prebuilt rules the node shipped with." not in replaced
+        assert "Prebuilt rules the node shipped with." in self._prompt(replace=False)
