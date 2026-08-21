@@ -275,6 +275,13 @@ class BaseTool(ABC):
         costing the whole compile. `NodeRuntime._bind_tools` passes the list
         and records each sentence as a `CAPABILITY_FAILED` finding, which is
         the same channel every other lost capability already travels.
+
+        **An override that raises anyway costs one capability too**
+        (`production-ready` 93). Appending is the contract; a stranger's
+        implementation is not bound by it, so `_bind_tools` wraps this call and
+        turns the exception into the same sentence on the same channel. Prefer
+        the sink — it says what happened in your own words — but a tool that
+        raises no longer takes the agent's other tools down with it.
         """
         return [self.as_langchain_tool()]
 

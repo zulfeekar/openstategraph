@@ -453,9 +453,13 @@ TOOLS = [Ping]        # a list — or `= Ping`, or `= Ping()`. All three work.
 > field, and the keyword `as_langchain_tool()` passes to LangChain — so
 > writing it in a tool body reads right and leaves `Args` undeclared. It has
 > no default, and a tool without it can be neither described nor bound.
-> Discovery names such a class, its file and the fix in the capabilities
-> `warnings`, and drops that one tool; before `production-ready` 87 it
-> answered the whole endpoint with a 500.
+> Both discovery paths name such a class and the fix, and drop that one tool:
+> a package's own `tools/` folder reports it in the capabilities `warnings`
+> (before `production-ready` 87 it answered the whole endpoint with a 500),
+> and an entry-point plugin's is skipped by the loader with the distribution
+> named (before `production-ready` 93 it registered, appeared in the palette,
+> validated clean, and then killed the run — along with every other tool
+> wired to the same agent).
 
 Three more groups exist, with the same rules:
 

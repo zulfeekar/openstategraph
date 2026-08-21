@@ -1912,13 +1912,36 @@ class NodeRuntime:
         one a plugin that would not import and a reasoning effort that could
         not be carried already use, so the sentence reaches the run response,
         the CLI and `CompiledWorkflow.warnings` with no per-surface plumbing.
+
+        **One tool at a time, and the `try` is deliberately wide**
+        (`production-ready` 93). `as_langchain_tools` is a *stranger's* method
+        — a plugin's, an MCP server's — and until this guard existed one that
+        raised took the whole list with it: the agent lost every other tool
+        wired to it and the exception left the compile as a bare traceback.
+        The contract this method already advertises is that a capability which
+        cannot materialise costs one capability, and `tool.mcp` honours it by
+        appending to `warnings` rather than raising; the wrapper is what makes
+        the promise true for a tool that does not know about it. Nothing is
+        swallowed — every exception becomes a sentence naming the node, its
+        type and the exception, on the channel a lost capability already
+        travels — so a real defect in a working tool is *louder* here, not
+        quieter: it used to kill the run before anything could name it.
         """
         lc_tools: list[Any] = []
         warnings: list[str] = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
             tool = self._bound_tool(tool_node_id)
-            if tool is not None:
+            if tool is None:
+                continue
+            try:
                 lc_tools.extend(tool.as_langchain_tools(warnings=warnings))
+            except Exception as exc:
+                warnings.append(
+                    f'Tool "{tool_node_id}" (type "{self._types.get(tool_node_id, "")}") '
+                    f"could not be bound and is missing from this node's tools "
+                    f"({type(exc).__name__}: {exc}) — the other tools wired to it are "
+                    "unaffected, but its answer will not be grounded in that data source."
+                )
         for message in warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, message)
         return lc_tools

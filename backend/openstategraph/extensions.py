@@ -306,7 +306,11 @@ def _discover_tools() -> Discovered:
     """
     import inspect
 
-    from openstategraph.abc.tool import BaseTool, _abstract_tool_diagnosis
+    from openstategraph.abc.tool import (
+        BaseTool,
+        _abstract_tool_diagnosis,
+        _missing_args_message,
+    )
 
     registry: dict[str, Any] = {}
     #: node_type -> the distribution that claimed it first, so the second
@@ -346,6 +350,27 @@ def _discover_tools() -> Discovered:
                         TOOLS_GROUP,
                         f"{type(tool).__name__} is not an openstategraph.abc.BaseTool",
                     )
+                )
+                continue
+            if not hasattr(tool, "Args"):
+                # 87's check, aimed outward — the same slip, reached through
+                # `pip install` instead of through a package's own `tools/`
+                # folder, and it used to survive here because this layer only
+                # asked whether the class *instantiates*. It does: `Args` has
+                # no default, so such a tool is fine until something reads it,
+                # and then the palette degrades its card
+                # (`plugin_capabilities`), `validate` resolves the binding
+                # through this very registry and prints it as fine, and the run
+                # dies inside the agent node. Surfaced and dropped, exactly as
+                # `discover_tool_instances` does it, so all three doors say
+                # "absent" once.
+                #
+                # Below the checks above on purpose, and after construction so
+                # it covers an exported *instance* too: a family base with
+                # neither `_execute` nor `Args` is already named better by
+                # `_abstract_tool_diagnosis`.
+                warnings.append(
+                    _skipped(entry_point, TOOLS_GROUP, _missing_args_message(type(tool).__name__))
                 )
                 continue
             if not tool.node_type:
