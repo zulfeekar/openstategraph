@@ -43,11 +43,18 @@ ambiently (`ambient_knowledge_tool`), so `rewrite1` can also reach it even
 though no edge says so. `know1` is on the canvas because a reader should be able
 to see where the second brain is; unwiring it would change nothing at runtime.
 
-## Six attempts for two laps
+## Three attempts, three laps
 
-`attempts` is one counter for the whole graph and *both* agents increment it, so
-one lap of this loop costs **two** attempts. `maxAttempts: 6` therefore buys
-three laps, not six. See gallery ticket 21.
+`maxAttempts: 3` on `grader1` buys three looks at an answer — this grader's own
+budget, counted by the grader itself, whatever else sits on the path.
+
+It used to read `6`, and that was not generosity. `attempts` is one counter for
+the whole graph that every model-driven node increments once per invocation, and
+the grader's check was against *that*, so with two agents inside the cycle one
+lap cost **two** and `6` bought three laps. Gallery ticket 21 moved the count
+onto the grader — the only node that knows a lap happened — so the number on the
+card is the number of looks, and this package's behaviour is unchanged: three
+looks before and three looks now.
 
 ## Smoke run
 

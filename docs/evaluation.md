@@ -132,7 +132,7 @@ the gold used a subquery. `COUNT(*)` and `COUNT(id)` are the same answer.
 | `refusal_accuracy` | of the deliberately unanswerable questions, the share the system declined instead of inventing |
 | `overall_accuracy` | every case, answerable or not. **This is what `--threshold` gates on** — gating on execution accuracy alone would let a system score well by inventing an answer to every question it cannot know |
 | `sql_recovery_rate` | how often a query could be recovered from the answer at all. A system that is right but silent about its query is unverifiable, and that is a finding, not a rounding error |
-| `attempts_total`, `retried_items` | grader revise laps — how hard the loop is working for the score |
+| `attempts_total`, `retried_items` | model-node invocations across the graded runs — how hard the workflow is working for the score. Not a lap count: a cycle holding two agents spends two per lap (`workflow-gallery` 21) |
 | `latency_p50`, `latency_p95` | nearest-rank percentiles, defined explicitly so two runs agree |
 | `cost` | usually `null` with the reason: `RunResult` carries no token usage. Attach LangSmith (`LANGSMITH_TRACING=true`) for real per-run token and dollar accounting |
 

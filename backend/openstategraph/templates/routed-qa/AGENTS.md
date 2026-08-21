@@ -28,9 +28,11 @@ Four ideas, one document:
   because `feedback` is a typed feedback input.
 - **`agent2`** — the cheap path. Not everything deserves three model calls.
 
-`maxAttempts` on the grader bounds the loop. It is attempts, not supersteps —
-a loop that never satisfies its criteria gives up and emits its best answer
-rather than running forever.
+`maxAttempts` on the grader bounds the loop. It counts **that grader's own
+attempts** — candidates it has judged — not supersteps and not the whole run's
+model calls, so each grader in a document carries its own budget. A loop that
+never satisfies its criteria gives up and emits its best answer rather than
+running forever.
 
 Discovered by convention: `tools/`, `functions/`, `middlewares/`, `skills/`,
 `tests/`, `data/`.

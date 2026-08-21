@@ -26,22 +26,21 @@ two rubrics over one drafter is not a drawable shape. Two graders means two
 drafters, in series. That is not a workaround; it is the honest form of "these
 are two different judgements about two different artefacts".
 
-## Two graders, one counter
+## Two graders, two budgets
 
-**`maxAttempts` is not a per-loop revision budget.** `attempts` is a single
-`int` on the run state (`RunState.attempts`, reducer `MAX`) and *every*
-model-driven node increments it once per invocation. A grader's check is
-`state["attempts"] >= maxAttempts`, so:
+Both cards say `3`, and both mean it: `maxAttempts` is **this grader's own**
+budget, counted per grader by the grader itself (`RunState.revisions`, keyed by
+node id). Stage two starts with three looks however hard stage one worked.
 
-- the two numbers on these two cards are **two ceilings on one shared count**,
-  not two budgets;
-- the second grader's real revision budget is `maxAttempts` minus everything
-  the first stage already spent;
-- setting both to the natural `2` would give stage two **zero** revisions —
-  the first stage alone reaches 2, so `grader2` force-passes the first draft it
-  ever sees, silently.
-
-Hence `grader1: 3` and `grader2: 6` here. Gallery ticket 21 is the fix.
+It has not always been so, and this package is where it was found. Until gallery
+ticket 21 the check was against `attempts` — one graph-wide `int` that every
+model-driven node increments once per invocation — so these were two ceilings on
+one shared count, the second grader's real budget was `maxAttempts` minus
+everything stage one had already spent, and the natural `2` on both cards gave
+`grader2` **zero** revisions: it force-passed the first draft it ever saw,
+silently, against a card promising two attempts. `grader1: 3` and `grader2: 6`
+was the arithmetic that bought each stage three looks. Now `3` and `3` buy the
+same three looks each and say so.
 
 ## Smoke run
 
@@ -75,6 +74,13 @@ attempts 2  grader1 pass
 attempts 3  grader2 revise  "Reduce the answer to exactly two sentences."
 attempts 4  grader2 pass
 ```
+
+`attempts` is still what it always was — a true count of model-node
+invocations across the whole run, which is why it reaches 4 for two laps in two
+stages. What each grader spent of *its own* budget is `RunState.revisions`, keyed by
+grader node id — run state the checkpointer records, deliberately not a
+`RunResult` field, because `attempts` is a cost and a budget is not something a
+caller should gate on.
 
 `outputs` and `decisions` are keyed by node id and merged, so each holds only
 the *last* value that node produced. The per-lap history lives in the

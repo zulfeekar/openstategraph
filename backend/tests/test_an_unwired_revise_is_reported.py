@@ -152,7 +152,9 @@ class TestTheRunSaysItToo:
         `pass`, the answer really was published, and `forced` already says so —
         nothing was unrouted."""
         _runtime, run = _grader(monkeypatch, {"pass": "out1"})
-        result = run({"question": "q", "attempts": 3, "outputs": {"agent1": "draft"}})
+        result = run(
+            {"question": "q", "revisions": {"grader1": 2}, "outputs": {"agent1": "draft"}}
+        )
         assert result["decisions"]["grader1"] == "pass"
         assert "forced" in result
         assert "unrouted" not in result

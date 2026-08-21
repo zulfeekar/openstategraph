@@ -125,8 +125,11 @@ def test_the_grader_treats_a_non_answer_as_a_failure(document: dict) -> None:
     assert node_of(document, "grader1")["data"]["rulesMode"] == "extend"
 
 
-def test_the_budget_buys_whole_laps(document: dict) -> None:
-    """Both agents increment the one graph-wide `attempts` counter, so a lap
-    here costs two. An odd ceiling would strand half a lap. Gallery ticket 21."""
+def test_the_budget_is_a_count_of_laps(document: dict) -> None:
+    """This test used to demand an even ceiling of at least four, because both
+    agents incremented the one graph-wide `attempts` counter and a lap here cost
+    two — so an odd number stranded half a lap. Gallery ticket 21 moved the
+    count onto the grader, which is the node that knows a lap happened, so the
+    ceiling is laps and any number is whole."""
     cap = int(node_of(document, "grader1")["data"]["maxAttempts"])
-    assert cap >= 4 and cap % 2 == 0
+    assert cap == 3

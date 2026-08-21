@@ -128,6 +128,32 @@ class RunState(TypedDict, total=False):
     #: if it were the model's own answer.
     feedback: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
     attempts: Annotated[int, reducer_for(Reducer.MAX)]
+    #: grader node id -> how many candidates *that grader* has judged this turn
+    #: (`workflow-gallery` 21). The revision budget, and the only counter a
+    #: grader's `maxAttempts` is measured against.
+    #:
+    #: `attempts` above cannot serve, and the ticket is the record of what that
+    #: cost. It is one graph-wide integer that every model-driven node
+    #: increments once per invocation, so a card reading "2 attempts" bought a
+    #: number of laps that depended on the shape of the graph around it: a
+    #: cycle holding two agents burned it twice as fast as one holding one, and
+    #: a second grader in series inherited the first stage's spend and
+    #: force-passed the first candidate it was ever shown. It stays exactly as
+    #: it is — it is a true count of model-node invocations and `RunResult`
+    #: publishes it — and it is no longer what a budget is checked against.
+    #:
+    #: **The grader counts, because the grader is the only node that knows a
+    #: lap happened.** An agent cannot: it is invoked identically on a first
+    #: draft and on a revision, which is precisely why counting at the agent
+    #: produced this.
+    #:
+    #: MERGE, and the key is the grader's own node id, so the single-writer
+    #: argument that `forced`, `unrouted` and `verdicts` rest on holds here
+    #: too — a node writes only its own row and no two writes of one key can
+    #: land in one superstep. Reset at the turn boundary by `_input`, for the
+    #: reason `RESET` exists: a checkpointed thread that carried a spent
+    #: budget forward would hand turn two a grader with no laps left.
+    revisions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: grader node id -> the reason it rejected the answer it was then forced
     #: to pass (`every-workflow-green` 09). Written only on a force-pass, so
     #: its presence *is* the signal.
@@ -1984,6 +2010,10 @@ class NodeRuntime:
                 # reporting" gaps.
                 "subtasks": {RESET: ""},
                 "worker_results": {RESET: ""},
+                # Per-grader revision budgets, same reasoning as `attempts`
+                # above and the same failure if it is forgotten
+                # (`workflow-gallery` 21).
+                "revisions": {RESET: ""},
             }
             prior = state.get("messages") or []
             already_recorded = bool(
@@ -2571,7 +2601,15 @@ class NodeRuntime:
 
             # Budget check before routing: a grader that keeps rejecting must
             # still let the run finish with an honest answer rather than spin.
-            exhausted = state.get("attempts", 0) >= cap
+            #
+            # Counted **per grader**, against this node's own row in
+            # `revisions`, and incremented here rather than at every agent
+            # (`workflow-gallery` 21). `judged` includes the candidate in hand,
+            # so `maxAttempts: 1` means the first candidate is also the last —
+            # which is what the graph-wide check happened to do for the single
+            # -agent loop, and the shape every other graph did not get.
+            judged = int((state.get("revisions") or {}).get(node_id, 0)) + 1
+            exhausted = judged >= cap
             branch = "pass" if verdict.passed or exhausted else "revise"
 
             # The ceiling reports itself when it has nothing to hand on.
@@ -2602,6 +2640,7 @@ class NodeRuntime:
             # 09). What is published does not change.
             update: dict[str, Any] = {
                 "decisions": {node_id: branch},
+                "revisions": {node_id: judged},
                 "feedback": "" if branch == "pass" else verdict.feedback,
                 "outputs": {node_id: outcome},
                 # The judgement itself, beside the branch it produced. Written

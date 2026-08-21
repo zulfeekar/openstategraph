@@ -79,7 +79,10 @@ class TestTheCeiling:
         run = _grader_run(monkeypatch)
         state = {
             "question": "Which genre earns the most revenue?",
-            "attempts": 3,
+            # Two candidates already judged, so the one in hand is the third
+            # and last this grader's own budget allows (`workflow-gallery` 21;
+            # this used to be a graph-wide `"attempts": 3`).
+            "revisions": {"grader1": 2},
             "outputs": {"agent1": "Rock, $826.65."},
         }
         result = run(state)  # type: ignore[arg-type]
@@ -91,7 +94,11 @@ class TestTheCeiling:
     ) -> None:
         """The live failure. Silence here reads as a broken product."""
         run = _grader_run(monkeypatch)
-        state = {"question": "Which genre earns the most revenue?", "attempts": 3, "outputs": {}}
+        state = {
+            "question": "Which genre earns the most revenue?",
+            "revisions": {"grader1": 2},
+            "outputs": {},
+        }
         result = run(state)  # type: ignore[arg-type]
 
         assert result["decisions"]["grader1"] == "pass"
@@ -107,7 +114,7 @@ class TestTheCeiling:
     def test_it_never_speaks_before_the_ceiling(self, monkeypatch: Any) -> None:
         """Under the cap an empty candidate means revise, not report."""
         run = _grader_run(monkeypatch)
-        state = {"question": "q", "attempts": 1, "outputs": {}}
+        state = {"question": "q", "revisions": {"grader1": 0}, "outputs": {}}
         result = run(state)  # type: ignore[arg-type]
         assert result["decisions"]["grader1"] == "revise"
         assert result["outputs"]["grader1"] == ""

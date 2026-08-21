@@ -67,7 +67,16 @@ class RunResult(str):
     #: gates on (`workflow-gallery` 49). `RunHealth` has had this split all
     #: along; this is the same split at the door.
     failures: list[str]
-    #: How many grader revise laps the run took. 0 for a graph with no loop.
+    #: How many times a model-driven node was invoked during the run. 0 for a
+    #: graph that holds none.
+    #:
+    #: **Not a lap count**, and it never was — this line said "grader revise
+    #: laps" until `workflow-gallery` 21, which is true only of the one shape
+    #: where a cycle holds exactly one agent. Two agents inside a cycle spend
+    #: two per lap, and two stages in series both add into the same number.
+    #: A grader's own budget is counted separately now (`RunState.revisions`,
+    #: keyed by grader node id) and is not published here: this field is a
+    #: cost, not a budget, and nothing downstream may read it as one.
     attempts: int
 
     def __new__(

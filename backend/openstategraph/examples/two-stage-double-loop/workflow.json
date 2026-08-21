@@ -53,7 +53,7 @@
         "data": {
           "criteria": "- Exactly two sentences — count them.\n- No internal component, class, file or module name appears.\n- The word 'bug' does not appear.\n- The second sentence tells the reader what to do, or explicitly tells them nothing is needed.\n- If it falls short, name the rule it broke and the exact words that broke it.",
           "rulesMode": "extend",
-          "maxAttempts": 6
+          "maxAttempts": 3
         },
         "position": { "x": 1240, "y": 220 }
       },

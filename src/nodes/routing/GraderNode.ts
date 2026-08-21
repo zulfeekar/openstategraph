@@ -170,16 +170,32 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
         {
           kind: 'slider',
           key: FIELD_MAX_ATTEMPTS,
-          label: 'Max revisions',
+          // Attempts, and **this grader's own**. Both halves of that were
+          // wrong on the card until `workflow-gallery` 21.
+          //
+          // Not supersteps: `recursion_limit` counts those and one lap of a
+          // loop can cost several, so it is never the number a user means
+          // here — which is why the graph keeps its own counter.
+          //
+          // Not revisions either, and not the graph's: the runtime checked a
+          // single graph-wide integer that every model-driven node
+          // incremented once per invocation, so "3 max" bought a number of
+          // laps that depended on the shape of the graph around it, and a
+          // second grader in series inherited the first stage's spend. The
+          // count is per grader now, and it counts candidates *judged* — so
+          // `n` allows `n - 1` revisions, which is what the hint says rather
+          // than what the label implies.
+          label: 'Max attempts',
+          hint:
+            'How many candidates this grader will judge before it passes one ' +
+            'through. Its own budget — another grader in the same workflow ' +
+            'gets its own. 3 attempts allows 2 revisions.',
           defaultValue: 3,
           min: 1,
           max: 6,
           step: 1,
           onCard: false,
-          // Revisions, not supersteps. `recursion_limit` counts supersteps and one
-          // lap of a loop can cost several, so it is never the number a user means
-          // here — which is why the graph keeps its own attempt counter.
-          format: (value) => `· ${value} max`,
+          format: (value) => `· ${value} ${value === 1 ? 'attempt' : 'attempts'}`,
         },
         {
           kind: 'select',

@@ -30,7 +30,9 @@ A **revision loop**: run a step, judge it, run it again with the objection
 included. It is a cycle *in* the graph, not a wrapper around one — which is why
 adding one is two edges rather than a different tool.
 
-`maxAttempts` on the grader bounds it, and it counts **attempts**. A loop that
+`maxAttempts` on the grader bounds it, and it counts **that grader's own
+attempts** — candidates it has judged, so `3` allows two revisions, and a
+second grader elsewhere in the document gets its own three. A loop that
 never satisfies its criteria gives up and emits its best answer rather than
 running forever. That is a different number from the run's **step budget**
 (`recursion_limit`), which counts *supersteps* across the whole graph. Set that

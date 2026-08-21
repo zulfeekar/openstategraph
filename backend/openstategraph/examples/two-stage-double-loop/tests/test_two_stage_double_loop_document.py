@@ -62,15 +62,16 @@ def test_no_agent_receives_more_than_one_feedback_edge(document: dict) -> None:
     assert len(targets) == len(set(targets))
 
 
-def test_the_second_ceiling_clears_what_the_first_stage_spends(document: dict) -> None:
-    """`attempts` is ONE counter for the whole graph (`RunState.attempts`,
-    reducer MAX), incremented by every model-driven node. So these two numbers
-    are two ceilings on one count, not two budgets — and the second must exceed
-    the first, or `grader2` force-passes the first draft it ever sees. Gallery
-    ticket 21; delete this test when that lands, not before."""
+def test_each_grader_carries_its_own_natural_budget(document: dict) -> None:
+    """This test used to assert `second > first`, because the two numbers were
+    two ceilings on one graph-wide count and the second stage had to buy back
+    what the first had spent. Gallery ticket 21 made `maxAttempts` a per-grader
+    budget (`RunState.revisions`), so the workaround is gone and the shape it
+    was hiding is the thing worth pinning: two loops in series, neither number
+    inflated to pay for the other."""
     first = int(node_of(document, "grader1")["data"]["maxAttempts"])
     second = int(node_of(document, "grader2")["data"]["maxAttempts"])
-    assert second > first
+    assert first == second == 3
 
 
 def test_both_graders_extend_rather_than_replace_their_machinery(document: dict) -> None:

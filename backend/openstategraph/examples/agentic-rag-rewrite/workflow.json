@@ -49,7 +49,7 @@
         "data": {
           "criteria": "- The answer must name at least one handbook topic it came from, spelled as one of: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers.\n- It must quote at least one concrete value from the handbook — a tier name, a number of minutes or hours, or a named role.\n- 'the handbook does not say' is a failure: it means the question was asked of the wrong topic.\n- Generic advice that would be true of any company is a failure.\n- If it falls short, say which topic should have been asked about instead, and which concrete figure is missing.",
           "rulesMode": "extend",
-          "maxAttempts": 6
+          "maxAttempts": 3
         },
         "position": { "x": 940, "y": 260 }
       },

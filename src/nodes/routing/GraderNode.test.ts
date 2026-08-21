@@ -140,12 +140,30 @@ describe('grader criteria — prebuilt and overridable', () => {
     expect(restored.replacesDefaults).toBe(false);
   });
 
-  it('measures revisions rather than supersteps', () => {
-    // `recursion_limit` counts supersteps and one lap can cost several, so it is
-    // never the number a user means by "try again three times".
+  it('says the budget is this grader\'s own, and counts attempts not revisions', () => {
+    // `workflow-gallery` 21. The number is a count of candidates *this* grader
+    // judges. It read "Max revisions" over a runtime that checked one
+    // graph-wide counter every model node incremented, so the card promised a
+    // relationship the number did not have — in both directions at once.
+    //
+    // `recursion_limit` is still not it either: that counts supersteps and one
+    // lap can cost several, which is why the graph keeps its own counter.
     const field = graderNode.fields.find((f) => f.key === 'maxAttempts');
     expect(field?.kind).toBe('slider');
-    expect(field?.label).toMatch(/revision/i);
+    expect(field?.label).toMatch(/attempt/i);
+    expect(field?.label).not.toMatch(/revision/i);
+    // The two claims a reader needs and could not get from the label: whose
+    // budget it is, and that `n` attempts is `n - 1` revisions.
+    expect(field?.hint).toMatch(/this grader/i);
+    expect(field?.hint).toMatch(/its own/i);
+    expect(field?.hint).toMatch(/3 attempts allows 2 revisions/i);
+  });
+
+  it('reads out attempts on the slider, and one attempt is singular', () => {
+    const field = graderNode.fields.find((f) => f.key === 'maxAttempts');
+    const format = (field as { format?: (v: number) => string }).format;
+    expect(format?.(3)).toBe('· 3 attempts');
+    expect(format?.(1)).toBe('· 1 attempt');
   });
 });
 

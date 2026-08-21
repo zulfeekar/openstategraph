@@ -541,7 +541,7 @@ hand-seeded state:
 | `.warnings` | everything worth knowing about this run: the workflow's unresolved capabilities, the steps that broke, and how the answer was reached — a node that produced nothing, a grader that ran out of attempts, a `revise` verdict with no edge |
 | `.failures` | the half of `.warnings` that is a claim the run **failed**. This is the one to gate a script on; `openstategraph run`'s exit code reads it |
 | `.failed_nodes` | node id → why that step failed, for the nodes whose `.outputs` entry is a failure marker rather than content |
-| `.attempts` | how many grader revise laps the run took |
+| `.attempts` | how many times a model-driven node was invoked during the run — a cost, not a lap count and not a budget. A cycle holding two agents spends two per lap, and two loops in series both add into it. Each grader's own budget is `maxAttempts`, counted per grader |
 
 **The split is the point, and it is why `.warnings` is not what a script
 should test.** A node that produced nothing is a report about *how* the answer
