@@ -326,9 +326,12 @@ graph LR
 iterating — a translation that needs nuance, a literary rewrite, SQL that must
 actually run, a report that must cite figures.
 
-**Fixed vs dynamic:** the loop is fixed; the number of laps is not. Budget it:
-LangGraph's `recursion_limit` counts **supersteps, not iterations** — with
-fan-out, one lap can cost several — so never read it as "max iterations".
+**Fixed vs dynamic:** the loop is fixed; the number of laps is not. Budget it
+in the document — `"settings": {"recursionLimit": 200}` — and every run of that
+workflow gets it, from the editor, from `/chat` and from `openstategraph run`;
+a caller that names its own number still overrides. It counts **supersteps, not
+iterations** — with fan-out, one lap can cost several — so never read it as
+"max iterations", and never size it as if it were a lap count.
 
 ---
 

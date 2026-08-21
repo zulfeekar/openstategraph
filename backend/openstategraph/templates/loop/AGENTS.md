@@ -33,7 +33,10 @@ adding one is two edges rather than a different tool.
 `maxAttempts` on the grader bounds it, and it counts **attempts**. A loop that
 never satisfies its criteria gives up and emits its best answer rather than
 running forever. That is a different number from the run's **step budget**
-(`recursion_limit`), which counts *supersteps* across the whole graph.
+(`recursion_limit`), which counts *supersteps* across the whole graph. Set that
+one in the document — `"settings": {"recursionLimit": 200}` — and every run of
+this package gets it. Size it in supersteps, never in laps: a lap that fans out
+spends one per branch.
 
 Discovered by convention: `tools/`, `functions/`, `middlewares/`, `skills/`,
 `tests/`, `data/`.

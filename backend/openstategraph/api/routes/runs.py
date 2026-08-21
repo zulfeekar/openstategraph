@@ -47,6 +47,7 @@ from openstategraph.api.streaming import (
     stop_when_client_leaves,
 )
 from openstategraph.schema import normalize_document
+from openstategraph.step_budget import resolve_step_budget
 
 router = APIRouter()
 
@@ -176,7 +177,7 @@ def run_workflow(
         final = graph.invoke(
             {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
             {
-                "recursion_limit": request.recursion_limit,
+                "recursion_limit": resolve_step_budget(request.recursion_limit, document),
                 "configurable": {
                     "thread_id": thread_id,
                     "session_id": request.session_id or "",
@@ -400,7 +401,7 @@ def run_workflow_stream(
     node_ids_by_name = {safe_name(n): n for n in plan.nodes}
     thread_id = request.thread_id or f"run-{id(graph)}-{os.urandom(4).hex()}"
     config = {
-        "recursion_limit": request.recursion_limit,
+        "recursion_limit": resolve_step_budget(request.recursion_limit, document),
         "configurable": {
             "thread_id": thread_id,
             "session_id": request.session_id or "",
@@ -503,7 +504,7 @@ def resume_workflow_stream(
 
     node_ids_by_name = {safe_name(n): n for n in plan.nodes}
     config = {
-        "recursion_limit": request.recursion_limit,
+        "recursion_limit": resolve_step_budget(request.recursion_limit, document),
         "configurable": {
             "thread_id": request.thread_id,
             "session_id": request.session_id or "",

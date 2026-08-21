@@ -1009,11 +1009,17 @@
             "title": "Model"
           },
           "recursion_limit": {
-            "default": 50,
-            "maximum": 1000.0,
-            "minimum": 10.0,
-            "title": "Recursion Limit",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recursion Limit"
           },
           "session_id": {
             "anyOf": [
@@ -1102,11 +1108,17 @@
             "type": "string"
           },
           "recursion_limit": {
-            "default": 50,
-            "maximum": 1000.0,
-            "minimum": 10.0,
-            "title": "Recursion Limit",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recursion Limit"
           },
           "session_id": {
             "anyOf": [

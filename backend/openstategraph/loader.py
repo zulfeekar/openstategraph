@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from openstategraph.errors import InvalidPackageName, PackageNotFound
 from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
+from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
 
 if TYPE_CHECKING:
     # TYPE_CHECKING, not a plain import: `import openstategraph` must stay
@@ -54,7 +55,10 @@ logger = logging.getLogger(__name__)
 
 #: Supersteps, not iterations — see CLAUDE.md. Matches the editor's own
 #: default so a workflow behaves the same run from a script as from the canvas.
-DEFAULT_RECURSION_LIMIT = 50
+#: Re-exported from `step_budget`, which is where the resolution lives now
+#: that a document's own `settings.recursionLimit` is consulted first; the
+#: name is kept because scripts import it from here.
+DEFAULT_RECURSION_LIMIT = DEFAULT_STEP_BUDGET
 
 
 @dataclass(frozen=True)
@@ -172,7 +176,7 @@ class CompiledWorkflow:
         thread_id: str | None = None,
         user_email: str | None = None,
         session_id: str | None = None,
-        recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+        recursion_limit: int | None = None,
     ) -> RunResult:
         """Run the graph once and return its answer.
 
@@ -211,7 +215,7 @@ class CompiledWorkflow:
         """
         thread = thread_id or f"load-workflow-{uuid.uuid4().hex}"
         config = {
-            "recursion_limit": recursion_limit,
+            "recursion_limit": resolve_step_budget(recursion_limit, self.document),
             "configurable": {
                 "thread_id": thread,
                 "user_email": user_email or "",

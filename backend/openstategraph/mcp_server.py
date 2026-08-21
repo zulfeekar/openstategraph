@@ -52,6 +52,7 @@ from typing import Any
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
 from openstategraph.schema import normalize_document as _normalize_document
+from openstategraph.step_budget import resolve_step_budget
 
 logger = logging.getLogger(__name__)
 
@@ -654,7 +655,7 @@ class WorkflowRuns:
         question: str,
         slug: str | None = None,
         document: Any = None,
-        recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+        recursion_limit: int | None = None,
         model: str | None = None,
     ) -> dict[str, Any]:
         """Compile and run, synchronously — the `/api/runs` path, no streaming.
@@ -703,7 +704,12 @@ class WorkflowRuns:
             # meaningful answer, and the findings are the useful reply.
             return {"error": "The document does not compile.", "findings": findings}
 
-        limit = max(10, min(int(recursion_limit), self.MAX_RECURSION_LIMIT))
+        # The document's own `settings.recursionLimit` when the caller named
+        # nothing — the same precedence `workflow_default_model` gets on the
+        # next line (workflow-gallery 26). `MAX_RECURSION_LIMIT` still caps it:
+        # a *client's* number is untrusted, and so is a client-supplied
+        # `document`, so the server's ceiling stays below the API's 1000.
+        limit = min(resolve_step_budget(recursion_limit, resolved), self.MAX_RECURSION_LIMIT)
         chat_model = build_chat_model(resolve_model(model or workflow_default_model(resolved)))
         compiler = WorkflowCompiler()
         plan = compiler.plan(resolved)
@@ -911,7 +917,7 @@ def build_mcp_server(
             question: str,
             slug: str | None = None,
             document: Any = None,
-            recursion_limit: int = WorkflowRuns.DEFAULT_RECURSION_LIMIT,
+            recursion_limit: int | None = None,
             model: str | None = None,
         ) -> dict[str, Any]:
             """Run a workflow once, synchronously, and return its answer.

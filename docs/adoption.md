@@ -424,7 +424,7 @@ print(answer.decisions)               # ...and which branch each router took
 | --- | --- |
 | `.graph` | the compiled LangGraph `StateGraph` — **the escape hatch** |
 | `.warnings` | tools/functions/subgraphs the package names but could not be resolved |
-| `.ask(question, *, thread_id=None, user_email=None, session_id=None, recursion_limit=50)` | run it once, get a `RunResult`. **`user_email` is who the run is for** — omit it and per-person memory does not bind (see [`deploying.md` §1b](deploying.md)); over HTTP a client may not send it, but here you are the server. `workflow_slug` needs no argument: it comes from the package |
+| `.ask(question, *, thread_id=None, user_email=None, session_id=None, recursion_limit=None)` | run it once, get a `RunResult`. **`user_email` is who the run is for** — omit it and per-person memory does not bind (see [`deploying.md` §1b](deploying.md)); over HTTP a client may not send it, but here you are the server. `workflow_slug` needs no argument: it comes from the package |
 | `.as_tool(name=…, description=…)` | this workflow as one LangChain tool (see below) |
 | `.mermaid()` | the compiled topology as text, no network call |
 | `.slug` / `.package_dir` / `.document` | what it loaded, and from where |
@@ -588,6 +588,7 @@ constructor is worse than one that is honest about the line.
 | Functions | `functions=` | the package's own `functions/` | the same reasons, for `function.*` steps |
 | Middleware | `middleware=` | the package's own `middlewares/`, one file per slot | your existing guardrail/redaction/tracing middleware, contributed by slot name without writing a file into the package |
 | Knowledge directory | `knowledge_dir=` | the convention, `<package>/knowledge` | knowledge shared between two packages, living outside the repository, or a fixture directory in a test |
+| Step budget | `ask(recursion_limit=…)` | the document's own `settings.recursionLimit`, else 50. **Supersteps, not iterations** — one lap of a loop that fans out costs several, so a number chosen as "max attempts" will be several times too small. A saved value outside 10–1000 is clamped rather than refused | a graph that legitimately needs more, and a package you would rather not edit |
 | Run trace sink | `trace_file=` | none | you want one JSON line per `ask()` on disk |
 
 #### `settings.memory` — what a package declares about its own memory

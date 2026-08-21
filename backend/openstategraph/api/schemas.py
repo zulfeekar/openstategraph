@@ -366,7 +366,13 @@ class RunRequest(BaseModel):
     workflow: dict[str, Any] = Field(description="A workflow.json document.")
     question: str = Field(min_length=1)
     model: str | None = None
-    recursion_limit: int = Field(default=50, ge=10, le=1000)
+    #: Superstep budget, **not** an iteration count. `None` is not "no
+    #: budget" — it means *this caller did not name one*, which is what lets
+    #: the document's own `settings.recursionLimit` be consulted before the
+    #: default of 50 (`step_budget.resolve_step_budget`, workflow-gallery 26).
+    #: A non-null default here would have made the two indistinguishable,
+    #: which is why the saved setting could never be honoured.
+    recursion_limit: int | None = Field(default=None, ge=10, le=1000)
     #: Set by the client on a fresh send; echoed back so a paused run's
     #: eventual resume call can target the same checkpointed thread.
     thread_id: str | None = None
@@ -463,7 +469,10 @@ class ResumeRequest(BaseModel):
     decision: Literal["approve", "reject"]
     feedback: str | None = None
     model: str | None = None
-    recursion_limit: int = Field(default=50, ge=10, le=1000)
+    #: Same as `RunRequest.recursion_limit`, `None` and all — a resume that
+    #: fell back to a hardcoded 50 would give the second half of a run a
+    #: different budget from the first.
+    recursion_limit: int | None = Field(default=None, ge=10, le=1000)
     #: Same as `RunRequest.workflow_slug` — and it must exist on BOTH models:
     #: this class forbids extras, so a client that echoes the slug on resume
     #: (as ours does) would otherwise be rejected 422 and every approval
