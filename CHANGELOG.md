@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed
+- **`docs/releasing.md` no longer reports a status nobody measured.** Its
+  "What has run, and what still has not" table counted four `pages.yml`
+  failures when there were six, and omitted `Release PR` entirely — which has
+  run twice and **failed twice**, both times at
+  `peter-evans/create-pull-request` with *"GitHub Actions is not permitted to
+  create or approve pull requests."* That is a repository switch, not a
+  workflow permission: `release-pr.yml` already declares `pull-requests:
+  write`, and no `permissions:` block can grant what Settings → Actions →
+  General withholds. So the automated first half of the release train has
+  never once worked, and `0.3.0rc1` was prepared by hand. The page now also
+  records that the PyPI name `openstategraph` is **free** (HTTP 404, measured
+  2026-08-21) and that CI has not run since 2026-08-16, so "CI is green" is a
+  statement about a tree 178 commits behind. The checkable half is pinned by
+  `backend/tests/test_the_release_train_names_what_has_not_run.py` rather than
+  restated in prose (`ship-it` 46).
+
 ### Added
 - **A run can say what it cost, and nothing new counts it.** `RunResult` now
   carries `usage` — model name -> the tokens that model reported — plus a

@@ -475,14 +475,70 @@ prediction.
 run on a pull request. So the gates on this page describe observed behaviour,
 not intent.
 
-Three things still have not executed, and they are named rather than implied:
+Four things still have not executed, and they are named rather than implied.
+**Measured 2026-08-21** against the `beta` remote, 99 runs:
 
 | | State |
 | --- | --- |
 | The **`pypi` job** | never run. `0.3.0rc1` is on TestPyPI only, and the human gate has never been clicked |
+| **`release-pr.yml`** (*Release PR*) | two runs, **two failures**, both at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` | zero runs, ever |
-| `pages.yml` (*Deploy landing page*) | four runs, four failures — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
+| `pages.yml` (*Deploy landing page*) | six runs, six failures — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
 
 `docs-freshness` is `if: github.event_name == 'pull_request'` and this
 repository pushes straight to `main`, so it skips on nearly every run by
 design — `ci-success` accounts for that, and a skip is not a gap.
+
+### The first half of the train is broken, and no workflow file can fix it
+
+`Release PR` failed both times it ran, at the same step and with the same
+message:
+
+> `GitHub Actions is not permitted to create or approve pull requests.`
+
+**This is not a bug in `release-pr.yml`.** That workflow already declares
+`pull-requests: write` in its own `permissions:` block, which is everything a
+workflow can grant itself. What it hits is a *repository* (or organisation)
+switch that overrides workflow permissions and defaults to off:
+
+> Settings → Actions → General → Workflow permissions →
+> **Allow GitHub Actions to create and approve pull requests**
+
+Until an owner ticks that box, step 1 of this document — "run the Release PR
+workflow" — cannot succeed, and the only way to prepare a release is by hand:
+edit `backend/pyproject.toml`'s version and date the `CHANGELOG.md` section
+yourself, then push to `main` and let `release.yml`'s `detect` job find it.
+That is how `0.3.0rc1` was actually prepared, and it is worth knowing that the
+automated path has never once worked.
+
+`openwiki-update.yml` uses the same action and therefore needs the same switch,
+*in addition to* the model key its one run died for want of.
+
+`backend/tests/test_the_release_train_names_what_has_not_run.py` pins the
+documented half: while any workflow calls that action, this page has to name
+the setting it needs.
+
+### The name is free, and that was the one thing nobody had checked
+
+`ship-it` ticket 46's first instruction was to check that the PyPI name is
+available before anything downstream assumes it. Measured 2026-08-21:
+
+| Index | `openstategraph` |
+| --- | --- |
+| `pypi.org` | **HTTP 404 — the name is unregistered and free** |
+| `test.pypi.org` | HTTP 200 — `0.3.0rc1`, wheel *and* sdist, uploaded by the rc1 run |
+
+Nothing on the real index has to be worked around, and the rehearsal artefact
+a stranger would fetch demonstrably exists on the test index.
+
+### CI is blind to everything committed since 2026-08-16
+
+The last CI run on the `beta` remote was `2026-08-16T08:23Z`, and it was green.
+Nothing has been pushed since. Every gate on this page describes a checkout
+that is now **178 commits behind `main`** on this machine — including
+`ci.yml`'s `gallery-diagrams-check` job, which was added after that run and has
+therefore never executed in Actions at all.
+
+So "CI is green" is a true statement about a five-day-old tree, and it is not
+evidence about the tree a release would be cut from. **Push before you release**,
+and watch that run finish before starting the train.
