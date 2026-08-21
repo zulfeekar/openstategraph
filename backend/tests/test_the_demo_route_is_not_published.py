@@ -135,6 +135,22 @@ class TestAFreshInstallAsksForNothingItDoesNotHave:
     def test_no_status_code_is_shown_to_a_customer(self) -> None:
         assert "resp.status" not in self._render_flow()
 
+    def test_nothing_published_reads_differently_from_a_real_compile_fault(
+        self,
+    ) -> None:
+        """Two silences that must not read alike (ticket's own wording): a
+        fresh install with nothing published is a state a customer cannot
+        fix, so the pane says exactly that — never the sentence a genuine
+        `/graph` failure gets, and never a bare status code either way."""
+        body = self._render_flow()
+
+        no_slug_text = body.partition("if (!slug)")[2].partition("return")[0]
+        assert "No workflows are published yet" in no_slug_text
+
+        not_ok_text = body.partition("if (!resp.ok)")[2].partition("return")[0]
+        assert "No workflows are published yet" not in not_ok_text
+        assert "This workflow has no diagram to show." in not_ok_text
+
 
 @pytest.mark.parametrize("surface", ["editor", "chat"])
 def test_the_demo_slug_is_not_special_cased_anywhere_else(surface: str) -> None:
