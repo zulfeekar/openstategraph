@@ -1,4 +1,4 @@
-import { mountCycleRefusal } from '@core/validation/mountCycleRule';
+import { mountGestureRefusal } from '@core/validation/mountCycleRule';
 import type { WorkflowChoice } from '@core/runtime/workflowCatalogue';
 
 /** One saved package as the palette shows it, and why it may refuse the drag. */
@@ -27,10 +27,18 @@ export interface PackageRow extends WorkflowChoice {
  * this is the surface that does it — the gesture is unavailable rather than
  * merely punished afterwards.
  *
- * The refusal is `mountCycleRefusal`'s, not a second comparison: the server
+ * The refusal is `mountGestureRefusal`'s, not a second comparison: the server
  * stays the authority (`node_runtime.py::_subgraph`, `api/mount_resolution.py`)
- * and a user who meets this by dragging, by typing, or by running reads one
- * sentence rather than three that sound like different problems.
+ * and a user who meets this by dragging, by typing, or by running meets one
+ * rule rather than three that sound like different problems.
+ *
+ * **In the conditional, and that is `workflow-gallery` 65.** The rule's other
+ * mood — `mountCycleRefusal`, the compiler's own sentence — says a workflow
+ * *mounts itself*, which is a fact about a document that declares the mount.
+ * A palette row declares nothing: it offers a gesture. A package fresh from
+ * `openstategraph new` is its own only row, so the first screen a new user ever
+ * sees was telling them their untouched document mounts itself, with no mount
+ * node in it. The greying was right; the tense was not.
  */
 export function packageRows(
   catalogue: readonly WorkflowChoice[],
@@ -46,5 +54,5 @@ export function packageRows(
         choice.slug.toLowerCase().includes(needle) ||
         choice.name.toLowerCase().includes(needle),
     )
-    .map((choice) => ({ ...choice, refusal: mountCycleRefusal(choice.slug, ancestry) }));
+    .map((choice) => ({ ...choice, refusal: mountGestureRefusal(choice.slug, ancestry) }));
 }

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { packageRows } from './packageRows';
@@ -31,18 +31,22 @@ describe('the Packages palette rows', () => {
       expect(rows.map((row) => row.slug)).toContain('concierge');
     });
 
-    it('refuses in the compiler’s own sentence, chain included', () => {
+    it('refuses the gesture, in the conditional, chain included', () => {
+      // `workflow-gallery` 65: this row used to carry the *compiler's*
+      // sentence, "Workflow 'concierge' mounts itself" — an accusation about
+      // a document that, on the first screen after `new`, contains no mount
+      // node at all. The row is right to grey; only the tense was wrong.
       const rows = packageRows(CATALOGUE, ['concierge'], '');
       expect(rows.find((row) => row.slug === 'concierge')?.refusal).toBe(
-        "Workflow 'concierge' mounts itself (concierge -> concierge); " +
-          'a mount cycle can never terminate',
+        "Mounting 'concierge' here would make it mount itself " +
+          '(concierge -> concierge); a mount cycle can never terminate',
       );
     });
 
     it('refuses a drill ancestor too, not only the document on screen', () => {
       const rows = packageRows(CATALOGUE, ['concierge', 'chinook-assistant'], '');
       expect(rows.find((row) => row.slug === 'concierge')?.refusal).toBe(
-        "Workflow 'concierge' mounts itself " +
+        "Mounting 'concierge' here would make it mount itself " +
           '(concierge -> chinook-assistant -> concierge); a mount cycle can never terminate',
       );
       expect(rows.find((row) => row.slug === 'morning-brief')?.refusal).toBeNull();
@@ -164,4 +168,66 @@ describe('a refused package row', () => {
     expect(palette).toContain('aria-disabled={refused}');
     expect(palette).not.toMatch(/<button[^>]*\n\s*disabled=\{refused\}/);
   });
+});
+
+/**
+ * `workflow-gallery` 65 — the first screen after `openstategraph new`.
+ *
+ * A scaffolded package is both the document on screen *and* the only row in
+ * the Packages section, which is the coincidence this rule needed: its slug is
+ * on its own ancestry trail, so its own row refuses, and the refusal it used to
+ * carry was the compiler's diagnosis of a cycle — printed in the row body, not
+ * hidden behind a hover — about a document containing no mount node whatsoever.
+ * The product's most common starting point accused itself of being broken.
+ *
+ * The row still greys, because dropping it there genuinely would not compile.
+ * What it must never do again is assert something about the graph as drawn.
+ *
+ * Every shipped template is walked, because the sighting named `routed-qa` and
+ * "is this template special?" was one of the open questions. None of them is.
+ */
+describe('a freshly scaffolded package, open in the editor', () => {
+  const templatesDir = fileURLToPath(
+    new URL('../../../backend/openstategraph/templates/', import.meta.url),
+  );
+  const slugs = readdirSync(templatesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('__'))
+    .map((entry) => entry.name);
+
+  it('walks every shipped template, so none can be special by being absent', () => {
+    expect(slugs).toContain('routed-qa');
+    expect(slugs.length).toBeGreaterThanOrEqual(3);
+  });
+
+  for (const template of slugs) {
+    describe(`scaffolded from ${template}`, () => {
+      const raw = JSON.parse(
+        readFileSync(`${templatesDir}${template}/workflow.json`, 'utf8'),
+      ) as Record<string, unknown>;
+      // A saved package wraps its document; a template on disk does not.
+      const document = (raw.document ?? raw) as { nodes: { type: string }[] };
+      const slug = `${template}-demo`;
+      const row = packageRows([{ slug, name: 'Routed Demo', hidden: false }], [slug], '')[0];
+
+      it('draws no mount node of its own — nothing here mounts anything', () => {
+        expect(document.nodes.some((node) => node.type === 'workflow.subgraph')).toBe(false);
+      });
+
+      it('is greyed, because dropping it into itself would not compile', () => {
+        expect(row?.refusal).not.toBeNull();
+      });
+
+      it('is never told that it mounts itself', () => {
+        expect(row?.refusal).not.toContain(`Workflow '${slug}' mounts itself`);
+        expect(row?.refusal).not.toMatch(/\bmounts itself\b/);
+      });
+
+      it('is told what the gesture would do, with the path and the reason', () => {
+        expect(row?.refusal).toBe(
+          `Mounting '${slug}' here would make it mount itself ` +
+            `(${slug} -> ${slug}); a mount cycle can never terminate`,
+        );
+      });
+    });
+  }
 });
