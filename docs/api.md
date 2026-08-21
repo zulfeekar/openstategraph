@@ -748,6 +748,17 @@ channel's `capability_gap`), and no node anywhere in the run having handed a
 query to a tool. The last of those reads `tool_use[node]["queried"]`, which
 names tools by what they were *given* rather than by what they are called.
 
+`queried` names **the tools a query was actually handed to and whose body ran
+with it**, and the second half is not decoration. The call arguments alone are
+only a claim that a query was *written*: a name nothing binds carries its
+arguments like any other (`production-ready` 98), and so does a real, bound
+tool whose arguments failed their own schema, which LangGraph rejects before it
+invokes the tool at all (`production-ready` 100). Both leave the database
+untouched, and because any `queried` anywhere clears this check for the whole
+run, either one would silently disarm it. A tool that ran a query and *then*
+errored still counts — "errored" and "never executed" are different things, and
+that query did leave the building.
+
 The same pair rides an `update` frame, which is what a trace is built from. A
 grader row that returned instantly used to have one available explanation and
 it was the wrong one — three such rows are why `production-ready/84` was filed

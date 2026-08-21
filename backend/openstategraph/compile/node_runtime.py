@@ -568,9 +568,30 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     that binds tools now says all three things or none.
     """
     from openstategraph.compile.workflow_compiler import (
+        arguments_were_rejected,
         looks_like_sql_query,
         rejected_tool_names,
     )
+
+    #: Calls whose **arguments** a real tool refused, by `tool_call_id`
+    #: (`production-ready` 100). Gathered in a pass of its own because the
+    #: answer arrives *after* the call that has to be judged by it, and
+    #: keyed by id rather than by tool name because the rejection is per
+    #: call: the model's next lap usually fixes the argument name, and that
+    #: query really was sent.
+    unaccepted: set[str] = set()
+    for message in messages or []:
+        if getattr(message, "type", None) != "tool":
+            continue
+        if getattr(message, "status", None) != "error":
+            continue
+        if not arguments_were_rejected(
+            getattr(message, "content", None), getattr(message, "name", None)
+        ):
+            continue
+        call_id = str(getattr(message, "tool_call_id", "") or "")
+        if call_id:
+            unaccepted.add(call_id)
 
     refused: list[str] = []
     ran: list[str] = []
@@ -580,11 +601,19 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     #: their tool; the argument is the query itself, so this says what happened
     #: for a tool called `warehouse` exactly as well as for `chinook_execute_sql`.
     #:
-    #: Collected here and filtered by `ran` at the end (`production-ready` 98):
-    #: a call the runtime refused because no such tool exists carries its
-    #: arguments like any other, so an invented `execute_sql?` handed a SELECT
-    #: would otherwise record a query that never left the building — and any
-    #: `queried` anywhere clears 95's check for the **whole run**, silently.
+    #: **`queried` names the tools a query was actually handed to *and whose
+    #: body ran with it*.** Both halves are load-bearing. The call arguments
+    #: alone are only a claim that a query was written, and two shapes have
+    #: already made that claim falsely: a name the runtime refused because no
+    #: such tool exists (`production-ready` 98, filtered by `ran` below), and a
+    #: real bound tool whose **arguments** failed their schema, so Pydantic
+    #: rejected the call before the body opened anything (`production-ready`
+    #: 100, filtered by `unaccepted` above). Any `queried` anywhere clears 95's
+    #: check for the **whole run**, so either one is a silent miss.
+    #:
+    #: A tool that ran a query and *then* errored still counts — "errored" and
+    #: "never executed" are different things, and that query did leave the
+    #: building.
     queried: list[str] = []
     for message in messages or []:
         for call in getattr(message, "tool_calls", None) or []:
@@ -592,6 +621,8 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
             if not isinstance(args, dict):
                 continue
             if not any(looks_like_sql_query(value) for value in args.values()):
+                continue
+            if str(call.get("id") or "") in unaccepted:
                 continue
             name = str((call.get("name") if isinstance(call, dict) else "") or "")
             if name and name not in queried:

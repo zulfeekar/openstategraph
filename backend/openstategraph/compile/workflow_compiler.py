@@ -485,6 +485,75 @@ def rejected_tool_names(text: Any) -> list[str]:
     return seen
 
 
+def _invocation_error_pattern() -> "re.Pattern[str] | None":
+    """A matcher for LangGraph's own bad-arguments sentence, built from LangGraph's
+    own format string rather than from a copy of one.
+
+    `CLAUDE.md`: *"a detector keyed on error prose will rot"*. This one is keyed
+    on `TOOL_INVOCATION_ERROR_TEMPLATE` — the single constant the library
+    formats when `ToolNode` raises `ToolInvocationError`, which it does at
+    exactly one moment: **after** the arguments fail their `args_schema` and
+    **before** `tool.invoke` is ever called. Reword the template upstream and
+    this pattern is reworded with it; the only way it can rot is the library
+    dropping the constant, and then we return `None` and claim nothing.
+
+    Note the sibling it must never match: `TOOL_EXECUTION_ERROR_TEMPLATE` says
+    *executing* where this one says *invoking*, and that is the library drawing
+    the same line this function needs — a body that ran and threw, versus a
+    body that never ran.
+    """
+    try:
+        from langgraph.prebuilt.tool_node import TOOL_INVOCATION_ERROR_TEMPLATE
+    except Exception:  # pragma: no cover - the library moved the constant
+        return None
+    parts = re.split(r"\{(tool_name|tool_kwargs|error)\}", TOOL_INVOCATION_ERROR_TEMPLATE)
+    groups = {
+        "tool_name": "(?P<tool_name>.+?)",
+        "tool_kwargs": "(?:.*?)",
+        "error": "(?:.*)",
+    }
+    pattern = "".join(
+        groups[part] if index % 2 else re.escape(part) for index, part in enumerate(parts)
+    )
+    return re.compile(pattern, re.DOTALL)
+
+
+_INVOCATION_ERROR = _invocation_error_pattern()
+
+
+def arguments_were_rejected(text: Any, tool_name: Any) -> bool:
+    """Whether this tool result says the **arguments** were refused, so the
+    tool's body never ran.
+
+    `production-ready` 100. `queried` is 95's evidence that a query left the
+    building, and it is read off the *call* arguments — which exist whether or
+    not anything accepted them. A model that calls a real, bound
+    `chinook_execute_sql` with `sql=` instead of `query=` gets a `ToolMessage`
+    under the tool's own name, so the call looked, to `tool_report`, exactly
+    like a query that had been sent. It had not been: Pydantic rejected it and
+    the database was never opened. Any `queried` anywhere clears
+    `unrun_query_claim` for the whole run, so the fabricated answer that
+    followed went unchallenged.
+
+    Deliberately narrow, in the direction 98 named. The failure this guards is
+    a **miss**, not a false accusation, so every ambiguity resolves towards
+    still counting the query:
+
+    - `fullmatch`, so the sentence has to *be* the message. An answer quoting
+      it — this product prints machinery as prose constantly — is not one.
+    - The sentence names its own subject, and the subject has to be the tool
+      that answered. That is the check 98 had to add to the refusal sentence
+      for the same reason.
+    - A tool that ran a query and *then* failed still counts. "Errored" and
+      "never executed" are different things, and confusing them re-breaks
+      `the-agent-asks-for-what-it-cannot-get` 01, where an error is data.
+    """
+    if _INVOCATION_ERROR is None or not isinstance(text, str) or not text:
+        return False
+    match = _INVOCATION_ERROR.fullmatch(text)
+    return bool(match and match.group("tool_name") == str(tool_name or ""))
+
+
 def suggestible_node_type(tool_name: str, registry: Any) -> str | None:
     """The node type a rejected name could be placed as, or None.
 
