@@ -828,10 +828,40 @@ def silent_node_warnings(
                 "the workflow."
             )
         elif not text:
-            record = used.get(node)
+            # A dispatched member of a fan-out, whose key `_worker` writes as
+            # `<node>#<task>` — the only producer of a `#` in `outputs`
+            # (`workflow-gallery` 52). Two things follow, and both were wrong
+            # before. The tool lookup has to use the *node* half, because
+            # `tool_report` keys by node id and every dispatched instance
+            # shares one, so 96's split missed on every member and a worker
+            # could never say its loop had worked. And the sentence has to
+            # stop claiming a stale answer is being read: a member's silence
+            # leaves a gap in one section of the report, it does not leave the
+            # previous `answer` standing, so sending a reader upstream sends
+            # them to the wrong place.
+            member = node.split("#", 1)[1] if "#" in node else ""
+            owner = node.split("#", 1)[0]
+            record = used.get(owner)
             ran = record.get("ran") if isinstance(record, Mapping) else None
             names = [str(name) for name in ran] if isinstance(ran, (list, tuple)) else []
-            if names:
+            if member:
+                # A worker reaches here only after calling a model — its
+                # no-model branch writes `NO_MODEL_MARKER` and is handled
+                # above — so "its model ended the turn" is measured, not
+                # inferred. What the model did on that turn was settled off
+                # the raw wire in `production-ready` 96: it genuinely stopped.
+                sentence = (
+                    f'Member "{member}" of node "{owner}" ran and its model ended the '
+                    "turn without writing anything, so that section of the report is "
+                    "empty."
+                )
+                if names:
+                    # Attributed to the node and to the run, never to this
+                    # member: `tool_use` is per node, and a sibling subtask's
+                    # call would otherwise be reported as this one's.
+                    sentence += f' The node called {", ".join(names)} during this run.'
+                warnings.append(sentence)
+            elif names:
                 warnings.append(
                     f'Node "{node}" ran {", ".join(names)} and then ended its turn '
                     "without writing an answer. The run continued with the previous "

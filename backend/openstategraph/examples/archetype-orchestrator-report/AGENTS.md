@@ -102,7 +102,7 @@ Two control runs, same package, same day:
 | Brief | Plan | Result |
 | --- | --- | --- |
 | "…agenda…for a new engineer **and** list the accounts **and** tools they need on day one." | 3 subtasks | Split mid-noun-phrase. `task-2` = "list the accounts", `task-3` = "tools they need on day one." — both asked the user to clarify. |
-| "Research what a new engineer needs access to on day one**;** write a 30-minute onboarding agenda for them." | 2 subtasks | Clean split, but `task-1` came back **empty** — rendered as `_(this member produced no result)_`, with `warnings: []`. Gallery ticket 18. |
+| "Research what a new engineer needs access to on day one**;** write a 30-minute onboarding agenda for them." | 2 subtasks | Clean split, but `task-1` came back **empty**. It rendered as `_(this member produced no result)_` with `warnings: []`; since gallery ticket 52 the section reads `_(`worker-research` ran this subtask and its model returned no text, so it is unanswered.)_` and the run's warnings name the member and the node. Gallery tickets 18, 52. |
 
 Recorded rather than tidied away. The example is wired exactly as the catalogue
 specifies and validates clean; what the runs found is a platform gap, and four

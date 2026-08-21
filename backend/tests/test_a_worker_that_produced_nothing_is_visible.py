@@ -94,7 +94,11 @@ class TestAWorkerThatSaidNothing:
     ) -> None:
         result = _worker_result(monkeypatch, model=any_chat_model(), said="")
         warnings = silent_node_warnings(result["outputs"])
-        assert warnings and f"{WORKER_ID}#{TASK_ID}" in warnings[0]
+        # Both halves of the composite key still identify the step, but as the
+        # two things they are rather than as one opaque id — `workflow-gallery`
+        # 52 split the sentence into member and node.
+        assert warnings
+        assert WORKER_ID in warnings[0] and TASK_ID in warnings[0]
 
     def test_a_worker_that_answered_is_left_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         result = _worker_result(monkeypatch, model=any_chat_model(), said="VPN, SSO, the repo.")
@@ -117,7 +121,11 @@ class TestAWorkerWithNoModelAtAll:
         """
         result = _worker_result(monkeypatch, model=None, said="unused")
         warnings = silent_node_warnings(result["outputs"])
-        assert warnings and f"{WORKER_ID}#{TASK_ID}" in warnings[0]
+        # Both halves of the composite key still identify the step, but as the
+        # two things they are rather than as one opaque id — `workflow-gallery`
+        # 52 split the sentence into member and node.
+        assert warnings
+        assert WORKER_ID in warnings[0] and TASK_ID in warnings[0]
         assert "no model" in warnings[0].lower()
 
     def test_the_join_still_sees_nothing_so_the_gap_marker_still_renders(

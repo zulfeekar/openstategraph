@@ -874,6 +874,51 @@ def apply_mount_overrides(
     return document, warnings
 
 
+def _silent_member_note(task_id: str, state: RunState) -> str:
+    """What an empty section of a fan-out report says instead of nothing.
+
+    `workflow-gallery` 52. It used to read `_(this member produced no result)_`
+    — a true sentence that answers none of the three questions a reader has:
+    did this member run, did its loop work, and is there text somewhere that we
+    lost? The live symptom is a whole subtask silently unanswered in a report
+    that otherwise looks finished.
+
+    Everything here is read off state rather than inferred. `_worker` writes
+    `outputs[f"{node}#{task}"]`, so the node behind a member is recoverable,
+    and its two empty branches are distinguishable: `NO_MODEL_MARKER` means no
+    model was ever called, and anything else empty means one was called and
+    returned nothing — which `production-ready` 96 settled off the raw Ollama
+    wire (`content=''`, `thinking=None`, `done_reason='stop'`) as the model
+    genuinely stopping, not as text lost in extraction.
+
+    **No tool is named here, deliberately.** Every dispatched instance shares
+    one node id, so `tool_use` is per node; naming a call inside one member's
+    section would attribute a sibling's work to this subtask. The node-level
+    sentence in `silent_node_warnings` says "the node called X during this
+    run", which is what is actually known.
+    """
+    from openstategraph.compile.workflow_compiler import NO_MODEL_MARKER
+
+    outputs = state.get("outputs") or {}
+    owner = next(
+        (str(key).split("#", 1)[0] for key in outputs if str(key).endswith(f"#{task_id}")),
+        "",
+    )
+    if not owner:
+        # Nothing wrote an output under this task id at all, so there is no
+        # node to name and nothing measured to say about it.
+        return "_(this member produced no result)_"
+    if str(outputs.get(f"{owner}#{task_id}") or "") == NO_MODEL_MARKER:
+        return (
+            f"_(no model was configured for `{owner}`, so nothing ran for this "
+            "subtask. Set a model on the node or a default for the workflow.)_"
+        )
+    return (
+        f"_(`{owner}` ran this subtask and its model returned no text, so it is "
+        "unanswered.)_"
+    )
+
+
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
@@ -3365,7 +3410,7 @@ class NodeRuntime:
                 # An empty member result renders as an explicit gap — a blank
                 # section reads like formatting, and the grader (and the
                 # human) must see the miss to act on it (ticket 61).
-                f"### {task_id}\n{text or '_(this member produced no result)_'}"
+                f"### {task_id}\n{text or _silent_member_note(task_id, state)}"
                 for task_id, text in sorted(scoped.items())
             )
             # An empty body means the *plan* was empty, not that the workers
