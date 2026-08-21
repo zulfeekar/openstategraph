@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { draftIsStale } from './staleDraft';
+import { draftIsAhead, draftIsStale } from './staleDraft';
 
 /**
  * `every-workflow-green` 25 — the editor showed a cached draft over a newer
@@ -33,5 +33,23 @@ describe('draftIsStale', () => {
   it('keeps the draft when a timestamp is unparseable', () => {
     expect(draftIsStale('not a date', LATE)).toBe(false);
     expect(draftIsStale(EARLY, 'not a date')).toBe(false);
+  });
+});
+
+describe('draftIsAhead', () => {
+  it('is true only when this browser holds work newer than the file', () => {
+    expect(draftIsAhead('2026-08-22T10:00:00Z', '2026-08-22T09:00:00Z')).toBe(true);
+    expect(draftIsAhead('2026-08-22T09:00:00Z', '2026-08-22T10:00:00Z')).toBe(false);
+    // Equal is not ahead: a save writes both, and a confirm fired by every
+    // publish immediately after a save is a confirm nobody reads.
+    expect(draftIsAhead('2026-08-22T10:00:00Z', '2026-08-22T10:00:00Z')).toBe(false);
+  });
+
+  it('answers false when it cannot tell, unlike draftIsStale', () => {
+    // The two guard opposite losses; the defaults are opposite on purpose.
+    expect(draftIsAhead(null, '2026-08-22T10:00:00Z')).toBe(false);
+    expect(draftIsAhead('2026-08-22T10:00:00Z', undefined)).toBe(false);
+    expect(draftIsAhead('not a date', '2026-08-22T10:00:00Z')).toBe(false);
+    expect(draftIsStale(null, '2026-08-22T10:00:00Z')).toBe(false);
   });
 });

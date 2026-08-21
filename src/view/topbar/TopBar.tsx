@@ -23,6 +23,8 @@ import {
   Upload,
   GitBranch,
   Crosshair,
+  Globe,
+  GlobeLock,
 } from 'lucide-react';
 import {
   Badge,
@@ -61,6 +63,8 @@ import { runIntent } from './runIntent';
 import { subscribeOpenSlug } from '@app/openWorkflow';
 import { subscribeOpenAddress } from '@app/openAddress';
 import { saveAffordance } from './saveAffordance';
+import { usePublishState } from './usePublishState';
+import { publishedMessage, unpublishedMessage } from '@view/workflow/consequences';
 import './TopBar.css';
 
 interface TopBarProps {
@@ -170,6 +174,14 @@ export function TopBar({
       offAddress();
     };
   }, []);
+  // **Is what I am editing live to customers?** (`ship-it` 39.) The other
+  // half of the pair the toolbar owes an open package — Save answers "is my
+  // work on disk", and until this there was nowhere on the canvas that
+  // answered the more consequential one. The state, the words and the
+  // save/publish relationship are all `publishAffordance`'s; this renders it.
+  const publish = usePublishState();
+  const [publishing, setPublishing] = useState(false);
+
   const workbench = useWorkbench();
   const flowDirection = useFlowDirection();
   const controller = useController();
@@ -251,6 +263,32 @@ export function TopBar({
     if (intent.kind === 'explain') return onNotify(intent.reason);
     onRun(intent.question);
   };
+
+  /**
+   * The gesture. The act is the hook's, the words are `consequences`' — the
+   * Workflows panel presses the same endpoint and says the same two sentences,
+   * so a reword there cannot leave this surface contradicting it.
+   *
+   * The confirm fires only when this browser holds work the file does not, and
+   * it is the whole of the ticket's second half: publishing ships the **saved**
+   * package, and a control that would quietly put something other than what is
+   * on screen in front of customers owes the user that sentence.
+   */
+  const onPublishToggle = useCallback(async () => {
+    // `affordanceNow`, deliberately, not the rendered one — see the hook.
+    const { action, confirmation } = publish.affordanceNow();
+    if (action === null) return;
+    if (confirmation !== null && !confirm(confirmation)) return;
+    setPublishing(true);
+    const failure = await publish.setPublished(action === 'publish');
+    setPublishing(false);
+    const name = workbench.model.name;
+    if (failure !== null) {
+      onNotify(`Could not ${action}: ${failure}`);
+      return;
+    }
+    onNotify(action === 'publish' ? publishedMessage(name) : unpublishedMessage(name));
+  }, [publish, workbench, onNotify]);
 
   const exportEntries: MenuEntry[] = [
     {
@@ -355,6 +393,42 @@ export function TopBar({
               {save.unsaved ? <span className="topbar__unsaved" aria-hidden="true" /> : null}
             </Button>
           </Tooltip>
+          {/* **Who can see this** — `ship-it` 39. The badge and the verb are
+              one cluster because they are one fact: the word is the state, and
+              the button is the only thing that changes it. The badge is
+              `Badge`'s explained form, so the claim carries its sentence to a
+              keyboard as well as to a pointer, and both come from
+              `publishAffordance` rather than being written here. Nothing is
+              printed at all while the runtime has not answered, or while a
+              mount instance is open — a lifecycle word this surface cannot act
+              on is the click that goes nowhere `workflowCatalogue` warns of. */}
+          {publish.affordance.label !== null ? (
+            <span className="topbar__lifecycle">
+              <Badge
+                tone={publish.affordance.status === 'published' ? 'success' : 'neutral'}
+                explanation={publish.affordance.hint}
+              >
+                {publish.affordance.label}
+              </Badge>
+              {publish.affordance.action !== null ? (
+                <Tooltip content={publish.affordance.actionHint} multiline>
+                  <Button
+                    variant="ghost"
+                    icon={
+                      <Icon
+                        glyph={publish.affordance.action === 'publish' ? Globe : GlobeLock}
+                        size="sm"
+                      />
+                    }
+                    onClick={() => void onPublishToggle()}
+                    disabled={publishing}
+                  >
+                    {publish.affordance.actionLabel}
+                  </Button>
+                </Tooltip>
+              ) : null}
+            </span>
+          ) : null}
           {/* Anchor for the examples pointer (ticket 23), on the control that
               actually leads to the shelf — the shelf lives inside this panel,
               collapsed, and until now nothing on any surface said so. */}

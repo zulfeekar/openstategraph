@@ -30,3 +30,30 @@ export function draftIsStale(
   if (Number.isNaN(draft) || Number.isNaN(file)) return false;
   return file > draft;
 }
+
+/**
+ * Whether this browser holds work the file on disk does not — the inverse
+ * question to `draftIsStale`, and a different one from "they differ".
+ *
+ * `ship-it` 39 needs it because publishing ships the **saved** version: the
+ * moment the draft is ahead of the file, pressing Publish would put something
+ * other than what is on screen in front of customers, and that is the sentence
+ * the toolbar owes the user before it happens.
+ *
+ * Unknown timestamps mean "cannot tell", and cannot-tell answers **false**
+ * here — the opposite default from `draftIsStale`, and deliberately so. The
+ * two functions guard opposite losses: that one keeps a draft when it cannot
+ * tell, because losing edits is the failure. This one declines to raise a
+ * confirm it cannot justify, because a warning that fires on every publish is
+ * a warning nobody reads by the third one.
+ */
+export function draftIsAhead(
+  draftSavedAt: string | null | undefined,
+  fileSavedAt: string | null | undefined,
+): boolean {
+  if (!draftSavedAt || !fileSavedAt) return false;
+  const draft = Date.parse(draftSavedAt);
+  const file = Date.parse(fileSavedAt);
+  if (Number.isNaN(draft) || Number.isNaN(file)) return false;
+  return draft > file;
+}

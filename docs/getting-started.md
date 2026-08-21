@@ -392,6 +392,17 @@ directory — `/chat` is a path, not a second server. What makes a workflow
 appear there is one human action: **Publish**. Saving writes a draft, and
 drafts are invisible in `/chat`.
 
+The toolbar says which of the two the open workflow is — **Draft** or
+**Published**, beside Save — and the button next to that word is how you change
+it (`ship-it` 39; it used to live only in the Workflows panel). The two words
+answer different questions and both are worth reading: Save is about the file
+on disk, Publish is about who can see it.
+
+**Publishing does not save**, deliberately. It flips one flag on the package's
+folder and never touches the document, so what customers get is the version
+already in `workflows/<slug>/` — not whatever is on the canvas. When this
+browser holds edits the file does not, publishing says so and asks first.
+
 Try:
 
 > Which genre earned the most revenue, and which country bought the most?

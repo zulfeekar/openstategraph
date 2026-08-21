@@ -148,3 +148,57 @@ describe('the workflow list', () => {
   });
 
 });
+
+/**
+ * `ship-it` 39 — the lifecycle state, on the surface where the work happens.
+ *
+ * The knowledge is tested where it lives (`publishAffordance.test.ts`): the
+ * words, the states, the confirm. What cannot be tested there is that the
+ * toolbar renders any of it, and that is precisely the failure this ticket is
+ * about — publishing worked perfectly for months in a panel nobody opened. A
+ * source assertion for the same reason the rest of this file is one: placement
+ * has no seam in a `node` environment, and it is what a later tidy-up undoes.
+ */
+describe('the toolbar’s lifecycle cluster', () => {
+  const topbar = read('./TopBar.tsx');
+  const manager = read('../workflow/WorkflowManager.tsx');
+
+  it('is in the document group, beside Save', () => {
+    // The pair, and the order: Save answers "is my work on disk", this answers
+    // "is my work in front of customers". A cluster docked anywhere else on a
+    // bar this wide is a second place to look.
+    const group = topbar.split('<div className="topbar__group">')[1] ?? '';
+    expect(group).toContain('topbar__lifecycle');
+    expect(group.indexOf('save.label')).toBeLessThan(group.indexOf('topbar__lifecycle'));
+  });
+
+  it('prints the state and the verb from the affordance, never from here', () => {
+    expect(topbar).toContain('usePublishState');
+    expect(topbar).toContain('publish.affordance.label');
+    expect(topbar).toContain('publish.affordance.actionLabel');
+    // No literal lifecycle word in the toolbar: two spellings of one state
+    // agree on the day they are written and drift on the first reword.
+    expect(topbar).not.toMatch(/>\s*Published\s*</);
+    expect(topbar).not.toMatch(/>\s*Unpublish\s*</);
+  });
+
+  it('clears the confirm before it ships something other than what is on screen', () => {
+    // The ticket's second half, pinned at the gesture. `publishAffordance`
+    // decides *whether* one is owed; this is the surface actually asking.
+    expect(topbar).toMatch(/confirmation !== null && !confirm\(confirmation\)/);
+    // **At press time, not at last render.** Found in the browser, not in a
+    // test: `unsavedWork` comes from the autosaved draft, a drag writes that
+    // draft, and nothing re-renders the toolbar when it does — so the
+    // memoised answer was computed before the edits it warns about and the
+    // confirm never fired once.
+    expect(topbar).toContain('publish.affordanceNow()');
+    expect(topbar).not.toMatch(/confirmation \} = publish\.affordance;/);
+  });
+
+  it('says the same two sentences the panel says, from the same module', () => {
+    for (const source of [topbar, manager]) {
+      expect(source).toContain('publishedMessage');
+      expect(source).toContain('unpublishedMessage');
+    }
+  });
+});

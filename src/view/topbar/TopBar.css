@@ -166,3 +166,12 @@
   background: var(--color-accent, currentColor);
   vertical-align: middle;
 }
+
+/* The lifecycle cluster — `ship-it` 39. The badge and its verb read as one
+   thing because they are one fact, and the gap is the row token's half so the
+   pair does not look like two unrelated controls that happen to be adjacent. */
+.topbar__lifecycle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
