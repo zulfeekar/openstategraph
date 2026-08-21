@@ -179,6 +179,13 @@ def test_the_runtimes_members_are_each_nameable_without_and() -> None:
         # the public surface is still on the public surface. It is what the old
         # `vars()`-on-a-fresh-instance pin could not see.
         "last_bound_tools",
+        # The eighth, and the same kind of thing as `machinery_nodes`: a fact
+        # about the graph this compile produced that only the compiler knows.
+        # A mount is a closure, so LangGraph's `xray` cannot open it — unless
+        # the compiler records which child ran under which node, a composition
+        # cannot be drawn at all (`workflow-gallery` 28). Drawing only; no run
+        # path reads it.
+        "mounted_graphs",
     }
 
 

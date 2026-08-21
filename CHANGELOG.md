@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Changed
+- **`CompiledWorkflow.mermaid()` opens every mount, to any depth.**
+  `nested-mounts` — three documents, three levels, six nodes below the top —
+  drew three featureless boxes, and so did every composed example on the
+  gallery page. LangGraph's `xray` was never going to fix that: it expands a
+  LangGraph *subgraph*, and a mount is a closure over the child's `invoke()`,
+  which is a Python function and opaque. So the compiler now records which
+  child it compiled under which node (`NodeRuntime.mounted_graphs`) and the
+  composition is spliced from that, with LangGraph's own drawable
+  `Graph.extend`, into ordinary `subgraph` blocks. `mermaid(xray=False)` and
+  `openstategraph graph --no-xray` still draw what LangGraph itself holds —
+  one box per mount — which is what you want when a mount is the suspect. An
+  agent is a closure too and still renders as one box: it has no second
+  document to show. The HTTP and MCP preview endpoints are unchanged
+  (`workflow-gallery` 28, 56).
+
 ### Fixed
 - **A step that failed and was retried now says so.** Every node compiles with
   a graph-wide `RetryPolicy(max_attempts=3)`, so a transient provider failure

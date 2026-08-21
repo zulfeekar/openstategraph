@@ -761,13 +761,19 @@ graph TD;
     <div class="callout callout-warn">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
       <div>
-        <p><b><code>--xray</code> expands nothing in this project today.</b> LangGraph can
+        <p><b>LangGraph&rsquo;s own x-ray expands nothing in this project.</b> LangGraph can
         open a node that <em>is</em> a subgraph. Ours are not: an agent is built lazily
-        inside its closure, and a mounted workflow is a closure over the child's
-        <code>invoke()</code>. Both render as one flat box whether you ask for x-ray or not.</p>
-        <p>The build script for this page renders the graph both ways and fails if they ever
-        differ — so the day that stops being true, this paragraph gets rewritten instead of
-        quietly becoming false.</p>
+        inside its closure, and a mounted workflow is a closure over the child&rsquo;s
+        <code>invoke()</code>, which is a Python function and therefore opaque.</p>
+        <p>The build script for this page renders <em>this</em> graph both ways and fails if
+        they ever differ — so the day a node type does compile to a real subgraph, this
+        paragraph gets rewritten instead of quietly becoming false.</p>
+        <p><code>--xray</code> on the command line is not nothing, though: a <b>mount</b> is
+        opened by the compiler itself, which records which child it built under which node
+        and splices the two drawings together. <code>evaluator-optimizer</code>, above,
+        mounts nothing — run <code>openstategraph graph</code> on
+        <code>nested-mounts</code> to see three levels at once. An agent still renders as
+        one box: it has no second document to show.</p>
       </div>
     </div>
 

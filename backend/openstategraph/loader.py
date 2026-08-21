@@ -93,6 +93,13 @@ class CompiledWorkflow:
     #: but it is a field rather than a closure so the dataclass stays frozen
     #: and comparable. A checkpointer the *caller* passed is never in here.
     _owned: tuple[Any, ...] = field(default=(), repr=False, compare=False)
+    #: Graph node name -> the mounted child compiled under it, as the
+    #: compiler recorded it. Drawing only — see `mermaid`. Underscored and out
+    #: of `repr`/equality for the same reason `_owned` is: it is bookkeeping,
+    #: not part of what a loaded workflow *is*.
+    _mounts: Mapping[str, Any] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     def close(self) -> None:
         """Release the sqlite handles this load opened. Idempotent.
@@ -127,25 +134,35 @@ class CompiledWorkflow:
     def mermaid(self, *, xray: bool = True) -> str:
         """The compiled topology as Mermaid **text**, with no network call.
 
-        `xray` expands a **LangGraph subgraph**, and this compiler emits none,
-        so today the flag changes nothing: an agent is built lazily inside its
-        node's closure, and a mount is a closure over the child's `invoke()`.
-        Neither is a node LangGraph can open. Verified byte-identical against
-        `xray=False` on all 23 shipped examples.
+        `xray=True` **opens every mount**, to any depth: `nested-mounts` draws
+        as three nested `subgraph` blocks with the innermost workflow's own
+        agents inside them. `xray=False` draws what LangGraph itself holds —
+        one box per mount — which is the honest picture of the topology handed
+        to the runtime, and is what you want when a mount is the suspect.
 
-        The parameter stays because the day a node type compiles to a real
-        subgraph it starts mattering again, and
-        `backend/tests/test_behind_the_scenes.py` fails on that day rather
-        than letting the words drift back.
+        **LangGraph's own `xray` is not what does this, and cannot be.** It
+        expands a LangGraph subgraph; a mount is a *closure* over the child's
+        `invoke()`, and a function is opaque. So the expansion is ours, from
+        what the compiler recorded while it built the child —
+        `compile/composition.py` carries the argument, including why the child
+        is not made into a real subgraph instead. An agent is likewise a
+        closure and stays one box: it has no second document to show.
 
-        (Until 2026-08-16 this said "`xray=True` expands subgraph internals,
-        so what you render is what the compiler actually produced" — aspirational
-        for the one construct it named, and the third unciteable claim found in
-        this area.)
+        (Until `workflow-gallery` 28 this docstring said the flag "changes
+        nothing", which was true of LangGraph and read as a statement about
+        the preview. Before 2026-08-16 it said the opposite and was simply
+        wrong. Two corrections of one sentence is why the behaviour is now
+        pinned in `backend/tests/test_mount_composition_preview.py` rather
+        than described here.)
 
         Never `draw_mermaid_png()`: that posts the graph to a third-party API.
         """
-        diagram: str = self.graph.get_graph(xray=xray).draw_mermaid()
+        drawable = self.graph.get_graph(xray=xray)
+        if xray and self._mounts:
+            from openstategraph.compile.composition import expand_mounts
+
+            drawable = expand_mounts(drawable, self._mounts)
+        diagram: str = drawable.draw_mermaid()
         return diagram
 
     def ask(
@@ -545,6 +562,7 @@ def load_workflow(
         document=document,
         trace_file=Path(trace_file).expanduser() if trace_file else None,
         _owned=tuple(owned),
+        _mounts=dict(runtime.mounted_graphs),
     )
 
 

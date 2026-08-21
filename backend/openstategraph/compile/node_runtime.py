@@ -1426,6 +1426,16 @@ class NodeRuntime:
         #: They were two attributes here, always handed to `RunPathResolver`
         #: together and read defensively (reviews-2026-08-14 ticket 07).
         self.names = GraphNames()
+        #: Graph node name -> the mount rendered under it, for previewing a
+        #: composition (`workflow-gallery` 28). A mount is a **closure** over
+        #: the child's `invoke()`, not a LangGraph subgraph, so `xray` has
+        #: nothing to open and never will — this is the compiler saying what
+        #: it built, since it is the only thing that knows. Recursive: each
+        #: entry carries the child's own map, so depth costs nothing.
+        #:
+        #: Drawing only. Nothing here is read on a run path, and the closure
+        #: keeps its own reference to the compiled child regardless.
+        self.mounted_graphs: dict[str, "MountedGraph"] = {}
         #: The built-in families: the node types **this build implements
         #: itself**. A literal table of bound methods on purpose, and
         #: consulted before anything installed, because these are what a
@@ -3145,7 +3155,8 @@ class NodeRuntime:
         subagent-isolation rule: a subgraph receives a task and reports a
         result.
         """
-        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.compile.composition import MountedGraph
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
 
         data = node.get("data") or {}
         slug = _text(data, "workflow").strip()
@@ -3277,6 +3288,17 @@ class NodeRuntime:
                 # that build, so a grandchild's ids only exist on
                 # `child_runtime` once it has run.
                 self.names.absorb(child_runtime.names, through=node_id, slug=slug)
+                # And what the compiler alone knows: this mount runs THAT
+                # graph. A closure is opaque to LangGraph's `xray`, so unless
+                # the compiler records it, a composition can only be drawn by
+                # hand — see `compile/composition.py` for why this is a
+                # recording rather than a change to how the child is added.
+                # Keyed by the GRAPH node name, which is what a drawing has.
+                self.mounted_graphs[safe_name(node_id)] = MountedGraph(
+                    slug=slug,
+                    graph=child_graph,
+                    mounts=dict(child_runtime.mounted_graphs),
+                )
 
         if child_graph is None:
             label = slug or "(no workflow selected)"

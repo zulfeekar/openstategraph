@@ -17,9 +17,14 @@ Diagrams are hand-written Mermaid using the same shapes the compiler's own
 `draw_mermaid()` output uses — rounded boxes for nodes, dotted lines for
 conditional edges. The authoritative picture of any workflow you build is the
 top bar's **View compiled graph**, which renders `draw_mermaid()` on the
-compiled graph, locally, with no network call. It passes `xray=True`, which
-expands nothing: a mount and an agent are closures, not LangGraph subgraphs,
-so a composed workflow shows its mounts as flat boxes.
+compiled graph, locally, with no network call.
+
+That editor view still draws each mount as one flat box (`workflow-gallery`
+56). `openstategraph graph <package>` and `CompiledWorkflow.mermaid()` open
+them: a mount is a closure over the child's `invoke()` rather than a LangGraph
+subgraph, so LangGraph's `xray` cannot see into it, and the compiler records
+what it built instead. An agent is a closure too and stays one box — it has no
+second document to show.
 
 ---
 

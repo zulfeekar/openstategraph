@@ -419,9 +419,15 @@ variable someone can set, see and revoke.
 
 ### Never send a user's graph to a third party
 
-`draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `compiled.get_graph(xray=True).draw_mermaid()`, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
+`draw_mermaid_png()` defaults to posting the graph to the **Mermaid.Ink API**. Use **`draw_mermaid()`**, which returns Mermaid text with no network call and no extra dependency, and render it in the frontend. Compiled-graph previews come from `draw_mermaid()` on the compiled graph, so a preview shows what the compiler actually produced rather than a hand-drawn approximation that can drift.
 
-**`xray` expands nothing here, and the sentence that said it did was wrong.** Until 2026-08-16 this line claimed `xray=True` "expands subgraph internals". It expands a *LangGraph subgraph*, and this compiler emits none: an agent is built lazily inside its node's closure and a mount is a closure over the child's `invoke()`. Verified byte-identical against `xray=False` on all 23 shipped examples. So a composed workflow previews as flat boxes, `xray` is kept for the day a node type compiles to a real subgraph, and `backend/tests/test_behind_the_scenes.py` fails on that day rather than letting the words drift back.
+**LangGraph's `xray` expands nothing here, and never will — so a composition is drawn by us.** `xray=True` opens a *LangGraph subgraph*, and this compiler emits none: an agent is built lazily inside its node's closure, and a mount is a closure over the child's `invoke()`. A function is opaque, so this is not a flag anyone can turn on. `backend/tests/test_behind_the_scenes.py` still pins that fact about LangGraph, and fails on the day a node type compiles to a real subgraph.
+
+What it is **not** is a reason for a composition to render as one featureless box, which is what it was until `workflow-gallery` 28: `nested-mounts` — three documents, three levels, six nodes below the top — drew three boxes and nothing about the nesting survived. **`CompiledWorkflow.mermaid(xray=True)` now opens every mount to any depth**, from what the compiler recorded while it built the child (`NodeRuntime.mounted_graphs` → `compile/composition.py`), splicing with LangGraph's own drawable `Graph.extend` so the output is ordinary `subgraph` blocks. `mermaid(xray=False)` still draws what LangGraph itself holds — one box per mount — and that is the honest picture when a mount is the suspect. An agent stays one box either way: it has no second document to show.
+
+Two sentences of this paragraph have now been wrong in opposite directions — before 2026-08-16 it claimed the expansion happened; after it, the correction read as a statement about the *preview* rather than about LangGraph. That is why the behaviour is pinned in `backend/tests/test_mount_composition_preview.py` against a package that actually mounts, rather than described here.
+
+**The HTTP and MCP preview endpoints still render mounts flat** (`api/routes/workflows.py`, `mcp_server.py`), because the customer-audience relabelling reads node ids out of the *parent* document and a spliced child's ids are not in it — `workflow-gallery` 56.
 
 ### Cycles are gated by port *type*, and the step budget is not an iteration count
 

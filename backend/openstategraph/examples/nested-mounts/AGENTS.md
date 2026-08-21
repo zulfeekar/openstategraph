@@ -102,11 +102,15 @@ layers of indirection. Two things the `--json` result shows about mounts:
   is graph-wide (gallery ticket 21) and it crosses the mount boundary, which
   is worth knowing before treating it as a revision count.
 
-## What a preview does not show
+## What a preview shows
 
-`openstategraph graph workflows/nested-mounts` renders three boxes. `xray=True`
-expands a LangGraph subgraph, but a mount is invoked *inside* a node function,
-so no preview of any depth shows the composition — gallery ticket 28.
+`openstategraph graph workflows/nested-mounts` draws all three levels, as
+nested `subgraph` blocks with `chained-summarizer`'s two agents at the bottom.
+It is not `xray` that does that: `xray` opens a LangGraph subgraph, and a mount
+is invoked *inside* a node function, which LangGraph cannot see into. The
+compiler records which child it compiled under which node and the composition
+is spliced from that — `compile/composition.py` (gallery ticket 28). Pass
+`--no-xray` for the flat picture LangGraph itself holds.
 
 ## Tests
 

@@ -4,9 +4,9 @@
     python3 scripts/build_gallery_diagrams.py [--check]
 
 Every diagram on the gallery page is the Mermaid the **compiler actually
-produced** — ``compiled.get_graph(xray=True).draw_mermaid()`` on each package
-(``xray`` expands nothing here; see the note on ``ALIASES`` below)
-under ``backend/openstategraph/examples/``. Compiling needs no credentials and
+produced** — ``CompiledWorkflow.mermaid()`` on each package under
+``backend/openstategraph/examples/``, which is ``draw_mermaid()`` with every
+mount opened (see the note on ``ALIASES`` below). Compiling needs no credentials and
 calls no model, so this script is free to run.
 
 ``draw_mermaid()``, never ``draw_mermaid_png()``: the PNG helper posts the graph
@@ -56,11 +56,15 @@ COLOUR_MAP = {
 # reads them, and `data-points` alone is a base64 blob per edge.
 NOISE_ATTRS = re.compile(r'\s(?:data-points|data-look|data-edge|data-et|data-id)="[^"]*"')
 
-# The three composition examples show their children beside them, because a mount
-# renders as one featureless box and `xray=True` cannot open it — the parent holds
-# a closure over the child, not a LangGraph subgraph. A child therefore appears on
-# the page more than once, and each appearance is rendered separately so its
-# element ids stay unique in the document.
+# The three composition examples show their children beside them. That began as
+# a workaround: a mount rendered as one featureless box, because `xray=True`
+# opens a LangGraph subgraph and the parent holds a *closure* over the child.
+# `CompiledWorkflow.mermaid()` now opens it (`workflow-gallery` 28), so the
+# parent diagram carries the nesting itself and these siblings are a second,
+# unnested look at the same child rather than the only way to see it. Whether
+# the page still wants them is a reader's question, filed as gallery 54.
+# A child therefore appears on the page more than once, and each appearance is
+# rendered separately so its element ids stay unique in the document.
 ALIASES = {
     "chained-summarizer-l3": "chained-summarizer",  # 11, level 3
     "chained-summarizer-x2": "chained-summarizer",  # 12, both mounts
@@ -88,7 +92,7 @@ def mermaid_sources() -> dict[str, str]:
         workflow = load_workflow(EXAMPLES / slug)
         if workflow.warnings:
             raise SystemExit(f"{slug} compiled with warnings: {workflow.warnings}")
-        sources[slug] = workflow.graph.get_graph(xray=True).draw_mermaid()
+        sources[slug] = workflow.mermaid()
     for alias, slug in ALIASES.items():
         sources[alias] = sources[slug]
     return sources
