@@ -539,6 +539,7 @@ tracks an open document should do the same rather than scanning the listing.
 ```json
 {
   "slug": "quarterly-brief",
+  "name": "Quarterly Brief",
   "document": {
     "version": 2,
     "name": "Quarterly Brief",
@@ -561,6 +562,29 @@ tracks an open document should do the same rather than scanning the listing.
 You need this because a run takes the document as **input**. The workflow that
 executes is the one you can read — which is what makes the compile seam
 one-directional and a run reproducible outside this editor.
+
+**This body is what `PUT /api/workflows/{slug}` takes back**, unchanged
+(`workflow-gallery` 42). Fetch, edit, put it back:
+
+```bash
+curl -s "$BASE/api/workflows/quarterly-brief" \
+  | jq '.document.name = "Quarterly Brief v2"' \
+  | curl -s -X PUT "$BASE/api/workflows/quarterly-brief" \
+        -H 'content-type: application/json' -d @-
+```
+
+Until 42 that one-liner could not be written: the read shape was
+`{slug, document}` and the write shape `{name, document}` with
+`additionalProperties: false`, so the same body was rejected twice over —
+once for the `name` the read shape did not carry, once for the `slug` it did.
+The envelope's `name` closed the first half. The second half is the narrow
+part and is worth reading before you rely on it: `PUT` tolerates `slug`
+**only when it agrees with the path**, and answers `422` when it does not,
+because a body naming another workflow is a confused client rather than an
+instruction to cross-write. Nothing else was relaxed — a misspelt field is
+still `422` rather than a silent no-op, and `POST /api/workflows` still
+refuses `slug` outright, because minting an identity is the server's job
+(ticket 20, below).
 
 #### One mount of it: `GET /api/workflows/{root}/mounts/{path}`
 

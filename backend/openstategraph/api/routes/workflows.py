@@ -39,6 +39,7 @@ from openstategraph.api.schemas import (
     PluginToolCapabilityResponse,
     PublishWorkflowRequest,
     PublishWorkflowResponse,
+    SaveWorkflowAtSlugRequest,
     SaveWorkflowRequest,
     SqlSchemaResponse,
     SqlSourceResponse,
@@ -247,6 +248,10 @@ def get_workflow(services: Services, slug: str) -> WorkflowDocumentResponse:
     A client fetches this and posts it back to `/api/runs/stream`: the
     compile seam is one-directional and stateless per call, so the
     workflow that executes is the one the caller can read.
+
+    **This body is accepted by `PUT /api/workflows/{slug}` unchanged**
+    (ticket 42), which is why `name` is on the envelope rather than only
+    inside the document: fetch, edit, put it back, with no reshaping.
     """
     from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
@@ -256,7 +261,13 @@ def get_workflow(services: Services, slug: str) -> WorkflowDocumentResponse:
         raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
     except InvalidSlugError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return WorkflowDocumentResponse(slug=slug, document=document)
+    # The name the *store* holds, not a second reading of the document:
+    # `describe` owns the precedence (envelope name, else document name,
+    # else the slug) and a copy of it here would be the same knowledge
+    # written twice.
+    summary = services.store.describe(slug)
+    name = summary.name if summary is not None else str(document.get("name") or slug)
+    return WorkflowDocumentResponse(slug=slug, name=name, document=document)
 
 @router.get(
     "/api/workflows/{root}/mounts/{path:path}",
@@ -364,7 +375,7 @@ def create_workflow(services: Services, request: SaveWorkflowRequest) -> Workflo
     except SlugMintingError as exc:
         raise HTTPException(status_code=507, detail=str(exc)) from exc
     announce(services, "saved", slug)
-    return WorkflowDocumentResponse(slug=slug, document=request.document)
+    return WorkflowDocumentResponse(slug=slug, name=request.name, document=request.document)
 
 @router.put(
     "/api/workflows/{slug}",
@@ -372,7 +383,9 @@ def create_workflow(services: Services, request: SaveWorkflowRequest) -> Workflo
     summary="Overwrite the workflow document at a slug you already hold",
     tags=["Catalogue"],
 )
-def save_workflow(services: Services, slug: str, request: SaveWorkflowRequest) -> WorkflowDocumentResponse:
+def save_workflow(
+    services: Services, slug: str, request: SaveWorkflowAtSlugRequest
+) -> WorkflowDocumentResponse:
     """Writes the package's `workflow.json` and stamps `saved_at`.
 
     The slug is the path parameter and is frozen at creation; the body
@@ -390,6 +403,19 @@ def save_workflow(services: Services, slug: str, request: SaveWorkflowRequest) -
 
     from openstategraph.api.workflow_store import InvalidSlugError
 
+    if request.slug is not None and request.slug != slug:
+        # Tolerant in reading, strict in trusting: the echoed slug is
+        # admitted so a fetched body can be put straight back, and a slug
+        # naming a *different* package is refused rather than ignored. The
+        # path is the identity; honouring the body would cross-write one
+        # workflow's document onto another's, silently.
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"body names workflow {request.slug!r} but the path addresses "
+                f"{slug!r} — the path is the identity; omit `slug` or make it match"
+            ),
+        )
     try:
         services.store.save(
             slug,
@@ -400,7 +426,7 @@ def save_workflow(services: Services, slug: str, request: SaveWorkflowRequest) -
     except InvalidSlugError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     announce(services, "saved", slug)
-    return WorkflowDocumentResponse(slug=slug, document=request.document)
+    return WorkflowDocumentResponse(slug=slug, name=request.name, document=request.document)
 
 @router.delete(
     "/api/workflows/{slug}",

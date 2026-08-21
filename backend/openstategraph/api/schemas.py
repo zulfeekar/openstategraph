@@ -532,12 +532,36 @@ class RunResponse(BaseModel):
 class SaveWorkflowRequest(BaseModel):
     """The whole document plus the display name — never the slug: the slug
     is the URL path parameter, frozen at creation (see `workflow_store.py`).
+
+    This is the **creation** shape. `POST /api/workflows` mints the identity,
+    so a body naming one is ticket 20's data loss arriving by a different
+    door and is refused by `extra="forbid"`. The save shape is
+    :class:`SaveWorkflowAtSlugRequest`, which differs by exactly one
+    optional field.
     """
 
     model_config = {"extra": "forbid"}
 
     name: str = Field(min_length=1)
     document: dict[str, Any]
+
+
+class SaveWorkflowAtSlugRequest(SaveWorkflowRequest):
+    """What `PUT /api/workflows/{slug}` accepts — workflow-gallery ticket 42.
+
+    Identical to :class:`SaveWorkflowRequest` but for tolerating the `slug`
+    that `WorkflowDocumentResponse` hands back, so *fetch, edit, put it
+    back* is writable without reshaping the payload. The field is
+    **echo-only**: the path is the identity, and a `slug` disagreeing with
+    it is refused by the route rather than honoured (a body carrying another
+    workflow's slug is a confused client, not an instruction to cross-write).
+
+    `extra="forbid"` is inherited and deliberately not relaxed further —
+    it is what makes a typo an error instead of a silent no-op. One field
+    was admitted, not the door.
+    """
+
+    slug: str | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -664,7 +688,22 @@ class PublishWorkflowResponse(BaseModel):
 
 
 class WorkflowDocumentResponse(BaseModel):
+    """What the catalogue hands back for one package — and what
+    `PUT /api/workflows/{slug}` takes back unchanged (ticket 42).
+
+    `name` is here because the save shape requires it. It used to live only
+    inside `document["name"]`, so a scripted edit had to know to lift it out;
+    that asymmetry made a published contract whose read and write shapes
+    could not be composed.
+    """
+
     slug: str
+    #: The display name — the envelope's copy of `document["name"]`, which is
+    #: what the store actually keeps and what a rename writes. Required, not
+    #: defaulted: a client composing a `PUT` body out of this needs it to be
+    #: there on every read, and an optional field is one a reader has to
+    #: check for.
+    name: str
     document: dict[str, Any]
 
 

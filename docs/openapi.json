@@ -1211,9 +1211,42 @@
         "title": "RunResponse",
         "type": "object"
       },
+      "SaveWorkflowAtSlugRequest": {
+        "additionalProperties": false,
+        "description": "What `PUT /api/workflows/{slug}` accepts \u2014 workflow-gallery ticket 42.\n\nIdentical to :class:`SaveWorkflowRequest` but for tolerating the `slug`\nthat `WorkflowDocumentResponse` hands back, so *fetch, edit, put it\nback* is writable without reshaping the payload. The field is\n**echo-only**: the path is the identity, and a `slug` disagreeing with\nit is refused by the route rather than honoured (a body carrying another\nworkflow's slug is a confused client, not an instruction to cross-write).\n\n`extra=\"forbid\"` is inherited and deliberately not relaxed further \u2014\nit is what makes a typo an error instead of a silent no-op. One field\nwas admitted, not the door.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name",
+          "document"
+        ],
+        "title": "SaveWorkflowAtSlugRequest",
+        "type": "object"
+      },
       "SaveWorkflowRequest": {
         "additionalProperties": false,
-        "description": "The whole document plus the display name \u2014 never the slug: the slug\nis the URL path parameter, frozen at creation (see `workflow_store.py`).",
+        "description": "The whole document plus the display name \u2014 never the slug: the slug\nis the URL path parameter, frozen at creation (see `workflow_store.py`).\n\nThis is the **creation** shape. `POST /api/workflows` mints the identity,\nso a body naming one is ticket 20's data loss arriving by a different\ndoor and is refused by `extra=\"forbid\"`. The save shape is\n:class:`SaveWorkflowAtSlugRequest`, which differs by exactly one\noptional field.",
         "properties": {
           "document": {
             "additionalProperties": true,
@@ -1720,11 +1753,16 @@
         "type": "object"
       },
       "WorkflowDocumentResponse": {
+        "description": "What the catalogue hands back for one package \u2014 and what\n`PUT /api/workflows/{slug}` takes back unchanged (ticket 42).\n\n`name` is here because the save shape requires it. It used to live only\ninside `document[\"name\"]`, so a scripted edit had to know to lift it out;\nthat asymmetry made a published contract whose read and write shapes\ncould not be composed.",
         "properties": {
           "document": {
             "additionalProperties": true,
             "title": "Document",
             "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "slug": {
             "title": "Slug",
@@ -1733,6 +1771,7 @@
         },
         "required": [
           "slug",
+          "name",
           "document"
         ],
         "title": "WorkflowDocumentResponse",
@@ -2841,7 +2880,7 @@
         ]
       },
       "get": {
-        "description": "The vendor-neutral document itself \u2014 the thing a run takes as input.\n\nA client fetches this and posts it back to `/api/runs/stream`: the\ncompile seam is one-directional and stateless per call, so the\nworkflow that executes is the one the caller can read.",
+        "description": "The vendor-neutral document itself \u2014 the thing a run takes as input.\n\nA client fetches this and posts it back to `/api/runs/stream`: the\ncompile seam is one-directional and stateless per call, so the\nworkflow that executes is the one the caller can read.\n\n**This body is accepted by `PUT /api/workflows/{slug}` unchanged**\n(ticket 42), which is why `name` is on the envelope rather than only\ninside the document: fetch, edit, put it back, with no reshaping.",
         "operationId": "get_workflow_api_workflows__slug__get",
         "parameters": [
           {
@@ -2899,7 +2938,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveWorkflowRequest"
+                "$ref": "#/components/schemas/SaveWorkflowAtSlugRequest"
               }
             }
           },
