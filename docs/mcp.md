@@ -13,6 +13,11 @@ The decision record — trust boundary, transports, honest limits — is
 [`decisions/mcp-layer.md`](decisions/mcp-layer.md). This page is the worked
 example the record does not contain.
 
+Sections 1–7 below are all one direction: openstategraph running *as* an MCP
+server. §8 is the other direction — a workflow *consuming* someone else's MCP
+server from the canvas — because both live under "MCP" and only one of them
+is this server.
+
 ---
 
 ## 1. Point a client at it
@@ -478,3 +483,27 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
 
 All of these, with reasoning and re-open conditions, are in
 [`decisions/mcp-layer.md`](decisions/mcp-layer.md).
+
+## 8. The other direction — connecting to someone else's MCP server
+
+Everything above is about openstategraph running *as* an MCP server. `tool.mcp`
+is the reverse: a workflow node that connects *to* one, so an agent on the
+canvas can call its tools.
+
+One `tool.mcp` card carries **N server rows**, not one server per card — URL,
+transport, auth, and a per-row tool filter, the same field set the app-level
+MCP panel renders. Rows are addressable: a row that is unreachable, rejects
+its credential, or does not speak MCP degrades to a capability warning naming
+which row, and every other row still binds.
+
+N rows on one card is not free, though — it costs per-server **routing**,
+because the card has exactly one output and every row's tools travel to
+whatever that output feeds. Whether that cost is zero or a wall depends on who
+is downstream, and the card says so in its own copy rather than leaving it for
+a support thread:
+
+> One node per group of servers that share a consumer. Every row’s tools land on the same bus, so an agent wired here can call all of them and choose per task; two agents that need different servers want two of these nodes. Narrow a thirty-tool server with that row’s own filter rather than by splitting it out.
+
+That is `MCP_GROUPING_GUIDE` in `src/nodes/tools/mcpServerFields.ts`, quoted
+here rather than restated so the two copies cannot drift apart — a test pins
+the quote (`src/nodes/tools/mcpDocsGuide.test.ts`).
