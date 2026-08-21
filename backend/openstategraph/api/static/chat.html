@@ -899,7 +899,12 @@ function renderTimeline(el, rows, names) {
     body.appendChild(row);
   }
 }
-const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms");
+// Mirrors src/view/ask/traceDuration.ts (ticket 84): a sub-millisecond gap is
+// real — a grader's deterministic reject skips the model entirely and can
+// measure 0.02 ms — and printing "0 ms" reads as a broken timer rather than
+// as the truth. This page is a separate implementation of the same idea
+// because it has no build step to import the shared module from (ticket 82).
+const fmtMs = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms < 1 ? "<1 ms" : Math.round(ms) + " ms");
 
 /* Repaints the picker from a catalogue listing, PRESERVING the selection.
  *
@@ -1075,13 +1080,42 @@ function watchCatalogue() {
 }
 
 /**
+ * A node's own type, humanised — the fallback for a node its author never
+ * named (ticket 82).
+ *
+ * `in1`/`out1`/`grader-general` are compiler handles, not words a reader
+ * chose or can act on — they are the developer half of the same boundary
+ * `docs/api.md` §"Audience: what a customer's run cannot carry" already draws
+ * for `warnings`. But a bare type ("input.text", "route.grader") is still
+ * real information the customer surface may show: it says what kind of step
+ * ran without pretending a person named it. The editor's own trace
+ * (`src/view/ask/traceTree.tsx`) is a developer surface and keeps the raw id
+ * on purpose — this function is only reached on `/chat`.
+ */
+function humanizeType(type) {
+  const str = String(type || "");
+  const family = str.split(".")[0] || "";
+  // The two families every workflow has, named the way a reader thinks of
+  // their own turn rather than the way the compiler wires it up.
+  if (family === "input") return "Your question";
+  if (family === "output") return "Answer";
+  const tail = str.split(".").pop() || "";
+  const words = tail.replace(/[-_]+/g, " ").trim();
+  if (!words) return "";
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
  * The name a node's author gave it, for the trace.
  *
  * Frames carry the node **id** — `in1`, `router1`, `node:agent.llm-1` — which
  * is the compiler's handle on it, not a word this reader chose. The document
  * is already loaded for the run, so the title is a lookup away
- * (reviews-2026-08-14 ticket 04). Falls back to the bare id: a node its author
- * never named has no better name to show, and inventing one would be worse.
+ * (reviews-2026-08-14 ticket 04). Falls back to the node's own **type**,
+ * humanised (ticket 82): `in1` with no title but type `input.text` reads as
+ * "Text", not as the id nobody but a developer can act on. A node with
+ * neither a title nor a resolvable type falls back to the bare id — the
+ * floor this whole chain cannot go below.
  */
 /**
  * The canvas node a frame belongs to (ticket 72).
@@ -1116,7 +1150,8 @@ function displayName(nodeId) {
   const bare = String(nodeId || "").replace(/^node:/, "");
   const nodes = (state.doc && state.doc.document && state.doc.document.nodes) || [];
   const hit = nodes.find((n) => n.id === nodeId || n.id === bare);
-  return (hit && hit.title) || bare;
+  if (hit && hit.title) return hit.title;
+  return (hit && humanizeType(hit.type)) || bare;
 }
 
 async function docFor(slug) {
@@ -1578,9 +1613,28 @@ function setComposerRunning(running) {
   btn.textContent = running ? "Stop" : "Send";
   if (running) btn.dataset.stop = "1";
   else delete btn.dataset.stop;
+  updateSendEnabled();
+}
+
+/**
+ * Whether Send has anything to send (ticket 82).
+ *
+ * `send()` already refused whitespace-only text — `q = value.trim(); if
+ * (!q) return` — but silently: the button stayed enabled, so pressing it on
+ * three spaces produced no turn, no error and no `POST /api/runs/stream`,
+ * which is a control that looks live and reaches nothing. This is the same
+ * `.trim()` the refusal already used, just surfaced on the control itself
+ * instead of swallowed inside the handler. Stop is never disabled by empty
+ * text — a running turn must always be stoppable regardless of what is
+ * typed underneath it.
+ */
+function updateSendEnabled() {
+  const btn = $("send");
+  btn.disabled = !inFlight && !$("msg").value.trim();
 }
 
 $("send").onclick = () => { if (inFlight) inFlight.abort(); else send(); };
+$("msg").addEventListener("input", updateSendEnabled);
 $("msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -1589,6 +1643,7 @@ $("msg").addEventListener("keydown", (e) => {
     if (!inFlight) send();
   }
 });
+updateSendEnabled();
 async function send() {
   const q = $("msg").value.trim();
   if (!q || !state.workflow) return;
