@@ -1746,6 +1746,25 @@ class NodeRuntime:
                 "which this build implements itself. The built-in is used; that family "
                 "will never be built."
             )
+        # The same shadow, one namespace over. A package's `functions/` folder
+        # binds by bare name (`function.<name>`) while a discovered *tool*
+        # binds by a slug-qualified id, so a package defining
+        # `def format_report` lands on a built-in's key. `builder_for`
+        # consults the built-in table first — which is the right answer, and
+        # was a silent one: the developer's function was simply never called
+        # (`export-and-eject/11`). Reported here for the reason the family
+        # loop above is: this is the object that holds the built-in table.
+        for shadowed in sorted(
+            key
+            for key in set(self.services.functions) & set(self._builders)
+            if key.startswith("function.")
+        ):
+            self.diagnostics.record(
+                Finding.CAPABILITY_FAILED,
+                f'A function named "{shadowed[len("function."):]}" is discovered from this '
+                f'package, but "{shadowed}" is a node type this build implements itself. '
+                "The built-in is used; that function will never be called. Rename it.",
+            )
         for warning in family_warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, warning)
 

@@ -931,7 +931,15 @@ Two things about it that are not guesses:
   bare name — so that is what a document names. It is therefore **not**
   slug-qualified, unlike a discovered tool's; harmless in the editor, where only
   the open package's functions are ever registered, and a real property of the
-  runtime rather than of the card.
+  runtime rather than of the card. Two consequences of the flat namespace were
+  measured for `export-and-eject/11` rather than reasoned about:
+  a **mount** is safe — a child runtime is built with the child's own functions
+  last and therefore highest, so a mounted package binds its own `shout` and
+  never the parent's — and a name that collides with a **built-in**
+  (`function.format_report`) loses to the built-in at both ends. That last one
+  used to be silent; the compiler now says so on `runtime_warnings()`, naming
+  the function and telling you to rename it, because the alternative is a
+  developer's function that never runs and never explains itself.
 - **The card has no fields.** The compiled step reads nothing from `data`, so a
   control here would be one the compiler ignores. The signature and the first
   line of the docstring become the card's subtitle instead, where they cannot

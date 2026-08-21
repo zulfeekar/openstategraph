@@ -37,7 +37,10 @@
  *   and `registerDiscoveredCapabilities` declines to overwrite it — the same
  *   hand-authored-wins rule discovery already applies to tools, and the same
  *   rule the compiler applies at the other end, where the explicit builder
- *   table is consulted before the `function.` convention.
+ *   table is consulted before the `function.` convention. Silent on both sides
+ *   until `export-and-eject/11`, which made the compiler report the collision
+ *   on `runtime_warnings()` — the developer's `def format_report` is never
+ *   called, and now says so.
  *
  * **No field schema, v1, stated rather than implied.** The compiled step reads
  * nothing from `data`; every input is the upstream text. A control on the card
