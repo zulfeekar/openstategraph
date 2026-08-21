@@ -361,6 +361,22 @@ a stale fact immortal precisely because it keeps surfacing in search.
 ## Efficiency
 
 `search_memory` caps each scope at 4 hits (≤12 one-liners total).
+
+**Those four are not the four most relevant, and the tool says so**
+(`organisms-first-class/26`). `store.search(ns, query=…)` ranks only when the
+store was built with `index={"embed": …, "dims": …}`, and none of
+`build_store()`'s three backends is — there is nowhere to declare an embedding
+model yet, which is `organisms-first-class/45`. Until there is, `query=` is
+accepted and dropped by the store, so the caller gets an arbitrary window of
+each scope. What changed is that this is now **said**: every unranked answer
+carries `UNRANKED_NOTICE` to the model and one WARNING per process to the
+operator. The evidence used is `Item.score` — populated only by a search that
+actually ranked — rather than sniffing a backend for its `index_config`, so it
+stays true of a store type this module has never seen.
+
+This sharpens the retention argument above rather than softening it: stale
+facts crowd correct ones out of a window that has *no* preference for the
+correct ones.
 `_thread_question` bounds history to the last 6 turns and marks the new
 message as THE task ("the conversation above is context only, never the
 task" — pinned wording; a softer framing let history dominate a mounted team

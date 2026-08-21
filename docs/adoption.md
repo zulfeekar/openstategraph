@@ -614,7 +614,9 @@ Every agent that binds memory gets three tools: `save_memory`, `search_memory`
 and `forget_memory`. Search prints a short handle beside each fact
 (`[workflow · a1b2c3d4]`) and forget takes that handle — a wrong fact is
 removable, and because search shows only four results per scope, removing stale
-ones is what keeps correct ones visible.
+ones is what keeps correct ones visible — those four are an arbitrary
+window, not the four closest to the query, and every unranked answer says
+so in its own last line (`organisms-first-class/26`).
 
 **Retention is a deployment property, not a document one** — how long *this
 installation* keeps data is not something a workflow author can answer for the

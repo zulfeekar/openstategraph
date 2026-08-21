@@ -217,6 +217,38 @@ HANDLE_LENGTH = 8
 #: cannot reach would be the worst kind of "it did nothing".
 SEARCH_CEILING = 200
 
+#: What `search_memory` appends when nothing it returned carried a relevance
+#: score. `store.search(ns, query=…)` is only a relevance search when the store
+#: was built with `index={"embed": …, "dims": …}`; without one the argument is
+#: accepted and dropped, and the caller gets an arbitrary window of each scope.
+#: The model is the one acting on these facts, so it is the one that has to be
+#: told the order means nothing (`organisms-first-class/26`).
+UNRANKED_NOTICE = (
+    "(Not ranked: this memory store returned no relevance scores, so the query "
+    "did not select or order these facts. They are an arbitrary window of each "
+    "scope, capped at 4 — closer matches may exist and not be shown. The facts "
+    "above are still real; only their order and selection are meaningless.)"
+)
+
+#: The operator's half of the same news, said once per process rather than once
+#: per lookup: an agent that searches memory every turn would otherwise bury
+#: every other log line under it.
+_UNRANKED_WARNED = False
+
+
+def _warn_unranked_once() -> None:
+    global _UNRANKED_WARNED
+    if _UNRANKED_WARNED:
+        return
+    _UNRANKED_WARNED = True
+    _log().warning(
+        "search_memory ran a query against a store with no embedding index, so "
+        "results are UNRANKED — an arbitrary window of each scope, not the "
+        "closest matches. No backend build_store() can return is constructed "
+        "with index={'embed': ...}, and there is no way to configure one yet; "
+        "the tool's answer now says so to the model as well."
+    )
+
 
 def _app_namespace() -> tuple[str, ...]:
     """The app pool, as a resolver so every scope is declared the same way."""
@@ -510,13 +542,15 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
     def search_memory(query: str) -> str:
         """Look up previously saved facts across every scope — the user's,
         this workflow's, and the shared app pool. Results are labelled with
-        where they came from."""
+        where they came from. If the store cannot rank by relevance, the
+        answer says so — trust the facts, not the order."""
         from langgraph.config import get_store
 
         store = get_store()
         if store is None:
             return "No memory store is configured."
         rows: list[str] = []
+        ranked = False
         # Iterating the enum is what keeps this from being a second copy of
         # the scope set; declaration order is the order the agent reads.
         for scope in allowed:
@@ -538,12 +572,26 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
                 _log().warning("memory scope %s is unreadable (%s); skipped", namespace, exc)
                 continue
             for item in hits:
+                # `score` is `BaseStore`'s own way of saying a search ranked:
+                # it is populated only when a vector search actually ran. So
+                # this reads the evidence rather than sniffing the backend for
+                # an `index_config`, and is therefore true of a store type
+                # this module has never heard of.
+                if item.score is not None:
+                    ranked = True
                 source = item.value.get("workflow", "")
                 tag = f"{label} via {source}" if label == "app" and source else label
                 # The handle is what makes a fact nameable again — `forget_memory`
                 # needs a referent, and quoted prose is a guess, not a referent.
                 rows.append(f"- [{tag} · {item.key[:HANDLE_LENGTH]}] {item.value.get('fact', '')}")
-        return "\n".join(rows) if rows else "No saved memories match."
+        if not rows:
+            # Not "no memories match": nothing was compared to anything, so a
+            # claim about matching would be the same false claim in miniature.
+            return "No saved memories found."
+        if not ranked:
+            _warn_unranked_once()
+            rows.append(UNRANKED_NOTICE)
+        return "\n".join(rows)
 
     @tool
     def forget_memory(memory_id: str) -> str:
