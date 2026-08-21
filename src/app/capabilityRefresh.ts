@@ -2,7 +2,8 @@ import { WorkflowFileClient, type ToolCapability } from '@core/runtime/WorkflowF
 import type { ModelRegistry } from '@core/model/ModelRegistry';
 import type { Registry } from '@core/kernel/Registry';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
-import { registerDiscoveredCapabilities } from '@nodes/workflowScoped';
+import { forgetPackageCapabilities, registerDiscoveredCapabilities } from '@nodes/workflowScoped';
+import { subscribeOpenSlug } from '@app/openWorkflow';
 import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNodes';
 import { setAmbientTools } from '@app/ambientTools';
 
@@ -87,7 +88,17 @@ export async function refreshWorkflowCapabilities(
   executors: Registry<INodeExecutor>,
   client: Pick<WorkflowFileClient, 'capabilities'> = new WorkflowFileClient(),
 ): Promise<CapabilityRefreshOutcome> {
-  if (!slug) return { kind: 'no-workflow' };
+  if (!slug) {
+    // Nothing to fetch, and — ticket 75 — nothing to keep. `no-workflow` is
+    // not a failure to reach the backend: the slug is read out of this tab's
+    // own session, so `null` means *this document has no package*, decided
+    // locally and synchronously. A slug that exists but cannot be resolved
+    // takes the branch below instead, where a failed fetch is already handled
+    // on its own terms. The two never arrive here as the same value, which is
+    // what makes clearing safe.
+    forgetPackageCapabilities();
+    return { kind: 'no-workflow' };
+  }
 
   const outcome = await client.capabilities(slug);
   const tools = outcome.ok ? outcome.value.tools : [];
@@ -136,4 +147,33 @@ export function recordKnownCapabilities(
 /** Exposed for tests — a module-level cache would otherwise leak between them. */
 export function forgetKnownCapabilities(): void {
   knownCapabilityIds.clear();
+}
+
+/**
+ * Withdraw "this workflow's own tools" the moment the tab stops having a
+ * workflow — ticket 75.
+ *
+ * `createNewWorkflow` calls `clearOpenSlug()`, and deleting the open package
+ * does the same. Neither fetches anything afterwards, because there is nothing
+ * to fetch, so nothing used to tell the palette that the answer it was showing
+ * had stopped describing the document on screen: a blank canvas went on
+ * offering the last package's discovered tool under a heading that reads "From
+ * this workflow's own package".
+ *
+ * **Only `null` clears.** Arriving at another package announces that package's
+ * slug before its capabilities have been fetched, and treating that as "no
+ * tools" would blank the section on every load and refill it a moment later —
+ * making an in-flight load look exactly like a blank canvas, which is the one
+ * confusion this must not introduce. A new package's answer replaces the old
+ * one where it always did, in `registerDiscoveredCapabilities`.
+ *
+ * Here rather than inside `openWorkflow` or `workflowScoped`: this module
+ * already owns the "what does the open workflow ship" question, and a store
+ * that subscribed to the address bar itself would be a second place that
+ * knows.
+ */
+export function followOpenPackage(): () => void {
+  return subscribeOpenSlug((slug) => {
+    if (slug === null) forgetPackageCapabilities();
+  });
 }

@@ -233,6 +233,30 @@ export function forgetCapabilityBackedTypeIds(): void {
   setCapabilityBackedTypeIds([]);
 }
 
+/**
+ * The open document has no package, so it has no tools of its own — ticket 75.
+ *
+ * The backed set is an *answer about a package*, and `registerDiscoveredCapabilities`
+ * can only ever replace it with another package's answer. Leaving a package
+ * without arriving at one was a state neither of them represented, so after
+ * **New** the previous package's answer simply stayed standing and the palette
+ * went on offering a discovered tool whose type id resolves to nothing in the
+ * document now on screen.
+ *
+ * Only the offer is withdrawn. The registry is untouched, because
+ * registered-and-unbacked is the correct state `add0e6e` recorded: a
+ * package-scoped node must still load as its real card rather than as an
+ * unknown-node placeholder, which CLAUDE.md's `code → canvas` rule requires.
+ *
+ * Same body as `forgetCapabilityBackedTypeIds` and deliberately not the same
+ * function: that one exists so a module-level store does not leak between
+ * tests, this one is a thing the product does, and collapsing them would leave
+ * the behaviour looking like test scaffolding somebody could tidy away.
+ */
+export function forgetPackageCapabilities(): void {
+  setCapabilityBackedTypeIds([]);
+}
+
 function setCapabilityBackedTypeIds(ids: readonly string[]): void {
   const next = new Set(ids);
   // Replaced only when the contents actually changed: `useSyncExternalStore`

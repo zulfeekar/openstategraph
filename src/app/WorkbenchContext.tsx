@@ -48,6 +48,7 @@ import {
   restoreSessionDraft,
   type DraftRestoreReport,
 } from './workflowDrafts';
+import { followOpenPackage } from './capabilityRefresh';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -384,6 +385,13 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       ),
     [],
   );
+
+  // The same announcement, answered by the other thing that was keyed to the
+  // workflow the user just left: the palette's "This workflow" section
+  // (`production-ready` 75). `clearOpenSlug` is followed by no fetch, because
+  // there is nothing to fetch, so without this the blank canvas **New** hands
+  // over goes on offering the previous package's discovered tools as its own.
+  useEffect(() => followOpenPackage(), []);
 
   // Saving starts only once identity is settled, so nothing is ever written
   // under a placeholder id.
