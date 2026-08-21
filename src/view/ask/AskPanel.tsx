@@ -1467,6 +1467,24 @@ export function AskPanel({
       });
       scrollToEnd();
       await ask(turns.find((turn) => turn.id === turnId)?.question ?? '');
+
+      // The centre placed above does not survive the re-run: `runStarted()`
+      // clears the follower's latch, and every `update` frame calls
+      // `setActive`, which walks the camera to whatever just ran — the new
+      // node only if it happens to be the last thing the run touches, never
+      // otherwise (measured: `agent-world, in1, out-world, router1` glowed,
+      // the added tool did not). Re-ordering the two calls was tried and does
+      // not survive the chain either, because the chain starts *after* this
+      // function returns control, not after `ask` resolves.
+      //
+      // So centre again once the run has actually settled: `ask` above only
+      // resolves after its own `highlightChain` has drained, which is the
+      // same moment the follower stops moving the camera on its own. Select
+      // the node fresh too — the highlight chain's own final selection
+      // (`seen`, ticket 08) does not include a node that never ran.
+      controller.selectionActions.selectNodes([created]);
+      const settledRect = rectOfAdded(controller.model, created);
+      if (settledRect) paper?.viewport.centerOn(settledRect);
     },
     [ask, controller, paper, scrollToEnd, turns, updateTurn, workbench],
   );
