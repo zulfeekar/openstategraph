@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { showsThinking } from './settledThinking';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
@@ -31,7 +31,12 @@ import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
-import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
+import {
+  getOpenAddress,
+  OPEN_ADDRESS_KEY,
+  openSubject,
+  subscribeOpenAddress,
+} from '@app/openAddress';
 import { parseMountAddress } from '@core/model/MountAddress';
 import { replayRun, turnToReplay } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
@@ -41,14 +46,9 @@ import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
 import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
 import { displayNamesByGraphName } from '@core/runtime/graphName';
-import {
-  busKey,
-  suggestionOutcome,
-  unreadyFields,
-  type CapabilitySuggestion,
-} from './suggestion';
+import { busKey, suggestionOutcome, unreadyFields, type CapabilitySuggestion } from './suggestion';
 import { acceptAction, type AcceptAction } from './acceptAction';
-import { continuingThread, rememberThread, type ThreadBinding } from './thread';
+import { ConversationStore } from './conversationStore';
 import { clearRunInFlight, markRunInFlight } from './interruptedRun';
 import { progressLine } from './progressLine';
 import './AskPanel.css';
@@ -64,6 +64,55 @@ function currentWorkflowSlug(): string | undefined {
   } catch {
     return undefined; // sessionStorage can throw in restricted contexts
   }
+}
+
+/**
+ * Which conversation this tab is having — the **address**, falling back to the
+ * class slug (`openSubject`).
+ *
+ * Read fresh per call for the same reason `currentWorkflowSlug` is: a drill-in
+ * or a workflow switch changes it while the panel is open, and a captured
+ * subject would keep writing a new document's turns into the old one's
+ * conversation.
+ */
+function currentSubject(): string | null {
+  try {
+    return openSubject({
+      openAddress: sessionStorage.getItem(OPEN_ADDRESS_KEY),
+      classSlug: currentWorkflowSlug() ?? null,
+    });
+  } catch {
+    return null; // sessionStorage can throw in restricted contexts
+  }
+}
+
+/**
+ * Every conversation this editor is having, one per open workflow.
+ *
+ * **Module scope, not component state** — that is the whole of
+ * `memory-and-replay` 35. The Ask panel is conditionally rendered, so closing
+ * it is an unmount, and a thread held in `useState` died with it: the canvas'
+ * Run button and the panel's composer are two doors onto one conversation,
+ * and only one of them was remembering. `conversationStore.ts` carries the
+ * argument, including why the transcript moves with the thread rather than
+ * without it.
+ */
+const conversations = new ConversationStore<ChatTurn>();
+
+/**
+ * The last toolbar Run press this load has already executed — see the effect
+ * that reads it for why it outlives the panel.
+ */
+let honouredRunNonce = 0;
+
+/** The store's channel and the open-workflow channel, as one subscription. */
+function subscribeConversation(listener: () => void): () => void {
+  const unstore = conversations.subscribe(listener);
+  const unopen = subscribeOpenAddress(listener);
+  return () => {
+    unstore();
+    unopen();
+  };
 }
 
 /**
@@ -319,7 +368,23 @@ export function AskPanel({
   const controller = useController();
   const workbench = useWorkbench();
   const [question, setQuestion] = useState('');
-  const [turns, setTurns] = useState<readonly ChatTurn[]>([]);
+  /**
+   * The conversation this tab is having about the open workflow — its
+   * transcript and its thread, read from the store above rather than held
+   * here. A snapshot, so an unmount takes nothing with it.
+   */
+  const conversation = useSyncExternalStore(subscribeConversation, () =>
+    conversations.read(currentSubject()),
+  );
+  const turns = conversation.turns;
+  /**
+   * The same functional-updater shape the panel's own `useState` had, so every
+   * caller reads unchanged — the subject is resolved at write time, never
+   * captured, for the reason `currentSubject` gives.
+   */
+  const setTurns = useCallback((updater: (all: readonly ChatTurn[]) => readonly ChatTurn[]) => {
+    conversations.setTurns(currentSubject(), updater);
+  }, []);
   /**
    * Whether the panel is showing history instead of the live thread.
    *
@@ -350,31 +415,28 @@ export function AskPanel({
   useModelEvents(NAMING_EVENTS);
   const laneNames = displayNamesByGraphName(workbench.model.nodes());
   /**
-   * The conversation in progress, or `null` before the first answer comes back
-   * and after an explicit reset.
+   * The conversation in progress lives in `conversations`, not here.
    *
-   * **React state, deliberately not `localStorage`** — and that is the one
-   * place this panel diverges from `/chat`, which persists its own thread per
-   * slug. Three reasons, in the order they bite:
+   * It was `useState` in this component until `memory-and-replay` 35, and the
+   * docblock that stood here defended holding it no longer than the transcript
+   * — rightly, and for reasons that still stand and are now recorded on the
+   * store:
    *
-   * 1. *The transcript above is not persisted either.* A reloaded panel says
-   *    "Ask anything" with an empty thread. Restoring the id alone would give
-   *    a conversation whose first four turns exist on the server and nowhere
-   *    on screen — an answer with an antecedent the developer cannot see,
-   *    which is the same class of defect this ticket exists to remove, only
-   *    harder to spot. The thread lives exactly as long as the record of it.
-   * 2. *This is an editor.* A reload here usually follows an edit — to the
-   *    document, to a workflow's `tools/`, to the backend. The checkpointed
-   *    `messages` belong to the graph as it was, and replaying them into the
-   *    graph as it now is answers questions about a workflow that no longer
-   *    exists. `/chat` runs a published workflow nobody is editing, so its
-   *    persistence is right *there* and would be wrong here.
-   * 3. *The costs are asymmetric.* Losing continuity across a reload costs one
-   *    re-asked question, and the panel says so plainly. An invisible
-   *    antecedent costs a debugging session, because the symptom is "the model
-   *    said something strange" with no visible cause.
+   * 1. A thread restored without the turns that filled it is an answer with an
+   *    antecedent the developer cannot see, which is worse than losing it.
+   * 2. This is an editor, and a reload usually follows an edit; the
+   *    checkpointed `messages` belong to the graph as it was. So neither the
+   *    thread nor the transcript is persisted across a reload — the store is
+   *    in memory for this load, and `production-ready` 90 is where that
+   *    question is asked properly.
+   *
+   * What was wrong was the *scope* it concluded from them. A panel close is
+   * not a reload: nothing was edited, the document on the canvas is the one
+   * that ran, and the developer who pressed Run from the toolbar with the
+   * panel shut was continuing the same conversation by every measure except
+   * the one the code used. So both move together, one step out — out of the
+   * component that unmounts, into the module that does not.
    */
-  const [thread, setThread] = useState<ThreadBinding | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLInputElement | null>(null);
 
@@ -415,9 +477,12 @@ export function AskPanel({
    * in is now the other one, and it says so by actually ending the run.
    */
 
-  const updateTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
-    setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
-  }, []);
+  const updateTurn = useCallback(
+    (id: string, patch: Partial<ChatTurn>) => {
+      setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
+    },
+    [setTurns],
+  );
 
   const scrollToEnd = useCallback(() => {
     // Newest turn at the bottom, so a growing thread reads like a chat rather
@@ -519,7 +584,7 @@ export function AskPanel({
       // rebinds — live in `thread.ts` where they are unit-tested; a thread is
       // a server object, so getting them wrong changes nothing on screen.
       const remember = (threadId: string) => {
-        setThread((held) => rememberThread(held, slug, threadId));
+        conversations.remember(currentSubject(), slug, threadId);
       };
       const seen = new Set<string>();
       let activeNode: string | null = null;
@@ -910,7 +975,7 @@ export function AskPanel({
       }
       scrollToEnd();
     },
-    [controller, scrollToEnd, streams, updateTurn, workbench],
+    [controller, scrollToEnd, setTurns, streams, updateTurn, workbench],
   );
 
   const respondToApproval = useCallback(
@@ -988,7 +1053,7 @@ export function AskPanel({
       // different conversation — the checkpointer being keyed by thread id
       // alone, continuing would replay the other document's history in here.
       const slug = currentWorkflowSlug();
-      const continuing = continuingThread(thread, slug);
+      const continuing = conversations.continuing(currentSubject(), slug);
 
       const id = `turn-${nextTurnId++}`;
       setTurns((all) => [
@@ -1052,7 +1117,7 @@ export function AskPanel({
         ),
       );
     },
-    [client, controller, resetRunState, scrollToEnd, streamAndSettle, thread, workbench],
+    [client, controller, resetRunState, scrollToEnd, setTurns, streamAndSettle, workbench],
   );
 
   /**
@@ -1064,7 +1129,7 @@ export function AskPanel({
    * new conversation" and "throw away what the last one showed me" the same
    * gesture. The next turn draws its own boundary instead.
    */
-  const newConversation = useCallback(() => setThread(null), []);
+  const newConversation = useCallback(() => conversations.newSession(currentSubject()), []);
 
   /**
    * Stop, from either the composer or the toolbar.
@@ -1222,12 +1287,20 @@ export function AskPanel({
   // development StrictMode mounts effects twice, and without this a single
   // Run press started two real backend runs (seen live, two identical turns
   // in the thread).
-  const ranNonce = useRef(0);
+  //
+  // **Module scope, not a ref** (`memory-and-replay` 35). A ref dies with the
+  // panel, and the shell's `runRequest` does not: closing the panel and
+  // reopening it replayed the last Run press against a nonce nothing
+  // remembered honouring, so merely looking at the conversation again spent a
+  // run's worth of tokens. Found while verifying this ticket, because a
+  // transcript that now survives the close is what made the duplicate turn
+  // visible — the same defect this ticket is about, in the neighbouring
+  // variable.
   useEffect(() => {
-    if (runNonce <= 0 || ranNonce.current === runNonce) return;
+    if (runNonce <= 0 || honouredRunNonce === runNonce) return;
     const trimmed = (runRequest?.question ?? '').trim();
     if (trimmed === '' || runningRef.current) return;
-    ranNonce.current = runNonce;
+    honouredRunNonce = runNonce;
     void askRef.current(trimmed);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce is the trigger; see above
   }, [runNonce]);
@@ -1435,9 +1508,9 @@ export function AskPanel({
               variant="ghost"
               size="sm"
               icon={<Icon glyph={MessageSquarePlus} size="xs" />}
-              disabled={thread === null || running}
+              disabled={conversation.thread === null || running}
               title={
-                thread === null
+                conversation.thread === null
                   ? 'The next question already starts a new conversation'
                   : 'Forget what was said so far — the next question starts fresh. The transcript stays.'
               }
@@ -1667,7 +1740,10 @@ function Turn({
           asked for this, so presenting it as a failure would be the panel
           disagreeing with them. */}
       {turn.capabilityGap !== null && !turn.suggestion ? (
-        <CapabilityGapCard gap={turn.capabilityGap} onStart={() => onStartBuild(turn.capabilityGap ?? '')} />
+        <CapabilityGapCard
+          gap={turn.capabilityGap}
+          onStart={() => onStartBuild(turn.capabilityGap ?? '')}
+        />
       ) : null}
 
       {turn.stopped ? (
