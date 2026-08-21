@@ -1173,6 +1173,55 @@ def advisor_context(node_id: str, catalog: str) -> str:
     )
 
 
+def held_tools_context(tools: list[Any]) -> str:
+    """What this node **already holds** — the counterweight to `advisor_context`.
+
+    `advisor_context` tells an agent what could be *added* to it, and nothing
+    told it what it has. That asymmetry was invisible while every agent's
+    authored prose happened to be current, and it stopped being invisible the
+    moment the capability door started wiring tools onto agents after the fact
+    (production-ready 88): `chinook-assistant`'s front desk opens *"You hold no
+    tools and no database access"*, a user accepted an Email Send onto it, and
+    the agent answered *"this workflow doesn't include an email-sending
+    capability"* — two supersteps, no tool call. The binding was correct the
+    whole time; `plan.tool_bindings` and `openstategraph validate` both agreed.
+    The model believed the sentence over the tool schema, which is the only
+    reasonable thing to do when one of them is an explicit instruction.
+
+    **Context, not rules**, exactly like `branch_context`: it is generated from
+    what the compiler bound, never authored, so `SystemPrompt` places it above
+    the developer's rules and the locked output contract still renders last.
+
+    Which forces the precedence sentence to be explicit. Context renders
+    *before* rules and the stale claim lives *in* the rules, so "later
+    instructions win ties" runs the wrong way here — a list saying "you have
+    `send_email`" followed by prose saying "you hold no tools" is a
+    contradiction the model resolves by recency, and recency favours the lie.
+    The developer's text is not edited: it is theirs, and a platform that
+    rewrites a prompt field is a platform nobody can predict. It is overruled,
+    on the one point the compiler knows better than the author.
+    """
+    named = [t for t in tools if getattr(t, "name", "")]
+    if not named:
+        return ""
+    lines = "\n".join(
+        f"- `{t.name}`" + (f" — {str(getattr(t, 'description', '') or '').strip()}" if getattr(t, "description", "") else "")
+        for t in named
+    )
+    return (
+        "Tools you hold right now — the exact set you can call:\n"
+        f"{lines}\n"
+        "This list is authoritative. It is generated from what was bound to "
+        "you at the moment you were built, so where anything in your rules says or "
+        "implies you hold no tools — or no tool of some kind — that text is "
+        "out of date and this list wins. A tool may well have been added to "
+        "you after those rules were written.\n"
+        "So: never tell the user a capability is missing when one of these "
+        "provides it. Call it instead. If one of them fails, say what the "
+        "error was — a tool that ran and failed is not a tool you lack."
+    )
+
+
 def branch_context(node_id: str, plan: CompiledPlan, nodes: dict[str, Any]) -> str:
     """What the classifier feeding this agent can actually route to (ticket 11).
 
@@ -2042,6 +2091,13 @@ class NodeRuntime:
                             # rather than in what its prompt author guessed
                             # the graph contained.
                             branch_context(node_id, plan, self._nodes),
+                            # What it *holds*, beside what could be *added*
+                            # (production-ready 88). The pair has to travel
+                            # together: an agent told only what it lacks, whose
+                            # authored rules deny holding anything, answers
+                            # "this workflow doesn't include that capability"
+                            # about a tool sitting in its own schema.
+                            held_tools_context(lc_tools),
                             advisor_context(node_id, self.services.advisor_catalog),
                         )
                         if part
@@ -2874,6 +2930,13 @@ class NodeRuntime:
                         # every model-driven node here, not a choice about
                         # this one. Context, and it stays context.
                         self.services.skills_context,
+                        # And what it holds (production-ready 88). Composed
+                        # here as well as in `_agent` for the reason the block
+                        # below already records about `advisor_context`: a
+                        # sentence that exists in one factory and not the other
+                        # is a worker deserving less for no reason anybody
+                        # chose.
+                        held_tools_context(lc_tools),
                         # The same way out of a capability gap `_agent` has
                         # had all along, and the reason this was added
                         # (`every-workflow-green` 19): a worker with no tools
