@@ -54,3 +54,24 @@ export function panelsWidth(open: OpenPanels): number {
 export function panelsMustOverlay(viewportWidth: number, open: OpenPanels): boolean {
   return viewportWidth - panelsWidth(open) < MIN_CANVAS_WIDTH;
 }
+
+/**
+ * How much of the canvas's right edge the right-hand panels cover when they
+ * overlay it instead of sharing the row.
+ *
+ * When the row has room, Ask and Inspector are flex siblings of the canvas —
+ * the canvas element is already narrower by their width, so nothing more is
+ * owed. When they overlay (production-ready 55.4), they float over the
+ * canvas at `right: 0` instead of shrinking it, so the canvas element itself
+ * is still full width and anything centred on it — the empty-state copy —
+ * centres on space the panels are sitting on top of (production-ready 76).
+ * Only Ask and Inspector overlay on the right; the palette and the Workflows
+ * drawer are left-hand.
+ */
+export function rightOverlayWidth(
+  overlay: boolean,
+  open: Pick<OpenPanels, 'ask' | 'inspector'>,
+): number {
+  if (!overlay) return 0;
+  return (open.ask ? PANEL_WIDTH.ask : 0) + (open.inspector ? PANEL_WIDTH.inspector : 0);
+}

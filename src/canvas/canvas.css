@@ -479,7 +479,15 @@
 
 .canvas-empty {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  /* The overlaying Ask/Inspector panels sit on top of this element rather
+     than sharing its row (55.4), so the canvas is still full width under
+     them; without this the empty state centred on the covered half too
+     (production-ready 76). `AppShell` sets this to the width the panels
+     actually cover, 0 otherwise. */
+  right: var(--canvas-empty-inset-right, 0px);
   display: flex;
   flex-direction: column;
   align-items: center;

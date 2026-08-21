@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { Theme } from '@design/tokens';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
 import {
@@ -20,7 +21,7 @@ import { McpServersDialog } from './overlays/McpServersDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
-import { panelsMustOverlay } from './layout/panelFit';
+import { panelsMustOverlay, rightOverlayWidth } from './layout/panelFit';
 import { useViewportWidth } from './layout/useViewportWidth';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
@@ -350,6 +351,17 @@ export function AppShell() {
     );
   }, [workbench, workflowFiles, notify]);
 
+  // Whether the panels share the row with the canvas or float over it,
+  // decided by what is open rather than by a breakpoint (55.4). Computed once
+  // here so both `data-overlay` and the canvas's right-edge inset (76) read
+  // the same answer.
+  const mustOverlay = panelsMustOverlay(viewportWidth, {
+    palette: paletteOpen,
+    ask: askOpen,
+    inspector: inspectorOpen,
+    workflows: workflowManagerOpen,
+  });
+
   return (
     <div className="app-shell">
       <TopBar
@@ -400,21 +412,29 @@ export function AppShell() {
         // Whether the panels share the row with the canvas or float over it,
         // decided by what is open rather than by a breakpoint (55.4). Four
         // panels at 1280 used to leave ~140px of canvas, silently.
-        data-overlay={
-          panelsMustOverlay(viewportWidth, {
-            palette: paletteOpen,
-            ask: askOpen,
-            inspector: inspectorOpen,
-            workflows: workflowManagerOpen,
-          }) || undefined
-        }
+        data-overlay={mustOverlay || undefined}
         // The drawer is a second left-hand panel: floating, it must stand
         // beside the palette rather than on top of it.
         data-palette-open={paletteOpen || undefined}
       >
         {paletteOpen ? <Palette onNotify={onNotify} /> : null}
 
-        <main className="app-shell__canvas">
+        <main
+          className="app-shell__canvas"
+          // Ask/Inspector float over the canvas rather than sharing its row
+          // when overlaying (55.4), so the canvas element stays full width —
+          // anything centred on it, like the empty-state copy, was centring
+          // on space the panels sit on top of (76). This tells the canvas how
+          // much of its right edge is actually covered.
+          style={
+            {
+              '--canvas-empty-inset-right': `${rightOverlayWidth(mustOverlay, {
+                ask: askOpen,
+                inspector: inspectorOpen,
+              })}px`,
+            } as CSSProperties
+          }
+        >
           <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
           {/* Over the canvas, not in the topbar: it is a fact about *this
               document*, and it appears and disappears with a navigation —

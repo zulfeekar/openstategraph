@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_CANVAS_WIDTH, PANEL_WIDTH, panelsMustOverlay, panelsWidth } from './panelFit';
+import {
+  MIN_CANVAS_WIDTH,
+  PANEL_WIDTH,
+  panelsMustOverlay,
+  panelsWidth,
+  rightOverlayWidth,
+} from './panelFit';
 
 describe('panelsMustOverlay', () => {
   it('leaves a wide window alone with everything open', () => {
@@ -44,5 +50,33 @@ describe('panelsMustOverlay', () => {
 
     expect(panelsMustOverlay(width, { palette: true, inspector: true })).toBe(false);
     expect(panelsMustOverlay(width - 1, { palette: true, inspector: true })).toBe(true);
+  });
+});
+
+describe('rightOverlayWidth', () => {
+  // production-ready 76: when the row has room, Ask/Inspector are flex
+  // siblings of the canvas, which is already narrower by their width — the
+  // canvas element owes nothing more.
+  it('is zero when the row has room, regardless of what is open', () => {
+    expect(rightOverlayWidth(false, { ask: true, inspector: true })).toBe(0);
+    expect(rightOverlayWidth(false, {})).toBe(0);
+  });
+
+  it('is zero while overlaying if neither right-hand panel is open', () => {
+    expect(rightOverlayWidth(true, {})).toBe(0);
+  });
+
+  it('is one panel width while overlaying with just the inspector open', () => {
+    expect(rightOverlayWidth(true, { inspector: true })).toBe(PANEL_WIDTH.inspector);
+  });
+
+  it('is one panel width while overlaying with just ask open', () => {
+    expect(rightOverlayWidth(true, { ask: true })).toBe(PANEL_WIDTH.ask);
+  });
+
+  it('sums both while overlaying with ask and inspector both open', () => {
+    expect(rightOverlayWidth(true, { ask: true, inspector: true })).toBe(
+      PANEL_WIDTH.ask + PANEL_WIDTH.inspector,
+    );
   });
 });
