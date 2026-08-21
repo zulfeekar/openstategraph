@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Fixed
+- **A finding recorded inside a mount reaches the run that mounts it.**
+  `_subgraph` absorbed a mounted child's `machinery_nodes`, `names` and
+  `mounted_graphs` upward and not its `diagnostics`, so every sentence a
+  mounted package's compile recorded was dropped — an unbindable tool, a
+  built-in shadowing a package function, a stale tool denial, a grader with no
+  `revise` edge, silent in exactly the document a developer is least able to
+  debug by reading. They now ride the mounting workflow's `.warnings` behind
+  `Inside mounted workflow "<package>":`, and behind the whole chain of
+  packages when the mount is nested. Keyed by the mounted **slug** rather than
+  by the mount's node id, which is what makes a package mounted three times say
+  its piece once: a finding its compile recorded is a property of the package,
+  not of the mount. A row keeps the `Finding` it was recorded as, so
+  `REPORT_ONLY` is read again at render time and no report absorbed from a
+  child can move an exit code (`workflow-gallery` 75).
 - **`docs/releasing.md` no longer reports a status nobody measured.** Its
   "What has run, and what still has not" table counted four `pages.yml`
   failures when there were six, and omitted `Release PR` entirely — which has

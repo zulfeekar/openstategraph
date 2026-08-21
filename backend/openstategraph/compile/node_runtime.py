@@ -3619,11 +3619,21 @@ class NodeRuntime:
         namespace — and a new member would have to earn its way past
         `test_public_surface_ceiling`'s recorded exception for `Finding`.
 
-        Reported on the **parent's** diagnostics, not the child's, and that is
-        not a shortcut: a child runtime's findings are never absorbed upward,
-        so a sentence recorded there reaches nobody. It is also the honest
-        owner — the leak is a property of *this mount*, not of the child
-        package, which is why the sentence names the mounted slug.
+        Reported on the **parent's** diagnostics, not the child's, because the
+        parent is the honest owner: the leak is a property of *this mount* —
+        it is found by comparing the child's document against the registry the
+        child's own package produced, which only the mounting side can do —
+        and that is why the sentence names the mounted slug.
+
+        That was originally the second of two reasons, the first being that a
+        child runtime's findings were never absorbed upward and a sentence
+        recorded there reached nobody. `workflow-gallery` 75 made that half
+        false: `CompileDiagnostics.absorb` now folds a child's findings into
+        the parent's, prefixed by the mounted package. This stayed where it is
+        anyway, on the reason that survives — recording it on the child would
+        attribute a mounting workflow's leak to the package that was leaked
+        into, and would say it once for a package mounted three times when it
+        is three separate mounts each reaching outside.
 
         Silent in the two cases that are not leaks: a child that ships the
         name binds its own, and a built-in (`function.format_report`) is in
@@ -3800,6 +3810,20 @@ class NodeRuntime:
                 # that build, so a grandchild's ids only exist on
                 # `child_runtime` once it has run.
                 self.names.absorb(child_runtime.names, through=node_id, slug=slug)
+                # Third thing inherited upwards, and the last of them to be:
+                # what the child's compile *noticed*. Until `workflow-gallery`
+                # 75 the two lines above absorbed a child's names and its
+                # machinery and left its findings where nobody reads them, so
+                # a mounted package could report an unbindable tool, a stale
+                # tool denial or an unwired grader into silence. Keyed by
+                # `slug` rather than `node_id` — `CompileDiagnostics.absorb`
+                # carries why, and it is the difference between one sentence
+                # and three for a package mounted three times.
+                #
+                # After `build()` for the same reason as the two above: a
+                # mount inside the child records on `child_runtime` only once
+                # that call has returned.
+                self.diagnostics.absorb(child_runtime.diagnostics, through=slug)
                 # And what the compiler alone knows: this mount runs THAT
                 # graph. A closure is opaque to LangGraph's `xray`, so unless
                 # the compiler records it, a composition can only be drawn by

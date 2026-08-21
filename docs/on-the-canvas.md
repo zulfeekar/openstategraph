@@ -183,6 +183,16 @@ nothing sends a weak answer back"**. A run in that state also emits a
 developer-channel `runtime_warnings` entry naming the node and the slug. Loud,
 never fatal.
 
+**And what the child noticed reaches you.** A mounted package compiles inside
+your build and is never run on its own, so until `workflow-gallery` 75 anything
+its compile found — a tool it could not bind, a stale sentence in one of its
+prompts, a grader of its own with no `revise` edge — was recorded where nobody
+reads it. Those sentences now ride the mounting workflow's warnings, behind
+`Inside mounted workflow "<package>":`, and behind the whole chain of packages
+when the mount is nested (`outer/inner`). Mount the same package three times and
+it still says its piece once: a finding its compile recorded belongs to the
+package, not to the mount.
+
 The cost you are weighing is in **the package you point at**, never the card.
 A supervisor-and-workers package buys a planning call and a fan-out; if the
 work has one worker role, that is a planner you pay for and do not use.

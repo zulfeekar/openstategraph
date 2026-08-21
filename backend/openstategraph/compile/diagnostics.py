@@ -235,6 +235,13 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
 )
 
 
+#: How a finding absorbed from a mount is said. The child's own sentence,
+#: unedited, behind the path of packages it came from — the child's words are
+#: already full sentences naming the consequence, and rewriting them per depth
+#: would be a second phrasing to keep in step with the first.
+_MOUNTED = 'Inside mounted workflow "{path}": {sentence}'
+
+
 class CompileDiagnostics:
     """What the compiler noticed and could not resolve.
 
@@ -245,6 +252,7 @@ class CompileDiagnostics:
 
     def __init__(self) -> None:
         self._findings: dict[Finding, list[tuple[str, ...]]] = {}
+        self._mounted: list[tuple[str, Finding, tuple[str, ...]]] = []
 
     @staticmethod
     def sentence_for(finding: Finding) -> str:
@@ -291,19 +299,82 @@ class CompileDiagnostics:
         code — is what decides which list it is *also* on.
         """
         return [
-            _SENTENCES[finding].format(*subjects)
-            for finding in Finding
-            if finding not in REPORT_ONLY
-            for subjects in self._findings.get(finding, ())
+            *(
+                _SENTENCES[finding].format(*subjects)
+                for finding in Finding
+                if finding not in REPORT_ONLY
+                for subjects in self._findings.get(finding, ())
+            ),
+            *(
+                _MOUNTED.format(path=path, sentence=_SENTENCES[finding].format(*subjects))
+                for path, finding, subjects in self._mounted
+                if finding not in REPORT_ONLY
+            ),
         ]
 
     def warnings(self) -> list[str]:
-        """Every finding, spelled out, grouped in `Finding` declaration order."""
+        """Every finding, spelled out, grouped in `Finding` declaration order.
+
+        This document's own findings first and unprefixed, then everything
+        absorbed from a mount. The split is the point: a reader scanning the
+        top of the list is reading about the document they have open.
+        """
         return [
-            _SENTENCES[finding].format(*subjects)
-            for finding in Finding
-            for subjects in self._findings.get(finding, ())
+            *(
+                _SENTENCES[finding].format(*subjects)
+                for finding in Finding
+                for subjects in self._findings.get(finding, ())
+            ),
+            *(
+                _MOUNTED.format(path=path, sentence=_SENTENCES[finding].format(*subjects))
+                for path, finding, subjects in self._mounted
+            ),
         ]
+
+    def absorb(self, child: "CompileDiagnostics", *, through: str) -> None:
+        """Fold a mounted child's findings into this document's, prefixed.
+
+        Upward, for `GraphNames.absorb`'s reason and one of its own: the child
+        compiles inside the parent's build and is never run by itself, so the
+        parent's report is the only place a sentence recorded down there can
+        be read. Until `workflow-gallery` 75 nothing folded them and every one
+        was dropped — `CAPABILITY_FAILED`, `STALE_TOOL_DENIAL`,
+        `UNWIRED_REVISE` and the rest, silent in exactly the document a
+        developer is least able to debug by reading.
+
+        **`through` is the mounted package's slug, not the mount's node id**,
+        and that choice is the whole of the ticket's "a package mounted three
+        times does not say the same thing three times". `GraphNames` keys by
+        node-id path because it answers *which card lit up*, and three mounts
+        of one package are three different cards. This answers *what is wrong
+        with the drawing*, and three mounts of one package are one package: a
+        finding recorded by its compile is a property of the package, so
+        keying by node id would print the same sentence once per mount and
+        keying by slug collapses them by construction. Two mounts whose
+        `overrides` genuinely produce *different* findings still both speak —
+        they differ in the finding, not in the key.
+
+        Depth costs nothing: a grandchild's already-prefixed rows are
+        re-prefixed here, so a finding three levels down arrives as
+        `outer/inner`.
+
+        The failure/report split survives the crossing. A row keeps the
+        `Finding` it was recorded as, so `REPORT_ONLY` membership is read
+        again at render time and `8bda508`'s rule — no report may move an exit
+        code — holds for an absorbed finding exactly as for an owned one.
+        """
+        rows = [
+            (through, finding, subjects)
+            for finding in Finding
+            for subjects in child._findings.get(finding, ())
+        ]
+        rows += [
+            (f"{through}/{path}", finding, subjects)
+            for path, finding, subjects in child._mounted
+        ]
+        for row in rows:
+            if row not in self._mounted:
+                self._mounted.append(row)
 
 
 #: The phrasings that count as *"this node holds no tools at all"*, and nothing
