@@ -188,7 +188,15 @@ the refusal is unconditional, and it happens two ways:
   `GUNICORN_WORKERS` are read and refused **before a socket is bound**.
 - `uvicorn --workers 4` and `gunicorn -w 4` leave no trace in a child's
   environment, so the serving process takes an **exclusive OS lock** on
-  `<state dir>/serve.lock`. The second process to try is refused by name.
+  `<state dir>/serve.lock`. The second process to try is refused by name —
+  and it is refused *before* `serve` prints its three URLs, not after. The
+  lock is checked twice: a cheap, non-blocking check in `cmd_serve` itself,
+  ahead of the socket bind, so the common case (a second `serve` started
+  against an already-served state directory) never sees a URL it cannot
+  reach; and the authoritative check in the FastAPI lifespan, which is what
+  actually holds the lock for the life of the process, because that is where
+  the checkpointer, the memory store and the `/api/events` fan-out are
+  constructed (workflow-gallery ticket 40).
 
 **Scale by giving one worker more concurrency** — the endpoints are async and
 a run's cost is model latency, not CPU — or by running several one-worker

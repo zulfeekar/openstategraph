@@ -589,7 +589,8 @@ class TestTheExtrasAnnounceThemselves:
     """A missing extra must name its own `pip install` line and exit 3 — not
     surface a bare `ModuleNotFoundError` the adopter has to map to an extra."""
 
-    def test_serve_without_uvicorn(self, capsys, monkeypatch) -> None:
+    def test_serve_without_uvicorn(self, capsys, monkeypatch, tmp_path) -> None:
+        monkeypatch.setenv("OPENSTATEGRAPH_STATE_DIR", str(tmp_path))
         import builtins
 
         real = builtins.__import__
@@ -670,9 +671,20 @@ class TestServe:
     """
 
     @pytest.fixture
-    def served(self, monkeypatch):
-        """Captures the socket and config uvicorn would have run."""
+    def served(self, monkeypatch, tmp_path):
+        """Captures the socket and config uvicorn would have run.
+
+        `OPENSTATEGRAPH_STATE_DIR` is pointed at an isolated `tmp_path` rather
+        than left to default to this checkout's own `workflows/.openstategraph`
+        — `cmd_serve` now takes a fast, fail-early lock on the state directory
+        before printing the URLs (workflow-gallery/40), and this checkout's
+        default state directory may genuinely be held by another `serve`
+        running concurrently in another terminal. Without this the whole class
+        would flake against whatever else happens to be running.
+        """
         import uvicorn
+
+        monkeypatch.setenv("OPENSTATEGRAPH_STATE_DIR", str(tmp_path))
 
         captured: dict[str, Any] = {}
 

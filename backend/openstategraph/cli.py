@@ -842,14 +842,34 @@ def cmd_serve(args: argparse.Namespace) -> int:
     number, because that is the only way `--port 0` can print the URL it landed
     on *before* the server starts talking.
 
-    Four things are said before anything is bound (scale-and-adopt ticket 06,
-    workflow-gallery ticket 37, production-ready 60), because a message printed
-    after a server is listening is a message someone scrolls past: more than one
-    worker is refused outright, an unauthenticated bind to a non-loopback
-    address is warned about by name, an install with no provider integration is
-    told that every run will fail, and — in a checkout only — an editor built
-    before the last `src/` change says so, because this process serves `dist/`
-    and the dev server on 5273 does not.
+    Five things are said before anything is bound (scale-and-adopt ticket 06,
+    workflow-gallery tickets 37 and 40, production-ready 60), because a message
+    printed after a server is listening is a message someone scrolls past: more
+    than one worker is refused outright, a second process pointed at a state
+    directory another server already holds is refused by name, an
+    unauthenticated bind to a non-loopback address is warned about by name, an
+    install with no provider integration is told that every run will fail, and
+    — in a checkout only — an editor built before the last `src/` change says
+    so, because this process serves `dist/` and the dev server on 5273 does
+    not.
+
+    **The state-directory lock is checked twice, on purpose.** The
+    authoritative lock still lives in the FastAPI lifespan
+    (`api/main.py:single_server_lifespan`) — it has to, because the resources
+    it guards (the checkpointer, the memory store, the `/api/events`
+    fan-out) are constructed there, and hoisting *that* setup ahead of the
+    socket bind would be a much larger, riskier change for a message-ordering
+    fix. What moves here is only the cheap part: `SingleServerLock.acquire()`
+    is a non-blocking `flock` on a small file, with no sqlite or FastAPI
+    involved, so it costs nothing to ask early and release immediately if it
+    succeeds. A `serve` that fails this early check never reaches
+    `bind_listener` and never prints a URL it cannot honour (workflow-gallery
+    40). A `serve` that passes it can still be refused by the lifespan's own
+    acquire a moment later — another process could win the race in between —
+    and that refusal still reaches `AnotherServerIsRunning`'s full message on
+    stderr; it is simply no longer the *only* place the check happens, so the
+    common case (a second `serve` started well after the first) is caught
+    before the URLs print instead of after.
     """
     from openstategraph import deployment
 
@@ -861,6 +881,20 @@ def cmd_serve(args: argparse.Namespace) -> int:
         import uvicorn
     except ImportError:
         return _missing("uvicorn", "server", "the HTTP API")
+
+    from openstategraph.state_dir import state_dir
+    from openstategraph.workflows_root import workflows_root
+
+    lock = deployment.SingleServerLock(state_dir(workflows_root()))
+    try:
+        lock.acquire()
+    except deployment.AnotherServerIsRunning as exc:
+        return _error(str(exc))
+    else:
+        # Only a fast fail-early check: release immediately so the lifespan's
+        # own acquire (the one that actually owns the resource for the life of
+        # the process) is the sole long-lived holder.
+        lock.release()
 
     from openstategraph.api import auth
     from openstategraph.api.listening import PortUnavailable, bind_listener, listen_urls

@@ -198,3 +198,64 @@ class TestServeCommandRefuses:
         """The flag exists to refuse, but `--workers 1` is a legitimate thing
         for a deploy script to say, and saying it must not be an error."""
         assert deployment.check_worker_count(explicit=1) is None
+
+    def test_a_locked_state_directory_is_refused_before_the_urls_print(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path
+    ) -> None:
+        """workflow-gallery/40: the third refusal — the state-directory lock —
+        used to live only in the FastAPI lifespan, which runs *after*
+        `bind_listener` and after the three URLs are printed. A second
+        `serve` against a directory another server already holds must be
+        refused before anything is bound or printed, exactly like the
+        `--workers` and port refusals above.
+        """
+        from openstategraph import cli
+
+        monkeypatch.setenv("OPENSTATEGRAPH_STATE_DIR", str(tmp_path))
+
+        # A genuinely different lock object with the same path still conflicts
+        # at the OS level unless it is the same *process* — which the flock
+        # refcounting in `deployment._HELD` would otherwise paper over. Take
+        # the lock in a real subprocess so the ceiling test's own process
+        # cannot "see" it as already held.
+        script = textwrap.dedent(
+            f"""
+            import time
+            from openstategraph import deployment
+            lock = deployment.SingleServerLock({str(tmp_path)!r})
+            lock.acquire()
+            time.sleep(5)
+            """
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script],
+            env=dict(os.environ, PYTHONPATH=str(_backend_dir())),
+        )
+        try:
+            # Give the subprocess a moment to actually take the lock.
+            import time as _time
+
+            for _ in range(50):
+                try:
+                    probe_lock = deployment.SingleServerLock(tmp_path)
+                    probe_lock.acquire()
+                except deployment.AnotherServerIsRunning:
+                    break
+                else:
+                    probe_lock.release()
+                    _time.sleep(0.1)
+            else:  # pragma: no cover - defensive
+                pytest.fail("subprocess never took the lock")
+
+            def _never(*args: object, **kwargs: object) -> object:  # pragma: no cover
+                raise AssertionError("a socket was bound despite the lock refusal")
+
+            monkeypatch.setattr("openstategraph.api.listening.bind_listener", _never)
+            code = cli.main(["serve", "--port", "0"])
+            captured = capsys.readouterr()
+            assert code != 0
+            assert "editor" not in captured.out
+            assert "already holds" in captured.err
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
