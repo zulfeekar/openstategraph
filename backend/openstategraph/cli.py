@@ -370,6 +370,43 @@ def cmd_graph(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_export_plugin(args: argparse.Namespace) -> int:
+    """`export_plugin` + `write_export` — the pair `GET /api/workflows/{slug}/
+    plugin-export` already calls, with the write the GET deliberately does not do.
+
+    The positional is a **package path**, as it is for every other command here,
+    not the slug the two hosted doors take. Both are the same identity — the
+    slug *is* the directory name, and `export_plugin` reads it from there — and
+    a slug is a name the user never chose, so the CLI keeps asking for the one
+    thing they did choose: where the package is.
+
+    The two refusals are argument checks, not behaviour: a directory with no
+    `workflow.json` is not a package (the seam would happily render a
+    convincing bundle of nothing), and a destination that already holds files
+    is somebody else's directory (`write_export` merges into what it finds,
+    which is right for a library call and wrong for a command).
+    """
+    from openstategraph.plugin_interop import export_plugin, write_export
+
+    package = Path(args.package).expanduser().resolve()
+    if not (package / "workflow.json").is_file():
+        return _error(f"no workflow.json in {package} — is that a workflow package?")
+    destination = (
+        Path(args.out).expanduser().resolve()
+        if args.out
+        else Path.cwd().resolve() / package.name
+    )
+    if destination.exists() and any(destination.iterdir()):
+        return _error(f"{destination} already has files in it — name an empty --out")
+
+    export = export_plugin(package)
+    written = write_export(export, destination)
+    for note in export.notes:
+        print(f"note: {note}", file=sys.stderr)
+    print(f"plugin exported: {written}")
+    return EXIT_OK
+
+
 def _write_root(args: argparse.Namespace) -> Path:
     """Where a command that *creates* a package puts it (install-experience T5).
 
@@ -1190,6 +1227,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--root", help="where to copy it (default: the project's workflows root)"
     )
     example_copy.set_defaults(handler=cmd_examples_copy)
+
+    export_group = subparsers.add_parser(
+        "export", help="write this package out in somebody else's format"
+    )
+    # `required=True`, unlike `examples`: every leaf here writes a directory,
+    # so there is no safe thing for the bare verb to assume.
+    export_commands = export_group.add_subparsers(dest="export_command", required=True)
+
+    export_plugin_cmd = export_commands.add_parser(
+        "plugin", help="write an Agent Plugins v1 bundle (what the HTTP door previews)"
+    )
+    export_plugin_cmd.add_argument("package", help="the folder holding workflow.json")
+    export_plugin_cmd.add_argument(
+        "--out", help="where to write the bundle (default: ./<the package's folder name>)"
+    )
+    export_plugin_cmd.set_defaults(handler=cmd_export_plugin)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
     thread_commands = threads.add_subparsers(dest="threads_command", required=True)

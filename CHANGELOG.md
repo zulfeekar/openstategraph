@@ -20,6 +20,20 @@
   restated in prose (`ship-it` 46).
 
 ### Added
+- **`openstategraph export plugin <package>` — the Agent Plugins export has a
+  command line.** `plugin_interop.export_plugin` had shipped reachable from
+  HTTP and from MCP and from no terminal at all, so the one audience most
+  likely to want an export in anger — a script in CI — could not reach it. The
+  command is the seam plus `write_export`, which is the write the GET
+  deliberately does not do: it lands the bundle at `./<the package's folder
+  name>` or wherever `--out` says, prints every lossy note on stderr as the
+  other two doors return them, and refuses a destination that already holds
+  files rather than interleaving a bundle with somebody's directory. Its
+  positional is a package path like every other command's, not the slug the
+  hosted doors take — the slug is the directory's name and comes along for
+  free, and a slug is a name a user never chose. `export` is a subcommand
+  group so `export python` can join it without re-opening the argument surface
+  (`export-and-eject` 07).
 - **A run can say what it cost, and nothing new counts it.** `RunResult` now
   carries `usage` — model name -> the tokens that model reported — plus a
   `total_tokens` convenience, populated by wrapping the library door's one
