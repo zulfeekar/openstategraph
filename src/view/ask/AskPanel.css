@@ -105,7 +105,11 @@
 .ask__composer {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  /* End, not centre: the composer grows upward with a multi-line message
+     (`every-workflow-green` 40), and Send should stay on the last line rather
+     than float in the middle of a twelve-line brief. At one row — every
+     ordinary message — the two are identical. */
+  align-items: flex-end;
   gap: var(--space-2);
   padding: var(--space-1-5);
   background: var(--color-bg-surface);
@@ -130,6 +134,17 @@
   border: none;
   background: none;
   box-shadow: none;
+  /* `TextArea` carries its own roomier vertical padding, which is right for a
+     node card and wrong inside a pill that already pads itself — without this
+     the one-row composer is visibly taller than it was. */
+  --input-padding-y: 0;
+}
+
+/* The grabber belongs to a node's prompt field, not to a chat box: the
+   composer already sizes itself to the message, and a handle here would drag
+   against the transcript it shares a column with. */
+.ask__composer-input .input__control {
+  resize: none;
 }
 
 .ask__composer-input:focus-within,

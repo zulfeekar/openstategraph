@@ -15,7 +15,7 @@ import {
   Square,
   TriangleAlert,
 } from 'lucide-react';
-import { Button, Icon, Panel, PanelBody, PanelHeader, TextInput } from '@design/primitives';
+import { Button, Icon, Panel, PanelBody, PanelHeader, TextArea } from '@design/primitives';
 import {
   RuntimeClient,
   isCancelled,
@@ -438,7 +438,7 @@ export function AskPanel({
    * component that unmounts, into the module that does not.
    */
   const threadRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Focus, never auto-send: the graph runs on the backend now, but *what* to
   // ask is still the developer's to say. Silently executing an empty question
@@ -1603,20 +1603,48 @@ export function AskPanel({
             is carried by the placeholder and `aria-label`, so nothing is lost
             to a screen reader. */}
         <div className="ask__composer" data-running={running || undefined} hidden={historyOpen}>
-          <TextInput
+          {/* Multi-line, and it grows with what is in it
+              (`every-workflow-green` 40).
+
+              A single-line `<input>` cannot hold a newline: the HTML value
+              sanitisation algorithm strips CR and LF, silently. So the
+              "build one for this workflow" card — whose whole justification
+              is *it seeds, it does not send*, because the developer is meant
+              to read and edit the brief — delivered its twelve lines as one
+              909-character run-on: `provides it.What`, `SlackBefore`,
+              `logicThen`. The five shape clauses, which are the contract a
+              generated module is checked against, arrived unreadable.
+
+              Enter still sends, so nothing a developer does today changes;
+              Shift+Enter now types a newline instead of doing nothing. That
+              is not a new answer to an open question — it is the answer this
+              product already ships one surface away, in `/chat`'s textarea
+              composer (`api/static/chat.html`), and the `!event.shiftKey`
+              guard below was already written for it. */}
+          <TextArea
             ref={composerRef}
             className="ask__composer-input"
             value={question}
             aria-label="Message"
+            // One row at rest, so an empty composer looks exactly as it did.
+            // The ceiling keeps a long brief from eating the transcript it is
+            // supposed to be read beside — past it the box scrolls.
+            minRows={1}
+            maxRows={8}
             // The workflow's own entry question, never a fixed sentence: a
             // placeholder borrowed from another workflow teaches the wrong
             // thing about the one in front of you (`every-workflow-green` 04).
             placeholder={composerPlaceholder(entryQuestion(controller.model))}
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={(event) => {
-              // Enter sends it. A message is one line, so a newline would be
-              // less useful than the shortcut.
-              if (event.key === 'Enter' && !event.shiftKey) void send();
+              // Enter sends it; Shift+Enter falls through to the textarea and
+              // types a newline. `preventDefault` is what stops Enter doing
+              // both — sending *and* leaving a blank line in a composer that
+              // is about to be cleared anyway.
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void send();
+              }
             }}
           />
           {/* One control, two meanings — Send becomes Stop while the turn

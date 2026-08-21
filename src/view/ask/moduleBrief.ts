@@ -51,6 +51,18 @@
  *
  * Written as a brief the developer can edit before sending, because they know
  * their business logic and this only knows the gap.
+ *
+ * ## The lines are load-bearing, and for a day they did not arrive
+ *
+ * This function was correct and its output was still unreadable: the composer
+ * was a single-line `<input>`, and the HTML value sanitisation algorithm
+ * strips CR and LF from an input's value. Twelve lines became one 909-
+ * character run-on — `provides it.What`, `SlackBefore`, `logicThen` — with
+ * nothing thrown and nothing reported (`every-workflow-green` 40). Every test
+ * here stayed green, because they all read the value this function *returns*.
+ * So: a change that makes the brief longer or more structured is only as good
+ * as the control it lands in, which is now a `TextArea` and pinned by
+ * `composerHoldsAMultiLineBrief.test.ts`.
  */
 export function moduleBrief(gap: string, slug: string | null | undefined): string {
   const where = (slug ?? '').trim() || 'this workflow';
