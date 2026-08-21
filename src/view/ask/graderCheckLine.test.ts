@@ -20,9 +20,11 @@ describe('graderCheckLine', () => {
   });
 
   it('quotes the reason rather than captioning the check name', () => {
-    // `check` is an open set: `Grader` adds `no_figure`, and a subclass
-    // overriding `deterministic_checks` names its own. A lookup table would
-    // print nothing for one it had not met.
+    // `check` is an open set: `BaseGrader.deterministic_checks` names
+    // `empty` and `error`, and a subclass overriding `deterministic_checks`
+    // may name its own (a fixture in `backend/tests/test_grader.py` adds
+    // `no_figure`, which is not a built-in check). A lookup table would
+    // print nothing for a name it had not met.
     expect(graderCheckLine({ check: 'no_figure', reason: 'No figure was cited.' })).toBe(
       'rejected without a model call — No figure was cited.',
     );

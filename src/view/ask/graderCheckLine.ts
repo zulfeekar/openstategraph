@@ -18,9 +18,14 @@
  *   ordinary pass *and* a model's own rejection. Saying anything there would
  *   tell a reader no model ran when one did.
  * - **The check is a fact; the reason is the sentence.** `check` is an
- *   internal marker from an open set — `Grader` adds `no_figure`, and any
- *   subclass overriding `deterministic_checks` names its own — so it is never
- *   captioned or looked up. It is only the evidence that no model was asked.
+ *   internal marker from an open set — `BaseGrader.deterministic_checks`
+ *   names `empty` and `error`, and any subclass overriding
+ *   `deterministic_checks` may add its own — so it is never captioned or
+ *   looked up. It is only the evidence that no model was asked.
+ *   (Until 2026-08-21 this said "`Grader` adds `no_figure`". `Grader`
+ *   overrides only `revise_payload`; `no_figure` was never a built-in check —
+ *   it names a stricter grader defined inside `backend/tests/test_grader.py`,
+ *   a test fixture.)
  * - **A missing reason is not a missing finding.** The skipped model call is
  *   the part of this a reader acts on, and it is true with or without prose
  *   attached.
