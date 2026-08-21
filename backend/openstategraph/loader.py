@@ -234,11 +234,36 @@ class CompiledWorkflow:
         }
         from openstategraph.compile.workflow_compiler import run_health_from_state
 
+        from langchain_core.callbacks import get_usage_metadata_callback
+
         started = time.monotonic()
-        final = self.graph.invoke(
-            {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
-            config,
-        )
+        # **What the run cost, counted by LangChain rather than by us**
+        # (`workflow-gallery` 35). `get_usage_metadata_callback` aggregates
+        # `AIMessage.usage_metadata` per model, in-process, with no tracer and
+        # no account — so the answer to "what did that cost" stops being
+        # "attach LangSmith" for a run happening on this machine.
+        #
+        # `CLAUDE.md` says token accounting stays deliberately **not** unified
+        # — middleware for agents, callbacks elsewhere — "because unifying them
+        # would invent an abstraction LangGraph does not have". This is on the
+        # permitted side of that line and deliberately so: it is the library's
+        # own callback, wrapped around the one `invoke()` this door already
+        # makes. Nothing is declared on a base class, no node knows about it,
+        # and no family carries a capability it does not use. The forbidden
+        # move would be an accounting layer of ours that agents and tools both
+        # inherit; this adds no layer at all.
+        #
+        # The context variable is `inheritable=True`, so it reaches every model
+        # call the graph makes underneath — including inside an agent's ReAct
+        # loop and inside a mounted child, which is where a run's tokens
+        # actually go.
+        with get_usage_metadata_callback() as usage:
+            final = self.graph.invoke(
+                {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
+                config,
+            )
+            # Read inside the block: the manager clears the variable on exit.
+            spent = dict(usage.usage_metadata)
         outputs = final.get("outputs") or {}
         # The third door onto `run_health`, and the one that had been reading
         # a third of it (`workflow-gallery` 49). Derived from the assembly
@@ -259,6 +284,9 @@ class CompiledWorkflow:
             # in `outputs` and is still a broken run (`production-ready` 53).
             failures=[*self.failure_warnings, *health.failures],
             attempts=int(final.get("attempts") or 0),
+            # Empty when no model reported — which is *unknown*, not free.
+            # See `RunResult.usage`; nothing here fabricates a zero.
+            usage=spent,
         )
         self._append_trace(question, result, time.monotonic() - started)
         return result
@@ -292,6 +320,10 @@ class CompiledWorkflow:
             "warnings": result.warnings,
             "seconds": round(seconds, 3),
             "answer_chars": len(result),
+            # Tokens, per model — the one number a support ticket about a
+            # slow or expensive run always wants and never had. Safe to write
+            # where the answer is not: a count carries no customer data.
+            "usage": result.usage,
         }
         try:
             self.trace_file.parent.mkdir(parents=True, exist_ok=True)

@@ -10,7 +10,7 @@
 | `sql_recovery_rate` | The share of answerable questions where a query could be recovered from the answer at all. A system that is right but silent about its query is unverifiable, and that is a finding. |
 | `attempts_total` / `retried` | Grader revise laps — how much the loop is working. |
 | `latency_p50` / `p95` | Nearest-rank percentiles over per-item wall clock. |
-| `cost` | A token/dollar figure when the run carries one, otherwise an explicit "not available". |
+| `cost` | Token counts measured from the runs themselves, per model, plus their sum. `usd` is always `null` and says why: prices are per-account and live in no file this project owns. An unmetered provider leaves `total_tokens` **null**, never `0`. |
 
 **What is deliberately not measured** is on `NOT_MEASURED` and is printed on
 the scorecard itself, not buried in a document: phrasing, tone, whether an
@@ -49,9 +49,27 @@ NOT_MEASURED = (
     "answer phrasing, tone, and whether the explanation is right for the right reasons",
     "conversational behaviour across turns (every case is a fresh thread)",
     "safety, prompt injection, and data exfiltration",
-    "cost, unless the run reports token usage",
+    # Tokens ARE measured now (`workflow-gallery` 35); what is still not
+    # measured is money, and this line says only that.
+    "money — tokens are measured, but no price table is owned here to cost them",
     "SQL efficiency (BIRD's Valid Efficiency Score is not computed)",
 )
+
+
+def _cost_row(cost: dict[str, Any]) -> str:
+    """One line for the terminal: the measured total, then the caveat.
+
+    `None` prints as the note alone — a row reading `0 tokens` for a run
+    nothing metered would be a claim the dataset was free, which is the one
+    thing this row must never say (`workflow-gallery` 35).
+    """
+    total = cost.get("total_tokens")
+    note = str(cost.get("note") or "")
+    if not isinstance(total, int) or isinstance(total, bool):
+        return note or str(cost.get("usd"))
+    models = cost.get("tokens") or {}
+    who = f" across {len(models)} model(s)" if models else ""
+    return f"{total:,} tokens{who} — {note}"
 
 
 def _rate(numerator: int, denominator: int) -> float:
@@ -255,7 +273,7 @@ class Scorecard:
             f"latency p50        {self.latency_p50:>8.2f}s",
             f"latency p95        {self.latency_p95:>8.2f}s",
             f"total              {self.total_seconds:>8.2f}s",
-            f"cost               {self.cost.get('note') or self.cost.get('usd')}",
+            f"cost               {_cost_row(self.cost)}",
         ]
         if self.by_difficulty():
             lines.append("")

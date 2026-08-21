@@ -153,6 +153,12 @@ def cmd_run(args: argparse.Namespace) -> int:
                     "outputs": result.outputs,
                     "warnings": result.warnings,
                     "attempts": result.attempts,
+                    # What the run spent, per model, and one total beside it
+                    # (`workflow-gallery` 35). `total_tokens` is `null` — never
+                    # `0` — when no provider reported: a script piping this
+                    # must be able to tell "free" from "nobody said".
+                    "usage": result.usage,
+                    "total_tokens": result.total_tokens,
                     "thread_id": thread_id,
                     "slug": workflow.slug,
                 },

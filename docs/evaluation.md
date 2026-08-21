@@ -46,11 +46,21 @@ diagonal of that square, on purpose:
 
 Both blanks are decisions rather than oversights, and they are not the same
 decision. The offline judge is refused below. The online *monitor* is missing
-because we have no tracing project to aim one at — which is also why the
-scorecard's `cost` is usually `null` (`NO_COST_SIGNAL`). Everything the eval
+because we have no tracing project to aim one at. Everything the eval
 vocabulary offers that we lack — online evaluation, backtesting, experiment
-comparison, per-run token cost — is downstream of that one absent capability,
-not of an eval feature we skipped.
+comparison — is downstream of that one absent capability, not of an eval
+feature we skipped.
+
+**Per-run token cost is no longer on that list** (`workflow-gallery` 35). It
+was, and the reason given was the tracer; that reason was wrong.
+`langchain-core` aggregates `AIMessage.usage_metadata` per model through
+`get_usage_metadata_callback`, in-process and with no account, so `ask()` now
+returns it on `RunResult.usage` and the scorecard's `cost` block carries the
+dataset's measured tokens per model. What is still absent is **money**: `usd`
+stays `null` because prices are per-account, change without notice, and live
+in no file this project owns — a caller with a price table multiplies
+`cost["tokens"]` themselves. An unmetered provider leaves `total_tokens`
+**`null`**, never `0`; unknown is not free.
 
 The in-graph judge has no equivalent on the other side of that table, and the
 difference is worth naming: a hosted judge observes a run from outside and

@@ -24,7 +24,7 @@ semantics:
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -33,11 +33,30 @@ from openstategraph.evaluation.denotation import compare, execute_query
 from openstategraph.evaluation.recovery import recover_from_run
 from openstategraph.evaluation.scoring import ItemVerdict, Scorecard
 
-#: Why the scorecard's cost block is usually empty, stated once.
-NO_COST_SIGNAL = (
-    "not available — `RunResult` carries no token usage, so no dollar figure can "
-    "be derived without a tracer. Attach LangSmith (LANGSMITH_TRACING=true) for "
-    "per-run token and cost accounting."
+#: Why a cost block carries tokens and never dollars, stated once.
+#:
+#: **Tokens are a fact; money is a claim about a vendor's price sheet.** Prices
+#: change, differ per account, and live in no file this repository owns, so a
+#: dollar figure derived here would be a number that goes stale silently and
+#: has nothing to fail against. A caller with a price table multiplies
+#: `cost["tokens"]` themselves.
+TOKENS_NOT_DOLLARS = (
+    "tokens measured from the run itself (langchain-core's usage callback, no "
+    "tracer). No dollar figure: prices are per-account and live in no file this "
+    "project owns — multiply the token counts by your own price table."
+)
+
+#: Why a cost block is empty. Replaces `NO_COST_SIGNAL` (`workflow-gallery` 35),
+#: which said `RunResult` carries no token usage — it does now, so the old
+#: sentence became false the moment the field landed. This one says the
+#: narrower thing that can still be true: nobody reported.
+#:
+#: An empty block is **unknown, not free**. `total_tokens` is `None` beside it
+#: rather than `0`, for the reason `RunResult.usage` gives at the field.
+NO_USAGE_REPORTED = (
+    "not available — no model in this run reported usage. A provider that sends "
+    "no `usage_metadata` (or no model name with it) has made no claim about what "
+    "it spent; this is unknown, not zero."
 )
 
 
@@ -50,6 +69,10 @@ class AskOutcome:
     outputs: dict[str, str]
     attempts: int = 0
     seconds: float = 0.0
+    #: model name -> that one run's token usage, straight off `RunResult.usage`.
+    #: Empty is *nobody reported*, never *free* — the scorecard preserves the
+    #: distinction all the way to its cost row (`workflow-gallery` 35).
+    usage: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 Asker = Callable[[EvalCase], AskOutcome]
@@ -70,8 +93,9 @@ def evaluate(
 
     items: list[ItemVerdict] = []
     warnings: list[str] = []
+    spent: dict[str, dict[str, Any]] = {}
     for case in cases:
-        item = _grade(case, ask, db, warnings)
+        item = _grade(case, ask, db, warnings, spent)
         items.append(item)
         if on_item is not None:
             on_item(item)
@@ -82,11 +106,70 @@ def evaluate(
         model=model,
         items=tuple(items),
         warnings=tuple(warnings),
-        cost={"usd": None, "note": NO_COST_SIGNAL},
+        cost=cost_block(spent),
     )
 
 
-def _grade(case: EvalCase, ask: Asker, database: Path, warnings: list[str]) -> ItemVerdict:
+def cost_block(spent: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The scorecard's cost row, from what the runs actually reported.
+
+    `usd` stays `None` and says why: see `TOKENS_NOT_DOLLARS`. `total_tokens`
+    is `None` — never `0` — when nothing reported, so a reader (or a CI job)
+    cannot mistake an unmetered provider for a free one.
+    """
+    total: int | None = None
+    if spent:
+        total = 0
+        for row in spent.values():
+            value = row.get("total_tokens")
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            total += int(value)
+    return {
+        "usd": None,
+        "tokens": {name: dict(row) for name, row in sorted(spent.items())},
+        "total_tokens": total,
+        "note": TOKENS_NOT_DOLLARS if spent else NO_USAGE_REPORTED,
+    }
+
+
+def _accumulate(spent: dict[str, dict[str, Any]], usage: Any) -> None:
+    """Add one run's per-model usage into the dataset's running total.
+
+    Added **per field**, so a provider that reports a detail block another does
+    not is not flattened to the intersection; a value that is not a number is
+    skipped rather than raising, because a malformed usage block must not turn
+    a graded dataset into a crash. Nested detail dicts (`input_token_details`)
+    are summed one level down, which is where providers put cache reads —
+    the field that makes prompt caching measurable at all.
+    """
+    if not isinstance(usage, dict):
+        return
+    for name, row in usage.items():
+        if not isinstance(row, dict):
+            continue
+        into = spent.setdefault(str(name), {})
+        for field_name, value in row.items():
+            if isinstance(value, dict):
+                nested = into.setdefault(field_name, {})
+                if isinstance(nested, dict):
+                    for key, inner in value.items():
+                        if isinstance(inner, bool) or not isinstance(inner, (int, float)):
+                            continue
+                        nested[key] = int(nested.get(key, 0)) + int(inner)
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            into[field_name] = int(into.get(field_name, 0)) + int(value)
+
+
+def _grade(
+    case: EvalCase,
+    ask: Asker,
+    database: Path,
+    warnings: list[str],
+    spent: dict[str, dict[str, Any]] | None = None,
+) -> ItemVerdict:
     started = time.monotonic()
     try:
         outcome = ask(case)
@@ -100,6 +183,12 @@ def _grade(case: EvalCase, ask: Asker, database: Path, warnings: list[str]) -> I
             seconds=round(time.monotonic() - started, 3),
             error=f"{type(exc).__name__}: {exc}",
         )
+
+    # Counted before grading, and for every verdict: a wrong answer costs the
+    # same tokens as a right one, and a cost row that only counted the
+    # successes would understate the bill by exactly the failures.
+    if spent is not None:
+        _accumulate(spent, outcome.usage)
 
     sql, source = recover_from_run(outcome.answer, outcome.outputs)
     common: dict[str, Any] = {
@@ -200,6 +289,9 @@ def package_asker(workflow: Any) -> Asker:
             outputs=dict(result.outputs),
             attempts=int(result.attempts),
             seconds=round(time.monotonic() - started, 3),
+            # Straight off the door — the harness measures nothing itself, for
+            # the same reason it invokes nothing itself.
+            usage=dict(getattr(result, "usage", {}) or {}),
         )
 
     return ask
@@ -236,7 +328,9 @@ def evaluate_package(
 __all__ = [
     "AskOutcome",
     "Asker",
-    "NO_COST_SIGNAL",
+    "NO_USAGE_REPORTED",
+    "TOKENS_NOT_DOLLARS",
+    "cost_block",
     "evaluate",
     "evaluate_package",
     "package_asker",

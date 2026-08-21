@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+- **A run can say what it cost, and nothing new counts it.** `RunResult` now
+  carries `usage` — model name -> the tokens that model reported — plus a
+  `total_tokens` convenience, populated by wrapping the library door's one
+  `graph.invoke()` in `langchain_core.callbacks.get_usage_metadata_callback`.
+  In-process, no tracer, no account. `openstategraph run --json` prints both,
+  the trace file records `usage` beside `attempts`, and the eval scorecard's
+  cost row reports measured tokens instead of *"attach LangSmith"*
+  (`NO_COST_SIGNAL` is retired for `NO_USAGE_REPORTED` / `TOKENS_NOT_DOLLARS`).
+  **Per model, never one integer** — a run that drives a cloud model and one
+  paid Claude call is only readable while the two are apart. **No dollar
+  figure**: tokens are a fact, money is a claim about a vendor's price sheet,
+  and no price table lives in this repository. A provider that reports nothing
+  leaves `usage` empty and `total_tokens` **`None`**, never `0`: unknown is not
+  free (`workflow-gallery` 35).
 - **`web_fetch` keeps the page's links.** It stripped every tag *with its
   attributes*, so a document whose value is "these titles point there" arrived
   as titles alone — the flagship gallery example read 8 013 characters of a

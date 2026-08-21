@@ -542,6 +542,8 @@ hand-seeded state:
 | `.failures` | the half of `.warnings` that is a claim the run **failed**. This is the one to gate a script on; `openstategraph run`'s exit code reads it |
 | `.failed_nodes` | node id → why that step failed, for the nodes whose `.outputs` entry is a failure marker rather than content |
 | `.attempts` | how many times a model-driven node was invoked during the run — a cost, not a lap count and not a budget. A cycle holding two agents spends two per lap, and two loops in series both add into it. Each grader's own budget is `maxAttempts`, counted per grader |
+| `.usage` | model name → the tokens that model reported (`input_tokens`, `output_tokens`, `total_tokens`, and whatever detail block the provider added, including cache reads). Counted in-process by `langchain-core`'s own usage callback — **no tracer, no account**. **Per model, never one integer**: a run that drives a cloud model and one paid Claude call is only readable while the two are apart. An **empty** mapping means no provider reported, which is *unknown*, not free |
+| `.total_tokens` | every model's `total_tokens` added up, or **`None`** when nothing reported. `None`, never `0` — a run nobody metered did not cost nothing. There is deliberately no dollar figure: tokens are a fact, money is a claim about a vendor's price sheet, and no price table lives in this project. Multiply by your own |
 
 **The split is the point, and it is why `.warnings` is not what a script
 should test.** A node that produced nothing is a report about *how* the answer
@@ -742,7 +744,8 @@ things you asked for is how a list that matters gets ignored.
   or is a fixture directory in a test. It names the directory holding the
   `<topic>.md` files, not the package above it.
 - **`trace_file`** — appends one JSON line per `ask()`: question, slug,
-  decisions, attempts, warnings, duration, and the answer's **length**. The
+  decisions, attempts, warnings, per-model token usage, duration, and the
+  answer's **length**. The
   answer text itself is deliberately not written: a trace file gets committed,
   emailed and pasted into issues, and the answer is the one field of a run that
   reliably carries a customer's data — while `decisions` and `attempts` are

@@ -78,6 +78,27 @@ class RunResult(str):
     #: keyed by grader node id) and is not published here: this field is a
     #: cost, not a budget, and nothing downstream may read it as one.
     attempts: int
+    #: model name -> what that model reported spending, exactly as
+    #: `langchain_core.callbacks.get_usage_metadata_callback` aggregated it
+    #: (`input_tokens`, `output_tokens`, `total_tokens`, and whatever
+    #: `input_token_details`/`output_token_details` the provider added).
+    #:
+    #: **Keyed by model, never summed into one integer** (`workflow-gallery`
+    #: 35). A run may spend on two providers — the gallery's flagship drives a
+    #: cloud model and one paid Claude call — and "which node cost what" is
+    #: only answerable while the two are apart. A caller who wants one number
+    #: has `total_tokens`.
+    #:
+    #: **An empty mapping means nobody reported, and that is not zero.** The
+    #: callback records a model only when the `AIMessage` carries
+    #: `usage_metadata` *and* `response_metadata["model_name"]`; a provider
+    #: that reports neither has made no claim about what it spent, and
+    #: inventing `0` on its behalf would be a claim that the run was free.
+    #: A `0` a provider actually reported is kept as the `0` it is.
+    #:
+    #: Plain JSON — dicts of numbers — so it crosses a serialisable seam
+    #: without a non-finite value in it.
+    usage: dict[str, dict[str, Any]]
 
     def __new__(
         cls,
@@ -88,6 +109,7 @@ class RunResult(str):
         warnings: list[str] | None = None,
         failures: list[str] | None = None,
         attempts: int = 0,
+        usage: dict[str, dict[str, Any]] | None = None,
     ) -> "RunResult":
         self = super().__new__(cls, answer)
         self.answer = str(answer)
@@ -101,7 +123,36 @@ class RunResult(str):
         # to empty would silently turn every such run into a success.
         self.failures = list(self.warnings if failures is None else failures)
         self.attempts = int(attempts)
+        # Copied a level down as well: the callback hands back its own live
+        # mapping, and a finished run must not keep changing.
+        self.usage = {str(k): dict(v) for k, v in (usage or {}).items()}
         return self
+
+    @property
+    def total_tokens(self) -> int | None:
+        """Every model's `total_tokens`, added up — or `None` if none reported.
+
+        `int | None` with `None` meaning *unknown*, which is the shape
+        `CLAUDE.md` requires of anything that crosses a serialisable seam: a
+        run nothing metered is not a run that cost nothing, and `0` is the
+        answer to a different question. A model that genuinely reported `0`
+        still totals `0`, because it did answer.
+
+        Derived rather than stored, so it is right for a `RunResult` assembled
+        by hand as well as one built by `ask()` — the same reason
+        `failed_nodes` is a property.
+        """
+        if not self.usage:
+            return None
+        total = 0
+        for row in self.usage.values():
+            value = row.get("total_tokens")
+            # Read tolerantly: a provider that omits or malforms the field
+            # must not turn a finished run into a TypeError at the door.
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            total += int(value)
+        return total
 
     def __reduce__(self) -> tuple[Any, ...]:
         """Pickle and `copy` keep the attributes.
@@ -119,6 +170,7 @@ class RunResult(str):
                 self.warnings,
                 self.attempts,
                 self.failures,
+                self.usage,
             ),
         )
 
@@ -156,7 +208,8 @@ class RunResult(str):
         return (
             f"RunResult({str.__repr__(self)}, decisions={self.decisions!r}, "
             f"outputs={self.outputs!r}, warnings={self.warnings!r}, "
-            f"failures={self.failures!r}, attempts={self.attempts!r})"
+            f"failures={self.failures!r}, attempts={self.attempts!r}, "
+            f"usage={self.usage!r})"
         )
 
 
@@ -167,12 +220,16 @@ def _rebuild(
     warnings: list[str],
     attempts: int,
     failures: list[str] | None = None,
+    usage: dict[str, dict[str, Any]] | None = None,
 ) -> RunResult:
     """Module-level so `pickle` can find it by name.
 
-    `failures` is last and optional so a `RunResult` pickled by an older
-    version still unpickles — a five-tuple written before the split lands on
-    the same back-compat path as a caller that never passed it.
+    Every argument after `attempts` is optional and appended, never inserted,
+    so a `RunResult` pickled by an older version still unpickles: a five-tuple
+    written before the `failures` split, or a six-tuple written before `usage`
+    (`workflow-gallery` 35), lands on the same back-compat path as a caller
+    that never passed either. `usage` arrives as unknown, which is what a run
+    that was never metered actually is.
     """
     return RunResult(
         answer,
@@ -181,6 +238,7 @@ def _rebuild(
         warnings=warnings,
         failures=failures,
         attempts=attempts,
+        usage=usage,
     )
 
 
