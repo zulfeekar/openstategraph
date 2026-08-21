@@ -439,14 +439,28 @@ scoped by mount path, because `in1` exists in all three of `nested-mounts`'
 documents. A block carries the title the parent's author gave the mount. A
 child that will not load costs the labels below it and nothing else.
 
-**`mcp_server.py` stays flat, and that is the honest answer there.** That path
-is stateless and holds no workflow library, so a mount resolves to nothing and
-there is no child graph to splice; its docstrings say so, and its `warnings`
-already name the capability that did not resolve.
+**`mcp_server.py`'s `compile_workflow` stays flat, and that is the honest
+answer there.** That path is stateless and holds no workflow library, so a
+mount resolves to nothing and there is no child graph to splice; its docstrings
+say so, and its `warnings` already name the capability that did not resolve.
+`run_workflow` on the same server is the other case — it *ran* the children, so
+it can draw them, and does.
 
-The **run** surfaces — `RunResponse.mermaid`, the terminal SSE frame, and
-`run_workflow` — still draw one box per mount and are not relabelled per
-audience at all. Filed as `workflow-gallery` 62 rather than swept in here.
+**The run surfaces draw exactly what the preview draws** (`workflow-gallery`
+62). `RunResponse.mermaid`, the terminal SSE `done` frame and `run_workflow`
+each called `get_graph().draw_mermaid()` and so made neither of the two calls
+above: a caller who had asked for the customer channel received `__start__`,
+`__default_error_handler__` and `safe_name`d ids beside its answer, with every
+mount as one box. They are one seam now — `api/diagram.py`'s
+`workflow_mermaid`, which the preview route calls too — because four call
+sites that must each remember two calls is a defect with a fifth instance
+waiting. A run answers "what just ran" and a preview answers "what did the
+compiler build", but about the same compiled graph, and two shapes for one
+workflow is a worse answer to both.
+
+`backend/tests/test_a_runs_diagram_opens_its_mounts.py` fails the day a fifth
+surface draws its own, by parsing every module under `openstategraph/` for a
+bare `draw_mermaid()` call.
 
 ### Cycles are gated by port *type*, and the step budget is not an iteration count
 

@@ -18,9 +18,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 
-from openstategraph.api.audience import Audience, resolve as resolve_audience
+from openstategraph.api.audience import resolve as resolve_audience
 from openstategraph.api.catalogue_events import CatalogueEvent, ChangeReason
-from openstategraph.api.customer_graph import MountedDocument, customer_mermaid
 from openstategraph.api.deps import Services
 from openstategraph.api.model_resolution import workflow_default_model
 from openstategraph.api.schemas import (
@@ -835,8 +834,8 @@ def compiled_graph(
     the ids, which are what a mount bug gets reported under, and only the
     customer page opts out (reviews-2026-08-14 ticket 04).
     """
+    from openstategraph.api.diagram import workflow_mermaid
     from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
-    from openstategraph.compile.composition import expand_mounts
     from openstategraph.compile.node_runtime import RunState
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -853,40 +852,15 @@ def compiled_graph(
         graph = compiler.build(
             document, RunState, runtime.factory(document), store=services.memory_store
         )
-        drawable = graph.get_graph(xray=True)
-        mounts = dict(runtime.mounted_graphs)
-        if mounts:
-            drawable = expand_mounts(drawable, mounts)
-        mermaid_text = drawable.draw_mermaid()
+        mermaid_text = workflow_mermaid(
+            graph,
+            document,
+            runtime=runtime,
+            audience=resolve_audience(audience),
+            store=services.store,
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}")
-    if resolve_audience(audience) is Audience.CUSTOMER:
-        mermaid_text = customer_mermaid(
-            mermaid_text, document, _mounted_documents(mounts, services.store)
-        )
     return CompiledGraphResponse(mermaid=mermaid_text)
 
 
-def _mounted_documents(mounts: Any, store: Any) -> dict[str, MountedDocument]:
-    """The compiler's map of mounts, with each child's *document* beside it.
-
-    The compiler records which package a mount runs; a package's document is
-    the only thing that knows what its author called the nodes inside it. Both
-    halves are needed to relabel an opened composition for a customer, and
-    they live in different places, so they are joined here — at the one route
-    that has a store to load from.
-
-    A child that will not load is dropped rather than raised on: its subtree
-    keeps the compiler's labels, which is worse than a title and much better
-    than a 502 on a picture.
-    """
-    resolved: dict[str, MountedDocument] = {}
-    for name, mounted in (mounts or {}).items():
-        try:
-            child = store.load(mounted.slug)
-        except Exception:
-            continue
-        resolved[name] = MountedDocument(
-            document=child, mounts=_mounted_documents(mounted.mounts, store)
-        )
-    return resolved

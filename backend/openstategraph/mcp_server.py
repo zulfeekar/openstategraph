@@ -49,6 +49,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
 from openstategraph.schema import normalize_document as _normalize_document
@@ -418,7 +419,11 @@ class WorkflowArtifacts:
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
         graph = compiler.build(document, RunState, runtime.factory(document))
-        mermaid = graph.get_graph(xray=True).draw_mermaid()
+        # Through the one seam, with no store and no audience: this path
+        # holds no workflow library, so `mounted_documents` finds nothing to
+        # load and the diagram is flat — which is the true picture of what
+        # would compile here, and is the shape the paragraph above promises.
+        mermaid = workflow_mermaid(graph, document, runtime=runtime)
         return mermaid, list(plan.warnings) + runtime_warnings(runtime)
 
     @staticmethod
@@ -768,7 +773,15 @@ class WorkflowRuns:
             "decisions": {k: str(v) for k, v in (final.get("decisions") or {}).items()},
             "outputs": {k: str(v) for k, v in (final.get("outputs") or {}).items()},
             "attempts": int(final.get("attempts") or 0),
-            "mermaid": graph.get_graph().draw_mermaid(),
+            # Unlike `compile_workflow` above, this path *has* a library:
+            # it just ran the children, so it can draw them. Until
+            # `workflow-gallery` 62 it published `get_graph().draw_mermaid()`
+            # and a mount was one box here too. No audience — an MCP client
+            # is composing a document, so it gets the compiler's own names,
+            # which are what a mount bug is reported under.
+            "mermaid": workflow_mermaid(
+                graph, resolved, runtime=runtime, store=self._services.store
+            ),
             "warnings": list(plan.warnings) + runtime_warnings(runtime),
             "recursion_limit": limit,
             "error": None,

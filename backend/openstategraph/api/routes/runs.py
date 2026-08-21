@@ -28,6 +28,7 @@ from openstategraph.api.audience import (
     with_capability_notice,
 )
 from openstategraph.api.deps import PrincipalId, Services
+from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.model_resolution import (
     apply_credentials,
     resolve_model,
@@ -309,7 +310,20 @@ def run_workflow(
         decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
         outputs={k: str(clean_output(str(v))) for k, v in visible.items()},
         attempts=int(final.get("attempts") or 0),
-        mermaid=graph.get_graph().draw_mermaid(),
+        # The composition, in this caller's own vocabulary — never
+        # `get_graph().draw_mermaid()` again (`workflow-gallery` 62). This
+        # field used to publish `__start__`, `__default_error_handler__` and
+        # `safe_name`d ids to a caller who had explicitly asked for the
+        # customer channel, with every mount flattened to one box. One seam,
+        # shared with the preview route and the stream, so the two doors
+        # cannot draw two different shapes for one workflow.
+        mermaid=workflow_mermaid(
+            graph,
+            document,
+            runtime=runtime,
+            audience=audience,
+            store=services.store,
+        ),
         developer=DeveloperChannelResponse(**developer) if developer else None,
     )
 
@@ -430,6 +444,8 @@ def run_workflow_stream(
                 runtime,
                 thread_id,
                 audience,
+                document,
+                services.store,
             ),
             http.receive,
         ),
@@ -527,6 +543,8 @@ def resume_workflow_stream(
                 runtime,
                 request.thread_id,
                 audience,
+                document,
+                services.store,
             ),
             http.receive,
         ),

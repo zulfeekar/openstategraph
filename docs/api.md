@@ -143,7 +143,12 @@ Two things follow that a client should not try to work around:
 
 `mermaid` deliberately stays on both audiences: it is the compiled topology
 that a chat page draws its live flow diagram from, and
-`GET /api/workflows/{slug}/graph` already serves the same text. `decisions`,
+`GET /api/workflows/{slug}/graph` serves byte-identical text for the same
+workflow and audience — one workflow has one shape, whichever door you came
+through. On the customer channel it is drawn in the customer's own vocabulary:
+no `__start__`, no `__default_error_handler__`, each node under the name its
+author gave it, and every mount opened to any depth with the child's own
+document supplying the names inside it (`workflow-gallery` 62). `decisions`,
 `outputs` and `attempts` stay too — they are facts about the customer's own
 turn.
 

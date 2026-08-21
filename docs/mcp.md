@@ -349,9 +349,12 @@ print(workflow.ask("..."))
 `mermaid` is not a picture of the document. It is
 `compiled.get_graph(xray=True).draw_mermaid()` — the topology the compiler
 *actually produced*, so a preview can never be a hand-drawn approximation that
-drifts. It does **not** open a mount or an agent: those compile to closures
-rather than LangGraph subgraphs, so `xray` has nothing to expand and each
-renders as one flat box. Text, never a PNG:
+drifts. It does **not** open a mount or an agent here: those compile to closures
+rather than LangGraph subgraphs, so `xray` has nothing to expand, and this tool
+is stateless besides — it holds no workflow library, so a mounted child does
+not resolve at all and one flat box is the true picture of what would compile.
+(`run_workflow` is the other case: it ran the children, so its `mermaid` opens
+every mount as a `subgraph` block.) Text, never a PNG:
 `draw_mermaid_png()` would post your graph to a third-party API.
 
 Here is the real output for the document above:

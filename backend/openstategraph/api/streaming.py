@@ -11,6 +11,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from openstategraph.api.diagram import workflow_mermaid  # noqa: E402
 from openstategraph.api.audience import (  # noqa: E402
     AnswerChannel,
     Audience,
@@ -819,6 +820,8 @@ def _stream_run(
     runtime: Any,
     thread_id: str,
     audience: Audience = Audience.CUSTOMER,
+    document: Any = None,
+    store: Any = None,
 ) -> Any:
     """The stream, with its ending guaranteed (UX-02).
 
@@ -863,7 +866,16 @@ def _stream_run(
     the client having seen updates and no ending at all.
     """
     frames = _run_frames(
-        graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id, audience
+        graph,
+        graph_input,
+        config,
+        plan,
+        node_ids_by_name,
+        runtime,
+        thread_id,
+        audience,
+        document,
+        store,
     )
     ended = False
     try:
@@ -968,6 +980,8 @@ def _run_frames(
     runtime: Any,
     thread_id: str,
     audience: Audience = Audience.CUSTOMER,
+    document: Any = None,
+    store: Any = None,
 ) -> Any:
     """Drives one `graph.stream()` call and yields SSE frames.
 
@@ -976,6 +990,13 @@ def _run_frames(
     fold: the suggestion fence is split out of the answer on every run,
     whatever the audience, so there is no code path that could put developer
     guidance in a customer's `answer` and none to keep audited.
+
+    `document` and `store` are what the terminal frame's diagram needs and
+    nothing else: the outermost document supplies the titles a customer reads,
+    and the store loads a mounted child's own document so a node three levels
+    down carries the name *its* author gave it. Both default to `None`, which
+    draws exactly what LangGraph holds — the honest picture for a caller that
+    has neither.
 
     Shared by `/api/runs/stream` (a fresh run) and `/api/runs/resume` (a
     run a `human.approval` node paused) — from the frontend's point of
@@ -1730,7 +1751,17 @@ def _run_frames(
             # Topology, not guidance, and `/chat` draws its live flow diagram
             # from it — `GET /api/workflows/{slug}/graph` already serves the
             # same text to that page. See the table in `api/audience.py`.
-            "mermaid": graph.get_graph().draw_mermaid(),
+            # The composition, in this reader's own vocabulary. Until
+            # `workflow-gallery` 62 this drew `graph.get_graph()
+            # .draw_mermaid()`: a customer's terminal frame carried
+            # `__start__`, `__default_error_handler__` and `safe_name`d ids,
+            # and every mount as one box. The seam is shared with
+            # `RunResponse.mermaid` and with the preview route, so a reader
+            # who opens the preview and then runs the workflow is not shown
+            # two shapes for one workflow.
+            "mermaid": workflow_mermaid(
+                graph, document, runtime=runtime, audience=audience, store=store
+            ),
             **channel.payload(audience),
         },
     )
