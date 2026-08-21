@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from openstategraph.messages import content_text
 
+import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
@@ -208,6 +209,60 @@ class BaseGrader(ABC):
             prompt = prompt.with_context(f"The question was:\n{question}")
         return prompt.render()
 
+    #: How much model prose a `reason` may carry. It is read by a person at a
+    #: gate deciding whether to send something under their own name, and by the
+    #: trace row beside it — both surfaces where four hundred words is a
+    #: regression however informative the field has become. The number matches
+    #: the bound the no-keyword branch below already applies to a rejection, so
+    #: the two paths cannot disagree about what "too long" means.
+    REASON_LIMIT: ClassVar[int] = 200
+
+    @staticmethod
+    def _condense(text: str) -> str:
+        """Model prose as one bounded line, or "" when there is none.
+
+        Whitespace is collapsed rather than preserved because every consumer of
+        this field interpolates it into a sentence — *"The grader passed this —
+        {reason}"* on the approval card, *"Its last reason: {reason}"* in the
+        exhaustion warning — and a newline or a JSON blob breaks the line the
+        reader is actually looking at. The ellipsis is deliberate: a truncated
+        sentence that does not admit it was truncated reads as a model that
+        stopped mid-thought.
+        """
+        collapsed = " ".join(text.split())
+        if len(collapsed) <= BaseGrader.REASON_LIMIT:
+            return collapsed
+        return collapsed[: BaseGrader.REASON_LIMIT - 1].rstrip() + "\u2026"
+
+    @classmethod
+    def _pass_reason(cls, head: str, tail: str) -> str:
+        """What an approval says, which until `workflow-gallery` 53 was nothing.
+
+        The `fail` branch read `tail` and the `pass` branch discarded it, so a
+        rejection carried the model's reasoning and an approval carried the
+        literal `"Grader passed it"` — a restatement of `passed=True` in the one
+        place a human is deciding whether to send the text onward.
+
+        **Tolerant in reading**: a model puts its sentence on the next line as
+        often as it puts it on the keyword's own (`PASS - the tone is right`),
+        so both are read, the next line first because that is the shape the
+        output contract asks for. **Strict in trusting**: nothing is invented.
+        Only text the model actually wrote after the keyword becomes a reason,
+        and `PASS.` — a keyword and punctuation — is treated as having said no
+        more than a bare `PASS` did.
+
+        When it said nothing, the constant is honest and stays. It is worded so
+        a reader can tell the two apart: *"No reason given"* reports an absence,
+        where *"Grader passed it"* read like a sentence and carried none.
+        """
+        said = cls._condense(tail)
+        if not said:
+            # Everything after the keyword on its own line. `\w*` because the
+            # branch above accepts `pass`, `passed` and `passes` alike.
+            remainder = re.sub(r"^pass\w*", "", head.strip(), flags=re.IGNORECASE)
+            said = cls._condense(remainder.lstrip(" \t:.,;\u2013\u2014-"))
+        return said or "No reason given"
+
     def normalise(self, answer: str) -> Verdict:
         """Reads a verdict out of whatever the model said.
 
@@ -224,7 +279,7 @@ class BaseGrader(ABC):
         head_l = head.strip().lower()
 
         if head_l.startswith("pass"):
-            return Verdict(passed=True, reason="Grader passed it")
+            return Verdict(passed=True, reason=self._pass_reason(head, tail))
         if head_l.startswith("fail"):
             detail = tail.strip() or head.strip()
             return Verdict.reject(detail, feedback=detail)

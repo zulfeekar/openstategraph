@@ -17,9 +17,15 @@
  *   known labels; anything else is a value this build does not understand, and
  *   the honest move is to print the reason without captioning it with a word
  *   whose meaning we are guessing at.
- * - **A verdict with no reason is still worth saying.** An ordinary pass
- *   carries a generic reason and a deterministic rejection carries a specific
- *   one; either way the label alone already changes what a reviewer looks for.
+ * - **A verdict with no reason is still worth saying.** The label alone
+ *   already changes what a reviewer looks for. (Until `workflow-gallery` 53
+ *   this said an ordinary pass "carries a generic reason": it carried the
+ *   literal `Grader passed it`, so this card's most-read line was *"The grader
+ *   passed this — Grader passed it"*. A pass now carries whatever the model
+ *   wrote after the keyword, already condensed to one line and bounded to 200
+ *   characters by `BaseGrader`, or the words `No reason given` when it wrote
+ *   nothing — so the length and the newline are handled before the string
+ *   reaches here, and nothing on this side needs to truncate.)
  */
 export function graderVerdictLine(approval: {
   readonly verdict: string;

@@ -13,9 +13,31 @@ describe('graderVerdictLine', () => {
     ).toBe("The grader asked for a revision — 'if appropriate' is a hedge.");
   });
 
-  it('reports a pass', () => {
-    expect(graderVerdictLine({ verdict: 'pass', reason: 'Grader passed it' })).toBe(
-      'The grader passed this — Grader passed it',
+  it('reports a pass with the grader’s own sentence', () => {
+    // `workflow-gallery` 53. This case used to read `reason: 'Grader passed it'`
+    // — a fixture faithfully copying a backend constant that restated
+    // `passed=true` and told the reviewer nothing. `BaseGrader.normalise` now
+    // carries whatever the model wrote after the keyword, condensed to one
+    // bounded line, so the two halves of this sentence no longer say the same
+    // thing twice.
+    expect(
+      graderVerdictLine({
+        verdict: 'pass',
+        reason: 'It apologises plainly and commits to a date, with no hedging.',
+      }),
+    ).toBe(
+      'The grader passed this — It apologises plainly and commits to a date, with no hedging.',
+    );
+  });
+
+  it('reports a pass the grader did not explain, as an absence', () => {
+    // A bare `PASS` is a legitimate and common reply, and the backend reports
+    // it as an absence rather than inventing prose. What matters here is that
+    // a reviewer can tell it apart from the case above — *the grader said why*
+    // versus *the grader just said pass* — which is exactly what the old
+    // constant made impossible.
+    expect(graderVerdictLine({ verdict: 'pass', reason: 'No reason given' })).toBe(
+      'The grader passed this — No reason given',
     );
   });
 
