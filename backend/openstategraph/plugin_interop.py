@@ -225,11 +225,16 @@ def _export_extension(workflow_dir: Path, files: dict[str, str], notes: list[str
         if found:
             carried.append(f"{dirname}/")
     if carried:
-        notes.append(
+        note = (
             f"Carried into {EXTENSION_NAMESPACE}/ (no portable v1 component type, so no other "
-            f"client will load it): {', '.join(carried)}. knowledge/ in particular loses its "
-            "on-demand lookup semantics and reads as inert Markdown elsewhere."
+            f"client will load it): {', '.join(carried)}."
         )
+        if "knowledge/" in carried:
+            note += (
+                " knowledge/ in particular loses its on-demand lookup semantics and reads as "
+                "inert Markdown elsewhere."
+            )
+        notes.append(note)
     if (workflow_dir / "data").is_dir():
         notes.append("data/ excluded: fixtures and binaries are not distribution payload.")
 

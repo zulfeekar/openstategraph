@@ -103,8 +103,29 @@ def test_export_carries_non_portable_parts_into_the_extension_directory(tmp_path
     assert f"{EXTENSION_NAMESPACE}/workflow.json" in export.files
     assert f"{EXTENSION_NAMESPACE}/tools/warehouse.py" in export.files
     assert f"{EXTENSION_NAMESPACE}/AGENTS.md" in export.files
-    # knowledge lives nowhere portable, and the caller is told so.
-    assert any("knowledge" in note for note in export.notes)
+    # knowledge lives nowhere portable, and the caller is told so — the specific
+    # clause about lost on-demand lookup semantics, not just the word "knowledge"
+    # appearing in the carried-file list.
+    assert any("knowledge/ in particular" in note for note in export.notes)
+
+
+def test_export_note_does_not_mention_knowledge_when_the_package_has_none(tmp_path: Path) -> None:
+    """Ticket 12: the note is a report on this package, not a fixed template.
+
+    A package with no `knowledge/` still has other non-portable parts carried
+    (workflow.json, AGENTS.md, tools/), so the `Carried into …` note still
+    fires — but the `knowledge/ in particular …` clause describes a directory
+    that was never in the bundle, and must not appear.
+    """
+    directory = tmp_path / "workflows" / "minimal"
+    directory.mkdir(parents=True)
+    (directory / "workflow.json").write_text(
+        json.dumps({"version": 1, "name": "Minimal", "document": {"nodes": [], "edges": []}})
+    )
+    (directory / "AGENTS.md").write_text("# Minimal\n\nA scaffold with nothing extra.\n")
+    export = export_plugin(directory)
+    assert any("Carried into" in note for note in export.notes)
+    assert not any("knowledge" in note for note in export.notes)
 
 
 def test_export_never_emits_mcp_json(tmp_path: Path) -> None:
