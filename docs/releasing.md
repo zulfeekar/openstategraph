@@ -122,6 +122,15 @@ developer's machine. On this hardware the whole script takes about **37
 seconds** with the editor bundle already built, and several minutes when it has
 to run `npm ci && npm run build` first.
 
+The six credential-free assertions above cover the wheel's own server. For a
+QA who wants the same six cases run directly against `build_chat_model` — one
+call per case, no server, no wheel build — `scripts/nine_provider_cases.py`
+runs the three *absent* cases with no network at all, and the three *wrong*
+cases behind an explicit `--live` flag (one cheap, expected-401 call per
+vendor). It also documents how to run the three *valid* cases by hand, with a
+real key, for whichever one provider you own an account with
+(providers-and-credentials 03).
+
 **Still not covered**, so that nobody reads the table as exhaustive: the
 CLI-and-library half of `RunResult`'s failure/report split (a legally-empty run
 must exit 0), `openstategraph validate`'s exit 1 on a mount cycle, a saved
