@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CircleAlert, Info, MousePointer2, TriangleAlert, Trash2 } from 'lucide-react';
 import {
   Badge,
@@ -18,6 +18,11 @@ import { groupFieldsForInspector, validateFields } from '@core/model/contracts/f
 import { describeEdge } from '@core/model/edgeDescription';
 import { LockedPromptSections } from './LockedPromptSections';
 import { useDraftValue } from '@view/hooks/useDraftValue';
+import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
+import {
+  documentSettingScope,
+  type DocumentSettingScope,
+} from '@view/workflow/documentSettingScope';
 import {
   parseStepBudget,
   readStepBudget,
@@ -286,6 +291,11 @@ function WorkflowInspector({ count }: { count: number }) {
   // different statements, and the badge used to conflate them.
   const isEmpty = workbench.model.nodes().length === 0;
 
+  // Inside a mounted instance neither of the Document boxes can be written —
+  // `workflow-gallery` 70. The rule and its sentence live in a plain module so
+  // they can be tested; this is only the wiring.
+  const documents = useDocumentSettingScope();
+
   const errors = diagnostics.filter((d) => d.severity === 'error');
   const warnings = diagnostics.filter((d) => d.severity === 'warning');
   const infos = diagnostics.filter((d) => d.severity === 'info');
@@ -295,10 +305,16 @@ function WorkflowInspector({ count }: { count: number }) {
       <PanelHeader bordered title="Workflow" />
       <PanelBody>
         <PanelSection heading="Document">
+          {documents.locked ? (
+            // Above both boxes rather than under one, because it is true of
+            // both — and a disabled box with no sentence would be a second
+            // silent refusal, which is the defect 70 was filed about.
+            <p className="inspector__description">{documents.reason}</p>
+          ) : null}
           <Field label="Name">
-            <WorkflowNameInput name={workbench.model.name} />
+            <WorkflowNameInput name={workbench.model.name} locked={documents.locked} />
           </Field>
-          <StepBudgetInput settings={workbench.model.settings} />
+          <StepBudgetInput settings={workbench.model.settings} locked={documents.locked} />
           <div className="inspector__stats">
             <span>
               {workbench.model.nodeCount} node{workbench.model.nodeCount === 1 ? '' : 's'}
@@ -450,7 +466,13 @@ function NodeTitleInput({
  * is worse than a refusal — so an out-of-range draft shows the error and
  * writes nothing.
  */
-function StepBudgetInput({ settings }: { settings: Readonly<Record<string, unknown>> }) {
+function StepBudgetInput({
+  settings,
+  locked,
+}: {
+  settings: Readonly<Record<string, unknown>>;
+  locked: boolean;
+}) {
   const controller = useController();
   const saved = readStepBudget(settings);
   const commit = useCallback(
@@ -468,11 +490,12 @@ function StepBudgetInput({ settings }: { settings: Readonly<Record<string, unkno
     <Field
       label={STEP_BUDGET_LABEL}
       hint={STEP_BUDGET_HINT}
-      error={parsed.ok ? undefined : parsed.error}
+      error={locked || parsed.ok ? undefined : parsed.error}
     >
       <TextInput
         value={draft.value}
         inputMode="numeric"
+        disabled={locked}
         placeholder={STEP_BUDGET_PLACEHOLDER}
         onChange={(event) => draft.onChange(event.target.value)}
         onBlur={draft.onBlur}
@@ -482,7 +505,7 @@ function StepBudgetInput({ settings }: { settings: Readonly<Record<string, unkno
 }
 
 /** The document's name. Same buffering problem — `setName` also normalises. */
-function WorkflowNameInput({ name }: { name: string }) {
+function WorkflowNameInput({ name, locked }: { name: string; locked: boolean }) {
   const controller = useController();
   const commit = useCallback((value: string) => controller.document.setName(value), [controller]);
   const draft = useDraftValue(name, commit);
@@ -490,8 +513,26 @@ function WorkflowNameInput({ name }: { name: string }) {
   return (
     <TextInput
       value={draft.value}
+      disabled={locked}
       onChange={(event) => draft.onChange(event.target.value)}
       onBlur={draft.onBlur}
     />
   );
+}
+
+/**
+ * Whether the Document boxes are the package's rather than this mount's, kept
+ * in step with the address bar — `workflow-gallery` 70.
+ *
+ * Subscribed rather than read once, for the reason `DrillBanner` subscribes:
+ * drilling in and pressing Back change the open address without unmounting the
+ * inspector, so a value read at first render would leave the boxes locked in a
+ * document a moment after leaving the mount.
+ */
+function useDocumentSettingScope(): DocumentSettingScope {
+  const [scope, setScope] = useState<DocumentSettingScope>(() =>
+    documentSettingScope(getOpenAddress()),
+  );
+  useEffect(() => subscribeOpenAddress(() => setScope(documentSettingScope(getOpenAddress()))), []);
+  return scope;
 }

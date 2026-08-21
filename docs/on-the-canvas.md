@@ -92,6 +92,12 @@ the default of 50; a number between 10 and 1000 is saved into the document's
 number still overrides it. Raising it is rarely the fix for a loop that will
 not settle; a grader that can actually pass is.
 
+It belongs to the **package**, so inside a mounted instance the box — and the
+name beside it — is disabled with a line saying so. An instance's own state is
+`data.overrides`, which is keyed by a step and a field; a workflow's name and
+settings belong to no step, so there is nowhere in a mount for them to go.
+Change them in the package and every mount of it changes.
+
 > Starting from `openstategraph new my-thing --template routed-qa` gives you
 > this shape already wired, with a router in front of it.
 
