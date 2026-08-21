@@ -539,6 +539,17 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     `ToolMessage` in the middle and the answer that follows it usually says
     nothing about it, which is exactly what proved unreliable in 33.
 
+    **`ran` names the tools this node's loop actually reached — a real tool
+    that was invoked and returned, whether it answered or errored — and never a
+    name the runtime refused because no such tool exists.** Both halves are
+    load-bearing and both have been wrong once. An error is data and the tool
+    is wired (`the-agent-asks-for-what-it-cannot-get` 01), so it counts; an
+    invented `execute_sql?` reached nothing at all, so it does not
+    (`production-ready` 98). The filter is the refusal, never membership of
+    `bound` — `bound` is *canvas-wired only*, so filtering by it would drop a
+    memory or knowledge tool the agent genuinely used, and a deep agent's
+    preset tools with it.
+
     Returns no `unmet_tools` key rather than an empty map when nothing was
     refused, so a clean run writes nothing there — a node that reports `[]` and
     a node that reports nothing must not look the same to the reducer.
@@ -568,6 +579,12 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     #: `execute_sql`, `query`, `run_*` — is a guess about how somebody spelled
     #: their tool; the argument is the query itself, so this says what happened
     #: for a tool called `warehouse` exactly as well as for `chinook_execute_sql`.
+    #:
+    #: Collected here and filtered by `ran` at the end (`production-ready` 98):
+    #: a call the runtime refused because no such tool exists carries its
+    #: arguments like any other, so an invented `execute_sql?` handed a SELECT
+    #: would otherwise record a query that never left the building — and any
+    #: `queried` anywhere clears 95's check for the **whole run**, silently.
     queried: list[str] = []
     for message in messages or []:
         for call in getattr(message, "tool_calls", None) or []:
@@ -593,6 +610,8 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
         used = str(getattr(message, "name", "") or "")
         if used and used not in ran:
             ran.append(used)
+    # A tool the runtime refused never ran, so it never sent anything either.
+    queried = [name for name in queried if name in ran]
     row: dict[str, Any] = {"bound": list(bound), "ran": ran}
     # Absent rather than empty, for the reason the docstring gives about
     # `unmet_tools`: a node that sent no query and a node with no query to send

@@ -449,7 +449,17 @@ def capability_door(answer: str, suggestion: Any, tool_use: Any) -> str | None:
 
 #: Our own refusal, written by the agent runtime when a model calls a name it
 #: was never given: "web_fetch is not a valid tool, try one of [...]".
-_REJECTED_TOOL = re.compile(r"([A-Za-z0-9_.-]+) is not a valid tool")
+#:
+#: `\S+` rather than an identifier class, because the whole point of this
+#: sentence is that the name is one **the model made up**, and a made-up name
+#: is not obliged to look like an identifier. `production-ready` 98: a live run
+#: asked for `execute_sql?`, the `?` fell outside `[A-Za-z0-9_.-]`, the
+#: refusal the runtime had just written about itself did not match, and
+#: `tool_report` filed the invented name under `ran` — where three readers take
+#: it to mean the node did the work. The narrowness that matters is the
+#: sentence, not the character class: prose merely mentioning a tool still
+#: matches nothing.
+_REJECTED_TOOL = re.compile(r"(\S+) is not a valid tool")
 
 
 def rejected_tool_names(text: Any) -> list[str]:
