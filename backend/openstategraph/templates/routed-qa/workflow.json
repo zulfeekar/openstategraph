@@ -47,7 +47,10 @@
       },
       "position": { "x": 700, "y": 420 }
     },
-    { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1420, "y": 260 } }
+    { "id": "out1", "type": "output.formatted", "title": "Answer", "data": {},
+      "position": { "x": 1420, "y": 140 } },
+    { "id": "out2", "type": "output.formatted", "title": "Greeting", "data": {},
+      "position": { "x": 1420, "y": 420 } }
   ],
   "edges": [
     {
@@ -76,7 +79,7 @@
     },
     {
       "source": { "nodeId": "agent2", "portId": "result" },
-      "target": { "nodeId": "out1", "portId": "result" }
+      "target": { "nodeId": "out2", "portId": "result" }
     }
   ]
 }

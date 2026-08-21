@@ -1,12 +1,16 @@
 """Three mutually exclusive terminal branches — and three outputs, not one.
 
-Gallery example 3. The interesting assertion is the last one. The shipped
-`routed-qa` template converges two branches onto a single
-`output.formatted.result`, an input whose `maxConnections` is 1: the document
-loads and compiles, but the capacity rule makes *drawing* the second edge
-replace the first, so nobody can redraw the template the scaffolder ships.
-Every gallery example therefore gives each exclusive branch its own output —
-and this test is what stops that decision from quietly rotting.
+Gallery example 3. The interesting assertion is the last one.
+`output.formatted.result` is an input whose `maxConnections` is 1: a document
+converging two exclusive branches onto one output loads and compiles, but the
+capacity rule makes *drawing* the second edge replace the first, so nobody can
+redraw it. Every gallery example therefore gives each exclusive branch its own
+output — and this test is what stops that decision from quietly rotting.
+
+The shipped `routed-qa` template used to be the counter-example; gallery
+ticket 13 gave it a second output. The repository-wide sweep that keeps every
+shipped document redrawable is
+`src/core/validation/shippedDocumentsSurviveRedrawing.test.ts`.
 """
 
 from __future__ import annotations

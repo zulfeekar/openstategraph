@@ -28,6 +28,10 @@ def test_document_shape() -> None:
             "agent.llm",
             "route.grader",
             "agent.llm",
+            # One output per exclusive branch. `output.formatted.result` takes
+            # a single link, so converging both branches on one card produced a
+            # graph the editor could not redraw (gallery ticket 13).
+            "output.formatted",
             "output.formatted",
         ],
     )

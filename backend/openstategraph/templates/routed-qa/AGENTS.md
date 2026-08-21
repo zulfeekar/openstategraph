@@ -7,10 +7,10 @@ vocabulary.
 ## What is in here
 
 ```
-                        ┌── question ──→ agent1 (Answerer) ──→ grader1 ──pass──┐
-input.text → router1 ───┤                        ▲                 │          ├→ output.formatted
-                        └── smalltalk ─→ agent2 (Greeter) ─────────┼──────────┘
-                                                 └──── revise ─────┘
+                        ┌── question ──→ agent1 (Answerer) ──→ grader1 ──pass──→ out1 (Answer)
+input.text → router1 ───┤                        ▲                 │
+                        │                        └──── revise ─────┘
+                        └── smalltalk ─→ agent2 (Greeter) ────────────────────→ out2 (Greeting)
 ```
 
 Four ideas, one document:
@@ -27,6 +27,12 @@ Four ideas, one document:
   port. That is the evaluator-optimizer loop, and it is legal to draw only
   because `feedback` is a typed feedback input.
 - **`agent2`** — the cheap path. Not everything deserves three model calls.
+- **`out1` and `out2`** — one output per branch, not one shared output. Exactly
+  one of them runs, so this is not a fan-in; `output.formatted.result` accepts a
+  single link, and converging both branches on one card gives you a document
+  the editor cannot redraw — nudge the second link and the first disappears.
+  An output carries no configuration, so a card per branch duplicates nothing
+  that matters. Delete the branch you do not want and its output goes with it.
 
 `maxAttempts` on the grader bounds the loop. It counts **that grader's own
 attempts** — candidates it has judged — not supersteps and not the whole run's

@@ -17,15 +17,17 @@ execute — not "execute and get discarded".
 
 ## Three branches, three outputs — deliberately
 
-The shipped `routed-qa` template converges two branches onto a single
-`output.formatted.result`. That document loads and compiles, but `result` is a
-`maxConnections: 1` input, and the capacity rule resolves a second edge by
-**replacing** the first. So the template ships a graph nobody can redraw: open
-it, nudge the second link, and the first one is gone.
+`output.formatted.result` is a `maxConnections: 1` input, and the capacity rule
+resolves a second edge into a full single slot by **replacing** the first. So a
+document that converges two exclusive branches onto one output loads and
+compiles, and then cannot be redrawn: open it, nudge the second link, and the
+first one is gone.
 
 Every gallery example therefore gives each exclusive branch its own output.
-It costs one card per branch and it is the only shape that survives being
-edited. Gallery ticket 13 carries the inconsistency.
+It costs one card per branch — an `output.formatted` carries no configuration
+worth duplicating — and it is the only shape that survives being edited.
+Gallery ticket 13 applied the same shape to the shipped `routed-qa` template,
+which had converged two branches onto one output since it was written.
 
 ## Branch ids are the wire; branch names are the vocabulary
 
