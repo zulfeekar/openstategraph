@@ -85,6 +85,50 @@ derivation, no reconciliation job.
 To rehearse without releasing, prepare `0.3.0rc1`: the train runs end to end,
 uploads to TestPyPI, rehearses, and stops. No approval is even requested.
 
+### What the rehearsal actually proves
+
+`scripts/clean_install_proof.sh` is the whole rehearsal, and it runs twice per
+release — once on the wheel this repository built, once on the wheel the index
+served. It answers two different questions, and it is worth knowing which is
+which before trusting a green run.
+
+**Packaging and wiring.** The wheel carries its package data — the editor
+bundle, `compile/port_specs.json`, every template, the examples including
+`sql-qa`'s database. Installed outside any checkout with `PYTHONPATH` empty,
+the templates scaffold, the examples copy with their mounts, `validate` and
+`graph` and `serve` work, paths resolve to the *project* rather than into
+`site-packages`, the runtime executes a compiled graph, and the editor, the
+customer chat and the API all answer under one origin.
+
+**Behaviour** (providers-and-credentials 05). Compiling and answering is not
+the same as answering *correctly*, and a green pytest run is silent about the
+difference: `pytest.ini` puts a workflow's `tools/` on `sys.path` in the
+checkout, so bindings resolve in-tree for a reason an adopter does not have.
+Six assertions, none of which needs a credential — *absent* and *wrong* are
+testable with no vendor account, and only *valid* is not:
+
+| Guarantee | Where it would break |
+| --- | --- |
+| Every name in `backend/tests/public_api.txt` imports from the installed package | a public symbol that exists in the source tree and is not shipped (build mode only) |
+| A package that arrived without its `tools/` fails `validate` with exit 1, naming the unbound types and the fix | a copied or exported document, which is the normal way one travels |
+| User-scoped memory refuses a run the server identified nobody for, and writes nothing | the shared-`anonymous` merge, where two strangers read each other's remembered facts |
+| `POST /api/runs` with `user_email` is a 422 | a client naming the person whose memory namespace it wants |
+| A missing provider key is a 200 carrying the variable to set, never a 500 and never a blank answer | the first thing a new adopter hits |
+| `GET /api/workflows/{slug}` round-trips into `PUT` unchanged | fetch, edit, put back — the first script a customer writes |
+
+The proof's server is started with every provider credential unset, so the
+credential assertion cannot pass by quietly calling a real vendor on a
+developer's machine. On this hardware the whole script takes about **37
+seconds** with the editor bundle already built, and several minutes when it has
+to run `npm ci && npm run build` first.
+
+**Still not covered**, so that nobody reads the table as exhaustive: the
+CLI-and-library half of `RunResult`'s failure/report split (a legally-empty run
+must exit 0), `openstategraph validate`'s exit 1 on a mount cycle, a saved
+`settings.recursionLimit` reaching the graph, and `ThreadSummary.failed` on the
+wire. Each needs either a run that produces a thread or a fixture the proof
+does not yet scaffold — `providers-and-credentials/06`.
+
 ### What to check before clicking approve
 
 The gate exists because a version number, once used on PyPI, is burned — a

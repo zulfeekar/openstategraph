@@ -335,6 +335,131 @@ case "$no_creds" in
 esac
 echo "    exited $code, naming the variable to set"
 
+# ---------------------------------------------------------------------------
+# BEHAVIOUR, NOT WIRING (providers-and-credentials ticket 05)
+#
+# Everything above proves the artifact is assembled: the files are in the
+# wheel, the paths resolve outside the checkout, the commands exit 0. None of
+# it asks whether the product still *behaves*. Every behaviour below is
+# covered by a unit test in the checkout and by nothing at all in the artifact
+# a stranger installs, and the two are not the same claim — `pytest.ini` puts a
+# workflow's `tools/` on `sys.path` in-tree, so a green suite is silent about
+# exactly the class of defect this file exists for.
+#
+# Credential-free by construction. The sibling ticket 03's framing is the rule:
+# *absent* and *wrong* are testable with no credential at all, and only *valid*
+# needs one. A proof that needs a vendor account is a proof that stops running.
+# ---------------------------------------------------------------------------
+
+# `backend/tests/public_api.txt` is the semver-public surface, snapshotted —
+# but the snapshot test runs against the source tree, so it is silent about a
+# name that exists in the checkout and is not SHIPPED. Build mode only: in
+# index mode the wheel is a released version and this checkout's snapshot may
+# legitimately describe a different one, and a proof that fails for being
+# ahead of the release is a proof people learn to ignore.
+if [ "$SOURCE" = "build" ]; then
+  echo "==> every name the public surface promises is importable from the wheel"
+  (cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/python" - \
+     "$REPO/backend/tests/public_api.txt" <<'SURFACE')
+import importlib
+import sys
+
+missing = []
+names = set()
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    dotted = line.split(" = ")[0].split(" ")[0]
+    module, _, attribute = dotted.rpartition(".")
+    names.add((module, attribute))
+
+for module, attribute in sorted(names):
+    try:
+        imported = importlib.import_module(module)
+    except Exception as exc:
+        missing.append(f"{module} does not import: {exc}")
+        continue
+    if not hasattr(imported, attribute):
+        missing.append(f"{module}.{attribute}")
+
+assert names, "the snapshot parsed to nothing — the parser, not the wheel"
+assert not missing, "the wheel does not ship what the public API promises: " + repr(missing)
+print(f"    {len(names)} public names, all present in the installed package")
+SURFACE
+fi
+
+echo "==> a package that travelled without its tools/ fails validate, from the wheel"
+# `d7b0473`. This is the assertion that would pass in-tree and fail from a
+# wheel, which is the valuable kind: in the checkout `pytest.ini` has already
+# put `workflows/chinook-assistant/tools` on `sys.path`, so the bindings
+# resolve for a reason the adopter does not have. A document arriving without
+# its package — a copy, an export, a colleague's file — is the normal case, and
+# `validate` is what a person runs on arrival.
+STRAYED="$PROJECT/strayed"
+rm -rf "$STRAYED"
+cp -R "$PROJECT/chinook-assistant" "$STRAYED"
+rm -rf "$STRAYED/tools"
+set +e
+(cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/openstategraph" validate strayed) \
+  >"$WORK/strayed.log" 2>&1
+code=$?
+set -e
+[ "$code" -eq 1 ] || {
+  echo "validate exited $code on an unresolvable tool binding, expected 1"
+  cat "$WORK/strayed.log"; exit 1; }
+grep -q "nothing in this installation implements" "$WORK/strayed.log" || {
+  echo "validate failed without naming the unimplemented tool type:"
+  cat "$WORK/strayed.log"; exit 1; }
+grep -q "tools/" "$WORK/strayed.log" || {
+  echo "the refusal does not say what to do about it:"
+  cat "$WORK/strayed.log"; exit 1; }
+rm -rf "$STRAYED"
+echo "    exited $code, naming the three unbound tool types and the fix"
+
+echo "==> user-scoped memory refuses a run the server identified nobody for"
+# providers-and-credentials ticket 01. The namespace is keyed on the principal
+# the *server* determined, and when it determined nobody there is nowhere to
+# put a fact about a person. This used to fold to a shared "anonymous"
+# namespace, which is a merge rather than a degradation: two strangers reading
+# each other's remembered facts, silently. Both directions, because a refusal
+# that also refuses an identified run proves nothing.
+run python -c "
+from langgraph.graph import StateGraph, START, END
+from langgraph.store.memory import InMemoryStore
+from typing_extensions import TypedDict
+
+from openstategraph.memory import USER_MEMORY_NAMESPACE, memory_tools
+
+save = {tool.name: tool for tool in memory_tools()}['save_memory']
+
+class State(TypedDict):
+    said: str
+
+builder = StateGraph(State)
+builder.add_node('remember', lambda state: {
+    'said': save.invoke({'fact': 'the user drinks tea', 'scope': 'user'})
+})
+builder.add_edge(START, 'remember')
+builder.add_edge('remember', END)
+store = InMemoryStore()
+graph = builder.compile(store=store)
+
+# Nobody identified: no principal resolver is configured, so the server put no
+# user_email in configurable.
+said = graph.invoke({'said': ''}, config={'configurable': {}})['said']
+assert said.startswith('NOT SAVED'), said
+assert not list(store.search((USER_MEMORY_NAMESPACE,))), 'it wrote somewhere anyway'
+
+# And the other direction, or the assertion above is satisfied by a scope that
+# never works.
+said = graph.invoke({'said': ''}, config={'configurable': {'user_email': 'a@b.c'}})['said']
+assert said == 'Remembered (user).', said
+spaces = [item.namespace for item in store.search((USER_MEMORY_NAMESPACE,))]
+assert spaces == [('memories', 'a@b_c')], spaces
+print('    anonymous -> NOT SAVED, nothing written; identified -> one namespace')
+"
+
 echo "==> the workflows root is the project's, never the interpreter's lib/"
 run python -c "
 from openstategraph.workflows_root import checkout_root, content_root, workflows_root
@@ -416,7 +541,16 @@ SERVE_LOG="$WORK/serve.log"
 # on one machine (a CI matrix, two developers, two sessions) would refuse each
 # other for a reason that has nothing to do with the wheel. A hermetic run
 # needs a hermetic state directory.
-(cd "$PROJECT" && exec env -u PYTHONPATH OPENSTATEGRAPH_STATE_DIR="$WORK/state" \
+# Every provider credential unset, deliberately (ticket 05). CI has none, so
+# this changes nothing there; a developer's shell has several, and the
+# behavioural section below asserts what a run does when the key is MISSING.
+# Inheriting a key would turn that assertion into a real vendor call — slow,
+# networked, and passing for the wrong reason on the one machine most likely
+# to run this by hand.
+(cd "$PROJECT" && exec env -u PYTHONPATH \
+  -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OLLAMA_API_KEY \
+  -u OLLAMA_HOST -u OLLAMA_ENDPOINT \
+  OPENSTATEGRAPH_STATE_DIR="$WORK/state" \
   "$VENV/bin/openstategraph" serve --port 0) \
   >"$SERVE_LOG" 2>&1 &
 SERVE_PID=$!
@@ -487,6 +621,82 @@ status, _ = get("/chat/mermaid.js")
 assert status == 200, f"/chat/mermaid.js returned {status} — the wheel lost its Mermaid"
 print("    /chat/mermaid.js  the flow view's Mermaid, from the wheel, no CDN")
 PY
+
+
+# ---------------------------------------------------------------------------
+# THE SAME SERVER, ASKED ABOUT BEHAVIOUR (providers-and-credentials ticket 05)
+#
+# The block above proves the four surfaces answer. This one proves they answer
+# *correctly*, on the three questions that are contract rather than wiring —
+# each one a single call against the server already running, and none of them
+# needing a credential. Ticket 05's original list, closed from the outside for
+# the first time.
+# ---------------------------------------------------------------------------
+echo "==> the server behaves, not merely answers"
+(cd "$PROJECT" && "$VENV/bin/python" - "$BASE" <<'BEHAVE') || { echo "--- serve log ---"; cat "$SERVE_LOG"; exit 1; }
+import json
+import sys
+import urllib.error
+import urllib.request
+
+base = sys.argv[1]
+
+
+def call(method, path, payload=None):
+    body = json.dumps(payload).encode() if payload is not None else None
+    request = urllib.request.Request(
+        base + path, data=body, method=method,
+        headers={"Content-Type": "application/json"} if body else {},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace")
+
+
+document = json.loads(
+    open("workflows/proof-minimal/workflow.json", encoding="utf-8").read()
+)
+
+# 1. The contract break. `user_email` was a field on `RunRequest`, typed into a
+#    box in /chat and copied into `configurable` unverified, where it keyed a
+#    per-person memory namespace — so any client could read and write any
+#    person's memories by naming them. It is `extra: forbid` now, and this is
+#    the one assertion that would have caught the break from the outside.
+status, body = call("POST", "/api/runs", {
+    "workflow": document, "question": "hi", "user_email": "someone@else.example",
+})
+assert status == 422, f"a client naming the person got {status}, not 422: {body[:300]}"
+assert "user_email" in body, body[:300]
+print("    /api/runs        422 — a client may not say who a run is for")
+
+# 2. A missing provider key is a diagnosis, not a 500 and not a silence. The
+#    customer surface gets a sentence it can act on; the developer audience
+#    gets the variable to set. Both halves, because a 200 whose developer
+#    channel is empty is the shape ticket 04 already had to fix once.
+status, body = call("POST", "/api/runs", {
+    "workflow": document, "question": "hi", "audience": "developer",
+})
+assert status == 200, f"a credential-less run returned {status}: {body[:300]}"
+answer = json.loads(body)
+warnings = " ".join((answer.get("developer") or {}).get("warnings") or [])
+assert "no credential" in warnings, f"no credential diagnosis: {warnings!r}"
+assert "OLLAMA_API_KEY" in warnings, f"the diagnosis names no variable: {warnings!r}"
+assert answer.get("answer"), "a failed run answered with nothing at all"
+print("    /api/runs        200 + the variable to set, not a 500 and not a blank")
+
+# 3. The body the API hands you is a body it takes back. A GET whose response
+#    a PUT rejects is a round trip that does not close, and every client that
+#    reads-modifies-writes a document rides on it.
+status, body = call("GET", "/api/workflows/proof-minimal")
+assert status == 200, f"GET returned {status}"
+fetched = json.loads(body)
+status, put = call("PUT", "/api/workflows/proof-minimal", fetched)
+assert status == 200, f"the API refused the body it just handed out: {status} {put[:300]}"
+assert json.loads(put)["document"] == fetched["document"], "the round trip changed it"
+print("    /api/workflows   GET -> PUT round-trips unchanged")
+BEHAVE
 
 kill "$SERVE_PID" 2>/dev/null || true
 wait "$SERVE_PID" 2>/dev/null || true
