@@ -4,7 +4,10 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
-import type { DraftRestoreReport } from './workflowDrafts';
+import {
+  supersedeDraftAfterHostWrite,
+  type DraftRestoreReport,
+} from './workflowDrafts';
 import {
   CURRENT_SLUG_KEY,
   forgetKnownSavedAt,
@@ -390,6 +393,11 @@ export async function writeOpenMountHostToDisk(
   if (!result.ok) return { kind: 'failed', reason: result.error };
 
   lastHostWritten.set(root, payload);
+  // **The parent's draft is now a lie** (`production-ready` 101). It was
+  // written when the parent was opened, before this drill-in existed, so it
+  // does not carry the override this call has just put in the file — and Back
+  // re-reads the file and then restores that draft over it.
+  supersedeDraftAfterHostWrite(root);
   // Adopt our own write as the new baseline. Forgetting it — what the class
   // path does — would disable the guard above from the second edit onwards,
   // and recording nothing would make every later write look like somebody

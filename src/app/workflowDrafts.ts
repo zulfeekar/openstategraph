@@ -1,6 +1,7 @@
 import type { Workbench } from './Workbench';
 import { subscribeOpenSlug } from './openWorkflow';
 import {
+  deleteWorkflow,
   moveWorkflow,
   readWorkflow,
   type KeyValueStore,
@@ -180,6 +181,50 @@ export function followOpenSubjectWithDraftKey(
     }
     onId(id);
   });
+}
+
+/**
+ * Drop this browser's draft of a package it has just written to disk itself —
+ * **`production-ready` 101**, and the one line between a saved override and a
+ * deleted one.
+ *
+ * ## What a draft means, and when it stops meaning it
+ *
+ * A draft is *this browser's unsaved edits to a package*. Drilling into a
+ * mount breaks that: the mount's overrides live on the **parent**, so a Save
+ * mount — and the drill-in's own autosave — write the parent's file while the
+ * parent is not the document on screen and has no editor of its own. From that
+ * instant the parent's draft is not unsaved work. It is a mirror of a version
+ * this browser has itself superseded, and `restoreDraftFor` will faithfully
+ * put it back over the file on the way out.
+ *
+ * That is exactly what it did. Measured with md5: Save mount inside `m2` wrote
+ * both overrides to `front-desk/workflow.json`, **← Back** re-read that file
+ * correctly, the draft written when the parent was first opened was restored
+ * over it, and `writeOpenWorkflowToDisk` — which writes documents *whole* —
+ * turned the absence in memory into a deletion on disk.
+ *
+ * ## Why a delete, and why not a timestamp
+ *
+ * Not a timestamp, because `restoreDraftFor` says at length why it compares
+ * canonical bytes and not clocks, and the clocks here belong to two different
+ * machines. *Which package this browser just wrote* needs no clock at all.
+ *
+ * A delete rather than a rewrite because the draft has nothing left to say:
+ * the host document that was just written is the file, and the next edit to
+ * the parent mints a fresh draft from it. Nothing recoverable is thrown away
+ * that the write itself had not already replaced — the host document is the
+ * one this browser loaded from that same file when the drill-in began.
+ *
+ * Called by **both** host writers, and that is the part a fix can get half
+ * right: `writeOpenMountHostToDisk` (the drill-in's autosave) and
+ * `saveWorkflow`'s instance branch (the Save mount button).
+ */
+export function supersedeDraftAfterHostWrite(
+  root: string,
+  store: KeyValueStore = browserStore(),
+): void {
+  deleteWorkflow(store, draftIdForSlug(root));
 }
 
 /** Whether this browser holds a draft for `subject` (a slug or an address). */

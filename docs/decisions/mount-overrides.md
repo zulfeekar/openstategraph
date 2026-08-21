@@ -82,6 +82,30 @@ edits the field as JSON with the same validation.
 > untested-by-change: two mounts of one package hold different overrides and
 > the package's bytes do not move.
 
+> **Back lost the override a second time, by a different route** (noted
+> 2026-08-21, `production-ready` 101). With the sink above in place the file
+> was correct — measured with md5, `front-desk/workflow.json` carried both
+> mounts' overrides and `music-analyst/workflow.json` never moved — and
+> pressing **← Back** still emptied `m2`'s override, on the canvas and then on
+> disk.
+>
+> Not the same defect wearing a new hat. `Back` re-reads the host from disk and
+> reads it correctly; what overwrote it was this browser's **draft** of the
+> parent, written by the act of opening the parent *before* the drill-in and
+> restored over the fresh file by `restoreDraftFor`. `writeOpenWorkflowToDisk`
+> writes documents whole, so the absence in memory became a deletion in the
+> file about ten seconds later.
+>
+> A draft means *this browser's unsaved edits to a package*, and it stops
+> meaning that the moment this same browser writes that package from somewhere
+> else — which is exactly what a mount save does, since the override lives on
+> the parent. `workflowDrafts.supersedeDraftAfterHostWrite` drops it, and
+> **both** host writers call it: the drill-in's autosave
+> (`writeOpenMountHostToDisk`) and the **Save mount** button
+> (`saveWorkflow`'s instance branch). Deliberately not a timestamp comparison
+> inside `restoreDraftFor` — that function compares canonical bytes and not
+> clocks on purpose, and the clocks here belong to two machines.
+
 ## Rejected alternatives
 
 - **Fork-on-configure** (copy the package per mount): kills the single source

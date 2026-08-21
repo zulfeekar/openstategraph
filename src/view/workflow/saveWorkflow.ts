@@ -5,7 +5,11 @@ import { getOpenAddress } from '@app/openAddress';
 import { isInstance } from '@core/model/MountAddress';
 import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { rememberDiskDocument } from '@app/diskAutosave';
-import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
+import {
+  adoptSlugForDraft,
+  currentDraftId,
+  supersedeDraftAfterHostWrite,
+} from '@app/workflowDrafts';
 import { duplicateNameConfirmation } from './consequences';
 
 /**
@@ -134,6 +138,11 @@ export async function saveWorkflow({
       mounts.rootDocument,
     );
     if (!written.ok) return { kind: 'refused', message: `Could not save: ${written.error}` };
+    // **The parent's draft is now a lie** (`production-ready` 101), the same
+    // reason and the same call as the drill-in's autosave in `diskAutosave`.
+    // Wiring only one of the two writers leaves Save-mount-then-Back losing
+    // the override exactly as before.
+    supersedeDraftAfterHostWrite(address.root);
     const row = await client.summary(address.root);
     recordKnownSavedAt(address.root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
     return { kind: 'overrides', root: address.root };
