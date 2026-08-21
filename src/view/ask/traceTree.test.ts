@@ -147,4 +147,33 @@ describe('buildTrace ownership (ticket 72)', () => {
     expect(trace).toHaveLength(1);
     expect(trace[0]!.children.map((c) => c.node)).toEqual(['model']);
   });
+  it('carries a skipped model call through the fold, on the grader row only', () => {
+    // `production-ready` 92, and both paths in one assertion on purpose: a
+    // fold that dropped the marker, and a fold that smeared it onto every
+    // row, are the two ways this stops being readable.
+    const trace = buildTrace([
+      row({ node: 'agent-sql', path: ['agent-sql'], output: 'Error: no such table' }),
+      row({
+        node: 'grader-sql',
+        path: ['grader-sql'],
+        check: 'error',
+        reason: 'The step failed: Error: no such table',
+      }),
+      row({ node: 'grader-doc', path: ['grader-doc'], output: 'A firm answer.' }),
+    ]);
+    expect(trace.map((s) => s.check ?? '')).toEqual(['', 'error', '']);
+    expect(trace[1]!.reason).toContain('no such table');
+  });
+
+  it("closes an opened grader row with the completion frame's judgement", () => {
+    // A grader whose own internal step arrived first opens the row; only the
+    // completion frame knows the verdict, so a fold that kept the opener's
+    // (empty) marker would render a judged row for a skipped model call.
+    const trace = buildTrace([
+      row({ node: 'model', internal: true, path: ['grader-sql'], durationMs: 1 }),
+      row({ node: 'grader-sql', path: ['grader-sql'], check: 'empty', reason: 'The answer is empty.' }),
+    ]);
+    expect(trace).toHaveLength(1);
+    expect(trace[0]!.check).toBe('empty');
+  });
 });

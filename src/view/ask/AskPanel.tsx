@@ -749,6 +749,11 @@ export function AskPanel({
                         activeNode: event.activeNode,
                         durationMs,
                         output: event.output,
+                        // A grader that reached its verdict without invoking a
+                        // model says so here (`production-ready` 92); empty on
+                        // every other frame.
+                        check: event.check,
+                        reason: event.reason,
                       },
                     ],
                   }

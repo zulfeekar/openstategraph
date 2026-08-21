@@ -584,6 +584,21 @@
   color: var(--color-text-quaternary);
 }
 
+/* Why a grader row was instant (`production-ready` 92) — see
+   `graderCheckLine`. Warning-toned rather than quaternary: the row it sits on
+   looks like a success and is reporting that no model was consulted, which is
+   the one thing a reader scanning durations cannot infer. Allowed to shrink
+   and ellipsize, because the reason is model prose of unbounded length and
+   the marker's presence is most of its value. */
+.ask__activity-check {
+  font: var(--type-caption);
+  color: var(--color-status-warning);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ask__trace-output {
   margin: var(--space-1) 0 var(--space-2) var(--space-4);
   padding: var(--space-1-5) var(--space-2);

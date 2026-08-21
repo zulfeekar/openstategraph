@@ -740,6 +740,10 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     "update": (
         "node", "namespace", "taskId", "internal",
         "activeNode", "path", "pathSlugs", "output",
+        # Optional, and a pair: a grader's own frame carries them when a
+        # deterministic check rejected the candidate before any model was
+        # invoked, and neither key at all otherwise (`production-ready` 92).
+        "check", "reason",
     ),
     "token": (
         "node", "namespace", "content", "block", "usage",
@@ -750,7 +754,7 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
         "activeNode", "path", "pathSlugs",
     ),
     "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
-    "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason"),
+    "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
     "done": (
         "threadId", "answer", "decisions", "outputs",
         "nested", "attempts", "mermaid", "developer",
@@ -1292,6 +1296,37 @@ def _run_frames(
                     output_id = update_path[-1] if update_path else node_id
                     for spawn in spawns.inspect(node_id, namespace, update, is_internal):
                         yield _sse("spawn", spawn)
+                    # Which of a grader's two paths this frame is
+                    # (`production-ready` 92). `BaseGrader.grade` rejects an
+                    # empty candidate, or one beginning
+                    # `Error`/`Traceback`/`Exception`, *before* reaching
+                    # `self.model.invoke` — 0.021 ms against two seconds for a
+                    # judged verdict — and until now the frame said nothing
+                    # about it, so a reader looking at a grader row that
+                    # returned instantly had only one available explanation and
+                    # it was the wrong one (ticket 84).
+                    #
+                    # Absent together, like `withheld` on a token frame, and
+                    # absence is the value: it says no deterministic check
+                    # fired, which covers both an ordinary pass and a model's
+                    # rejection. Only their presence is a claim.
+                    #
+                    # `reason` rides with it because `check` is an internal
+                    # token — an open set, since a subclass overriding
+                    # `deterministic_checks` names its own — so no client may
+                    # turn it into a sentence. The sentence is `reason`, which
+                    # the grader already wrote for a human reading a trace.
+                    # Cleaned like every other prose field on this frame.
+                    verdict_row = (update.get("verdicts") or {}).get(output_id)
+                    skipped_check: dict[str, str] = {}
+                    if isinstance(verdict_row, dict) and verdict_row.get("check"):
+                        skipped_check = {
+                            "check": str(verdict_row["check"]),
+                            "reason": _redact_for(audience)(
+                                _clean_output(str(verdict_row.get("reason") or ""))
+                            )
+                            or "",
+                        }
                     yield _sse(
                         "update",
                         {
@@ -1332,6 +1367,7 @@ def _run_frames(
                                     )
                                 )
                             ),
+                            **skipped_check,
                         },
                     )
             elif mode == "custom":
@@ -1543,6 +1579,18 @@ def _run_frames(
                             str((payload_value or {}).get("reason") or "")
                         )
                         or "",
+                        # And, when the judgement cost no model call, which
+                        # check made it (`production-ready` 92). Same door,
+                        # same fact as the trace's own row: a reviewer told
+                        # "the grader asked for a revision" deserves to know
+                        # whether a model formed that opinion. Present only
+                        # when one fired — `_upstream_verdict` omits the key
+                        # otherwise.
+                        **(
+                            {"check": str((payload_value or {}).get("check") or "")}
+                            if (payload_value or {}).get("check")
+                            else {}
+                        ),
                     }
                     if (payload_value or {}).get("verdict")
                     else {}

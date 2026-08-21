@@ -1545,14 +1545,24 @@ function renderInterrupt(el, d) {
   // rather than a neutral line implying a machine looked at it. The label is
   // the grader's real judgement, not the branch it routed down: at its attempt
   // cap a grader routes `pass` for an answer it rejected.
+  //
+  // `check` joins them when the grader reached that opinion without invoking a
+  // model at all — `deterministic_checks` rejects an empty candidate, or one
+  // beginning `Error`/`Traceback`/`Exception`, and returns before
+  // `self.model.invoke` (`production-ready` 92). A reviewer told the machine
+  // asked for a revision deserves to know whether a model formed that view.
+  // Word for word what the editor's own gate says (`graderVerdictLine.ts`) and
+  // what its trace row says (`graderCheckLine.ts`): one judgement reaching
+  // three surfaces must not be described three ways.
   const verdict = String(d.verdict || "");
   const reason = String(d.reason || "");
+  const skipped = String(d.check || "").trim() ? " without a model call" : "";
   const verdictLine = !verdict
     ? ""
     : verdict === "pass"
       ? "The grader passed this" + (reason ? " — " + esc(reason) : ".")
       : verdict === "revise"
-        ? "The grader asked for a revision" + (reason ? " — " + esc(reason) : ".")
+        ? "The grader asked for a revision" + skipped + (reason ? " — " + esc(reason) : ".")
         : esc(reason);
   box.innerHTML = `<p><b>Approval needed:</b> ${esc(d.message || "")}</p><div class="answer">${md(d.candidate || "")}</div>
     ${verdictLine ? `<p class="hitl__verdict">${verdictLine}</p>` : ""}

@@ -807,7 +807,9 @@ def _upstream_text(state: RunState, node_ids: list[str]) -> str:
 def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:
     """What the grader that produced this node's input thought of it.
 
-    `workflow-gallery` 32. Returns `{"verdict", "reason"}`, or an empty dict
+    `workflow-gallery` 32. Returns `{"verdict", "reason"}` — plus `check` when
+    a deterministic check rejected the candidate without a model call
+    (`production-ready` 92) — or an empty dict
     when no grader is immediately upstream — so a caller adds nothing rather
     than adding two empty keys, and a client can read absence as "no machine
     opinion exists" instead of "the machine had nothing to say".
@@ -830,7 +832,14 @@ def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:
     for node_id in node_ids:
         row = verdicts.get(node_id)
         if isinstance(row, dict) and row.get("verdict"):
-            return {"verdict": str(row["verdict"]), "reason": str(row.get("reason") or "")}
+            found = {"verdict": str(row["verdict"]), "reason": str(row.get("reason") or "")}
+            # Only when one actually fired. An empty `check` is the ordinary
+            # case — a model judged it — and a key present-but-empty would
+            # make a reviewer's client distinguish "" from absent to learn
+            # nothing (`production-ready` 92).
+            if row.get("check"):
+                found["check"] = str(row["check"])
+            return found
     return {}
 
 
@@ -2420,10 +2429,25 @@ class NodeRuntime:
                 # them deliberately (the reason explains the verdict to a human,
                 # the feedback is written for the agent that must retry), and a
                 # deterministic rejection fills only one of the two.
+                # `check` names *which* deterministic check rejected the
+                # candidate, and is empty for every model judgement — which is
+                # what makes the grader's two paths distinguishable downstream
+                # (`production-ready` 92). `Verdict.failed_check` had named it
+                # since the field was added and it was dropped here, so a
+                # rejection costing 0.021 ms and one costing two seconds
+                # produced byte-identical frames and ticket 84 spent a session
+                # plus a live model run establishing which had happened.
+                #
+                # The marker travels beside the reason rather than instead of
+                # it: the check name is an internal token an open set of
+                # subclasses may extend (`Grader` adds `no_figure`), so no
+                # reader may map it to a sentence — the sentence is `reason`,
+                # and `check` is only the fact that no model was asked.
                 "verdicts": {
                     node_id: {
                         "verdict": "pass" if verdict.passed else "revise",
                         "reason": verdict.reason or verdict.feedback,
+                        "check": verdict.failed_check,
                     }
                 },
             }

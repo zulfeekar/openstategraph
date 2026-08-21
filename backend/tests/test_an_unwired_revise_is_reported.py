@@ -67,6 +67,9 @@ class _StubGrader:
         # Declared on `Verdict`, and read by `_grader` since
         # `workflow-gallery` 32. A double stands in for the whole type.
         verdict.reason = "passed" if self.passed else "not good enough"
+        # And `failed_check` (`production-ready` 92) — empty, because this
+        # double stands in for a judgement, not a deterministic rejection.
+        verdict.failed_check = ""
         return verdict
 
 

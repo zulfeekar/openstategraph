@@ -24,18 +24,25 @@
 export function graderVerdictLine(approval: {
   readonly verdict: string;
   readonly reason: string;
+  readonly check?: string;
 }): string {
   const verdict = approval.verdict.trim();
   if (!verdict) return '';
   const reason = approval.reason.trim();
+  // The fourth rule, added by `production-ready` 92: a reviewer told the
+  // grader asked for a revision deserves to know whether a *model* formed
+  // that opinion, or whether a rule rejected the text without asking one.
+  // Same fact and same wording as the trace row — `graderCheckLine` — so the
+  // two doors onto one judgement cannot say different things.
+  const skipped = (approval.check ?? '').trim() ? ' without a model call' : '';
 
   if (verdict === 'pass') {
     return reason ? `The grader passed this — ${reason}` : 'The grader passed this.';
   }
   if (verdict === 'revise') {
     return reason
-      ? `The grader asked for a revision — ${reason}`
-      : 'The grader asked for a revision.';
+      ? `The grader asked for a revision${skipped} — ${reason}`
+      : `The grader asked for a revision${skipped}.`;
   }
   return reason;
 }

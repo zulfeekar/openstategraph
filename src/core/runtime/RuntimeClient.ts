@@ -221,6 +221,15 @@ export interface RunInterrupted {
   /** The grader's sentence explaining `verdict`. `''` alongside it. */
   readonly reason: string;
   /**
+   * Which deterministic check produced `verdict` without a model call
+   * (`production-ready` 92), or `''` when a model formed the opinion.
+   *
+   * Present only when one fired, so a reviewer told "the grader asked for a
+   * revision" can tell a judgement from a rule. Same fact, and the same
+   * wording, as the trace row — see `graderCheckLine`.
+   */
+  readonly check: string;
+  /**
    * The canvas node the run is parked on — the approval node itself.
    *
    * It never appears in an `update` frame, because `updates` reports a node
@@ -369,6 +378,22 @@ export type RunStreamEvent =
        * determined — "no claim", never "not you".
        */
       readonly pathSlugs: readonly string[];
+      /**
+       * Which deterministic check rejected this grader's candidate before any
+       * model was invoked (`production-ready` 92), or `''`.
+       *
+       * The server omits this and `reason` together on every other frame, and
+       * absence is the value: it says no deterministic check fired, which
+       * covers an ordinary pass and a model's own rejection alike. Only its
+       * presence is a claim — that `BaseGrader.grade` returned from
+       * `deterministic_checks` and `self.model.invoke` was never reached.
+       *
+       * Never captioned or looked up: the marker is an open set a subclass
+       * extends. `reason` is the sentence a reader is shown.
+       */
+      readonly check: string;
+      /** The grader's sentence for `check`. `''` alongside it. */
+      readonly reason: string;
     }
   | {
       readonly type: 'token';
@@ -924,6 +949,8 @@ export class RuntimeClient implements IRuntimeClient {
           activeNode: asString(payload['activeNode']) || asString(payload['node']),
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
+          check: asString(payload['check']),
+          reason: asString(payload['reason']),
         });
       } else if (eventName === 'progress') {
         onEvent({
@@ -985,6 +1012,7 @@ export class RuntimeClient implements IRuntimeClient {
           candidate: asString(payload['candidate']),
           verdict: asString(payload['verdict']),
           reason: asString(payload['reason']),
+          check: asString(payload['check']),
           node: asString(payload['node']),
         };
       } else if (eventName === 'done') {

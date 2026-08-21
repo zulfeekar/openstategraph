@@ -40,6 +40,10 @@ class _StubGrader:
             # the type it stands in for is a Liskov failure in the test, not
             # a reason to make the runtime defensive.
             reason = "the ceiling case"
+            # Likewise `failed_check` (`production-ready` 92): empty is the
+            # honest value for this double, which stands in for a model
+            # judgement rather than a deterministic rejection.
+            failed_check = ""
 
         verdict = _Verdict()
         verdict.feedback = self.feedback  # type: ignore[attr-defined]

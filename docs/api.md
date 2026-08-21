@@ -93,11 +93,11 @@ endpoints emit the identical vocabulary and one parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
-| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output` |
+| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
-| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate** |
+| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |
 
@@ -716,6 +716,35 @@ Three things about those two fields:
   sit upstream along a chain, no walk is made further back: a judgement of some
   earlier text captioning this text would be a confident wrong statement rather
   than a missing one.
+
+A third key, `check`, joins them when the grader reached that verdict **without
+invoking a model** (`production-ready` 92). `BaseGrader.grade` runs
+`deterministic_checks` first — an empty candidate, or one beginning
+`Error`/`Traceback`/`Exception` — and returns before `self.model.invoke`, at
+0.021 ms against 719-2024 ms for a judged verdict on a live run. Its value
+names the check that fired (`empty`, `error`, and whatever a subclass overriding
+`deterministic_checks` adds; the built-in `Grader` adds `no_figure`), so it is
+an **open set**: read its presence, never look its value up in a table. The
+sentence to show a reader is `reason`, which the grader wrote for exactly that.
+
+The same pair rides an `update` frame, which is what a trace is built from. A
+grader row that returned instantly used to have one available explanation and
+it was the wrong one — three such rows are why `production-ready/84` was filed
+as a broken timer, and the timer was right.
+
+```
+event: update
+data: {"node": "grader-sql", "namespace": [], "taskId": null, "internal": false,
+       "activeNode": "grader-sql", "path": ["grader-sql"], "pathSlugs": ["chinook-assistant"],
+       "output": "Error: no such table: Track",
+       "check": "error",
+       "reason": "The step failed: Error: no such table: Track"}
+```
+
+Absence carries the same meaning it does on the interrupt frame, and it is the
+one worth stating twice: no `check` means **no deterministic check fired**,
+which covers an ordinary pass *and* a model's own rejection. Only its presence
+is a claim.
 
 ### 5 — Answer the approval: `POST /api/runs/resume`
 

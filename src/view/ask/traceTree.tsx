@@ -3,6 +3,7 @@ import type { RunResult } from '@core/runtime/RuntimeClient';
 import { RichText } from '@view/common/RichText';
 import { traceStepKey } from './traceKeys';
 import { formatDuration } from './traceDuration';
+import { graderCheckLine } from './graderCheckLine';
 
 /**
  * The execution trace tree (ticket 63), extracted from AskPanel (ticket 72):
@@ -58,6 +59,14 @@ export interface ActivityRow {
    * announced a child worker or subagent. A first-class row, not an
    * anonymous internal-step tick — seeing the spawn moment is the point. */
   readonly spawn?: SpawnDetail;
+  /**
+   * A grader row only: which deterministic check rejected the candidate
+   * before any model was invoked (`production-ready` 92). Empty on every
+   * other row, and empty is the value — no deterministic check fired.
+   */
+  readonly check?: string;
+  /** The grader's sentence for `check`. Carried with it, never alone. */
+  readonly reason?: string;
 }
 
 export interface SpawnDetail {
@@ -73,6 +82,10 @@ export interface TraceNode {
   readonly durationMs: number;
   readonly output: string | null;
   readonly spawn?: SpawnDetail;
+  /** See `ActivityRow.check` — carried through the fold so the row can say
+   * that this grader skipped its model call. */
+  readonly check?: string;
+  readonly reason?: string;
   readonly children: readonly Omit<ActivityRow, 'internal'>[];
 }
 
@@ -150,6 +163,8 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
     durationMs: number;
     output: string | null;
     spawn?: SpawnDetail;
+    check?: string;
+    reason?: string;
     children: Omit<ActivityRow, 'internal'>[];
   }
   const tree: Mutable[] = [];
@@ -167,6 +182,10 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
       durationMs: row.durationMs,
       output: row.output,
       ...(row.spawn ? { spawn: row.spawn } : {}),
+      // Only when one fired. A key present-but-empty on every row would make
+      // a reader distinguish `''` from absent to learn nothing, and the
+      // exported trace JSON would carry two dead fields per step.
+      ...(row.check ? { check: row.check, reason: row.reason ?? '' } : {}),
       children: [],
     };
     tree.push(node);
@@ -209,6 +228,11 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
       // second, empty one directly beneath it.
       opened.durationMs += row.durationMs;
       opened.output = row.output ?? opened.output;
+      // The completion frame is the one that carries the judgement, and the
+      // row it closes was opened by an internal step that could not have
+      // known it (`production-ready` 92).
+      opened.check = row.check || opened.check;
+      opened.reason = row.reason || opened.reason;
       opened.taskId = opened.taskId ?? row.taskId;
       open.delete(key);
       last = opened;
@@ -284,6 +308,12 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
               <span className="ask__activity-ms">{formatDuration(step.durationMs)}</span>
               {step.children.length > 0 ? (
                 <span className="ask__activity-count">{step.children.length} steps</span>
+              ) : null}
+              {/* Why this grader row was instant — see `graderCheckLine`. It
+                  is empty for every judged verdict and for every non-grader
+                  row, so the span simply does not exist there. */}
+              {graderCheckLine(step) ? (
+                <span className="ask__activity-check">{graderCheckLine(step)}</span>
               ) : null}
             </summary>
             {step.children.map((child, childIndex) => (

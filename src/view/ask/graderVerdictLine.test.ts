@@ -32,4 +32,27 @@ describe('graderVerdictLine', () => {
       'something else happened',
     );
   });
+  it('tells a reviewer when no model formed the revision opinion', () => {
+    // `production-ready` 92: the gate is the second door onto one judgement,
+    // and it must not disagree with the trace row. Both paths here, because a
+    // card that reads the same either way is the same defect the trace had.
+    const judged = graderVerdictLine({
+      verdict: 'revise',
+      reason: "'if appropriate' is a hedge.",
+    });
+    const skipped = graderVerdictLine({
+      verdict: 'revise',
+      reason: 'The answer is empty.',
+      check: 'empty',
+    });
+    expect(judged).toBe("The grader asked for a revision — 'if appropriate' is a hedge.");
+    expect(skipped).toBe('The grader asked for a revision without a model call — The answer is empty.');
+    expect(skipped).not.toBe(judged);
+  });
+
+  it('keeps the clause when the reason is missing', () => {
+    expect(graderVerdictLine({ verdict: 'revise', reason: '', check: 'empty' })).toBe(
+      'The grader asked for a revision without a model call.',
+    );
+  });
 });
