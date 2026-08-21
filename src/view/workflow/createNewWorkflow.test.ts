@@ -6,6 +6,7 @@ import {
   BLANK_TEMPLATE,
   createNewWorkflow,
   defaultWorkflowName,
+  discardDeclined,
   discardWarning,
 } from './createNewWorkflow';
 
@@ -144,6 +145,57 @@ describe('discardWarning', () => {
   });
 
   it('counts one node in the singular', () => {
-    expect(discardWarning({ name: 'Untitled', nodeCount: 1, saved: false })).toContain('1 node');
+    // The verb agrees too, or the commonest case reads "its 1 node live".
+    expect(discardWarning({ name: 'Untitled', nodeCount: 1, saved: false })).toContain(
+      '1 node lives',
+    );
+    expect(discardWarning({ name: 'Untitled', nodeCount: 2, saved: false })).toContain(
+      '2 nodes live',
+    );
+  });
+});
+
+/**
+ * `say-it-on-the-surface` 02 — **the fifth path**.
+ *
+ * The ticket's audit closed four refusals and predicted this one: *"if the
+ * answer is 'nothing at all', the remaining bug is a fifth path this audit did
+ * not find."* It was found by reproducing the owner's own sentence — *"why is
+ * it not able to add another workflow?"* — in the browser: draw a node on a
+ * never-saved document, press **New**, decline the discard confirm, and the
+ * editor does nothing and says nothing.
+ *
+ * It is the same defect `saveWorkflow`'s duplicate-name confirm had, in the
+ * same shape, on the gesture next door: `if (!confirm(...)) return;`. And it is
+ * worse in the case nobody chooses, for the reason recorded there — a browser
+ * that suppresses dialogs answers "no" on the user's behalf, so **New** simply
+ * appears broken to someone who was never asked anything.
+ *
+ * The standard is the one the ticket set: *a refusal is audible on the gesture
+ * that was refused* — and each names itself, rather than four rules sharing one
+ * generic sentence.
+ */
+describe('discardDeclined', () => {
+  it('says the new workflow was not started, and that nothing was lost', () => {
+    const message = discardDeclined({ name: 'Untitled', nodeCount: 3, saved: false });
+    expect(message).toContain('Untitled');
+    // What was refused — in the words of the gesture that was refused.
+    expect(message).toContain('New');
+    // The reassurance is the substance: the fear this confirm exists to serve
+    // is losing the work, so the answer has to say the work is still there.
+    expect(message).toContain('3 nodes');
+  });
+
+  it('counts one node in the singular, as the warning it answers does', () => {
+    expect(discardDeclined({ name: 'Untitled', nodeCount: 1, saved: false })).toContain(
+      '1 node is untouched',
+    );
+    expect(discardDeclined({ name: 'Untitled', nodeCount: 3, saved: false })).toContain(
+      '3 nodes are untouched',
+    );
+  });
+
+  it('tells the user what to do instead', () => {
+    expect(discardDeclined({ name: 'Untitled', nodeCount: 2, saved: false })).toContain('Save');
   });
 });

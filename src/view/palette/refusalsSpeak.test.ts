@@ -33,6 +33,8 @@ const read = (relative: string) =>
 
 const palette = read('./Palette.tsx');
 const saving = read('../workflow/saveWorkflow.ts');
+const shell = read('../AppShell.tsx');
+const manager = read('../workflow/WorkflowManager.tsx');
 
 describe('every way to refuse a workflow', () => {
   it('speaks when a package row refuses a mount — on both gestures', () => {
@@ -59,6 +61,23 @@ describe('every way to refuse a workflow', () => {
     // than obeyed — and a browser that suppresses dialogs answers "no" for you.
     expect(saving).toMatch(/case 'cancelled':/);
     expect(saving).toContain('Not saved — that would have created a second workflow');
+  });
+
+  it('speaks when New is asked for and then not done — on both surfaces', () => {
+    // **The fifth path**, and the one this ticket's audit predicted it would
+    // find: *"if the answer is 'nothing at all', the remaining bug is a fifth
+    // path this audit did not find."* Reproduced from the owner's own sentence
+    // — a node on a never-saved document, press New, decline, and the editor
+    // neither adds a workflow nor says why.
+    //
+    // Both New buttons had the identical `if (!confirm(warning)) return;` that
+    // `saveWorkflow`'s duplicate-name confirm had before it was given a voice,
+    // so both are pinned. A bare return after a declined confirm is the shape
+    // to watch for.
+    for (const surface of [shell, manager]) {
+      expect(surface).toContain('discardDeclined(subject)');
+      expect(surface).not.toMatch(/!(?:window\.)?confirm\(warning\)\) return;/);
+    }
   });
 
   it('keeps the greyed row firing events, because silence is the failure mode', () => {

@@ -110,10 +110,54 @@ export interface DiscardSubject {
  */
 export function discardWarning(subject: DiscardSubject): string | null {
   if (subject.saved || subject.nodeCount === 0) return null;
-  const nodes = subject.nodeCount === 1 ? '1 node' : `${subject.nodeCount} nodes`;
   return (
     `Start a new workflow?\n\n` +
-    `“${subject.name}” has never been saved, so its ${nodes} live in this browser only. ` +
+    `“${subject.name}” has never been saved, so its ${countedNodes(subject)} ` +
+    `${subject.nodeCount === 1 ? 'lives' : 'live'} in this browser only. ` +
     `Starting a new one discards them.`
+  );
+}
+
+/**
+ * `3 nodes`, or `1 node`. Shared so the question and its answer agree.
+ *
+ * The count is singular often enough to matter — one node on a never-saved
+ * canvas is the commonest way into the warning at all — so both sentences take
+ * their verb from `nodeCount` too, rather than reading "its 1 node live".
+ */
+function countedNodes(subject: DiscardSubject): string {
+  return subject.nodeCount === 1 ? '1 node' : `${subject.nodeCount} nodes`;
+}
+
+/**
+ * What to say when the discard warning above is answered "no" — the toast for a
+ * **New** that was asked for and then not done.
+ *
+ * `say-it-on-the-surface` 02, and the fifth refusal path its own audit
+ * predicted. That audit closed four ways to refuse a workflow and set the
+ * standard they now meet: *a refusal is audible on the gesture that was
+ * refused*. Both **New** buttons — the toolbar's and the panel's — guarded
+ * themselves with `if (!confirm(warning)) return;` and said nothing, which is
+ * the exact defect `saveWorkflow`'s duplicate-name confirm had before that
+ * ticket gave it a `cancelled` outcome and a sentence.
+ *
+ * It reproduces the owner's report literally: draw one node, press **New**,
+ * answer no, and the editor neither adds a workflow nor explains why — *"why
+ * is it not able to add another workflow?"*. And it is worst in the case
+ * nobody chooses, for the reason recorded on the save path: a browser that
+ * suppresses dialogs answers "no" for you, so **New** looks broken to a user
+ * who was never asked anything.
+ *
+ * The sentence names *this* refusal rather than joining a generic chorus — the
+ * ticket's complaint was ambiguity between the rules, so four refusals sharing
+ * one voice would be the same defect in a new costume. The reassurance carries
+ * it: the fear the confirm exists to serve is losing the work, so the answer
+ * says the work is still there.
+ */
+export function discardDeclined(subject: DiscardSubject): string {
+  return (
+    `Still on “${subject.name}” — New was cancelled, so its ${countedNodes(subject)} ` +
+    `${subject.nodeCount === 1 ? 'is' : 'are'} untouched. ` +
+    `Save this one to give it a folder, then press New again.`
   );
 }

@@ -30,7 +30,12 @@ import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
-import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './workflow/createNewWorkflow';
+import {
+  BLANK_TEMPLATE,
+  createNewWorkflow,
+  discardDeclined,
+  discardWarning,
+} from './workflow/createNewWorkflow';
 import { saveMessage, saveSucceeded, saveWorkflow } from './workflow/saveWorkflow';
 import './AppShell.css';
 
@@ -321,12 +326,18 @@ export function AppShell() {
    * the one the panel calls — this is a gesture, not a second implementation.
    */
   const startNewWorkflow = useCallback(async () => {
-    const warning = discardWarning({
+    const subject = {
       name: workbench.model.name,
       nodeCount: workbench.model.nodeCount,
       saved: getOpenSlug() !== null,
-    });
-    if (warning !== null && !window.confirm(warning)) return;
+    };
+    const warning = discardWarning(subject);
+    if (warning !== null && !window.confirm(warning)) {
+      // `say-it-on-the-surface` 02: a refusal is audible on the gesture that
+      // was refused. A bare `return` here is what made New look broken.
+      notify(discardDeclined(subject));
+      return;
+    }
     const outcome = await createNewWorkflow(
       { name: '', template: BLANK_TEMPLATE },
       workbench.controller,

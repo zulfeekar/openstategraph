@@ -36,7 +36,12 @@ import {
 import { clearDrillStack } from '@app/drillStack';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
 import { saveMessage, saveSucceeded, saveWorkflow } from './saveWorkflow';
-import { BLANK_TEMPLATE, createNewWorkflow, discardWarning } from './createNewWorkflow';
+import {
+  BLANK_TEMPLATE,
+  createNewWorkflow,
+  discardDeclined,
+  discardWarning,
+} from './createNewWorkflow';
 import {
   deleteConfirmation,
   deletedMessage,
@@ -169,12 +174,18 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const handleNewWorkflow = useCallback(async () => {
     // The same guard the toolbar's New uses, and for the same reason: this
     // replaces the open document, and a never-saved one exists nowhere else.
-    const warning = discardWarning({
+    const subject = {
       name: workbench.model.name,
       nodeCount: workbench.model.nodeCount,
       saved: getOpenSlug() !== null,
-    });
-    if (warning !== null && !confirm(warning)) return;
+    };
+    const warning = discardWarning(subject);
+    if (warning !== null && !confirm(warning)) {
+      // Same sentence as the toolbar's New, from the same function — one
+      // refusal with one voice, on whichever surface asked (`say-it-on-the-surface` 02).
+      onNotify(discardDeclined(subject));
+      return;
+    }
 
     setBusy(true);
     // The act itself is `createNewWorkflow`, shared with the toolbar — the
