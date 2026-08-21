@@ -5,7 +5,7 @@ read it. So the natural thing produced the worst possible answer:
 
     $ openstategraph run ./workflows/demo "hi" --model anthropic:claude-opus-5
     MissingProviderKey: Provider "anthropic" has no credential —
-      set ANTHROPIC_API_KEY in .env (see .env.example).
+      set ANTHROPIC_API_KEY in .env (see `openstategraph env-example`).
 
 A closed loop: the error names the action the user has already taken. Good copy
 pointing at a mechanism that did not exist.

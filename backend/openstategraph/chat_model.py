@@ -6,8 +6,8 @@ all:
 
 1. **The credential gate.** A named provider with no credential fails here with
    the exact fix, rather than raising the vendor SDK's own error — which names
-   *its* environment variable and knows nothing about our `.env.example`, so an
-   adopter had to work out the two were the same thing.
+   *its* environment variable and knows nothing about `openstategraph
+   env-example`, so an adopter had to work out the two were the same thing.
 2. **The endpoint.** `ProviderSpec.base_url` decides where the request goes.
    Without this, `ollama.Client` silently dialled `127.0.0.1:11434` — which is
    how "Ollama means cloud, never local" was violated by omission.

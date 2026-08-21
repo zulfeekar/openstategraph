@@ -242,7 +242,8 @@ class ProviderSpec:
             return f'Provider "{self.name}" needs no key.'
         return (
             f'Provider "{self.name}" has no credential — '
-            f"set {self.credential_variables} in .env (see .env.example)."
+            f"set {self.credential_variables} in .env "
+            f"(see `openstategraph env-example`)."
         )
 
     @property

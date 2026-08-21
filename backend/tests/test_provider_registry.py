@@ -368,15 +368,26 @@ class TestOllamaHasTwoWaysToBeConfigured:
         """
         message = self._ollama().missing_key_message()
         assert "OLLAMA_API_KEY or OLLAMA_HOST" in message
-        assert message.endswith("in .env (see .env.example).")
+        assert message.endswith("in .env (see `openstategraph env-example`).")
 
     def test_a_single_variable_provider_still_reads_naturally(self) -> None:
         spec = provider_catalogue().get("anthropic")
         assert spec is not None
         assert spec.missing_key_message() == (
             'Provider "anthropic" has no credential — '
-            "set ANTHROPIC_API_KEY in .env (see .env.example)."
+            "set ANTHROPIC_API_KEY in .env (see `openstategraph env-example`)."
         )
+
+    def test_the_message_points_at_a_command_not_a_file(self) -> None:
+        """Ticket 39: `.env.example` is a file in this checkout, not in the
+
+        wheel and not in a customer's project — a pip-installed customer has
+        nowhere to look. `openstategraph env-example` works from a wheel and
+        is what `openstategraph init` already recommends running.
+        """
+        message = self._ollama().missing_key_message()
+        assert ".env.example" not in message
+        assert "openstategraph env-example" in message
 
     def test_an_unconfigured_ollama_now_produces_a_diagnosis(self) -> None:
         """It used to return `None`: a keyless provider cannot lack a key."""

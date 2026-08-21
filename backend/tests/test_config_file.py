@@ -621,9 +621,14 @@ class TestPrecedence:
 
 
 class TestAMissingKeyIsLoud:
-    def test_it_names_the_variable_and_the_example_file(
+    def test_it_names_the_variable_and_a_command_a_wheel_install_has(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Ticket 39: `.env.example` is a file in this checkout, absent from
+
+        the wheel and from a customer's project, so the message points at
+        `openstategraph env-example` instead — a command, not a file.
+        """
         from openstategraph.providers import provider_catalogue
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -633,7 +638,8 @@ class TestAMissingKeyIsLoud:
         message = spec.missing_key_message()
         assert "ANTHROPIC_API_KEY" in message
         assert ".env" in message
-        assert ".env.example" in message
+        assert ".env.example" not in message
+        assert "openstategraph env-example" in message
 
     def test_the_diagnosis_fires_for_a_model_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from openstategraph.providers import missing_key_diagnosis

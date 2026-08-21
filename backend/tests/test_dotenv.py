@@ -5,7 +5,7 @@ placed in `.env` was never read, and the resulting message told the user to do
 the thing they had just done.
 
     MissingProviderKey: Provider "anthropic" has no credential —
-      set ANTHROPIC_API_KEY in .env (see .env.example).
+      set ANTHROPIC_API_KEY in .env (see `openstategraph env-example`).
 
 A closed loop. Good copy pointing at a mechanism that did not exist.
 """
