@@ -90,6 +90,39 @@ class TestKnowledgeLookupTool:
         assert not result.ok
         assert result.error is not None and "second brain" in result.error.lower()
 
+    def test_omitting_the_topic_returns_the_index_tier_successfully(
+        self, tmp_path: Path
+    ) -> None:
+        """The free index tier has an honest first-class call — no topic asked
+        for, no error raised — rather than being reachable only by naming a
+        topic that does not exist and reading the menu out of the miss."""
+        tool = KnowledgeLookupTool(package_dir=_package(tmp_path))
+        result = tool.run(topic="")
+        assert result.ok
+        assert result.error is None
+        assert "album" in result.content and "track" in result.content
+
+    def test_an_empty_topic_is_the_same_call_as_no_topic_at_all(self, tmp_path: Path) -> None:
+        tool = KnowledgeLookupTool(package_dir=_package(tmp_path))
+        assert tool.run().content == tool.run(topic="").content
+
+    def test_the_index_reply_carries_the_hints_same_as_the_miss_menu(
+        self, tmp_path: Path
+    ) -> None:
+        tool = KnowledgeLookupTool(package_dir=_package(tmp_path))
+        index_reply = tool.run(topic="").content
+        miss_reply = tool.run(topic="nope").error
+        assert miss_reply is not None
+        for line in ("- album — album", "- track — track"):
+            assert line in index_reply
+            assert line in miss_reply
+
+    def test_the_index_call_on_an_empty_store_still_succeeds(self, tmp_path: Path) -> None:
+        (tmp_path / "bare").mkdir()
+        result = KnowledgeLookupTool(package_dir=tmp_path / "bare").run(topic="")
+        assert result.ok
+        assert "second brain" in result.content.lower()
+
 
 class TestRegistryWiring:
     def test_the_open_workflows_registry_binds_its_own_knowledge_dir(self, tmp_path: Path) -> None:

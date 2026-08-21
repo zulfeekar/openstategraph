@@ -27,7 +27,13 @@ from openstategraph.knowledge import PackageKnowledge, UnknownTopicError
 class KnowledgeLookupArgs(BaseModel):
     model_config = {"extra": "forbid"}
     topic: str = Field(
-        description="The topic to look up — usually an exact table name."
+        default="",
+        description=(
+            "The topic to look up — usually an exact table name. Omit it, "
+            "or pass an empty string, to get the free index tier: every "
+            "topic name with its one-line hint, at no cost of a wrong "
+            "guess."
+        ),
     )
 
 
@@ -39,7 +45,10 @@ class KnowledgeLookupTool(BaseTool):
     description = (
         "Before querying a table, look up its knowledge: business meaning, "
         "column semantics, JOIN rules, and caveats. Pass the table name as "
-        "the topic. An unknown topic returns the list of available topics."
+        "the topic. Call with no topic (or an empty topic) first to see the "
+        "free index of every topic and its one-line hint — this always "
+        "succeeds, even when nothing has been indexed yet. An unknown named "
+        "topic also returns the list of available topics."
     )
     Args = KnowledgeLookupArgs
 
@@ -67,22 +76,42 @@ class KnowledgeLookupTool(BaseTool):
                 "No workflow package is bound — knowledge lookup only works "
                 "for a saved, open workflow."
             )
+        if not args.topic.strip():
+            return self._index_reply()
         try:
             return ToolResult(content=self._knowledge.lookup(args.topic))
         except UnknownTopicError as exc:
             if not exc.available:
-                return ToolResult.failure(
-                    "This workflow has no knowledge docs yet. Use 'Build "
-                    "second brain' on the Knowledge node (or add "
-                    "knowledge/<topic>.md files) to create them."
-                )
-            listing = "\n".join(
-                f"- {entry.name} — {entry.hint}" if entry.hint else f"- {entry.name}"
-                for entry in exc.available
-            )
+                return ToolResult.failure(self._no_docs_yet_message())
             return ToolResult.failure(
-                f"No knowledge for topic '{args.topic}'. Available topics:\n{listing}"
+                f"No knowledge for topic '{args.topic}'. Available topics:\n"
+                f"{self._listing(exc.available)}"
             )
+
+    def _index_reply(self) -> ToolResult:
+        """The free index tier, asked for directly — a first-class call that
+        always succeeds, unlike the miss-menu it shares its formatting with.
+        """
+        assert self._knowledge is not None
+        topics = self._knowledge.topics()
+        if not topics:
+            return ToolResult(content=self._no_docs_yet_message())
+        return ToolResult(content=f"Available topics:\n{self._listing(topics)}")
+
+    @staticmethod
+    def _listing(entries: list[Any]) -> str:
+        return "\n".join(
+            f"- {entry.name} — {entry.hint}" if entry.hint else f"- {entry.name}"
+            for entry in entries
+        )
+
+    @staticmethod
+    def _no_docs_yet_message() -> str:
+        return (
+            "This workflow has no knowledge docs yet. Use 'Build second "
+            "brain' on the Knowledge node (or add knowledge/<topic>.md "
+            "files) to create them."
+        )
 
 
 def knowledge_lookup_for(

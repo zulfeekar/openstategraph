@@ -133,8 +133,15 @@ gets its index line for free by starting with one sentence.
 **The badge.** `[yours]` — no marker, hand-owned, never regenerated.
 `[generated: <builder>]` — owned by that builder. `STALE` — see §4.
 
-Then check the miss path, because it is the one an agent hits first — it will
-guess a topic name before it guesses right:
+**Reaching the index does not require missing first.** `knowledge_lookup`
+called with no topic (or an empty one) returns the same listing directly and
+succeeds — a first-class call, not a side effect of guessing wrong. That is
+what the tool's own description tells a model to do before it guesses a topic
+name at all; gallery ticket 29 fixed the gap where the only route was through
+an `Error:`.
+
+Check the miss path too, because a wrong *named* guess is still the common
+case in practice and must still answer with the same menu:
 
 ```bash
 python3 -c "

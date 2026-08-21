@@ -59,7 +59,9 @@ Recorded 2026-08-15 on `ollama:gpt-oss:120b-cloud`, ~6s:
 
 Both figures are correct and both are unguessable. The tool calls are visible
 in the recording — `openstategraph threads show <thread-id>` replays it without
-calling a model or a tool:
+calling a model or a tool. That recording predates gallery ticket 29's fix and
+is kept below for its historical shape, but no longer matches what a fresh run
+produces:
 
 ```
 tool: Error: No knowledge for topic ''. Available topics:
@@ -68,11 +70,17 @@ tool: Error: No knowledge for topic ''. Available topics:
 tool: Viability testing — how often a lot is germination-tested, …
 ```
 
-Two calls: the index, then the topic. Which is the shape the design intends —
-and note how the index arrives. **The free index tier is delivered as an
-`Error:`**, because the only way to ask for it is to look up a topic that is
-not there. It worked here; a weaker model that treats "Error" as a dead end
-would stop instead of reading the menu. Gallery ticket 29.
+Two calls: the index, then the topic — that shape is unchanged, and the
+system prompt still says "call it with no topic to see the index of topics"
+because that is still the right instruction. What changed is how the first
+call arrives: it used to be the only way to reach the index was to name a
+topic that does not exist and read the menu out of the miss, so a call that
+was actually correct usage came back marked `Error:`. Since ticket 29, an
+empty (or omitted) topic is a first-class call that succeeds —
+`Available topics:\n- accessions — …` — and stays reachable even against a
+knowledge store with no docs yet. A wrong *named* topic still fails and still
+carries the same menu; only the deliberate index request stopped being
+spelled as a failure.
 
 ## Pairs with example 8
 
