@@ -85,6 +85,48 @@ describe('compositionSurface', () => {
     }
   });
 
+  it('does not count a child entry that pins nothing', () => {
+    // `{}` is not a customisation, and neither is a child id whose field map
+    // is empty — both are what a cleared override leaves behind, and a card
+    // reading `· 1 overridden` over them would claim a pin that no longer
+    // exists. `MountContext.clearOverride` prunes these on the write side; the
+    // card must not depend on that, because the field is a raw JSON textarea
+    // (`organisms-first-class/12`) and a person can type either by hand.
+    expect(compositionSurface({ slug: 'x', state: READY, overrides: '{}' })?.overridden).toBe(0);
+    expect(
+      compositionSurface({ slug: 'x', state: READY, overrides: '{"agent1": {}}' })?.overridden,
+    ).toBe(0);
+    expect(
+      compositionSurface({
+        slug: 'x',
+        state: READY,
+        overrides: '{"agent1": {}, "grader1": {"criteria": "- stricter"}}',
+      })?.overridden,
+    ).toBe(1);
+  });
+
+  it('counts a nested mount only when something below it is actually pinned', () => {
+    // A mount inside a mount stores its instance state under `overrides`
+    // again, and at that level it is legitimately a JSON *string*
+    // (`MountContext.readOverridesField`). An empty one is a container, not a
+    // customisation.
+    expect(
+      compositionSurface({
+        slug: 'x',
+        state: READY,
+        overrides: '{"m1": {"overrides": "{\\"agent1\\": {\\"model\\": \\"y\\"}}"}}',
+      })?.overridden,
+    ).toBe(1);
+    expect(
+      compositionSurface({ slug: 'x', state: READY, overrides: '{"m1": {"overrides": {}}}' })
+        ?.overridden,
+    ).toBe(0);
+    expect(
+      compositionSurface({ slug: 'x', state: READY, overrides: '{"m1": {"overrides": "{}"}}' })
+        ?.overridden,
+    ).toBe(0);
+  });
+
   it('stays silent about overrides it cannot parse', () => {
     expect(compositionSurface({ slug: 'x', state: READY, overrides: '{oops' })?.overridden).toBe(0);
     expect(compositionSurface({ slug: 'x', state: READY, overrides: '[1,2]' })?.overridden).toBe(0);

@@ -128,16 +128,51 @@ function noteFor(state: MountDocumentState, slug: string): string {
  * rather than guessing.
  */
 function overriddenCount(raw: string): number {
-  const text = raw.trim();
-  if (!text) return 0;
+  const blob = readBlob(raw);
+  if (!blob) return 0;
+  return Object.values(blob).filter(pinsSomething).length;
+}
+
+/**
+ * An object, or `null` for anything this card will not guess at.
+ *
+ * A blob may legitimately arrive as a JSON **string** at any nesting level —
+ * `commit()` writes one and `apply_mount_overrides` reads one — so a string is
+ * parsed rather than dismissed. Malformed JSON is the inspector validator's
+ * problem; this stays silent rather than guessing.
+ */
+function readBlob(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return Object.keys(parsed).length;
-    }
+    return readBlob(JSON.parse(value));
   } catch {
     // Not JSON yet — the author is mid-keystroke, or the inspector is already
     // showing them the error. Either way the card does not pile on.
+    return null;
   }
-  return 0;
+}
+
+/**
+ * Whether one child id's entry actually pins anything.
+ *
+ * **An empty entry is not a customisation**, and the distinction is the whole
+ * point of the badge: `{"agent1": {}}` and `{"m1": {"overrides": {}}}` are what
+ * a cleared override leaves behind, and a card counting them would report a pin
+ * against a field that follows the package. `MountContext.clearOverride` prunes
+ * them on the write side and says so — but the card must not lean on that,
+ * because `OVERRIDES_FIELD` is a raw JSON textarea
+ * (`organisms-first-class/12`), so either shape can be typed by hand.
+ *
+ * A nested mount recurses: its own `overrides` is the only key it carries, so
+ * asking "is it non-empty" one level down is asking the same question again.
+ */
+function pinsSomething(entry: unknown): boolean {
+  const fields = readBlob(entry);
+  if (!fields) return false;
+  return Object.entries(fields).some(([key, value]) =>
+    key === 'overrides' ? pinsSomething(value) : true,
+  );
 }

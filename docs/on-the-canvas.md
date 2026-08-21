@@ -106,6 +106,15 @@ second one.
   package are untouched.
 - The editor shows you which fields you have overridden, and offers a revert
   that puts the package's own value back.
+- **From outside, the mount card says so too.** A mount that pins anything
+  reads `· n overridden` beside its census, where *n* is how many of the
+  child's nodes this instance has pinned; a mount that follows the package
+  says nothing extra. That is what lets one glance at a parent canvas answer
+  *which of these follow the package, and which are pinned* — the exception to
+  the by-reference promise is visible without opening each one. The count is
+  read from the mount's own data, so it is still right when the runtime is
+  unreachable and the census is not; overrides that will not parse are left to
+  the inspector's validator and count as nothing rather than as a guess.
 
 So one saved workflow is a **class**, and each mount of it is an **instance**
 with its own settings. Two mounts of one package are two independent instances.
