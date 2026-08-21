@@ -295,24 +295,33 @@ found rather than querying again. That is a real LangGraph thread underneath —
 the graph's `messages` channel accumulates in it — not a transcript the panel
 re-sends.
 
-A conversation lasts until one of three things ends it, and **New** in the
-panel header is the one you press on purpose:
+**The Run button is the same conversation.** Typing into the Input node on the
+canvas and pressing Run is one door onto this panel, and the composer is the
+other — a question asked either way continues what the other one started. That
+includes closing the panel: it stops the runs it was showing, but the
+conversation is the workflow's, not the panel's, so reopening it comes back to
+the transcript and the thread you left.
 
-- **New** — the next question starts fresh. The transcript stays where it is,
-  with a `New conversation` rule drawn across the thread, because a run's trace
-  is evidence: starting over should not also delete what the last conversation
-  showed you.
-- **Opening a different workflow** starts one for you. LangGraph's checkpointer
-  is keyed by thread id alone, so carrying one across documents would replay the
-  previous workflow's history into a different graph.
-- **Reloading the editor** starts one. The panel deliberately does *not* persist
-  its thread, and this is where it differs from `/chat`, which does. The
-  transcript is not persisted either — so restoring the id alone would leave you
-  in a conversation whose earlier turns exist on the server and nowhere on
-  screen, which is an answer with an invisible antecedent. In an editor a reload
-  usually follows an *edit*, and the checkpointed history belongs to the graph as
-  it was. `/chat` runs a published workflow nobody is editing, so persisting is
-  right there and would be wrong here.
+A conversation lasts until one of two things ends it, and **New** in the panel
+header is the one you press on purpose:
+
+- **New** — the next question starts fresh, from either door. The transcript
+  stays where it is, with a `New conversation` rule drawn across the thread,
+  because a run's trace is evidence: starting over should not also delete what
+  the last conversation showed you.
+- **Opening a different workflow** puts you in that workflow's own
+  conversation. LangGraph's checkpointer is keyed by thread id alone, so
+  carrying one across documents would replay the previous workflow's history
+  into a different graph. Come back and the first one is still there — down to
+  the mount, so two instances of one package are two conversations.
+And one gesture ends every conversation at once: **reloading the editor**. The
+panel deliberately does *not* persist its thread, and this is where it differs
+from `/chat`, which does. The transcript is not persisted either — so restoring
+the id alone would leave you in a conversation whose earlier turns exist on the
+server and nowhere on screen, which is an answer with an invisible antecedent.
+In an editor a reload usually follows an *edit*, and the checkpointed history
+belongs to the graph as it was. `/chat` runs a published workflow nobody is
+editing, so persisting is right there and would be wrong here.
 
 **History** in the Chat panel header shows what those checkpoints hold: past
 runs of this workflow, newest first, each expanding to the run superstep by
