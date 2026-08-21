@@ -540,6 +540,19 @@ CUSTOMER_STEP_FAILED = "This step did not complete."
 RUN_FAILED_ANSWER = GENERIC_FAILURE_MESSAGE
 
 
+def parse_failure_marker(text: str) -> str | None:
+    """The reason inside a failure marker, or `None` if this is not one.
+
+    The pattern had three readers inside this module and none outside it, so
+    `RunResult.failed_nodes` — the door where a caller most needs to tell a
+    sentinel from content — would have had to match the shape a fourth time.
+    A marker's shape is knowledge, and knowledge is duplicated once too often
+    the moment it is spelled out twice.
+    """
+    match = _FAILURE_PATTERN.match(text)
+    return None if match is None else str(match["message"])
+
+
 def redact_failure_markers(outputs: Mapping[str, Any]) -> dict[str, Any]:
     """`outputs` with every failure marker replaced, for a customer.
 
@@ -549,7 +562,9 @@ def redact_failure_markers(outputs: Mapping[str, Any]) -> dict[str, Any]:
     boundary `tests/test_audience_boundary.py` exists to hold.
     """
     return {
-        node: (CUSTOMER_STEP_FAILED if _FAILURE_PATTERN.match(str(value or "")) else value)
+        node: (
+            CUSTOMER_STEP_FAILED if parse_failure_marker(str(value or "")) is not None else value
+        )
         for node, value in outputs.items()
     }
 
@@ -569,12 +584,12 @@ def node_failure_warnings(outputs: Mapping[str, Any]) -> list[str]:
     """
     warnings: list[str] = []
     for node, value in outputs.items():
-        match = _FAILURE_PATTERN.match(str(value or ""))
-        if match:
+        reason = parse_failure_marker(str(value or ""))
+        if reason is not None:
             # A full stop, not a dash: the message that follows carries its own
             # em-dash ("… no credential — set X"), and two in one sentence read
             # as one run-on rather than as a cause and its fix.
-            warnings.append(f'Node "{node}" failed and produced no result. {match["message"]}')
+            warnings.append(f'Node "{node}" failed and produced no result. {reason}')
     return warnings
 
 

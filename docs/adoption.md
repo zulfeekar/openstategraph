@@ -535,6 +535,7 @@ hand-seeded state:
 | `.outputs` | node id → that node's own output |
 | `.warnings` | everything worth knowing about this run: the workflow's unresolved capabilities, the steps that broke, and how the answer was reached — a node that produced nothing, a grader that ran out of attempts, a `revise` verdict with no edge |
 | `.failures` | the half of `.warnings` that is a claim the run **failed**. This is the one to gate a script on; `openstategraph run`'s exit code reads it |
+| `.failed_nodes` | node id → why that step failed, for the nodes whose `.outputs` entry is a failure marker rather than content |
 | `.attempts` | how many grader revise laps the run took |
 
 **The split is the point, and it is why `.warnings` is not what a script
@@ -543,7 +544,20 @@ was reached, not a claim the run failed — a workflow may legally answer with
 nothing. `if result.warnings:` is the reader's question ("is there anything I
 should look at?"); `if result.failures:` is the script's ("did this break?").
 
-> At 1.0 this becomes a plain dataclass with `.answer`. Build on the six
+**`.outputs` can hold a sentinel, and `.failed_nodes` is how you tell.** A
+step that failed publishes `'[summarise1 failed after retries: …]'` into its
+own output slot — deliberately, so the nodes downstream of it still read
+*something* — which means a caller reading `.outputs` alone sees a string that
+looks like an answer. `.failed_nodes` names exactly those nodes, with the
+reason:
+
+```python
+result = workflow.ask("Explain what a compiler is.")
+for node, reason in result.failed_nodes.items():
+    print(f"{node} did not run: {reason}")
+```
+
+> At 1.0 this becomes a plain dataclass with `.answer`. Build on the seven
 > attributes above, not on the string methods it also happens to have.
 
 ### Calling a workflow from an agent you already have

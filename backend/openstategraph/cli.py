@@ -161,12 +161,43 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         return EXIT_OK
 
-    for warning in result.warnings:
+    for line in run_report_lines(result):
         # Degrade loud, never silent — on stderr, so `run … > answer.txt` still
         # gives you only the answer while the degradation stays visible.
-        print(f"warning: {warning}", file=sys.stderr)
+        print(line, file=sys.stderr)
     print(result)
     return run_exit_code(result)
+
+
+def run_report_lines(result: "RunResult") -> list[str]:
+    """A run's health report, prefixed by what each line actually is.
+
+    Every line used to be `warning:` — including the one that ended the run
+    and produced the `1` this command exits with, so a reader grepping for
+    `error:` on a failed run found nothing and the prefix contradicted the
+    exit code beside it (`workflow-gallery` 44).
+
+    The split it needs already exists and is the same one `run_exit_code`
+    gates on: `failures` is the claim the run failed, `warnings` is the whole
+    report (`workflow-gallery` 49). So the prefix is derived from that
+    membership rather than decided here — one rule, one place, and a line
+    cannot be an `error:` on one surface and a `warning:` on the next.
+
+    Order is `warnings`' order, which puts compile findings before what
+    happened when it ran. Demoting nothing: a failure keeps its position.
+
+    A failure absent from `warnings` is still printed, at the end. `ask()`
+    builds the two so that `failures` is a subset — but a `RunResult` can be
+    assembled by hand, for a resumed run or a test, and a reason this function
+    silently dropped would be exactly the silence this ticket is about.
+    """
+    failures = set(result.failures)
+    lines = [
+        f"{'error' if warning in failures else 'warning'}: {warning}" for warning in result.warnings
+    ]
+    reported = set(result.warnings)
+    lines += [f"error: {failure}" for failure in result.failures if failure not in reported]
+    return lines
 
 
 def run_exit_code(result: "RunResult") -> int:

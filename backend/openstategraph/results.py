@@ -113,6 +113,36 @@ class RunResult(str):
             ),
         )
 
+    @property
+    def failed_nodes(self) -> dict[str, str]:
+        """node id -> why that node failed, for a caller reading `outputs`.
+
+        A failed node's output slot carries `'[summarise1 failed after
+        retries: …]'`. That is deliberate and stays — downstream nodes must
+        still read *something* — but every surface renders `outputs` as each
+        node's **output**, so a caller reading the map rather than the
+        warnings got a sentinel indistinguishable from an answer
+        (`workflow-gallery` 44).
+
+        Derived from `outputs` on access rather than stored, so it is right
+        for a `RunResult` assembled by hand as well as one built by `ask()` —
+        the same reason `cli.run_exit_code` reads `outputs` directly.
+
+        **Narrow on purpose.** The whole marker, anchored at both ends, is
+        what counts; a node whose answer merely *mentions* one is content and
+        is left alone. This product prints JSON and brackets as prose
+        constantly, and tolerance here would be permission to call an answer
+        a failure.
+        """
+        from openstategraph.compile.workflow_compiler import parse_failure_marker
+
+        found: dict[str, str] = {}
+        for node, value in self.outputs.items():
+            reason = parse_failure_marker(str(value or ""))
+            if reason is not None:
+                found[node] = reason
+        return found
+
     def __repr__(self) -> str:
         return (
             f"RunResult({str.__repr__(self)}, decisions={self.decisions!r}, "

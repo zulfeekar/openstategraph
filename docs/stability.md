@@ -192,8 +192,8 @@ at run time in an adopter's service rather than at import.
 
 **Recorded intent:** at 1.0, where a major bump makes it affordable, this
 becomes a plain frozen dataclass with `.answer`. Build on `.answer`,
-`.decisions`, `.outputs`, `.warnings`, `.failures` and `.attempts` — not on
-the several dozen string methods it currently also has.
+`.decisions`, `.outputs`, `.warnings`, `.failures`, `.failed_nodes` and
+`.attempts` — not on the several dozen string methods it currently also has.
 
 **Gate a script on `.failures`, never on `.warnings`.** `.warnings` is a
 run's whole health report and grows whenever a new kind of finding is added;
