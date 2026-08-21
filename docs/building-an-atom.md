@@ -336,10 +336,24 @@ which is where the built-in layers are actually listed. `build_tool_registry`
 is the function that *assembles* them and holds no list of its own; it keys
 every tool by its `node_type`.
 
-**Workflow-scoped (only while a workflow using it is open).** Set
-`scope: 'workflow'` on each definition so the palette says where it came from.
-This exists because the alternative is real: put one workflow's tools in the
-shared catalogue and every future palette carries every past workflow's tools.
+**Workflow-scoped (only while a workflow whose package ships it is open).**
+Set `scope: 'workflow'` on each definition so the palette says where it came
+from. This exists because the alternative is real: put one workflow's tools in
+the shared catalogue and every future palette carries every past workflow's
+tools.
+
+**Two conditions, not one, and the second is the one people miss.** A family is
+*registered* when the open document names one of its types — it has to be, or
+the saved nodes arrive as unknown-node placeholders rather than their real
+cards. It reaches the palette's **This workflow** section only when the open
+package's `tools/` folder actually backs it, which is the discovery endpoint's
+answer and not the document's (production-ready/80). So a document copied out
+of its package, without the `tools/` beside it, keeps every node exactly as
+saved and offers you none of them to place — which is the honest reading, since
+the runtime would warn on any you added.
+
+Concretely: your Python `BaseTool` must declare `node_type = '<your card's
+id>'`, or the card and the capability never meet.
 
 A family is one entry in `workflowScopedFamilies`, the `Registry<T>` in
 [`workflowScoped.ts`](../src/nodes/workflowScoped.ts):

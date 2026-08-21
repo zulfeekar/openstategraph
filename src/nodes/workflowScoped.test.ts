@@ -6,6 +6,8 @@ import {
   registerScopedFamily,
   registerDiscoveredCapabilities,
   registerNodeTypesForRawDocument,
+  packageScopedNodes,
+  capabilityBackedTypeIds,
 } from './workflowScoped';
 
 /**
@@ -393,5 +395,97 @@ describe('registerDiscoveredCapabilities', () => {
       );
     }).not.toThrow();
     expectUsable(workbench, 'a/tools.One');
+  });
+});
+
+/**
+ * production-ready/80 — **"This workflow" is a view of the package's
+ * capabilities, not of the registry.**
+ *
+ * A folder holding only `workflow.json`, copied out of `chinook-assistant`
+ * without its `tools/`, opened three tool cards under a heading whose own
+ * subtitle reads *"From this workflow's own package"*. The package shipped
+ * none of them: the section was listing node **types**, which
+ * `registerNodeTypesForRawDocument` had minted while importing a document
+ * that merely *names* them.
+ *
+ * The two halves are deliberately asserted together, because the fix is
+ * only correct if both hold at once: the section empties, and the type stays
+ * registered so the saved nodes still arrive as their real cards — CLAUDE.md's
+ * `code → canvas` rule requires a document naming a package-scoped type to be
+ * preserved exactly as saved.
+ */
+describe('the "This workflow" section follows the package, not the document', () => {
+  const chinookDocument = {
+    nodes: CHINOOK_NODES.map(({ definition }, index) => ({
+      id: `n${index}`,
+      type: definition.id,
+      position: { x: 0, y: 0 },
+      data: {},
+    })),
+  };
+
+  /** What the backend reports for a package whose `tools/` really ships them. */
+  const shippedCapabilities: ToolCapability[] = CHINOOK_NODES.map(({ definition }, index) => ({
+    id: `chinook-copy/tools.Tool${index}`,
+    name: `tool_${index}`,
+    description: 'shipped',
+    argsSchema: {},
+    nodeType: definition.id,
+  }));
+
+  function openDocument(capabilities: readonly ToolCapability[]): Workbench {
+    const workbench = new Workbench();
+    registerNodeTypesForRawDocument(
+      chinookDocument,
+      workbench.registry,
+      workbench.engine.executors,
+    );
+    registerDiscoveredCapabilities(capabilities, workbench.registry, workbench.engine.executors);
+    return workbench;
+  }
+
+  it('lists nothing when the package ships no tools, and still keeps the types loadable', () => {
+    const workbench = openDocument([]);
+
+    expect(
+      packageScopedNodes(workbench.registry.paletteSections(), capabilityBackedTypeIds()).map(
+        (definition) => definition.id,
+      ),
+    ).toEqual([]);
+
+    // The other half: the document's nodes must still deserialize as their
+    // real cards rather than unknown-node placeholders.
+    for (const { definition } of CHINOOK_NODES) {
+      expectUsable(workbench, definition.id);
+    }
+  });
+
+  it('lists them when the package does ship them', () => {
+    const workbench = openDocument(shippedCapabilities);
+
+    expect(
+      packageScopedNodes(workbench.registry.paletteSections(), capabilityBackedTypeIds())
+        .map((definition) => definition.id)
+        .sort(),
+    ).toEqual(CHINOOK_NODES.map(({ definition }) => definition.id).sort());
+  });
+
+  it('lists a capability the package ships but no hand-authored card covers', () => {
+    const workbench = openDocument([
+      {
+        id: 'chinook-copy/tools.Bespoke',
+        name: 'bespoke',
+        description: 'no card ships for this one',
+        argsSchema: {},
+        nodeType: '',
+      },
+    ]);
+
+    expect(
+      packageScopedNodes(workbench.registry.paletteSections(), capabilityBackedTypeIds()).map(
+        (definition) => definition.id,
+      ),
+    ).toEqual(['chinook-copy/tools.Bespoke']);
   });
 });

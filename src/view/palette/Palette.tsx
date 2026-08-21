@@ -18,6 +18,11 @@ import { matchesQuery } from '@core/model/ModelRegistry';
 import type { INodeCategory, INodeDefinition } from '@core/model/contracts/node';
 import { useController, usePaperController, useWorkbench } from '@app/WorkbenchContext';
 import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
+import {
+  capabilityBackedTypeIds,
+  onCapabilityBackedTypeIdsChange,
+  packageScopedNodes,
+} from '@nodes/workflowScoped';
 import { capabilityWarnings, onCapabilityWarningsChange } from '@app/pluginNodes';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { resolveIcon } from '@view/icons/iconRegistry';
@@ -126,6 +131,13 @@ export function Palette({ onNotify }: PaletteProps) {
   // types are lifted out of their categories into a single leading section
   // (they are few, and *where they came from* matters more than which
   // category they'd land in); everything else keeps its normal sectioning.
+  // What the open package actually ships, subscribed the same way the registry
+  // is above (production-ready/80). A different store, and a different
+  // question: the registry answers "can this type be loaded", the capability
+  // set answers "does this workflow's own `tools/` folder back it" — and only
+  // the second is what this section's subtitle promises.
+  const backed = useSyncExternalStore(onCapabilityBackedTypeIdsChange, capabilityBackedTypeIds);
+
   const { scoped, appSections, matchCount } = useMemo(() => {
     const all = workbench.registry.paletteSections();
     const searching = query.trim().length > 0;
@@ -144,13 +156,10 @@ export function Palette({ onNotify }: PaletteProps) {
           .filter((section) => sectionSurvivesSearch(section, query))
       : all;
 
-    const scopedNodes: INodeDefinition[] = [];
+    const scopedNodes: INodeDefinition[] = packageScopedNodes(visible, backed);
     const rest: { category: INodeCategory; nodes: readonly INodeDefinition[] }[] = [];
     for (const section of visible) {
       const app = section.nodes.filter((definition) => definition.scope !== 'workflow');
-      for (const definition of section.nodes) {
-        if (definition.scope === 'workflow') scopedNodes.push(definition);
-      }
       // Assemblies again: a section whose only match is one must survive this
       // second gate too, or the first filter is undone three lines later —
       // which is exactly what kept "loop" returning nothing after the first
@@ -172,7 +181,7 @@ export function Palette({ onNotify }: PaletteProps) {
     // `useSyncExternalStore` above forces — `workbench.registry` itself
     // never changes identity, so it cannot be a dependency that triggers this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workbench, query, workbench.registry.nodeTypes.size]);
+  }, [workbench, query, workbench.registry.nodeTypes.size, backed]);
 
   const searching = query.trim().length > 0;
 

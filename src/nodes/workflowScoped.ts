@@ -187,16 +187,95 @@ export function registerDiscoveredCapabilities(
   }
 
   const minted: string[] = [];
+  const backed: string[] = [];
   for (const capability of capabilities) {
-    if (isAlreadyHandAuthored(capability, registry)) continue;
+    if (isAlreadyHandAuthored(capability, registry)) {
+      backed.push(capability.nodeType);
+      continue;
+    }
     const { definition, executor } = createDiscoveredToolNode(capability);
     registry.nodeTypes.upsert(asWorkflowScoped(definition));
     executors.upsert(executor);
     minted.push(capability.id);
+    backed.push(capability.id);
   }
   // Only what was actually minted, so the teardown above cannot unregister a
   // hand-authored card that discovery merely declined to duplicate.
   registeredDiscoveredToolIds = minted;
+  // ...and separately, *everything the package backs*, minted or hand-authored,
+  // which is a longer list and a different question — see `packageScopedNodes`.
+  setCapabilityBackedTypeIds(backed);
+}
+
+/** Node type ids the open package's own capabilities actually back. */
+let backedTypeIds: ReadonlySet<string> = new Set();
+const backedListeners = new Set<() => void>();
+
+/**
+ * What the open package ships, keyed by the node type that represents it.
+ *
+ * A store rather than a return value because the two callers are far apart:
+ * `registerDiscoveredCapabilities` runs on every load and every Refresh, deep
+ * inside `loadWorkflowIntoEditor`, while the reader is the palette. It is the
+ * same shape as `ambientTools` and `capabilityWarnings`, for the same reason.
+ */
+export function capabilityBackedTypeIds(): ReadonlySet<string> {
+  return backedTypeIds;
+}
+
+export function onCapabilityBackedTypeIdsChange(handler: () => void): () => void {
+  backedListeners.add(handler);
+  return () => backedListeners.delete(handler);
+}
+
+/** Exposed for tests — a module-level store would otherwise leak between them. */
+export function forgetCapabilityBackedTypeIds(): void {
+  setCapabilityBackedTypeIds([]);
+}
+
+function setCapabilityBackedTypeIds(ids: readonly string[]): void {
+  const next = new Set(ids);
+  // Replaced only when the contents actually changed: `useSyncExternalStore`
+  // compares snapshots by identity, and a fresh `Set` every load would make
+  // the palette's subscription report a change on every keystroke-free
+  // repaint.
+  const same = next.size === backedTypeIds.size && [...next].every((id) => backedTypeIds.has(id));
+  if (same) return;
+  backedTypeIds = next;
+  for (const handler of backedListeners) handler();
+}
+
+/**
+ * The palette's "This workflow" section: the node types **this package's own
+ * capabilities back**, not every workflow-scoped type the registry happens to
+ * hold.
+ *
+ * The distinction is the whole of production-ready/80. A document copied out
+ * of `chinook-assistant` without its `tools/` still *names* three tool types,
+ * and naming one is enough for `registerNodeTypesForRawDocument` to register
+ * it — as it must, or the saved nodes arrive as unknown-node placeholders
+ * instead of their real cards. So the registry is the wrong thing to ask.
+ * The section's own subtitle promises a view of the package ("From this
+ * workflow's own package"), and the backend already answers that question at
+ * `/api/workflows/<slug>/capabilities`; this reads that answer rather than
+ * inferring a second one.
+ *
+ * Registered-and-unbacked is therefore a real, correct state: the type stays
+ * loadable and the node stays exactly as saved, but it is not offered for
+ * placement, because placing it would add a node the runtime warns about at
+ * run time (`unresolved_tool_bindings`, ticket 79).
+ */
+export function packageScopedNodes(
+  sections: readonly { readonly nodes: readonly INodeDefinition[] }[],
+  backed: ReadonlySet<string>,
+): INodeDefinition[] {
+  const offered: INodeDefinition[] = [];
+  for (const section of sections) {
+    for (const definition of section.nodes) {
+      if (definition.scope === 'workflow' && backed.has(definition.id)) offered.push(definition);
+    }
+  }
+  return offered;
 }
 
 /**
