@@ -124,9 +124,10 @@ gentler outcome too: when the child's own grader stops the loop early under a
 ceiling smaller than the package asked for, the run reports the overruled
 number once, however many times that package is mounted. A package that asked
 for less, or asked for more and never ran low, is told nothing extra. The asymmetry is the
-point: a caller who names a step budget has said what their whole run may
-cost, and a mounted package able to raise it would make that ceiling
-meaningless. When a mounted workflow
+point: a caller who names a step budget has said what any one workflow in
+their run may cost, and a mounted package able to raise it would make that
+ceiling meaningless. *Any one* — not the whole composition; the paragraph
+after next is what that difference costs. When a mounted workflow
 does run out, the two outcomes are the ones above, one level down: with enough
 slack the child's own grader stops the loop and publishes, and the warning
 naming it arrives under the mount (`mount-review/grader1`); with less than the
@@ -134,6 +135,33 @@ slack the child cannot stop itself, and the mount reports that it spent the
 run's whole step budget without producing an answer. That last one **is** a
 failed step — a mount promises a task in and an answer out, and there is no
 candidate to publish.
+
+**The number sizes one workflow, not a whole composition — and that is worth
+knowing before you set it.** A mount is a separate run with a superstep counter
+of its own, so a step budget of 60 does not mean the composition spends 60: a
+top workflow with six mounts below it may spend up to seven sixties. Measured,
+on a package drawn with a loop that never settles: three levels deep costs
+exactly what one level costs, and three copies side by side cost three times.
+**Depth on its own is free; what costs is how many mounts are drawn.**
+
+That total is bounded rather than open-ended, and bounded before the run
+starts: every mounted workflow is compiled when the parent is, a workflow that
+mounts itself is refused there, and each mount's ceiling is the run's or the
+smaller number that package saved. So the worst case is arithmetic on the
+drawing, and you can ask for it:
+
+```python
+with load_workflow("workflows/desk") as desk:
+    print(desk.composition_step_budget())   # e.g. 420, for a run of 60
+```
+
+It is a ceiling, not a forecast — a real run reaches it only if every loop in
+every one of those workflows runs out. Nothing shares one allowance across the
+composition on purpose: under a shared, decrementing number a mounted workflow
+would behave differently depending on what ran before it, and a mount is one
+*isolated* step. Nothing divides the ceiling by depth either, for the same
+reason a smaller number is rarely the fix — it would quietly starve the
+innermost loop, which is the one hardest to predict.
 
 It belongs to the **package**, so inside a mounted instance the box — and the
 name beside it — is disabled with a line saying so. An instance's own state is

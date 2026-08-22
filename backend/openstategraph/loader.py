@@ -129,8 +129,9 @@ class CompiledWorkflow:
     #: and comparable. A checkpointer the *caller* passed is never in here.
     _owned: tuple[Any, ...] = field(default=(), repr=False, compare=False)
     #: Graph node name -> the mounted child compiled under it, as the
-    #: compiler recorded it. Drawing only — see `mermaid`. Underscored and out
-    #: of `repr`/equality for the same reason `_owned` is: it is bookkeeping,
+    #: compiler recorded it. Read by `mermaid`, which draws it, and by
+    #: `composition_step_budget`, which prices it. Underscored and out of
+    #: `repr`/equality for the same reason `_owned` is: it is bookkeeping,
     #: not part of what a loaded workflow *is*.
     _mounts: Mapping[str, Any] = field(
         default_factory=dict, repr=False, compare=False
@@ -199,6 +200,40 @@ class CompiledWorkflow:
             drawable = expand_mounts(drawable, self._mounts)
         diagram: str = drawable.draw_mermaid()
         return diagram
+
+    def composition_step_budget(self, recursion_limit: int | None = None) -> int:
+        """The most supersteps this workflow **and everything it mounts** may
+        spend — a ceiling known before the run, not a measurement after it.
+
+        `ask()`'s `recursion_limit` bounds **one graph**. A mount is one
+        isolated step of that graph and a separate `invoke` with a counter of
+        its own, so a composition of seven graphs given 60 may spend up to
+        seven sixties. That is the number this returns.
+
+        It is not the unbounded thing the phrasing suggests, and
+        `step_budget.composition_step_budget` carries the measurement:
+        depth on its own costs nothing, the cost tracks the number of mount
+        *instances in the expansion*, and that expansion is finite at build
+        time because every child is compiled eagerly and a mount cycle is
+        refused there. So there is a worst case and it can be quoted.
+
+        Pass a number to price a run you have not started; pass nothing to
+        price the run this document would take on its own, resolved exactly as
+        `ask()` resolves it.
+
+            with load_workflow("workflows/desk") as desk:
+                print(desk.composition_step_budget())   # e.g. 420, not 60
+
+        Reporting rather than preventing is the whole answer to
+        `organisms-first-class` 63, and the two preventions it rejects — one
+        shared decrementing allowance, and a depth-scaled ceiling — are priced
+        at that function.
+        """
+        from openstategraph.step_budget import composition_step_budget
+
+        return composition_step_budget(
+            resolve_step_budget(recursion_limit, self.document), self._mounts
+        )
 
     def ask(
         self,

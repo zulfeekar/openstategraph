@@ -59,13 +59,25 @@ export const STEP_BUDGET_PLACEHOLDER = String(STEP_BUDGET_DEFAULT);
  * The box is disabled inside a mounted instance, so the only place a reader
  * meets this number is the child package's own canvas; if the sentence is not
  * here it is nowhere.
+ *
+ * And a fifth, added by `organisms-first-class` 63: the number sizes **this
+ * workflow**, not the composition it may sit at the top of. Every mount is a
+ * separate run with a superstep counter of its own, measured: a loop package
+ * mounted three levels down spends exactly what it spends one level down, and
+ * three of them side by side spend three times. That is bounded — the mount
+ * tree is compiled eagerly and a cycle is refused at build time, so the worst
+ * case exists and `CompiledWorkflow.composition_step_budget()` reports it —
+ * but it is not what a box labelled "Step budget" invites a reader to assume,
+ * and the assumption is only correctable here.
  */
 export const STEP_BUDGET_HINT =
   'Supersteps a run may spend before it stops. Not laps — a loop that fans out ' +
   'spends several supersteps per lap, so this is not a count of laps. Leave it ' +
   'empty for the default, 50. If a loop never settles, a grader that can pass is ' +
   'the fix; a bigger number only lets it run longer. When this workflow is ' +
-  'mounted inside another, it may take less than that run allowed but never more.';
+  'mounted inside another, it may take less than that run allowed but never more. ' +
+  'It sizes this workflow alone: every workflow mounted inside it counts from zero ' +
+  'again, so a composition can spend this much for each workflow in it.';
 
 /**
  * The budget a document saved, or `null` when it saved none.

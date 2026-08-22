@@ -49,6 +49,18 @@ class MountedGraph:
     graph: Any
     #: The child's own mounts, keyed by *its* graph node names.
     mounts: Mapping[str, "MountedGraph"] = field(default_factory=dict)
+    #: What the child's document saved as `settings.recursionLimit`, already
+    #: clamped by `workflow_step_budget`, or `None` if it saved none.
+    #:
+    #: `organisms-first-class` 63. The docstring above says this record is
+    #: read only by `expand_mounts`; it now has a second reader,
+    #: `step_budget.composition_step_budget`, which needs exactly the same
+    #: thing a drawing needs — *what did the compiler actually build* — for a
+    #: different question: what is the most this whole composition may spend.
+    #: Recorded here rather than re-derived, because re-loading every child
+    #: document to answer would be a second traversal that can disagree with
+    #: the first, and the tree is already the compiler's own account.
+    saved_step_budget: int | None = None
 
 
 #: What the compiler adds around every document it builds. `__start__` and

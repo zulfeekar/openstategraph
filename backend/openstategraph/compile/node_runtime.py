@@ -3270,6 +3270,13 @@ class NodeRuntime:
                     slug=slug,
                     graph=child_graph,
                     mounts=dict(child_runtime.mounted_graphs),
+                    # What this child asked to be sized at, for the worst case
+                    # `composition_step_budget` reports (63). The closure below
+                    # applies the same number at run time through
+                    # `mount_step_budget`; recording it here is what lets a
+                    # caller be told the total *before* the run rather than
+                    # after it.
+                    saved_step_budget=workflow_step_budget(child_sizing_document),
                 )
 
         if child_graph is None:

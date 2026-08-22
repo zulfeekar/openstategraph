@@ -57,7 +57,7 @@ reaches nothing looks supported, which is the defect class
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 #: Supersteps, not iterations. Matches the editor's own default so a
 #: workflow behaves the same run from a script as from the canvas.
@@ -136,10 +136,68 @@ def mount_step_budget(inherited: int, document: Any) -> int:
     effect at any depth — a grandchild saving 200 under a mid saving 300 ran
     on the run's number and neither saved number was consulted.
     """
-    requested = workflow_step_budget(document)
-    if requested is None:
-        return inherited
-    return min(inherited, requested)
+    return cap_step_budget(inherited, workflow_step_budget(document))
+
+
+def cap_step_budget(inherited: int, requested: int | None) -> int:
+    """`mount_step_budget`'s one decision, without a document to read it from.
+
+    Split out for `composition_step_budget` below, which walks the mount tree
+    the compiler recorded rather than the documents it was built from — the
+    tree carries the saved number, not the document. Two callers, one rule, so
+    the arithmetic of a *bound* cannot drift from the arithmetic of a *run*.
+    """
+    return inherited if requested is None else min(inherited, requested)
+
+
+def composition_step_budget(ceiling: int, mounts: Mapping[str, Any]) -> int:
+    """The most supersteps a whole composition may spend, top graph included.
+
+    `organisms-first-class` 63, whose title said the total was *unbounded in
+    depth*. Measured, it is not, and both halves of that matter:
+
+    - **Depth on its own costs nothing.** A loop package mounted three levels
+      down spends exactly what it spends one level down; a composition's cost
+      tracks the number of mount *instances in the expansion*, which is drawn.
+      Depth multiplies only where the drawing branches, which is the same
+      sentence as "eight loops run eight loops".
+    - **The expansion is finite, and finite at build time.**
+      `NodeRuntime._subgraph` compiles every child eagerly and refuses a mount
+      cycle there (`_ancestry`), so by the time a graph exists every mount it
+      will ever make has been compiled and recorded. There is therefore a
+      worst case, and it can be reported before the run starts.
+
+    So the answer taken for 63 is **reporting**, not preventing. The two
+    preventions were priced and rejected, and are pinned against in
+    `test_a_compositions_total_spend_is_bounded_by_its_drawing.py`:
+
+    - **One shared, decrementing allowance** across the composition is what
+      "bound the total" would mean, and it makes a mount's cost depend on what
+      ran before it. `CLAUDE.md` defines a mount as *"another workflow run as
+      one isolated step — task in, answer out"*; a package that behaves
+      differently in the second position than in the first is not that, and
+      the innermost loop — the one a developer can least predict — is the one
+      that would starve.
+    - **A depth-scaled ceiling**, each level taking a fraction, is bounded and
+      position-independent and silently starves deep compositions, which is
+      `61`'s stated cost multiplied. It would also break `59`'s computed floor
+      for any level below it.
+
+    The sum, not a product: the top graph's ceiling plus, for each mount, the
+    ceiling *it* runs under (`61`'s downward-only cap, applied at every edge
+    and inherited past it) plus everything below it. `mounts` is the map
+    `NodeRuntime` recorded — `MountedGraph.saved_step_budget` and
+    `MountedGraph.mounts` are the only two fields read.
+
+    It is a **ceiling, not an estimate**. A real run reaches it only if every
+    loop in every document exhausts its own budget, which is what
+    `56`'s guard exists to stop happening quietly.
+    """
+    total = ceiling
+    for mount in mounts.values():
+        branch = cap_step_budget(ceiling, getattr(mount, "saved_step_budget", None))
+        total += composition_step_budget(branch, getattr(mount, "mounts", None) or {})
+    return total
 
 
 def read_budget_stop(value: Any) -> tuple[Any, list[dict[str, Any]]]:

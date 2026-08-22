@@ -145,6 +145,15 @@ describe('the words the field uses', () => {
     expect(STEP_BUDGET_HINT).toMatch(/several|more than one/i);
   });
 
+  it('says the number sizes this workflow, not a whole composition', () => {
+    // `organisms-first-class` 63. Each mount is a separate run with a counter
+    // of its own, so a composition of seven workflows given 60 may spend
+    // seven sixties. Measured, and the number is per-graph — which is exactly
+    // what a reader of a box labelled "Step budget" does not assume.
+    expect(STEP_BUDGET_HINT).toMatch(/this workflow|each mounted|its own/i);
+    expect(STEP_BUDGET_HINT).toMatch(/from zero|of its own|separately/i);
+  });
+
   it('never calls it iterations, turns or retries', () => {
     for (const forbidden of [/iteration/i, /max turns/i, /retr(y|ies)/i, /recursion/i]) {
       expect(copy, `"${copy}"`).not.toMatch(forbidden);
