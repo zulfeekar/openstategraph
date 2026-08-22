@@ -124,8 +124,12 @@ records why chasing it through prose was abandoned. Judged against the
 god-class rule it is
 *borderline rather than violating*: `NodeRuntime`'s public surface is small
 (`factory`, the unresolved-\* warning lists, and the injected collaborators);
-the bulk is per-family private builders registered in one `_builders` table,
-plus module helpers. The mass is real, though, and the seams are clean:
+the bulk is per-family private builders registered in one table, plus module
+helpers. That table is a real registry as of 2026-08-22
+(`compile/node_types.py`, `export-and-eject/03`), which is a **step 3
+enabler**: `_register_node_types` is now the single place a bound method is
+named, so swapping bound methods for the module functions step 3 carves out is
+one method's worth of diff rather than a dict literal rewritten mid-move. The mass is real, though, and the seams are clean:
 
 1. `compile/state.py` — **done**, 2026-08-22 (`docs-and-gaps` 13). `RESET`
    and the three re-exported reducers, `RunState`, and the state readers
@@ -178,8 +182,10 @@ plus module helpers. The mass is real, though, and the seams are clean:
    (orchestrator/worker/format_report), `mounting.py` (subgraph +
    `apply_mount_overrides`, `PackageAssets`), `functions.py` (discovered
    functions).
-4. `node_runtime.py` keeps `NodeRuntime` (the `_builders` table becomes a
-   registry of those functions bound to `self`) and **re-exports every name
+4. `node_runtime.py` keeps `NodeRuntime` (the table **is** a registry as of
+   `export-and-eject/03`; step 4 now only rebinds its thirteen entries plus
+   the mount types and the `function.` namespace from bound methods to those
+   module functions, inside `_register_node_types`) and **re-exports every name
    currently importable** (`RESET`, `RunState`, reducers, `_thread_question`,
    `apply_mount_overrides`, `PackageAssets`, `RuntimeServices`,
    `ToolRegistry`, `chinook_tool_registry`, …) so the test surface —

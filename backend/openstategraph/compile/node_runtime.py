@@ -37,6 +37,7 @@ from openstategraph.abc.router import Router
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
+from openstategraph.compile.node_types import NodeTypeRegistry
 from openstategraph.compile.diagnostics import (
     CompileDiagnostics,
     Finding,
@@ -987,36 +988,28 @@ class NodeRuntime:
         #: Drawing only. Nothing here is read on a run path, and the closure
         #: keeps its own reference to the compiled child regardless.
         self.mounted_graphs: dict[str, "MountedGraph"] = {}
-        #: The built-in families: the node types **this build implements
-        #: itself**. A literal table of bound methods on purpose, and
-        #: consulted before anything installed, because these are what a
+        #: The node types **this build implements itself**, as a registry
+        #: rather than a dict literal (`export-and-eject/03`).
+        #:
+        #: Consulted before anything installed, because these are what a
         #: document's types *mean* — `input.text` resolving to somebody else's
         #: code would change every workflow in the venv, including the ones
         #: that never heard of the plugin. Contributed families live in
-        #: `compile/node_families.py` and are consulted after this and after
-        #: the two conventions; see `builder_for`.
-        self._builders: dict[str, Callable[..., Any]] = {
-            "input.text": self._input,
-            # NOT `_input`. A skill source is a *static text source*, not the
-            # run's entry point — see `_static_text`.
-            "input.markdown": self._static_text,
-            "input.skill": self._static_text,
-            "agent.llm": self._agent,
-            "route.classifier": self._router,
-            "route.grader": self._grader,
-            "human.approval": self._human_approval,
-            "guard.policy": self._guardrail,
-            "memory.segment": self._memory_segment,
-            "orchestrate.supervisor": self._orchestrator,
-            "orchestrate.worker": self._worker,
-            "function.format_report": self._format_report_function,
-            "output.formatted": self._output,
-        }
+        #: `compile/node_families.py` and are consulted after this; see
+        #: `builder_for`.
+        #:
+        #: The two arms that used to be `if`s inside `builder_for` are
+        #: registrations here: the mount types by exact name, and
+        #: `function.` as an **open namespace**, which is the one shape a
+        #: plain dict could not hold — a `function.<name>` node binds a
+        #: callable named in the *document*, so its keys are unknowable when
+        #: this table is built. `NodeTypeRegistry` carries the reasoning.
+        self._node_types = self._register_node_types()
         #: The families installed distributions contributed, and what failed
         #: to install. Resolved once per process by `extensions`' cache, so
         #: this costs a dict lookup per runtime rather than a `sys.path` walk.
         self._families, family_warnings = discovered_node_families()
-        for shadowed in sorted(self._families.types() & set(self._builders)):
+        for shadowed in sorted(self._families.types() & self._node_types.types()):
             # Reported here rather than at discovery because this is the object
             # that holds the built-in table, and reported at all because the
             # alternative — a family that registered cleanly and is never
@@ -1036,7 +1029,7 @@ class NodeRuntime:
         # loop above is: this is the object that holds the built-in table.
         for shadowed in sorted(
             key
-            for key in set(self.services.functions) & set(self._builders)
+            for key in set(self.services.functions) & self._node_types.types()
             if key.startswith("function.")
         ):
             self.diagnostics.record(
@@ -1047,6 +1040,61 @@ class NodeRuntime:
             )
         for warning in family_warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, warning)
+
+    def _register_node_types(self) -> NodeTypeRegistry:
+        """One registration point per node type this build implements.
+
+        A method rather than a table module because every value is a bound
+        method of this object: a separate module would have to reach through
+        thirteen private attributes to build the same table, which trades a
+        readable list for a privacy leak and buys nothing.
+
+        Adding a *built-in* node type is still a line in this method, and that
+        is the honest reading of CLAUDE.md's **O** rather than a hole in it —
+        a built-in is the engine. Extending the engine **from outside** is
+        `openstategraph.node_families`, which needs no edit here at all
+        (`compile/node_families.py`, install-experience 08).
+        """
+        registry = NodeTypeRegistry()
+        registry.register("input.text", self._input)
+        # NOT `_input`. A skill source is a *static text source*, not the
+        # run's entry point — see `_static_text`.
+        registry.register("input.markdown", self._static_text)
+        registry.register("input.skill", self._static_text)
+        registry.register("agent.llm", self._agent)
+        registry.register("route.classifier", self._router)
+        registry.register("route.grader", self._grader)
+        registry.register("human.approval", self._human_approval)
+        registry.register("guard.policy", self._guardrail)
+        registry.register("memory.segment", self._memory_segment)
+        registry.register("orchestrate.supervisor", self._orchestrator)
+        registry.register("orchestrate.worker", self._worker)
+        registry.register("function.format_report", self._format_report_function)
+        registry.register("output.formatted", self._output)
+        # The first convention arm, which was only ever a closed set nobody
+        # had registered. The constant, not the literal (install-experience
+        # 08): "which node types mount a child" is one fact, and this was one
+        # of four places that spelled it.
+        for mount_type in MOUNT_NODE_TYPES:
+            registry.register(mount_type, self._subgraph)
+        # The second, and the one a dict could not express. Registered after
+        # `function.format_report` and losing to it by the registry's own
+        # exact-beats-namespace rule, so a package's own `format_report` can
+        # never shadow the built-in by accident.
+        registry.register_namespace("function.", self._discovered_function)
+        return registry
+
+    @property
+    def _builders(self) -> dict[str, Callable[..., Any]]:
+        """The exact registrations as a dict, for readers that want one.
+
+        Five tests walk "every built-in node type and its builder" through
+        this name (`test_model_field_contract`, `test_skill_layer_contract`,
+        `test_reasoning_effort`, `test_architect`, `test_schema_v3_team_collapse`).
+        Kept as a read-only view rather than renamed at five call sites in a
+        commit about the dispatch: a copy, so nothing can write the table back.
+        """
+        return self._node_types.mapping()
 
     def factory(
         self, document: dict[str, Any]
@@ -1093,33 +1141,30 @@ class NodeRuntime:
         catalogue without a hand-kept second list.
         `backend/tests/test_data_key_contract.py` does exactly that.
 
-        Four sources, in a fixed order, and the order is the policy:
+        Three sources, in a fixed order, and the order is the policy:
 
-        1. the **built-ins**, so nothing installed can change what a shipped
-           document's node types mean;
-        2. `workflow.subgraph` and `function.*`, the two conventions, which
-           are the compiler's own and are reserved against a plugin;
-        3. **registered families** — the `openstategraph.node_families`
+        1. the **built-in registry** — `_register_node_types`, which holds
+           both the named types and the two conventions (`workflow.subgraph`
+           by name, `function.` as an open namespace), so nothing installed
+           can change what a shipped document's node types mean and both
+           conventions stay reserved against a plugin. Inside it, an exact
+           registration beats the namespace it falls under;
+        2. **registered families** — the `openstategraph.node_families`
            entry-point group (install-experience ticket 08);
-        4. `_passthrough`, for a type nothing implements, which reports itself
+        3. `_passthrough`, for a type nothing implements, which reports itself
            rather than quietly forwarding.
+
+        Until `export-and-eject/03` the first source was a dict literal and
+        the conventions were two `if`s here, so the policy was half a table
+        and half control flow and no test could enumerate it.
 
         A pure lookup, with no side effect: `test_data_key_contract.py`
         enumerates it over the whole catalogue, and a diagnostic recorded here
         would report node types nobody wired.
         """
-        builder = self._builders.get(node_type)
+        builder = self._node_types.resolve(node_type)
         if builder is not None:
             return builder
-        # Discovered capabilities resolve by convention, after the
-        # explicitly-registered builders so a built-in like
-        # `function.format_report` can never be shadowed by accident.
-        # The constant, not the literal (ticket 08): "which node types mount a
-        # child" is one fact, and this was one of four places that spelled it.
-        if node_type in MOUNT_NODE_TYPES:
-            return self._subgraph
-        if node_type.startswith("function."):
-            return self._discovered_function
         family = self._families.get(node_type)
         if family is not None:
             return self._family_builder(family)

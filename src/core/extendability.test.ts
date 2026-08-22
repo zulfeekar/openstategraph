@@ -21,7 +21,12 @@
  * heard of compiled to `_passthrough` — it ran and did nothing. Install-
  * experience ticket 08 made contributed families the
  * `openstategraph.node_families` entry-point group, with the built-in table
- * un-shadowable; that half is walked in `backend/tests/test_node_families.py`,
+ * un-shadowable, and `export-and-eject/03` turned that built-in table into a
+ * registry too (`compile/node_types.py`), which is where the two conventions
+ * `builder_for` used to branch on now live — `workflow.subgraph` by name and
+ * `function.` as an open namespace, the one shape a key map cannot hold;
+ * those halves are walked in `backend/tests/test_node_families.py` and
+ * `backend/tests/test_node_type_registry.py`,
  * and `backend/tests/test_production_audit_2026_08_15.py` keeps pinning the
  * case nothing implements, which still reports itself rather than forwarding.
  */
