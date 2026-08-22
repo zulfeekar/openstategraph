@@ -23,7 +23,7 @@
 # Precedence, lowest to highest — every adjacent pair is covered by a test in
 # backend/tests/test_config_file.py::TestPrecedence:
 #
-#   instance default  <  this file  <  workflow settings.model
+#   installation default  <  this file  <  workflow settings.model
 #                     <  a node's own model  <  the caller's model= argument
 #
 # The one that surprises people: A CREDENTIAL IN YOUR ENVIRONMENT DOES NOT
