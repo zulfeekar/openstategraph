@@ -49,7 +49,7 @@ from openstategraph.errors import (
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
     ThreadNotResumable, CredentialError, MissingProviderKey, MissingProviderPackage,
-    NoProviderInstalled, ProviderRefusedCredential, UnknownProvider,
+    NoProviderInstalled, ProviderRefusedCredential, ProviderUnreachable, UnknownProvider,
     GENERIC_FAILURE_MESSAGE,
 )
 from openstategraph.schema import (

@@ -62,6 +62,7 @@ openstategraph.errors.NoProviderInstalled = class(OpenStateGraphError,ImportErro
 openstategraph.errors.OpenStateGraphError = class(Exception)(...)
 openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
 openstategraph.errors.ProviderRefusedCredential = class(CredentialError)(...)
+openstategraph.errors.ProviderUnreachable = class(OpenStateGraphError)(...)
 openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
 openstategraph.errors.ThreadNotResumable = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.UnknownProvider = class(OpenStateGraphError,ValueError)(...)

@@ -2,7 +2,29 @@
 
 ## Unreleased
 
+### Added
+- **`ProviderUnreachable`** (Tier 1) — a provider whose address is configured
+  and where nothing is listening. Not a `CredentialError`: none was absent and
+  none was rejected, so both of that family's actions are the wrong advice.
+  Raised through the same node error path every other provider failure takes,
+  so a run degrades rather than crashing (`providers-and-credentials` 08).
+
 ### Fixed
+- **A stopped Ollama daemon now says so, and names `OLLAMA_HOST`.** The fourth
+  provider shape — the address set, the daemon not running — matched neither
+  "absent" nor "wrong", so no translator claimed it and a developer read
+  `ConnectError: [Errno 61] Connection refused`: no provider, no variable, no
+  fix. `chat_model.unreachable_endpoint_error_from` now translates it, joining
+  `credential_error_from` at the one seam a foreign exception crosses into our
+  hierarchy. Attributed by **address** rather than by module, because a
+  connection failure is `httpx`'s for every provider alike while the address is
+  the one thing the developer configured; the variable named is the one that
+  actually supplied it, read through the endpoint precedence rather than
+  restating it. Narrow on purpose: a timeout at the same host, a connect
+  failure to an address no provider claims, and a 401 all stay exactly as they
+  were. Exit code is unchanged at **1** — a run that could not reach its model
+  is a failed run, not a usage error and not a missing extra
+  (`providers-and-credentials` 08).
 - **`threads show` now says what a paused thread is waiting for.** `run` (and
   `resume`) had printed the pause payload and the exact command to finish it,
   but only in the terminal that started the run — `threads list` printed the

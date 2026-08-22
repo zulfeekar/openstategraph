@@ -6,12 +6,17 @@ that cannot be a slug. A service embedding a workflow could not tell either
 apart from its *own* file and value errors, so the only available handler was
 `except Exception`, which swallows the bugs you want to see.
 
-**Every class here inherits from both `OpenStateGraphError` and the builtin it
-used to be.** That is not decoration: `except FileNotFoundError` in code
-written against an earlier release keeps working, unchanged, while
+**A class here inherits from both `OpenStateGraphError` and the builtin it used
+to be.** That is not decoration: `except FileNotFoundError` in code written
+against an earlier release keeps working, unchanged, while
 `except OpenStateGraphError` becomes available to anyone who wants the narrow
 handler. A new exception hierarchy that breaks existing handlers would be a
 worse trade than the untyped errors it replaces.
+
+The rule is *the builtin it used to be*, so a failure that was never a builtin
+gets none — `ProviderUnreachable` is the one, and says why at itself. Until
+providers-and-credentials 08 this paragraph said "every class", which read as
+a requirement to invent a base rather than as the compatibility promise it is.
 
 Deliberately small. An exception type is a promise to keep raising it, so this
 module holds only failures the code raises **today** (plus `SchemaVersionError`,
@@ -159,6 +164,32 @@ class MissingProviderKey(CredentialError):
     """
 
 
+class ProviderUnreachable(OpenStateGraphError):
+    """A provider's address is configured, and nothing is listening at it.
+
+    The **fourth** provider shape, and not a `CredentialError`: no credential
+    was absent and none was rejected, so both of that family's actions — set
+    the variable, replace the value — are the wrong advice. What is wrong is
+    the *address*, or the daemon that should be answering at it. Ticket 03's
+    matrix enumerated absent, wrong and valid; this is the one a developer is
+    most likely to reach by accident, having set `OLLAMA_HOST` once, stopped
+    the daemon, and forgotten (providers-and-credentials 08).
+
+    **The only class here that carries no builtin base, deliberately.** Every
+    other one keeps the builtin it used to be, so an existing `except` keeps
+    working. This was never a builtin: it arrived as `httpx.ConnectError`,
+    which is a vendor's type, and the tempting builtin — `ConnectionError` —
+    is an `OSError`, which would put every unreachable provider inside the
+    `except OSError` an adopter wrote around their file handling. A base that
+    captures an error in handlers written for something else is worse than no
+    base at all.
+
+    Constructed by `chat_model.unreachable_endpoint_error_from`, the sibling
+    adapter to `credential_error_from`, and worded by
+    `providers.ProviderEnvironment.unreachable_endpoint_message`.
+    """
+
+
 class MissingProviderPackage(OpenStateGraphError, ImportError):
     """A model names a provider whose LangChain integration is not installed.
 
@@ -244,6 +275,7 @@ __all__ = [
     "OpenStateGraphError",
     "PackageNotFound",
     "ProviderRefusedCredential",
+    "ProviderUnreachable",
     "SchemaVersionError",
     "ThreadNotResumable",
     "UnknownProvider",

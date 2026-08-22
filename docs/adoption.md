@@ -745,6 +745,14 @@ things you asked for is how a list that matters gets ignored.
   path and raises `MissingProviderPackage`, whose message is the `pip install`
   line. Both gaps are checked together and reported in one sentence, so
   setting the key does not reveal the extra one run later.
+
+  A fourth gap is neither: the address is set and nothing is listening at it —
+  `OLLAMA_HOST` pointing at a daemon you stopped. That one cannot be seen
+  before a call is made, so it is translated where it lands, into
+  `ProviderUnreachable`, naming the variable that supplied the address and the
+  address itself. Deliberately **not** a `CredentialError`: nothing was absent
+  and nothing was rejected, so "set the key" and "replace the key" are both
+  the wrong advice (`providers-and-credentials` 08).
 - **`knowledge_dir`** — where the package's second brain is read from.
   Convention (`<package>/knowledge`) stays the default, because
   discovery-by-convention is why this function takes one argument. Override it

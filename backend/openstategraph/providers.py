@@ -399,11 +399,74 @@ class ProviderEnvironment:
         default is how "Ollama means cloud, never local" was being violated by
         omission.
         """
+        source = self._endpoint_source()
+        if source is not None:
+            return source[1]
+        return self.spec.default_endpoint or None
+
+    def _endpoint_source(self) -> tuple[str, str] | None:
+        """The variable that supplied this endpoint, and its value.
+
+        `None` when nothing did and `default_endpoint` is what will be used.
+        Split out of `base_url` rather than duplicated beside it because the
+        precedence — tuple order, host before endpoint — is *knowledge*, and
+        the message below needs the winning variable's **name** while the
+        model builder needs only its value. Two readings of one rule, one
+        implementation.
+        """
         for name in self.spec.endpoint_env:
             value = str(self._source.get(name) or "").strip()
             if value:
-                return value
-        return self.spec.default_endpoint or None
+                return name, value
+        return None
+
+    def unreachable_endpoint_message(self, url: str) -> str:
+        """The address is configured and nothing is listening at it.
+
+        The **fourth** shape, and Ollama's alone, because Ollama is the only
+        provider whose address is a variable a developer types: absent, wrong
+        and valid were the three ticket 03 enumerated, and a host set to a
+        daemon that is not running is none of them. It arrived as
+        `httpx.ConnectError: [Errno 61] Connection refused` — a sentence that
+        names no provider, no variable and no fix
+        (providers-and-credentials 08).
+
+        Written in the same voice and on the same one line as
+        `missing_key_message` and `missing_package_message`, and it says what
+        it is *not* as well as what it is: *not a missing or wrong credential*
+        is the whole reason this shape needed words of its own, since those
+        two are what a developer will otherwise go and check.
+
+        **The variable named is the one that actually supplied the address.**
+        Naming `OLLAMA_HOST` to somebody who set `OLLAMA_ENDPOINT` sends them
+        to edit a variable that is not in play — the precedence is tuple
+        order and this reads it rather than restating it. With neither set the
+        address is our default, so there is no variable to blame and the
+        message offers the ones that would move it instead.
+        """
+        where = _without_userinfo(url)
+        source = self._endpoint_source()
+        if source is None:
+            return (
+                f'Provider "{self.spec.name}" could not be reached at {where} — '
+                "nothing accepted a connection at its default endpoint. This is an "
+                "unreachable endpoint rather than a missing or wrong credential: "
+                f"check network access, or set {' or '.join(self.spec.endpoint_env)} "
+                "to an address that is running."
+            )
+        variable = source[0]
+        fallback = (
+            f" (unset {variable} to fall back to {self.spec.default_endpoint})"
+            if self.spec.default_endpoint
+            else ""
+        )
+        return (
+            f'Provider "{self.spec.name}" could not be reached at {where} — the address '
+            f"is configured ({variable}) but nothing is listening there, so the "
+            "connection was refused. This is an unreachable endpoint rather than a "
+            f"missing or wrong credential: start the service at that address, or point "
+            f"{variable} at one that is running{fallback}."
+        )
 
     def model_string(self) -> str:
         """The full `provider:model` string, honouring the model env var."""

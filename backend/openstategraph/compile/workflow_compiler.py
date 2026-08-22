@@ -157,12 +157,16 @@ def as_our_error(exc: Any) -> "OpenStateGraphError | None":
     show a developer and the same rule `missing_key_diagnosis` follows for an
     unknown provider prefix.
     """
-    from openstategraph.chat_model import credential_error_from
+    from openstategraph.chat_model import credential_error_from, unreachable_endpoint_error_from
     from openstategraph.errors import OpenStateGraphError
 
     if isinstance(exc, OpenStateGraphError):
         return exc
-    return credential_error_from(exc)
+    # Credential first, and the order is not arbitrary: a refusal is judged by
+    # status and an unreachable endpoint by address, so the two cannot both
+    # claim one exception — but if a vendor ever answered 401 from a host we
+    # also recognise, "your key was rejected" is the more specific reading.
+    return credential_error_from(exc) or unreachable_endpoint_error_from(exc)
 
 
 #: LangGraph annotates a propagating exception with the task it died in.

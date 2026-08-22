@@ -36,6 +36,7 @@ from openstategraph.errors import (
     MissingProviderPackage,
     OpenStateGraphError,
     ProviderRefusedCredential,
+    ProviderUnreachable,
 )
 from openstategraph.providers import (
     ProviderEnvironment,
@@ -207,9 +208,105 @@ def credential_error_from(exc: BaseException) -> ProviderRefusedCredential | Non
     )
 
 
+#: Exception type names that mean "no connection was established", by the two
+#: libraries every provider integration in this project reaches the network
+#: through. Matched on the name rather than imported, because `httpx` is a
+#: transitive dependency of the integrations and not one of ours — importing it
+#: to build a translator would make the lean core depend on a vendor's SDK to
+#: describe that vendor's failure.
+_UNREACHABLE = ("ConnectError", "ConnectTimeout", "ConnectionRefusedError")
+
+
+def _failing_url(exc: BaseException) -> str | None:
+    """Where the request that failed was going, if the exception says.
+
+    Tolerant in reading, and the chain is why: the raising library annotates
+    `httpx.ConnectError` with its `request`, but a wrapper may re-raise its own
+    exception `from` it, so the address is one or two links down. Three links
+    is the cap — beyond that the exception being read is no longer plausibly
+    about this request.
+
+    `None` when nothing carries an address, which is the strict half: without
+    one there is no way to tell a dead Ollama daemon from a dead anything else,
+    and a confidently wrong "start your Ollama" is worse than the raw error.
+    """
+    seen: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and len(seen) < 3:
+        request = getattr(current, "request", None)
+        url = getattr(request, "url", None)
+        if url is not None:
+            return str(url)
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _authority(url: str) -> str | None:
+    """`host:port` for a URL, or `None` if it does not parse as one.
+
+    The comparison is deliberately not the whole string: the configured
+    endpoint is an origin (`http://127.0.0.1:11434`) and the failing request
+    carries a path (`/api/chat`), so equality would never match. Scheme is
+    dropped too — a developer who wrote `https` against a plaintext daemon has
+    the same unreachable daemon.
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url if "//" in url else f"//{url}")
+    except ValueError:  # pragma: no cover - urlsplit is forgiving
+        return None
+    return parts.netloc.rpartition("@")[2].lower() or None
+
+
+def unreachable_endpoint_error_from(exc: BaseException) -> ProviderUnreachable | None:
+    """A dead endpoint at a **configured** provider address, translated. Else `None`.
+
+    The sibling of `credential_error_from`, and the fourth shape ticket 03's
+    matrix had no room for: `OLLAMA_HOST` set, pointing at a daemon that is not
+    running. That is not absent (an address is configured) and not wrong (no
+    credential was rejected), so neither existing translator claimed it and a
+    developer read `ConnectError: [Errno 61] Connection refused` — a sentence
+    naming no provider, no variable and no fix.
+
+    **Attributed by address, not by module.** `credential_error_from` matches
+    the SDK an exception came from, which works because a vendor's auth error
+    is a vendor's class. A connection failure is `httpx`'s for every provider
+    alike, so the module says nothing; the address says everything, and it is
+    the one thing the developer configured.
+
+    **Strict in trusting.** Both halves must hold — a connect-shaped failure
+    *and* an address that equals a provider's resolved endpoint. A tool calling
+    some unrelated service is left exactly as it was, which matters because
+    this handler sits on the generic node error path where every failure in a
+    workflow passes through.
+    """
+    if type(exc).__name__ not in _UNREACHABLE:
+        return None
+    url = _failing_url(exc)
+    if url is None:
+        return None
+    authority = _authority(url)
+    if authority is None:
+        return None
+    for spec in provider_catalogue().list():
+        environment = ProviderEnvironment(spec)
+        endpoint = environment.base_url()
+        if endpoint and _authority(endpoint) == authority:
+            # The **configured** address, not the failing request's URL. They
+            # differ by the integration's path (`/api/chat`), and quoting a
+            # path a developer never wrote back at them beside "the address is
+            # configured (OLLAMA_HOST)" invites them to go looking for it in
+            # the variable.
+            return ProviderUnreachable(environment.unreachable_endpoint_message(endpoint))
+    return None
+
+
 __all__ = [
     "UnconfiguredProvider",
     "build_chat_model",
     "credential_error_from",
+    "unreachable_endpoint_error_from",
     "model_kwargs",
 ]
