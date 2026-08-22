@@ -278,28 +278,58 @@ class TestSubagentsAreNotIsolatedFromIt:
         assert seen["subagent_tool"] == Ctx(tenant=TENANT, user_id=USER)
 
 
-class TestNothingHereUsesItYet:
-    """The measurement that dated the design: this platform passes no context.
+class TestOnlyTheCompilerDeclaresAContextSchema:
+    """The measurement that dated the design, updated the day it stopped holding.
 
-    `generated_module_contract.py` already records that `grep` for `Runtime[`
-    across the backend returned nothing, and that a published brief promised
-    `ToolRuntime` anyway. This keeps that true until the build tickets land —
-    and when the first of them lands, this is the test that says so out loud
-    rather than a paragraph nobody re-reads.
+    Until `organisms-first-class/69` this class was `TestNothingHereUsesItYet`
+    and asserted that **no** module of `openstategraph/` contained the string
+    `context_schema=`. That was the measurement the design rested on, and it is
+    now false on purpose: the compiler mints one.
+
+    It is updated rather than deleted because the fact worth pinning was never
+    "zero" — it was **where**. `context_schema` is a graph-assembly parameter
+    and a LangGraph type name, so it belongs at exactly one seam: the
+    `StateGraph(...)` call in the compiler. A second one anywhere would be
+    either a node family growing a graph-assembly concern (`CLAUDE.md`:
+    `retry_policy`/`timeout`/`cache_policy` live on the workflow) or a
+    LangGraph type name leaking towards `workflow.json` and `core/`
+    (portability guardrail 4). So the census stays, and it is now a census of
+    one.
     """
 
-    def test_no_compiler_path_declares_a_context_schema(self) -> None:
+    #: The one seam. A file added here needs the argument for why a second
+    #: place assembles a graph, not just a passing test.
+    ALLOWED = {"compile/workflow_compiler.py"}
+
+    def test_only_the_compile_seam_declares_a_context_schema(self) -> None:
         from pathlib import Path
 
         import openstategraph
 
         root = Path(openstategraph.__file__).parent
-        offenders = [
+        declaring = {
             path.relative_to(root).as_posix()
             for path in root.rglob("*.py")
             if "context_schema=" in path.read_text(encoding="utf-8")
-        ]
-        assert offenders == [], (
-            "A context_schema now reaches the compiler. That is organisms-first-class/41's "
-            f"build landing in {offenders} — update this test and the design doc together."
+        }
+        assert declaring == self.ALLOWED, (
+            "`context_schema=` belongs to graph assembly and to nowhere else. "
+            f"Unexpected: {sorted(declaring - self.ALLOWED)}; missing: "
+            f"{sorted(self.ALLOWED - declaring)}."
         )
+
+    def test_the_editor_side_still_never_names_it(self) -> None:
+        """`core/` sees JSON field descriptors and no LangGraph vocabulary."""
+        from pathlib import Path
+
+        import openstategraph
+
+        core = Path(openstategraph.__file__).parents[2] / "src" / "core"
+        if not core.is_dir():  # pragma: no cover - a backend-only checkout
+            pytest.skip("no src/core in this checkout")
+        offenders = [
+            path.name
+            for path in core.rglob("*.ts")
+            if "context_schema" in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == []

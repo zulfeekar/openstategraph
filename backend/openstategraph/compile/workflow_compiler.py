@@ -41,7 +41,12 @@ from langgraph.types import RetryPolicy, Send
 
 from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
-from openstategraph.compile.run_context import context_declaration_problems
+from openstategraph.compile.run_context import (
+    context_declaration,
+    context_declaration_problems,
+    mint_context_schema,
+    unmintable_context_keys,
+)
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
@@ -1394,12 +1399,29 @@ class WorkflowCompiler:
     def plan(self, document: dict[str, Any]) -> CompiledPlan:
         plan = CompiledPlan()
         # What the document says its runs carry, checked before anything is
-        # wired (`organisms-first-class/67`). A declaration compiles to nothing
-        # yet — 69 is what mints a schema from it — so this is the whole of its
-        # effect on a build: a malformed one is a problem on the channel
-        # `validate` turns into a non-zero exit, and a well-formed one, or none
-        # at all, is silent.
-        plan.warnings.extend(context_declaration_problems(document))
+        # wired (`organisms-first-class/67`). A malformed declaration is a
+        # problem on the channel `validate` turns into a non-zero exit; a
+        # well-formed one is minted into the graph's `context_schema` in
+        # `build` (69), and no declaration at all is silent and free.
+        context_problems = context_declaration_problems(document)
+        plan.warnings.extend(context_problems)
+        if not context_problems:
+            # A key that cannot become a field name cannot be minted, and a
+            # build that raised `TypeError` out of `make_dataclass` would blame
+            # the compiler for a document defect. Reported here, where every
+            # other document defect is reported, and the whole schema is
+            # withheld rather than half of it: a context a caller can only
+            # partly supply is worse than one it must supply none of.
+            awkward = unmintable_context_keys(context_declaration(document))
+            if awkward:
+                listed = ", ".join(repr(key) for key in awkward)
+                plan.warnings.append(
+                    f"Run context declares keys that cannot be minted into a run "
+                    f"context schema: {listed} — a key must be a plain word (letters, "
+                    "digits and underscore, not starting with a digit), because it is "
+                    "also a command-line flag and a prompt variable. No context schema "
+                    "was minted for this workflow."
+                )
         nodes = {n["id"]: n for n in document.get("nodes", [])}
 
         # Annotations and containers never execute, so they are not graph nodes.
@@ -1597,10 +1619,27 @@ class WorkflowCompiler:
         """
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}
+        # What this workflow's runs carry, as a class (`organisms-first-class/69`).
+        # A **build artefact**: minted here from JSON field descriptors, handed
+        # to LangGraph, and never read back — `workflow.json` holds no Python
+        # type and `core/` never sees this object, which is how portability
+        # guardrail 4 survives a feature about declaring a Python class. It is
+        # a graph-assembly parameter, so it sits here beside `retry_policy` and
+        # `set_node_defaults` rather than on any node family.
+        #
+        # `None` means *pass nothing*, not *pass `None`*: a document that
+        # declares no run context must build exactly the graph it built before
+        # this ticket, and whether a library treats an explicit `None` as an
+        # absent argument is its business rather than a thing to assume.
+        context_schema = mint_context_schema(document)
         # `state_schema` is a caller-supplied TypedDict class, so the builder's
         # own type parameters cannot be inferred from it; `Any` here is honest —
         # the state shape is a workflow's, not ours.
-        builder: StateGraph[Any, Any, Any, Any] = StateGraph(state_schema)
+        builder: StateGraph[Any, Any, Any, Any] = (
+            StateGraph(state_schema)
+            if context_schema is None
+            else StateGraph(state_schema, context_schema=context_schema)
+        )
 
         # Graph-assembly parameters, never a node concern (CLAUDE.md): every
         # node gets the same retry/error-recovery policy from one place,
