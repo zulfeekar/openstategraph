@@ -42,6 +42,7 @@ from langgraph.types import RetryPolicy, Send
 from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
+from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
 try:
@@ -683,23 +684,6 @@ _FAILURE_PATTERN = re.compile(r"^\[(?P<node>.+?) failed after retries: (?P<messa
 def failure_marker(node: str, message: str) -> str:
     """The text a failed node publishes as its output."""
     return _FAILURE.format(node=node, message=message)
-
-
-#: What a model-driven node publishes when no model was configured for it.
-#:
-#: `_worker` returned `{"worker_results": {task_id: ""}}` for a `None` model and
-#: wrote **no** `outputs` entry, so the step was absent from the run's record
-#: entirely — not even the silent channel could see it — and was in any case
-#: indistinguishable from a worker whose model answered with nothing
-#: (`workflow-gallery` 18).
-#:
-#: A marker in `outputs` rather than a new state channel, for the reason
-#: `_FAILURE` is one: reader and writer stay together, and downstream still
-#: reads *something*. On the **silent** half rather than the failure half —
-#: `silent_node_warnings` argues that boundary in as many words, and
-#: `cli.run_exit_code` reads `.failures`. A step nobody gave a model to is a
-#: report about how the answer was reached; the run did not break.
-NO_MODEL_MARKER = "[no model was configured for this step]"
 
 
 #: What a failed step says to someone who cannot fix it.

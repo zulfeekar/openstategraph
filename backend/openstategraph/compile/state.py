@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, TypedDict
 
-from openstategraph.compile.context import _text
+from openstategraph.compile.fields import _text
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
 
@@ -35,6 +35,29 @@ RESET = _RESET
 merge_decisions = reducer_for(Reducer.MERGE)
 keep_max = reducer_for(Reducer.MAX)
 keep_latest_nonempty = reducer_for(Reducer.LATEST_NONEMPTY)
+
+
+#: What a model-driven node publishes when no model was configured for it.
+#:
+#: `_worker` returned `{"worker_results": {task_id: ""}}` for a `None` model and
+#: wrote **no** `outputs` entry, so the step was absent from the run's record
+#: entirely — not even the silent channel could see it — and was in any case
+#: indistinguishable from a worker whose model answered with nothing
+#: (`workflow-gallery` 18).
+#:
+#: A marker in `outputs` rather than a new state channel, for the reason
+#: `_FAILURE` is one: reader and writer stay together, and downstream still
+#: reads *something*. On the **silent** half rather than the failure half —
+#: `silent_node_warnings` argues that boundary in as many words, and
+#: `cli.run_exit_code` reads `.failures`. A step nobody gave a model to is a
+#: report about how the answer was reached; the run did not break.
+#:
+#: It lives here rather than in `workflow_compiler.py`, which defined it until
+#: `export-and-eject/16`, because it is a *value written into `RunState`* — the
+#: same kind of word as `RESET`, and read by `_silent_member_note` two hundred
+#: lines below. `workflow_compiler` re-exports it, so its own readers and the
+#: tests that import it from there did not have to move.
+NO_MODEL_MARKER = "[no model was configured for this step]"
 
 
 class RunState(TypedDict, total=False):
@@ -258,8 +281,6 @@ def _silent_member_note(task_id: str, state: RunState) -> str:
     sentence in `silent_node_warnings` says "the node called X during this
     run", which is what is actually known.
     """
-    from openstategraph.compile.workflow_compiler import NO_MODEL_MARKER
-
     outputs = state.get("outputs") or {}
     owner = next(
         (str(key).split("#", 1)[0] for key in outputs if str(key).endswith(f"#{task_id}")),

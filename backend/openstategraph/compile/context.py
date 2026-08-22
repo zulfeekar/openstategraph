@@ -17,13 +17,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from openstategraph.compile.fields import _text  # noqa: F401  (re-exported)
 from openstategraph.compile.workflow_compiler import CompiledPlan, ROUTER_TYPE
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN
-
-
-def _text(data: dict[str, Any], key: str, default: str = "") -> str:
-    value = data.get(key)
-    return value if isinstance(value, str) else default
 
 
 def _branch_entries(raw: Any) -> list[Any]:

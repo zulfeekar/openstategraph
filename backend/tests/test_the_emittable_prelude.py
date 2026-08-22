@@ -44,8 +44,11 @@ PACKAGE = Path(__file__).resolve().parents[1] / "openstategraph"
 #: that it stays free of this package forever; removing one is a promise the
 #: emitter no longer needs it.
 PRELUDE = (
+    "compile/fields.py",
     "compile/reducers.py",
+    "compile/state.py",
     "messages.py",
+    "skills.py",
 )
 
 #: Every name `export-and-eject/02` asked for, mapped to **every** module-level
@@ -66,10 +69,10 @@ HOMES: dict[str, tuple[tuple[str, ...], bool]] = {
     "keep_max": (("compile/reducers.py", "compile/state.py"), True),
     "keep_latest_nonempty": (("compile/reducers.py", "compile/state.py"), True),
     "content_text": (("messages.py",), True),
-    "RunState": (("compile/state.py",), False),
-    "_thread_question": (("compile/state.py",), False),
-    "_upstream_text": (("compile/state.py",), False),
-    "_text": (("compile/context.py", "api/threads.py"), False),
+    "RunState": (("compile/state.py",), True),
+    "_thread_question": (("compile/state.py",), True),
+    "_upstream_text": (("compile/state.py",), True),
+    "_text": (("compile/fields.py", "api/threads.py"), True),
     "_final_text": (("compile/node_runtime.py",), False),
     "Classification": (("abc/router.py",), False),
 }
@@ -81,30 +84,68 @@ def _imported_modules(path: Path) -> set[str]:
     Depth is the point: `inspect.getsource` emits the whole file, so a
     function-local import travels with it and fails in the emitted copy exactly
     as a top-level one would.
+
+    A relative import is resolved against this file's own position, so the
+    result is a dotted `openstategraph.…` name that `_relative_path` can turn
+    back into a roster entry. Recording it as the bare package name — which is
+    what this did until `export-and-eject/16` — is fine for "does it import
+    anything from us", and useless for "does it import anything *off the
+    roster*", which is the question the closure rule asks.
     """
+    here = path.relative_to(PACKAGE).parent.parts
     found: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.Import):
             found.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            # A relative import resolves inside this package by definition.
-            found.add("openstategraph" if node.level else (node.module or ""))
+            if node.level:
+                base = ("openstategraph", *here[: len(here) - (node.level - 1)])
+                found.add(".".join((*base, node.module) if node.module else base))
+            else:
+                found.add(node.module or "")
     return found
+
+
+def _relative_path(dotted: str) -> str:
+    """`openstategraph.compile.state` -> `compile/state.py`, roster spelling."""
+    return "/".join(dotted.split(".")[1:]) + ".py"
+
+
+def _package_imports(relative: str) -> set[str]:
+    """The `openstategraph` modules `relative` imports, in roster spelling."""
+    return {
+        _relative_path(name)
+        for name in _imported_modules(PACKAGE / relative)
+        if name.split(".")[0] == "openstategraph"
+    }
 
 
 class TestThePreludeIsFreeOfThisPackage:
     @pytest.mark.parametrize("relative", PRELUDE)
-    def test_it_imports_nothing_from_openstategraph(self, relative: str) -> None:
-        offenders = sorted(
-            name
-            for name in _imported_modules(PACKAGE / relative)
-            if name.split(".")[0] == "openstategraph"
-        )
+    def test_it_imports_nothing_from_off_the_roster(self, relative: str) -> None:
+        """The roster is **closed under its own imports**, and that is the rule.
+
+        `export-and-eject/02` wrote the strict form — zero `openstategraph`
+        imports at any depth — because both of its two modules happened to
+        have zero. `compile/state.py` cannot: `RunState`'s annotations *are*
+        `reducer_for(...)` calls, so the reducers arrive by import or the
+        schema does not exist. The strict form would have made the state
+        schema permanently un-emittable to protect a property nobody needs.
+
+        What the emitter actually needs is that the **set** it copies is
+        self-contained, which is the same promise 02's commit already made in
+        prose when it said tier one emits two files rather than one. So: an
+        `openstategraph` import is allowed exactly when it names another
+        roster module, which travels in the same emission and keeps its own
+        import working. Anything else is still fatal at call time.
+        """
+        offenders = sorted(_package_imports(relative) - set(PRELUDE))
         assert not offenders, (
             f"{relative} is on the emitter's prelude roster, so it is copied "
-            f"verbatim into repositories that do not have this package "
-            f"installed — but it imports {offenders}. Either lift the "
-            f"dependency or take the module off PRELUDE."
+            f"into repositories that do not have this package installed — but "
+            f"it imports {offenders}, which the emission does not carry. "
+            f"Either lift the dependency, put the module it needs on PRELUDE "
+            f"too, or take {relative} off PRELUDE."
         )
 
     @pytest.mark.parametrize("relative", PRELUDE)
@@ -147,19 +188,32 @@ class TestTheRosterIsWhereTheCodeIs:
     @pytest.mark.parametrize("name", sorted(HOMES))
     def test_emittability_matches_its_modules_imports(self, name: str) -> None:
         (relative, *_), emittable = HOMES[name]
-        free = not any(
-            imported.split(".")[0] == "openstategraph"
-            for imported in _imported_modules(PACKAGE / relative)
-        )
+        free = not (_package_imports(relative) - set(PRELUDE))
         assert free == emittable, (
-            f"{name} lives in {relative}, which is "
-            f"{'free of' if free else 'bound to'} openstategraph — but HOMES "
-            f"records it as {'emittable' if emittable else 'not emittable'}. "
-            f"A module that just became free is a candidate for PRELUDE."
+            f"{name} lives in {relative}, which imports "
+            f"{sorted(_package_imports(relative) - set(PRELUDE)) or 'nothing'} "
+            f"from off the roster — but HOMES records it as "
+            f"{'emittable' if emittable else 'not emittable'}. A module whose "
+            f"off-roster imports just went to zero is a candidate for PRELUDE."
         )
 
-    def test_every_prelude_module_is_reachable_from_a_recorded_name(self) -> None:
-        assert {sites[0] for sites, ok in HOMES.values() if ok} == set(PRELUDE)
+    def test_every_emittable_name_lives_on_the_roster(self) -> None:
+        assert {sites[0] for sites, ok in HOMES.values() if ok} <= set(PRELUDE)
+
+    def test_every_roster_module_is_a_home_or_a_dependency_of_one(self) -> None:
+        """No module joins the roster for its own sake.
+
+        Either a name the emitter carries lives in it, or a module holding
+        such a name imports it — `skills.py` is the second kind, arriving
+        because `_upstream_text`'s neighbour `_wired_skill` calls `skill_text`.
+        A module that is neither is a module the emitter would copy and never
+        read.
+        """
+        homes = {sites[0] for sites, ok in HOMES.values() if ok}
+        needed = set(homes)
+        for relative in homes:
+            needed |= _package_imports(relative)
+        assert set(PRELUDE) == needed
 
 
 def _binds(path: Path, name: str) -> bool:
@@ -185,3 +239,52 @@ def _binds(path: Path, name: str) -> bool:
             ):
                 return True
     return False
+
+
+class TestTheRosterActuallySurvivesBeingEmitted:
+    """The end the two property tests above are a proxy for.
+
+    Closure over imports is an *argument* that the emitted set stands up on
+    its own. This runs it: every roster module is written out by
+    `inspect.getsource` into a bare tree, and a subprocess that cannot see
+    this package at all imports the names `export-and-eject/16` set out to
+    make carryable. A property test that agrees with itself is the failure
+    mode `skills/ticket-loop` names; this one cannot.
+    """
+
+    def test_the_emitted_set_imports_with_this_package_absent(
+        self, tmp_path: Path
+    ) -> None:
+        import subprocess
+        import sys
+
+        for relative in PRELUDE:
+            target = tmp_path / "openstategraph" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            (target.parent / "__init__.py").write_text("")
+            module = __import__(
+                "openstategraph." + relative[: -len(".py")].replace("/", "."),
+                fromlist=["*"],
+            )
+            target.write_text(inspect.getsource(module))
+        (tmp_path / "openstategraph" / "__init__.py").write_text("")
+
+        program = (
+            "import sys; sys.path.insert(0, %r)\n"
+            "from openstategraph.compile.state import ("
+            "RunState, NO_MODEL_MARKER, _thread_question, _upstream_text)\n"
+            "from openstategraph.compile.fields import _text\n"
+            "from openstategraph.messages import content_text\n"
+            "print(len(RunState.__annotations__), _text({'k': 'v'}, 'k'),"
+            " _thread_question({}))\n" % str(tmp_path)
+        )
+        # cwd is the filesystem root and the real package is not installed
+        # there, so an import that reached it would be reaching this checkout.
+        result = subprocess.run(
+            [sys.executable, "-c", program],
+            capture_output=True,
+            text=True,
+            cwd="/",
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.split() == ["21", "v"]

@@ -250,15 +250,62 @@ obstacle. And when a name on `HOMES` moves, the test names both its old and new
 binding site and requires the map updated in the same commit, the same
 discipline the two source-scanning tests below already impose.
 
-Six names remain un-emittable (`RunState`, `_thread_question`, `_upstream_text`,
-`_text`, `_final_text`, `Classification`) because their *modules* are bound to
-the package even where the functions are pure. That is `export-and-eject/16`,
-deliberately left until 04 unblocks — the cheapest lever it records is that
-`compile/state.py`'s only package imports are two already-lazy ones inside
-`_silent_member_note` and `_wired_skill`, so lifting two constants would make
-that whole module emittable without moving a line of the three names on it.
-`_final_text` stays put; the `docs-and-gaps` 14 argument for that survived
-re-examination, and its one dependency (`messages.py`) is on the roster anyway.
+Six names remained un-emittable at 02 (`RunState`, `_thread_question`,
+`_upstream_text`, `_text`, `_final_text`, `Classification`) because their
+*modules* were bound to the package even where the functions are pure. That was
+`export-and-eject/16`, and four of the six are carryable now.
+
+#### The roster is closed under its own imports (2026-08-22, `export-and-eject/16`)
+
+**The lever 02 recorded was wrong, and measuring it was the first half of 16.**
+It said `compile/state.py`'s only package imports were two already-lazy ones.
+AST over every import at every depth says five: those two
+(`workflow_compiler.NO_MODEL_MARKER` in `_silent_member_note`,
+`skills.skill_text` in `_wired_skill`) **and three at module level** —
+`compile/context._text`, and `RESET` and `Reducer`/`reducer_for` from
+`compile/reducers`.
+
+The reducers are the interesting one. `RunState`'s annotations *are*
+`reducer_for(...)` calls, so the reducers arrive by import or the state schema
+does not exist — which means 02's strict rule, *zero `openstategraph` imports*,
+would have made the state schema permanently un-emittable to protect a property
+nobody needs. **What the emitter needs is that the set it copies is
+self-contained**, which is what 02's own commit already said in prose when it
+noted that tier one emits two files rather than one. So the rule is now
+**closure**: a roster module may import from `openstategraph` exactly when it
+names another roster module, and `test_the_emitted_set_imports_with_this_package_absent`
+writes the whole set out with `inspect.getsource` and imports it from a
+subprocess that cannot see this package at all.
+
+`PRELUDE` is therefore five modules: `compile/fields.py`, `compile/reducers.py`,
+`compile/state.py`, `messages.py`, `skills.py`. Two moves got `state.py` there,
+and neither touched a line of the three names on it:
+
+- **`NO_MODEL_MARKER` moved from `workflow_compiler.py` to `state.py`**, where
+  it belongs on its own terms: it is a *value written into `RunState`*, the
+  same kind of vocabulary word as `RESET`, and its only reader outside the
+  compiler was already two hundred lines below it in `state.py`.
+  `workflow_compiler` re-exports it, so no caller and no test moved. The
+  direction is the one that avoids a cycle — `workflow_compiler` → `state` is
+  new and fine, `state` → `context` → `workflow_compiler` would not have been.
+- **`_text` moved from `compile/context.py` to a new `compile/fields.py`** —
+  *reading one declared field out of a node's saved `data`, tolerantly*, the
+  document-side mirror of `messages.content_text`. It did **not** move into
+  `state.py`: that module's docstring draws the seam *state readers here,
+  document readers over there*, and moving a document reader in would have made
+  the seam falser. `context.py` re-exports it; it had exactly one cross-module
+  importer, which was `state.py`.
+
+`skills.py` joins the roster unmoved — it already had zero package imports, so
+`_wired_skill`'s lazy `skill_text` import is legal under closure with no edit.
+
+**Two of the six are still not carryable, and for unchanged reasons.**
+`_final_text` sits in `compile/node_runtime.py`, which will never be on a
+roster; the `docs-and-gaps` 14 argument for leaving it there survives, and tier
+one carries it by `getsource` on the *function* rather than the module.
+`Classification` sits in `abc/router.py` behind `SystemPrompt`; 02's note that
+emitting the two-field model may be cheaper than lifting it still stands, and
+that is 04's call.
 
 ### What executing step 2 measured (2026-08-22)
 
