@@ -160,7 +160,7 @@ class TestTheReservedKeys:
 
     def test_the_reserved_list_is_read_from_one_place(self) -> None:
         from openstategraph.compile.run_context import RESERVED_CONTEXT_KEYS
-        from openstategraph.prebuilt_session import RUN_IDENTITY_FIELDS
+        from openstategraph.run_identity import RUN_IDENTITY_FIELDS
 
         assert RESERVED_CONTEXT_KEYS == tuple(key for key, _label in RUN_IDENTITY_FIELDS)
 

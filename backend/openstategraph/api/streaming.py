@@ -1018,6 +1018,7 @@ def _run_frames(
     one failure.
     """
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
+    from openstategraph.run_identity import run_identity
 
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
@@ -1034,7 +1035,7 @@ def _run_frames(
     run_path = RunPathResolver(
         {**(dict(names.node_ids_by_name) if names else {}), **node_ids_by_name},
         dict(names.mount_slugs) if names else {},
-        str((config.get("configurable") or {}).get("workflow_slug") or ""),
+        run_identity(config).get("workflow_slug", ""),
     )
     # `dict.values()` is a *view*, so `x in view` is a linear scan. Asking it
     # once per update frame made "is this an internal step" O(canvas nodes)

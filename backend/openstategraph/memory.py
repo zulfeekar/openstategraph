@@ -128,16 +128,12 @@ def _user_namespace() -> tuple[str, str] | None:
     person who declined to identify is normal; ``configurable`` failing to
     reach this code is a bug, and before this the two were the same silence.
     """
-    from langgraph.config import get_config
+    from openstategraph.run_identity import run_identity
 
-    email = ""
-    try:
-        email = str((get_config().get("configurable") or {}).get("user_email") or "")
-    except Exception as exc:
-        _log().debug("no run config to read user_email from (%s); no user scope", exc)
-    else:
-        if not email:
-            _log().debug("run config carries no user_email; no user scope")
+    identity = run_identity(log=_log())
+    email = identity.get("user_email", "")
+    if identity and not email:
+        _log().debug("run config carries no user_email; no user scope")
     # Store namespace labels forbid periods, and emails are full of them —
     # a deterministic substitution keeps one person one namespace.
     cleaned = email.strip().lower().replace(".", "_")
@@ -180,16 +176,12 @@ def workflow_scope_slug() -> str | None:
     different facts, and the second one also silently defeats the app-scope
     provenance stamp (ship-it 47's rider).
     """
-    from langgraph.config import get_config
+    from openstategraph.run_identity import run_identity
 
-    slug = ""
-    try:
-        slug = str((get_config().get("configurable") or {}).get("workflow_slug") or "")
-    except Exception as exc:
-        _log().debug("no run config to read workflow_slug from (%s); no workflow scope", exc)
-    else:
-        if not slug:
-            _log().debug("run config carries no workflow_slug; no workflow scope")
+    identity = run_identity(log=_log())
+    slug = identity.get("workflow_slug", "")
+    if identity and not slug:
+        _log().debug("run config carries no workflow_slug; no workflow scope")
     return slug.strip().lower().replace(".", "_") or None
 
 

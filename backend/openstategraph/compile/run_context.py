@@ -72,7 +72,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from openstategraph.errors import DocumentError
-from openstategraph.prebuilt_session import RUN_IDENTITY_FIELDS
+from openstategraph.run_identity import RUN_IDENTITY_KEYS
 
 #: Where a document declares it — a sibling of `model` and `recursionLimit`.
 #: `document.setSetting(key, value)` is already generic in the key, so nothing
@@ -93,7 +93,7 @@ RUN_CONTEXT_TYPES: tuple[str, ...] = ("string", "number", "boolean")
 #: construction: the author declares it and the caller fills it. A key that
 #: existed on both channels would hand back exactly what that ticket took away,
 #: and would be two spellings of one fact besides.
-RESERVED_CONTEXT_KEYS: tuple[str, ...] = tuple(key for key, _label in RUN_IDENTITY_FIELDS)
+RESERVED_CONTEXT_KEYS: tuple[str, ...] = RUN_IDENTITY_KEYS
 
 
 def _fold(key: str) -> str:

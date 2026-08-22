@@ -200,10 +200,13 @@ CLASSIFIED: dict[str, str] = {
     "api/routes/runs.py": "run",
     "compile/node_runtime.py": "mount",
     "api/threads.py": "read",
-    "api/streaming.py": "read",
-    "memory.py": "read",
-    "prebuilt_session.py": "read",
     "generated_module_contract.py": "read",
+    # The one accessor every other reader now goes through
+    # (`organisms-first-class` 68). `memory.py`, `api/streaming.py` and
+    # `prebuilt_session.py` left this table when they stopped spelling
+    # `configurable` themselves; `tests/test_one_accessor_reads_run_identity.py`
+    # is the census that keeps them from spelling it again.
+    "run_identity.py": "read",
     # Addresses one stored thread to ask *where* its pause is waiting, and
     # starts nothing: a `thread_id` handed to `checkpointer.list` is a lookup
     # key, not a claim about who is running (`organisms-first-class` 64).

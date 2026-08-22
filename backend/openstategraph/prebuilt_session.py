@@ -5,8 +5,10 @@ orders, or quotes the thread id back so a support reply can be found later,
 needs one fact the graph state does not carry: the identity the *run* was
 started under. That identity already exists — `thread_id`, `session_id`,
 `user_email` and `workflow_slug` ride in `configurable` on every run, and the
-memory tools already namespace by the same `user_email`. It simply was never
-readable from inside a prompt.
+memory tools already namespace by the same `user_email` — and since
+`organisms-first-class/68` every one of those readings goes through
+`openstategraph.run_identity`. It simply was never readable from inside a
+prompt.
 
 **The model cannot supply any of it.** `Args = NoArgs`, exactly like the email
 tool's recipient rule: the transport says who this is, the model may only ask.
@@ -23,45 +25,14 @@ work.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.run_identity import RUN_IDENTITY_FIELDS, run_identity
 
-#: `configurable` key -> the label the model sees. Ordered: who, then which
-#: conversation, then where — the order a sentence would want them in.
-#:
-#: Public because it is the **one place the four run-identity keys are named**.
-#: `compile/run_context.py` reads it to refuse a `settings.context` declaration
-#: that tries to name one: `configurable` is who the run is *for*, decided by
-#: the server, and `context` is what the workflow asked its caller for. A
-#: second list of these keys somewhere else is a second chance for one of them
-#: to drift. `organisms-first-class/68` moves it onto a `run_identity`
-#: accessor together with the three hand-rolled `configurable` reads; until
-#: then this tuple is that place, under a name another module may say.
-RUN_IDENTITY_FIELDS: tuple[tuple[str, str], ...] = (
-    ("user_email", "user"),
-    ("session_id", "session"),
-    ("thread_id", "conversation (thread) id"),
-    ("workflow_slug", "workflow"),
-)
-
-
-def _configurable() -> dict[str, Any]:
-    """The run's own config, or `{}` outside a run.
-
-    `get_config()` raises when there is no runnable context — a unit test, a
-    tool called directly from a script. That is not an error worth surfacing
-    to a model; "we do not know who you are" is a complete answer.
-    """
-    try:
-        from langgraph.config import get_config
-
-        config = get_config() or {}
-    except Exception:
-        return {}
-    return dict(config.get("configurable") or {})
+#: Re-exported, not redefined: `run_identity` owns the four keys and their
+#: labels, and this module renders them. `organisms-first-class/68`.
+__all__ = ["RUN_IDENTITY_FIELDS", "SESSION_TOOLS", "SessionIdentityTool"]
 
 
 class SessionIdentityTool(BaseTool):
@@ -80,11 +51,11 @@ class SessionIdentityTool(BaseTool):
     Args = NoArgs
 
     def _execute(self, args: BaseModel) -> ToolResult:
-        configurable = _configurable()
+        identity = run_identity()
         known = [
-            f"- {label}: {str(configurable.get(key) or '').strip()}"
+            f"- {label}: {identity.get(key, '').strip()}"
             for key, label in RUN_IDENTITY_FIELDS
-            if str(configurable.get(key) or "").strip()
+            if identity.get(key, "").strip()
         ]
         if not known:
             # Deliberately not an error: an anonymous run is a normal run, and

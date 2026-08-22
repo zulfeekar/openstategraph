@@ -1,6 +1,6 @@
 # A workflow declares what its runs carry
 
-**Status: step 1 of 7 built; the rest is prose.** `organisms-first-class/41`,
+**Status: steps 1 and 2 of 7 built; the rest is prose.** `organisms-first-class/41`,
 adopted from ticket 19's owner decision (2026-08-15). The build is split into
 seven tickets, listed at the end, in the order they must land.
 
@@ -12,6 +12,14 @@ schema is minted, no value is supplied and nothing reads one — so a workflow
 declaring run context today behaves exactly as it did yesterday. The sections
 below are marked accordingly: **[BUILT]** for what 67 shipped, and everything
 else is still a plan.
+
+**Ticket 68 has landed** (2026-08-22) and changed no behaviour at all. The four
+run-identity keys are now spelled in one module,
+`backend/openstategraph/run_identity.py`, and every reader of them goes through
+its `run_identity()` accessor;
+`backend/tests/test_one_accessor_reads_run_identity.py` is the census that
+fails when a fifth reader hand-rolls `configurable`, the sibling of `ac870f6`'s
+census of writers.
 
 The code it shipped with is `backend/tests/test_runtime_context_facts.py`,
 which pins the library facts it rests on, plus
@@ -46,7 +54,7 @@ anyway.
 
 | channel | who supplies it | who reads it | scope |
 | --- | --- | --- | --- |
-| `configurable.thread_id` / `session_id` / `user_email` / `workflow_slug` | the **server** (`principal.py`), or the library caller, never the client | `memory.py:135`, `memory.py:187`, `prebuilt_session._configurable`, `api/streaming.py:1037`, `api/threads.py` | every run, every door |
+| `configurable.thread_id` / `session_id` / `user_email` / `workflow_slug` | the **server** (`principal.py`), or the library caller, never the client | `run_identity.run_identity()` — the one accessor since ticket 68; `memory.py`, `prebuilt_session.py` and `api/streaming.py` call it, and `api/threads.py` reads a *stored* checkpoint rather than the run | every run, every door |
 | `document.settings.*` — `model`, `recursionLimit`, `checkpointer`, `memory`, `injectionScreening`, `knowledgeCodeRoot`, `purpose` | the **author**, saved in `workflow.json` | the compiler, at build | the package |
 | `RunRequest` — `question`, `model`, `recursion_limit`, `thread_id`, `session_id`, `workflow_slug` | the caller | `api/routes/runs.py` | one run |
 | `ask(question, *, thread_id, user_email, session_id, recursion_limit)` | the library caller | `loader.py:238` | one run |
@@ -184,7 +192,7 @@ the compiled graph.
   context and memory through `ToolRuntime`"* — by making a true version of it
   available.
 
-### How this relates to the four identity keys — the rule that keeps them apart — **[refusal BUILT, ticket 67; the `run_identity` accessor is still 68]**
+### How this relates to the four identity keys — the rule that keeps them apart — **[BUILT, tickets 67 and 68]**
 
 They do not merge, and a declaration may not name one.
 
@@ -209,8 +217,13 @@ it, read by `memory.py` (both sites), `prebuilt_session.py` and
 `api/streaming.py`. Three hand-rolled `get_config().get("configurable")` reads
 are three chances for one of them to learn a normalisation the others do not —
 which is the argument `_workflow_scope` already makes in its own docstring
-about itself, applied one level up. `ac870f6`'s census of *writers* gains a
-sibling census of *readers*.
+about itself, applied one level up. `ac870f6`'s census of *writers* gained its
+sibling census of *readers* in
+`backend/tests/test_one_accessor_reads_run_identity.py`: every module naming
+one of the four keys is classified as accessor, writer, transport or checkpoint
+lookup, and no module but the accessor may take one out of a `configurable`
+mapping — whether it called `get_config()` or was handed the config, which is
+the half a `get_config()`-only check misses.
 
 ### The subagent sentence, in full
 
@@ -302,10 +315,10 @@ edge with an unknown endpoint". That puts it on the channel `validate` turns
 into PROBLEMS FOUND and a non-zero exit, which is the honest answer to that
 command's one question.
 
-The reserved list is read from `prebuilt_session.RUN_IDENTITY_FIELDS` — 67
-promoted that tuple from `_FIELDS` to a public name so there is one place the
-four keys are spelled. Ticket 68 moves it onto a `run_identity` accessor; until
-then this is that place. The TypeScript half is a hand-mirror (`core/` cannot
+The reserved list is read from `run_identity.RUN_IDENTITY_KEYS` — 67 promoted
+the tuple from `prebuilt_session._FIELDS` to a public name, and 68 moved it to
+the accessor's own module, which is now the one place the four keys are
+spelled. The TypeScript half is a hand-mirror (`core/` cannot
 import Python) and is pinned against the Python one by a drift test in
 `test_run_context_declaration.py::TestTheTypeScriptMirrorDoesNotDrift`, the
 same instrument `RuntimeClient.ts` is held to.
@@ -320,7 +333,7 @@ test when it lands.
 | # | ticket | why here |
 | --- | --- | --- |
 | ~~67~~ | ~~`settings.context` is a declared field schema~~ | **Landed 2026-08-22.** TS `core/` contract + Pydantic mirror + both serializer round trips + the reserved-key refusal. Builds no runtime, as designed. |
-| 68 | One `run_identity` accessor for the four keys | Settles the `memory.py` drift, and 69's reserved-key refusal needs one list to read. Pure refactor, no behaviour. |
+| ~~68~~ | ~~One `run_identity` accessor for the four keys~~ | **Landed 2026-08-22.** `openstategraph/run_identity.py`, four readers repointed, the reserved list moved onto it, and a census of readers beside `ac870f6`'s census of writers. Pure refactor, as designed. |
 | 69 | The compiler mints a `context_schema` | Needs 67's schema and 68's reserved list. Ends with `TestNothingHereUsesItYet` updated rather than deleted. |
 | 70 | One validator, three supply routes | `ask(context=)`, `RunRequest.context`, `run --context`. Needs 69, or there is nothing to supply *to*. |
 | 71 | Nodes read it | The first read door, and the cheapest to verify end to end. |
