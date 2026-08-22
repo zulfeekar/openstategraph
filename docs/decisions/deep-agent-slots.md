@@ -1,6 +1,10 @@
 # What a deep agent can actually offer
 
 **Status: measured, 2026-08-22, against `deepagents 0.7.5` as installed.**
+**Amended 2026-08-22 by `organisms-first-class/84`**, which built §3. The
+amendment is marked in place rather than appended, because a build order whose
+first shipped item still reads as a plan is the drift this repository has
+corrected in its own prose three times.
 Nothing here is a design. It is the ground the configuration surface will stand
 on, established so that surface offers nothing false.
 
@@ -144,20 +148,69 @@ stack because a general-purpose subagent is auto-added unless a profile
 disables it — so **every deep agent already has `task`** (executed: `task` is
 in the bound tool list of a bare deep agent).
 
-**Half reachable.** `DeepAgentNode` has a `subagents` pass-through and the
-compiler never fills it (`node_runtime.py` builds the tier with `name`,
-`model`, `tools`, `rules`, … and no `subagents`). That is ticket 31, and this
-measurement confirms its premise stands.
+**Reachable, and now filled — `organisms-first-class/84`, which also retires
+`organisms-first-class/31`.** Until then `DeepAgentNode` had a `subagents`
+pass-through the compiler never filled, so every deep agent delegated to
+exactly one anonymous `general-purpose` worker nobody had configured.
 
-**What it needs:** nothing we do not have. A `SubAgent` is a dict of strings
-plus tools — declarative, serialisable, exactly the shape `workflow.json`
-already carries.
+**Where a declaration lives: on the agent node's own `data`, as a
+`repeatable-group` field keyed `subagents`.** Rejected alternatives, and why:
 
-**A user would configure:** a list — name, description, prompt, and which of
-the parent's tools it keeps. **Note for the surface:** `CLAUDE.md` says a
-subagent never sees the parent's state, and that remains true of *graph state*;
-`a86b4d8` measured that **run context does cross into a subagent's tools
-unchanged**. Both sentences are true and the surface must not blur them.
+- **Canvas nodes wired to a bus.** A subagent never joins the shared state,
+  never occupies a superstep, and its result arrives as a tool result. Drawing
+  it would assert the opposite of all three. The `tools` bus is a real
+  precedent for *tools*, and a subagent is not one of this graph's steps.
+- **A mount.** `CLAUDE.md` fixes **workflow node / package / instance / slug**
+  for *another workflow run as one isolated step*, with a document of its own
+  on disk. A subagent has no package, no slug and no document. Reusing that
+  vocabulary would cost it its only distinction.
+
+**What a user configures per row** — measured against the installed
+`SubAgent` TypedDict, whose required keys are exactly `name`, `description`,
+`system_prompt` and whose optional ones include `tools`, `model`, `middleware`,
+`interrupt_on`, `skills`, `permissions`, `response_format`:
+
+| Row field | Maps to | Note |
+| --- | --- | --- |
+| Name | `name` | what the model passes as `subagent_type` |
+| When to use it | `description` | the *only* thing the model reads when deciding to delegate |
+| Worker instructions | `system_prompt` | required — `create_sub_agent` raises without it |
+| Tools | `tools` | two states only: omit the key (inherit the parent's) or pass `[]` |
+
+**Deliberately not offered yet**, each for a stated reason rather than an
+oversight: `model` (a second model picker per row, and the library's default —
+inherit the parent's — is the honest one until somebody asks); `skills` and
+`permissions` (gated by ticket 82's backend seam, exactly as the parent's are);
+`interrupt_on` (ticket 86, which depends on 27); `middleware` and
+`response_format` (not data, so not `workflow.json`'s to carry).
+
+**A declaration the runtime cannot deliver is said out loud**, on
+`plan.warnings` — the channel `validate` prints as PROBLEMS FOUND and exits
+non-zero on. Two kinds, both knowable from the document before anything runs: a
+**malformed** row (missing one of the three strings, or a repeated name — the
+row is dropped, never repaired), and a **well-formed row on a `react` or
+`custom` tier**, where there is no `subagents` parameter to reach at all. Not a
+`Finding`: a `Finding` names a capability that tried to load and failed, and
+`6a812bf`'s precedent puts a malformed declaration here.
+
+**The auto-added `general-purpose` worker is named on screen, not disabled.**
+Disabling it needs a `HarnessProfile` this product does not register, so
+"disable it" was not on the table; the decision 84 records is that a deep agent
+which can already delegate to an anonymous worker must say so where the
+delegation is configured. Declaring a row named `general-purpose` replaces it —
+that is the library's own override path, and the field hint says so.
+
+**Both isolation sentences are pinned, together, because apart they read as a
+contradiction** (`tests/test_a_deep_agent_delegates.py`): a subagent's model
+never receives the parent's message history or graph state, **and** the run's
+context reaches the subagent's tools unchanged (`a86b4d8`, re-measured here on
+the subagent path). Isolation is about messages and state; runtime context is a
+third channel.
+
+**What a fake model cannot prove**, and this is the whole of it: that a real
+model *chooses* to call `task`, or picks the right `subagent_type` from a
+description. The tests script the delegation. There is no provider credential
+here, so the assembly and the plumbing are proven and the judgement is not.
 
 ### 4 · Summarization — `SummarizationMiddleware`
 
@@ -268,9 +321,9 @@ names a slot; the compiler owns the order.
    slots can only be offered as lies.
 2. **83 — skills and memory sources.** Depends on **82**. Two list fields and a
    loud failure where the library is silent.
-3. **84 — subagents reach the pass-through.** Depends on nothing; the
-   pass-through exists and the compiler simply never fills it. Cheapest real
-   capability on the list.
+3. ~~**84 — subagents reach the pass-through.**~~ **Shipped**, and it retired
+   ticket 31. See §3 above for what was built and what was deliberately left
+   off the row.
 4. **85 — a todo-list slot from `langchain`, not `deepagents`.** Depends on
    nothing. Corrects ticket 33's premise.
 5. **86 — per-tool approval.** Depends on **27**, which must be settled first.

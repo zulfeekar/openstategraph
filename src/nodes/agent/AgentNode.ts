@@ -20,6 +20,29 @@ const FIELD_MODEL = MODEL_FIELD_KEY;
 const FIELD_BUDGET = 'tokenBudget';
 const FIELD_TIER = 'tier';
 const FIELD_SYSTEM_PROMPT = 'systemPrompt';
+const FIELD_SUBAGENTS = 'subagents';
+
+/**
+ * The worker every deep agent already carries.
+ *
+ * `create_deep_agent` auto-adds it unless the caller declares a subagent of
+ * this name, and disabling it needs a harness profile this product does not
+ * register. So the decision `organisms-first-class/84` records is **name it**,
+ * not "quietly have one": a `task` tool that can already delegate to an
+ * anonymous worker nobody configured is a capability a developer cannot see.
+ */
+const GENERAL_PURPOSE_SUBAGENT = 'general-purpose';
+
+/** How many workers one agent may declare. Rows the model must choose between. */
+const MAX_SUBAGENTS = 8;
+
+const SUBAGENTS_NOTE =
+  'On the deep agent runtime this agent can hand work to a named worker and ' +
+  `get one answer back. It already carries one, "${GENERAL_PURPOSE_SUBAGENT}", ` +
+  'with this agent\'s own tools; declare a subagent of that name to replace ' +
+  'it. A worker is given a task and reports a result — it never sees this ' +
+  "agent's conversation or the workflow's state, though the run's context " +
+  'does reach its tools.';
 
 /**
  * Turns before the loop is cut off.
@@ -164,6 +187,91 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
         // model-driven types. It governs the rules typed above *and* the
         // skill wired to the port below — never the locked machinery.
         rulesModeField(),
+        {
+          // `organisms-first-class/84`. The deep runtime's `subagents`
+          // parameter existed and nothing ever filled it, so every deep agent
+          // could delegate to exactly one anonymous worker.
+          //
+          // **Declared here, on the node's own data, and deliberately not as
+          // canvas nodes wired to a bus.** A subagent is not a step in this
+          // graph: it never joins the shared state, never appears in a
+          // superstep, and its result reaches the agent as a tool result.
+          // Drawing it would say the opposite of every one of those. It is
+          // also not a *workflow node* — `CLAUDE.md` fixes that word for
+          // another workflow run as one isolated step, with its own package,
+          // slug and mount — and blurring the two would cost the vocabulary
+          // its only distinction.
+          //
+          // A row is three strings and a tool choice, which is exactly a
+          // `deepagents.SubAgent`, so it travels in `workflow.json` as data
+          // with no host-language code in it.
+          kind: 'readonly',
+          key: 'subagentsNote',
+          label: 'Delegation',
+          defaultValue: SUBAGENTS_NOTE,
+          onCard: false,
+          group: 'Delegation',
+          advanced: true,
+        },
+        {
+          kind: 'repeatable-group',
+          key: FIELD_SUBAGENTS,
+          label: 'Subagents',
+          hint:
+            'Deep agent runtime only. Each subagent is a separate worker: it ' +
+            'is given a task and reports a result, and never sees this ' +
+            "agent's conversation.",
+          defaultValue: [],
+          addLabel: 'Add subagent',
+          maxRows: MAX_SUBAGENTS,
+          onCard: false,
+          group: 'Delegation',
+          advanced: true,
+          fields: [
+            {
+              kind: 'text',
+              key: 'name',
+              label: 'Name',
+              placeholder: 'e.g. researcher',
+              hint: `What the agent delegates to. Naming one "${GENERAL_PURPOSE_SUBAGENT}" replaces the built-in worker.`,
+              defaultValue: '',
+              validate: (value) => (value.trim() ? null : 'Name required'),
+            },
+            {
+              kind: 'text',
+              key: 'description',
+              label: 'When to use it',
+              placeholder: 'e.g. Looks facts up in the wired tools and reports one number.',
+              hint: 'How the agent decides to delegate. The model reads this and nothing else about the worker.',
+              defaultValue: '',
+              validate: (value) => (value.trim() ? null : 'Description required'),
+            },
+            {
+              kind: 'textarea',
+              key: 'systemPrompt',
+              label: 'Worker instructions',
+              placeholder: 'e.g. You research one question at a time. Answer with the figure only.',
+              defaultValue: '',
+              minRows: 3,
+              maxRows: 12,
+              validate: (value) => (value.trim() ? null : 'Instructions required'),
+            },
+            {
+              // The library's own two states, and no third: a spec that omits
+              // `tools` inherits the parent's, and one that passes `[]` has
+              // none. A per-tool picker would need this node's wired tool
+              // list, which is a port question and not a field question.
+              kind: 'select',
+              key: 'tools',
+              label: 'Tools',
+              defaultValue: 'inherit',
+              options: [
+                { value: 'inherit', label: "This agent's tools" },
+                { value: 'none', label: 'No tools' },
+              ],
+            },
+          ],
+        },
       ],
       ports: [
         {

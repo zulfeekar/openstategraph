@@ -90,6 +90,7 @@ from openstategraph.compile.context import (  # noqa: F401
     rejection_feedback,
     revision_request,
 )
+from openstategraph.compile.subagents import subagent_specs
 from openstategraph import injection
 from openstategraph.developer_channel import transcript_text
 from openstategraph.memory import MemorySettings
@@ -1801,6 +1802,19 @@ class NodeRuntime:
                         keep=SUMMARIZE_KEEP,
                     )
                 tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
+                # Delegation (`organisms-first-class/84`). The pass-through has
+                # existed since `DeepAgentNode` was written and nothing ever
+                # filled it, so every deep agent could delegate to exactly one
+                # anonymous `general-purpose` worker. Only the deep tier has a
+                # parameter to reach — a declaration on any other tier is a
+                # `plan.warnings` problem raised at plan time, never a silent
+                # drop here, because a pass-through that appears wired and does
+                # nothing is what 81 measured `skills=` doing.
+                tier_kwargs: dict[str, Any] = {}
+                if tier_cls is agent_family.DeepAgentNode:
+                    specs = subagent_specs(data)
+                    if specs:
+                        tier_kwargs["subagents"] = specs
                 built[key] = tier_cls(
                     name=f"agent_{node_id}",
                     model=model,
@@ -1845,6 +1859,7 @@ class NodeRuntime:
                         if part
                     ),
                     middleware=contributions,
+                    **tier_kwargs,
                 ).build()
             return built[key]
 

@@ -47,6 +47,7 @@ from openstategraph.compile.run_context import (
     mint_context_schema,
     unmintable_context_keys,
 )
+from openstategraph.compile.subagents import subagent_declaration_problems
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
@@ -1405,6 +1406,13 @@ class WorkflowCompiler:
         # `build` (69), and no declaration at all is silent and free.
         context_problems = context_declaration_problems(document)
         plan.warnings.extend(context_problems)
+        # What a deep agent says it may delegate to (`organisms-first-class/84`).
+        # Same channel and same reason: a row the runtime cannot deliver — three
+        # required strings missing, a repeated name, or a declaration on a tier
+        # with no `subagents` parameter at all — is a document defect knowable
+        # before anything runs, and saying nothing is the `skills=` failure 81
+        # measured.
+        plan.warnings.extend(subagent_declaration_problems(document))
         if not context_problems:
             # A key that cannot become a field name cannot be minted, and a
             # build that raised `TypeError` out of `make_dataclass` would blame
