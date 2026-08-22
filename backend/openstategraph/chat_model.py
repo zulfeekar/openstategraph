@@ -145,6 +145,39 @@ def build_chat_model(model_name: str) -> "BaseChatModel":
         ) from exc
 
 
+def verify_provider(here: ProviderEnvironment) -> str | None:
+    """Make **one real call** to this provider. `None` if it answered.
+
+    The only certain answer to *"will this run"*, and the reason it cannot be
+    part of a status listing: it costs money and latency, so it belongs behind
+    something a person opted into — `POST /api/providers/{name}/verify` in the
+    editor, `openstategraph providers --check` on a terminal
+    (providers-and-credentials 12).
+
+    **One implementation, because it was about to be two.** The route had this
+    inline; the CLI needed the same three steps — refuse early when no
+    credential is set, send the smallest possible prompt, report the failure in
+    the product's own words. Two spellings of one behaviour is the defect the
+    provider catalogue itself was built to end, and a divergence here would
+    mean the editor and the terminal disagreeing about whether a key works.
+
+    The failure string never carries a stack trace and never carries the
+    credential — `describe_failure` and `credential_error_from` between them
+    are what keep that true, including for OpenAI's own masked fragment.
+    """
+    from openstategraph.compile.workflow_compiler import describe_failure
+
+    if not here.is_configured():
+        return here.spec.missing_key_message()
+    try:
+        # The smallest thing that proves the credential is accepted. A single
+        # token of output is all this needs to learn.
+        build_chat_model(here.model_string()).invoke("hi")
+    except Exception as exc:  # noqa: BLE001 — reported, never raised at a user
+        return describe_failure(exc)
+    return None
+
+
 #: HTTP statuses that mean "your credential was read and refused".
 #: 403 counts: a key valid for the vendor but not for *this model* is the same
 #: action for the reader — look at the key and the account behind it.

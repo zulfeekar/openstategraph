@@ -366,8 +366,22 @@ class ProviderEnvironment:
         except (ImportError, ValueError):  # pragma: no cover - a broken parent package
             return False
 
-    def key_hint(self) -> str | None:
-        """A glance at what configured this, or `None` when nothing did.
+    def credential_source(self) -> tuple[str, str] | None:
+        """The variable that actually configured this, and a safe glance at it.
+
+        `None` when nothing did. The **name** is the half a reader can act on
+        and the half that was missing everywhere it mattered: `is_configured`
+        is `any(env_vars)`, so Ollama is configured by its cloud key *or* by
+        `OLLAMA_HOST`, and naming the first would send a developer running
+        their own daemon to go and get a key they do not need.
+
+        Split out of `key_hint` for the same reason `_endpoint_source` was
+        split out of `base_url`: the precedence is *knowledge*, `/api/providers`
+        needs the winning variable's name while a masked glance is all the
+        editor may see, and two readings of one rule get one implementation.
+        `/api/providers` had a third copy of this loop written inline against
+        `os.getenv`, which is how a route ends up describing a machine other
+        than the one a `ProviderEnvironment` was handed.
 
         A **secret** variable is reduced to its first two characters and a
         fixed mask. A **non-secret** one is shown whole: `OLLAMA_HOST` is a
@@ -379,9 +393,14 @@ class ProviderEnvironment:
             if not value:
                 continue
             if not _is_secret(name):
-                return _without_userinfo(value)
-            return value[:HINT_PREFIX] + HINT_MASK
+                return name, _without_userinfo(value)
+            return name, value[:HINT_PREFIX] + HINT_MASK
         return None
+
+    def key_hint(self) -> str | None:
+        """A glance at what configured this, or `None` when nothing did."""
+        source = self.credential_source()
+        return None if source is None else source[1]
 
     def base_url(self) -> str | None:
         """This provider's endpoint, or `None` to leave the SDK's default alone.
@@ -656,6 +675,14 @@ def _default_reason(
     more-than-one cases name the alternatives, because a default nobody can
     see is the *"why is it not using my key"* question this text exists to
     pre-empt.
+
+    **It says "has a credential", never "configured", and that is the fix for
+    providers-and-credentials 12.** This clause is the header of
+    `openstategraph providers`, and it read *"3 integrations installed and
+    configured"* on the strength of `is_configured()` — which asks whether a
+    variable is set and cannot ask whether a request would be answered. A
+    supervisor session read it as a verdict on running and acted on that. The
+    count is the same count; only the claim narrowed to what was measured.
     """
     installed = len(candidates)
     configured = any(spec is elected for spec in ready)
@@ -668,13 +695,17 @@ def _default_reason(
             f"set {variables} to use {elected.name}"
         )
     if installed == 1:
-        return "the only provider integration installed, and it is configured"
+        return "the only provider integration installed, and it has a credential"
     if len(ready) == 1:
-        return f"the only one of {installed} installed integrations that is configured"
+        return (
+            f"the only one of {installed} installed integrations "
+            "that has a credential"
+        )
     names = ", ".join(spec.name for spec in ready)
     return (
-        f"{len(ready)} integrations installed and configured ({names}); the first "
-        "registered wins. Pin one with default_model: in openstategraph.yaml"
+        f"{len(ready)} of {installed} installed integrations have a credential "
+        f"({names}); the first registered wins. Pin one with default_model: in "
+        "openstategraph.yaml"
     )
 
 

@@ -7,8 +7,6 @@ gaining a dependency (reviews-2026-08-14 ticket 15).
 
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, HTTPException
 
 from openstategraph.api.schemas import ProviderStatusResponse, ProviderVerifyResponse
@@ -51,10 +49,12 @@ def provider_status() -> list[ProviderStatusResponse]:
             # The variable that actually did it. `is_configured` is
             # `any(env_vars)`, so Ollama is configured by its key *or* its
             # host — naming the first would send a developer running their
-            # own daemon looking for a cloud key they do not need.
-            configured_by=next(
-                (name for name in here.spec.env_vars if os.getenv(name, "").strip()), None
-            ),
+            # own daemon looking for a cloud key they do not need. Asked of
+            # `here` rather than of `os.getenv`: this loop was a third copy of
+            # `credential_source`, and one written against the real process
+            # environment inside an object whose whole point is that it may
+            # describe a different one.
+            configured_by=(source[0] if (source := here.credential_source()) else None),
             env_vars=list(here.spec.env_vars),
             default_model=here.model_string(),
             key_hint=here.key_hint(),
@@ -84,23 +84,18 @@ def verify_provider(name: str) -> ProviderVerifyResponse:
     one, and never carries a stack trace or the credential — the same rule
     `credential_error_from` applies to a 401.
     """
-    from openstategraph import chat_model
-    from openstategraph.compile.workflow_compiler import describe_failure
+    from openstategraph.chat_model import verify_provider as make_the_call
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     spec = provider_catalogue().get(name)
     if spec is None:
         raise HTTPException(status_code=404, detail=f'No provider named "{name}".')
-    here = ProviderEnvironment(spec)
-    if not here.is_configured():
-        return ProviderVerifyResponse(
-            name=name, ok=False, detail=spec.missing_key_message()
-        )
 
-    try:
-        # The smallest thing that proves the credential is accepted. A
-        # single token of output is all this needs to learn.
-        chat_model.build_chat_model(here.model_string()).invoke("hi")
-    except Exception as exc:  # noqa: BLE001 — reported, never raised at a user
-        return ProviderVerifyResponse(name=name, ok=False, detail=describe_failure(exc))
+    # The call itself lives in `chat_model.verify_provider`, because
+    # `openstategraph providers --check` asks the identical question from a
+    # terminal and two spellings of it would let the editor and the CLI
+    # disagree about whether a key works (providers-and-credentials 12).
+    failure = make_the_call(ProviderEnvironment(spec))
+    if failure is not None:
+        return ProviderVerifyResponse(name=name, ok=False, detail=failure)
     return ProviderVerifyResponse(name=name, ok=True)

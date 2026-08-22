@@ -290,7 +290,10 @@ class TestTheInstanceDefaultIsElected:
         _installed(monkeypatch, "anthropic")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
         alone = provider_catalogue().elected_default()
-        assert alone.reason == "the only provider integration installed, and it is configured"
+        # "has a credential", never "configured": this clause is the header of
+        # `openstategraph providers`, and the softer word was read as a verdict
+        # on whether a run would work (providers-and-credentials 12).
+        assert alone.reason == "the only provider integration installed, and it has a credential"
 
         with monkeypatch.context() as patch:
             _installed(patch, "anthropic", "openai")
@@ -298,7 +301,7 @@ class TestTheInstanceDefaultIsElected:
             patch.setenv("OPENAI_API_KEY", "sk-openai")
             both = provider_catalogue().elected_default()
         assert both.spec is not None and both.spec.name == "anthropic"
-        assert "2 integrations installed and configured (anthropic, openai)" in both.reason
+        assert "2 of 2 installed integrations have a credential (anthropic, openai)" in both.reason
         assert "default_model:" in both.reason  # how to stop guessing
 
     def test_the_ollama_default_is_still_never_a_local_model(
@@ -348,7 +351,7 @@ class TestTheDefaultIsShown:
         assert "default:     anthropic:claude-haiku-4-5" in out
         # The reason is one sentence; the terminal wraps it, so the assertion
         # is about the words rather than about where the column ran out.
-        assert "the only provider integration installed, and it is configured" in " ".join(
+        assert "the only provider integration installed, and it has a credential" in " ".join(
             out.split()
         )
 

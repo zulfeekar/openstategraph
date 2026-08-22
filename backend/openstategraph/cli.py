@@ -58,6 +58,7 @@ from openstategraph import templates
 #: Fixed, documented above, and referenced by name everywhere below so a
 #: reader never has to decode a bare integer.
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from openstategraph.providers import ProviderEnvironment
     from openstategraph.results import RunResult
 
 EXIT_OK = 0
@@ -1744,6 +1745,14 @@ def build_parser() -> argparse.ArgumentParser:
     providers_parser = subparsers.add_parser(
         "providers", help="what model providers are registered, and are they configured"
     )
+    providers_parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "make one real, BILLABLE request per configured provider and report "
+            "which answered. Off by default: a status command must not spend money."
+        ),
+    )
     providers_parser.set_defaults(handler=cmd_providers)
 
     env_example = subparsers.add_parser(
@@ -1754,12 +1763,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def cmd_providers(_args: argparse.Namespace) -> int:
-    """Which providers exist, where their keys come from, and which work now.
+def cmd_providers(args: argparse.Namespace) -> int:
+    """Which providers exist, where their keys come from, and what was measured.
 
     The question "why is it not using my key" has one honest answer and it is
-    a list: what is registered, what each one reads, and which of them is
-    actually configured on this machine.
+    a list: what is registered, what each one reads, which variable actually
+    supplied a credential — and, said out loud, that none of this was verified
+    by a request.
+
+    **Five states, three of them knowable from here** (providers-and-credentials
+    12). The extra is installed; a credential is present; which variable
+    supplied it — all three are `find_spec` and the environment. *The endpoint
+    is reachable* and *a request will be answered* are neither, and this
+    command used to answer them anyway, in one word: `ready`. A supervisor
+    session read that word, concluded three live credentials, and sent a
+    correction into a running session telling it to call a model.
+
+    So the row says `configured`, which is exactly the question
+    `ProviderEnvironment.is_configured` asks, the footer defines the word
+    rather than leaving a reader to, and `--check` is the only thing here that
+    makes a claim about running — because it is the only thing here that calls
+    anybody. `/api/providers` and its `verify` route already drew this line;
+    this is the terminal catching up with the vocabulary the HTTP surface
+    shipped.
+
+    **Exit codes are deliberate and they differ between the two modes.** Plain
+    `providers` is a *status* command: it exits 0 whenever it could report,
+    including on a machine where nothing at all is configured, because it is
+    the command you run precisely when things are broken and a non-zero exit
+    would make it useless inside `set -e`. `--check` is an *assertion* — "can
+    this machine run a workflow" — so it exits 1 when any configured provider
+    failed to answer, and 1 when there was nothing to check at all, which is
+    the same answer to the same question.
     """
     from openstategraph.config_file import find_config_file
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
@@ -1779,26 +1814,103 @@ def cmd_providers(_args: argparse.Namespace) -> int:
         )
     )
     print()
-    for spec in catalogue.list():
+    environments = [ProviderEnvironment(spec) for spec in catalogue.list()]
+    for here in environments:
+        spec = here.spec
         # Three states, not two. "needs a key" on a provider whose integration
         # is absent sent a reader to fix the wrong thing, and then round again
         # for the real one — the round trip workflow-gallery ticket 38 exists
         # to end, in the surface it named as already doing this correctly.
-        here = ProviderEnvironment(spec)
         gap = here.readiness()
         if gap is None:
-            state = "ready"
+            state = "configured"
         elif gap.missing_package:
             state = "needs its extra"
         else:
             state = "needs a key"
-        variables = ", ".join(spec.env_vars) or "(no credential needed)"
         elected = "   (default)" if spec is default.spec else ""
         print(f"{spec.name:<12} {state:<12} {here.model_string()}{elected}")
-        print(f"{'':<12} reads {variables}; extra 'openstategraph[{spec.extra}]'")
+        print(f"{'':<12} {_credential_line(here)}")
+        print(f"{'':<12} extra 'openstategraph[{spec.extra}]'")
     for warning in catalogue.warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    return EXIT_OK
+
+    if not args.check:
+        print()
+        print(
+            textwrap.fill(
+                "No provider was called. \"configured\" means a credential is present "
+                "in this environment — not that the endpoint is reachable, and not "
+                "that a request will be answered. Run `openstategraph providers "
+                "--check` to make one real (billable) request per configured "
+                "provider and find out.",
+                width=88,
+            )
+        )
+        return EXIT_OK
+    return _check_providers(environments)
+
+
+def _credential_line(here: "ProviderEnvironment") -> str:
+    """What this provider reads, and which of it actually answered.
+
+    Naming the winning variable is the state a reader could not previously
+    see, and it is the one that settles Ollama: `env_vars` is two, `any` of
+    them configures it, and *which* one tells a developer whether they are on
+    the cloud key or on a daemon of their own. The value is a
+    `credential_source` glance — a secret masked to a fixed width, an address
+    shown whole, since masking a URL hides the only readable thing about it.
+    """
+    variables = ", ".join(here.spec.env_vars)
+    if not variables:
+        return "needs no credential"
+    source = here.credential_source()
+    if source is None:
+        absent = "it is not set" if len(here.spec.env_vars) == 1 else "none of them is set"
+        return f"reads {variables}; {absent}"
+    name, hint = source
+    # `reads X; X is set` says the name twice for the two single-variable
+    # providers and is worth the branch: the name is *information* only where
+    # there was a choice, which is Ollama, which is the whole reason the
+    # winning variable is printed at all.
+    which = "it is set" if len(here.spec.env_vars) == 1 else f"{name} is set"
+    return f"reads {variables}; {which} ({hint})"
+
+
+def _check_providers(environments: "list[ProviderEnvironment]") -> int:
+    """One real request per configured provider. The only certain answer.
+
+    Deliberately skips a provider that has no credential rather than calling
+    it: the answer is already known and the failure would be ours, not the
+    vendor's. With nothing configured at all there is nothing to check, and
+    that is a failed check rather than a vacuous pass — the question `--check`
+    asks is "can this machine run a workflow", and the answer is no.
+
+    The call is `chat_model.verify_provider`, the same function
+    `POST /api/providers/{name}/verify` uses, so the editor and the terminal
+    cannot come to different conclusions about one key.
+    """
+    from openstategraph import chat_model
+
+    checkable = [here for here in environments if here.readiness() is None]
+    print()
+    if not checkable:
+        print("--check: nothing to check — no provider has both its extra and a credential.")
+        return EXIT_FAILURE
+    print(
+        f"--check: making one real, billable request to each of {len(checkable)} "
+        "configured providers."
+    )
+    failures = 0
+    for here in checkable:
+        failure = chat_model.verify_provider(here)
+        if failure is None:
+            print(f"{here.spec.name:<12} answered      {here.model_string()}")
+            continue
+        failures += 1
+        print(f"{here.spec.name:<12} did not answer {here.model_string()}")
+        print(textwrap.fill(failure, width=88, initial_indent=" " * 13, subsequent_indent=" " * 13))
+    return EXIT_FAILURE if failures else EXIT_OK
 
 
 def cmd_env_example(_args: argparse.Namespace) -> int:

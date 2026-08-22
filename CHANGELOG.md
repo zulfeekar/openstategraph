@@ -77,6 +77,28 @@
   so a run degrades rather than crashing (`providers-and-credentials` 08).
 
 ### Fixed
+- **`openstategraph providers` reports only what it measured, and `--check`
+  is how you find out the rest.** Every row said `ready` and the header said
+  *"3 integrations installed and configured"* on the strength of
+  `is_configured()` — which asks whether a variable is set and cannot ask
+  whether a request would be answered. A supervisor session read that as a
+  verdict on running and acted on it. There are five states and this command
+  can honestly report three of them without a network call: the extra is
+  installed, a credential is present, and **which** of the variables supplied
+  it. So the row now says `configured`, the word `/api/providers` already
+  used; the header says *"3 of 3 installed integrations have a credential"*;
+  each row names the variable that answered — the state nobody could see, and
+  the one that tells an Ollama user whether they are on the cloud key or on a
+  daemon of their own; and a footer says out loud that nobody was called.
+  **`--check` makes one real, billable request per configured provider**, off
+  by default because a status command must not spend an adopter's budget to
+  render a word. It is `POST /api/providers/{name}/verify`'s own machinery,
+  extracted rather than re-spelled, so the editor and the terminal cannot
+  disagree about whether a key works. Plain `providers` still exits **0**
+  whenever it could report — it is the command you run *because* something is
+  broken. `--check` exits **1** when any configured provider fails to answer,
+  and **1** when there is nothing to check at all
+  (`providers-and-credentials` 12).
 - **A mounted workflow that runs out of supersteps now says so in our words,
   and a child that stopped its own loop is heard at all.** A mount is a
   separate `invoke` with its own counter and the **run's** number, so a child

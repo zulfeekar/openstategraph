@@ -192,8 +192,10 @@ prints one warning: the checkpointer fell back to memory because
 `langgraph-checkpoint-sqlite` is not installed. That is honest rather than
 broken — a run still works, an approval or a follow-up question just will not
 survive the process. Add `[sqlite]` (or `[server]`, which includes it) when you
-want durable threads. `openstategraph providers` says which model providers the
-install can actually reach.
+want durable threads. `openstategraph providers` says which model providers are
+installed and which have a credential — and `--check` makes one real, billable
+request to each of those to find out whether they actually answer, which is the
+only way to know.
 
 Also `eval` (grade a package against its golden dataset — see
 [Evaluation](docs/evaluation.md)), `knowledge build|list`, `threads list|show`,
