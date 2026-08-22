@@ -51,8 +51,25 @@ describe('the mount persistence field', () => {
     expect(hint).toContain('conflict');
   });
 
-  it('says a stateless mount cannot hold an approval', () => {
-    expect(hint.toLowerCase()).toContain('approval');
+  it('does not repeat the claim that a stateless mount cannot pause', () => {
+    // `organisms-first-class` 65, measured: a mount is a closure, so the
+    // child's `interrupt()` is held by the *parent's* checkpointer. A
+    // stateless mount pauses, resumes and answers — the label and the hint
+    // both said it could not, which is the surface a person actually reads.
+    const words = `${options.map((option) => option.label).join(' ')} ${hint}`.toLowerCase();
+    expect(words).not.toContain('cannot pause');
+    expect(words).not.toContain('can never wait');
+  });
+
+  it('says what answering an approval inside a stateless mount costs', () => {
+    // The cost is the fact: nothing was kept, so answering runs the mounted
+    // workflow again from its first step and everything before the approval
+    // happens a second time. The compiler reports the same thing before the
+    // run (`Finding.STATELESS_MOUNT_REDOES`); one fact, two surfaces.
+    const words = `${options.map((option) => option.label).join(' ')} ${hint}`.toLowerCase();
+    expect(words).toContain('approval');
+    expect(words).toContain('first step');
+    expect(words).toContain('second time');
   });
 
   it('never offers remembering as the better option', () => {

@@ -196,7 +196,7 @@ class TestEveryProducerHasASide:
     """The ticket asks for a test pinning which side each *producer* lands on.
 
     Spelled as the whole partition rather than as `assert X in REPORT_ONLY`, so
-    a twelfth `Finding` is a red test until somebody decides what it means.
+    a thirteenth `Finding` is a red test until somebody decides what it means.
     Deciding is the work; the default of silence is what this ticket is about.
     """
 
@@ -221,7 +221,19 @@ class TestEveryProducerHasASide:
     )
 
     #: "This graph is drawn oddly." The run did everything it was drawn to do.
-    REPORTS = frozenset({Finding.UNWIRED_REVISE, Finding.STALE_TOOL_DENIAL})
+    #: `STATELESS_MOUNT_REDOES` is the third, and the closest call of the
+    #: three (`organisms-first-class` 65): a stateless mount over a workflow
+    #: that holds an approval *does* pause, resume and answer — so the run did
+    #: everything it was drawn to do — and what the sentence reports is that
+    #: answering it does the work before the gate a **second** time. Advice
+    #: about a mode, not a lost capability, so it may not move an exit code.
+    REPORTS = frozenset(
+        {
+            Finding.UNWIRED_REVISE,
+            Finding.STALE_TOOL_DENIAL,
+            Finding.STATELESS_MOUNT_REDOES,
+        }
+    )
 
     def test_the_two_sides_are_the_whole_enum(self) -> None:
         assert self.FAILURES | self.REPORTS == set(Finding)

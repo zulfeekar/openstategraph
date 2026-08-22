@@ -240,7 +240,13 @@ mount has always done:
   place — but because the child kept nothing, answering it re-runs the mounted
   workflow **from its first step**, so everything it did before the gate
   happens a second time. Use it only for a child you are sure is a pure
-  function of its task.
+  function of its task — and if it is not, you are told: a mount set to this
+  over a workflow that holds an approval anywhere inside it is a compile-time
+  finding, printed as a warning when the workflow is loaded, before the run
+  reaches the gate. It is advice and not a refusal — the document runs, pauses
+  and answers, and no exit code moves. (`openstategraph validate` does not
+  print it: that command reports the compiler's *plan* problems, and no
+  finding of this kind has ever reached it.)
 
   (An earlier version of this line said such a child "cannot pause". That is
   what LangGraph documents about a stateless *subgraph*, and it is not what

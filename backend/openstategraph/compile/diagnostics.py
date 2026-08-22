@@ -111,6 +111,32 @@ class Finding(str, Enum):
     #: sentence at all — a missing inbound guard is a missed block, a missing
     #: outbound one is a disclosure.
     UNGUARDED_EXIT = "unguarded_exit"
+    #: A **stateless** mount whose child contains an approval gate, as
+    #: `(mount node id, package slug)` — `organisms-first-class` 65.
+    #:
+    #: `625d695` shipped the mode with LangGraph's sentence attached, that a
+    #: stateless subgraph cannot pause or resume. At this boundary that is
+    #: false and was measured to be: a mount is a **closure**, so the child's
+    #: `interrupt()` travels up and is held by the *parent's* checkpointer. It
+    #: pauses, and it resumes, and it answers.
+    #:
+    #: What it does not do is remember. Resuming re-enters the mount node in
+    #: every mode, but only this one has no child checkpoint to pick up from,
+    #: so the child runs again **from its first step** — counted on the
+    #: child's own pre-gate node: once before the pause, twice after the
+    #: approval, at one level and at two, while both other modes run it once.
+    #: A step that called a tool, sent a message or wrote to a store does it a
+    #: second time, on the approval path, silently. That is why this is worth
+    #: a sentence at all: a gate exists because something consequential is
+    #: about to happen, and here something consequential already did.
+    #:
+    #: **Reported, not refused**, and on `REPORT_ONLY` below. The document
+    #: runs, pauses, resumes and answers, so `validate`'s one question — is
+    #: this ready to run here — is honestly yes, and refusing it would fail a
+    #: working graph in somebody's CI over advice. The advice is the whole
+    #: value: it arrives before the run, which is when the mode can still be
+    #: changed.
+    STATELESS_MOUNT_REDOES = "stateless_mount_redoes"
     #: A Guardrail row that cannot do what its card says — an unimplemented
     #: strategy, or a `detector` that is not a valid pattern (guardrails 05).
     #:
@@ -196,6 +222,13 @@ _SENTENCES: dict[Finding, str] = {
         "answer is right and the sentence is stale. Update the line, or expect every "
         "reader of this document to believe it."
     ),
+    Finding.STATELESS_MOUNT_REDOES: (
+        'The workflow node "{0}" keeps no record of "{1}", and that workflow contains an '
+        "approval step. It does pause and it can be answered — but because nothing was "
+        "kept, answering it runs that workflow again from its first step, so every step "
+        "before the approval happens a second time. Change what the child remembers, or "
+        "move the approval out of that workflow."
+    ),
     Finding.INVALID_GUARDRAIL_RULE: (
         'Guardrail "{0}" has a row for "{1}" that {2} — that row protects nothing, '
         "and the node refuses everything rather than letting text past a policy it "
@@ -221,7 +254,13 @@ _SENTENCES: dict[Finding, str] = {
 #: answered with nothing, the compile half alone exited 1 for a graph
 #: `support-triage` ships on purpose.
 #:
-#: The other eight stay failures, and two of them are close enough to say so
+#: `STATELESS_MOUNT_REDOES` joined it in `organisms-first-class` 65 on the
+#: narrowest reading of the same rule: the run does everything it was drawn to
+#: do — it pauses, it resumes, it answers — and the sentence is about what
+#: answering *costs*. A document that runs is not a document `validate` should
+#: exit 1 on.
+#:
+#: The other nine stay failures, and two of them are close enough to say so
 #: out loud. `UNENFORCED_OUTCOME` is the same shape one level up — a Team card
 #: promising an outcome whose child graph cannot check it — and
 #: `UNGUARDED_EXIT` is likewise about how a document is drawn. Both were left
@@ -231,7 +270,11 @@ _SENTENCES: dict[Finding, str] = {
 #: green-lights a broken graph in somebody's CI. Neither is a settled call, and
 #: `workflow-gallery` 51 carries the argument.
 REPORT_ONLY: frozenset[Finding] = frozenset(
-    {Finding.UNWIRED_REVISE, Finding.STALE_TOOL_DENIAL}
+    {
+        Finding.UNWIRED_REVISE,
+        Finding.STALE_TOOL_DENIAL,
+        Finding.STATELESS_MOUNT_REDOES,
+    }
 )
 
 

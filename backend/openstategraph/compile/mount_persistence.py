@@ -8,7 +8,7 @@
 | --- | --- |
 | `None` (default) | per-invocation — each call starts fresh and inherits the parent's checkpointer, so `interrupt()` and durable execution still work *within* one call |
 | `True` | per-thread — the child's own state accumulates across calls on the same thread |
-| `False` | stateless — no interrupts, no durable execution, no checkpoints |
+| `False` | stateless — no checkpoints, no durable execution (and, the doc says, no interrupts — see below, because at *this* boundary that half is not what happens) |
 
 Until this ticket `NodeRuntime._subgraph` passed **no** `checkpointer` argument
 at all, so every mount in this product was per-invocation and the per-thread
@@ -44,8 +44,21 @@ so it does not go through the override editor.
 **And it is not the obvious upgrade.** The doc warns that stateful subgraphs
 **conflict under parallel calls to the same subgraph** — they write to one
 checkpoint namespace — so per-thread is the exception a developer reaches for
-deliberately. `stateless` costs more still: the child cannot pause, so a
-`human.approval` anywhere inside it cannot interrupt.
+deliberately. `stateless` costs more still, though **not** what the doc's
+sentence predicts: a mount is a *closure*, not a LangGraph subgraph node, so
+the `interrupt()` a stateless child raises travels up and is held by the
+**parent's** checkpointer. It pauses, it resumes, and it answers — measured at
+one level and at two (`organisms-first-class` 64, then 65).
+
+What it cannot do is remember. Resuming re-enters the mount node in every mode,
+and only this one has no child checkpoint to pick up from, so the child runs
+again **from its first step**: counted on the child's own pre-gate node, once
+under per-invocation and per-thread and **twice** under stateless. A step that
+called a tool or wrote to the world before the gate does it a second time, on
+the approval path. That is reported at compile time rather than refused —
+`Finding.STATELESS_MOUNT_REDOES`, recorded by `NodeRuntime._subgraph` for a
+stateless mount over a child that holds a gate at any depth — and said again on
+the mount's own field in the editor.
 
 An absent or unrecognised value is `per-invocation`, which is byte-identical to
 every document saved before this module existed. Tolerant in reading, strict in
@@ -59,7 +72,9 @@ from __future__ import annotations
 PER_INVOCATION = "per-invocation"
 #: The child's own state accumulates across calls on the same thread.
 PER_THREAD = "per-thread"
-#: No checkpoints at all: no interrupts, no durable execution.
+#: No checkpoints at all. It still pauses through the parent's checkpointer;
+#: what it loses is the ability to resume where it stopped (see the module
+#: docstring — the doc's "no interrupts" is not what happens at this boundary).
 STATELESS = "stateless"
 
 #: The whole of the tri-state, in the order the doc's own table lists it. The

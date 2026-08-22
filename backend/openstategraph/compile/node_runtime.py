@@ -1005,6 +1005,22 @@ class NodeRuntime:
         #: Drawing only. Nothing here is read on a run path, and the closure
         #: keeps its own reference to the compiled child regardless.
         self.mounted_graphs: dict[str, "MountedGraph"] = {}
+        #: Whether this document — or anything it mounts, at any depth — has
+        #: a `human.approval` node in it (`organisms-first-class` 65).
+        #:
+        #: Private on purpose, unlike the three collaborators above it: the one
+        #: reader is `_subgraph`, on a *child* runtime of this same class, and a
+        #: public boolean would be a tenth member on a surface `CLAUDE.md` says
+        #: to extend by collaborator rather than by attribute.
+        #:
+        #: Set by `_human_approval` as the executor is built, and unioned
+        #: upward in `_subgraph` for the same reason `machinery_nodes` is: the
+        #: question is asked one level *above* where the answer lives. A
+        #: stateless mount is the only caller — it stores no checkpoint, so
+        #: answering a gate anywhere below it re-runs the child from its first
+        #: step, and the mount is the only place that knows both halves.
+        self._holds_a_gate: bool = False
+
         #: The node types **this build implements itself**, as a registry
         #: rather than a dict literal (`export-and-eject/03`).
         #:
@@ -2203,6 +2219,9 @@ class NodeRuntime:
         the node from its own start), which is exactly why this calls it
         **exactly once**, unconditionally, rather than inside a retry loop.
         """
+        # Recorded as the executor is built, so a caller one level up can ask
+        # whether this document waits for anybody (`organisms-first-class` 65).
+        self._holds_a_gate = True
         data = node.get("data") or {}
         message = _text(data, "message") or "Approve this result?"
         upstream = [src for src, dst in plan.edges if dst == node_id]
@@ -3101,6 +3120,7 @@ class NodeRuntime:
         """
         from openstategraph.compile.composition import MountedGraph
         from openstategraph.compile.mount_persistence import (
+            STATELESS,
             carries_the_parents_dialogue,
             mount_checkpointer,
             mount_persistence,
@@ -3275,6 +3295,23 @@ class NodeRuntime:
                 # mount inside the child records on `child_runtime` only once
                 # that call has returned.
                 self.diagnostics.absorb(child_runtime.diagnostics, through=slug)
+                # Fourth thing inherited upwards, and the narrowest: whether
+                # anything below this mount waits for a person. Unioned so a
+                # grandparent sees a gate two levels down, and taken after
+                # `build()` for the reason the three lines above are.
+                self._holds_a_gate = self._holds_a_gate or child_runtime._holds_a_gate
+                # And the one question only this line can answer: a mount that
+                # keeps no record, over a workflow that pauses. It *does*
+                # pause — the closure hands the interrupt to the parent's
+                # checkpointer — but there is no child checkpoint to resume
+                # from, so answering re-runs the child from its first step and
+                # every side effect before the gate happens twice
+                # (`organisms-first-class` 65; the measurement is in
+                # `tests/test_a_stateless_mount_redoes_its_work.py`).
+                if persistence == STATELESS and child_runtime._holds_a_gate:
+                    self.diagnostics.record(
+                        Finding.STATELESS_MOUNT_REDOES, node_id, slug
+                    )
                 # And what the compiler alone knows: this mount runs THAT
                 # graph. A closure is opaque to LangGraph's `xray`, so unless
                 # the compiler records it, a composition can only be drawn by
