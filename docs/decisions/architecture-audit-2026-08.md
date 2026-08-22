@@ -127,8 +127,23 @@ god-class rule it is
 the bulk is per-family private builders registered in one `_builders` table,
 plus module helpers. The mass is real, though, and the seams are clean:
 
-1. `compile/state.py` — `RESET`, the three reducers, `RunState`. Pure, no
-   imports from the rest of the file.
+1. `compile/state.py` — **done**, 2026-08-22 (`docs-and-gaps` 13). `RESET`
+   and the three re-exported reducers, `RunState`, and the state readers
+   step 2 left behind: `_thread_question`, `_silent_member_note`,
+   `_upstream_text`, `_upstream_verdict`, `_wired_skill`. It imports `_text`
+   from `context.py` and nothing else from this package, so the two carved
+   modules form a chain rather than a cycle.
+
+   One correction to the membership above, the same kind step 2 had to make.
+   `_final_text` and `_content_text` were listed here as state readers and are
+   **not**: their argument is a list of messages, not a `RunState`, and the
+   knowledge they hold is *how to read a model message* — which already has a
+   home in `openstategraph/messages.py`, where `content_text` duplicates
+   `_content_text` outright. Moving them under a module named for the state
+   schema would also have split the subject of
+   `test_message_content_is_read_the_same_way.py`, whose `SITES` list names
+   `compile/node_runtime.py` as a constant, across two files. They stayed, and
+   deduplicating them against `openstategraph.messages` is `docs-and-gaps` 14.
 2. `compile/context.py` — **done**, 2026-08-22 (`docs-and-gaps` 03), with one
    correction to the membership above. That list mixed two things: functions
    that render *prompt context* from a document and a plan, and functions that
@@ -163,6 +178,27 @@ the churn the tests-before-refactor rule exists to prevent. The split is
 mechanical, the seams above are the whole design, and it should be its own
 ticket with zero behavioural diffs.
 
+
+### What executing step 1 measured (2026-08-22)
+
+`node_runtime.py` was **3764 lines** going in and is **3433** coming out — 344
+lines moved into a 368-line `compile/state.py`, plus the 13-line re-export
+block. 4270 passed / 1 skipped on both sides, **no test file edited**, and a
+mutation inside the moved `_thread_question` (rewording its history header)
+turned `test_follow_up_conversation.py` and
+`test_transcript_is_not_a_channel.py` red in the new home, two distinct reds.
+The first mutation tried — dropping `_upstream_verdict`'s `check` key — left
+both Python test files that name that key green, so it proved nothing and was
+replaced. Whether any Python test reaches that branch at all was not measured
+here; the TS `graderCheckLine.claim.test.ts` is the one that visibly cares. Every `Annotated` reducer was
+compared by `typing.get_type_hints(..., include_extras=True)` against the
+pre-move module loaded side by side: 21 keys, zero differences.
+
+The remaining order is unchanged — **step 3 (`compile/nodes/`) is next, and it
+is the expensive one**, because it is the first that rewrites `self.`
+references and the first that moves a source-scanning test's subject.
+`graphify` was used for shape and, as step 2 recorded, still reports line
+numbers that are not the code's: it placed `RunState` nowhere near line 93.
 
 ### What executing step 2 measured (2026-08-22)
 
