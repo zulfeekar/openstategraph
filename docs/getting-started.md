@@ -180,11 +180,25 @@ real answers:
 - **Does this model reason, and at which tiers?**
   `model.profile["reasoning_effort_levels"]`, from the models.dev dataset
   shipped inside each partner package.
+- **Does this integration name tiers for anybody at all?** The question that
+  makes a silence readable, and the one that decides what happens next.
 
 Both move when you update your provider packages, not when this repo is
-edited. A model whose profile is silent is treated as *unknown*, not as a
-refusal — `claude-haiku-4-5` reasons and publishes no tiers, and refusing it
-would deny a setting that works.
+edited.
+
+A model whose profile is silent is treated as *unknown* — no refusal — when its
+provider package names tiers for nobody. Where the package does name them for
+some of its models, a model it leaves out is refused instead. That is not a
+preference: `claude-haiku-4-5` reasons, publishes no tiers, and answers
+`400 — This model does not support the effort parameter`, so sending it would
+kill the run rather than tune it.
+
+The refusal is an inference from published data, and it is known to be
+occasionally wrong in the safe direction: `langchain-openai` names tiers for
+its `gpt-5` family and not for `o3` or `o4-mini`, which do take the parameter,
+so those are refused with a warning. A refused setting costs one sentence in
+the run's warnings; a rejected one costs the run. The warning says which it is,
+and says the reading is an inference rather than the provider's own word.
 
 The editor mirrors the same three states in the picker: the model's declared
 tiers where a provider knows them, the common `low`/`medium`/`high` where it

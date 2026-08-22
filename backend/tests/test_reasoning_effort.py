@@ -90,12 +90,18 @@ class TestAProviderThatEnumeratesWhichModelsTakeIt:
 
     The discriminator was already in the profile and was being read past. This
     package's own dataset publishes `reasoning_effort_levels` for eight of its
-    fifteen models; `langchain-openai`'s publishes it for none of thirty-nine.
-    So the key's absence means opposite things per integration, and the fact
-    that separates them is discoverable: **does this integration fill the field
-    in for anybody?** Where it does, a model left out is left out on purpose.
-    Where it never does, the field is unpopulated and says nothing — so OpenAI
-    keeps falling back to the annotation, unchanged.
+    fifteen models. So the key's absence means different things per integration,
+    and the fact that separates them is discoverable: **does this integration
+    fill the field in for anybody?** Where it does, a model left out is read as
+    a no. Where it never does, the field is unpopulated and says nothing, and
+    the annotation still answers.
+
+    On 2026-08-22 `langchain-openai` crossed from the second case to the first,
+    and the confirmation this class's tripwire demanded found the dataset
+    **incomplete** — see
+    `test_the_datasets_the_gate_reads_are_the_ones_it_was_reasoned_about`. The
+    rule is unchanged; what changed is that it is now known to over-refuse, is
+    said so in the warning, and is measured here.
 
     No model ids and no provider names in `reasoning.py`, per CLAUDE.md. The
     ids below are in the *test*, where a package update that moves them is
@@ -137,13 +143,15 @@ class TestAProviderThatEnumeratesWhichModelsTakeIt:
         resolved, warning = apply_reasoning_effort(self._anthropic("claude-not-yet"), "high")
         assert resolved is not None and warning is not None
 
-    def test_an_integration_that_publishes_no_tiers_at_all_is_unaffected(self) -> None:
-        """OpenAI's reasoning models keep working off the annotation.
+    def test_the_openai_model_that_takes_it_receives_it_either_way(self) -> None:
+        """`gpt-5` gets the parameter under both readings of the dataset.
 
-        `gpt-5` reports `reasoning_output: True` and no tiers — the same shape
-        as `claude-haiku-4-5` — and unlike it, accepts the parameter. Reading
-        the shape alone cannot tell them apart, which is why the rule reads the
-        dataset instead.
+        Under `langchain-openai` 1.1.6 it publishes no tiers, the integration
+        enumerates for nobody, and the annotation answers. Under 1.6.0 it
+        publishes `none/low/medium/high/xhigh` and is sent the value because it
+        is on its own list. Two different code paths, one correct outcome, and
+        this is the half that would break if the fix to the other half were a
+        blanket refusal.
         """
         openai = pytest.importorskip("langchain_openai")
         model = openai.ChatOpenAI(model="gpt-5", api_key="placeholder")
@@ -151,31 +159,118 @@ class TestAProviderThatEnumeratesWhichModelsTakeIt:
         assert warning is None
         assert resolved.reasoning_effort == "high"
 
-    def test_the_premise_holds_in_the_installed_packages(self) -> None:
-        """The evidence, asserted rather than described.
+    def test_an_enumerating_integration_gates_and_a_silent_one_does_not(self) -> None:
+        """The rule itself, asserted against whatever is installed.
 
-        Every claim above rests on one fact about the shipped datasets. If a
-        package update populates the OpenAI dataset or empties the Anthropic
-        one, the rule silently changes meaning — so it fails here first.
+        Version-independent on purpose. `langchain-openai` 1.1.6 publishes
+        tiers for nobody and 1.6.0 publishes them for twenty-seven models, and
+        this repository has both in front of it — a local checkout and a CI
+        runner that resolves `langchain-openai>=1.0,<2` to the newest release.
+        A test that pins one of those two states is the drift
+        `test_deep_agent_slot_facts.py` hit on the same push.
+
+        So the invariant is asserted rather than the reading: for every
+        integration, a model with no published tiers is sent the parameter if
+        and only if that integration enumerates for nobody.
+        """
+        for module_name, model_id in (
+            ("langchain_anthropic", "claude-haiku-4-5"),
+            ("langchain_openai", "o3"),
+        ):
+            module = pytest.importorskip(module_name)
+            factory = getattr(module, "ChatAnthropic", None) or module.ChatOpenAI
+            model = factory(model=model_id, api_key="placeholder")
+            support = effort_support(model)
+            assert support.model_levels is None, (
+                f"{model_id} has gained published tiers — this case is no "
+                "longer the silent one it was chosen to exercise."
+            )
+            _, warning = apply_reasoning_effort(model, "high")
+            gated = enumerates_effort_levels(model)
+            assert (warning is not None) is gated, (
+                f"{model_id}: integration enumerates={gated}, "
+                f"warning={warning!r} — the gate and the dataset disagree."
+            )
+
+    def test_the_datasets_the_gate_reads_are_the_ones_it_was_reasoned_about(
+        self,
+    ) -> None:
+        """The replacement tripwire, and what it fires on.
+
+        The one it replaces asserted `langchain-openai` publishes tiers for
+        nobody. On 2026-08-22 that stopped being true — 1.6.0 publishes them
+        for twenty-seven models — and the confirmation the message asked for
+        was done: **the dataset is not complete.** Every one of the twenty-seven
+        is a `gpt-5*` entry hand-written into
+        `langchain_openai/data/profile_augmentations.toml`; `o1`, `o3`,
+        `o3-mini`, `o3-pro`, `o1-pro` and `o4-mini` report
+        `reasoning_output: True`, have no override table at all, and are
+        documented by OpenAI to accept the effort parameter. They were not left
+        out on purpose — they were never reached.
+
+        So the premise the `excluded` inference rests on is **false for
+        `langchain-openai`**, and it was only ever verified for
+        `langchain-anthropic`, where a live 400 supplied the evidence. The rule
+        is kept anyway, for the asymmetry the module is built on: over-refusing
+        `o3` costs one sentence in the run warnings, and sending `effort` to
+        `claude-haiku-4-5` costs the run. The cost of that choice is real and
+        is filed as `providers-and-credentials/11` rather than absorbed here.
+
+        Which makes this the assertion worth keeping: the two facts that would
+        change the decision, either of which fires here first.
+
+        - Anthropic stops enumerating → the gate goes blind and the 400 is back.
+        - The OpenAI omissions gain tiers → the known false negative is gone
+          and the rule can be narrowed.
+
+        Both readings of `langchain-openai` this repository has measured —
+        silent (1.1.6) and enumerating-but-partial (1.6.0) — are green, because
+        both have been reasoned about. A third is not.
         """
         anthropic = pytest.importorskip("langchain_anthropic")
         openai = pytest.importorskip("langchain_openai")
 
-        publishing = enumerates_effort_levels(
-            anthropic.ChatAnthropic(model="claude-haiku-4-5", api_key="placeholder")
-        )
-        assert publishing is True, (
+        assert (
+            enumerates_effort_levels(
+                anthropic.ChatAnthropic(model="claude-haiku-4-5", api_key="placeholder")
+            )
+            is True
+        ), (
             "langchain-anthropic no longer publishes reasoning_effort_levels for "
             "any model — the per-model gate has gone blind and the 400 is back."
         )
-        assert (
-            enumerates_effort_levels(openai.ChatOpenAI(model="gpt-5", api_key="placeholder"))
-            is False
-        ), (
-            "langchain-openai has started publishing reasoning_effort_levels — "
-            "good news, but OpenAI models are now gated on it too. Confirm the "
-            "dataset is complete before accepting this."
+
+        omitted = {
+            model_id: effort_support(
+                openai.ChatOpenAI(model=model_id, api_key="placeholder")
+            ).model_levels
+            for model_id in ("o1", "o3", "o3-mini", "o3-pro", "o4-mini")
+        }
+        assert all(levels is None for levels in omitted.values()), (
+            "langchain-openai now publishes reasoning_effort_levels for the "
+            f"o-series ({omitted}). That is the measured incompleteness closing: "
+            "re-check whether the `excluded` rule still over-refuses, and close "
+            "providers-and-credentials/11 if it does not."
         )
+
+    def test_the_refusal_says_it_is_an_inference_and_not_the_provider_speaking(
+        self,
+    ) -> None:
+        """A warning may not overstate what the dataset actually established.
+
+        Until 2026-08-22 this message said sending the value *"would fail the
+        request"*. For `claude-haiku-4-5` that was measured — a live 400. For an
+        omitted model in general it is a guess, and `o3` is the counter-example:
+        omitted, refused, and documented to accept the parameter. A product that
+        must not promise what is not possible must equally not report a
+        certainty it does not have.
+        """
+        model = self._anthropic("claude-haiku-4-5")
+        _, warning = apply_reasoning_effort(model, "high")
+        assert warning is not None
+        assert "inference" in warning
+        assert "published tiers are incomplete" in warning
+        assert "would fail the request" not in warning
 
     def test_a_probe_of_something_with_no_dataset_does_not_raise(self) -> None:
         """`langchain-ollama` ships no `data._profiles` at all."""
@@ -287,6 +382,40 @@ class TestTheRuntimeReportsIt:
 
         reported = runtime_warnings(runtime)
         assert any("Reasoning effort" in line for line in reported), reported
+
+    def test_a_node_on_an_excluded_model_reports_it_and_runs_without_it(self) -> None:
+        """The caller's view of the refusal, at the layer that runs the node.
+
+        `apply_reasoning_effort` being right is not the same as a node being
+        right — the trap this repo has paid for twice. So both directions are
+        driven through `_resolve_model`, which is the only place a model becomes
+        a model, and asserted on what the node ends up holding.
+        """
+        from openstategraph.api.registries import runtime_warnings
+
+        anthropic = pytest.importorskip("langchain_anthropic")
+        runtime = NodeRuntime(
+            model=anthropic.ChatAnthropic(model="claude-haiku-4-5", api_key="placeholder")
+        )
+        model = runtime._resolve_model({REASONING_EFFORT_KEY: "high"})
+
+        assert model.reasoning_effort is None, (
+            "an excluded model was handed the parameter that 400s it"
+        )
+        assert any("Reasoning effort" in line for line in runtime_warnings(runtime))
+
+    def test_a_node_on_a_model_that_takes_it_is_handed_it(self) -> None:
+        """And the other half, or the fix would be a blanket refusal."""
+        from openstategraph.api.registries import runtime_warnings
+
+        anthropic = pytest.importorskip("langchain_anthropic")
+        runtime = NodeRuntime(
+            model=anthropic.ChatAnthropic(model="claude-sonnet-4-6", api_key="placeholder")
+        )
+        model = runtime._resolve_model({REASONING_EFFORT_KEY: "high"})
+
+        assert model.reasoning_effort == "high"
+        assert not [line for line in runtime_warnings(runtime) if "Reasoning effort" in line]
 
     def test_the_same_fact_is_reported_once(self) -> None:
         ollama = pytest.importorskip("langchain_ollama")

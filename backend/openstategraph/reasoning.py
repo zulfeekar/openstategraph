@@ -58,26 +58,36 @@ the annotation is *per class*, so no amount of reading it can tell.
 
 The fact that does tell was already in the profile and was being read past.
 `langchain-anthropic`'s own dataset fills `reasoning_effort_levels` in for
-eight of its fifteen models; `langchain-openai`'s fills it in for none of
-thirty-nine. So the key's absence means opposite things depending on who is
-silent, and the question that separates them is one more probe:
+eight of its fifteen models. So the key's absence means different things
+depending on who is silent, and the question that separates them is one more
+probe:
 
 3. **Does this integration enumerate at all?** If it publishes tiers for *any*
-   model it ships, the field is populated and a model left out was left out on
-   purpose — a real "no", and `effort` is not sent. If it publishes them for
-   nobody, the field is simply unused there and says nothing, so the fallback
-   to the annotation stands exactly as before. `gpt-5` reports the same shape
-   as `claude-haiku-4-5` — reasons, no tiers — and genuinely accepts the
-   parameter; this is what tells them apart.
+   model it ships, the field is populated and a model left out is treated as a
+   "no", and `effort` is not sent. If it publishes them for nobody, the field
+   is simply unused there and says nothing, so the fallback to the annotation
+   stands exactly as before.
 
 So there are four states, not three: supported, unsupported, *excluded*, and
 unknown. Only unknown falls back to the annotation.
 
-An enumerating integration therefore refuses a model it has never heard of,
-and that direction is chosen rather than conceded. A model released tomorrow
-may well accept `effort`; refusing it costs one sentence in the run's
-warnings, and sending it to a model that does not costs the run. The two are
-not symmetric, and this module exists because of that asymmetry.
+**`excluded` is an inference, and on 2026-08-22 it was measured to over-refuse.**
+Until that day `langchain-openai` filled the field in for nobody, and this
+paragraph read "a model left out was left out on purpose". Then 1.6.0 filled it
+in for twenty-seven models — every one of them a `gpt-5*` entry hand-written
+into that package's `profile_augmentations.toml`, while `o1`, `o3`, `o3-mini`,
+`o3-pro`, `o1-pro` and `o4-mini` report `reasoning_output: True`, carry no
+override entry at all, and are documented by OpenAI to take the parameter. They
+were not left out on purpose; they were never reached. Neither integration's
+dataset is a closed allowlist, and no probe can tell a deliberate omission from
+an unreached one — the two are byte-identical in the profile.
+
+The inference is kept anyway, because the two errors are not symmetric: a model
+released tomorrow, or one the dataset has not caught up with, costs one sentence
+in the run's warnings, and sending `effort` to a model that rejects it costs the
+run. That is the whole reason this module exists. The cost is stated in the
+warning rather than hidden, and is tracked as a real gap in
+`.scratch/providers-and-credentials/tickets/11-*`.
 
 **What is deliberately *not* done here: mapping onto `thinking`.** Anthropic's
 thinking models reach reasoning through `thinking={"type": "enabled",
@@ -332,11 +342,15 @@ def apply_reasoning_effort(model: Any, effort: str) -> tuple[Any, str | None]:
     if support.excluded:
         return model, (
             f'Reasoning effort "{wanted}" was not sent: "{name}" publishes no '
-            "reasoning-effort tiers, and its provider publishes them for the "
-            "models that accept the parameter — sending it would fail the "
-            "request. It ran at its own default. A model that reasons without "
-            "tiers is usually configured through its provider's own thinking "
-            "parameter instead."
+            "reasoning-effort tiers, and its provider publishes them for other "
+            "models it ships — so this one is read as a model that does not "
+            "take the parameter. It ran at its own default. That reading is an "
+            "inference from the provider's published data, not a statement from "
+            "the provider: if this model does accept the parameter, its "
+            "published tiers are incomplete. It is refused either way, because "
+            "sending it to a model that does not take it fails the whole run. A "
+            "model that reasons without tiers is often configured through its "
+            "provider's own thinking parameter instead."
         )
 
     accepted = support.accepted
