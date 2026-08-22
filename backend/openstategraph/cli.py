@@ -159,17 +159,119 @@ def cmd_run(args: argparse.Namespace) -> int:
                     # must be able to tell "free" from "nobody said".
                     "usage": result.usage,
                     "total_tokens": result.total_tokens,
+                    # `null` for a run that finished. A script piping this must
+                    # be able to tell an answer from a question it was asked
+                    # (`workflow-gallery` 24).
+                    "pause": result.pause,
                     "thread_id": thread_id,
                     "slug": workflow.slug,
                 },
                 indent=2,
             )
         )
-        return EXIT_OK
+        return run_exit_code(result)
 
     for line in run_report_lines(result):
         # Degrade loud, never silent — on stderr, so `run … > answer.txt` still
         # gives you only the answer while the degradation stays visible.
+        print(line, file=sys.stderr)
+    for line in pause_report_lines(result, package=args.package, thread_id=thread_id):
+        print(line, file=sys.stderr)
+    print(result)
+    return run_exit_code(result)
+
+
+def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> list[str]:
+    """What a run that stopped at a `human.approval` gate has to say for itself.
+
+    Empty for every run that finished, which is nearly all of them.
+
+    A paused run answered *nothing* and used to say so with an empty line and
+    exit 0 — the same silence the blocking HTTP endpoint refuses with a 409
+    naming the endpoint that can carry it. This is that refusal at the
+    terminal, and it goes one further: it names the exact command, because the
+    pause report is the only place a person learns the verb exists.
+    """
+    if not result.pause:
+        return []
+    pause = result.pause
+    lines = [f"paused: {pause.get('message') or 'a decision is needed'}"]
+    candidate = str(pause.get("candidate") or "").strip()
+    if candidate:
+        lines.append(f"  candidate: {candidate}")
+    lines.append(f"  thread: {thread_id}")
+    lines.append(
+        f"  finish it: openstategraph resume {package} {thread_id} "
+        "--approve | --reject --feedback '…'"
+    )
+    return lines
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    """`CompiledWorkflow.resume` — the other half of `run`, and its own verb.
+
+    A person is the only thing a `human.approval` node is waiting for, and the
+    terminal is where a person is already sitting; until this, a run could be
+    *started* there and finished only over HTTP.
+
+    The decision is a **required** choice between two flags rather than a value
+    with a default, so the one thing this command cannot do is guess a verdict
+    nobody gave — argparse refuses with the usage code, before anything is
+    loaded or resumed.
+
+    It says what it is about to do first. A resume runs the rest of the graph
+    against a durable checkpoint — every tool downstream of the gate, for real
+    — and consumes the pause, so the announcement is the last moment a
+    `Ctrl-C` still means something. On stderr, so `resume … > answer.txt` is
+    still just the answer.
+    """
+    decision = "approve" if args.approve else "reject"
+    if args.feedback and decision == "approve":
+        return _usage(
+            "--feedback is a note on a rejection; an approval carries none. "
+            "Drop it, or say --reject."
+        )
+
+    workflow = _load(args)
+    pause = workflow.pause(args.thread_id)
+    if pause is None:
+        return _error(
+            f"thread {args.thread_id!r} is not paused — there is nothing waiting "
+            "for a decision. `openstategraph threads list` reports which threads are"
+        )
+    print(f"resuming {args.thread_id} with: {decision}", file=sys.stderr)
+    print(f"  gate: {pause.get('message') or ''}", file=sys.stderr)
+    print(f"  candidate: {str(pause.get('candidate') or '').strip()}", file=sys.stderr)
+    print("  this runs the rest of the workflow and cannot be undone", file=sys.stderr)
+
+    result = workflow.resume(args.thread_id, decision=decision, feedback=args.feedback)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "answer": result.answer,
+                    "decisions": result.decisions,
+                    "outputs": result.outputs,
+                    "warnings": result.warnings,
+                    "attempts": result.attempts,
+                    "usage": result.usage,
+                    "total_tokens": result.total_tokens,
+                    "pause": result.pause,
+                    "thread_id": args.thread_id,
+                    "slug": workflow.slug,
+                },
+                indent=2,
+            )
+        )
+        return run_exit_code(result)
+
+    for line in run_report_lines(result):
+        print(line, file=sys.stderr)
+    # A rejection re-enters the drafter and stops at the same gate again, so a
+    # resumed run pauses exactly as a started one does — and reports it the
+    # same way, with the command to type next.
+    for line in pause_report_lines(result, package=args.package, thread_id=args.thread_id):
         print(line, file=sys.stderr)
     print(result)
     return run_exit_code(result)
@@ -254,6 +356,15 @@ def run_exit_code(result: "RunResult") -> int:
     from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED
     from openstategraph.compile.workflow_compiler import node_failure_warnings
 
+    # **A pause is checked before the answer, and it is the one condition that
+    # does not need "and something went wrong"** (`workflow-gallery` 24). A run
+    # stopped at a `human.approval` gate has not failed and has not answered —
+    # it is waiting — and a CLI that calls that success is a CLI that reports a
+    # truncated run as a finished one. The blocking HTTP endpoint has refused
+    # the same document with a 409 since the node shipped; this is that
+    # refusal's exit code.
+    if result.pause:
+        return EXIT_FAILURE
     answer = str(result).strip()
     if answer and answer != NO_ANSWER_PRODUCED:
         return EXIT_OK
@@ -817,8 +928,10 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
     """One past run, read back. A **view**: nothing is executed again.
 
     Continuing a paused run is a different act with a different name —
-    `POST /api/runs/resume`, or `run --thread-id` — and it does call models
-    and tools. Printing what already happened does not.
+    `openstategraph resume`, or `POST /api/runs/resume` — and it does call
+    models and tools. Printing what already happened does not. (`run
+    --thread-id` is a third thing again: it starts a *new* turn on the same
+    conversation, and it has never been able to answer an `interrupt()`.)
     """
     from openstategraph.api import threads as thread_queries
 
@@ -1091,6 +1204,26 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
     run.add_argument("--json", action="store_true", help="print the whole result, not the answer")
     run.set_defaults(handler=cmd_run)
+
+    resume = subparsers.add_parser(
+        "resume", help="answer an approval a run is paused on, and let it finish"
+    )
+    resume.add_argument("package", help="the folder holding workflow.json")
+    resume.add_argument("thread_id", help="the paused thread — `threads list` names it")
+    # Required and mutually exclusive: argparse refuses "neither" and "both"
+    # with exit 2 on its own, which is the contract, and no code path here can
+    # ever assume a decision nobody typed.
+    verdict = resume.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--approve", action="store_true", help="let it through")
+    verdict.add_argument("--reject", action="store_true", help="send it back")
+    resume.add_argument(
+        "--feedback", help="what to change — a note on a rejection, read as the spec"
+    )
+    resume.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
+    resume.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
+    resume.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
+    resume.add_argument("--json", action="store_true", help="print the whole result, not the answer")
+    resume.set_defaults(handler=cmd_resume)
 
     evaluate = subparsers.add_parser(
         "eval", help="grade a package against its golden dataset (runs a model)"

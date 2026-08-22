@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Fixed
+- **A run that stopped at an approval no longer reports itself as finished.**
+  `openstategraph run` on a pausing package returned whatever `ask()` had at
+  the interrupt — an empty answer, no warnings, **exit 0** — while the blocking
+  HTTP endpoint had refused the identical document with a 409 since the node
+  shipped. `run` now prints the pause payload, the thread id and the `resume`
+  line that finishes it, and exits **1**. A pause is checked before the answer
+  and does not need the "and something went wrong" half of `run_exit_code`:
+  the run has not failed and has not answered, it is waiting
+  (`workflow-gallery` 24).
 - **A finding recorded inside a mount reaches the run that mounts it.**
   `_subgraph` absorbed a mounted child's `machinery_nodes`, `names` and
   `mounted_graphs` upward and not its `diagnostics`, so every sentence a
@@ -34,6 +43,28 @@
   restated in prose (`ship-it` 46).
 
 ### Added
+- **`openstategraph resume <package> <thread-id> --approve|--reject` — a run
+  paused for a person can now be finished by one.** `openstategraph run` was
+  `ask()` and nothing else, and `ask()` has no resume parameter, so a package
+  holding a `human.approval` node could be started from the terminal and
+  finished only over HTTP — in the one pattern whose whole point is that a
+  person intervenes, at the surface where a person is already sitting. The
+  decision is a required choice between two flags, never a value with a
+  default: a verdict nobody gave is the one thing this command may not invent.
+  `--feedback` is a note on a rejection and is refused (exit **2**) on an
+  approval rather than accepted and dropped. A thread the checkpointer never
+  stored, a thread that is not paused, and a thread belonging to another
+  package are three sentences and exit **1**, never a traceback. Because it
+  executes against a durable checkpoint and consumes the pause, it prints the
+  thread, the gate and the decision on stderr before it acts
+  (`workflow-gallery` 24).
+- **`CompiledWorkflow.resume()` and `CompiledWorkflow.pause()`**, the library
+  seam under it — `ask()`'s siblings, returning the same `RunResult`. `pause()`
+  is a view and resumes nothing. Both raise the new `ThreadNotResumable` for a
+  thread this workflow cannot speak for.
+- **`RunResult.pause`** — the gate a run stopped at, or `None` for one that
+  finished. Additive keyword; a `RunResult` built without it is unchanged, and
+  an older pickle still round-trips.
 - **`openstategraph export plugin <package>` — the Agent Plugins export has a
   command line.** `plugin_interop.export_plugin` had shipped reachable from
   HTTP and from MCP and from no terminal at all, so the one audience most

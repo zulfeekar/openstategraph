@@ -51,6 +51,7 @@ from openstategraph.errors import (
     OpenStateGraphError,
     PackageNotFound,
     SchemaVersionError,
+    ThreadNotResumable,
     WorkflowPackageError,
 )
 from openstategraph.loader import (
@@ -91,6 +92,7 @@ __all__ = [
     "PackageNotFound",
     "RunResult",
     "SchemaVersionError",
+    "ThreadNotResumable",
     "WorkflowInfo",
     "WorkflowPackageError",
     "Workflows",

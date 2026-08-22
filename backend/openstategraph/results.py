@@ -99,6 +99,18 @@ class RunResult(str):
     #: Plain JSON — dicts of numbers — so it crosses a serialisable seam
     #: without a non-finite value in it.
     usage: dict[str, dict[str, Any]]
+    #: The gate this run stopped at, or `None` for a run that finished —
+    #: `{"message", "candidate"}`, the node's own payload, exactly as the
+    #: `interrupt` frame carries it over HTTP.
+    #:
+    #: **`None` is the ordinary case and the field is the honest one**
+    #: (`workflow-gallery` 24). A run parked at a `human.approval` gate used to
+    #: come back from `ask()` indistinguishable from a run that finished with
+    #: nothing to say: empty answer, no warnings, exit 0. It is not on
+    #: `warnings` and not on `failures`, because a pause is neither — nothing
+    #: went wrong and nothing degraded; the run is *waiting*, and the caller's
+    #: move is to answer it with `resume()`, not to retry or to report a fault.
+    pause: dict[str, Any] | None
 
     def __new__(
         cls,
@@ -110,6 +122,7 @@ class RunResult(str):
         failures: list[str] | None = None,
         attempts: int = 0,
         usage: dict[str, dict[str, Any]] | None = None,
+        pause: dict[str, Any] | None = None,
     ) -> "RunResult":
         self = super().__new__(cls, answer)
         self.answer = str(answer)
@@ -126,6 +139,9 @@ class RunResult(str):
         # Copied a level down as well: the callback hands back its own live
         # mapping, and a finished run must not keep changing.
         self.usage = {str(k): dict(v) for k, v in (usage or {}).items()}
+        # Copied, and `None` kept as `None`: an empty dict would be a claim
+        # that the run paused and said nothing, which is a different fact.
+        self.pause = dict(pause) if pause is not None else None
         return self
 
     @property
@@ -171,6 +187,7 @@ class RunResult(str):
                 self.attempts,
                 self.failures,
                 self.usage,
+                self.pause,
             ),
         )
 
@@ -221,6 +238,7 @@ def _rebuild(
     attempts: int,
     failures: list[str] | None = None,
     usage: dict[str, dict[str, Any]] | None = None,
+    pause: dict[str, Any] | None = None,
 ) -> RunResult:
     """Module-level so `pickle` can find it by name.
 
@@ -239,6 +257,7 @@ def _rebuild(
         failures=failures,
         attempts=attempts,
         usage=usage,
+        pause=pause,
     )
 
 

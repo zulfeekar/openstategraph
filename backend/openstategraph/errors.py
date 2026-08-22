@@ -115,6 +115,22 @@ class SchemaVersionError(DocumentError):
     """
 
 
+class ThreadNotResumable(OpenStateGraphError, ValueError):
+    """`CompiledWorkflow.resume()` was asked to continue a thread it cannot.
+
+    Three distinct causes, one type, because the caller's move is the same for
+    all three — say so and stop: the checkpointer holds no such thread; the
+    thread finished and has no pause waiting for a decision; or the thread
+    belongs to a different package, which a shared saver makes perfectly
+    findable from the wrong one. The message names which.
+
+    Typed rather than left a bare `ValueError` for the reason this module
+    exists: a service embedding a workflow needs "that approval is already
+    answered" to be catchable apart from its own value errors, and a person at
+    a terminal needs it to be a sentence rather than a traceback.
+    """
+
+
 class CredentialError(OpenStateGraphError, RuntimeError):
     """A provider's credential is the reason this run cannot proceed.
 
@@ -229,6 +245,7 @@ __all__ = [
     "PackageNotFound",
     "ProviderRefusedCredential",
     "SchemaVersionError",
+    "ThreadNotResumable",
     "UnknownProvider",
     "WorkflowPackageError",
 ]

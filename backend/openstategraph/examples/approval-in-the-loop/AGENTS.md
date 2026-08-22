@@ -25,11 +25,61 @@ typed `feedback`. Those two are the only feedback *outputs* in the catalogue;
 edges — the ports do not know, and do not need to know, that this verdict came
 from a human. That symmetry is the example's claim.
 
-## How to run it: not from the CLI
+## Smoke run
 
-`openstategraph run` calls `workflow.ask(...)`, which has no resume flag, so the
-CLI can observe the *pause* and nothing after it. The blocking API endpoint is
-honest about the same limit:
+It ships in the wheel rather than in this project's `workflows/`, so take a
+copy first — `openstategraph examples copy approval-in-the-loop` — and everything below
+runs against `workflows/approval-in-the-loop`.
+
+Two commands, the same `openstategraph run` every other package in the gallery
+documents plus the verb that finishes it (`workflow-gallery` 24). The run stops
+at the gate and says so on stderr, exiting **1** — it has not failed and has
+not answered, it is waiting:
+
+```
+$ openstategraph run workflows/approval-in-the-loop \
+    "Draft a one-line apology to a customer whose order was late." \
+    --thread-id smoke-approval-1
+paused: This message goes to a customer under your name. Approve to send it, or reject with a note saying what to change.
+  candidate: We're sorry your order arrived late and we're taking steps to improve our delivery speed.
+  thread: smoke-approval-1
+  finish it: openstategraph resume workflows/approval-in-the-loop smoke-approval-1 --approve | --reject --feedback '…'
+```
+
+Reject it, and the drafter treats the note as the specification and stops at
+the same gate again:
+
+```
+$ openstategraph resume workflows/approval-in-the-loop smoke-approval-1 --reject \
+    --feedback "Too formal, and it does not say when the order will arrive. One sentence, warmer, and name the next step."
+```
+
+> We're sorry your order arrived late; it's now set to arrive by [date] and
+> we'll send you a tracking update shortly.
+
+Approve it, and the run finishes with `decisions: {"gate1": "approved"}` and
+that message as the answer:
+
+```
+$ openstategraph resume workflows/approval-in-the-loop smoke-approval-1 --approve
+```
+
+There is no `edit` outcome — a person may approve or reject with words, never
+hand back corrected text. That is organisms-first-class 27. `--feedback` on an
+approval is refused (exit **2**) rather than dropped, and a thread that is not
+stored, is not paused, or belongs to another package is refused with a sentence
+and exit **1**.
+
+**Provenance, because the two halves were measured on different days.** The
+model's drafts above are the transcript recorded 2026-08-15 against a local
+`openstategraph serve` on `ollama:gpt-oss:120b-cloud`, thread
+`smoke-approval-1`. The CLI commands and their exit codes were verified on
+2026-08-22 in an environment with no provider credential, against a gate
+reached without a model — so the pause, both decisions and all four refusals
+are measured, and the drafter's wording is quoted from the earlier run rather
+than re-run.
+
+## The API is the second way, and it is what the editor uses
 
 ```
 $ POST /api/runs   → 409
@@ -38,20 +88,9 @@ Run it through POST /api/runs/stream, which reports the pause and resumes
 through POST /api/runs/resume. Thread: smoke-approval-blocking-2
 ```
 
-The full cycle is `POST /api/runs/stream` → `POST /api/runs/resume`, twice.
-Gallery ticket 24 asks for a CLI equivalent.
-
-## Smoke run
-
-It ships in the wheel rather than in this project's `workflows/`, so take a
-copy first — `openstategraph examples copy approval-in-the-loop` — and everything below
-runs against `workflows/approval-in-the-loop`.
-
-Recorded 2026-08-15 against a local `openstategraph serve` on
-`ollama:gpt-oss:120b-cloud`, thread `smoke-approval-1`, question *"Draft a
-one-line apology to a customer whose order was late."*
-
-**1 — `POST /api/runs/stream`.** The run pauses, and the pause is a frame:
+`POST /api/runs/stream` reports the pause as a frame, and the payload is the
+same `{message, candidate}` the CLI prints — the node's own field and the text
+a person is being asked to stand behind:
 
 ```json
 event: interrupt
@@ -60,21 +99,9 @@ event: interrupt
  "candidate": "We're sorry your order arrived late and we're taking steps to improve our delivery speed."}
 ```
 
-The payload is `{message, candidate}` — the node's own field and the text a
-person is being asked to stand behind. Nothing has been sent.
-
-**2 — `POST /api/runs/resume`, `{"decision": "reject", "feedback": "Too formal,
-and it does not say when the order will arrive. One sentence, warmer, and name
-the next step."}`.** The drafter redrafts and the run pauses again:
-
-> We're sorry your order arrived late; it's now set to arrive by [date] and
-> we'll send you a tracking update shortly.
-
-**3 — `POST /api/runs/resume`, `{"decision": "approve"}`.** `done`, with
-`decisions: {"gate1": "approved"}` and that message as the answer.
-
-There is no `edit` outcome — a person may approve or reject with words, never
-hand back corrected text. That is organisms-first-class 27.
+`POST /api/runs/resume` then carries `{"decision": "reject", "feedback": "…"}`
+and `{"decision": "approve"}`, which is exactly what `--reject --feedback` and
+`--approve` send. Nothing is sent to the customer until a person has decided.
 
 ## It resists both fixture formats, and the reason is the interrupt
 

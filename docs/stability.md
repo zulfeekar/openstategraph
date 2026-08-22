@@ -31,6 +31,7 @@ from openstategraph import (
     DEFAULT_RECURSION_LIMIT, __version__,
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
+    ThreadNotResumable,
 )
 from openstategraph.abc import (
     ITool, BaseTool, ToolResult, NoArgs, Field, ToolField,
@@ -47,7 +48,7 @@ from openstategraph.abc import (
 from openstategraph.errors import (
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
-    CredentialError, MissingProviderKey, MissingProviderPackage,
+    ThreadNotResumable, CredentialError, MissingProviderKey, MissingProviderPackage,
     NoProviderInstalled, ProviderRefusedCredential, UnknownProvider,
     GENERIC_FAILURE_MESSAGE,
 )

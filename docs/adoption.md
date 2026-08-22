@@ -363,7 +363,8 @@ seam the library already has — there is no behaviour in the CLI that
 
 | Command | What it does |
 | --- | --- |
-| `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer |
+| `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer. A run that stopped at a `human.approval` gate **exits 1** and prints the pause, the thread id and the `resume` line that finishes it — it is not a finished run and no longer says it is |
+| `openstategraph resume <package> <thread-id> --approve\|--reject [--feedback "…"]` | answer the approval a run is paused on and let the rest of it happen. The decision is **required** — there is no default and nothing infers one — and `--feedback` is a note on a rejection, refused with **2** on an approval rather than silently dropped. A thread that is not stored, is not paused, or belongs to another package is refused with **1** and a sentence. Same flags as `run` otherwise; **it executes**, so it announces the thread, the gate and the decision on stderr before it acts |
 | `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings, plus the two questions a plan held in memory cannot answer: does every mount name a package that is there **and stop short of mounting its own package again**, and does every bound tool have an implementation **in this installation** (built-in, an installed plugin, or the package's own `tools/`). **Exit 1** on blocking findings, so it is a CI gate. A document copied without its package's `tools/`, and a package whose mount chain closes on itself, fail here rather than at the first run |
 | `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
 | `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `loop`, `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
@@ -385,6 +386,11 @@ Exit codes are fixed, because they are what CI consumes: **0** success, **1**
 run or validation failure, **2** usage error, **3** a required extra is missing
 (the message names the exact `pip install` line). Every command takes its paths
 from its arguments, so it works from any directory.
+
+A **paused run** is the one thing that exits **1** on its own, without the
+second half: a run stopped at a `human.approval` gate has not failed and has
+not answered — it is waiting — and reporting it as success is what let a
+human-in-the-loop package look finished when nobody had decided anything.
 
 A **failed run** is one rule, in one place (`cli.run_exit_code`): the run
 produced no answer *and* something went wrong — a step failed, or a capability
@@ -544,6 +550,7 @@ hand-seeded state:
 | `.failed_nodes` | node id → why that step failed, for the nodes whose `.outputs` entry is a failure marker rather than content |
 | `.attempts` | how many times a model-driven node was invoked during the run — a cost, not a lap count and not a budget. A cycle holding two agents spends two per lap, and two loops in series both add into it. Each grader's own budget is `maxAttempts`, counted per grader |
 | `.usage` | model name → the tokens that model reported (`input_tokens`, `output_tokens`, `total_tokens`, and whatever detail block the provider added, including cache reads). Counted in-process by `langchain-core`'s own usage callback — **no tracer, no account**. **Per model, never one integer**: a run that drives a cloud model and one paid Claude call is only readable while the two are apart. An **empty** mapping means no provider reported, which is *unknown*, not free |
+| `.pause` | the gate this run stopped at — `{"message", "candidate"}` — or **`None`** for a run that finished. A pause is not a failure and not a warning: nothing went wrong, the run is *waiting*, and the answer is `workflow.resume(thread_id, decision=…)` rather than a retry |
 | `.total_tokens` | every model's `total_tokens` added up, or **`None`** when nothing reported. `None`, never `0` — a run nobody metered did not cost nothing. There is deliberately no dollar figure: tokens are a fact, money is a claim about a vendor's price sheet, and no price table lives in this project. Multiply by your own |
 
 **The split is the point, and it is why `.warnings` is not what a script
@@ -779,6 +786,15 @@ log line) rather than raising. When you need more than one question and an
 answer, drop to `.graph` — it is a plain compiled LangGraph object, so
 `.stream()`, `.astream_events()`, `.get_state()` and interrupt/resume are all
 right there.
+
+`ask()` has a sibling for the one case that needs no drop at all:
+`workflow.resume(thread_id, decision="approve" | "reject", feedback="…")`
+continues a run a `human.approval` node paused, and returns the same
+`RunResult`. `workflow.pause(thread_id)` asks what a thread is waiting for
+without resuming it, and answers `None` for a run that finished. A thread the
+checkpointer has never seen, one that is not paused, and one belonging to a
+different package each raise `ThreadNotResumable`, which is catchable apart
+from your own `ValueError`s.
 
 **Streaming that into your own frontend is its own page.**
 [Wiring a workflow into your app](wiring-it-in.md) has the worked

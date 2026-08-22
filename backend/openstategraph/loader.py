@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from openstategraph.errors import InvalidPackageName, PackageNotFound
+from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNotResumable
 from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
@@ -59,6 +59,28 @@ logger = logging.getLogger(__name__)
 #: that a document's own `settings.recursionLimit` is consulted first; the
 #: name is kept because scripts import it from here.
 DEFAULT_RECURSION_LIMIT = DEFAULT_STEP_BUDGET
+
+#: The verdicts a `human.approval` gate can carry, and the whole set of them.
+#: There is no `edit`: a person may approve, or reject with words, and never
+#: hand back corrected text (`organisms-first-class` 27).
+_DECISIONS = frozenset({"approve", "reject"})
+
+
+def _interrupt_payload(final: dict[str, Any]) -> dict[str, Any] | None:
+    """The pause a finished `invoke` came back carrying, or `None`.
+
+    LangGraph puts pending `Interrupt` objects on the returned state under
+    `__interrupt__`. Read tolerantly and trusted narrowly, the way this project
+    reads every reply it did not write: a payload is taken as a mapping when it
+    is one, and anything else is rendered as the message it evidently is
+    rather than raised over.
+    """
+    pending = final.get("__interrupt__") or ()
+    for interrupt in pending if isinstance(pending, (list, tuple)) else (pending,):
+        value = getattr(interrupt, "value", interrupt)
+        return dict(value) if isinstance(value, dict) else {"message": str(value)}
+    return None
+
 
 
 @dataclass(frozen=True)
@@ -264,13 +286,159 @@ class CompiledWorkflow:
             )
             # Read inside the block: the manager clears the variable on exit.
             spent = dict(usage.usage_metadata)
+        result = self._result(final, spent)
+        self._append_trace(question, result, time.monotonic() - started)
+        return result
+
+    def pause(self, thread_id: str) -> dict[str, Any] | None:
+        """What a paused thread is waiting to be told — or `None` if it is not
+        waiting at all.
+
+        The payload is the node's own: `{"message", "candidate"}`, the sentence
+        the gate asks and the text a person is being asked to stand behind. It
+        is a **view**, like `threads show`: reading a pause resumes nothing.
+
+        Raises for a thread this workflow cannot speak for at all — see
+        `_thread_state`. A stored thread that simply finished is not an error:
+        it returns `None`, because "is this waiting on me" is a fair question
+        to ask of any thread.
+        """
+        state = self._thread_state(thread_id)
+        for task in state.tasks or ():
+            for interrupt in getattr(task, "interrupts", ()) or ():
+                value = getattr(interrupt, "value", None)
+                return dict(value) if isinstance(value, dict) else {"message": str(value)}
+        return None
+
+    def resume(
+        self,
+        thread_id: str,
+        *,
+        decision: str,
+        feedback: str | None = None,
+        user_email: str | None = None,
+        session_id: str | None = None,
+        recursion_limit: int | None = None,
+    ) -> RunResult:
+        """Answer a `human.approval` gate and let the rest of the run happen.
+
+        `ask()`'s sibling, and the half that was missing: `ask()` starts a
+        conversation, this one finishes the turn a person was asked to close.
+        Both return a `RunResult`, because a resumed run is not a different
+        kind of thing from the run it continues — it is the same run, picking
+        back up, which is the argument `POST /api/runs/resume` already makes
+        about reusing one event vocabulary.
+
+        `decision` is `"approve"` or `"reject"`, and there is deliberately no
+        default: a decision nobody gave is the one thing this seam must never
+        invent. `feedback` rides along with a rejection and is what the drafter
+        treats as the specification for its next attempt; `_human_approval`
+        reads it only when the decision is a rejection, so passing it with an
+        approval is a caller error rather than a value silently dropped.
+
+        There is no `edit` outcome, deliberately — a person may approve, or
+        reject with words, and never hand back corrected text
+        (`organisms-first-class` 27).
+
+        **This executes.** The rest of the graph runs against a durable
+        checkpoint, tools and all, and the pause is consumed: a thread cannot
+        be resumed twice. Callers with a person in front of them should say so
+        first — `openstategraph resume` does.
+        """
+        if decision not in _DECISIONS:
+            raise ValueError(
+                f"decision must be one of {', '.join(sorted(_DECISIONS))} — "
+                f"{decision!r} is not a verdict this gate can carry"
+            )
+        if feedback and decision == "approve":
+            raise ValueError(
+                "feedback belongs to a rejection — an approval carries no note, "
+                "and one passed here would be dropped rather than read"
+            )
+        if self.pause(thread_id) is None:
+            raise ThreadNotResumable(
+                f"thread {thread_id!r} is not paused — there is nothing waiting "
+                "for a decision. `threads list` reports which threads are"
+            )
+
+        from langgraph.types import Command
+
+        from langchain_core.callbacks import get_usage_metadata_callback
+
+        started = time.monotonic()
+        resume_value: dict[str, Any] = {"decision": decision}
+        if feedback:
+            resume_value["feedback"] = feedback
+        config = self._config(thread_id, user_email, session_id, recursion_limit)
+        with get_usage_metadata_callback() as usage:
+            final = self.graph.invoke(Command(resume=resume_value), config)
+            spent = dict(usage.usage_metadata)
+        result = self._result(final, spent)
+        self._append_trace(f"resume:{decision}", result, time.monotonic() - started)
+        return result
+
+    def _config(
+        self,
+        thread_id: str,
+        user_email: str | None = None,
+        session_id: str | None = None,
+        recursion_limit: int | None = None,
+    ) -> dict[str, Any]:
+        """The one config both doors build. Identity is the whole point of it:
+        a resume that named the thread and forgot the slug would continue the
+        right run in the wrong memory namespace."""
+        return {
+            "recursion_limit": resolve_step_budget(recursion_limit, self.document),
+            "configurable": {
+                "thread_id": thread_id,
+                "user_email": user_email or "",
+                "session_id": session_id or "",
+                "workflow_slug": self.slug or "",
+            },
+        }
+
+    def _thread_state(self, thread_id: str) -> Any:
+        """The checkpointer's snapshot of one thread, or a refusal naming why.
+
+        Two refusals, and both are about *this* workflow's right to speak for
+        the thread rather than about how the run went:
+
+        - **Nothing stored.** A checkpointer with no record of the id is a
+          typo, a different state directory, or a run that never happened.
+        - **Another package's thread.** The saver is shared across a project,
+          so a thread is perfectly *findable* from the wrong package — and
+          resuming it there would run this document against a checkpoint some
+          other document wrote. `workflow_slug` has ridden in every
+          checkpoint's metadata since threads were listable, so the mismatch
+          is answerable rather than merely suspected.
+        """
+        state = self.graph.get_state(self._config(thread_id))
+        if state.created_at is None:
+            raise ThreadNotResumable(
+                f"no stored run for thread {thread_id!r} — `threads list` shows "
+                "which threads this checkpointer holds"
+            )
+        stored = str((state.metadata or {}).get("workflow_slug") or "")
+        if stored and self.slug and stored != self.slug:
+            raise ThreadNotResumable(
+                f"thread {thread_id!r} belongs to {stored!r}, not to {self.slug!r} "
+                "— resume it against the package that started it"
+            )
+        return state
+
+    def _result(self, final: dict[str, Any], spent: dict[str, Any]) -> RunResult:
+        """One finished `invoke` as a `RunResult` — the assembly `ask` and
+        `resume` share, so a run cannot report its health differently
+        depending on which door started it."""
+        from openstategraph.compile.workflow_compiler import run_health_from_state
+
         outputs = final.get("outputs") or {}
         # The third door onto `run_health`, and the one that had been reading
         # a third of it (`workflow-gallery` 49). Derived from the assembly
         # rather than re-listed here: this door fell behind three times, once
         # per source added to `run_health`, and each time by re-listing.
         health = run_health_from_state(final)
-        result = RunResult(
+        return RunResult(
             str(final.get("answer") or ""),
             decisions=final.get("decisions") or {},
             outputs=outputs,
@@ -287,9 +455,13 @@ class CompiledWorkflow:
             # Empty when no model reported — which is *unknown*, not free.
             # See `RunResult.usage`; nothing here fabricates a zero.
             usage=spent,
+            # **A pause is not an answer, and this is where the two stop
+            # looking alike** (`workflow-gallery` 24). LangGraph puts the
+            # pending `Interrupt` on the returned state under `__interrupt__`;
+            # without reading it, a run stopped at a gate came back with an
+            # empty answer, no warnings and every appearance of success.
+            pause=_interrupt_payload(final),
         )
-        self._append_trace(question, result, time.monotonic() - started)
-        return result
 
     def _append_trace(self, question: str, result: RunResult, seconds: float) -> None:
         """One JSON line per run, appended to `trace_file`. Never fatal.
