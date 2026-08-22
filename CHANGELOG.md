@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **Run context reaches a model as a generated Context section, per field and
+  by opt-in.** A declared field carrying `"prompt": true` is rendered into the
+  system prompt of every prompted node — `agent.llm`, `route.classifier`,
+  `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` — as a
+  generated, non-editable **Context** block placed above the developer's rules,
+  with the locked output contract still last. The block declares itself
+  authoritative, following `held_tools_context`: context renders before rules,
+  so a developer's older prose naming a different value is overruled rather
+  than rewritten. **The opt-in defaults to off**, and that is the substance: a
+  run-context field is exactly where an API handle or a tenant id lives, and a
+  tool must be able to read one without a model ever seeing it. A field nobody
+  opted in is not named, not described and not valued anywhere in what the
+  model was sent, and a document that declares nothing composes byte-identical
+  prompts to the ones it composed before (`organisms-first-class` 72).
+- **`context=` on `BaseRouter` / `Router`, `Grader`, `BaseOrchestrator` /
+  `Orchestrator` and `orchestrator_for`** — keyword-only, defaulting to `""`,
+  the seam the section above arrives by. Purely additive; `ReactAgentNode`
+  already had one.
 - **A run supplies run context, by three doors and one validator.** A workflow
   that declares `settings.context` can now be given the values it asked for:
   `wf.ask(question, context={…})`, `POST /api/runs` and `/api/runs/stream` with

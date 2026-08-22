@@ -147,6 +147,15 @@ export interface RunContextField {
   readonly label?: string;
   readonly description?: string;
   readonly required?: boolean;
+  /**
+   * Whether this field's **value** may be rendered into a model's system
+   * prompt (`organisms-first-class/72`). Absent means no, and that default is
+   * the point: a run-context field is exactly where an API handle or a
+   * caller's address ends up, and a tool must be able to read one without a
+   * model ever seeing it. Opting in is one word; un-sending a handle is not
+   * possible at all.
+   */
+  readonly prompt?: boolean;
   readonly default?: string | number | boolean;
 }
 

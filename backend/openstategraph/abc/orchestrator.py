@@ -213,6 +213,7 @@ class BaseOrchestrator(ABC):
         skill: str = "",
         replace_rules: bool = False,
         model: Any = None,
+        context: str = "",
     ) -> None:
         self.max_subtasks = max_subtasks
         self.model = model
@@ -228,12 +229,19 @@ class BaseOrchestrator(ABC):
         #: machinery, which is exactly what a `SystemPrompt` per call is for.
         #: The split itself is deterministic when no model is configured, so on
         #: many runs neither of these is ever rendered.
+        #: `context` is the generated run-context block
+        #: (`organisms-first-class/72`), and it rides on **both** prompts. A
+        #: sentence composed into one call and not the other is the defect
+        #: `advisor_context` already cost this repository once: labelling is
+        #: as much a decision about the run as planning is, and a supervisor
+        #: that knows the tenant while planning and forgets it while assigning
+        #: is a supervisor nobody can predict.
         self.prompt = self.PROMPT.with_rules(
             rules, replace_defaults=replace_rules
-        ).with_skill(skill)
+        ).with_skill(skill).with_context(context)
         self.label_prompt = self.LABEL_PROMPT.with_rules(
             rules, replace_defaults=replace_rules
-        ).with_skill(skill)
+        ).with_skill(skill).with_context(context)
 
     @abstractmethod
     def split(self, instruction: str, feedback: str = "") -> list[str]:
@@ -584,6 +592,7 @@ def orchestrator_for(
     skill: str = "",
     replace_rules: bool = False,
     model: Any = None,
+    context: str = "",
 ) -> BaseOrchestrator:
     """The one place configuration chooses a decomposition strategy.
 
@@ -608,6 +617,7 @@ def orchestrator_for(
         skill=skill,
         replace_rules=replace_rules,
         model=model,
+        context=context,
     )
 
 

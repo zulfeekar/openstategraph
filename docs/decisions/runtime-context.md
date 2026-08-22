@@ -1,6 +1,6 @@
 # A workflow declares what its runs carry
 
-**Status: steps 1 to 5 of 7 built; the rest is prose.** `organisms-first-class/41`,
+**Status: steps 1 to 6 of 7 built; the rest is prose.** `organisms-first-class/41`,
 adopted from ticket 19's owner decision (2026-08-15). The build is split into
 seven tickets, listed at the end, in the order they must land.
 
@@ -254,7 +254,7 @@ withholds the *whole* schema rather than half of it, and builds. Whether 67's
 declaration validator should refuse it earlier — in both mirrors, so the editor
 says so while you type — is `organisms-first-class/74`.
 
-### The read side is three doors — door one built (71), the other two prose (72–73)
+### The read side is three doors — two built (71, 72), the third prose (73)
 
 - **A node** reads it through **`run_context()`**, the sibling of
   `run_identity()` — **[BUILT, ticket 71]**, and *not* through a second
@@ -266,7 +266,8 @@ says so while you type — is `organisms-first-class/74`.
   the single place context becomes prompt text, exactly as `resolveMiddleware`
   is for middleware. **Only declared keys marked for the prompt are rendered**:
   a context field is a place to put an API handle, and a handle must be able to
-  reach a tool without reaching the model.
+  reach a tool without reaching the model. **[BUILT, ticket 72]**, and by a
+  composed section rather than a middleware — see below.
 - **A tool** reads it through an accessor on `BaseTool`, not a third argument.
   `BaseTool.run` validates `**kwargs` into `Args` and calls `_execute(args)`;
   there is no third parameter and adding one changes every tool in the
@@ -338,6 +339,82 @@ same value supplied over HTTP would spell differently.
 child saw the **parent's** context object even when it declared its own, and
 its own defaults never materialised. Invisible until something read a value.
 The section below is what was decided.
+
+### The Context section, and where the opt-in lives — **[BUILT, ticket 72]**
+
+**The opt-in is `"prompt": true` on the field descriptor, and it defaults to
+off.** One more property on the list 67 already declared, so the descriptor
+stays the single field schema every surface derives from — the inspector row,
+the CLI flag, the validator and now the prompt section. Default-off is the
+whole ticket: a run-context field is exactly where an API handle, a tenant id
+or a caller's address ends up, and a tool has to be able to read one without a
+model ever seeing it. Opting in costs a word in the document; a value already
+sent to a provider cannot be un-sent, so the asymmetry decides the default.
+
+**What was rejected, and why.** *Per node* — a `tenant` a router may see is not
+a handle an agent may see, and that is a real distinction — but it would be a
+new per-node config field on five families, duplicating in each card a decision
+that is a property of the **value**, not of the reader; a document with four
+context fields and six prompted nodes would carry twenty-four checkboxes, and
+one forgotten checkbox is the leak. *Per mount, in `data.overrides`* — an
+override is per-instance and a slug-keyed JSON string, so the same handle would
+be showable in one mount and not another with nothing able to audit which; it
+also puts a security decision on the *caller* of a package rather than on the
+author who declared the field. Both remain reachable later: narrowing an opt-in
+per node is additive, widening one is not, so shipping the coarse **safe** shape
+first is the direction that keeps the promise.
+
+**A composed section, not a middleware.** The plan above said middleware, and
+that was written before 71 measured the read door. Middleware is an *agent*
+concern — `create_agent`'s wrapped model call — and four of the five prompted
+families are not agents: a router, a grader and a supervisor each make a bare
+`model.invoke([SystemMessage, HumanMessage])` with no middleware stack to hang
+anything on. A middleware would therefore have served `agent.llm` and
+`orchestrate.worker` and silently skipped the other three, which is exactly the
+one-factory-and-not-the-other defect `advisor_context` already cost this
+repository. So the section is built by `run_context_prompt_section` and arrives
+through `SystemPrompt.with_context` — the one place every family already
+composes generated context, which keeps `resolve_prompt()`'s promise that
+configuration becomes a prompt in one place. `context=` is now a keyword on
+`Router`, `Grader` and `BaseOrchestrator`, beside the one `ReactAgentNode`
+already had.
+
+**Composed per run, and the cache key is where this could have leaked.**
+`_agent` memoises its built agent per wired skill, and that cache outlives a
+run; keying it on `skill` alone would have handed the second caller the first
+caller's tenant. The key is `(skill, section)`. The router's compile-time
+`prebuilt` is likewise used only when neither a skill nor a section varies.
+
+**The section declares itself authoritative**, copying `held_tools_context`:
+context renders *before* rules, so "later instructions win ties" runs the wrong
+way, and a developer's months-old prose naming a different tenant would beat
+this run's actual one. Precedence is stated rather than positioned, and the
+developer's text is overruled rather than rewritten. It **never names a field
+it withheld** — telling a model something exists that it has not been given
+invites it to ask for what nothing can supply, and leaks the one fact the
+opt-in exists to keep quiet. A field with no value this run is omitted rather
+than rendered empty, which is `render_run_context`'s rule on this surface.
+
+**What is pinned**, in `backend/tests/test_context_reaches_a_prompt.py` (17
+tests): every claim is made against the system message a **real compiled
+graph's model actually received**, because a test of the composer's return
+value passes against a section no node ever sends. The demonstration runs once
+per prompted family; the inverses are that a withheld field's value, key and
+label appear nowhere in the whole message, that a document declaring nothing
+and a document whose fields all declined compose **byte-identical** prompts,
+that the output contract still renders last, that two runs of one compiled
+graph never see each other's values, and that `prompt` defaults to `False` on
+the descriptor itself. Five mutations were checked red: ignoring the opt-in
+filter, flipping the default to on, keying the agent cache on skill alone,
+rendering the context after the contract, and dropping the worker factory's
+call.
+
+**Not surfaced read-only, and that is a gap rather than a decision.**
+`/api/node-contracts` publishes `preamble`, `contract` and `default_rules` off
+the ladder *classes*, so it cannot publish anything generated from a document —
+`branch_context`, `held_tools_context` and the grader's rubric are equally
+invisible there today. `organisms-first-class/80` is that gap, filed rather
+than left as a footnote.
 
 ### At a mount: inherit, then narrow — **[BUILT, ticket 76]**
 
@@ -595,8 +672,8 @@ prose, an agent's instruction is untouched, and the two channels stay separate
 inside one run.
 
 **Prose, unpinned, because it describes a thing that does not exist yet:** the
-prompt-section placement and the tool accessor. Each is a build ticket below and each carries its own
-test when it lands.
+tool accessor. It is the last build ticket below, and it carries its own test
+when it lands.
 
 ## The build, in the order it must land
 
@@ -607,7 +684,7 @@ test when it lands.
 | ~~69~~ | ~~The compiler mints a `context_schema`~~ | **Landed 2026-08-22.** `mint_context_schema` in `compile/run_context.py`, one `StateGraph(..., context_schema=…)` in the compiler, and the sentinel updated into a census of one. Supplies and reads nothing, as designed. |
 | ~~70~~ | ~~One validator, three supply routes~~ | **Landed 2026-08-22.** `validate_run_context` and `coerce_context_flags` in `compile/run_context.py`, `RunContextError` (Tier 1), `ask(context=)`, `RunRequest.context`, `run --context KEY=VALUE`. Reads nothing, as designed. |
 | ~~71~~ | ~~Nodes read it~~ | **Landed 2026-08-22.** `run_context()` and `render_run_context()` in `compile/run_context.py`, read by `_input` and `_static_text`. `get_runtime()` rather than a second parameter; the prompted families deliberately untouched. |
-| 72 | The generated prompt **Context** section, and per-field opt-in | Needs 71 working, and needs the opt-in or a handle reaches a model. |
+| ~~72~~ | ~~The generated prompt **Context** section, and per-field opt-in~~ | **Landed 2026-08-22.** `"prompt": true` on the descriptor (default off), `prompt_context_fields` and `run_context_prompt_section` in `compile/run_context.py`, `context=` on Router / Grader / BaseOrchestrator, composed in all five prompted factories. A composed section rather than a middleware, for the reason recorded above. |
 | 73 | `BaseTool` context accessor, and the generated-module contract clause | Last because it corrects a *published* false clause, which should be corrected against a working mechanism rather than a planned one. |
 
 The editor's inspector surface is deliberately not in this list: it derives

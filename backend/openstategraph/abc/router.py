@@ -216,6 +216,7 @@ class BaseRouter(ABC):
         replace_rules: bool = False,
         model: Any = None,
         match_mode: str = "best",
+        context: str = "",
     ) -> None:
         if not branches:
             raise ValueError("A router needs at least one branch")
@@ -256,7 +257,12 @@ class BaseRouter(ABC):
         #: `classify()` was rebuilding a constant.
         self.prompt = (
             (self.PROMPT_ALL if self._match_mode == "all" else self.PROMPT)
-            .with_context(self._describe_branches())
+            # The branch list, then whatever the *run* carried — generated
+            # sections both, and both above the developer's rules. `context`
+            # is the run-context block (`organisms-first-class/72`); it is
+            # empty for every workflow that declares nothing, which is all of
+            # them until somebody opts a field in.
+            .with_context(self._describe_branches(), context)
             .with_rules(rules, replace_defaults=replace_rules)
             .with_skill(skill)
         )
@@ -410,6 +416,7 @@ class Router(BaseRouter):
         replace_rules: bool = False,
         model: Any = None,
         match_mode: str = "best",
+        context: str = "",
         destinations: dict[str, str] | None = None,
     ) -> None:
         super().__init__(
@@ -420,6 +427,7 @@ class Router(BaseRouter):
             replace_rules=replace_rules,
             model=model,
             match_mode=match_mode,
+            context=context,
         )
         #: branch name -> graph node name, taken from the canvas wiring.
         self.destinations = destinations or {}

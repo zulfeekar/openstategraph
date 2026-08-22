@@ -56,8 +56,10 @@ from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.node_types import NodeTypeRegistry
 from openstategraph.compile.run_context import (
     mount_run_context,
+    prompt_context_fields,
     render_run_context,
     run_context,
+    run_context_prompt_section,
     unsuppliable_context_keys,
 )
 from openstategraph.compile.diagnostics import (
@@ -947,6 +949,7 @@ class NodeRuntime:
         #: until then, so a runtime built and never handed a document reads
         #: as "asked for nothing" rather than raising.
         self._settings: dict[str, Any] = {}
+        self._prompt_context: tuple[Any, ...] = ()
         #: What the compiler noticed and could not resolve — unresolved
         #: tools and functions, unknown node types, mounts whose outcome
         #: nothing enforces, capabilities that failed to load.
@@ -1152,6 +1155,14 @@ class NodeRuntime:
         #: ones. `injectionScreening` reads from here for the same reason the
         #: checkpointer and the memory settings do.
         self._settings = document.get("settings") or {}
+        #: The declared context fields a model may be shown, in document order
+        #: (`organisms-first-class/72`). Read from the document **once, here**,
+        #: because *which* fields opted in is a fact about the document and
+        #: only the *values* are a fact about the run. Empty for every workflow
+        #: that declares nothing and for every field that did not opt in — the
+        #: default — so a document untouched by this feature composes the
+        #: prompt it always did, byte for byte.
+        self._prompt_context = prompt_context_fields(document)
         # Declared here rather than in each `_router`/`_grader`/`_input`
         # builder: a bound-only or unreachable control node never reaches a
         # builder, and it would still be able to stream if the graph later
@@ -1589,6 +1600,18 @@ class NodeRuntime:
                 self.diagnostics.record(Finding.STALE_TOOL_DENIAL, node_id, phrase)
                 return
 
+    def _run_context_section(self) -> str:
+        """The generated **Context** block for this run, or `""`.
+
+        Called from inside a node's `run` closure and never from a factory:
+        the opted-in *fields* are known when the graph is built, but the
+        *values* are ambient to the run (`run_context()` reads
+        `get_runtime()`), and one compiled graph serves many runs. A section
+        computed at build time would be one run's values frozen into every
+        later run's prompt.
+        """
+        return run_context_prompt_section(self._prompt_context)
+
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """An agent-family loop with the tools the canvas bound to it.
 
@@ -1707,10 +1730,16 @@ class NodeRuntime:
             return "upstream" if node_id in seen else "bystander"
 
         rejector_roles = {src: _role_towards(src) for src in feedback_sources}
-        built: dict[str, Any] = {}
+        built: dict[tuple[str, str], Any] = {}
 
-        def agent_for(skill: str) -> Any:
-            if skill not in built:
+        def agent_for(skill: str, run_ctx: str = "") -> Any:
+            # Keyed by the run-context block as well as the wired skill
+            # (`organisms-first-class/72`). One compiled graph serves many
+            # runs, and this cache outlives all of them — keying on `skill`
+            # alone would have handed the second caller the first caller's
+            # tenant, which is the precise leak this ticket exists to prevent.
+            key = (skill, run_ctx)
+            if key not in built:
                 contributions: dict[str, Any] = dict(self.services.workflow_middleware)
                 # Prompt-injection screening, if this workflow asked for it and
                 # the extra is installed (guardrails ticket 04). A *workflow*
@@ -1772,7 +1801,7 @@ class NodeRuntime:
                         keep=SUMMARIZE_KEEP,
                     )
                 tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
-                built[skill] = tier_cls(
+                built[key] = tier_cls(
                     name=f"agent_{node_id}",
                     model=model,
                     tools=lc_tools,
@@ -1807,12 +1836,17 @@ class NodeRuntime:
                             # about a tool sitting in its own schema.
                             held_tools_context(lc_tools),
                             advisor_context(node_id, self.services.advisor_catalog),
+                            # What this *run* was started with, for the fields
+                            # the author opted in (`organisms-first-class/72`).
+                            # Generated, so it is context and never rules, and
+                            # the locked output contract still renders last.
+                            run_ctx,
                         )
                         if part
                     ),
                     middleware=contributions,
                 ).build()
-            return built[skill]
+            return built[key]
 
         def run(state: RunState) -> dict[str, Any]:
             prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
@@ -1824,7 +1858,11 @@ class NodeRuntime:
             if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
                 feedback = ""
 
-            agent = agent_for(skill) if model is not None else None
+            agent = (
+                agent_for(skill, self._run_context_section())
+                if model is not None
+                else None
+            )
             if agent is None:
                 return {
                     "outputs": {node_id: ""},
@@ -1922,7 +1960,7 @@ class NodeRuntime:
         upstream = [src for src, dst in plan.edges if dst == node_id]
         skills = plan.skill_bindings.get(node_id, [])
 
-        def router_for(skill: str) -> Router:
+        def router_for(skill: str, run_ctx: str = "") -> Router:
             """Built per skill value, for the same reason `_agent` is: the
             wired text arrives through state, not through the document.
 
@@ -1938,6 +1976,7 @@ class NodeRuntime:
                 replace_rules=_replaces_rules(data),
                 model=classifying_model,
                 match_mode=_text(data, "matchMode") or "best",
+                context=run_ctx,
             )
 
         prebuilt = router_for("")
@@ -1958,7 +1997,11 @@ class NodeRuntime:
                 _thread_question(state) if turn == state.get("question", "") else turn
             )
             skill = _wired_skill(state, skills, self._nodes)
-            router = router_for(skill) if skill else prebuilt
+            # `prebuilt` is the compile-time construction, kept for the common
+            # case where nothing varies per run. A wired skill or a run-context
+            # block does vary, so either one forces a rebuild.
+            run_ctx = self._run_context_section()
+            router = router_for(skill, run_ctx) if (skill or run_ctx) else prebuilt
             decision = router.classify(classified)
             return {
                 # The conditional edge dispatches on the *stable id* — the
@@ -2028,7 +2071,7 @@ class NodeRuntime:
         # state is known inside `run`, and neither place knows both.
         floor = step_budget_floor_for(plan, node_id)
 
-        def grader_for(skill: str) -> Grader:
+        def grader_for(skill: str, run_ctx: str = "") -> Grader:
             """A grader is cheap to build, so it is built per skill value.
 
             The skill text arrives through *state* (the port's upstream node
@@ -2043,6 +2086,7 @@ class NodeRuntime:
                 skill=skill,
                 replace_defaults=_replaces_rules(data),
                 model=grading_model,
+                context=run_ctx,
             )
 
         def run(state: RunState) -> dict[str, Any]:
@@ -2070,7 +2114,9 @@ class NodeRuntime:
             # second's answer, with `outputs[a2]` still empty beside it.
             previous = str((state.get("outputs") or {}).get(node_id) or "")
             candidate = _upstream_text(state, upstream) or previous
-            grader = grader_for(_wired_skill(state, skills, self._nodes))
+            grader = grader_for(
+                _wired_skill(state, skills, self._nodes), self._run_context_section()
+            )
 
             # A deterministic check the *grader* cannot make, because it needs
             # the run and a `BaseGrader` sees only the candidate
@@ -2457,7 +2503,7 @@ class NodeRuntime:
         # deterministic path free.
         supervisor_model = self._resolve_model(data)
 
-        def planner_for(skill: str) -> BaseOrchestrator:
+        def planner_for(skill: str, run_ctx: str = "") -> BaseOrchestrator:
             return orchestrator_for(
                 max_subtasks=cap,
                 # `"rules"`, not `"instruction"`. `instruction` is this node's
@@ -2472,6 +2518,7 @@ class NodeRuntime:
                 skill=skill,
                 replace_rules=_replaces_rules(data),
                 model=supervisor_model,
+                context=run_ctx,
             )
 
         # The wired worker archetypes, in edge order — the same roster the
@@ -2540,7 +2587,7 @@ class NodeRuntime:
             # Rebuilt per run rather than once at compile time: the wired skill
             # text can vary by run, and `notes` below is a per-run sink that
             # must not be shared between two concurrent runs of one graph.
-            planner = planner_for(skill)
+            planner = planner_for(skill, self._run_context_section())
             notes: list[str] = []
             subtasks = planner.plan(
                 instruction,
@@ -2797,6 +2844,13 @@ class NodeRuntime:
                         # arguments, same position — above the rules, so
                         # `SystemPrompt` still keeps the output contract last.
                         advisor_context(node_id, self.services.advisor_catalog),
+                        # And what this run was started with
+                        # (`organisms-first-class/72`). Composed here as well
+                        # as in `_agent` for the reason the block above already
+                        # records: a sentence in one factory and not the other
+                        # is a worker deserving less for no reason anybody
+                        # chose.
+                        self._run_context_section(),
                     )
                     if part
                 ),

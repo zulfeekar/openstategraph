@@ -131,6 +131,19 @@ class ContextField(BaseModel):
     label: str = ""
     description: str = ""
     required: bool = False
+    #: Whether this field's **value** may be rendered into a model's system
+    #: prompt — `organisms-first-class/72`, and it defaults to `False` on
+    #: purpose.
+    #:
+    #: A run-context field is exactly where an API handle, a tenant id or a
+    #: caller's address ends up, and a tool must be able to read one without a
+    #: model ever seeing it. Default-on would publish every declared value into
+    #: a context window the first time somebody declared a field, which is
+    #: `CLAUDE.md`'s law about not promising what is not possible read from the
+    #: other side: never hand a model something the author did not choose to
+    #: show it. Opting in is one word in the document; opting out after a
+    #: handle has been sent to a provider is not possible at all.
+    prompt: bool = False
     #: Absent means unset. There is no sentinel, and never a non-finite number.
     default: str | float | bool | None = None
 
@@ -185,6 +198,9 @@ def _problems_for(index: int, raw: Any) -> list[str]:
 
     if "required" in raw and not isinstance(raw["required"], bool):
         problems.append(f"Run context field '{key}' declares a non-boolean 'required'.")
+
+    if "prompt" in raw and not isinstance(raw["prompt"], bool):
+        problems.append(f"Run context field '{key}' declares a non-boolean 'prompt'.")
 
     return problems
 
@@ -799,3 +815,85 @@ def render_run_context(text: str, values: Mapping[str, Any] | None = None) -> st
         return _spell(value)
 
     return _PLACEHOLDER.sub(_fill, text)
+
+
+# --------------------------------------------------------------------------- #
+# The generated prompt section — organisms-first-class/72, step 6 of the seven.
+# --------------------------------------------------------------------------- #
+
+
+def prompt_context_fields(document: Any) -> tuple[ContextField, ...]:
+    """The declared fields whose values a model may be shown, in document order.
+
+    Tolerant, because it is read while a graph is being *built* and a malformed
+    declaration is already a `plan.warnings` problem (67). A document nobody
+    can parse renders nothing rather than raising out of a node factory — the
+    same choice `mint_context_schema` makes one screen up, for the same reason:
+    blaming the compiler for a document defect helps nobody.
+    """
+    try:
+        declared = context_declaration(document)
+    except DocumentError:
+        return ()
+    return tuple(field for field in declared if field.prompt)
+
+
+def run_context_prompt_section(
+    fields: Sequence[ContextField],
+    values: Mapping[str, Any] | None = None,
+) -> str:
+    """The **Context** section a prompted node's model is shown, or `""`.
+
+    Generated, locked, and placed above the developer's rules by
+    `SystemPrompt` — the four-part prompt rule verbatim, with the output
+    contract still rendering last so nothing here can countermand it.
+
+    **Only fields that opted in appear.** `fields` is already filtered by
+    `prompt_context_fields`; the filter lives there rather than here so that
+    the one decision — *may a model see this value?* — is made in one place and
+    can be read off the document without a run. Everything else the run
+    carries stays available to `run_context()` for a node and, from ticket 73,
+    to a tool — which is the whole point of the opt-in: a handle reaches the
+    code that needs it without reaching the model that does not.
+
+    **It declares itself authoritative**, copying `held_tools_context`
+    (`compile/context.py`). Context renders *before* rules, so "later
+    instructions win ties" runs the wrong way: a developer's prose written
+    months ago saying *assume the default tenant* would beat a generated line
+    carrying this run's actual one. Precedence is therefore stated rather than
+    positioned, which is the same remedy `UNTRUSTED_INPUT_IS_DATA` uses in the
+    preamble.
+
+    It deliberately does **not** mention that other fields exist. Naming a
+    withheld key would tell a model there is something it has not been given
+    and invite it to ask for it — a promise nothing can keep, and a leak of the
+    one thing the opt-in exists to keep quiet.
+
+    A field with no value this run — declared, opted in, no default and nothing
+    supplied — is omitted rather than rendered empty. That is
+    `render_run_context`'s rule on this surface: what is not known is not
+    written down.
+    """
+    supplied = run_context() if values is None else dict(values)
+    lines = []
+    for field in fields:
+        if field.key not in supplied:
+            continue
+        value = supplied[field.key]
+        if value is None:
+            continue
+        name = (field.label or "").strip() or field.key
+        described = f" — {field.description.strip()}" if field.description.strip() else ""
+        lines.append(f"- {name} (`{field.key}`): {_spell(value)}{described}")
+    if not lines:
+        return ""
+    listed = "\n".join(lines)
+    return (
+        "Run context — the values this run was started with:\n"
+        f"{listed}\n"
+        "This block is generated from what the caller actually supplied for "
+        "this run, so it is authoritative: where anything in your rules names "
+        "or assumes a different value, that text is out of date and these "
+        "values win. Use them exactly as given — never guess one, and never "
+        "ask for one that is already listed here."
+    )

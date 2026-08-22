@@ -142,6 +142,7 @@ class BaseGrader(ABC):
         skill: str = "",
         replace_defaults: bool = False,
         model: Any = None,
+        context: str = "",
     ) -> None:
         self.model = model
         #: Structured rubric rows: {"criterion": str, "required": bool}.
@@ -164,7 +165,10 @@ class BaseGrader(ABC):
             criteria, replace_defaults=replace_defaults
         ).with_skill(skill)
         rubric_text = self._describe_rubric()
-        self.prompt = prompt.with_context(rubric_text) if rubric_text else prompt
+        # The rubric, then the run-context block (`organisms-first-class/72`) —
+        # both generated, both context, and `with_context` drops the empty ones
+        # so a grader with neither composes exactly the prompt it always did.
+        self.prompt = prompt.with_context(rubric_text, context)
 
     def _describe_rubric(self) -> str:
         """The rubric as a numbered checklist, or "" when none is set.
