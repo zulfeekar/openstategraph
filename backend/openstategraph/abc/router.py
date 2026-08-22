@@ -30,7 +30,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from openstategraph.abc.prompt import SystemPrompt
+from openstategraph.abc.prompt import UNTRUSTED_INPUT_IS_DATA, SystemPrompt
 
 
 class Classification(BaseModel):
@@ -151,7 +151,12 @@ class BaseRouter(ABC):
             "conversation is shown, classify the NEW message in its light: a "
             "follow-up about a previous answer (how did you get it, explain, "
             "why, tell me more) belongs to the branch that produced that "
-            "answer, not to whichever branch the follow-up's words resemble."
+            "answer, not to whichever branch the follow-up's words resemble.\n\n"
+            # Locked, and locked *here* rather than in `default_rules`: a
+            # router classifies whatever an upstream node produced, which may
+            # be an agent's answer with a fetched page inlined into it. See
+            # `UNTRUSTED_INPUT_IS_DATA`.
+            + UNTRUSTED_INPUT_IS_DATA
         ),
         output_contract=(
             "Reply with exactly one branch name from the list above. "
@@ -185,7 +190,7 @@ class BaseRouter(ABC):
             "NEW message in its light: a follow-up about a previous answer "
             "(how did you get it, explain, why, tell me more) belongs to the "
             "branch that produced that answer, not to whichever branch the "
-            "follow-up's words resemble."
+            "follow-up's words resemble.\n\n" + UNTRUSTED_INPUT_IS_DATA
         ),
         output_contract=(
             "Reply with every branch name from the list above that the message "

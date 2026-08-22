@@ -34,7 +34,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from openstategraph.abc.prompt import SystemPrompt
+from openstategraph.abc.prompt import UNTRUSTED_INPUT_IS_DATA, SystemPrompt
 
 
 class Verdict(BaseModel):
@@ -95,7 +95,11 @@ class BaseGrader(ABC):
     PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
         preamble=(
             "You are a grader. You judge whether a candidate answer is good enough "
-            "to return to the user. You never rewrite it yourself."
+            "to return to the user. You never rewrite it yourself.\n\n"
+            # Locked, and locked *here* rather than in the default criteria: the
+            # candidate is an upstream node's output, so a fetched page's prose
+            # reaches this model verbatim. See `UNTRUSTED_INPUT_IS_DATA`.
+            + UNTRUSTED_INPUT_IS_DATA
         ),
         output_contract=(
             "Reply with PASS or FAIL on the first line. If FAIL, add one short line "
