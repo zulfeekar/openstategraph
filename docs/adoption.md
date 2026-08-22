@@ -413,6 +413,15 @@ root** — checked recursively, so a typo two packages down is caught before the
 run is. Of the packages this repository ships, exactly one carries a finding at
 all and it is a report; every one of them still exits 0.
 
+Where the line falls was settled by running both sides (`workflow-gallery` 61).
+An Output that leaves without meeting the guardrail the rest of the document
+keeps is a **problem**: same run, same model, the guarded door emits
+`[REDACTED_EMAIL]` and the unguarded one emits the address. A mount whose
+*Expected outcome* has no grader behind it to check it is a **note**: the field
+is documentation the compiler does not read, the run answers with every drawn
+node producing its output, and it is the same observation an unwired grader
+already reports one level down.
+
 > **Until the wheel is on PyPI** (see *Be honest about the install*, below),
 > `openstategraph` lands on your `PATH` when you `pip install -e
 > "/path/to/openstategraph/backend[ollama]"`. Without installing at all, every

@@ -204,13 +204,12 @@ class TestEveryProducerHasASide:
     #: the run did not do: a tool with no implementation, a function with no
     #: callable, a node type with no factory, a mount that would not load, an
     #: override that did not apply, a capability that never became one, a
-    #: guardrail row that protects nothing — and a Team whose card promises an
-    #: outcome its child graph has no machinery to check.
+    #: guardrail row that protects nothing — and an Output that emits what the
+    #: document's own policy redacts on the path beside it.
     FAILURES = frozenset(
         {
             Finding.UNRESOLVED_TOOL,
             Finding.UNRESOLVED_FUNCTION,
-            Finding.UNENFORCED_OUTCOME,
             Finding.UNKNOWN_NODE_TYPE,
             Finding.UNRESOLVED_SUBGRAPH,
             Finding.OVERRIDE_PROBLEM,
@@ -227,8 +226,13 @@ class TestEveryProducerHasASide:
     #: everything it was drawn to do — and what the sentence reports is that
     #: answering it does the work before the gate a **second** time. Advice
     #: about a mode, not a lost capability, so it may not move an exit code.
+    #: `UNENFORCED_OUTCOME` is the fourth (`workflow-gallery` 61): the same
+    #: "no grader routes revise" predicate this file's own subject reports one
+    #: level down, so keeping the two apart made one fact a failure at the
+    #: parent and a report at the child.
     REPORTS = frozenset(
         {
+            Finding.UNENFORCED_OUTCOME,
             Finding.UNWIRED_REVISE,
             Finding.STALE_TOOL_DENIAL,
             Finding.STATELESS_MOUNT_REDOES,

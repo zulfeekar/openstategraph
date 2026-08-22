@@ -48,6 +48,13 @@ class Finding(str, Enum):
     #: signal that it does not. Reported rather than refused: a Team without a
     #: loop is a legal graph that answers questions. What it cannot do is keep
     #: the promise printed on its card (production-ready ticket 03).
+    #:
+    #: And a **report**, not a failure — `REPORT_ONLY` below carries the
+    #: argument and `workflow-gallery` 61 the run it was decided on. In short:
+    #: its condition is the same "no grader routes revise" that
+    #: `UNWIRED_REVISE` reports one level down, the run answers with every
+    #: drawn node producing its output, and the missing thing is a check on
+    #: prose rather than a lost capability.
     UNENFORCED_OUTCOME = "unenforced_outcome"
     #: A grader whose `revise` port is wired to nothing (`workflow-gallery` 31).
     #:
@@ -260,17 +267,38 @@ _SENTENCES: dict[Finding, str] = {
 #: answering *costs*. A document that runs is not a document `validate` should
 #: exit 1 on.
 #:
-#: The other nine stay failures, and two of them are close enough to say so
-#: out loud. `UNENFORCED_OUTCOME` is the same shape one level up — a Team card
-#: promising an outcome whose child graph cannot check it — and
-#: `UNGUARDED_EXIT` is likewise about how a document is drawn. Both were left
-#: here because each names a *promise the document makes and the run cannot
-#: keep*, which is the failure side's own definition, and because the safe
-#: direction of error for an exit code is to keep exiting 1: the opposite
-#: green-lights a broken graph in somebody's CI. Neither is a settled call, and
-#: `workflow-gallery` 51 carries the argument.
+#: `UNENFORCED_OUTCOME` joined it in `workflow-gallery` 61, which is the
+#: ticket 50 filed against itself: 50 kept this one and `UNGUARDED_EXIT` on the
+#: failure side on its *safe direction of error* rather than because either
+#: argument was won, and `9729338` then turned that classification into an exit
+#: code. 61 decided them apart, by building a document for each and running it.
+#:
+#: This one is `UNWIRED_REVISE` one level up, and not by analogy: the condition
+#: is `_closes_a_loop_impl(child_document)` — *does any grader in the child
+#: route revise* — which is the same observation the child-level finding
+#: reports about itself. Leaving them classified differently made one fact a
+#: failure when the parent noticed it and a report when the child did, which is
+#: the asymmetry 50 was filed to remove. The run settles it: a parent mounting
+#: a graderless child answers, and every node it draws produces its output —
+#: nothing was skipped and no capability was lost. What is missing is a machine
+#: check on a sentence a person wrote on a card. And it fires on a
+#: *deliberate* act: an Expected outcome written as a note over a straight
+#: pipeline is a reasonable thing to author, and it exited 1.
+#:
+#: **`UNGUARDED_EXIT` stays a failure, and 61 recorded why with a run rather
+#: than with a direction of error.** One model, one answer, `guarded-lookup`
+#: plus a second Output off the agent: the guarded door emits
+#: `Contact them at [REDACTED_EMAIL] or [REDACTED_URL]` and the unguarded one
+#: emits the address and the internal URL intact. The run did something the
+#: document was drawn *not* to do — that is not an observation about how a
+#: graph is drawn, it is a disclosure, and `guardrails` 02's asymmetry (a
+#: missing inbound guard is a missed block, a missing outbound one is a
+#: disclosure) is what it turns on. It is also reachable only from an
+#: inconsistency the author had to draw twice — a policy, and then a path
+#: around it — which is the opposite of the deliberate-authoring case above.
 REPORT_ONLY: frozenset[Finding] = frozenset(
     {
+        Finding.UNENFORCED_OUTCOME,
         Finding.UNWIRED_REVISE,
         Finding.STALE_TOOL_DENIAL,
         Finding.STATELESS_MOUNT_REDOES,

@@ -482,14 +482,16 @@ def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
     real package guarding it.
 
     Measured before committing to that: of the 32 shipped packages (23
-    examples, 9 workflows) exactly one carries a finding at all, and it is the
-    report-only one — so **no shipped package's exit code moved**. Two members
-    on the failure side are not settled calls and now reach an exit code for
-    the first time: `UNENFORCED_OUTCOME` and `UNGUARDED_EXIT`, both about how
-    a document is drawn rather than about a lost capability.
-    `workflow-gallery` 61 carries that argument and owns any reclassification;
-    this command deliberately holds no opinion of its own, so moving a member
-    there moves it here with no edit.
+    examples, 9 workflows) exactly one carries a finding at all, and it is a
+    report-only one — so **no shipped package's exit code moved**, measured
+    again when `workflow-gallery` 61 settled the two members `9729338` brought
+    to an exit code for the first time. 61 decided them apart on run evidence:
+    `UNENFORCED_OUTCOME` became a report (it is the same predicate
+    `UNWIRED_REVISE` reports one level down, and the run answers with nothing
+    skipped), and `UNGUARDED_EXIT` stayed a problem (the unguarded door emits
+    what the document's own policy redacts on the path beside it). This
+    command deliberately holds no opinion of its own, so moving a member in
+    `REPORT_ONLY` moves it here with no edit.
 
     A package that will not load at all is a problem, not a crash: `run` would
     meet the same wall, and saying so is this command's job.
