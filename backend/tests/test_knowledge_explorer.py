@@ -25,7 +25,13 @@ from openstategraph.knowledge_builders import (
     GENERATED_MARKER,
     marker_source,
 )
-from tests.test_prebuilt_mcp import fake_discovery, failing_discovery
+from tests.test_prebuilt_mcp import (
+    DOCS,
+    REFERENCE,
+    fake_discovery,
+    failing_discovery,
+    per_server_discovery,
+)
 from openstategraph.knowledge_explorer import (
     EXPLORER_TOPIC_CAP,
     AgenticKnowledgeBuilder,
@@ -588,3 +594,137 @@ class TestAnMcpNodeContributesItsServersTools:
         assert [t.name for t in tools] == ["web_search"]
         assert warnings == []
         assert provenance() == ()
+
+
+class TestTwoMcpNodesAreTwoServers:
+    """`organisms-first-class` 51 — dedupe keyed on node **type**.
+
+    Right for every atom that is one tool: two `tool.web-search` nodes are one
+    capability twice, and binding both would offer the agent a duplicate name.
+    Wrong for `tool.mcp`, where the node's *data* names a server — two MCP
+    nodes on one document are two different servers, and the second was
+    skipped before it could reach the seam that would have discovered it.
+    """
+
+    def _document(self, *server_names: str) -> dict[str, Any]:
+        return {
+            "nodes": [
+                {"id": f"m{i}", "type": "tool.mcp", "data": {KEY_SERVER: name}}
+                for i, name in enumerate(server_names)
+            ],
+            "edges": [],
+        }
+
+    def test_two_servers_are_both_studied(self, tmp_path: Path, monkeypatch: Any) -> None:
+        monkeypatch.setattr(
+            prebuilt_mcp,
+            "_discover_tools",
+            per_server_discovery(**{DOCS: ["search_docs"], REFERENCE: ["get_symbol"]}),
+        )
+        document = self._document("LangChain docs", "LangChain API reference")
+        package = _save_workflow(tmp_path, "two-mcp", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["search_docs", "get_symbol"]
+        assert warnings == []
+
+    def test_run_build_studies_both_servers(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """At the layer the defect lives — `explore`, the only caller — so a
+        fix wired into the dedupe helper alone could not make this green."""
+        monkeypatch.setattr(
+            prebuilt_mcp,
+            "_discover_tools",
+            per_server_discovery(**{DOCS: ["search_docs"], REFERENCE: ["get_symbol"]}),
+        )
+        document = self._document("LangChain docs", "LangChain API reference")
+        package = _save_workflow(tmp_path, "two-mcp", document)
+        model = ToolCallingScriptedModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "get_symbol", "args": {"q": "x"}, "id": "c-0"}],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "write_topic",
+                            "args": {
+                                "topic": "symbols",
+                                "content": "symbols — what the reference server returns.",
+                            },
+                            "id": "c-1",
+                        }
+                    ],
+                ),
+                AIMessage(content="NOT covered: the docs server."),
+            ]
+        )
+
+        report = ExplorerKnowledgeBuilder().explore(package, document, tmp_path, model)
+
+        assert report.written == ["symbols"]
+        doc = (package / "knowledge" / "symbols.md").read_text()
+        assert "get_symbol" in doc
+
+    def test_a_down_second_server_names_itself_and_the_first_still_binds(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """Warnings are per server, not per node type."""
+        monkeypatch.setattr(
+            prebuilt_mcp,
+            "_discover_tools",
+            per_server_discovery(
+                **{DOCS: ["search_docs"], REFERENCE: httpx.ConnectError("refused")}
+            ),
+        )
+        document = self._document("LangChain docs", "LangChain API reference")
+        package = _save_workflow(tmp_path, "two-mcp", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["search_docs"]
+        assert warnings and "LangChain API reference" in warnings[0]
+
+    def test_a_name_colliding_across_two_nodes_resolves_to_one_tool_loudly(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """The safety the type dedupe was standing in for, now explicit: two
+        servers offering `search` bind one `search`, and the loss is named."""
+        monkeypatch.setattr(
+            prebuilt_mcp,
+            "_discover_tools",
+            per_server_discovery(**{DOCS: ["search"], REFERENCE: ["search", "get_symbol"]}),
+        )
+        document = self._document("LangChain docs", "LangChain API reference")
+        package = _save_workflow(tmp_path, "two-mcp", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["search", "get_symbol"]
+        assert any("search" in w for w in warnings)
+
+    def test_two_ordinary_tool_nodes_are_still_studied_once(self, tmp_path: Path) -> None:
+        """The inverse the dedupe exists for: one capability, offered once."""
+        document = {
+            "nodes": [
+                {"id": "w1", "type": "tool.web-search", "data": {}},
+                {"id": "w2", "type": "tool.web-search", "data": {}},
+            ],
+            "edges": [],
+        }
+        package = _save_workflow(tmp_path, "two-web", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["web_search"]
+        assert warnings == []

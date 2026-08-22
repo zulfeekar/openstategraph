@@ -29,6 +29,8 @@ The invariants this module exists to keep (knowledge-architecture.md 1–3):
 
 from __future__ import annotations
 
+import json
+
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -477,7 +479,36 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
 
         registry = build_tool_registry(WorkflowStore(root=workflows_root), workflow_dir.name)
         tools: list[Any] = []
+        #: **The dedupe key is the node's type *and* its configuration**, not
+        #: its type alone (`organisms-first-class` 51). Keying on type is right
+        #: for every atom that is one tool — two `tool.web-search` nodes are
+        #: one capability twice — and wrong for one whose identity lives in its
+        #: data: a `tool.mcp` node names a *server*, so two of them are two
+        #: different servers and the second was skipped before it could reach
+        #: the seam that discovers it.
+        #:
+        #: Rejected, and why. Keying on node **id** is always distinct, and
+        #: therefore studies two ordinary nodes twice — exactly the waste this
+        #: exists to prevent. Keying on type plus *the field that identifies
+        #: the thing* means a `tool.mcp` clause in a generic loop, which is the
+        #: knowledge-of-one-atom-in-the-engine move `as_langchain_tools` was
+        #: created to avoid. Asking the tool — a new member on `BaseTool`
+        #: declaring its own study identity — is the most SOLID-shaped of the
+        #: three and was the closest call; it was rejected because it buys
+        #: nothing this does not, at the price of a published Tier 1 surface
+        #: every future tool author must understand, to serve one build-time
+        #: caller.
+        #:
+        #: What is left is generic and needs no atom to opt in: two nodes that
+        #: are the same type *and* configured identically are the same
+        #: capability, whoever wrote them.
         seen: set[str] = set()
+        #: The second layer, and the real safety the type key was standing in
+        #: for: whatever the seams return, the agent is offered each name once.
+        #: `McpTool.as_langchain_tools` already does this *within* one node and
+        #: says so; across nodes nothing did, because nothing could reach a
+        #: second one.
+        bound_names: set[str] = set()
         #: Names of the tools this exploration actually ran, recorded as the
         #: agent uses them.
         called: set[str] = set()
@@ -485,15 +516,19 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
         warnings: list[str] = []
         for node in document.get("nodes") or []:
             node_type = str(node.get("type") or "")
-            if not node_type.startswith("tool.") or node_type in seen:
+            if not node_type.startswith("tool."):
                 continue
             if node_type.startswith(EXPLORER_DENY_PREFIXES):
+                continue
+            data = node.get("data") or {}
+            key = node_type + "\x00" + json.dumps(data, sort_keys=True, default=str)
+            if key in seen:
                 continue
             tool = registry.get(node_type)
             if tool is None:
                 continue  # unresolvable — the runtime would warn, we skip
-            seen.add(node_type)
-            bound = tool.configure(node.get("data") or {})
+            seen.add(key)
+            bound = tool.configure(data)
             # **The plural seam, the one the canvas binds through**
             # (`organisms-first-class` 50). One node is one tool for every
             # atom in this repository except `tool.mcp`, where one node is a
@@ -507,6 +542,18 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
             # this builder is build-time only (see the module header), so the
             # call is where a user is already waiting for discovery.
             for lc_tool in bound.as_langchain_tools(warnings=warnings):
+                name = str(getattr(lc_tool, "name", ""))
+                if name in bound_names:
+                    # Loudly, never silently: a capability the document asked
+                    # for is not being offered, and the agent has no way to
+                    # notice. Same channel as an unreachable server, so it
+                    # reaches the build report by name.
+                    warnings.append(
+                        f"{node_type}: tool '{name}' is already bound from an "
+                        "earlier node — this one is not offered."
+                    )
+                    continue
+                bound_names.add(name)
                 tools.append(_recording(lc_tool, called.add))
         # **Provenance is what was called, never what was offered**
         # (`production-ready` 12). This used to be `labels` — every tool the
