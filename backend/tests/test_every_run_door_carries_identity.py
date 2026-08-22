@@ -204,6 +204,10 @@ CLASSIFIED: dict[str, str] = {
     "memory.py": "read",
     "prebuilt_session.py": "read",
     "generated_module_contract.py": "read",
+    # Addresses one stored thread to ask *where* its pause is waiting, and
+    # starts nothing: a `thread_id` handed to `checkpointer.list` is a lookup
+    # key, not a claim about who is running (`organisms-first-class` 64).
+    "compile/paused_mount.py": "read",
 }
 
 

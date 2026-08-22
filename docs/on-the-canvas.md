@@ -234,13 +234,31 @@ mount has always done:
   working scratch — the answer it gave, its revision budget — is reset at the
   start of every turn, exactly as it is for a saved thread of a workflow run on
   its own.
-- **Nothing, and it cannot pause.** No record is kept at all, so an approval
-  step anywhere inside the mounted workflow can never wait for an answer. Use
-  it only for a child you are sure is a pure function of its task.
+- **Nothing, and it keeps no place of its own.** No record is kept at all. An
+  approval step inside such a child *does* still stop the run and can still be
+  answered — the pause travels up and the workflow you actually ran holds the
+  place — but because the child kept nothing, answering it re-runs the mounted
+  workflow **from its first step**, so everything it did before the gate
+  happens a second time. Use it only for a child you are sure is a pure
+  function of its task.
+
+  (An earlier version of this line said such a child "cannot pause". That is
+  what LangGraph documents about a stateless *subgraph*, and it is not what
+  this boundary does: a mount is not a subgraph node, so the interrupt is held
+  by the parent's own record. Measured, `organisms-first-class` 64.)
 
 This is a different promise from the default one, which is why it is a setting
 and not something inferred: a mount that remembers can answer the same question
 differently depending on what came before it.
+
+**When a mounted workflow stops for a person, it says so by name.** A gate
+raised inside a mount used to print only its own sentence, so a reviewer
+reading `run` or `resume` a day later saw the question and had no way to tell
+which document wrote it. Both now print an **asked by** line — the mounted
+packages between the workflow you ran and the one asking, outermost first — so
+the document to open is on screen beside the question. A gate in the workflow
+you actually ran says nothing extra, and neither does a child set to keep
+nothing: it stored no place of its own to read the path back from.
 
 ### Workflow or Team?
 

@@ -320,7 +320,7 @@ class CompiledWorkflow:
             )
             # Read inside the block: the manager clears the variable on exit.
             spent = dict(usage.usage_metadata)
-        result = self._result(final, spent)
+        result = self._result(final, spent, thread)
         self._append_trace(question, result, time.monotonic() - started)
         return result
 
@@ -341,8 +341,35 @@ class CompiledWorkflow:
         for task in state.tasks or ():
             for interrupt in getattr(task, "interrupts", ()) or ():
                 value = getattr(interrupt, "value", None)
-                return dict(value) if isinstance(value, dict) else {"message": str(value)}
+                payload = dict(value) if isinstance(value, dict) else {"message": str(value)}
+                chain = self._paused_mount(thread_id)
+                if chain:
+                    payload["mount"] = chain
+                return payload
         return None
+
+    def _paused_mount(self, thread_id: str) -> list[dict[str, str]]:
+        """Which mounted workflow this pause is waiting inside, top-down.
+
+        `organisms-first-class` 64. The gate's own sentence says *what* is
+        being asked and has since `07ffbc3`; what it could not say is that the
+        question comes from a package the top document merely mounts — and a
+        reviewer answering `approval-in-the-loop` a day later has no other way
+        to find out which document to read.
+
+        Asked of the checkpointer rather than of the graph, because
+        `get_state(subgraphs=True)` cannot answer for a mount at all (the
+        measurement, and the docs sentence behind it, are in
+        `compile/paused_mount.py`). A workflow with no mounts asks the saver
+        nothing, so every document without one costs exactly what it did.
+        """
+        from openstategraph.compile.paused_mount import paused_mount_chain
+
+        if not self._mounts:
+            return []
+        return paused_mount_chain(
+            getattr(self.graph, "checkpointer", None), thread_id, self._mounts
+        )
 
     def resume(
         self,
@@ -407,7 +434,7 @@ class CompiledWorkflow:
         with get_usage_metadata_callback() as usage:
             final = self.graph.invoke(Command(resume=resume_value), config)
             spent = dict(usage.usage_metadata)
-        result = self._result(final, spent)
+        result = self._result(final, spent, thread_id)
         self._append_trace(f"resume:{decision}", result, time.monotonic() - started)
         return result
 
@@ -460,7 +487,9 @@ class CompiledWorkflow:
             )
         return state
 
-    def _result(self, final: dict[str, Any], spent: dict[str, Any]) -> RunResult:
+    def _result(
+        self, final: dict[str, Any], spent: dict[str, Any], thread_id: str | None = None
+    ) -> RunResult:
         """One finished `invoke` as a `RunResult` — the assembly `ask` and
         `resume` share, so a run cannot report its health differently
         depending on which door started it."""
@@ -494,8 +523,26 @@ class CompiledWorkflow:
             # pending `Interrupt` on the returned state under `__interrupt__`;
             # without reading it, a run stopped at a gate came back with an
             # empty answer, no warnings and every appearance of success.
-            pause=_interrupt_payload(final),
+            pause=self._with_mount(_interrupt_payload(final), thread_id),
         )
+
+    def _with_mount(
+        self, payload: dict[str, Any] | None, thread_id: str | None
+    ) -> dict[str, Any] | None:
+        """The same mount chain `pause()` reports, on the pause a *run* returns.
+
+        Derived here rather than restated, so the two doors onto one pause
+        cannot disagree — `run` prints `RunResult.pause` and `resume` prints
+        `pause()`, and a reviewer reading one and then the other must not be
+        told two different things about where the gate is
+        (`organisms-first-class` 64).
+        """
+        if not payload or thread_id is None:
+            return payload
+        chain = self._paused_mount(thread_id)
+        if chain:
+            payload["mount"] = chain
+        return payload
 
     def _append_trace(self, question: str, result: RunResult, seconds: float) -> None:
         """One JSON line per run, appended to `trace_file`. Never fatal.

@@ -48,7 +48,7 @@ import sys
 import textwrap
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 # The one import this module makes eagerly, and it is stdlib-only: `--template`
 # uses argparse `choices`, so the catalogue has to exist while the parser is
@@ -193,6 +193,38 @@ def resume_command_line(package: str, thread_id: str) -> str:
     return f"openstategraph resume {package} {thread_id} --approve | --reject --feedback '…'"
 
 
+def mount_chain_line(pause: Mapping[str, Any] | None) -> str:
+    """The mounted packages a pause is waiting inside, as one readable phrase.
+
+    Empty for a gate in the document a person actually ran, which is where a
+    gate usually is. When it is not, the question on screen was written by a
+    package the top document merely *mounts*, and until this there was nothing
+    on any surface saying so — the reviewer answering a day later could read
+    the gate's sentence and still not know which document to open
+    (`organisms-first-class` 64).
+
+    One phrasing, built here and printed by both the run report and the resume
+    announcement, because a pause described two ways is a pause described
+    wrongly once.
+    """
+    chain = (pause or {}).get("mount") or []
+    if not isinstance(chain, (list, tuple)):
+        return ""
+    names = [
+        str((step or {}).get("workflow") or "").strip()
+        for step in chain
+        if isinstance(step, Mapping)
+    ]
+    named = [name for name in names if name]
+    if not named:
+        return ""
+    return " -> ".join(named) + (
+        " (a workflow this one mounts)"
+        if len(named) == 1
+        else " (workflows this one mounts, outermost first)"
+    )
+
+
 def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> list[str]:
     """What a run that stopped at a `human.approval` gate has to say for itself.
 
@@ -211,6 +243,9 @@ def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> 
     candidate = str(pause.get("candidate") or "").strip()
     if candidate:
         lines.append(f"  candidate: {candidate}")
+    asked_by = mount_chain_line(pause)
+    if asked_by:
+        lines.append(f"  asked by: {asked_by}")
     lines.append(f"  thread: {thread_id}")
     lines.append(f"  finish it: {resume_command_line(package, thread_id)}")
     return lines
@@ -251,6 +286,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
     print(f"resuming {args.thread_id} with: {decision}", file=sys.stderr)
     print(f"  gate: {pause.get('message') or ''}", file=sys.stderr)
     print(f"  candidate: {str(pause.get('candidate') or '').strip()}", file=sys.stderr)
+    asked_by = mount_chain_line(pause)
+    if asked_by:
+        print(f"  asked by: {asked_by}", file=sys.stderr)
     print("  this runs the rest of the workflow and cannot be undone", file=sys.stderr)
 
     result = workflow.resume(args.thread_id, decision=decision, feedback=args.feedback)
