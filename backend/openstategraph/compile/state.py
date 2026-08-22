@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any, TypedDict
 
+from langgraph.managed import RemainingSteps
+
 from openstategraph.compile.fields import _text
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
@@ -58,6 +60,27 @@ keep_latest_nonempty = reducer_for(Reducer.LATEST_NONEMPTY)
 #: lines below. `workflow_compiler` re-exports it, so its own readers and the
 #: tests that import it from there did not have to move.
 NO_MODEL_MARKER = "[no model was configured for this step]"
+
+
+#: How few supersteps must be left before a cycle stops asking for another lap
+#: (`organisms-first-class` 56).
+#:
+#: A floor rather than a calculation on purpose: what a `pass` branch still
+#: has to run is a property of the drawing, and a number derived from the plan
+#: would be a second thing to keep true.
+#:
+#: **Three, and the number was measured rather than copied.** The LangGraph
+#: docs' own example uses `<= 2`; that is one short here, and the run still
+#: raised. `remaining_steps` is read *inside* the superstep it describes, so
+#: `remaining == 1` means the grader itself is the last step the budget will
+#: pay for and the output node behind a forced `pass` never gets to run. Laps
+#: also arrive on a parity — `evaluator-optimizer` at `recursion_limit=10`
+#: shows the grader 7, 5, 3, 1, because one lap costs two supersteps — so a
+#: floor must be crossed with a step to spare rather than exactly.
+#:
+#: A `pass` tail longer than the slack this leaves can still exhaust the
+#: budget and raise. Narrower exposure than before, stated rather than implied.
+STEP_BUDGET_FLOOR = 3
 
 
 class RunState(TypedDict, total=False):
@@ -219,6 +242,22 @@ class RunState(TypedDict, total=False):
     #: only what the orchestrator explicitly packed into its Send (see below).
     task_id: str
     task_instruction: str
+    #: grader node id -> the supersteps that were left when it stopped looping
+    #: (`organisms-first-class` 56). Presence is the signal, the same shape as
+    #: `forced` and `unrouted` above; MERGE for the same reason.
+    budget_stops: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: **Managed, not ours.** LangGraph populates this on every superstep with
+    #: the supersteps remaining before `recursion_limit` is reached, and no
+    #: node may write it — which is why it carries no reducer and is not
+    #: seeded by `ask()` or reset by `_input`.
+    #:
+    #: It is here so a loop that cannot settle can *degrade* instead of
+    #: raising `GraphRecursionError`: the docs call reading it in-graph the
+    #: **recommended** approach over catching the error outside, because the
+    #: graph then completes normally and the answer it did produce is
+    #: published rather than lost. `_grader` is the only reader — the grader's
+    #: `revise` is the one branch a cycle may close on.
+    remaining_steps: RemainingSteps
 
 
 def _thread_question(state: RunState, limit: int = 6) -> str:

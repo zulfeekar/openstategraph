@@ -790,6 +790,7 @@ RESUME_SEEDED_KEYS: tuple[str, ...] = (
     "unmet_tools",
     "tool_use",
     "redactions",
+    "budget_stops",
 )
 
 
@@ -1044,6 +1045,12 @@ def _run_frames(
     # Force-passed graders (`every-workflow-green` 09), accumulated like the
     # two above so the terminal frame can report them.
     forced: dict[str, str] = {}
+    #: Graders that stopped revising because the **step budget** was nearly
+    #: spent (`organisms-first-class` 56). Folded like `forced`, and its own
+    #: accumulator for the reason it is its own state key: the two ceilings
+    #: are different facts with different fixes. The value is a superstep
+    #: count, so it is carried whole rather than stringified.
+    budget_stops: dict[str, Any] = {}
     #: Graders whose `revise` verdict named no wired edge (`workflow-gallery`
     #: 31). Folded exactly like `forced` — this door has no finished state to
     #: read, so the terminal frame is assembled from what went past.
@@ -1112,6 +1119,7 @@ def _run_frames(
         "unmet_tools": unmet_tools,
         "tool_use": tool_use,
         "redactions": redactions,
+        "budget_stops": budget_stops,
     }
     if _resumes_a_paused_run(graph_input):
         prior = getattr(graph.get_state(config), "values", None) or {}
@@ -1263,6 +1271,9 @@ def _run_frames(
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
+                    )
+                    budget_stops.update(
+                        {key(k): v for k, v in (update.get("budget_stops") or {}).items()}
                     )
                     unrouted.update(
                         {key(k): str(v) for k, v in (update.get("unrouted") or {}).items()}

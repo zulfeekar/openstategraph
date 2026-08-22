@@ -237,6 +237,7 @@ def run_health(
     unrouted: Any = None,
     retries: Any = None,
     tool_use: Any = None,
+    budget_stops: Any = None,
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -265,12 +266,14 @@ def run_health(
     # `run_health_from_state` derives the library door from. A source added
     # under any other name goes missing from that door on the day it lands.
     used = tool_use if isinstance(tool_use, dict) else {}
+    starved = budget_stops if isinstance(budget_stops, dict) else {}
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
             silent_node_warnings(flat, used)
             + silent_node_warnings(nested, used)
             + forced_pass_warnings(exhausted)
+            + step_budget_warnings(starved)
             + unrouted_decision_warnings(lost)
             + retry_warnings(retried)
         ),
@@ -898,6 +901,44 @@ def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
         f'Grader "{node}" ran out of attempts and published an answer it had '
         f"rejected. Its last reason: {str(reason).strip() or 'none given'}"
         for node, reason in forced.items()
+    ]
+
+
+def step_budget_warnings(budget_stops: Mapping[str, Any]) -> list[str]:
+    """Loops that stopped because the workflow ran out of **supersteps**.
+
+    `organisms-first-class` 56. Before this, a cycle whose grader never
+    relented simply raised `GraphRecursionError`: the answer the workflow had
+    already produced was thrown away, the HTTP door answered `502`, and the
+    CLI printed LangGraph's own advice to raise the number — which is the
+    opposite of what this product's own step-budget copy says.
+
+    **The pass is correct and is not the news.** It is the identical
+    publication `forced_pass_warnings` argues for: a loop that cannot finish
+    is worse than a mediocre answer, and the candidate is still what the
+    workflow produced. Only the silence would be the defect.
+
+    A separate sentence from the force-pass because a reader's next move is
+    different. `maxAttempts` is a number on one grader's card; the step budget
+    is a number on the *workflow*, and it is the drawing's shape — how many
+    nodes a lap crosses — that decides what it buys. Raising it is deliberately
+    **not** the advice: `resolve_step_budget` already says a bigger number only
+    lets a loop that cannot settle run longer.
+
+    Vocabulary is fixed by `CLAUDE.md`: **step budget** and **supersteps**,
+    never "iterations" or "max turns" — one lap with fan-out costs several
+    supersteps, so a count of laps would be a different, wrong number.
+
+    On the **silent** channel and not `node_failure_warnings`, which feeds
+    `cli.run_exit_code`: the run completed, took its own wired `pass` edge and
+    published. This is a report about how the answer was reached.
+    """
+    return [
+        f'Grader "{node}" stopped revising because the workflow\'s step budget '
+        f"was nearly spent ({remaining} supersteps left), and published the "
+        "answer it had. A cycle costs one superstep per node on it, so this "
+        "loop could not run to its own attempts cap."
+        for node, remaining in budget_stops.items()
     ]
 
 

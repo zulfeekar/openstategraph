@@ -15,6 +15,15 @@ the API resolves a model; the budget is also the CLI's, and `loader` must
 not import the API to get it. It is also deliberately import-cheap: nothing
 here pulls langgraph in, which `import openstategraph` is asserted on.
 
+**What happens when it runs out** (`organisms-first-class` 56). Not a crash.
+`_grader` reads LangGraph's managed `remaining_steps` and, with barely any
+left, stops asking for another lap: the run takes the wired `pass` edge, the
+answer it had is published, and `run_health` reports a budget stop on the
+silent channel. Before that, `GraphRecursionError` came out of every door and
+the answer the workflow had already produced was thrown away — with
+LangGraph's own advice to raise the number, which is the opposite of what this
+module's callers tell a user.
+
 **Why it exists at all** (`workflow-gallery` 26). `settings.recursionLimit`
 was held by the editor's model, serialised by `RuntimeClient`, accepted by
 `RunRequest` and consumed by the graph config — and read out of a saved

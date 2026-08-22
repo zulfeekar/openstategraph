@@ -287,4 +287,6 @@ class TestTheRosterActuallySurvivesBeingEmitted:
             cwd="/",
         )
         assert result.returncode == 0, result.stderr
-        assert result.stdout.split() == ["21", "v"]
+        # 23 since `organisms-first-class` 56 added `budget_stops` and the
+        # managed `remaining_steps`.
+        assert result.stdout.split() == ["23", "v"]

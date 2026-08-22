@@ -92,6 +92,14 @@ the default of 50; a number between 10 and 1000 is saved into the document's
 number still overrides it. Raising it is rarely the fix for a loop that will
 not settle; a grader that can actually pass is.
 
+**What happens when it runs out.** The run does not crash. When a grader is
+asked for another lap and there are barely any supersteps left, it stops
+revising, takes its own wired `pass` edge, and the answer it had is published
+along with a warning naming the grader and how many supersteps were left. A
+budget stop is a *report*, not a failed run: it does not change an exit code,
+and it is worded differently from the grader running out of its own attempts,
+because those are two ceilings with two different fixes.
+
 It belongs to the **package**, so inside a mounted instance the box — and the
 name beside it — is disabled with a line saying so. An instance's own state is
 `data.overrides`, which is keyed by a step and a field; a workflow's name and

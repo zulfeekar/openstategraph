@@ -83,6 +83,7 @@ from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effor
 # before the move, underscore names included, because the tests import them.
 from openstategraph.compile.state import (  # noqa: F401
     RESET,
+    STEP_BUDGET_FLOOR,
     RunState,
     _silent_member_note,
     _thread_question,
@@ -2054,7 +2055,26 @@ class NodeRuntime:
             # which is what the graph-wide check happened to do for the single
             # -agent loop, and the shape every other graph did not get.
             judged = int((state.get("revisions") or {}).get(node_id, 0)) + 1
-            exhausted = judged >= cap
+
+            # The *other* budget, and the one that used to end the run with an
+            # exception rather than an answer (`organisms-first-class` 56).
+            #
+            # `maxAttempts` above is this grader's own lap count; the **step
+            # budget** (`recursion_limit`) is the workflow's ceiling on
+            # supersteps, and a lap costs one per node on the cycle — so a cap
+            # the step budget cannot pay for is an ordinary drawing, not an
+            # exotic one. Before this, that graph raised
+            # `GraphRecursionError` and every door lost the answer the
+            # workflow had already produced.
+            #
+            # Read off `remaining_steps`, which LangGraph populates; the docs
+            # call this proactive read the recommended approach over catching
+            # the error outside, because the graph completes normally. `None`
+            # when a caller invoked the compiled graph without the managed key
+            # in play, and then this changes nothing.
+            remaining = state.get("remaining_steps")
+            starved = isinstance(remaining, int) and remaining <= STEP_BUDGET_FLOOR
+            exhausted = judged >= cap or starved
             branch = "pass" if verdict.passed or exhausted else "revise"
 
             # The ceiling reports itself when it has nothing to hand on.
@@ -2073,7 +2093,15 @@ class NodeRuntime:
             # it with our commentary would be worse than passing it on.
             outcome = candidate
             if branch == "pass" and not candidate.strip() and not verdict.passed:
+                # Which ceiling was hit changes what a reader can do about it:
+                # a cap is a number on this card, the step budget is a number
+                # on the workflow. Saying "after 500 attempts" for a run that
+                # made four laps would be a false sentence.
                 outcome = (
+                    "I could not produce an answer before the workflow's step "
+                    "budget ran out. The last review said: "
+                    f"{verdict.feedback or 'no reason given'}"
+                ) if starved else (
                     f"I could not produce an answer after {cap} "
                     f"{'attempt' if cap == 1 else 'attempts'}. "
                     f"The last review said: {verdict.feedback or 'no reason given'}"
@@ -2122,7 +2150,14 @@ class NodeRuntime:
                 },
             }
             if branch == "pass" and not verdict.passed:
-                update["forced"] = {node_id: verdict.feedback or ""}
+                # A budget stop is a force-pass too, and the *publication* is
+                # identical — so it stays out of `forced`, whose sentence
+                # names the attempts cap. Two ceilings, two sentences, one
+                # channel (`workflow_compiler.step_budget_warnings`).
+                if starved:
+                    update["budget_stops"] = {node_id: remaining}
+                else:
+                    update["forced"] = {node_id: verdict.feedback or ""}
             # A verdict with nowhere to go. `_router_for` will fall back to the
             # first declared destination — correct, and it must not be the only
             # thing that happens. Only on `revise`: at the cap the branch is
