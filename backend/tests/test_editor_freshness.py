@@ -55,13 +55,51 @@ class TestItAnswersOnlyWhenItCan:
         (tmp_path / "dist" / "index.html").write_text("<html></html>")
         assert editor_is_stale(tmp_path) is None
 
+    def test_a_checkout_with_no_built_editor_is_told_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """The CI failure of 2026-08-22, and the reason it was not a bug.
 
-class TestItAnswersInThisCheckout:
-    def test_the_real_repository_gives_a_boolean(self) -> None:
-        # Not which boolean — that depends on whether somebody has just built.
-        # What is pinned is that the question *applies* here, which is the
-        # difference between a checkout and an install.
-        assert editor_is_stale() in (True, False)
+        `dist/` is gitignored and the `backend` job runs `actions/checkout` plus
+        `pip install` — no `npm ci`, no `npm run build`. So a runner has `src/`
+        and no built editor at all, and there is nothing to call stale. This
+        test used to assert `editor_is_stale() in (True, False)` against the
+        real repository, which quietly assumed a checkout always has a `dist/`;
+        that held on a developer's disk and nowhere else (ship-it/56).
+
+        `False` here would be the dangerous repair — it means *this editor is
+        current*, about an editor that was never built.
+        """
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.ts").write_text("x")
+        assert editor_is_stale(tmp_path) is None
+
+
+class TestItAnswersWhenBothSidesExist:
+    """The third state is not a licence to be silent whenever it is convenient.
+
+    Given a `dist/` *and* a `src/`, the question applies and must be answered —
+    including the answer nobody wants to hear.
+    """
+
+    def test_a_source_edited_after_the_build_is_stale(self, tmp_path: Path) -> None:
+        assert editor_is_stale(_checkout(tmp_path, built_after=False)) is True
+
+    def test_a_build_newer_than_its_source_is_fresh(self, tmp_path: Path) -> None:
+        assert editor_is_stale(_checkout(tmp_path, built_after=True)) is False
+
+    def test_the_real_repository_answers_exactly_when_it_can(self) -> None:
+        """Tied to the observable condition rather than to "this is a checkout".
+
+        Which boolean depends on whether somebody has just built; *whether* it
+        is a boolean depends only on whether both trees are there, which is the
+        distinction the function actually draws.
+        """
+        root = Path(__file__).resolve().parents[2]
+        answerable = (root / "dist").is_dir() and (root / "src").is_dir()
+        answer = editor_is_stale()
+        assert (answer in (True, False)) is answerable
+        assert answerable or answer is None
 
 
 class TestTheWarningIsSaidOnce:

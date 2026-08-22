@@ -46,8 +46,16 @@ def editor_is_stale(repo_root: Path | None = None) -> bool | None:
     Three-valued deliberately. `False` claims *"this editor is current"*, and an
     installed wheel cannot claim that — it has no `src/` to compare against, and
     answering `False` there would be a promise nothing checked. `None` is the
-    honest "not a checkout", and every caller must treat it as *say nothing*
-    rather than as a falsy `False`.
+    honest "cannot tell", and every caller must treat it as *say nothing* rather
+    than as a falsy `False`.
+
+    **"Cannot tell" is wider than "not a checkout"** (ship-it/56). `dist/` is
+    gitignored, so a fresh clone — CI's `backend` job, which installs the
+    package and never runs `npm run build` — is a checkout with sources and no
+    built editor. There is no editor there to call stale, and that is `None`
+    too. A test that read the third state as install-only asserted a boolean
+    against the real repository and passed on every developer disk before
+    failing on the first runner that ran it.
     """
     root = repo_root if repo_root is not None else Path(__file__).resolve().parents[2]
     dist, src = root / "dist", root / "src"
