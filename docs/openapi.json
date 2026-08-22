@@ -1504,6 +1504,20 @@
             "title": "Failed",
             "type": "boolean"
           },
+          "pause": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause"
+          },
           "question": {
             "title": "Question",
             "type": "string"

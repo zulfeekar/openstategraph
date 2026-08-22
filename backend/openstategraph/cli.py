@@ -181,6 +181,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     return run_exit_code(result)
 
 
+def resume_command_line(package: str, thread_id: str) -> str:
+    """The one spelling of the command that finishes a paused run.
+
+    `run`'s pause report and `threads show`'s both name this verb, and a
+    paused thread has exactly one true resume command — so both build the
+    line here rather than each writing its own sentence. `ship-it` 52 and 53
+    each found a second, drifted spelling of a sentence that should have had
+    one home; this is that home for the resume line (`workflow-gallery` 76).
+    """
+    return f"openstategraph resume {package} {thread_id} --approve | --reject --feedback '…'"
+
+
 def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> list[str]:
     """What a run that stopped at a `human.approval` gate has to say for itself.
 
@@ -200,10 +212,7 @@ def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> 
     if candidate:
         lines.append(f"  candidate: {candidate}")
     lines.append(f"  thread: {thread_id}")
-    lines.append(
-        f"  finish it: openstategraph resume {package} {thread_id} "
-        "--approve | --reject --feedback '…'"
-    )
+    lines.append(f"  finish it: {resume_command_line(package, thread_id)}")
     return lines
 
 
@@ -921,6 +930,17 @@ def cmd_threads_list(args: argparse.Namespace) -> int:
             f"{row.thread_id}  {row.updated_at}  {label:15}  "
             f"{row.workflow_slug or '-'}  {who}  {row.question[:60]}"
         )
+    # A footer, not a column: `list` is read by scanning, and a resume line
+    # per row would turn a table into a wall of text. `threads show
+    # <thread-id>` is where the actual payload and the copy-pasteable command
+    # live — this only says that a next step exists (`workflow-gallery` 76).
+    paused = [row.thread_id for row in rows if row.status == "paused"]
+    if paused:
+        plural = "s" if len(paused) != 1 else ""
+        print(
+            f"\n{len(paused)} thread{plural} paused — "
+            "`openstategraph threads show <thread-id>` says what each is waiting for"
+        )
     return EXIT_OK
 
 
@@ -955,6 +975,9 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
     print(f"  session:  {thread.session_id or '-'}")
     print(f"  updated:  {thread.updated_at}")
     print("  (a recording, not a re-run — no model or tool was called to show this)")
+    if thread.status == "paused":
+        for line in _thread_pause_lines(services, thread):
+            print(f"  {line}")
     for step in history.steps:
         print(f"\nstep {step.step} ({step.source}) {step.at}")
         for key, value in step.values.items():
@@ -962,6 +985,61 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
                 continue
             print(f"  {key}: {value}")
     return EXIT_OK
+
+
+def _thread_pause_lines(services: Any, thread: Any) -> list[str]:
+    """What a paused thread read back from `threads show` has to say.
+
+    `thread.pause` is the payload `_pause_payload` read off the checkpoint's
+    pending `__interrupt__` write — the same fact `run`'s own pause report
+    prints, from the same field a live run leaves behind. This is the surface
+    that answers `workflow-gallery` 76: a reviewer who did not start the run
+    reads `threads show` a day later and this is where they learn what the
+    gate is asking and the exact command that answers it.
+
+    The resume line names a package, a thread and a decision, and `threads
+    show` only ever knew the *slug* — so before promising a copy-pasteable
+    line this resolves the slug to the package directory the same way the
+    store resolves any slug, and says plainly when it cannot: an unset or
+    invalid slug is not a package path, and `CLAUDE.md`'s law is not to
+    promise which is not possible.
+    """
+    lines: list[str] = []
+    pause = thread.pause or {}
+    message = str(pause.get("message") or "").strip()
+    lines.append(f"waiting: {message or 'a decision is needed'}")
+    candidate = str(pause.get("candidate") or "").strip()
+    if candidate:
+        lines.append(f"candidate: {candidate}")
+    package = _package_directory(services, thread.workflow_slug)
+    if package is not None:
+        lines.append(f"finish it: {resume_command_line(str(package), thread.thread_id)}")
+    else:
+        lines.append(
+            "finish it: openstategraph resume <package> "
+            f"{thread.thread_id} --approve | --reject --feedback '…'  "
+            "(this thread's workflow slug is unknown, so the exact package "
+            "path above is a placeholder — point it at the package yourself)"
+        )
+    return lines
+
+
+def _package_directory(services: Any, slug: str) -> Any:
+    """The package directory a stored thread's slug names, or `None`.
+
+    `None` covers both an empty slug (an older or unlabelled thread) and one
+    the store refuses — `WorkflowStore.directory_for` validates the slug
+    shape before resolving it, which is the same check `resume`'s own loader
+    ultimately relies on, so a slug this rejects would not have loaded either.
+    """
+    from openstategraph.api.workflow_store import InvalidSlugError
+
+    if not slug:
+        return None
+    try:
+        return services.store.directory_for(slug)
+    except InvalidSlugError:
+        return None
 
 
 def no_provider_warning() -> str | None:

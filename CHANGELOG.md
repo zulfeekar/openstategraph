@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Fixed
+- **`threads show` now says what a paused thread is waiting for.** `run` (and
+  `resume`) had printed the pause payload and the exact command to finish it,
+  but only in the terminal that started the run — `threads list` printed the
+  word `paused` with no next step, and `threads show` printed every
+  checkpoint value except the two a reviewer came for: the gate's `message`
+  and the `candidate` it is asking about. Both are read straight off the
+  checkpoint tuple's pending `__interrupt__` write, the same fact `_is_paused`
+  already inspects, so nothing is compiled to answer it. `threads show` now
+  prints the payload and the copy-pasteable `resume` line — built from the
+  one place `run`'s own pause report builds it, so the two surfaces never
+  drift into two spellings of the same sentence; `threads list` adds a
+  one-line footer rather than a sentence per row, so the table stays
+  scannable. `GET /api/threads` and `GET /api/threads/{id}` carry the same
+  `pause` field for the same reason (`workflow-gallery` 76).
 - **A run that stopped at an approval no longer reports itself as finished.**
   `openstategraph run` on a pausing package returned whatever `ask()` had at
   the interrupt — an empty answer, no warnings, **exit 0** — while the blocking

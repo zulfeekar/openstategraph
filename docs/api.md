@@ -1017,6 +1017,18 @@ different, separately-reported case (`silent_node_warnings`). Before this,
 run as `finished` with no way to tell a completed answer from a run that
 produced nothing and exited 1 (production-ready/78).
 
+A `paused` thread carries `pause: {"message": …, "candidate": …}` — the same
+node-authored payload `POST /api/runs`, `POST /api/runs/stream` and
+`openstategraph run` report when a run stops at the gate, read back here off
+the pending `__interrupt__` write rather than a second store. `finished`
+threads carry `pause: null`. Before this it was reachable only from the
+process that started the run: `threads` printed `status: "paused"` and
+nothing about what the gate was asking, so a client rebuilding an approval UI
+from `GET /api/threads` alone had no payload to show (`workflow-gallery` 76).
+`openstategraph threads show` also prints the exact `resume` command for a
+paused thread — the CLI knows the package path a JSON client would have to
+resolve itself from `workflow_slug`.
+
 A step says **which graph it belongs to**, which is what makes a run with any
 fan-out readable:
 

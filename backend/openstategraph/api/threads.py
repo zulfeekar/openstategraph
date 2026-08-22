@@ -211,6 +211,7 @@ def _summarize(thread_id: str, tuple_: Any, *, steps: int) -> ThreadSummary:
         # never from emptiness, which `silent_node_warnings` already covers
         # and which is not a failure (production-ready/78).
         failed=bool(node_failure_warnings(values.get("outputs") or {})),
+        pause=_pause_payload(tuple_),
     )
 
 
@@ -488,6 +489,33 @@ def _is_paused(tuple_: Any) -> bool:
     installed version, not inferred from the name.
     """
     return any(channel == "__interrupt__" for _, channel, _ in (tuple_.pending_writes or []))
+
+
+def _pause_payload(tuple_: Any) -> dict[str, str] | None:
+    """What a paused thread is waiting to be told, or `None` if it is not.
+
+    `CompiledWorkflow.pause()` reads the identical value off `graph.get_state`,
+    but that needs a compiled graph, and this module deliberately compiles
+    nothing to answer "is this thread waiting on me". The same payload rides
+    on the pending `__interrupt__` write `_is_paused` already inspects — a
+    LangGraph `Interrupt`'s `.value` is the node's own `{"message",
+    "candidate"}` dict, put there by `_human_approval` — so this reads the
+    checkpoint tuple a second way rather than a second store.
+
+    Every value is rendered through `_text`, the same tolerant, fence-scrubbed
+    rendering every other channel value gets here — a candidate is exactly the
+    kind of thing `workflow-architect` might have made an entire document, and
+    this is a customer-facing surface.
+    """
+    for _, channel, value in tuple_.pending_writes or []:
+        if channel != "__interrupt__":
+            continue
+        for interrupt in value or ():
+            payload = getattr(interrupt, "value", interrupt)
+            if isinstance(payload, dict):
+                return {key: _text(item) for key, item in payload.items()}
+            return {"message": _text(payload)}
+    return None
 
 
 def _matches(

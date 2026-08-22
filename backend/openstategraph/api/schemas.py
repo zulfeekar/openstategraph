@@ -1106,6 +1106,19 @@ class ThreadSummary(BaseModel):
     #: nothing at all" — so emptiness alone must never read as failure
     #: (production-ready/78).
     failed: bool = False
+    #: What a paused thread is waiting to be told — `{"message", "candidate"}`,
+    #: the sentence the gate asks and the text a person is being asked to
+    #: stand behind — or `None` for a thread that is not paused.
+    #:
+    #: Read off the pending `__interrupt__` write the checkpoint tuple already
+    #: carries (`_is_paused` looks at the same write), not from a compiled
+    #: graph: `api/threads.py` deliberately compiles nothing to answer "is this
+    #: waiting on me", and reading it back should not cost more than asking
+    #: that question does (`workflow-gallery` 76). Before this field, `threads
+    #: show` printed every checkpoint value except the one a reviewer came
+    #: for, so the pause payload was reachable only from the terminal that
+    #: started the run.
+    pause: dict[str, str] | None = None
 
 
 class ThreadListResponse(BaseModel):
