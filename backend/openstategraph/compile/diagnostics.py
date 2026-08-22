@@ -170,6 +170,34 @@ class Finding(str, Enum):
     #: question is "is this ready to run here", and the answer is yes — the
     #: tool is bound, and it is called.
     STALE_TOOL_DENIAL = "stale_tool_denial"
+    #: A mount whose child requires a run-context key the parent cannot ever
+    #: name, as `(package slug, key)` — `organisms-first-class` 79.
+    #:
+    #: The compile-time statement of 76's rule. A key crosses a mount only when
+    #: **both** documents declare it, so a child requiring a key with no
+    #: default that the parent does not declare is a mount that raises before
+    #: `invoke` on every run, for every input, with no `--context` value able
+    #: to change it. Both documents are on disk while the graph is built, so
+    #: the fact was knowable a whole run early and was said only as the run
+    #: died.
+    #:
+    #: **A `Finding` rather than `plan.warnings`**, on `6a812bf`'s line:
+    #: `plan.warnings` names a malformed document and neither document here is
+    #: malformed — each is valid, and each runs on its own. What is lost is the
+    #: mount, which produces nothing, which is `UNRESOLVED_SUBGRAPH`'s class one
+    #: reason over. And that channel could not carry it in any case:
+    #: `plan.warnings` is `ValidateWorkflowTool`'s in-memory plan, which has no
+    #: root to load a sibling package from and has never seen the child.
+    #:
+    #: **A failure, not a report**, by `afc57f6`'s test — can the composition
+    #: answer? It cannot: the run ends at the mount with no output. Keyed by
+    #: slug and not by node id, so a package mounted three times says it once
+    #: (`f4f61bd`'s rule, reached the other way): a parent's declaration is
+    #: document-wide, so three mounts of one package share one gap for one
+    #: reason. `organisms-first-class` 78 is the thing that could make that
+    #: untrue — a per-mount supply differs per instance — and
+    #: `unsuppliable_context_keys` takes the parameter where that lands.
+    UNSUPPLIABLE_CONTEXT = "unsuppliable_context"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -235,6 +263,12 @@ _SENTENCES: dict[Finding, str] = {
         "kept, answering it runs that workflow again from its first step, so every step "
         "before the approval happens a second time. Change what the child remembers, or "
         "move the approval out of that workflow."
+    ),
+    Finding.UNSUPPLIABLE_CONTEXT: (
+        'The workflow node mounting "{0}" can never run: that workflow requires the run '
+        'context key "{1}", and this document does not declare it — so no run of this '
+        "document can supply a value, and the mount fails before it starts. Declare that "
+        "key on this workflow, or give it a default in that one."
     ),
     Finding.INVALID_GUARDRAIL_RULE: (
         'Guardrail "{0}" has a row for "{1}" that {2} — that row protects nothing, '

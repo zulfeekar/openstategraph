@@ -566,6 +566,47 @@ def mount_run_context(
     return validate_run_context(child_document, narrowed, slug=slug) or {}
 
 
+def unsuppliable_context_keys(
+    child_document: Any,
+    parent_document: Any,
+    *,
+    mount_supplies: Sequence[str] = (),
+) -> list[str]:
+    """The child's required keys **no run of this parent can ever fill**.
+
+    `organisms-first-class/79`. It is the compile-time statement of 76's rule:
+    a key crosses a mount only when *both* documents declare it, so a child
+    requiring a key with no default that the parent does not name is a mount
+    that fails on every run, for every input — and both documents are on disk
+    while the graph is being built.
+
+    Required **and undefaulted**, in that order: `required` yields to a
+    default exactly as `validate_run_context` decides it, because a field the
+    caller must always name even though an answer already exists makes that
+    answer unreachable. A malformed declaration on either side yields nothing —
+    that is already `plan.warnings`' problem (67), and reporting a second thing
+    about a document that cannot be read is noise.
+
+    **`mount_supplies` is where `organisms-first-class/78` lands, and it is a
+    parameter today so that it cannot be forgotten.** 78 gives a mount an
+    explicit per-instance supply; a key that mount names is a key the run *can*
+    fill, so it is not a gap, and a check with no way to hear about it would
+    fire on exactly the composition 78 exists to allow. Nothing passes it yet,
+    and the empty default is today's truth rather than a placeholder.
+    """
+    if context_declaration_problems(child_document) or context_declaration_problems(
+        parent_document
+    ):
+        return []
+    suppliable = {field.key for field in context_declaration(parent_document)}
+    suppliable.update(mount_supplies)
+    return [
+        field.key
+        for field in context_declaration(child_document)
+        if field.required and field.default is None and field.key not in suppliable
+    ]
+
+
 #: What `--context flag=value` accepts for a `boolean` field, and nothing else.
 #:
 #: Deliberately not `1`/`0`, `yes`/`no`, `on`/`off`, and emphatically not

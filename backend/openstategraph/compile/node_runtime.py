@@ -58,6 +58,7 @@ from openstategraph.compile.run_context import (
     mount_run_context,
     render_run_context,
     run_context,
+    unsuppliable_context_keys,
 )
 from openstategraph.compile.diagnostics import (
     CompileDiagnostics,
@@ -3205,6 +3206,25 @@ class NodeRuntime:
                 # copy — an override that rewrote a declaration would otherwise
                 # be narrowed against a document the child never compiled from.
                 child_context_document = child_document
+                # And the fact those two documents make together
+                # (`organisms-first-class` 79). 76 narrowed what crosses a
+                # mount — a key crosses only when both documents declare it —
+                # which means a child requiring a key with no default that this
+                # document does not name is a mount that raises before
+                # `invoke`, on every run, for every input. Said here because
+                # both documents are in hand; until now it was said only as the
+                # run died at this node, a whole run late.
+                #
+                # Recorded against the effective (post-override) child, for the
+                # reason the two lines above are, and keyed by slug rather than
+                # by `node_id`: this document's declaration is document-wide,
+                # so three mounts of one package share one gap.
+                for unsuppliable in unsuppliable_context_keys(
+                    child_document, {"settings": self._settings}
+                ):
+                    self.diagnostics.record(
+                        Finding.UNSUPPLIABLE_CONTEXT, slug, unsuppliable
+                    )
                 # A mount's card shows an outcome its child may have no way to
                 # enforce. Keyed on *an outcome being written* rather than on
                 # the node's type — since v3 there is one mount type, and what

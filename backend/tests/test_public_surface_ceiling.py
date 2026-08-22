@@ -427,7 +427,7 @@ MULTI_MATCH_PROMPT = """**Twelve and thirteen, not eleven and twelve, and the ex
     when it was public, which is the census working."""
 
 
-FINDING_KINDS = """**An enum of twelve, and the ceiling is asking the wrong question of it.**
+FINDING_KINDS = """**An enum of thirteen, and the ceiling is asking the wrong question of it.**
     `Finding` has no methods and no state — every member is one *value*, and the
     number of them is the number of ways a compiled graph has been observed to
     come out less capable than it was drawn. There is no "and" to split on: a
@@ -453,14 +453,23 @@ FINDING_KINDS = """**An enum of twelve, and the ceiling is asking the wrong ques
     holds an approval pauses, resumes and answers — but the split the paragraph
     above contemplates already exists and is `REPORT_ONLY`, a membership rather
     than a second drawer. Meaning decided the side; the count decided
-    nothing."""
+    nothing.
+
+    The thirteenth (`UNSUPPLIABLE_CONTEXT`, `organisms-first-class` 79) is the
+    same paragraph read the other way: it *is* a lost capability — a mount
+    whose child requires a run-context key its parent cannot name raises before
+    `invoke`, so the composition produces no answer at all — which puts it on
+    the failure side with `UNRESOLVED_SUBGRAPH`, whose class it shares. One
+    more way for a graph to come out less capable than it was drawn, which is
+    precisely what the module docstring says this list is, so it is a table
+    entry and not a split."""
 
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(12, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(13, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),

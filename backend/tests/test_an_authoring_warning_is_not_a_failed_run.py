@@ -196,7 +196,7 @@ class TestEveryProducerHasASide:
     """The ticket asks for a test pinning which side each *producer* lands on.
 
     Spelled as the whole partition rather than as `assert X in REPORT_ONLY`, so
-    a thirteenth `Finding` is a red test until somebody decides what it means.
+    a fourteenth `Finding` is a red test until somebody decides what it means.
     Deciding is the work; the default of silence is what this ticket is about.
     """
 
@@ -205,7 +205,11 @@ class TestEveryProducerHasASide:
     #: callable, a node type with no factory, a mount that would not load, an
     #: override that did not apply, a capability that never became one, a
     #: guardrail row that protects nothing — and an Output that emits what the
-    #: document's own policy redacts on the path beside it.
+    #: document's own policy redacts on the path beside it — and a mount whose
+    #: child requires a run-context key this document cannot name, which raises
+    #: before `invoke` on every run, so the composition produces no answer at
+    #: all (`organisms-first-class` 79; it is `UNRESOLVED_SUBGRAPH`'s class one
+    #: reason over — the package loads, and still nothing can come out of it).
     FAILURES = frozenset(
         {
             Finding.UNRESOLVED_TOOL,
@@ -216,6 +220,7 @@ class TestEveryProducerHasASide:
             Finding.CAPABILITY_FAILED,
             Finding.UNGUARDED_EXIT,
             Finding.INVALID_GUARDRAIL_RULE,
+            Finding.UNSUPPLIABLE_CONTEXT,
         }
     )
 

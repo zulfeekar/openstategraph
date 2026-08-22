@@ -387,6 +387,39 @@ filed with the two questions its design must answer; until it lands, a package
 whose declaration asks for a key its parent does not also declare is not
 mountable, and says so.
 
+### And it says so at compile time — **[BUILT, ticket 79]**
+
+> **A mount that can never supply its child's required key is refused by
+> `openstategraph validate`, not by the run.**
+
+Narrowing made *"not mountable"* true; 76 left it said only at the moment the
+run reached the mount and died. It is a fact about **two documents**, both on
+disk while the graph is being built, and no value of `--context` can change it
+— the parent does not declare the key, so nothing can carry one across.
+`unsuppliable_context_keys` is the check, `_subgraph` records it, and it lands
+on `Finding.UNSUPPLIABLE_CONTEXT`:
+
+    The workflow node mounting "child" can never run: that workflow requires
+    the run context key "caseId", and this document does not declare it — so no
+    run of this document can supply a value, and the mount fails before it
+    starts. Declare that key on this workflow, or give it a default in that one.
+
+**A `Finding` rather than `plan.warnings`**, on `6a812bf`'s line: that channel
+names a *malformed document*, and neither document here is malformed — each is
+valid and each runs on its own. What is lost is the mount, which produces
+nothing on every run, which is `UNRESOLVED_SUBGRAPH`'s class one reason over.
+`plan.warnings` could not carry it in any case: it is the in-memory plan, which
+has no root to load a sibling package from and has never seen the child.
+
+**A failure rather than a report**, by `afc57f6`'s test — *can the composition
+answer?* It cannot. Keyed by slug rather than by mount node id, so a package
+mounted three times says it once; **`organisms-first-class/78` is what could
+make that untrue**, since a per-mount supply differs per instance, and
+`unsuppliable_context_keys` takes a `mount_supplies` parameter today precisely
+so 78 cannot forget to consult it. All 36 packages shipped in this repository —
+23 examples, 4 templates, 9 under `workflows/` — validate green before and
+after.
+
 **And the mount sentence beside the subagent one below**: a *subagent* is not
 isolated from run context and cannot be, because there is no boundary there to
 hold a value at. A *mount* is exactly such a boundary — a second document, with
