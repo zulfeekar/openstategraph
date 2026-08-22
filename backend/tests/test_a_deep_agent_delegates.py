@@ -14,9 +14,15 @@ The two isolation sentences are asserted together, because apart they read as a
 contradiction: the subagent never sees the parent's messages or graph state,
 **and** the run's context crosses into the subagent's tools unchanged.
 
-No provider credential exists here. Every model below is a fake, so this proves
-what is assembled and what a tool returns — never how a real model decides to
-delegate.
+Every model below is a fake, so this proves what is assembled and what a tool
+returns — never how a real model decides to delegate. It used to say "no
+provider credential exists here", and that was false: `.env` holds working
+keys and the belief came from an instrument that could not check
+(`providers-and-credentials/12`). The unproven half has since been measured —
+five live runs on `anthropic:claude-haiku-4-5`, five correct delegations,
+`docs/decisions/live-model-verification-2026-08-23.md` — which is a record of
+one evening rather than something this file can assert, so the scripted proof
+below stays exactly as it is.
 """
 
 from __future__ import annotations
