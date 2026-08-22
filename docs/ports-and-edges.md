@@ -99,12 +99,44 @@ branch field into branch ports. If one port sometimes carried a scalar and
 sometimes a list, its type would change at runtime and every executor would
 have to branch, which is exactly what typed ports exist to prevent.
 
+### The cap counts producers, not links
+
+A cap exists because a slot holds one value, and two producers writing it in
+the same superstep is an ambiguity nothing can resolve. So the number it
+compares against is **how many of a port's incoming links can carry a value in
+one run** — which is not the number of links drawn.
+
+A router takes exactly one of its branches. Three branches converging on one
+agent's `prompt` are three links and one value, and `maxConnections: 1` has no
+objection to them. Two unrelated agents into that same prompt are two links and
+two values, and that is the case the cap is for.
+
+The distinction is structural, never a flag anyone sets on an edge:
+`IPortDescriptor.branch` already declares an output as "one of several mutually
+exclusive ways out", and `concurrentProducers.ts` reads exclusivity back off
+the graph — including through the nodes a branch feeds, which is how three
+different agents behind one router converge on one grader's `candidate`. Two
+producers count as one only when some node's branches decide between them, and
+only when that node genuinely decides whether each of them runs at all.
+
+**A node whose branches are not exclusive says so.** A Router set to *run every
+match, in parallel* dispatches to every branch that matched, in one superstep —
+so its branches really can race, and `INodeModel.branchesAreExclusive` is how
+it tells the cap. Absent means exclusive, because that is what `branch` already
+promises; a family that broadcasts opts out.
+
 ### Full inputs swap rather than reject
 
 Dropping a link on an occupied **single-slot** input replaces the incumbent —
 re-wiring is the gesture users reach for, and making them delete first is
 friction with no safety benefit. A genuinely full **multi-slot** input rejects,
 because there is no obvious incumbent to displace.
+
+The replacement is still **silent**, and that is a known gap rather than a
+decision: the validator names the link it is about to displace and nothing
+shows the user. It bit hardest when the cap was counting links, because then it
+fired on fan-in that was never ambiguous — `workflow-gallery/77` carries what
+is left.
 
 ---
 
@@ -119,7 +151,7 @@ embedding app can drop one or insert its own.
 | 20 | `self-loop` | a node feeding itself |
 | 30 | `duplicate` | the same pair of ports linked twice |
 | 40 | `type-compatibility` | *"Text output can't feed a Tool input"* |
-| 50 | `capacity` | a full multi-slot input (a full single-slot input *replaces*) |
+| 50 | `capacity` | more *concurrent producers* than the port allows (a full single-slot input *replaces*) |
 | 60 | `acyclic` | any cycle that does not close on a `feedback` edge |
 
 ---

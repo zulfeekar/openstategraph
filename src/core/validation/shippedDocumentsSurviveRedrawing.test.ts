@@ -62,23 +62,28 @@ const TRACKED = trackedDocuments();
  * already fixed, and a second violation appearing on a listed document is
  * still a failure.
  *
- * Two families, and they want different medicine:
+ * **It is empty, and getting there is `workflow-gallery/64`'s account of
+ * itself.** It held four entries in two families:
  *
- * - **The sink.** `out1/result` on `concierge` and `chinook-assistant` is
- *   exactly ticket 13's shape, and ticket 13's answer applies unchanged: one
- *   `output.formatted` per exclusive branch. Both are repository packages
- *   another session held open, so `workflow-gallery/63` carries them.
- * - **The node that carries knowledge.** A grader's rubric, an agent's system
- *   prompt. Splitting those would duplicate *knowledge* rather than duplicate
- *   an empty card, which is the duplication DRY actually forbids. The answer
- *   there is capacity that counts what can be simultaneously live rather than
- *   what is drawn — `workflow-gallery/64`.
+ * - `out1/result` on `concierge` and `chinook-assistant` — ticket 13's shape,
+ *   whose answer was one `output.formatted` per exclusive branch, carried by
+ *   ticket 63.
+ * - `grader1/candidate` on `examples/support-triage` and `agent-chat/prompt`
+ *   on `chinook-assistant` — where that answer would have duplicated a
+ *   grader's rubric or an agent's system prompt, which is duplication of
+ *   *knowledge* and the thing DRY actually forbids.
+ *
+ * All four came off in one move, and none of the four documents changed a
+ * line. The defect was never in them: `capacityRule` was counting **edges
+ * drawn** where the ambiguity a cap exists to forbid is **producers that can
+ * arrive in the same run**. A router takes one branch, so its branches cannot
+ * race, however many of them converge — see `concurrentProducers.ts`. Which
+ * also retires 63: the two packages it was going to edit are expressible as
+ * they stand.
+ *
+ * So an entry appearing here again is a regression, not a backlog item.
  */
-const KNOWN_VIOLATIONS: Record<string, readonly string[]> = {
-  'examples/support-triage': ['grader1/candidate'],
-  'workflows/chinook-assistant': ['agent-chat/prompt', 'out1/result'],
-  'workflows/concierge': ['out1/result'],
-};
+const KNOWN_VIOLATIONS: Record<string, readonly string[]> = {};
 
 interface Doc {
   readonly key: string;

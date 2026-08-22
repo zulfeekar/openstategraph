@@ -10,6 +10,7 @@ import {
   type PortRef,
 } from '@core/model/contracts/ports';
 import type { EdgeId } from '@core/model/contracts/workflow';
+import { concurrentProducerCount } from './concurrentProducers';
 
 /** Everything a rule may inspect about a proposed connection. */
 export interface ConnectionContext {
@@ -214,7 +215,7 @@ export const sourceCapabilityRule: IConnectionRule = {
 export const capacityRule: IConnectionRule = {
   id: 'capacity',
   order: 50,
-  check({ model, target, targetPort, sourcePort, source }) {
+  check({ model, registry, target, targetPort, sourcePort, source }) {
     // `null` is unlimited, so there is nothing to compare against.
     const outMax = maxConnectionsOf(sourcePort);
     if (outMax !== null && model.edgesFrom(source).length >= outMax) {
@@ -226,6 +227,15 @@ export const capacityRule: IConnectionRule = {
 
     const occupying = model.edgesInto(target);
     if (occupying.length < inMax) return null;
+
+    // The cap counts *producers that can arrive together*, not edges drawn
+    // (`workflow-gallery/64`). A router's branches are mutually exclusive, so
+    // three of them converging on one `prompt` are three links and one value;
+    // two unrelated agents are two of both, and that is the ambiguity the cap
+    // is for. Only asked once the port is nominally full, so the graph walk
+    // never runs on the ordinary pointer-move.
+    const arriving = concurrentProducerCount(model, registry, [...occupying, { source }]);
+    if (arriving <= inMax) return null;
 
     if (inMax === 1) {
       return { replaces: occupying.map((edge) => edge.id) };

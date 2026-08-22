@@ -17,6 +17,8 @@ const FIELD_BRANCHES = 'branches';
 const FIELD_FALLBACK = 'fallback';
 /** `matchMode` — one desk, or every desk the question needs. */
 const FIELD_MATCH_MODE = 'matchMode';
+/** The one value that makes a Router's branches concurrent rather than exclusive. */
+const MATCH_MODE_ALL = 'all';
 const FIELD_TIER = 'tier';
 
 /**
@@ -238,6 +240,19 @@ export class RouterNodeModel extends AbstractNodeModel {
 
   get fallback(): string {
     return this.getText(FIELD_FALLBACK);
+  }
+
+  /**
+   * `matchMode: "all"` runs every branch that matched, in the same superstep,
+   * so this Router's branches are not mutually exclusive and a port they
+   * converge on really can be handed two values at once.
+   *
+   * The default is the other one, and it is read through `getText` rather than
+   * compared against a literal default here, so the field schema stays the
+   * single place that decides what an unset `matchMode` means.
+   */
+  get branchesAreExclusive(): boolean {
+    return this.getText(FIELD_MATCH_MODE) !== MATCH_MODE_ALL;
   }
 }
 

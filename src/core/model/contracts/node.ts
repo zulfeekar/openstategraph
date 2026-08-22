@@ -104,6 +104,21 @@ export interface INodeModel {
    */
   readonly hasCustomTitle: boolean;
   readonly subtitle: string;
+  /**
+   * Whether two of this node's `branch` outputs can be live in the same run.
+   *
+   * Absent means **yes, they are exclusive** — that is what
+   * `IPortDescriptor.branch` already declares ("one of several mutually
+   * exclusive ways out"), so nothing has to opt in. A family that can take
+   * more than one way out at once opts *out*, and exactly one does: a Router
+   * set to *run every match, in parallel* dispatches to every branch that
+   * matched, in one superstep (`workflow-gallery/64`).
+   *
+   * On the contract because port capacity asks it (`concurrentProducers.ts`)
+   * and capacity may not know node types — a plugin's own broadcasting
+   * conditional answers here and needs no edit in `core/`.
+   */
+  readonly branchesAreExclusive?: boolean;
 
   getField<T extends FieldValue>(key: string): T;
   port(portId: string): IPortDescriptor | undefined;
