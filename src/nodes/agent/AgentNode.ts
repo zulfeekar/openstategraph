@@ -206,7 +206,15 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           // is the sole `feedback` source, and `acyclicRule` permits a loop only
           // when it closes on one — so the type system gates the cycle, and an
           // accidental loop stays impossible to draw.
-          description: 'A grader’s rejection, to revise against.',
+          //
+          // The rejection is always written *about an answer*, and this agent
+          // need not be the one that wrote it (`organisms-first-class/37`): an
+          // agent two steps upstream may take the same sentence as a reason to
+          // ask a different question. Nothing in the machinery makes that
+          // choice — the Rules say which it is, so the description says so too.
+          description:
+            'A grader’s rejection of the answer. Say in Rules whether to redraft it or ' +
+            'to change the question you produce.',
         },
         {
           id: 'result',

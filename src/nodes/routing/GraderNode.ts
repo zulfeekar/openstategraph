@@ -229,8 +229,9 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           label: 'revise',
           branch: true,
           description:
-            'Feedback sent back upstream when the answer falls short. Wire this to an ' +
-            'agent’s feedback input to form a revision loop.',
+            'Feedback sent back upstream when the answer falls short. Wire this to any ' +
+            'node with a feedback input — the one that wrote the answer, or one further ' +
+            'upstream that reshapes the question it was asked.',
         },
       ],
     },

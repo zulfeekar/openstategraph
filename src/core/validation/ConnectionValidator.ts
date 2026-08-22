@@ -249,6 +249,20 @@ export const capacityRule: IConnectionRule = {
  * no escape hatch.
  *
  * What is still forbidden: a cycle of ordinary edges, which can never terminate.
+ *
+ * **The rule deliberately does not ask who produced the candidate**
+ * (`organisms-first-class/37`). LangChain's `agentic-rag` grades retrieved
+ * context and routes to a node that *rewrites the question*, which edges back —
+ * the same two nodes as the evaluator-optimizer with a different subject. Since
+ * the gate is the port type, that shape has always been legal here, and
+ * `agentic-rag-rewrite` ships it: `grader1.revise` lands on the rewriter, two
+ * nodes upstream of the agent that produced the answer. Narrowing this to "only
+ * the producer" would forbid the one move that can change the answer when the
+ * question itself was aimed wrong. Pinned in `reviseMayTargetTheQuestion.test.ts`.
+ *
+ * The reach of the shape is set by which families declare a `feedback` **input**
+ * — agent and orchestrator — not by this rule. Giving another family one is a
+ * node-family change, and this rule would not need editing for it.
  */
 export const acyclicRule: IConnectionRule = {
   id: 'acyclic',

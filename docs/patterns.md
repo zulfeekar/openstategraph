@@ -340,6 +340,29 @@ graph LR
   g -. revise .-> a
 ```
 
+**The `revise` edge does not have to land on the generator.** It may land on
+any node with a `feedback` input, including one *upstream* of the generator that
+shapes the question rather than the answer — LangChain's agentic-RAG shape,
+where a grader judges what was retrieved and a rewriter asks a better question.
+`examples/agentic-rag-rewrite` ships it, and it is the move that recovers a run
+whose question was aimed at the wrong topic: feeding the complaint back to the
+producer would re-run the same lookups against the same framing.
+
+The one thing the machinery does not do for you is say *which* it is. The
+feedback is always written about an **answer**, so a node that is meant to
+change the **question** must be told so in its Rules — `agentic-rag-rewrite`'s
+rewriter says it in a sentence, and without that sentence the edge stays legal
+while the two ends mean different things.
+
+```mermaid
+graph LR
+  q2([question]) --> rw(rewriter)
+  rw --> rt(retriever)
+  rt --> g2{route.grader}
+  g2 -- pass --> o2([result])
+  g2 -. revise .-> rw
+```
+
 **Commonly used to:** anything with clear quality criteria and value in
 iterating — a translation that needs nuance, a literary rewrite, SQL that must
 actually run, a report that must cite figures.
