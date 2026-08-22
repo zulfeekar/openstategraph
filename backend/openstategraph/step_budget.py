@@ -37,6 +37,15 @@ the mount boundary, where `node_runtime._subgraph` translates it into
 number reach a caller. That one *is* a failed step: unlike the loop door there
 is no candidate to publish.
 
+**And when the child stops itself instead** (`organisms-first-class` 62), the
+overrule travels up inside the `budget_stops` value rather than through a
+channel of its own — `record_overruled_mount` at the boundary,
+`read_budget_stop` in `workflow_compiler.step_budget_warnings`. Said once per
+package however many times it is mounted, and only when the ceiling actually
+bit: a child that asked for less, or asked for more and never ran low, is told
+nothing, because a warning nobody can act on is the same defect as a promise
+nobody can keep.
+
 **Why it exists at all** (`workflow-gallery` 26). `settings.recursionLimit`
 was held by the editor's model, serialised by `RuntimeClient`, accepted by
 `RunRequest` and consumed by the graph config — and read out of a saved
@@ -131,3 +140,51 @@ def mount_step_budget(inherited: int, document: Any) -> int:
     if requested is None:
         return inherited
     return min(inherited, requested)
+
+
+def read_budget_stop(value: Any) -> tuple[Any, list[dict[str, Any]]]:
+    """A `budget_stops` value, read tolerantly: how much was left, and why.
+
+    `organisms-first-class` 62. The key's value was a bare `remaining` count
+    written by `_grader`, which is all a grader knows. A mount knows one more
+    thing — whether the ceiling the child ran under was smaller than the one
+    the child's own document asked for — and that fact has no other way to
+    reach a reader: it is minted at the boundary, while the sentence is minted
+    in `workflow_compiler.step_budget_warnings` out of this key.
+
+    So the value widens rather than a fifth key being invented: the four keys
+    this boundary carries (`outputs`, `forced`, `unrouted`, `budget_stops`)
+    have already been lost there three times, and the streaming door folds
+    these values through verbatim, so widening the *value* keeps both doors
+    agreeing for free.
+
+    Both shapes are read and neither is trusted further than its keys:
+
+    - `3` — a grader that stopped itself under a ceiling nobody overruled.
+    - `{"remaining": 3, "overruled": [{...}]}` — the same, plus one record per
+      mount boundary that could not honour a saved step budget.
+    """
+    if isinstance(value, dict):
+        overruled = value.get("overruled")
+        return value.get("remaining"), [
+            record for record in overruled if isinstance(record, dict)
+        ] if isinstance(overruled, list) else []
+    return value, []
+
+
+def record_overruled_mount(
+    value: Any, workflow: str, requested: int, allowed: int
+) -> dict[str, Any]:
+    """Add this mount's overruled request to one `budget_stops` value.
+
+    Appended rather than replacing, because a grandchild's overrule and its
+    parent's are two different facts about two different documents and both
+    are true — `nested_record` prefixes the *key* through every mount, and
+    this does the same job for the value. Idempotent on the record, so a
+    boundary crossed twice cannot double it.
+    """
+    remaining, overruled = read_budget_stop(value)
+    record = {"workflow": workflow, "requested": requested, "allowed": allowed}
+    if record not in overruled:
+        overruled = [*overruled, record]
+    return {"remaining": remaining, "overruled": overruled}

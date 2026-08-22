@@ -44,6 +44,7 @@ from openstategraph.abc.grader import Grader, Verdict
 from openstategraph.errors import StepBudgetExhausted
 from openstategraph.step_budget import (
     DEFAULT_STEP_BUDGET,
+    record_overruled_mount,
     mount_step_budget,
     workflow_step_budget,
 )
@@ -3461,6 +3462,32 @@ class NodeRuntime:
             # overwrites rather than doubles, and the two doors agree.
             starved_inside = nested_record(node_id, final.get("budget_stops"))
             if starved_inside:
+                # And, when this boundary could not honour the child's own
+                # saved number, that fact travels *inside* the value
+                # (`organisms-first-class` 62). 61 made the overrule speak only
+                # on the crash path, which is minted here and holds both
+                # numbers; the graceful stop is minted in
+                # `workflow_compiler.step_budget_warnings` out of this key,
+                # where the requested number had no way to arrive. It rides the
+                # absorb the other three keys ride rather than a fifth private
+                # channel — the streaming door folds these values through
+                # verbatim, so both doors gain it together.
+                #
+                # Only when the ceiling actually bit: the child stopped itself
+                # AND asked for more than the run allowed. A child that asked
+                # for less got what it asked for, and a child that asked for
+                # more and never ran low is unharmed — neither is worth a
+                # sentence, and manufacturing one would be noise on every run.
+                if requested_budget is not None and requested_budget > inherited_budget:
+                    starved_inside = {
+                        key: record_overruled_mount(
+                            value,
+                            slug or "no workflow selected",
+                            requested_budget,
+                            inherited_budget,
+                        )
+                        for key, value in starved_inside.items()
+                    }
                 update["budget_stops"] = starved_inside
             child_attempts = final.get("attempts")
             if isinstance(child_attempts, int) and child_attempts > 0:

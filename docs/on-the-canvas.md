@@ -119,7 +119,11 @@ direction only: it can lower that ceiling for the child, and it can never
 raise it. A package that saved 20 supersteps inside a run given 200 stops
 itself at 20; a package that saved 1000 inside a run given 50 gets 50, and if
 it then runs out the mount says so and names both numbers — the one the
-package saved and the smaller one the run could give. The asymmetry is the
+package saved and the smaller one the run could give. It says so on the
+gentler outcome too: when the child's own grader stops the loop early under a
+ceiling smaller than the package asked for, the run reports the overruled
+number once, however many times that package is mounted. A package that asked
+for less, or asked for more and never ran low, is told nothing extra. The asymmetry is the
 point: a caller who names a step budget has said what their whole run may
 cost, and a mounted package able to raise it would make that ceiling
 meaningless. When a mounted workflow

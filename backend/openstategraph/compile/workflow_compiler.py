@@ -43,6 +43,7 @@ from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
+from openstategraph.step_budget import read_budget_stop
 from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
@@ -934,13 +935,34 @@ def step_budget_warnings(budget_stops: Mapping[str, Any]) -> list[str]:
     `cli.run_exit_code`: the run completed, took its own wired `pass` edge and
     published. This is a report about how the answer was reached.
     """
-    return [
-        f'Grader "{node}" stopped revising because the workflow\'s step budget '
-        f"was nearly spent ({remaining} supersteps left), and published the "
-        "answer it had. A cycle costs one superstep per node on it, so this "
-        "loop could not run to its own attempts cap."
-        for node, remaining in budget_stops.items()
-    ]
+    lines: list[str] = []
+    overruled: list[dict[str, Any]] = []
+    for node, value in budget_stops.items():
+        remaining, records = read_budget_stop(value)
+        lines.append(
+            f'Grader "{node}" stopped revising because the workflow\'s step budget '
+            f"was nearly spent ({remaining} supersteps left), and published the "
+            "answer it had. A cycle costs one superstep per node on it, so this "
+            "loop could not run to its own attempts cap."
+        )
+        for record in records:
+            if record not in overruled:
+                overruled.append(record)
+    # And, once per package rather than once per stop, the field that could not
+    # be honoured (`organisms-first-class` 62). Deliberately not one sentence
+    # per grader and not one per mount: the same package mounted three times
+    # saved the number once, so saying it three times would be noise about a
+    # single decision. Only reached when the ceiling actually bit — a package
+    # that asked for less, or asked for more and finished comfortably, records
+    # nothing here and is told nothing.
+    lines.extend(
+        f'The mounted workflow "{record.get("workflow")}" saved a step budget of '
+        f'{record.get("requested")} supersteps, and a mount may only ask for less '
+        f'than the run\'s — this run allowed {record.get("allowed")}. That smaller '
+        "ceiling is what the loop above was measured against."
+        for record in overruled
+    )
+    return lines
 
 
 def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:
