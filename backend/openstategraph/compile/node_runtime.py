@@ -54,7 +54,11 @@ from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCa
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.node_types import NodeTypeRegistry
-from openstategraph.compile.run_context import render_run_context
+from openstategraph.compile.run_context import (
+    mount_run_context,
+    render_run_context,
+    run_context,
+)
 from openstategraph.compile.diagnostics import (
     CompileDiagnostics,
     Finding,
@@ -3172,6 +3176,9 @@ class NodeRuntime:
         #: which `mount_step_budget` reads as "saved nothing" — the
         #: overwhelming majority, and byte-identical to before that ticket.
         child_sizing_document: dict[str, Any] | None = None
+        #: The same document, read for what it declared its runs carry
+        #: (`organisms-first-class` 76). `None` when there is no child at all.
+        child_context_document: dict[str, Any] | None = None
         if slug and self.services.document_loader is not None:
             try:
                 child_document = self.services.document_loader(slug)
@@ -3192,6 +3199,12 @@ class NodeRuntime:
                 # its way to a different size is sized against what it will
                 # run rather than against the package as it sits on disk.
                 child_sizing_document = child_document
+                # And the same effective document, under the name the *other*
+                # question asks it by: what this child declared its runs carry.
+                # One object, two readers, and both must be the post-override
+                # copy — an override that rewrote a declaration would otherwise
+                # be narrowed against a document the child never compiled from.
+                child_context_document = child_document
                 # A mount's card shows an outcome its child may have no way to
                 # enforce. Keyed on *an outcome being written* rather than on
                 # the node's type — since v3 there is one mount type, and what
@@ -3260,6 +3273,12 @@ class NodeRuntime:
                     # (`compile/mount_persistence.py` carries the rest).
                     checkpointer=mount_checkpointer(persistence),
                     store=self.services.memory_store,
+                    # A child of a mount is **sealed**: a graph compiled with no
+                    # `context_schema` inherits its caller's run context whole
+                    # and no argument to `invoke` can take that away, so a child
+                    # that declares nothing gets an empty schema rather than
+                    # none (`organisms-first-class` 76).
+                    mounted=True,
                 )
                 # Inherited *upwards*, unlike everything else about a child
                 # runtime, and deliberately: the child's frames ride the
@@ -3473,6 +3492,21 @@ class NodeRuntime:
                         "outputs": {},
                     },
                     child_config,
+                    # **Inherit, then narrow** (`organisms-first-class` 76).
+                    # A mount is a closure, so the parent's runtime rides down
+                    # this call whether or not anyone asks it to: the child used
+                    # to read the parent's context object entire, including keys
+                    # it never declared, while its own defaults never
+                    # materialised because its own schema was never constructed.
+                    # `mount_run_context` narrows the run's values to the keys
+                    # the child's own document asks its callers for, and the
+                    # child's schema — minted `sealed`, above — fills the rest
+                    # from the child's own defaults. The same rule as the step
+                    # budget one screen down: the run supplies, the child's own
+                    # drawing decides.
+                    context=mount_run_context(
+                        child_context_document or {}, run_context(), slug=slug
+                    ),
                 )
             except GraphRecursionError as exc:
                 # The field a developer set, and what it could not buy

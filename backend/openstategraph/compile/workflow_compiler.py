@@ -1596,6 +1596,7 @@ class WorkflowCompiler:
         compile_graph: bool = True,
         checkpointer: Any = None,
         store: 'BaseStore | None' = None,
+        mounted: bool = False,
     ) -> Any:
         """Assembles the graph.
 
@@ -1616,6 +1617,16 @@ class WorkflowCompiler:
         the two vocabularies can disagree; the type because this is where
         `WorkflowServices.store` (the filesystem one) could arrive by a
         one-token edit and pass every check downstream.
+
+        `mounted` says this graph is being built as a **child of a mount**, and
+        the only thing it changes is what *declares nothing* compiles to
+        (`organisms-first-class/76`). A graph with no `context_schema` is not
+        isolated from its caller's run context — it inherits it, and no argument
+        to `invoke` can take that away — so a mounted child that declares
+        nothing is given an empty schema rather than none. A workflow run
+        directly is never mounted and is never sealed: 69's promise that a
+        document declaring nothing builds exactly the graph it built before is
+        kept where it was made.
         """
         plan = self.plan(document)
         nodes = {n["id"]: n for n in document.get("nodes", [])}
@@ -1631,7 +1642,7 @@ class WorkflowCompiler:
         # declares no run context must build exactly the graph it built before
         # this ticket, and whether a library treats an explicit `None` as an
         # absent argument is its business rather than a thing to assume.
-        context_schema = mint_context_schema(document)
+        context_schema = mint_context_schema(document, sealed=mounted)
         # `state_schema` is a caller-supplied TypedDict class, so the builder's
         # own type parameters cannot be inferred from it; `Any` here is honest —
         # the state shape is a workflow's, not ours.

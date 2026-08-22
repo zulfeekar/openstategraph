@@ -332,11 +332,66 @@ accepts and what JSON carries; and an integral `number` renders `3` rather than
 `3.0`, because the CLI's `float()` must not be visible in an answer that the
 same value supplied over HTTP would spell differently.
 
-**Found on the way, and filed rather than fixed:
+**Found on the way, and fixed the next session:
 `organisms-first-class/76`.** A mount is a closure over the child's
-`invoke()`, and LangGraph carries the parent's runtime down it — so a mounted
-child sees the **parent's** context object even when it declared its own, and
-its own defaults never materialise. Invisible until something read a value.
+`invoke()`, and LangGraph carried the parent's runtime down it — so a mounted
+child saw the **parent's** context object even when it declared its own, and
+its own defaults never materialised. Invisible until something read a value.
+The section below is what was decided.
+
+### At a mount: inherit, then narrow — **[BUILT, ticket 76]**
+
+> **A run-context key crosses a mount only when both documents declare it.**
+> The run supplies; the child's own document decides. Everything the child
+> declared and the run did not carry comes from the child's own defaults,
+> minted from its own declaration exactly as for a direct run.
+
+That is `582e098`'s rule for the step budget, pointed at a different channel:
+the caller's run is the ceiling, the child's own drawing is the aperture. It
+holds at every level, so a middle document that declares nothing passes nothing
+on — a package cannot hand down a key it never asked its own caller for — which
+is what makes a package's behaviour a function of its own document and its
+immediate caller's, at any depth.
+
+Two consequences worth stating plainly, because they are the two failures the
+whole chain exists to remove:
+
+- **A child cannot read a field it never declared**, at any depth. Its
+  `{{tenant}}` stays byte-identical inside a run that has a live `tenant`,
+  exactly as an unresolved placeholder does anywhere else (71).
+- **A field a child declared is never silently `None`.** What the run cannot
+  honour — a required key with no default that the parent's declaration does
+  not name, or a value the parent typed differently — is refused before
+  `invoke`, by 70's own validator, in our words naming the key and the child.
+  It reaches a developer as a failure marker rather than as a raised exception,
+  because that is what every node failure does here (`_error_handler_for`), and
+  the child's nodes do not run at all.
+
+**The library fact the mechanism rests on**, measured against langgraph 1.2.10:
+a graph compiled with **no** `context_schema` is not isolated from its caller's
+context — it inherits it, and `context=None`, `context={}` and passing nothing
+are all the same to it. So `mint_context_schema` takes `sealed=`, and a mounted
+child that declares nothing is given an **empty** schema rather than none.
+`context_schema=` still has exactly one call site; a workflow run **directly**
+is never sealed, so 69's promise that a document declaring nothing builds
+exactly the graph it built before is kept where it was made.
+
+**What was rejected.** *Inherit whole*, today's behaviour made deliberate: a
+package would read a caller's field it never asked for, and would answer
+differently depending on which parent happened to declare a key of the same
+name — `3f688e5` refused exactly that. *Isolate completely*, the child seeing
+only what its parent explicitly hands it: the honest end state, and it costs a
+**new serialised field on the mount**, which is an owner's decision rather than
+a thing to add while fixing a read path. It is `organisms-first-class/78`,
+filed with the two questions its design must answer; until it lands, a package
+whose declaration asks for a key its parent does not also declare is not
+mountable, and says so.
+
+**And the mount sentence beside the subagent one below**: a *subagent* is not
+isolated from run context and cannot be, because there is no boundary there to
+hold a value at. A *mount* is exactly such a boundary — a second document, with
+its own declaration — so it is the one place in this platform where run context
+narrows.
 
 ### How this relates to the four identity keys — the rule that keeps them apart — **[BUILT, tickets 67 and 68]**
 

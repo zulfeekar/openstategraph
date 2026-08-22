@@ -281,7 +281,18 @@ def unmintable_context_keys(fields: Sequence[ContextField]) -> list[str]:
     return [f.key for f in fields if not _MINTABLE_KEY.match(f.key)]
 
 
-def mint_context_schema(document: Any) -> type | None:
+def _sealed_schema() -> type:
+    """A context schema with no fields — *this document declares nothing*.
+
+    Distinct from `None`, which means *pass no argument*, and the difference is
+    the whole of `organisms-first-class/76`: only a graph that declares a schema
+    gets one of its own, and only a graph with one of its own is isolated from
+    its caller's.
+    """
+    return dataclasses.make_dataclass(CONTEXT_SCHEMA_NAME, [], kw_only=True)
+
+
+def mint_context_schema(document: Any, *, sealed: bool = False) -> type | None:
     """The declaration as a `dataclass`, or `None` when there is nothing to mint.
 
     **A build artefact, minted here and discarded with the build.** Nothing
@@ -314,12 +325,25 @@ def mint_context_schema(document: Any) -> type | None:
     at build — the author's order silently becoming a build failure, when
     order is the substance of this list (it is the order the generated prompt
     section renders in).
+
+    `sealed` is the mount boundary's argument, and it changes only what
+    *nothing to mint* means (`organisms-first-class/76`). A graph compiled with
+    no `context_schema` at all does not merely see an empty context: measured
+    against langgraph 1.2.10, it sees **whatever the caller's runtime carried**,
+    and no argument to `invoke` can take that away — `context=None`, `context={}`
+    and passing nothing are all the same to a schema-less graph. A mounted child
+    is compiled by `NodeRuntime._subgraph` with `sealed=True`, so a document that
+    declares nothing is given an **empty** schema and reads an empty context
+    instead of its caller's. A workflow run directly is never sealed: it has no
+    caller whose values could leak into it, and 69's promise that a document
+    declaring nothing builds exactly the graph it built before is kept where it
+    was made.
     """
     if context_declaration_problems(document):
-        return None
+        return _sealed_schema() if sealed else None
     fields = context_declaration(document)
     if not fields or unmintable_context_keys(fields):
-        return None
+        return _sealed_schema() if sealed else None
 
     specs: list[tuple[str, Any, Any]] = []
     for declared in fields:
@@ -485,6 +509,61 @@ def validate_run_context(
                 f"{workflow!r}, and this run supplied a {_supplied_type_name(value)}."
             )
     return values
+
+
+def mount_run_context(
+    child_document: Any,
+    parent_context: Mapping[str, Any],
+    *,
+    slug: str | None = None,
+) -> dict[str, Any]:
+    """What a mounted child is invoked with — **inherit, then narrow**.
+
+    `organisms-first-class/76`. A mount is a closure over the child's
+    `invoke()`, so until this function existed LangGraph carried the parent's
+    runtime down it whole: a child read fields it never declared, and the
+    fields it *did* declare never materialised because its own schema was never
+    constructed. Both are the failure this chain exists to remove.
+
+    The rule is `582e098`'s rule for the step budget, pointed at a different
+    channel: **the run supplies, the child's own document decides**. A key
+    crosses a mount only when *both* documents declare it; the child's own
+    defaults fill everything else, minted from its own declaration by
+    `mint_context_schema` exactly as they would be for a direct run.
+
+    Two shapes were rejected:
+
+    - **Inherit whole**, today's behaviour made deliberate. It cannot be: a
+      package would read a caller's field it never asked for, which is the
+      thing 70 put a validator at the door to stop, and a package's answer
+      would depend on which parent happened to declare a key of the same name.
+    - **Isolate completely** — the child gets its own declaration and nothing
+      else, and the parent supplies the rest through a new per-mount field.
+      Honest, and it is the shape a package needing a value its caller does not
+      itself declare will eventually need; it is `organisms-first-class/78`,
+      filed rather than invented here, because it is a **new serialised field
+      on the mount** and changing what a saved document carries is not a thing
+      to do on the way past. Narrowing is the half that needs no new field and
+      closes both leaks today.
+
+    What it deliberately does **not** do is fill defaults itself. The minted
+    dataclass carries them and is the one place they live — the same sentence
+    `validate_run_context` makes about the supply doors, for the same reason.
+
+    Raises `RunContextError`, in our words and naming the child, when the run
+    cannot honour what the child declared: a required key neither document
+    could supply a value for, or a value the parent typed differently. A
+    declared field that arrived silently `None` is what this ticket refused.
+    """
+    declared = context_declaration(child_document)
+    if context_declaration_problems(child_document) or not declared:
+        # Nothing well-formed to narrow *to*, so nothing crosses. The child is
+        # still sealed by `mint_context_schema(sealed=True)`, which is what
+        # makes an empty mapping mean an empty context rather than the
+        # caller's.
+        return {}
+    narrowed = {field.key: parent_context[field.key] for field in declared if field.key in parent_context}
+    return validate_run_context(child_document, narrowed, slug=slug) or {}
 
 
 #: What `--context flag=value` accepts for a `boolean` field, and nothing else.

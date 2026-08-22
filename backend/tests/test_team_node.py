@@ -179,7 +179,10 @@ class TestChildPackageAssets:
         captured: dict = {}
 
         class SpyGraph:
-            def invoke(self, payload, config=None):
+            # `context` because the mount passes one since
+            # `organisms-first-class/76`, and a stand-in for a compiled graph
+            # has to accept what the real one does.
+            def invoke(self, payload, config=None, *, context=None):
                 captured.update(payload)
                 return {"answer": "ok"}
 
