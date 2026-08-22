@@ -1,6 +1,6 @@
 # A workflow declares what its runs carry
 
-**Status: steps 1, 2 and 3 of 7 built; the rest is prose.** `organisms-first-class/41`,
+**Status: steps 1 to 4 of 7 built; the rest is prose.** `organisms-first-class/41`,
 adopted from ticket 19's owner decision (2026-08-15). The build is split into
 seven tickets, listed at the end, in the order they must land.
 
@@ -149,7 +149,7 @@ list** of field descriptors:
   precisely so a sibling of `recursionLimit` lands without a second place
   settings get written.
 
-### A run supplies values by three routes, all JSON — *not built (70)*
+### A run supplies values by three routes, all JSON — **[BUILT, ticket 70]**
 
 | route | shape |
 | --- | --- |
@@ -159,11 +159,51 @@ list** of field descriptors:
 
 All three land in one validator, and the validator is **ours**, because
 measurement 1 above says the library's is unusable and measurement 2 says there
-isn't one at the door. It refuses an undeclared key, a missing required key
+isn't one at the door. **Ticket 70 has landed** (2026-08-22):
+`validate_run_context` in `compile/run_context.py` is that validator, called by
+`CompiledWorkflow.ask`, by `POST /api/runs` and `POST /api/runs/stream`, and by
+`openstategraph run` — before the graph is invoked at any of them, so the raw
+`TypeError` is unreachable from all three. It refuses an undeclared key, a missing required key
 with no default, and a value of the wrong declared type — each naming the key
 and the workflow, not a synthesised Python class. `RunRequest` keeps
 `extra: "forbid"` at the top level; `context` is validated against the posted
 document's own declaration, which is the only place the truth lives.
+
+**Four decisions 70 had to make.**
+
+**A flag carries strings, so the type comes from the document.** `--context
+key=value` is typed by the declaration and never guessed from the literal —
+guessing would make `caseId=00123` a number for one workflow and a string for
+the next, and `dryRun=false` a non-empty and therefore true string for
+everybody. A `boolean` field accepts `true` and `false` in any casing and
+**nothing else**: `1`, `0`, `yes`, `no`, `on` and `off` are refused by name in
+the message. That narrowness is the safety, and it is `CLAUDE.md`'s law about
+not promising what is not possible — a flag that quietly makes `false` mean
+true breaks it in the direction nobody checks. A `number` field takes what
+`float()` takes and then refuses what is not finite, because `inf` and `nan`
+are literals `float()` accepts and values JSON cannot carry. A key the document
+does **not** declare has no type to be read as, so it is left the string it
+arrived as and refused by the validator with the undeclared-key sentence: one
+refusal per fact, whichever door the value came in by.
+
+**The two CLI failures are two exit codes, deliberately.** A pair with no `=`
+is a mistyped command line and gets `EXIT_USAGE` (2), the code argparse itself
+gives for every other flag; a value the *declaration* refuses is a run that
+cannot start and gets `EXIT_FAILURE` (1). Exit codes are this CLI's API, and a
+script must be able to tell "you typed it wrong" from "the workflow refused
+it". Both are exercised as a real `cli.main` return and the second as a real
+process.
+
+**A refusal names the slug, or the document's name, or *this workflow*.** The
+slug is the identity and is what a package is addressed by — but `POST
+/api/runs` posts a canvas that may have none, and a refusal naming an empty
+string is worse than one naming nothing. `workflow_label` is the one place that
+falls back.
+
+**Defaults are not copied into the mapping.** The minted dataclass carries them
+(69) and that is the one place they live; filling them in here would be a
+second spelling of the author's intent, and the two would drift. `required`
+still yields to a default at the door, exactly as it does at the mint.
 
 ### The compiler mints a dataclass — **[BUILT, ticket 69]**
 
@@ -382,8 +422,18 @@ not guaranteed to be the same thing to a library we do not own; and the
 one-directional seam holds — building writes no type into the document, the plan
 holds no Python type, and two builds of one document mint two classes.
 
+`backend/tests/test_a_run_supplies_context.py` (61 tests) pins what 70 built:
+the raw `TypeError` still being what `graph.invoke` says, and being unreachable
+from all three doors; each of the four refusals driven once per door and
+asserted **verbatim**; the flag's typing and everything it refuses; every exit
+code as a real return and one as a real process; and the inverses — a workflow
+declaring nothing runs at all three doors exactly as before and is passed **no
+`context` argument at all**, a correct context reaches `invoke` unchanged,
+`configurable` still carries its four keys and only those, and `RunRequest` is
+still `extra: "forbid"` with a nested value refused by the model itself.
+
 **Prose, unpinned, because it describes a thing that does not exist yet:** the
-three supply routes, the prompt-section placement and the tool accessor. Each is a build ticket below and each carries its own
+prompt-section placement and the tool accessor. Each is a build ticket below and each carries its own
 test when it lands.
 
 ## The build, in the order it must land
@@ -393,7 +443,7 @@ test when it lands.
 | ~~67~~ | ~~`settings.context` is a declared field schema~~ | **Landed 2026-08-22.** TS `core/` contract + Pydantic mirror + both serializer round trips + the reserved-key refusal. Builds no runtime, as designed. |
 | ~~68~~ | ~~One `run_identity` accessor for the four keys~~ | **Landed 2026-08-22.** `openstategraph/run_identity.py`, four readers repointed, the reserved list moved onto it, and a census of readers beside `ac870f6`'s census of writers. Pure refactor, as designed. |
 | ~~69~~ | ~~The compiler mints a `context_schema`~~ | **Landed 2026-08-22.** `mint_context_schema` in `compile/run_context.py`, one `StateGraph(..., context_schema=…)` in the compiler, and the sentinel updated into a census of one. Supplies and reads nothing, as designed. |
-| 70 | One validator, three supply routes | `ask(context=)`, `RunRequest.context`, `run --context`. Needs 69, or there is nothing to supply *to*. |
+| ~~70~~ | ~~One validator, three supply routes~~ | **Landed 2026-08-22.** `validate_run_context` and `coerce_context_flags` in `compile/run_context.py`, `RunContextError` (Tier 1), `ask(context=)`, `RunRequest.context`, `run --context KEY=VALUE`. Reads nothing, as designed. |
 | 71 | Nodes read it | The first read door, and the cheapest to verify end to end. |
 | 72 | The generated prompt **Context** section, and per-field opt-in | Needs 71 working, and needs the opt-in or a handle reaches a model. |
 | 73 | `BaseTool` context accessor, and the generated-module contract clause | Last because it corrects a *published* false clause, which should be corrected against a working mechanism rather than a planned one. |

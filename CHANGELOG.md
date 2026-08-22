@@ -3,6 +3,34 @@
 ## Unreleased
 
 ### Added
+- **A run supplies run context, by three doors and one validator.** A workflow
+  that declares `settings.context` can now be given the values it asked for:
+  `wf.ask(question, context={…})`, `POST /api/runs` and `/api/runs/stream` with
+  a `context` object, and `openstategraph run --context key=value` (repeatable).
+  All three land in one validator, ours, before the graph is invoked. It refuses
+  an undeclared key, a required key with no value, a value of the wrong declared
+  type — including a `number` that is `Infinity` or `NaN`, which cannot survive
+  a JSON round trip — and a run that supplied nothing where something was
+  required. Every sentence names the **key** and the **workflow**. What it
+  replaces is `TypeError: RunContext.__init__() got an unexpected keyword
+  argument 'zzz'`, raised by a `dataclasses`-generated `__init__` naming a class
+  the author never wrote, from inside `graph.invoke`, alongside a wrong-typed
+  value that was never refused at all (`organisms-first-class` 70).
+- **`RunContextError`** (Tier 1) — the refusal above, catchable. A `ValueError`
+  by inheritance so an existing handler keeps working, and not a
+  `DocumentError`: the caller is wrong, not the document.
+- **`--context KEY=VALUE` on `openstategraph run`**, typed by the declaration
+  rather than guessed from the literal — so a zero-padded case number stays a
+  string and `dryRun=false` is `False`. A `boolean` field accepts `true` and
+  `false` and nothing else: `1`, `0`, `yes`, `no`, `on` and `off` are refused by
+  name, because under Python truthiness the string `"false"` is `True` and a
+  flag that quietly makes false mean true is worse than one that refuses. A pair
+  with no `=` is a usage error (exit 2, argparse's own); a value the declaration
+  refuses is exit 1.
+- **`RunRequest.context`** — `dict[str, str | int | float | bool] | None`, and
+  purely additive: `extra: "forbid"` is unchanged and `None` means *this caller
+  named nothing*. A key the posted document does not declare is a **422**, not
+  a 502.
 - **`StepBudgetExhausted`** (Tier 1) — a mounted workflow spent the whole of a
   run's step budget without producing an answer. Translated at the mount
   boundary from LangGraph's `GraphRecursionError`, the same seam

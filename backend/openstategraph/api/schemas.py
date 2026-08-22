@@ -387,6 +387,20 @@ class RunRequest(BaseModel):
     #: already applied to the model — "the transport says who this is" — now
     #: also applies to the transport's own callers.
     session_id: str | None = None
+    #: What the posted workflow **asked its caller for** — the other half of
+    #: the sentence the field above is one side of. `configurable` is who the
+    #: run is *for*, server-determined and unforgeable; `context` is declared
+    #: by the document's own `settings.context` and filled by whoever starts
+    #: the run, so a client may write it and a document with no declaration
+    #: accepts none of it.
+    #:
+    #: Purely additive: `extra: "forbid"` above is unchanged, and `None` means
+    #: *this caller named nothing*, which is what every run before this sent.
+    #: Scalars only, and the same three the declaration's type enum names — a
+    #: nested value cannot be typed on a CLI flag or rendered into a prompt
+    #: honestly, so it is not accepted on any of the three doors
+    #: (`organisms-first-class` 70).
+    context: dict[str, str | int | float | bool] | None = None
     #: The open workflow's slug, when the client knows it. Tools discovered
     #: in that workflow's own `tools/` folder are layered over the defaults,
     #: so a document can bind the tools that live beside it. Optional —

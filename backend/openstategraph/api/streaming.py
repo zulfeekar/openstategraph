@@ -7,6 +7,7 @@ from openstategraph.messages import content_text, reasoning_text, usage_of
 import json
 import logging
 from contextlib import suppress
+from collections.abc import Mapping
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -823,6 +824,7 @@ def _stream_run(
     audience: Audience = Audience.CUSTOMER,
     document: Any = None,
     store: Any = None,
+    run_context: Mapping[str, Any] | None = None,
 ) -> Any:
     """The stream, with its ending guaranteed (UX-02).
 
@@ -877,6 +879,7 @@ def _stream_run(
         audience,
         document,
         store,
+        run_context,
     )
     ended = False
     try:
@@ -983,6 +986,7 @@ def _run_frames(
     audience: Audience = Audience.CUSTOMER,
     document: Any = None,
     store: Any = None,
+    run_context: Mapping[str, Any] | None = None,
 ) -> Any:
     """Drives one `graph.stream()` call and yields SSE frames.
 
@@ -1173,9 +1177,15 @@ def _run_frames(
 
     stream = None
     try:
+        # `None` means *pass no argument at all*: a workflow that declares no
+        # run context must stream exactly as it did before this existed, and
+        # `None` and absent are not guaranteed to be the same thing to a
+        # library we do not own (`organisms-first-class` 70).
+        supplied = {"context": run_context} if run_context is not None else {}
         stream = graph.stream(
             graph_input,
             config,
+            **supplied,
             # `custom` is what lets a step say "read 40 of 100" while it works
             # (ticket 22). Purely additive: a run whose tools write nothing
             # produces not one extra frame. Note it is a **shared** channel —

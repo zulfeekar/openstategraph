@@ -120,6 +120,29 @@ class SchemaVersionError(DocumentError):
     """
 
 
+class RunContextError(OpenStateGraphError, ValueError):
+    """A run supplied run context the workflow did not ask for, or omitted some
+    it did.
+
+    `organisms-first-class/70`. **The caller is wrong, not the document** —
+    which is what separates this from `DocumentError`, its sibling for a
+    payload that is not shaped like a workflow. A declaration that is itself
+    malformed is still a `plan.warnings` problem and still exits `validate`
+    non-zero; this is the other side of the same field schema, raised when a
+    run tries to fill it.
+
+    Typed rather than left a bare `ValueError` for this module's standing
+    reason, and with one that is particular to it: the failure it replaces was
+    `TypeError: RunContext.__init__() got an unexpected keyword argument
+    'zzz'`, raised by a `dataclasses`-generated `__init__` naming a class the
+    workflow author never wrote and cannot see. That message names neither the
+    workflow nor anything the author can act on, it is not catchable apart from
+    any other `TypeError` in the process, and it arrives from inside
+    `graph.invoke` rather than at the door. Every sentence this class carries
+    names the offending **key** and the **workflow**.
+    """
+
+
 class ThreadNotResumable(OpenStateGraphError, ValueError):
     """`CompiledWorkflow.resume()` was asked to continue a thread it cannot.
 
@@ -309,6 +332,7 @@ __all__ = [
     "PackageNotFound",
     "ProviderRefusedCredential",
     "ProviderUnreachable",
+    "RunContextError",
     "SchemaVersionError",
     "StepBudgetExhausted",
     "ThreadNotResumable",

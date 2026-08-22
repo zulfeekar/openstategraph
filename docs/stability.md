@@ -50,7 +50,7 @@ from openstategraph.errors import (
     InvalidPackageName, DocumentError, SchemaVersionError,
     ThreadNotResumable, CredentialError, MissingProviderKey, MissingProviderPackage,
     NoProviderInstalled, ProviderRefusedCredential, ProviderUnreachable, UnknownProvider,
-    StepBudgetExhausted,
+    StepBudgetExhausted, RunContextError,
     GENERIC_FAILURE_MESSAGE,
 )
 from openstategraph.schema import (

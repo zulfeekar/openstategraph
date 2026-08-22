@@ -47,6 +47,8 @@ from openstategraph.api.streaming import (
     _stream_run,
     stop_when_client_leaves,
 )
+from openstategraph.compile.run_context import validate_run_context
+from openstategraph.errors import RunContextError
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
@@ -146,6 +148,17 @@ def run_workflow(
         resolve_model(request.model or workflow_default_model(document))
     )
 
+    # The caller's run context, refused here or not at all. A 422 rather than
+    # a 502: the *request* is wrong — a key this document does not declare, one
+    # it requires and this call omitted, or a value of the wrong declared type
+    # — and the sentence names the key and the workflow, where the library's
+    # own names a `dataclasses`-generated class nobody wrote
+    # (`organisms-first-class` 70).
+    try:
+        run_context = validate_run_context(document, request.context, slug=slug)
+    except RunContextError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     audience = resolve_audience(request.audience)
@@ -175,6 +188,8 @@ def run_workflow(
             checkpointer=services.checkpointer_for(document.get("settings"), slug),
             store=services.memory_store,
         )
+        # `None` means *pass no argument at all* — see `validate_run_context`.
+        supplied = {"context": run_context} if run_context is not None else {}
         final = graph.invoke(
             {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
             {
@@ -186,6 +201,7 @@ def run_workflow(
                     "workflow_slug": slug or "",
                 },
             },
+            **supplied,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
@@ -393,6 +409,17 @@ def run_workflow_stream(
         resolve_model(request.model or workflow_default_model(document))
     )
 
+    # The caller's run context, refused here or not at all. A 422 rather than
+    # a 502: the *request* is wrong — a key this document does not declare, one
+    # it requires and this call omitted, or a value of the wrong declared type
+    # — and the sentence names the key and the workflow, where the library's
+    # own names a `dataclasses`-generated class nobody wrote
+    # (`organisms-first-class` 70).
+    try:
+        run_context = validate_run_context(document, request.context, slug=slug)
+    except RunContextError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
     audience = resolve_audience(request.audience)
@@ -446,6 +473,7 @@ def run_workflow_stream(
                 audience,
                 document,
                 services.store,
+                run_context,
             ),
             http.receive,
         ),

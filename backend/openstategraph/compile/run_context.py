@@ -69,12 +69,12 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from openstategraph.errors import DocumentError
+from openstategraph.errors import DocumentError, RunContextError
 from openstategraph.run_identity import RUN_IDENTITY_KEYS
 
 #: Where a document declares it — a sibling of `model` and `recursionLimit`.
@@ -338,3 +338,219 @@ def mint_context_schema(document: Any) -> type | None:
                 )
             )
     return dataclasses.make_dataclass(CONTEXT_SCHEMA_NAME, specs, kw_only=True)
+
+
+# --------------------------------------------------------------------------- #
+# The door — organisms-first-class/70, step 4 of the seven.
+#
+# Three supply routes and **one** validator, ours. The library's is unusable
+# and the measurement is in `tests/test_runtime_context_facts.py`: an
+# undeclared key and a missing required one are refused only as
+# `TypeError: RunContext.__init__() got an unexpected keyword argument 'zzz'`,
+# from a `dataclasses`-generated `__init__` naming a class the workflow author
+# never wrote; **no schema checks a value's type at all**, so `{"tenant": 123}`
+# against `tenant: string` is delivered as an `int`; and a run supplying
+# nothing is not refused at the door but fails as an `AttributeError` inside
+# whichever node touched `runtime.context` first, naming neither the key nor
+# the run.
+#
+# So every sentence below names the **key** and the **workflow**, and every one
+# of them is raised *before* `invoke`. The minted dataclass stays exactly where
+# 69 put it and keeps doing exactly what it did — it is the second line of
+# defence now rather than the only one.
+# --------------------------------------------------------------------------- #
+
+#: What a supplied value is called, in the words the declaration uses.
+_SUPPLIED_TYPE: dict[type, str] = {bool: "boolean", int: "number", float: "number", str: "string"}
+
+
+def workflow_label(document: Any, slug: str | None = None) -> str:
+    """What a refusal calls the workflow it is speaking for.
+
+    The slug first — it is the identity, it is what `?w=` and a mount field
+    carry, and it is the one name that addresses the package on disk. A
+    document that has no slug (a canvas the editor has not saved, which is
+    exactly what `POST /api/runs` posts) falls back to its display name, and a
+    document with neither says *this workflow*, because a refusal that names an
+    empty string is worse than one that names nothing.
+    """
+    if slug:
+        return str(slug)
+    name = (document or {}).get("name") if isinstance(document, dict) else None
+    return str(name).strip() if isinstance(name, str) and name.strip() else "this workflow"
+
+
+def _supplied_type_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    # `bool` before `int`: in Python `True` is an `int`, and a boolean reported
+    # as a number is the accepted-and-wrong this module exists to prevent.
+    for python_type in (bool, str, int, float):
+        if isinstance(value, python_type):
+            return _SUPPLIED_TYPE[python_type]
+    return type(value).__name__
+
+
+def _accepts(declared: str, value: Any) -> bool:
+    if declared == "boolean":
+        return isinstance(value, bool)
+    if declared == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, str)
+
+
+def validate_run_context(
+    document: Any,
+    supplied: Mapping[str, Any] | None,
+    *,
+    slug: str | None = None,
+) -> dict[str, Any] | None:
+    """The run's context, checked against the document's own declaration.
+
+    Returns the mapping to hand `invoke(context=…)`, or `None` meaning **pass
+    no argument at all** — for a workflow that declares nothing and a run that
+    supplies nothing, which is every run this platform has ever made and must
+    keep behaving exactly as it did. `None` and absent are not guaranteed to be
+    the same thing to a library we do not own, so the distinction is kept here
+    rather than flattened.
+
+    Raises `RunContextError` naming the key and the workflow. It refuses, in
+    this order, so that a caller who got several things wrong learns the most
+    structural one first:
+
+    - a run that supplied **nothing** where something was required;
+    - an **undeclared** key;
+    - a **missing required** key;
+    - a value of the **wrong declared type**, including a `number` that is not
+      finite — `Infinity` and `NaN` are not representable in JSON, so a value
+      that could not survive its own round trip is refused where it is written
+      rather than lost silently later.
+
+    Defaults are **not** filled in here. The minted dataclass carries them
+    (69), which is the one place they live; copying them into the mapping would
+    be a second spelling of the author's intent, and the two would drift.
+
+    A malformed *declaration* is not this function's business: it is already a
+    `plan.warnings` problem (67) and already exits `validate` non-zero, and 69
+    mints no schema from one. A run against such a document is validated
+    against nothing and passes through, exactly as it compiles.
+    """
+    workflow = workflow_label(document, slug)
+    values = dict(supplied or {})
+
+    if context_declaration_problems(document):
+        return values or None
+    declared = context_declaration(document)
+    by_key = {field.key: field for field in declared}
+    # `required` yields to a default, as 69 decided: a field the caller must
+    # always name even though an answer already exists makes that answer
+    # unreachable.
+    required = [f.key for f in declared if f.required and f.default is None]
+
+    if not values:
+        if required:
+            raise RunContextError(
+                f"Workflow {workflow!r} requires run context that this run supplied none of: "
+                f"{', '.join(required)}."
+            )
+        return None if not declared else (values or None)
+
+    for key in values:
+        if key in by_key:
+            continue
+        names = ", ".join(field.key for field in declared)
+        asked = f"It asks for: {names}." if names else "It asks its callers for no run context."
+        raise RunContextError(
+            f"Run context key {key!r} is not declared by workflow {workflow!r}. {asked}"
+        )
+
+    for key in required:
+        if key not in values:
+            raise RunContextError(
+                f"Run context key {key!r} is required by workflow {workflow!r}, "
+                "and this run supplied no value for it."
+            )
+
+    for key, value in values.items():
+        field = by_key[key]
+        if field.type == "number" and isinstance(value, float) and not math.isfinite(value):
+            raise RunContextError(
+                f"Run context key {key!r} is declared 'number' by workflow {workflow!r}, and "
+                "this run supplied a value that is not a finite number — Infinity and NaN "
+                "cannot survive a JSON round trip."
+            )
+        if not _accepts(field.type, value):
+            raise RunContextError(
+                f"Run context key {key!r} is declared {field.type!r} by workflow "
+                f"{workflow!r}, and this run supplied a {_supplied_type_name(value)}."
+            )
+    return values
+
+
+#: What `--context flag=value` accepts for a `boolean` field, and nothing else.
+#:
+#: Deliberately not `1`/`0`, `yes`/`no`, `on`/`off`, and emphatically not
+#: Python's own truthiness, under which the string `"false"` is `True`.
+#: `CLAUDE.md`'s law is *never promise what is not possible*, and a flag that
+#: quietly makes `false` mean true is that promise broken in the direction
+#: nobody checks. Two spellings, both obvious, everything else refused with the
+#: two words that work printed in the refusal.
+_FLAG_BOOLEANS = {"true": True, "false": False}
+
+
+def coerce_context_flags(
+    document: Any,
+    raw: Mapping[str, str],
+    *,
+    slug: str | None = None,
+) -> dict[str, Any]:
+    """`--context key=value` strings, typed by the **declaration**.
+
+    A command line carries strings and nothing else, so the type has to come
+    from somewhere. It comes from the document — never guessed from the
+    literal, which is the trap this function exists to avoid: guessing would
+    make `--context caseId=00123` an integer for one workflow and a string for
+    the next, and `--context flag=false` a non-empty and therefore true string
+    for everybody.
+
+    A key the document does not declare has no type to be read as, so it is
+    left the string it arrived as and refused by the validator with the
+    undeclared-key sentence — one door, one refusal, whichever route the value
+    came in by.
+    """
+    workflow = workflow_label(document, slug)
+    if context_declaration_problems(document):
+        return dict(raw)
+    by_key = {field.key: field for field in context_declaration(document)}
+
+    typed: dict[str, Any] = {}
+    for key, text in raw.items():
+        field = by_key.get(key)
+        if field is None or field.type == "string":
+            typed[key] = text
+            continue
+        if field.type == "boolean":
+            value = _FLAG_BOOLEANS.get(text.strip().lower())
+            if value is None:
+                raise RunContextError(
+                    f"--context {key}={text!r} is declared 'boolean' by workflow "
+                    f"{workflow!r} — write true or false. 1, 0, yes, no, on and off are "
+                    "deliberately not accepted."
+                )
+            typed[key] = value
+            continue
+        try:
+            number = float(text.strip())
+        except ValueError:
+            raise RunContextError(
+                f"--context {key}={text!r} is declared 'number' by workflow "
+                f"{workflow!r} — write a number, such as 3 or 3.5."
+            ) from None
+        if not math.isfinite(number):
+            raise RunContextError(
+                f"--context {key}={text!r} is declared 'number' by workflow {workflow!r}, and "
+                "this run supplied a value that is not a finite number — Infinity and NaN "
+                "cannot survive a JSON round trip."
+            )
+        typed[key] = int(number) if number.is_integer() and "." not in text else number
+    return typed

@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNotResumable
 from openstategraph.results import RunResult
 from openstategraph.schema import normalize_document
@@ -243,6 +244,7 @@ class CompiledWorkflow:
         user_email: str | None = None,
         session_id: str | None = None,
         recursion_limit: int | None = None,
+        context: Mapping[str, Any] | None = None,
     ) -> RunResult:
         """Run the graph once and return its answer.
 
@@ -274,12 +276,27 @@ class CompiledWorkflow:
         Both use the same names as `RunRequest`, so one vocabulary describes
         identity whichever way a run is started.
 
+        `context` is the other half, and the opposite by construction: **who
+        the run is for** is `configurable` and the server's to decide, while
+        **what the workflow asked its caller for** is `settings.context`, the
+        author's to declare and yours to fill. A plain dict, never a Python
+        type — the compiler mints the dataclass and the mapping is coerced into
+        it, so nothing here imports an artefact of a build. It is validated
+        against this document's own declaration before the graph is invoked, so
+        a key it does not declare, one it requires and you omitted, or a value
+        of the wrong declared type is a `RunContextError` naming the key and
+        the workflow rather than a `TypeError` from inside the graph naming a
+        class you never wrote (`organisms-first-class` 70).
+
         `workflow_slug` needs no argument: this object knows its own slug and
         now passes it, which is what scopes workflow memory and stamps the
         provenance of an app-scope deposit. Before this it was dropped, so
         every workflow in a process shared `("workflow-memory", "unsaved")`.
         """
         thread = thread_id or f"load-workflow-{uuid.uuid4().hex}"
+        # Before anything is built or spent, and before `invoke` can raise the
+        # library's own message from inside the graph.
+        run_context = validate_run_context(self.document, context, slug=self.slug)
         config = {
             "recursion_limit": resolve_step_budget(recursion_limit, self.document),
             "configurable": {
@@ -314,9 +331,13 @@ class CompiledWorkflow:
         # loop and inside a mounted child, which is where a run's tokens
         # actually go.
         with get_usage_metadata_callback() as usage:
+            # `None` means *pass no argument at all*, which is what every run
+            # against a workflow declaring no context has always done.
+            extra = {"context": run_context} if run_context is not None else {}
             final = self.graph.invoke(
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
                 config,
+                **extra,
             )
             # Read inside the block: the manager clears the variable on exit.
             spent = dict(usage.usage_metadata)

@@ -63,6 +63,10 @@ class TestThePrefixMatchesTheExitCode:
 
         class _Workflow:
             slug = "chained-summarizer"
+            #: `cmd_run` validates run context against the document before it
+            #: asks anything (`organisms-first-class` 70), so a stand-in for
+            #: `CompiledWorkflow` has to carry the field one really has.
+            document: dict = {}
 
             def ask(self, *_args, **_kwargs) -> RunResult:
                 return result
@@ -72,6 +76,7 @@ class TestThePrefixMatchesTheExitCode:
             package="chained-summarizer",
             question="Explain what a compiler is.",
             thread_id=None,
+            context=None,
             json=False,
         )
         assert cli.cmd_run(args) == cli.EXIT_FAILURE

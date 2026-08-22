@@ -134,15 +134,51 @@ def _drawing_only_model() -> Any:
 # commands
 
 
+def split_context_flags(pairs: Sequence[str]) -> tuple[dict[str, str], str]:
+    """`--context key=value` occurrences as a mapping, or the usage error.
+
+    **Grammar only.** Whether `acme` is a legal value for `tenant` needs the
+    document, and that question is `coerce_context_flags`' — this one answers
+    only *did they type a `key=value` pair*, which is the same question
+    argparse answers for every other flag and gets the same exit code
+    (`EXIT_USAGE`). A run's exit codes are this CLI's API: a script must be
+    able to tell "you typed it wrong" from "the workflow refused it".
+
+    A value may contain `=` — `--context filter=a=b` is a filter of `a=b` —
+    because the split is on the *first* one. A key may not: there is nothing
+    before the first `=` to be one.
+    """
+    values: dict[str, str] = {}
+    for pair in pairs or ():
+        key, separator, value = pair.partition("=")
+        if not separator:
+            return {}, f"--context expects key=value, and got {pair!r}."
+        if not key.strip():
+            return {}, f"--context expects key=value, and got {pair!r} with no key before the '='."
+        values[key.strip()] = value
+    return values, ""
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """`load_workflow(pkg).ask(question)`, and nothing else."""
     workflow = _load(args)
+    # Grammar first and the document second, because the two failures are
+    # different exit codes: a pair with no `=` is a mistyped command line
+    # (2, argparse's own), and a value the *declaration* refuses is a run that
+    # cannot start (1). Both before the graph is invoked and before a single
+    # token is spent.
+    from openstategraph.compile.run_context import coerce_context_flags
+
+    supplied, usage = split_context_flags(args.context or [])
+    if usage:
+        return _usage(usage)
+    context = coerce_context_flags(workflow.document, supplied, slug=workflow.slug)
     # The thread id is minted HERE rather than left to `ask()` so that `--json`
     # can report it: a caller who wants a follow-up turn needs the id of the
     # conversation they just had, and an id generated inside the run and thrown
     # away is an id they can never continue.
     thread_id = args.thread_id or f"openstategraph-cli-{uuid.uuid4().hex}"
-    result = workflow.ask(args.question, thread_id=thread_id)
+    result = workflow.ask(args.question, thread_id=thread_id, context=context or None)
 
     if args.json:
         print(
@@ -1406,6 +1442,15 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
     run.add_argument("--thread-id", dest="thread_id", help="continue an earlier conversation")
     run.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
+    # Repeatable, and typed by the document rather than guessed from the
+    # literal: a command line carries strings, and guessing would make
+    # `caseId=00123` a number for one workflow and a string for the next.
+    run.add_argument(
+        "--context",
+        action="append",
+        metavar="KEY=VALUE",
+        help="a run context value the workflow declares; repeat for more than one",
+    )
     run.add_argument("--json", action="store_true", help="print the whole result, not the answer")
     run.set_defaults(handler=cmd_run)
 
