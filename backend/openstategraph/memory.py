@@ -150,10 +150,13 @@ def _user_namespace() -> tuple[str, str] | None:
 #:
 #: It stopped being a namespace on 2026-08-16. As a namespace it was the exact
 #: merge ticket 01 removed from the user scope one axis over: a real, writable
-#: `("workflow-memory", "unsaved")` that every unsaved canvas — and every run
-#: over MCP, which sets `thread_id` and nothing else — wrote to and read from.
-#: Two documents that had never met shared their findings, while `save_memory`
-#: told the model it was saving a fact about *this workflow*.
+#: `("workflow-memory", "unsaved")` that every unsaved canvas — and, until
+#: ship-it 54, every run over MCP, which set `thread_id` and nothing else —
+#: wrote to and read from. Two documents that had never met shared their
+#: findings, while `save_memory` told the model it was saving a fact about
+#: *this workflow*. The MCP door now carries the slug it already holds, so a
+#: run reaching this label is one that genuinely has no package: an unsaved
+#: canvas, or a document posted inline.
 UNSAVED_SLUG = "unsaved"
 
 

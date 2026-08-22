@@ -476,6 +476,19 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   compiles against the same durable checkpointer the HTTP API uses — and
   `run_workflow` returns an `error` naming the paused `thread_id` rather than a
   blank answer. Continue it with `/api/runs/resume` or the editor.
+- **A run over MCP is bound to a workflow, but not to a person.** The four
+  identity keys a run carries are `thread_id`, `workflow_slug`, `user_email`
+  and `session_id`. This transport supplies the first two — the thread is
+  minted per call, and `workflow_slug` is the slug you named, which is what
+  scopes that package's durable memory and stamps the provenance of an
+  app-scope deposit. It supplies neither of the last two, on purpose: an MCP
+  client is a model, not a person, there is no principal resolver on this
+  transport, and the HTTP API refuses a client-supplied `user_email` for the
+  same reason. So **user-scoped memory does not bind over MCP** — `save_memory`
+  says so rather than writing into a namespace shared with everyone else who
+  did not identify. Run an inline `document` instead of a `slug` and the
+  workflow scope is unbound too: a document with no package has no slug to be
+  honest about.
 - **No rate limiting, quotas or audit log.** `run_workflow` in particular
   spends the deployer's model budget.
 - **Discovered `tool.*`/`function.*` node types are not enumerable.** They are

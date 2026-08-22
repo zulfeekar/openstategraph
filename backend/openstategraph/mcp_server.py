@@ -735,6 +735,34 @@ class WorkflowRuns:
         # properly and is reported as paused — the resume *tool* is still not
         # built (register PF-04), so the honest answer is to say the run is
         # waiting and name the thread, not to pretend it finished.
+        # **Who this run is for, in the vocabulary every other door uses**
+        # (ship-it 54). Ticket 47 taught `ask()` these four keys and taught
+        # `routes/runs.py` the same four; this door kept building `thread_id`
+        # alone, so `workflow_scope_slug()` answered `None` for a *saved*
+        # package and its ledger merged into the `"unsaved"` bucket shared by
+        # every workflow ever run over this transport.
+        #
+        # Two of the four have an honest source here and two do not, and the
+        # difference is the point rather than an omission:
+        #
+        # - `workflow_slug` is a value this call site already **holds** — it
+        #   is handed to `checkpointer_for` on the line below. Dropping it was
+        #   the defect.
+        # - `thread_id` is minted here, as it always was.
+        # - `user_email` is **left unbound on purpose**. An MCP client is a
+        #   model, not a person; the HTTP door refuses a client-supplied
+        #   `user_email` with a 422 precisely because the server determines it,
+        #   and this transport has no principal resolver. `_user_namespace()`
+        #   answers `None` for an empty value and logs it, which is the
+        #   correct, loud degradation memory ticket 01 installed. Binding a
+        #   name nobody authenticated would be worse than not binding one.
+        # - `session_id` scopes thread *listing*, which is a browser-tab
+        #   concept. There is no session here to name.
+        #
+        # They are still written, as empty strings, rather than omitted: the
+        # key set is what a reader compares across doors, and an absent key is
+        # indistinguishable from a forgotten one. That comparison is a test —
+        # `tests/test_every_run_door_carries_identity.py`.
         thread_id = f"mcp-{uuid.uuid4().hex}"
         try:
             graph = compiler.build(
@@ -748,7 +776,15 @@ class WorkflowRuns:
             )
             final = graph.invoke(
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
-                {"recursion_limit": limit, "configurable": {"thread_id": thread_id}},
+                {
+                    "recursion_limit": limit,
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "session_id": "",
+                        "user_email": "",
+                        "workflow_slug": str(slug or ""),
+                    },
+                },
             )
         except Exception as exc:  # noqa: BLE001 — errors are data to the client
             return {"error": f"{type(exc).__name__}: {exc}", "findings": []}
