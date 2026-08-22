@@ -4,6 +4,8 @@ import {
   deletedMessage,
   duplicateNameConfirmation,
   publishedMessage,
+  rowActionHint,
+  rowStatusHint,
   unpublishedMessage,
 } from './consequences';
 
@@ -84,5 +86,29 @@ describe('unpublishedMessage', () => {
     expect(text).not.toContain('/chat picker');
     // The fear this sentence exists to answer: unpublish is not delete.
     expect(text).toMatch(/nothing is deleted|files are untouched|folder is untouched/i);
+  });
+});
+
+describe('rowStatusHint', () => {
+  it('says who can see it, in the shared plain words — never the internal names', () => {
+    expect(rowStatusHint(true)).toContain('chat app');
+    expect(rowStatusHint(false)).toContain('chat app');
+    for (const text of [rowStatusHint(true), rowStatusHint(false)]) {
+      expect(text).not.toContain('/chat picker');
+      expect(text).not.toContain('Auto routing');
+    }
+  });
+});
+
+describe('rowActionHint', () => {
+  it('names the audience the button affects, not the internal surfaces', () => {
+    expect(rowActionHint(true)).toContain('chat app');
+    expect(rowActionHint(false)).toContain('chat app');
+    for (const text of [rowActionHint(true), rowActionHint(false)]) {
+      expect(text).not.toContain('/chat picker');
+      expect(text).not.toContain('Auto routing');
+    }
+    // Unpublish still says nothing is deleted (ship-it 39's own worry).
+    expect(rowActionHint(true)).toMatch(/nothing is deleted/i);
   });
 });

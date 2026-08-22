@@ -66,6 +66,36 @@ export function duplicateNameConfirmation(name: string, existingSlugs: readonly 
   );
 }
 
+/**
+ * The Workflows panel row's own tooltips — the badge and the Publish/Unpublish
+ * button, both on the same row.
+ *
+ * `ship-it` 53: after 52 fixed the toast, this row was the third caller still
+ * spelling the fact for itself — `'Visible in the customer /chat picker and
+ * Auto routing'` on the badge, `'/chat picker'` twice more on the button —
+ * where the badge in the toolbar (`publishAffordance.ts`) and the toast
+ * (above) had already converged on `CHAT_APP_AUDIENCE`.
+ *
+ * Short on purpose: this list shows many rows at once, unlike the toolbar
+ * badge or the toast, which each speak about one workflow. The row's own
+ * Publish/Unpublish button already carries the verb; the tooltip's job is
+ * only to say who is affected, not to re-argue the lifecycle rule the
+ * toolbar's hint (`publishAffordance.ts`) already carries in full for the
+ * open document.
+ */
+export function rowStatusHint(published: boolean): string {
+  return published
+    ? `Published — ${CHAT_APP_AUDIENCE} can find it in their list.`
+    : `Draft — ${CHAT_APP_AUDIENCE} never see this until you publish.`;
+}
+
+/** The row's Publish/Unpublish button tooltip — the same audience, the verb. */
+export function rowActionHint(published: boolean): string {
+  return published
+    ? `Back to draft — ${CHAT_APP_AUDIENCE} stop seeing it. Nothing is deleted.`
+    : `Publish it, so ${CHAT_APP_AUDIENCE} can find it in their list.`;
+}
+
 /** The toast after a delete — the same terms the confirm used. */
 export function deletedMessage(name: string): string {
   return `Deleted: ${name} — its folder is gone from workflows/.`;

@@ -46,6 +46,8 @@ import {
   deleteConfirmation,
   deletedMessage,
   publishedMessage,
+  rowActionHint,
+  rowStatusHint,
   unpublishedMessage,
 } from './consequences';
 import { examplesShelfStartsOpen, rememberExamplesShelf } from './examplesShelf';
@@ -461,11 +463,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                           ? 'workflow-manager__badge workflow-manager__badge--published'
                           : 'workflow-manager__badge'
                       }
-                      title={
-                        wf.published
-                          ? 'Visible in the customer /chat picker and Auto routing'
-                          : 'Draft — not visible in /chat until published'
-                      }
+                      title={rowStatusHint(wf.published)}
                     >
                       {wf.published ? 'Published' : 'Draft'}
                     </span>
@@ -492,11 +490,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                       disabled={busy}
                       // The rule taught where the verb is, rather than after
                       // the fact: a draft never appears in /chat.
-                      title={
-                        wf.published
-                          ? 'Back to draft — out of the /chat picker. Nothing is deleted.'
-                          : 'Put it in the /chat picker for customers. It is a draft until you do.'
-                      }
+                      title={rowActionHint(wf.published)}
                       onClick={() => void handleSetPublished(wf.slug, wf.name, !wf.published)}
                       icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
                     >
