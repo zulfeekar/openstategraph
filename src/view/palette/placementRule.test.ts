@@ -96,4 +96,21 @@ describe('the palette’s placement rule', () => {
     expect(howto).toMatch(/Drag any of these onto the canvas/);
     expect(howto).toMatch(/Tab to one and press Enter/);
   });
+
+  it('states the rule on arrival, and stands down while searching', () => {
+    // The gate nothing pinned. `ship-it/57`: an e2e spec typed `Note` into the
+    // search box and *then* asked for this paragraph, so it was red for eight
+    // days against a rule no test named — and CI, which had not run since
+    // 2026-08-16, was the first thing to execute it. The copy was pinned above;
+    // *when the copy is shown* was not, which is the half a browser-level spec
+    // actually depends on.
+    //
+    // A filtered palette is a lookup, not a first visit, so the howto is a
+    // first-visit affordance. Asserting the gate rather than merely its
+    // presence: removing `!searching` must go red here, not only in e2e.
+    const body = rowSource('Palette');
+    const at = body.indexOf('<p className="palette-howto">');
+    expect(at, 'the howto paragraph').toBeGreaterThan(-1);
+    expect(collapsedWhitespace(body.slice(0, at))).toMatch(/\{!searching \? \($/);
+  });
 });

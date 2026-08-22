@@ -150,15 +150,25 @@ test('the palette adds a node from the keyboard', async ({ page }) => {
 test('a plain click on a palette row places nothing', async ({ page }) => {
   // The complaint, twice over: "on click it appears on the canvas is not
   // correct". A click aims at nothing, so it places nothing — and the palette
-  // now says so in its own header rather than in a source comment.
+  // now says so in its own body rather than in a source comment.
+  //
+  // **The howto is read on arrival, and that ordering is the fix for
+  // `ship-it/57`.** This assertion used to sit at the end, after the search
+  // box had been filled — and the palette hides the paragraph while searching
+  // on purpose, because a filtered palette is a lookup rather than a first
+  // visit. So it asked for an element the product had correctly removed, and
+  // failed on every runner from the day it was written (`bc6151f`) until CI
+  // next ran. Nothing is weakened here: the same sentence is still required,
+  // and the gate that hides it is now required too.
+  await expect(page.locator('.palette-howto')).toContainText('Drag any of these');
   await page.getByPlaceholder('Search nodes…').fill('Note');
+  await expect(page.locator('.palette-howto')).toHaveCount(0);
   const before = await page.locator('[data-node-id]').count();
   await page.locator('.palette button[draggable]').first().click();
   // Given a moment to be wrong in: a placement lands a frame or two later, so
   // an immediate read would pass even if the click still placed.
   await page.waitForTimeout(300);
   expect(await page.locator('[data-node-id]').count()).toBe(before);
-  await expect(page.locator('.palette-howto')).toContainText('Drag any of these');
 });
 
 test('two keystrokes make two nodes you can both see', async ({ page }) => {
