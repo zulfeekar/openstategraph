@@ -31,7 +31,16 @@ from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 
 #: `configurable` key -> the label the model sees. Ordered: who, then which
 #: conversation, then where — the order a sentence would want them in.
-_FIELDS = (
+#:
+#: Public because it is the **one place the four run-identity keys are named**.
+#: `compile/run_context.py` reads it to refuse a `settings.context` declaration
+#: that tries to name one: `configurable` is who the run is *for*, decided by
+#: the server, and `context` is what the workflow asked its caller for. A
+#: second list of these keys somewhere else is a second chance for one of them
+#: to drift. `organisms-first-class/68` moves it onto a `run_identity`
+#: accessor together with the three hand-rolled `configurable` reads; until
+#: then this tuple is that place, under a name another module may say.
+RUN_IDENTITY_FIELDS: tuple[tuple[str, str], ...] = (
     ("user_email", "user"),
     ("session_id", "session"),
     ("thread_id", "conversation (thread) id"),
@@ -74,7 +83,7 @@ class SessionIdentityTool(BaseTool):
         configurable = _configurable()
         known = [
             f"- {label}: {str(configurable.get(key) or '').strip()}"
-            for key, label in _FIELDS
+            for key, label in RUN_IDENTITY_FIELDS
             if str(configurable.get(key) or "").strip()
         ]
         if not known:

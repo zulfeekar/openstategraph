@@ -1,11 +1,24 @@
 # A workflow declares what its runs carry
 
-**Status: designed, not built.** `organisms-first-class/41`, adopted from
-ticket 19's owner decision (2026-08-15). The build is split into seven tickets,
-listed at the end, in the order they must land. Nothing in this document is
-implemented; the only code it shipped with is
-`backend/tests/test_runtime_context_facts.py`, which pins the library facts it
-rests on.
+**Status: step 1 of 7 built; the rest is prose.** `organisms-first-class/41`,
+adopted from ticket 19's owner decision (2026-08-15). The build is split into
+seven tickets, listed at the end, in the order they must land.
+
+**Ticket 67 has landed** (2026-08-22). The *declaration* is real: a document
+can say what its runs carry, an ill-formed declaration is refused by
+`openstategraph validate` with a non-zero exit, and a declaration naming one of
+the four run-identity keys is refused in any casing. Nothing consumes it — no
+schema is minted, no value is supplied and nothing reads one — so a workflow
+declaring run context today behaves exactly as it did yesterday. The sections
+below are marked accordingly: **[BUILT]** for what 67 shipped, and everything
+else is still a plan.
+
+The code it shipped with is `backend/tests/test_runtime_context_facts.py`,
+which pins the library facts it rests on, plus
+`backend/openstategraph/compile/run_context.py`,
+`backend/tests/test_run_context_declaration.py`,
+`src/core/model/contracts/workflow.ts` and
+`src/core/serialization/runContextDeclaration.test.ts`.
 
 ## Problem
 
@@ -21,7 +34,8 @@ same for every run.
 
 LangGraph has the channel: `StateGraph(state_schema, context_schema=…)`, a
 value supplied as `invoke(..., context=…)` and read as `Runtime[Ctx].context`.
-This platform passes it nowhere — pinned by
+This platform passes it nowhere — still true after 67, which builds a
+declaration and no runtime, and still pinned by
 `TestNothingHereUsesItYet::test_no_compiler_path_declares_a_context_schema`,
 which walks all 148 modules of `openstategraph/` for the string `context_schema=`
 and today finds none. `generated_module_contract.py` already records the same
@@ -80,7 +94,7 @@ unchanged.
 
 ## Decision
 
-### The declaration is data, in `settings`
+### The declaration is data, in `settings` — **[BUILT, ticket 67]**
 
 A workflow declares its context in `document.settings.context`, an **ordered
 list** of field descriptors:
@@ -124,7 +138,7 @@ list** of field descriptors:
   precisely so a sibling of `recursionLimit` lands without a second place
   settings get written.
 
-### A run supplies values by three routes, all JSON
+### A run supplies values by three routes, all JSON — *not built (70)*
 
 | route | shape |
 | --- | --- |
@@ -140,7 +154,7 @@ and the workflow, not a synthesised Python class. `RunRequest` keeps
 `extra: "forbid"` at the top level; `context` is validated against the posted
 document's own declaration, which is the only place the truth lives.
 
-### The compiler mints a dataclass
+### The compiler mints a dataclass — *not built (69)*
 
 `WorkflowCompiler` turns the descriptor list into a `dataclass` at build time
 and passes it as `StateGraph(..., context_schema=…)`. A dataclass rather than a
@@ -150,7 +164,7 @@ nothing. Nothing reads the minted class back into the model — the compile seam
 stays one-directional, and the class is an artefact of the build, exactly like
 the compiled graph.
 
-### The read side is three doors, all of which already work
+### The read side is three doors, all of which already work — *not built (71–73)*
 
 - **A node** takes `Runtime[Ctx]` as its second parameter.
 - **A prompt** receives it as the **Context** section — generated, placed
@@ -170,7 +184,7 @@ the compiled graph.
   context and memory through `ToolRuntime`"* — by making a true version of it
   available.
 
-### How this relates to the four identity keys — the rule that keeps them apart
+### How this relates to the four identity keys — the rule that keeps them apart — **[refusal BUILT, ticket 67; the `run_identity` accessor is still 68]**
 
 They do not merge, and a declaration may not name one.
 
@@ -265,16 +279,47 @@ against the installed libraries:
   that dates this document, and the test that will announce the first build
   ticket landing.
 
+`backend/tests/test_run_context_declaration.py` (47 tests) and
+`src/core/serialization/runContextDeclaration.test.ts` (23) pin what 67 built:
+the descriptor shape and its three-value enum; that a bad `type`, a duplicate
+key, a non-finite default, a default of the wrong declared type, an unknown
+property and a mapping-instead-of-a-list are each refused with the key named;
+that every reserved key is refused in **every** casing while `threading`,
+`slug` and `user_email_address` are left alone; that the refusal reaches
+`plan.warnings` and `openstategraph validate` exits 1 on it; and the inverses —
+a document without the key round-trips byte-identically through the store and
+through the editor, an empty list is preserved and means what absence means,
+and order is the rendering contract.
+
+**Two decisions 67 made that this document had left open.** An **empty list is
+preserved rather than dropped**, and means exactly what absence means: both say
+*this workflow asks its caller for nothing*, and a serializer that helpfully
+rewrites a file nobody edited is a loss this repository has already paid for
+twice. And a bad declaration is a **`plan.warnings` problem, not a
+`Finding`** — a `Finding` names a capability a compiled graph lost, where this
+is a malformed document, the same class of thing as `plan`'s own "dropped an
+edge with an unknown endpoint". That puts it on the channel `validate` turns
+into PROBLEMS FOUND and a non-zero exit, which is the honest answer to that
+command's one question.
+
+The reserved list is read from `prebuilt_session.RUN_IDENTITY_FIELDS` — 67
+promoted that tuple from `_FIELDS` to a public name so there is one place the
+four keys are spelled. Ticket 68 moves it onto a `run_identity` accessor; until
+then this is that place. The TypeScript half is a hand-mirror (`core/` cannot
+import Python) and is pinned against the Python one by a drift test in
+`test_run_context_declaration.py::TestTheTypeScriptMirrorDoesNotDrift`, the
+same instrument `RuntimeClient.ts` is held to.
+
 **Prose, unpinned, because it describes a thing that does not exist yet:** the
-descriptor schema itself, the three supply routes, the reserved-key refusal,
-the prompt-section placement and the tool accessor. Each is a build ticket
-below and each carries its own test when it lands.
+three supply routes, the compiler's minted schema, the prompt-section placement
+and the tool accessor. Each is a build ticket below and each carries its own
+test when it lands.
 
 ## The build, in the order it must land
 
 | # | ticket | why here |
 | --- | --- | --- |
-| 67 | `settings.context` is a declared field schema | Nothing can be supplied before it can be declared. TS `core/` contract + Pydantic mirror + serializer round trip. Builds no runtime. |
+| ~~67~~ | ~~`settings.context` is a declared field schema~~ | **Landed 2026-08-22.** TS `core/` contract + Pydantic mirror + both serializer round trips + the reserved-key refusal. Builds no runtime, as designed. |
 | 68 | One `run_identity` accessor for the four keys | Settles the `memory.py` drift, and 69's reserved-key refusal needs one list to read. Pure refactor, no behaviour. |
 | 69 | The compiler mints a `context_schema` | Needs 67's schema and 68's reserved list. Ends with `TestNothingHereUsesItYet` updated rather than deleted. |
 | 70 | One validator, three supply routes | `ask(context=)`, `RunRequest.context`, `run --context`. Needs 69, or there is nothing to supply *to*. |

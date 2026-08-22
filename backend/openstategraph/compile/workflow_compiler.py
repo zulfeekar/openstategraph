@@ -41,6 +41,7 @@ from langgraph.types import RetryPolicy, Send
 
 from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
+from openstategraph.compile.run_context import context_declaration_problems
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
@@ -1392,6 +1393,13 @@ class WorkflowCompiler:
 
     def plan(self, document: dict[str, Any]) -> CompiledPlan:
         plan = CompiledPlan()
+        # What the document says its runs carry, checked before anything is
+        # wired (`organisms-first-class/67`). A declaration compiles to nothing
+        # yet — 69 is what mints a schema from it — so this is the whole of its
+        # effect on a build: a malformed one is a problem on the channel
+        # `validate` turns into a non-zero exit, and a well-formed one, or none
+        # at all, is silent.
+        plan.warnings.extend(context_declaration_problems(document))
         nodes = {n["id"]: n for n in document.get("nodes", [])}
 
         # Annotations and containers never execute, so they are not graph nodes.
