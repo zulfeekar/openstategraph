@@ -1615,3 +1615,76 @@ Claude scheduled task refetches, judges whether a change alters a verdict, and
 appends a **dated section below** rather than editing a verdict in place — an
 overwritten verdict loses the argument that produced it. Cadence and prompt:
 `.scratch/organisms-first-class/tickets/09-how-often-should-the-docs-watch-run.md`.
+
+---
+
+## 2026-08-22 — `@task` inside a mount: measured, and refused
+
+Appended, not edited in place, per the section above. It supersedes the
+*Resulting ticket* line of `/oss/python/langgraph/functional-api.mdx`
+(`organisms-first-class/40`, closed by this entry). The verdict on the
+Functional API as a compile target is unchanged and unchallenged: it is not
+one, and must never be proposed as one.
+
+**The proposal.** Wrap `_subgraph`'s child invoke — and discovered-function
+calls — in `@task`, so a `retry_policy` firing on a mount, or a resume landing
+inside one, would skip the child work already done.
+
+**What was measured**, against the installed LangGraph (1.2.10), through the
+real `_subgraph` closure and a real `WorkflowCompiler`, counting a scripted
+model's answers rather than inspecting decorators:
+
+| | child agent runs |
+| --- | --- |
+| mount node fails once, retried | **2** |
+| the same, invoke wrapped in `@task` | **2** |
+| mount node not retried | 1 |
+| `human.approval` *inside the child*: pause, then resume | **1 in total** |
+
+Two findings, and the ticket anticipated neither.
+
+**A retry is not a resume, so `@task` does not serve it.** `graph-api.mdx`
+§ *Using tasks in nodes* is precise about which boundary the cache is for:
+"Task results are checkpointed when the graph uses a checkpointer, so
+**resuming a thread** can skip completed task work inside the node." A retry
+attempt happens inside one superstep, before any checkpoint is written, so
+there is nothing to restore from — which is why row two equals row one. The
+ticket's headline case is the one case the construct cannot help with.
+
+**And the resume half is already paid for, by `checkpoint_ns`.** The child is
+invoked from inside the parent's node and inherits the parent's config,
+checkpointer included, so it is checkpointed under its own namespace and its
+finished nodes are restored like anybody else's. Pausing at an approval inside
+a mounted child and resuming costs **one** model call, not two. That is the
+same property `every-workflow-green`'s namespace work preserved for frame
+attribution, doing a second job nobody had asked it for.
+
+**The cost, had we shipped it.** `graph-api.mdx` § *Re-execution and
+idempotency*: a node that calls tasks takes on "stricter determinism rules ...
+changing task or interrupt order in code before the resume point can mismatch
+cached values". `_subgraph`'s body chooses the child's question by branching
+over router versus content sources, so its call order is not statically fixed
+— we would be adopting a determinism obligation on a body that does not
+currently owe one. It would also move a mounted package's failure behind a
+future, so an exception would surface from `.result()` rather than from the
+invoke that caused it: strictly worse attribution, for nothing.
+
+**The discovered-function half needs no measurement.** `_function` performs
+exactly one call in its node and turns a raised exception into downstream text
+rather than a run failure — there is no second operation to skip, and no retry
+to skip it on.
+
+**Verdict: refused, and pinned.**
+`backend/tests/test_a_task_boundary_on_a_mount_was_priced.py` carries all four
+measurements plus an assertion that `@task` and `langgraph.func` are absent
+from `compile/node_runtime.py`, so the construct cannot arrive quietly. The row
+that deserves to reopen this is row two: if a LangGraph release starts
+restoring task results across retry attempts, that assertion goes red and the
+price changes.
+
+**The waste is real and unaddressed, and that is honest rather than fixed.** A
+retried mount does re-run its whole child. Nothing in the Functional API
+shortens it; what would is a `cache_policy` on the mount node — a
+graph-assembly parameter, which is where `CLAUDE.md` already says retry,
+timeout and caching live. That is `organisms-first-class/34`'s ground, not
+this ticket's, and it is left there rather than smuggled in here.
