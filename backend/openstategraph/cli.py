@@ -92,11 +92,42 @@ def _usage(message: str) -> int:
     return EXIT_USAGE
 
 
-def _load(args: argparse.Namespace, *, model: Any = None) -> Any:
+def _ephemeral_state() -> dict[str, Any]:
+    """Durability for a command that compiles a graph and never runs it.
+
+    `organisms-first-class` 77. `load_workflow`'s defaults are the *run*
+    defaults, and they are right for a run: a sqlite saver and a sqlite store
+    under `state_dir()`, so a `human.approval` pause survives a restart. A
+    command that only compiles inherits them anyway, and the loader's
+    `WorkflowServices` is rooted at `directory.parent` — so `validate` on a
+    package created `.openstategraph/memory.sqlite` in whatever directory
+    happened to *contain* the package. A template data directory shipped in
+    the wheel, in the case that found this; a user's home or a checkout root
+    just as easily. **A command whose whole contract is "read this and tell me
+    what is wrong with it" must not write into the tree it was pointed at.**
+
+    Both handles, together, because the pair is the defect: `_compiler_findings`
+    already passed an `InMemorySaver` for exactly this reason and the Store —
+    the sibling default, added later — was simply not passed beside it, which
+    is what one of the two commands leaking one of the two files looked like.
+    Not `None` and not a skipped compile: `builder.compile(store=)` is handed
+    whatever this returns, so a compile-only command still exercises the same
+    assembly a run does, and an in-memory pair is what makes that free.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.store.memory import InMemoryStore
+
+    return {"checkpointer": InMemorySaver(), "store": InMemoryStore()}
+
+
+def _load(args: argparse.Namespace, *, model: Any = None, ephemeral: bool = False) -> Any:
     """The one `load_workflow` call the whole CLI shares.
 
     `model` overrides what the arguments resolve to, for the commands that
     compile a graph without ever calling one — see `_drawing_only_model`.
+    `ephemeral` is the same commands' answer to the same question about state:
+    see `_ephemeral_state`. Both default to the run's answer, so a command
+    opts *out* of durability by saying so rather than inheriting silence.
     """
     from openstategraph import load_workflow
 
@@ -105,6 +136,7 @@ def _load(args: argparse.Namespace, *, model: Any = None) -> Any:
         model=model if model is not None else getattr(args, "model", None),
         trace_file=getattr(args, "trace_file", None),
         knowledge_dir=getattr(args, "knowledge_dir", None),
+        **(_ephemeral_state() if ephemeral else {}),
     )
 
 
@@ -532,16 +564,14 @@ def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
     A package that will not load at all is a problem, not a crash: `run` would
     meet the same wall, and saying so is this command's job.
     """
-    from langgraph.checkpoint.memory import InMemorySaver
-
     from openstategraph import load_workflow
 
     try:
-        # An in-memory saver rather than the durable default: validating a
-        # package must not create a checkpoint file for a run that never
-        # happens.
+        # In-memory durability rather than the durable default: validating a
+        # package must not create a checkpoint file — or a memory database —
+        # for a run that never happens. See `_ephemeral_state`.
         workflow = load_workflow(
-            package, model=_drawing_only_model(), checkpointer=InMemorySaver()
+            package, model=_drawing_only_model(), **_ephemeral_state()
         )
     except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
         return ([f"this package could not be compiled: {_terminal_message(exc)}"], [])
@@ -647,8 +677,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_graph(args: argparse.Namespace) -> int:
     """Mermaid **text**, on stdout. Never `draw_mermaid_png()`, which would post
-    the user's graph to a third-party API."""
-    print(_load(args, model=_drawing_only_model()).mermaid(xray=args.xray))
+    the user's graph to a third-party API.
+
+    Drawing-only in both senses: no model is built (`_drawing_only_model`) and
+    no state file is opened (`_ephemeral_state`). It compiles a graph it will
+    never invoke, so it wrote both a checkpoint database and a memory database
+    beside the package it was asked to draw — `organisms-first-class` 77."""
+    print(_load(args, model=_drawing_only_model(), ephemeral=True).mermaid(xray=args.xray))
     return EXIT_OK
 
 

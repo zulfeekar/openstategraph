@@ -461,6 +461,14 @@ warnings, attempts, thread id — which is what you want when the answer is
 wrong. Exit codes are fixed (`0` ok, `1` failure, `2` usage, `3` a missing
 extra), so `openstategraph validate` is a CI gate as it stands.
 
+`validate` and `graph` compile and never run, and since
+`organisms-first-class/77` they write **nothing**: no checkpoint database, no
+memory database, nowhere. Both used to inherit the *run* defaults, so pointing
+one at a package created `.openstategraph/` in whatever directory happened to
+contain it — a checkout root, a home directory, or (the case that found this) a
+data directory shipped inside the wheel. A run still gets both files, under
+`OPENSTATEGRAPH_STATE_DIR` when it is set.
+
 Without installing at all, every command is
 `PYTHONPATH=backend python3 -m openstategraph.cli …`.
 
