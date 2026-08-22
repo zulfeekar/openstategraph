@@ -14,6 +14,7 @@ Start with what you came here to do.
 | **understand what I am drawing** | [On the canvas](on-the-canvas.md) — the answers you need before the first drag: what a workflow is, the atom/molecule/organism tiers, how a revision loop is two edges, what a mount does (and why the Team card is gone), and why a template is a copy. Plus a glossary | [Patterns](patterns.md) |
 | **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run the Chinook Assistant, ask it something in `/chat`. Or skip the clone: `openstategraph examples copy sql-qa` then `openstategraph run workflows/sql-qa "…"` — the gallery ships **inside the wheel**, and `workflows/` does not | [Patterns](patterns.md) |
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
+| **wire it into an app I already own** | [Wiring a workflow into your app](wiring-it-in.md) — the two integration shapes and how to tell which you are in, a runnable `.astream_events()` → SSE loop for the embedded one, the four `configurable` identity keys in one table for both, and the consumer's half of the memory model | [The HTTP API](api.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
 | **measure whether my workflow is any good** | [Evaluation](evaluation.md) — `openstategraph eval`, execution accuracy (the metric Spider and BIRD report) and why it is not string comparison, how to add a case to a golden dataset, and how to read a regression | [Testing a second brain](second-brain.md) |
 | **check that my workflow's knowledge is right** | [Testing a second brain](second-brain.md) — what a project-level second brain is, what to build and read, how to tell a *stale* doc from a *wrong* one, the ablation that says whether the store earns its place, and the three checks worth pinning in a test | [`decisions/knowledge-architecture.md`](decisions/knowledge-architecture.md) |
@@ -40,7 +41,9 @@ is the only place the knowledge store's verification procedure is written down;
 [stability](stability.md) is the only
 place a promise is made about them; [the HTTP API](api.md) is the only place
 the SSE event vocabulary is written down; [deploying](deploying.md) is the only
-place authentication, the worker ceiling and the reverse proxy are explained.
+place authentication, the worker ceiling and the reverse proxy are explained;
+[wiring it in](wiring-it-in.md) is the only place the identity keys are
+collected for both integration shapes at once.
 
 ## The one idea underneath all of it
 

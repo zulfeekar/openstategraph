@@ -780,6 +780,12 @@ answer, drop to `.graph` — it is a plain compiled LangGraph object, so
 `.stream()`, `.astream_events()`, `.get_state()` and interrupt/resume are all
 right there.
 
+**Streaming that into your own frontend is its own page.**
+[Wiring a workflow into your app](wiring-it-in.md) has the worked
+`.astream_events()` loop — what to seed, which event carries the finished
+state, and what `ask()` was doing for you that the loop now has to do — plus
+the four `configurable` identity keys in one table.
+
 ### What you actually install
 
 The runtime dependencies are declared in
