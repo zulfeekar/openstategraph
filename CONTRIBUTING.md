@@ -73,7 +73,8 @@ someone can set, see and revoke is the defect ticket 02 closed.
 ```bash
 npm run verify              # tsc + eslint + prettier + vitest
 python -m pytest -q         # FROM THE REPO ROOT. live-API tests: pytest -m live
-cd backend && python -m ruff check . && python -m mypy
+python -m ruff check backend   # ALSO from the repo root — see below
+cd backend && python -m mypy
 ```
 
 **Typecheck with `npm run typecheck` (`tsc -b`), never with `npx tsc
@@ -89,12 +90,41 @@ Only `tsc -b` follows the project references to `tsconfig.app.json` and
 is what declares `testpaths = workflows backend` and puts the example
 workflow's `tools`/`functions` on `sys.path`. `cd backend && pytest` never
 reads it, so it silently runs 49 fewer tests — the entire `workflows/` half,
-which CI does run. `ruff` and `mypy` are the opposite: both read
-`backend/pyproject.toml` and want to be run from `backend/`.
+which CI does run. `mypy` is the opposite: it reads
+`backend/pyproject.toml` and wants to be run from `backend/`.
+
+**`ruff` is neither, and getting it wrong looks like success.** CI runs
+`python -m ruff check backend` **from the repo root**, and that is the spelling
+to match. Run it from `backend/` and the path does not exist, so you get
+`backend:1:1: E902 No such file or directory` — one error, no files linted, and
+nothing that reads like "your lint is broken". Scoping to the files you touched
+has the same shape: two sessions reported "ruff clean on the files I touched"
+on a tree carrying 22 violations (`organisms-first-class` 47). Ruff finds its
+config by walking up from each file, so the root spelling configures itself
+correctly; if you must run it from `backend/`, the equivalent is
+`python -m ruff check openstategraph tests`.
+
+**Ruff's version is pinned** — `ruff==0.14.10` in `backend[dev]`, and `ci.yml`
+installs no second copy. Do not install a floating one beside it: an unpinned
+linter is a gate that can go red with no commit in between. Raising the pin is a
+deliberate commit.
 
 `mypy` is the backend's counterpart to `tsc`: its settings live in
-`backend/pyproject.toml` and it is clean today, so any error it reports is
-yours. It is scoped to `openstategraph/` — `tests/` is deliberately outside it.
+`backend/pyproject.toml`, and it is scoped to `openstategraph/` — `tests/` is
+deliberately outside it.
+
+It is **not** clean today: it reports **3 errors**, tracked as
+`organisms-first-class` 48. This paragraph claimed "clean today, so any error it
+reports is yours" while four stood, which is the failure mode this repository
+keeps correcting in its own prose — a number stated in prose has no way to fail.
+Until 48 closes, compare against that count rather than against zero.
+
+The lint gate has the pin prose cannot give it:
+`backend/tests/test_the_lint_gate_actually_runs.py` runs `ruff check backend`
+inside `pytest`, so a violation costs one test run to notice. That exists
+because CI last executed on 2026-08-16 and roughly 180 commits landed behind it
+(`organisms-first-class` 49) — **do not read a green CI badge as a statement
+about the current tree.**
 
 TDD is the house style: tests land with (ideally before) the change.
 
