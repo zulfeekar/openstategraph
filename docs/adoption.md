@@ -400,10 +400,18 @@ answers with nothing did not fail either. *"Something went wrong"* means
 `RunResult.failures`, **not** `.warnings`: a run's warnings also carry reports
 about how the answer was reached — a node that produced nothing, a grader that
 ran out of attempts, a `revise` verdict with no edge — and those are printed
-on stderr without ever changing the exit code. `validate` fails on any finding,
-which since production-ready 53 includes a **mount naming a package that is not
-in the workflows root** — checked recursively, so a typo two packages down is
-caught before the run is.
+on stderr without ever changing the exit code.
+
+`validate` compiles the package and prints **every** compiler finding, which
+since `organisms-first-class` 66 is what that command's own docstring had
+always claimed and had never done. It **fails on a failure-classed one** — a
+claim that the graph cannot do what it was drawn to do, which is exactly the
+question `validate` asks — and prints a **report-only** one under `Notes:`
+below the verdict, where it can move no exit code. Since production-ready 53
+the failures include a **mount naming a package that is not in the workflows
+root** — checked recursively, so a typo two packages down is caught before the
+run is. Of the packages this repository ships, exactly one carries a finding at
+all and it is a report; every one of them still exits 0.
 
 > **Until the wheel is on PyPI** (see *Be honest about the install*, below),
 > `openstategraph` lands on your `PATH` when you `pip install -e

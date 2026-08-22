@@ -452,11 +452,81 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return EXIT_OK if scorecard.meets(args.threshold) else EXIT_FAILURE
 
 
+def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
+    """What the compiler noticed while building this package: (problems, notes).
+
+    `organisms-first-class` 66. This docstring used to be a lie by omission —
+    the command said "the compiler's own plan **and findings**" while reading
+    `plan.warnings` and nothing else, so not one of the twelve `Finding` kinds
+    had ever reached it. A document whose second Output bypassed the guardrail
+    the rest of it kept printed `VALID`; `run`, one command later, printed the
+    sentence twice. The command a person uses *before* shipping was the one
+    that could not see them.
+
+    The findings are recorded while the graph is **built**, not while it is
+    run, so collecting them costs a compile and no model — the same
+    drawing-only stand-in `graph` uses, so this stays the zero-token gate a
+    script runs before a run costs anything, on a machine with no credential.
+    (One recording site is genuinely run-time — the injection-screening gap
+    inside `_agent`'s per-skill `agent_for` closure — so that one cause of
+    `CAPABILITY_FAILED` cannot appear here. Its kind still can, from the
+    several build-time sites that record it.)
+
+    **The split is `REPORT_ONLY`'s, read at this surface rather than restated
+    at it.** A failure-classed finding is a claim that the graph cannot do
+    what it was drawn to do, which is exactly `validate`'s one question — is
+    this ready to run **here** — so it is a *problem* and moves the exit code,
+    the thing `failure_warnings()` was built for. A report is advice about the
+    drawing; `8bda508`'s rule is that it may never move an exit code, and
+    `support-triage` ships an unwired grader on purpose, so the rule has a
+    real package guarding it.
+
+    Measured before committing to that: of the 32 shipped packages (23
+    examples, 9 workflows) exactly one carries a finding at all, and it is the
+    report-only one — so **no shipped package's exit code moved**. Two members
+    on the failure side are not settled calls and now reach an exit code for
+    the first time: `UNENFORCED_OUTCOME` and `UNGUARDED_EXIT`, both about how
+    a document is drawn rather than about a lost capability.
+    `workflow-gallery` 61 carries that argument and owns any reclassification;
+    this command deliberately holds no opinion of its own, so moving a member
+    there moves it here with no edit.
+
+    A package that will not load at all is a problem, not a crash: `run` would
+    meet the same wall, and saying so is this command's job.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from openstategraph import load_workflow
+
+    try:
+        # An in-memory saver rather than the durable default: validating a
+        # package must not create a checkpoint file for a run that never
+        # happens.
+        workflow = load_workflow(
+            package, model=_drawing_only_model(), checkpointer=InMemorySaver()
+        )
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        return ([f"this package could not be compiled: {_terminal_message(exc)}"], [])
+    try:
+        failures = list(workflow.failure_warnings)
+        blame = set(failures)
+        return (failures, [w for w in workflow.warnings if w not in blame])
+    finally:
+        workflow.close()
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     """The compiler's own plan and findings, via the seam MCP already uses.
 
     `prebuilt_architect.ValidateWorkflowTool` — not a second validator. Two
-    validators is how a document passes one gate and fails the other.
+    validators is how a document passes one gate and fails the other. The
+    findings that seam cannot see, because they are recorded by a *build*
+    rather than by a plan, come from `_compiler_findings` below.
+
+    A developer surface, and the sentences say so — they name node ids, tool
+    types and package slugs. `api/audience.py` redacts those for a customer
+    reading a run; nobody reaches this command except by having the package on
+    their disk.
     """
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
@@ -507,18 +577,34 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # reporting it under a VALID heading (which is the shape ticket 53 removed
     # from this command one paragraph above).
     tools = unresolved_tool_bindings(document, manifest.parent)
-    if mounts or tools:
+    # The third thing the in-memory plan cannot answer, and the largest of them
+    # (`organisms-first-class` 66): everything the compiler noticed while
+    # actually building the graph. Only for a real package — `validate` also
+    # takes a bare document file, and there is nothing to compile without the
+    # `tools/`, `functions/` and sibling packages a folder carries.
+    findings, notes = (
+        _compiler_findings(manifest.parent) if manifest.name == "workflow.json" else ([], [])
+    )
+    found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
+    # `plan.warnings` reaches this command twice — through the seam above and
+    # again on `failure_warnings` — and one problem said once is the point.
+    findings = [f for f in findings if f not in found]
+    problems = [*found, *mounts, *tools, *findings]
+    topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
+    if problems:
         # Folded into the verdict rather than printed after it: one command,
-        # one answer. A VALID followed by a list of problems is the shape this
-        # ticket is about.
-        found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
-        topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
-        report = "\n".join(
-            ["PROBLEMS FOUND:", *(f"- {p}" for p in (*found, *mounts, *tools)), "", topology]
-        )
+        # one answer. A VALID followed by a list of problems is the shape
+        # ticket 53 removed from this command.
+        report = "\n".join(["PROBLEMS FOUND:", *(f"- {p}" for p in problems), "", topology])
+    if notes:
+        # Under their own heading, below the verdict, because that is what a
+        # note *is*: a report cannot move the exit code, so printing one among
+        # the problems would mean a reader could not tell from the page which
+        # line failed their CI.
+        report = "\n".join([report, "Notes:", *(f"- {n}" for n in notes), ""])
 
     print(report)
-    return EXIT_OK if verdict.ok and not mounts and not tools else EXIT_FAILURE
+    return EXIT_FAILURE if problems or not verdict.ok else EXIT_OK
 
 
 def cmd_graph(args: argparse.Namespace) -> int:

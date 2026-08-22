@@ -244,9 +244,9 @@ mount has always done:
   over a workflow that holds an approval anywhere inside it is a compile-time
   finding, printed as a warning when the workflow is loaded, before the run
   reaches the gate. It is advice and not a refusal — the document runs, pauses
-  and answers, and no exit code moves. (`openstategraph validate` does not
-  print it: that command reports the compiler's *plan* problems, and no
-  finding of this kind has ever reached it.)
+  and answers, and no exit code moves. (`openstategraph validate` prints it
+  too, since `organisms-first-class` 66 — under **Notes:**, below the verdict,
+  which is where a finding that cannot move an exit code belongs.)
 
   (An earlier version of this line said such a child "cannot pause". That is
   what LangGraph documents about a stateless *subgraph*, and it is not what
