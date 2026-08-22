@@ -42,6 +42,7 @@ from langgraph.types import RetryPolicy, Send
 from openstategraph.abc.orchestrator import archetype_key, default_worker_node
 from openstategraph.errors import GENERIC_FAILURE_MESSAGE, OpenStateGraphError  # noqa: F401
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
+from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
 
 #: `TimeoutPolicy` was added in `langgraph>=1.2`.
@@ -1229,6 +1230,122 @@ class CompiledPlan:
     entry: list[str] = field(default_factory=list)
     exits: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+#: How far the budget walk below will follow a chain before it gives up.
+#:
+#: "Longest path" is unbounded the moment the tail contains a cycle, and a
+#: `pass` branch may legally close one — so this is a capped walk rather than
+#: a graph algorithm, as `organisms-first-class` 59 asked for. Comfortably
+#: larger than any drawing a person lays out by hand, and small enough that a
+#: pathological one answers in microseconds instead of hanging.
+STEP_BUDGET_WALK_CAP = 32
+
+
+def _plan_destinations(plan: CompiledPlan) -> dict[str, list[str]]:
+    """Every node a node can hand to, whatever kind of edge does the handing.
+
+    Static edges, conditional branch destinations and `Send` fan-out targets
+    all cost the same thing — one superstep on the way past — so the walk
+    does not care which is which.
+    """
+    onward: dict[str, list[str]] = {}
+    for source, target in plan.edges:
+        onward.setdefault(source, []).append(target)
+    for source, branches in plan.conditional.items():
+        for target in branches.values():
+            onward.setdefault(source, []).append(target)
+    for source, targets in plan.fan_out.items():
+        for target in targets:
+            onward.setdefault(source, []).append(target)
+    return onward
+
+
+def _longest_chain(
+    onward: Mapping[str, list[str]], node: str, seen: frozenset[str]
+) -> int:
+    """Supersteps from `node` onward, counting `node` itself.
+
+    Depth, not node count — a fan-out layer runs in **one** superstep however
+    wide it is, which is why the longest path is the right measure and a
+    census of the reachable set would be the wrong one.
+    """
+    if node in seen or len(seen) >= STEP_BUDGET_WALK_CAP:
+        return 0
+    seen = seen | {node}
+    return 1 + max(
+        (_longest_chain(onward, nxt, seen) for nxt in onward.get(node, ())),
+        default=0,
+    )
+
+
+def _longest_route_back(
+    onward: Mapping[str, list[str]], node: str, target: str, seen: frozenset[str]
+) -> int | None:
+    """Supersteps from `node` to `target` inclusive, or `None` if it never
+    gets there — which is what an open-ended `revise` branch looks like."""
+    if node in seen or len(seen) >= STEP_BUDGET_WALK_CAP:
+        return None
+    if node == target:
+        return 1
+    seen = seen | {node}
+    routes = [
+        found
+        for found in (
+            _longest_route_back(onward, nxt, target, seen)
+            for nxt in onward.get(node, ())
+        )
+        if found is not None
+    ]
+    return 1 + max(routes) if routes else None
+
+
+def step_budget_floor_for(plan: CompiledPlan, node_id: str) -> int:
+    """How few supersteps must be left before this grader stops revising.
+
+    `organisms-first-class` 59. `56` compared against a flat constant, and a
+    constant cannot know how far `pass` still has to travel: a grader wired to
+    a formatter, then a guardrail, then an output has three supersteps of tail
+    where `evaluator-optimizer` has one, and the run raised the very exception
+    `56` exists to remove. Raising the constant instead was priced and
+    refused — it would stop *every* loop earlier, including the one-node tails
+    that are the common case, to pay for a shape most drawings do not have.
+
+    **The question is not what the tail costs; it is what one more lap costs
+    and then the tail.** A grader looks at the budget once per lap, so a floor
+    sized only for the tail approves a lap the budget cannot pay for and the
+    run dies part way round, never offered the chance to stop. That is the
+    `revise`-side exposure, and it is real: with two nodes spliced into the
+    revise path, the same package raised at `recursion_limit=10`.
+
+    So: the longest route from `revise` back to this grader, plus the longest
+    chain from `pass` onward. On `evaluator-optimizer` that is 2 + 1 = 3 —
+    **the constant `56` measured on that drawing**, which is the argument for
+    deriving it at all. The derivation agrees with the measurement on the
+    shape the measurement was taken on, and only moves for shapes `56` never
+    saw.
+
+    `STEP_BUDGET_FLOOR` remains the floor of the floor. A grader with nothing
+    drawn on one of its branches has nothing to derive from, and a number
+    below the measured one would restore the crash.
+
+    The walk is capped rather than solved. Longest simple path is NP-hard and
+    a cycle in the tail makes it meaningless anyway; what this needs is a
+    number that is large enough and always arrives.
+    """
+    branches = plan.conditional.get(node_id) or {}
+    onward = _plan_destinations(plan)
+    lap = _longest_route_back(
+        onward, branches["revise"], node_id, frozenset()
+    ) if "revise" in branches else None
+    tail = (
+        _longest_chain(onward, branches["pass"], frozenset())
+        if "pass" in branches
+        else None
+    )
+    if lap is None or tail is None:
+        return STEP_BUDGET_FLOOR
+    return max(STEP_BUDGET_FLOOR, lap + tail)
 
 
 class WorkflowCompiler:

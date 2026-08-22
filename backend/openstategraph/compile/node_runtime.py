@@ -57,6 +57,7 @@ from openstategraph.compile.workflow_compiler import (
     GUARDRAIL_TYPE,
     CompiledPlan,
     failure_marker,
+    step_budget_floor_for,
     unrun_query_claim,
 )
 # Re-exported, not merely used: `context.py` was carved out of this module and
@@ -1982,6 +1983,12 @@ class NodeRuntime:
         revise_wired = "revise" in (plan.conditional.get(node_id) or {})
         if not revise_wired:
             self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
+        # How few supersteps this grader may see and still stop safely — one
+        # more lap, then the whole `pass` tail (`organisms-first-class` 59).
+        # Read from the plan here, at build time, for the same reason
+        # `revise_wired` is: the drawn destinations are known here and the
+        # state is known inside `run`, and neither place knows both.
+        floor = step_budget_floor_for(plan, node_id)
 
         def grader_for(skill: str) -> Grader:
             """A grader is cheap to build, so it is built per skill value.
@@ -2073,7 +2080,7 @@ class NodeRuntime:
             # when a caller invoked the compiled graph without the managed key
             # in play, and then this changes nothing.
             remaining = state.get("remaining_steps")
-            starved = isinstance(remaining, int) and remaining <= STEP_BUDGET_FLOOR
+            starved = isinstance(remaining, int) and remaining <= floor
             exhausted = judged >= cap or starved
             branch = "pass" if verdict.passed or exhausted else "revise"
 

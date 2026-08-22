@@ -65,9 +65,16 @@ NO_MODEL_MARKER = "[no model was configured for this step]"
 #: How few supersteps must be left before a cycle stops asking for another lap
 #: (`organisms-first-class` 56).
 #:
-#: A floor rather than a calculation on purpose: what a `pass` branch still
-#: has to run is a property of the drawing, and a number derived from the plan
-#: would be a second thing to keep true.
+#: **The floor of the floor**, since `organisms-first-class` 59. `56` compared
+#: against this number flat, on the argument that a derived one would be a
+#: second thing to keep true. It is a property of the drawing, and 59 measured
+#: the cost of not deriving it: a `pass` branch crossing three nodes, and a
+#: `revise` path crossing three, both raised the exception 56 exists to
+#: remove. `workflow_compiler.step_budget_floor_for` now walks the plan; this
+#: is what it falls back to when a grader has nothing drawn to derive from,
+#: and the minimum it will ever return. The derivation *reproduces* the number
+#: below on the drawing the number was measured on — one more lap (2) plus the
+#: tail (1) — which is what made deriving it safe.
 #:
 #: **Three, and the number was measured rather than copied.** The LangGraph
 #: docs' own example uses `<= 2`; that is one short here, and the run still
@@ -78,8 +85,6 @@ NO_MODEL_MARKER = "[no model was configured for this step]"
 #: shows the grader 7, 5, 3, 1, because one lap costs two supersteps — so a
 #: floor must be crossed with a step to spare rather than exactly.
 #:
-#: A `pass` tail longer than the slack this leaves can still exhaust the
-#: budget and raise. Narrower exposure than before, stated rather than implied.
 STEP_BUDGET_FLOOR = 3
 
 

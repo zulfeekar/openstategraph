@@ -124,12 +124,18 @@ class TestSilencingAModel:
 
 
 def _plan() -> Any:
-    from types import SimpleNamespace
+    """An empty *real* plan, not a namespace shaped like one.
 
-    # `conditional` because `_grader` reads it to know whether its `revise`
-    # port is wired anywhere (`workflow-gallery` 31). A stub that omits a field
-    # the production plan always has is a stub that drifts.
-    return SimpleNamespace(edges=[], skill_bindings={}, warnings=[], conditional={})
+    This was a `SimpleNamespace` carrying the four fields `_grader` happened
+    to read, with a comment warning that a stub omitting a field the
+    production plan always has is a stub that drifts. It drifted:
+    `organisms-first-class` 59 taught `_grader` to walk `plan.fan_out` too,
+    and this test broke on a change it has no opinion about. `CompiledPlan`
+    is a dataclass with a default for every field, so the empty one costs
+    nothing and cannot drift again."""
+    from openstategraph.compile.workflow_compiler import CompiledPlan
+
+    return CompiledPlan()
 
 
 def _runtime(model: Any) -> Any:

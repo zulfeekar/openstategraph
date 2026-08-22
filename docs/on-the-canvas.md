@@ -100,6 +100,15 @@ budget stop is a *report*, not a failed run: it does not change an exit code,
 and it is worded differently from the grader running out of its own attempts,
 because those are two ceilings with two different fixes.
 
+**"Barely any left" is read off the drawing, not a fixed number.** A grader
+looks at the budget once per lap, so what it needs before it may ask for
+another one is: enough supersteps for that lap, and then enough for
+everything its `pass` branch still has to cross. A grader wired straight to
+an output needs three; one wired to a formatter, then a guardrail, then an
+output needs five. That is why splicing a node into either branch does not
+make a loop start crashing again. A mount counts as one superstep like any
+other node — the mounted workflow spends its own budget, not its parent's.
+
 It belongs to the **package**, so inside a mounted instance the box — and the
 name beside it — is disabled with a line saying so. An instance's own state is
 `data.overrides`, which is keyed by a step and a field; a workflow's name and
