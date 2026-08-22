@@ -554,3 +554,128 @@ def coerce_context_flags(
             )
         typed[key] = int(number) if number.is_integer() and "." not in text else number
     return typed
+
+
+# --------------------------------------------------------------------------- #
+# The read side, door one: a node reads what the caller supplied.
+# `organisms-first-class/71`, step 5 of the seven in
+# `docs/decisions/runtime-context.md`.
+# --------------------------------------------------------------------------- #
+
+#: How an author names a declared field inside their own text: `{{tenant}}`.
+#:
+#: A **name reference and not an expression** — no operators, no calls, no
+#: dotted paths — which is portability guardrail 1 obeyed rather than skirted:
+#: a placeholder that could compute would be host-language code living in a
+#: serialised field. The key grammar is `_MINTABLE_KEY`'s, restated as an
+#: inline group rather than composed from it, because this pattern also has to
+#: match a key it will then *refuse* to substitute; a pattern that only matched
+#: mintable keys would silently leave `{{case-id}}` looking like prose.
+#:
+#: Surrounding whitespace is tolerated (`{{ tenant }}`) for the reason
+#: `CLAUDE.md` gives about reading a model's answer, applied to a human's
+#: typing: be tolerant in what you accept, strict in what you then trust — and
+#: the strictness is the next paragraph.
+_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def run_context() -> dict[str, Any]:
+    """What this run was given for the fields its workflow declared, or `{}`.
+
+    The sibling of `run_identity()`, and deliberately the same shape of answer:
+    a plain mapping, never the minted class. **The compile seam is
+    one-directional** — the dataclass is an artefact of the build, so a node
+    reads *values* out of it and nothing anywhere reads the type back. A caller
+    that received the class would have a LangGraph-shaped object to pass
+    around; a caller that receives a dict has JSON.
+
+    `{}` covers three genuinely different situations on purpose, because a node
+    can do nothing different about any of them:
+
+    - there is no runnable context at all (a unit test, a script) —
+      `get_runtime()` raises, exactly as `get_config()` does for the identity
+      accessor;
+    - the workflow declares nothing, so the compiler passed no
+      `context_schema` and `runtime.context` is `None`;
+    - the caller supplied nothing to a workflow that declares nothing.
+
+    That last pair is why this exists rather than every reader writing
+    `get_runtime().context.tenant`: measured in
+    `tests/test_runtime_context_facts.py`, a run supplying no context is **not**
+    refused at the door — `runtime.context` is `None` and the failure is an
+    `AttributeError` at whichever node touched it first, naming neither the key
+    nor the run. Ticket 70 closed the three supply doors; this closes the
+    reader's half of the same hole for the workflow that declares nothing at
+    all, which is the common case (none of the shipped packages declares one).
+    """
+    try:
+        from langgraph.runtime import get_runtime
+
+        context = get_runtime().context
+    except Exception:
+        return {}
+    if context is None:
+        return {}
+    if dataclasses.is_dataclass(context) and not isinstance(context, type):
+        # Not `dataclasses.asdict`: that deep-copies and recurses, and these
+        # values are declared scalars by construction.
+        return {f.name: getattr(context, f.name) for f in dataclasses.fields(context)}
+    if isinstance(context, Mapping):
+        return dict(context)
+    return {}
+
+
+def _spell(value: Any) -> str:
+    """One value, in the spelling the author typed at the door.
+
+    `true`/`false` rather than Python's `True`/`False`, because that is what
+    `--context dryRun=false` accepts and what JSON carries; a run whose text
+    said `True` would be showing the reader a third spelling of a value they
+    supplied in one of the other two.
+
+    An integral `number` renders without its decimal point. The same declared
+    value arrives as `3` over HTTP and as `3.0` from the CLI's `float()`, and a
+    node's output must not depend on which door the run came in by.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def render_run_context(text: str, values: Mapping[str, Any] | None = None) -> str:
+    """`text` with every `{{key}}` the run actually supplied a value for filled in.
+
+    **Everything else is left byte-identical**, and that is the whole safety
+    property. A key the workflow does not declare, a declared key this run has
+    no value for, and a `{{` that was never a placeholder at all are each
+    passed through exactly as written. The alternative — substituting an empty
+    string for what we cannot resolve — silently deletes an author's text, and
+    the surfaces this runs on are Markdown, skill instructions and prompts,
+    which legitimately contain braces.
+
+    That is `CLAUDE.md`'s two-part rule about reading tolerantly and trusting
+    strictly, pointed at a document instead of at a model: the *pattern* is
+    generous, the *substitution* is resolved against the run's declared keys
+    and nothing else.
+
+    `values` is injectable so a test can exercise the rendering without a
+    runnable context; production callers pass nothing and get the ambient run.
+    """
+    if "{{" not in text:
+        return text
+    supplied = run_context() if values is None else dict(values)
+    if not supplied:
+        return text
+
+    def _fill(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in supplied:
+            return match.group(0)
+        value = supplied[key]
+        if value is None:
+            return match.group(0)
+        return _spell(value)
+
+    return _PLACEHOLDER.sub(_fill, text)

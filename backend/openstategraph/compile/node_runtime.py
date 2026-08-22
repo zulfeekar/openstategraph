@@ -54,6 +54,7 @@ from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCa
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
 from openstategraph.compile.node_types import NodeTypeRegistry
+from openstategraph.compile.run_context import render_run_context
 from openstategraph.compile.diagnostics import (
     CompileDiagnostics,
     Finding,
@@ -1374,7 +1375,10 @@ class NodeRuntime:
         )
 
         def run(_state: RunState) -> dict[str, Any]:
-            return {"outputs": {node_id: configured}}
+            # The author's own text, so the author's own `{{key}}` slots are
+            # filled from the run's context (organisms-first-class/71). A
+            # workflow declaring nothing gets its text back byte-identical.
+            return {"outputs": {node_id: render_run_context(configured)}}
 
         return run
 
@@ -1393,7 +1397,11 @@ class NodeRuntime:
         def run(state: RunState) -> dict[str, Any]:
             from langchain_core.messages import HumanMessage
 
-            text = state.get("question") or configured
+            # `configured` is the author's text and is rendered; the
+            # question is the *caller's* words and is not. A caller who typed
+            # `{{tenant}}` typed a string, not a slot, and rendering it would
+            # let them read a value the author never chose to show.
+            text = state.get("question") or render_run_context(configured)
             # Turn boundary: wipe per-run scratch a checkpointed thread would
             # otherwise carry over (stale outputs replayed as answers, spent
             # attempts, dead decisions re-arming feedback). `messages` is

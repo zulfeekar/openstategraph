@@ -1,6 +1,6 @@
 # A workflow declares what its runs carry
 
-**Status: steps 1 to 4 of 7 built; the rest is prose.** `organisms-first-class/41`,
+**Status: steps 1 to 5 of 7 built; the rest is prose.** `organisms-first-class/41`,
 adopted from ticket 19's owner decision (2026-08-15). The build is split into
 seven tickets, listed at the end, in the order they must land.
 
@@ -254,9 +254,11 @@ withholds the *whole* schema rather than half of it, and builds. Whether 67's
 declaration validator should refuse it earlier — in both mirrors, so the editor
 says so while you type — is `organisms-first-class/74`.
 
-### The read side is three doors, all of which already work — *not built (71–73)*
+### The read side is three doors — door one built (71), the other two prose (72–73)
 
-- **A node** takes `Runtime[Ctx]` as its second parameter.
+- **A node** reads it through **`run_context()`**, the sibling of
+  `run_identity()` — **[BUILT, ticket 71]**, and *not* through a second
+  parameter, which is the one thing this section had wrong. See below.
 - **A prompt** receives it as the **Context** section — generated, placed
   before the Rules, never editable, following `bc58fc1`'s `held_tools_context`
   as the precedent for a generated block that declares itself authoritative.
@@ -273,6 +275,68 @@ says so while you type — is `organisms-first-class/74`.
   false clause `generated_module_contract.py` records — *"it reads state,
   context and memory through `ToolRuntime`"* — by making a true version of it
   available.
+
+**Ticket 71 has landed** (2026-08-22) and corrected the sentence above.
+
+**A second parameter is not available to this compiler.** `Runtime[Ctx]` as a
+node's second argument is how the library documents the read, and it is what
+`test_runtime_context_facts.py::TestTheThreeReadDoors` pins — but LangGraph's
+injection reads the *signature it is handed*, and this runtime hands it wrapped
+closures (`recording_attempts` wraps a node factory's callable in
+`(*args, **kwargs)`). 69 had already met this and used `get_runtime()` in its
+own test harness for exactly that reason. So the read is
+**`langgraph.runtime.get_runtime()`**, which was measured to work from an
+ordinary `(state)` node, and the consequence is the good one: **no node family
+grows a parameter, so reading context never becomes a family capability some
+families carry and others do not.** It is graph assembly on the write side and
+an ambient accessor on the read side, which is the cross-family boundary rule
+satisfied rather than argued around.
+
+**`run_context()` returns values, never the class.** A plain
+`dict[str, Any]`, built from `dataclasses.fields()` — so the minted class stays
+an artefact of the build, nothing reads a runtime type back into the model, and
+a reader holds JSON rather than a LangGraph-shaped object. `{}` is the answer
+to all three of *no runnable context*, *the workflow declares nothing* and
+*the caller supplied nothing*, because a node can do nothing different about
+any of them; that is the reader's half of measurement 2 above, which 70 closed
+only at the supply doors.
+
+**An author names the field they want by writing `{{key}}` in their own text.**
+The naming lives in the field schema the node already has — `input.text`'s
+`prompt`, `input.markdown` / `input.skill`'s `content`/`instruction` — so no
+new node configuration was declared, which is the DRY rule as stated. A
+placeholder is a **name reference and not an expression** (no operators, no
+calls, no paths): guardrail 1 obeyed rather than skirted.
+
+**Only the three text families render, and the choice is the point.** Those
+are the families whose entire output *is* author-written text and which have
+nowhere else to put a per-run value. The prompted families — `agent.llm`,
+`route.classifier`, `route.grader`, `orchestrate.supervisor`,
+`orchestrate.worker` — deliberately do **not**: their context arrives as 72's
+generated **Context** section with its per-field opt-in, and a second mechanism
+writing the same prompt would both duplicate the knowledge and defeat the
+opt-in that keeps an API handle away from a model.
+`TestThePromptedFamiliesAreNotRenderedHere` is what says so out loud. `function.*`
+does not, because its contract is `fn(text: str) -> str` and ticket 35 withheld
+run state from referenced code on purpose. Tools are 73.
+
+**Unresolved is left byte-identical, never blanked.** An undeclared key, a
+declared key this run has no value for, and a `{{` that was never a
+placeholder are all passed through exactly as written. Substituting an empty
+string would silently delete an author's text on surfaces — Markdown, skills,
+prompts — that legitimately contain braces.
+
+**One value, one spelling, whichever door it came by.** `true`/`false` rather
+than Python's `True`/`False`, because that is what `--context dryRun=false`
+accepts and what JSON carries; and an integral `number` renders `3` rather than
+`3.0`, because the CLI's `float()` must not be visible in an answer that the
+same value supplied over HTTP would spell differently.
+
+**Found on the way, and filed rather than fixed:
+`organisms-first-class/76`.** A mount is a closure over the child's
+`invoke()`, and LangGraph carries the parent's runtime down it — so a mounted
+child sees the **parent's** context object even when it declared its own, and
+its own defaults never materialise. Invisible until something read a value.
 
 ### How this relates to the four identity keys — the rule that keeps them apart — **[BUILT, tickets 67 and 68]**
 
@@ -432,6 +496,16 @@ declaring nothing runs at all three doors exactly as before and is passed **no
 `configurable` still carries its four keys and only those, and `RunRequest` is
 still `extra: "forbid"` with a nested value refused by the model itself.
 
+`backend/tests/test_a_node_reads_the_run_context.py` (21 tests) pins what 71
+built: a supplied value reaching a real compiled graph's answer, two callers
+getting two answers from one workflow, a declared default reaching a node, and
+a skill node rendering through the *other* builder; and the inverses — a
+workflow declaring nothing gets its text back byte-identical and its accessor
+returns `{}`, the caller's question is never rendered, an undeclared key and a
+valueless declared key are left exactly as written, an unmintable key stays
+prose, an agent's instruction is untouched, and the two channels stay separate
+inside one run.
+
 **Prose, unpinned, because it describes a thing that does not exist yet:** the
 prompt-section placement and the tool accessor. Each is a build ticket below and each carries its own
 test when it lands.
@@ -444,7 +518,7 @@ test when it lands.
 | ~~68~~ | ~~One `run_identity` accessor for the four keys~~ | **Landed 2026-08-22.** `openstategraph/run_identity.py`, four readers repointed, the reserved list moved onto it, and a census of readers beside `ac870f6`'s census of writers. Pure refactor, as designed. |
 | ~~69~~ | ~~The compiler mints a `context_schema`~~ | **Landed 2026-08-22.** `mint_context_schema` in `compile/run_context.py`, one `StateGraph(..., context_schema=…)` in the compiler, and the sentinel updated into a census of one. Supplies and reads nothing, as designed. |
 | ~~70~~ | ~~One validator, three supply routes~~ | **Landed 2026-08-22.** `validate_run_context` and `coerce_context_flags` in `compile/run_context.py`, `RunContextError` (Tier 1), `ask(context=)`, `RunRequest.context`, `run --context KEY=VALUE`. Reads nothing, as designed. |
-| 71 | Nodes read it | The first read door, and the cheapest to verify end to end. |
+| ~~71~~ | ~~Nodes read it~~ | **Landed 2026-08-22.** `run_context()` and `render_run_context()` in `compile/run_context.py`, read by `_input` and `_static_text`. `get_runtime()` rather than a second parameter; the prompted families deliberately untouched. |
 | 72 | The generated prompt **Context** section, and per-field opt-in | Needs 71 working, and needs the opt-in or a handle reaches a model. |
 | 73 | `BaseTool` context accessor, and the generated-module contract clause | Last because it corrects a *published* false clause, which should be corrected against a working mechanism rather than a planned one. |
 
