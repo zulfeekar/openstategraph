@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "name": "Classifier Router QA",
+  "savedAt": "2026-08-19T21:09:42.568657+00:00",
+  "document": {
+    "version": 3,
+    "name": "Classifier Router QA",
+    "settings": {
+      "purpose": "Pure routing: one classifier, three exclusive terminal branches, no grader and no loop."
+    },
+    "nodes": [
+      {
+        "id": "agent-general",
+        "type": "agent.llm",
+        "position": {
+          "x": 216,
+          "y": 3147
+        },
+        "size": {
+          "width": 252,
+          "height": 494
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "Answer briefly and plainly, in at most three sentences.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "General"
+      },
+      {
+        "id": "agent-world",
+        "type": "agent.llm",
+        "position": {
+          "x": 216,
+          "y": 1268
+        },
+        "size": {
+          "width": 252,
+          "height": 494
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "Answer the factual question in one or two sentences. If the answer depends on something you cannot know — the current time, today's date, a live figure — say exactly what it depends on instead of guessing a value.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "World Facts"
+      },
+      {
+        "id": "node:tool.web-fetch-1",
+        "type": "tool.web-fetch",
+        "position": {
+          "x": 378,
+          "y": 3725
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "node:tool.web-fetch-2",
+        "type": "tool.web-fetch",
+        "position": {
+          "x": 378,
+          "y": 1846
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "node:tool.web-search-1",
+        "type": "tool.web-search",
+        "position": {
+          "x": 42,
+          "y": 3725
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "node:tool.web-search-2",
+        "type": "tool.web-search",
+        "position": {
+          "x": 42,
+          "y": 1846
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "out-general",
+        "type": "output.formatted",
+        "position": {
+          "x": 830,
+          "y": 3257
+        },
+        "size": {
+          "width": 320,
+          "height": 447
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Reply"
+      },
+      {
+        "id": "out-world",
+        "type": "output.formatted",
+        "position": {
+          "x": 830,
+          "y": 42
+        },
+        "size": {
+          "width": 320,
+          "height": 3120
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Fact"
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "agent-general",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-general",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "agent-world",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-world",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.web-fetch-1",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.web-fetch-2",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-world",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.web-search-1",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-general",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.web-search-2",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "agent-world",
+          "portId": "tools"
+        }
+      }
+    ]
+  },
+  "published": false
+}

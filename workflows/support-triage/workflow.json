@@ -1,0 +1,454 @@
+{
+  "version": 1,
+  "name": "Support Triage",
+  "savedAt": "2026-08-19T07:46:52.927770+00:00",
+  "document": {
+    "version": 3,
+    "name": "Support Triage",
+    "settings": {
+      "purpose": "Every control molecule in one graph: classify the ticket, answer it on the matching desk, grade the reply, and let a person decide whether it is sent. Nothing reaches a customer without the gate."
+    },
+    "nodes": [
+      {
+        "id": "a-account",
+        "type": "agent.llm",
+        "position": {
+          "x": 1287,
+          "y": 42
+        },
+        "size": {
+          "width": 252,
+          "height": 494
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "You answer account tickets for a software company — access, seats, permissions, contact details, cancellation.\n\nWrite the reply that goes to the customer. Three sentences at most: confirm what they are asking to change, state what you can do without further authorisation, and state what you need from them if the change needs it.\n\nNever confirm an identity you have not verified, and never state a plan, seat count or renewal date they did not give you.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Account desk"
+      },
+      {
+        "id": "a-billing",
+        "type": "agent.llm",
+        "position": {
+          "x": 1287,
+          "y": 899
+        },
+        "size": {
+          "width": 252,
+          "height": 469
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "You answer billing tickets for a software company.\n\nWrite the reply that goes to the customer. Three sentences at most: acknowledge the specific charge or invoice they named, say what you will do about it, and say when they will hear back. Name a concrete next step — a correction, a refund request, an escalation — never \"we are looking into it\".\n\nYou cannot see their account, so never state a figure, a date or an invoice number they did not give you. Apologise once, in plain words, and never for more than the thing that happened.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Billing desk"
+      },
+      {
+        "id": "a-technical",
+        "type": "agent.llm",
+        "position": {
+          "x": 1287,
+          "y": 1463
+        },
+        "size": {
+          "width": 252,
+          "height": 469
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "You answer technical support tickets for a software company.\n\nWrite the reply that goes to the customer. Three sentences at most: say what you understand to be broken in their words, give the one diagnostic step most likely to narrow it down, and say what you need back from them.\n\nDo not guess a root cause, do not promise a fix date, and do not ask for anything you could work out from what they already told you.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Technical desk"
+      },
+      {
+        "id": "gate1",
+        "type": "human.approval",
+        "position": {
+          "x": 2532,
+          "y": 992
+        },
+        "size": {
+          "width": 268,
+          "height": 283
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "message": "This reply goes to a customer under your name. Approve to send it, or reject with a note saying what is wrong — the note becomes the reason on the held ticket.",
+          "timeoutSeconds": ""
+        },
+        "title": "Send to the customer?"
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "position": {
+          "x": 2075,
+          "y": 760
+        },
+        "size": {
+          "width": 268,
+          "height": 748
+        },
+        "parentId": null,
+        "data": {
+          "criteria": "- At most three sentences, addressed to the customer, no internal notes.\n- Every specific — a figure, a date, an invoice number, a plan name — must be one the customer supplied. An invented specific is the failure that matters here, because the reader cannot tell it from a real one.\n- A concrete next step, not a holding phrase.\n- No promise the company has not been asked to make: no refund confirmed, no fix date, no compensation.\n- Say plainly which of these it breaks. Your verdict is read by the person deciding whether to send it.",
+          "maxAttempts": 2,
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": [],
+          "rulesMode": "extend",
+          "tier": "react",
+          "timeoutSeconds": ""
+        },
+        "title": "Is this sendable"
+      },
+      {
+        "id": "hold1",
+        "type": "agent.llm",
+        "position": {
+          "x": 3023,
+          "y": 676
+        },
+        "size": {
+          "width": 252,
+          "height": 494
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "A reply to this ticket was written and a person refused to send it. Their note says why.\n\nWrite the internal record, never sent to the customer. Two sentences: what the ticket was about, and the reason the draft was refused, in the reviewer's own terms. No apology, no reply text, no advice — this is a record, and someone will pick the ticket up from it.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Held ticket note"
+      },
+      {
+        "id": "in1",
+        "type": "input.text",
+        "position": {
+          "x": 42,
+          "y": 984
+        },
+        "size": {
+          "width": 252,
+          "height": 300
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "prompt": "create a ticket",
+          "timeoutSeconds": ""
+        },
+        "title": "Ticket"
+      },
+      {
+        "id": "node:tool.email-send-1",
+        "type": "tool.email-send",
+        "position": {
+          "x": 940,
+          "y": 620
+        },
+        "size": {
+          "width": 252,
+          "height": 184
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": "",
+          "to": ""
+        }
+      },
+      {
+        "id": "node:tool.email-send-2",
+        "type": "tool.email-send",
+        "position": {
+          "x": 1276,
+          "y": 620
+        },
+        "size": {
+          "width": 252,
+          "height": 184
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": "",
+          "to": ""
+        }
+      },
+      {
+        "id": "node:tool.email-send-3",
+        "type": "tool.email-send",
+        "position": {
+          "x": 1612,
+          "y": 620
+        },
+        "size": {
+          "width": 252,
+          "height": 184
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": "",
+          "to": ""
+        }
+      },
+      {
+        "id": "out-held",
+        "type": "output.formatted",
+        "position": {
+          "x": 3498,
+          "y": 820
+        },
+        "size": {
+          "width": 320,
+          "height": 206
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Held for review"
+      },
+      {
+        "id": "out-sent",
+        "type": "output.formatted",
+        "position": {
+          "x": 2989,
+          "y": 1265
+        },
+        "size": {
+          "width": 320,
+          "height": 159
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Approved reply"
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "position": {
+          "x": 483,
+          "y": 610
+        },
+        "size": {
+          "width": 268,
+          "height": 1048
+        },
+        "parentId": null,
+        "data": {
+          "branches": [
+            {
+              "id": "b-billing",
+              "name": "billing"
+            },
+            {
+              "id": "b-technical",
+              "name": "technical"
+            },
+            {
+              "id": "b-account",
+              "name": "account"
+            }
+          ],
+          "fallback": "account",
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rules": "billing: an invoice, a charge, a refund, a price, a payment that failed or a subscription that renewed.\ntechnical: something in the product is broken, slow, erroring, or not doing what it says.\naccount: sign-in, access, permissions, seats, contact details, cancellation — anything about who the customer is rather than what they were charged or what broke.\n\nA ticket that mentions a wrong charge is billing even when the customer is also angry about the wait: route on what must be fixed, never on tone.",
+          "rulesMode": "extend",
+          "tier": "react",
+          "timeoutSeconds": ""
+        },
+        "title": "Which desk"
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "a-account",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "a-billing",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "a-technical",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "gate1",
+          "portId": "approved"
+        },
+        "target": {
+          "nodeId": "out-sent",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "gate1",
+          "portId": "rejected"
+        },
+        "target": {
+          "nodeId": "hold1",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "gate1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "hold1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-held",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.email-send-1",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "a-account",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.email-send-2",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "a-account",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.email-send-3",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "a-account",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-account"
+        },
+        "target": {
+          "nodeId": "a-account",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-billing"
+        },
+        "target": {
+          "nodeId": "a-billing",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-technical"
+        },
+        "target": {
+          "nodeId": "a-technical",
+          "portId": "prompt"
+        }
+      }
+    ]
+  },
+  "published": false
+}
