@@ -223,6 +223,43 @@ references and the first that moves a source-scanning test's subject.
 `graphify` was used for shape and, as step 2 recorded, still reports line
 numbers that are not the code's: it placed `RunState` nowhere near line 93.
 
+### What the emitter needs from this split (2026-08-22, `export-and-eject/02`)
+
+The carve-outs above were done for length and for bounded context. They also,
+without anyone aiming at it, produced most of what the eject-to-Python emitter
+needs — and measuring that is what `export-and-eject/02` turned into.
+
+**Two modules are free of `openstategraph` at every import depth today**:
+`compile/reducers.py` and `messages.py`. An emitter can `inspect.getsource`
+either one and drop it into a repository that does not have this package
+installed. That roster is pinned in
+`backend/tests/test_the_emittable_prelude.py` as `PRELUDE`, alongside a
+name→home map (`HOMES`) covering the eleven names that ticket listed.
+
+**The depth matters and is the part a module-level scan misses.** A lazy
+`from openstategraph...` inside a function body reads as clean at module level
+and still breaks the emitted file at call time, because `getsource` carries the
+whole body. `reducers.reducer_for`'s deferred `langgraph` import is the shape
+that *is* allowed: third-party, and therefore present wherever the emitted
+graph runs.
+
+**So step 3 has a second constraint it did not have before.** As
+`compile/nodes/` pulls builders out, any of these two modules that grows a
+package import turns that test red — which is the intended behaviour, not an
+obstacle. And when a name on `HOMES` moves, the test names both its old and new
+binding site and requires the map updated in the same commit, the same
+discipline the two source-scanning tests below already impose.
+
+Six names remain un-emittable (`RunState`, `_thread_question`, `_upstream_text`,
+`_text`, `_final_text`, `Classification`) because their *modules* are bound to
+the package even where the functions are pure. That is `export-and-eject/16`,
+deliberately left until 04 unblocks — the cheapest lever it records is that
+`compile/state.py`'s only package imports are two already-lazy ones inside
+`_silent_member_note` and `_wired_skill`, so lifting two constants would make
+that whole module emittable without moving a line of the three names on it.
+`_final_text` stays put; the `docs-and-gaps` 14 argument for that survived
+re-examination, and its one dependency (`messages.py`) is on the roster anyway.
+
 ### What executing step 2 measured (2026-08-22)
 
 The numbers in this section were badly stale and are worth replacing with
