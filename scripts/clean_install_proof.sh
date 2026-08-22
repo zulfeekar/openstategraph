@@ -417,6 +417,147 @@ grep -q "tools/" "$WORK/strayed.log" || {
 rm -rf "$STRAYED"
 echo "    exited $code, naming the three unbound tool types and the fix"
 
+# ---------------------------------------------------------------------------
+# THE THREE THAT NEEDED A FIXTURE (providers-and-credentials ticket 07)
+#
+# Ticket 05 stopped short of these because each needs a document that no
+# template scaffolds. They are built here, by the script, on purpose: a
+# deliberately broken package committed into `workflows/` is a package some
+# other sweep trips over, and one authored in `$PROJECT` is gone with the
+# temporary directory.
+# ---------------------------------------------------------------------------
+
+echo "==> a legally-empty run exits 0, silent node and all"
+# `8bda508`, and the sharpest of the four. `RunResult.warnings` is the run's
+# whole health report and `.failures` is the half a script may gate on;
+# `cli.run_exit_code` reads `.failures`. The regression is silent: point it at
+# `.warnings` and every run containing a *silent node* — a node that ran and
+# produced nothing, which this project's own rule says is a report about how
+# the answer was reached and not a failed run — starts exiting 1.
+#
+# The fixture is two nodes and an empty question, so no model is resolved and
+# no credential is consulted: `in1` produces nothing, `out1` substitutes
+# NO_ANSWER_PRODUCED, and the run is *both* halves of the exit-code condition
+# at once except that nothing actually went wrong. That is the only shape that
+# tells the two channels apart.
+mkdir -p "$PROJECT/workflows/proof-quiet"
+cat >"$PROJECT/workflows/proof-quiet/workflow.json" <<'QUIET'
+{"version": 1, "name": "Proof Quiet", "published": false,
+ "document": {"version": 3, "name": "Proof Quiet", "settings": {},
+  "nodes": [{"id": "in1", "type": "input.text", "data": {}, "position": {"x": 40, "y": 200}},
+            {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 380, "y": 200}}],
+  "edges": [{"source": {"nodeId": "in1", "portId": "text"},
+             "target": {"nodeId": "out1", "portId": "result"}}]}}
+QUIET
+set +e
+quiet="$(cd "$PROJECT" && env -u PYTHONPATH -u ANTHROPIC_API_KEY -u ANTHROPIC_BASE_URL \
+  -u OPENAI_API_KEY -u OLLAMA_API_KEY -u OLLAMA_HOST \
+  "$VENV/bin/openstategraph" run workflows/proof-quiet "" --json 2>"$WORK/quiet.err")"
+code=$?
+set -e
+[ "$code" -eq 0 ] || {
+  echo "a legally-empty run exited $code — a silent node is reaching the failure channel"
+  echo "$quiet"; cat "$WORK/quiet.err"; exit 1; }
+# And the other direction, or the assertion above passes on a run that never
+# had a silent node to fold in and proves nothing at all. The silence is read
+# out of `--json`, not off stderr: `--json` is the machine channel and the
+# report goes into it rather than being printed twice.
+"$VENV/bin/python" - "$quiet" <<'QUIETJSON'
+import json, sys
+result = json.loads(sys.argv[1])
+silent = [line for line in result["warnings"] if "produced no output" in line]
+assert silent, f"the run reported no silent node, so exiting 0 proves nothing: {result['warnings']}"
+assert "without producing an answer" in result["answer"], result["answer"]
+print("    exit 0 with a silent node reported and no answer — report, not failure")
+QUIETJSON
+
+echo "==> validate exits 1 on a mount cycle, from the wheel"
+# `da44407`. Ticket 05 covered the sibling case (a package copied without its
+# `tools/`); this one needs two documents authored to mount each other, which
+# no template and no example provides. A cycle can never terminate, so the
+# refusal has to arrive at `validate` — the compiler would otherwise recurse
+# until Python's own stack said something unhelpful about recursion depth.
+for pair in "proof-ouro-a proof-ouro-b" "proof-ouro-b proof-ouro-a"; do
+  set -- $pair
+  mkdir -p "$PROJECT/workflows/$1"
+  cat >"$PROJECT/workflows/$1/workflow.json" <<OURO
+{"version": 1, "name": "$1", "published": false,
+ "document": {"version": 3, "name": "$1", "settings": {},
+  "nodes": [{"id": "in1", "type": "input.text", "data": {}, "position": {"x": 40, "y": 200}},
+            {"id": "m1", "type": "workflow.subgraph", "data": {"workflow": "$2"}, "position": {"x": 380, "y": 200}},
+            {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 720, "y": 200}}],
+  "edges": [{"source": {"nodeId": "in1", "portId": "text"}, "target": {"nodeId": "m1", "portId": "task"}},
+            {"source": {"nodeId": "m1", "portId": "answer"}, "target": {"nodeId": "out1", "portId": "result"}}]}}
+OURO
+done
+set +e
+(cd "$PROJECT" && env -u PYTHONPATH "$VENV/bin/openstategraph" validate workflows/proof-ouro-a) \
+  >"$WORK/ouro.log" 2>&1
+code=$?
+set -e
+[ "$code" -eq 1 ] || {
+  echo "validate exited $code on a mount cycle, expected 1"; cat "$WORK/ouro.log"; exit 1; }
+grep -q "mount cycle" "$WORK/ouro.log" || {
+  echo "validate failed without naming the cycle:"; cat "$WORK/ouro.log"; exit 1; }
+grep -q "proof-ouro-a -> proof-ouro-b -> proof-ouro-a" "$WORK/ouro.log" || {
+  echo "the refusal does not print the cycle it found:"; cat "$WORK/ouro.log"; exit 1; }
+rm -rf "$PROJECT/workflows/proof-ouro-a" "$PROJECT/workflows/proof-ouro-b"
+echo "    exited $code, printing the two-package cycle it walked"
+
+echo "==> a saved settings.recursionLimit reaches the graph"
+# `5543a90`. The number was held at four layers and read at none, so every run
+# took 50 whatever the document said — a defect with no symptom until a
+# runaway loop costs somebody money. Provable from the wheel because
+# `GraphRecursionError` names the limit it hit, and 10 can only have come from
+# the document: `DEFAULT_STEP_BUDGET` is 50.
+#
+# The loop is a real one — agent, grader, `revise` back to the agent — driven
+# by a fake model that answers `fail` to everything, so the grader never
+# passes and only the budget can stop it. `maxAttempts` is set past the budget
+# on purpose: the grader's own attempt ceiling would otherwise end the loop
+# first and the assertion would be about that instead.
+mkdir -p "$PROJECT/workflows/proof-loop"
+cat >"$PROJECT/workflows/proof-loop/workflow.json" <<'LOOP'
+{"version": 1, "name": "Proof Loop", "published": false,
+ "document": {"version": 3, "name": "Proof Loop", "settings": {"recursionLimit": 10},
+  "nodes": [{"id": "in1", "type": "input.text", "data": {}, "position": {"x": 40, "y": 200}},
+            {"id": "agent1", "type": "agent.llm", "data": {}, "position": {"x": 380, "y": 200}},
+            {"id": "grader1", "type": "route.grader", "data": {"maxAttempts": 50}, "position": {"x": 720, "y": 200}},
+            {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 1060, "y": 200}}],
+  "edges": [{"source": {"nodeId": "in1", "portId": "text"}, "target": {"nodeId": "agent1", "portId": "prompt"}},
+            {"source": {"nodeId": "agent1", "portId": "result"}, "target": {"nodeId": "grader1", "portId": "candidate"}},
+            {"source": {"nodeId": "grader1", "portId": "revise"}, "target": {"nodeId": "agent1", "portId": "feedback"}},
+            {"source": {"nodeId": "grader1", "portId": "pass"}, "target": {"nodeId": "out1", "portId": "result"}}]}}
+LOOP
+run python -c "
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langgraph.errors import GraphRecursionError
+from openstategraph import load_workflow
+from openstategraph.step_budget import DEFAULT_STEP_BUDGET
+
+class Fixed(GenericFakeChatModel):
+    def __init__(self, text):
+        super().__init__(messages=iter([]))
+        object.__setattr__(self, 'text', text)
+    def _generate(self, messages, stop=None, run_manager=None, **kw):
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=self.text))])
+    def bind_tools(self, tools, **kw):
+        return self
+
+assert DEFAULT_STEP_BUDGET != 10, 'the default moved onto the fixture — pick another number'
+workflow = load_workflow('workflows/proof-loop', model=Fixed('fail\nnever good enough'))
+try:
+    answer = workflow.ask('go')
+except GraphRecursionError as error:
+    assert 'limit of 10' in str(error), str(error)
+    print('    the loop stopped at the document\'s 10, not the default', DEFAULT_STEP_BUDGET)
+else:
+    raise AssertionError('the loop ended on its own: ' + repr(str(answer))[:120])
+"
+rm -rf "$PROJECT/workflows/proof-loop"
+
 echo "==> user-scoped memory refuses a run the server identified nobody for"
 # providers-and-credentials ticket 01. The namespace is keyed on the principal
 # the *server* determined, and when it determined nobody there is nowhere to
@@ -685,6 +826,28 @@ assert "no credential" in warnings, f"no credential diagnosis: {warnings!r}"
 assert "OLLAMA_API_KEY" in warnings, f"the diagnosis names no variable: {warnings!r}"
 assert answer.get("answer"), "a failed run answered with nothing at all"
 print("    /api/runs        200 + the variable to set, not a 500 and not a blank")
+
+# 2b. `ThreadSummary.failed` on the wire (`f46935e`, ticket 07). The run just
+#     above failed a node for want of a credential, and the checkpointer wrote
+#     it down; this reads it back through the API a history list actually
+#     calls. `failed` is deliberately NOT folded into `status` — a failed run
+#     is not paused, and every reader of `status == "finished"` would have had
+#     to learn a third case — so a regression here is a boolean quietly going
+#     missing rather than an endpoint breaking, and nothing else would notice.
+#
+#     Ticket 07 expected this to need the `[sqlite]` extra. It does not: the
+#     saver is in-memory and this is the same process that ran the run, which
+#     is exactly the reader a history list is. Durability across a restart is a
+#     different claim and not this one.
+thread_id = json.loads(body)["thread_id"]
+status, body = call("GET", "/api/threads")
+assert status == 200, f"/api/threads returned {status}: {body[:300]}"
+threads = {row["thread_id"]: row for row in json.loads(body)["threads"]}
+assert thread_id in threads, f"the run left no thread: {sorted(threads)}"
+assert threads[thread_id]["failed"] is True, threads[thread_id]
+# The other direction, or `failed` could be hardcoded true and still pass.
+assert threads[thread_id]["status"] == "finished", threads[thread_id]
+print("    /api/threads     the failed run is readable back, failed=True")
 
 # 3. The body the API hands you is a body it takes back. A GET whose response
 #    a PUT rejects is a round trip that does not close, and every client that
