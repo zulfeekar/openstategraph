@@ -190,6 +190,39 @@ class ProviderUnreachable(OpenStateGraphError):
     """
 
 
+class StepBudgetExhausted(OpenStateGraphError):
+    """A mounted workflow spent the run's whole step budget without answering.
+
+    `organisms-first-class` 60. A mount is *"another workflow run as one
+    isolated step — task in, answer out"*, and the child is a separate
+    `invoke` with its own superstep counter but the **run's** number: a
+    mount inherits the budget of the run that mounted it. When the child's
+    own guard cannot fire — `56`'s rule needs a few supersteps of slack to
+    stop a loop and still publish — the exhaustion arrives at the mount
+    boundary as LangGraph's `GraphRecursionError`, and it used to be
+    reported verbatim: a vendor's advice to *increase the limit*, which
+    `step_budget.py` and `stepBudget.ts` exist to contradict, plus a
+    `docs.langchain.com` URL no other copy in this product carries.
+
+    So the boundary translates it, exactly as `credential_error_from`
+    translates a vendor's `AuthenticationError`: once a foreign failure is
+    one of ours, every surface treats it like any other error we raise
+    rather than re-deciding what it meant.
+
+    **No builtin base**, the second class here without one and for
+    `ProviderUnreachable`'s reason. It was never a builtin: it arrived as
+    `GraphRecursionError`, which derives from `RecursionError`, and keeping
+    that would put every exhausted mount inside an `except RecursionError`
+    an adopter wrote around their own deep recursion — a base that captures
+    an error in handlers written for something else is worse than none.
+
+    It stays a **failure** rather than a report, unlike the loop door's
+    budget stop: there the graph had a candidate to publish, and here the
+    step produced nothing at all. A mount that quietly answered nothing
+    would be the silence `production-ready` 96 exists to name.
+    """
+
+
 class MissingProviderPackage(OpenStateGraphError, ImportError):
     """A model names a provider whose LangChain integration is not installed.
 
@@ -277,6 +310,7 @@ __all__ = [
     "ProviderRefusedCredential",
     "ProviderUnreachable",
     "SchemaVersionError",
+    "StepBudgetExhausted",
     "ThreadNotResumable",
     "UnknownProvider",
     "WorkflowPackageError",

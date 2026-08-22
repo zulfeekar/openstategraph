@@ -107,7 +107,21 @@ everything its `pass` branch still has to cross. A grader wired straight to
 an output needs three; one wired to a formatter, then a guardrail, then an
 output needs five. That is why splicing a node into either branch does not
 make a loop start crashing again. A mount counts as one superstep like any
-other node — the mounted workflow spends its own budget, not its parent's.
+other node, because the mounted workflow runs as a separate graph with a
+counter of its own.
+
+**But the number a mount runs on is the run's, not the mounted package's.** A
+child starts counting from zero and is given the same ceiling as the run that
+mounted it, so a parent of three steps and a child drawn with a loop are
+sharing one number that was probably chosen for the parent — and a step budget
+saved on the mounted package is not consulted at all. When a mounted workflow
+does run out, the two outcomes are the ones above, one level down: with enough
+slack the child's own grader stops the loop and publishes, and the warning
+naming it arrives under the mount (`mount-review/grader1`); with less than the
+slack the child cannot stop itself, and the mount reports that it spent the
+run's whole step budget without producing an answer. That last one **is** a
+failed step — a mount promises a task in and an answer out, and there is no
+candidate to publish.
 
 It belongs to the **package**, so inside a mounted instance the box — and the
 name beside it — is disabled with a line saying so. An instance's own state is

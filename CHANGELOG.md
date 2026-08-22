@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- **`StepBudgetExhausted`** (Tier 1) — a mounted workflow spent the whole of a
+  run's step budget without producing an answer. Translated at the mount
+  boundary from LangGraph's `GraphRecursionError`, the same seam
+  `credential_error_from` translates a vendor's refusal at, so a caller reads
+  this product's own copy instead of a vendor's advice to raise a limit that
+  this product tells them not to raise. No builtin base, for
+  `ProviderUnreachable`'s reason: it arrived as a `RecursionError` subclass,
+  and keeping that would capture it in handlers written for deep recursion
+  (`organisms-first-class` 60).
 - **`ProviderUnreachable`** (Tier 1) — a provider whose address is configured
   and where nothing is listening. Not a `CredentialError`: none was absent and
   none was rejected, so both of that family's actions are the wrong advice.
@@ -10,6 +19,26 @@
   so a run degrades rather than crashing (`providers-and-credentials` 08).
 
 ### Fixed
+- **A mounted workflow that runs out of supersteps now says so in our words,
+  and a child that stopped its own loop is heard at all.** A mount is a
+  separate `invoke` with its own counter and the **run's** number, so a child
+  drawn with a loop can exhaust the budget while the parent still has steps.
+  Below the slack `organisms-first-class` 56's guard needs, that surfaced as
+  LangGraph's own exception, whole: *"you can increase the limit by setting the
+  `recursion_limit` config key"* plus a `docs.langchain.com` URL, on
+  `.failures` at every door. It is now one sentence of ours naming the mounted
+  package, the step budget and the supersteps a cycle costs — channel and exit
+  code deliberately unmoved, because unlike the loop door there is no candidate
+  to publish and a mount that quietly answered nothing would be worse than a
+  crash. Above that slack the child *does* stop itself and publish, and the
+  sentence saying so used to die at the mount boundary exactly as `forced` and
+  `unrouted` did: `budget_stops` is now carried up under the mount's key
+  (`mount1/grader1`), which is the key the streaming door already folds from
+  the child's own frames, so it arrives once and both doors agree. Whose number
+  it is, settled: **the run's** — a mount is one isolated step of this run and
+  is budgeted like one. Sizing it against the child's own drawing is not
+  settled, and a child package's own `settings.recursionLimit` is still not
+  consulted on the mount path (`organisms-first-class` 60; 61 files the rest).
 - **A stopped Ollama daemon now says so, and names `OLLAMA_HOST`.** The fourth
   provider shape — the address set, the daemon not running — matched neither
   "absent" nor "wrong", so no translator claimed it and a developer read

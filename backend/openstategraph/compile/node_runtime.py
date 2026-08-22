@@ -37,8 +37,10 @@ if TYPE_CHECKING:
     from openstategraph.compile.composition import MountedGraph
 
 from langgraph.constants import TAG_NOSTREAM
+from langgraph.errors import GraphRecursionError
 
 from openstategraph.abc.grader import Grader, Verdict
+from openstategraph.errors import StepBudgetExhausted
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
@@ -3318,22 +3320,48 @@ class NodeRuntime:
             #    mount at all, which is precisely why the highlight sat on the
             #    router for the twenty seconds the mounted analyst worked.
             child_config = {"configurable": {"workflow_slug": slug}} if slug else None
-            final = captured.invoke(
-                {
-                    "question": question,
-                    # The conversation crosses the boundary (found live: the
-                    # Architect routed through the concierge re-asked its
-                    # interview question every turn — the child was invoked
-                    # with fresh state, so the parent thread's history never
-                    # reached it). Graph state stays isolated; the DIALOGUE
-                    # is precisely what a routed conversational child needs.
-                    "messages": list(state.get("messages") or []),
-                    "attempts": 0,
-                    "decisions": {},
-                    "outputs": {},
-                },
-                child_config,
-            )
+            # The child spends the RUN's step budget, not one of its own: this
+            # invoke inherits `recursion_limit` through the ambient runnable
+            # config, and `child_config` overrides exactly one `configurable`
+            # key (ticket 02). That is the reading `organisms-first-class` 60
+            # settled — a mount is one isolated step of this run, so it is
+            # budgeted like one — and it is left as it is. What 60 refused was
+            # the *report*: below the slack `56`'s guard needs, the child cannot
+            # stop itself, and LangGraph's own exception used to reach the
+            # caller whole, advising them to increase a limit this product's
+            # pinned copy tells them not to. Translated at the boundary instead,
+            # the way `credential_error_from` translates a vendor's refusal.
+            # Sizing the number against the child's own drawing is the half that
+            # is not settled — a child package's `settings.recursionLimit` is
+            # not consulted here — and is filed as 61 rather than changed
+            # quietly, since it would alter what a saved field means.
+            try:
+                final = captured.invoke(
+                    {
+                        "question": question,
+                        # The conversation crosses the boundary (found live: the
+                        # Architect routed through the concierge re-asked its
+                        # interview question every turn — the child was invoked
+                        # with fresh state, so the parent thread's history never
+                        # reached it). Graph state stays isolated; the DIALOGUE
+                        # is precisely what a routed conversational child needs.
+                        "messages": list(state.get("messages") or []),
+                        "attempts": 0,
+                        "decisions": {},
+                        "outputs": {},
+                    },
+                    child_config,
+                )
+            except GraphRecursionError as exc:
+                raise StepBudgetExhausted(
+                    f'The mounted workflow "{slug or "no workflow selected"}" '
+                    "spent the whole of this run's step budget without producing an "
+                    "answer. A mount runs as one isolated "
+                    "step of this run and spends the same budget, and what that buys "
+                    "depends on the mounted workflow's own drawing — every node on a "
+                    "cycle costs a superstep per lap. A loop that never settles needs a "
+                    "grader that can pass it, not more supersteps."
+                ) from exc
             answer = final.get("answer", "")
             # The child's loop cost is part of the parent's story: without
             # this, a Team that revised twice reports attempts=0 (ticket 60).
@@ -3370,6 +3398,17 @@ class NodeRuntime:
             unrouted_inside = nested_record(node_id, final.get("unrouted"))
             if unrouted_inside:
                 update["unrouted"] = unrouted_inside
+            # And the child's budget stops — the fourth key of the same set and
+            # the one that arrived a ticket later. `56` gave a starved grader a
+            # sentence on the silent channel; inside a mount it died here, so a
+            # child that stopped its own loop and published what it had looked
+            # exactly like a child that settled (`organisms-first-class` 60).
+            # Same prefix as the three above, which is also the key
+            # `streaming.py` folds from the child's own frames — so the fold
+            # overwrites rather than doubles, and the two doors agree.
+            starved_inside = nested_record(node_id, final.get("budget_stops"))
+            if starved_inside:
+                update["budget_stops"] = starved_inside
             child_attempts = final.get("attempts")
             if isinstance(child_attempts, int) and child_attempts > 0:
                 update["attempts"] = child_attempts

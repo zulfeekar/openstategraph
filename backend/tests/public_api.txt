@@ -64,6 +64,7 @@ openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundE
 openstategraph.errors.ProviderRefusedCredential = class(CredentialError)(...)
 openstategraph.errors.ProviderUnreachable = class(OpenStateGraphError)(...)
 openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
+openstategraph.errors.StepBudgetExhausted = class(OpenStateGraphError)(...)
 openstategraph.errors.ThreadNotResumable = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.UnknownProvider = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.WorkflowPackageError = class(OpenStateGraphError)(...)

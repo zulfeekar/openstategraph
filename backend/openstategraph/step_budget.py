@@ -24,6 +24,18 @@ the answer the workflow had already produced was thrown away — with
 LangGraph's own advice to raise the number, which is the opposite of what this
 module's callers tell a user.
 
+**A mount runs on this number too, and does not get one of its own**
+(`organisms-first-class` 60). A mounted child is a separate `invoke` with a
+fresh superstep counter and the *run's* ceiling, inherited through the ambient
+runnable config — so the number is the **run's**, not the workflow's, and a
+child package's own `settings.recursionLimit` is not consulted on that path.
+Sizing it against the child's own drawing is filed as 61. Below the slack the
+guard above needs, the child cannot stop itself and the exhaustion arrives at
+the mount boundary, where `node_runtime._subgraph` translates it into
+`StepBudgetExhausted` rather than letting LangGraph's advice to raise the
+number reach a caller. That one *is* a failed step: unlike the loop door there
+is no candidate to publish.
+
 **Why it exists at all** (`workflow-gallery` 26). `settings.recursionLimit`
 was held by the editor's model, serialised by `RuntimeClient`, accepted by
 `RunRequest` and consumed by the graph config — and read out of a saved
