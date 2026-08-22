@@ -68,6 +68,7 @@ from openstategraph.compile.context import (  # noqa: F401
 from openstategraph import injection
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
 from openstategraph.memory import MemorySettings
+from openstategraph.messages import content_text
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
 # Re-exported for the same reason `context.py`'s names are: `state.py` was
@@ -295,35 +296,6 @@ class _DeepAgentAsChatModel:
 
 
 
-def _content_text(content: Any) -> str:
-    """The human-readable text of a message's content, whichever shape it is.
-
-    LangChain documents `content` as "loosely-typed, supporting strings and
-    lists of untyped objects"; an Anthropic `AIMessage` in particular "can
-    either be a single string or a list of content blocks". Both shapes are
-    normal and which one arrives is not the caller's choice — adding
-    `"messages"` to `stream_mode` is enough to switch it.
-
-    Only `text` blocks are joined. A thinking model puts its reasoning in the
-    same list, and concatenating blindly would hand a customer the model's
-    private deliberation as if it were the answer.
-
-    Written out rather than delegating to `message.text`: that accessor is a
-    property on current message classes and a deprecated *method* on others,
-    so reading it generically means guessing which — and the stand-ins this
-    module is also handed have neither.
-    """
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""
-
-
 def _final_text(messages: list[Any]) -> str:
     """What the model said this turn — or "", never something else.
 
@@ -348,11 +320,13 @@ def _final_text(messages: list[Any]) -> str:
        `"messages"` to `stream_mode` is enough to switch a settled message
        from `"30"` to `[{"text": "30", "type": "text", "index": 0}]`. The old
        `isinstance(content, str)` test read that as *no text at all*, so the
-       guard meant to skip empty messages skipped a full one. `_content_text`
-       reads both shapes and joins only the `text` blocks — so a thinking
-       model's private reasoning, which rides in the same list, stays out of
-       the answer. (It does that itself rather than delegating to
-       `message.text`; see its own docstring for why.)
+       guard meant to skip empty messages skipped a full one.
+       `openstategraph.messages.content_text` reads both shapes and joins
+       only the `text` blocks — so a thinking model's private reasoning,
+       which rides in the same list, stays out of the answer. It is the one
+       reader in this codebase, and its module docstring is the account of
+       why: until docs-and-gaps 14 this module carried a byte-identical
+       private copy of it.
 
     2. **Never walk past the last human turn.** This is the floor, and it is
        about what a failure is *allowed to look like*. With rule 1 broken the
@@ -392,7 +366,7 @@ def _final_text(messages: list[Any]) -> str:
         # and every health channel on this map saw nothing wrong.
         if getattr(message, "type", None) == "tool":
             continue
-        text = _content_text(getattr(message, "content", ""))
+        text = content_text(getattr(message, "content", ""))
         if text.strip():
             return text
     return ""

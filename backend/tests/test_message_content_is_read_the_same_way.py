@@ -88,3 +88,61 @@ class TestNobodyReadsItTheOldWay:
         assert offenders == [], "message content must be read with content_text(): " + "; ".join(
             offenders
         )
+
+
+class TestNobodyWritesASecondReader:
+    """The other half of the guard, and the half that was missing.
+
+    `TestNobodyReadsItTheOldWay` scans for `str(content)` — the *stringifying*
+    spelling of the bug. It cannot see the failure mode that actually
+    happened next: a call site that reads the shapes correctly, but does so in
+    its own hand-rolled copy of `content_text`. `compile/node_runtime.py`
+    carried one for months (`_content_text`), byte-identical in behaviour, in
+    the one file whose docstring is an account of why this knowledge must
+    exist exactly once (docs-and-gaps 14).
+
+    Identical today is the hazard, not the reassurance: DRY's rule is
+    duplication of *knowledge*, and a second copy is a second thing to fix the
+    next time a provider ships a shape neither expects.
+
+    The telltale is `isinstance(content, ...)` — a module branching on the
+    shape of a message's content is deciding for itself how to read one.
+    """
+
+    def test_no_call_site_branches_on_content_shape(self) -> None:
+        offenders = []
+        for site in TestNobodyReadsItTheOldWay.SITES:
+            text = (REPO / site).read_text(encoding="utf-8")
+            for number, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("#") or stripped.startswith("*"):
+                    continue
+                # Prose quotes the bug by name all over this codebase —
+                # inside backticks it is a *mention*, not a call.
+                if "`isinstance(content" in line:
+                    continue
+                if "isinstance(content," in line:
+                    offenders.append(f"{site}:{number}: {stripped}")
+
+        assert offenders == [], (
+            "reading a message's content is content_text()'s job, once: "
+            + "; ".join(offenders)
+        )
+
+
+class TestTheAgentAnswerReaderUsesTheSharedOne:
+    """And the rewire, proven by behaviour rather than by grep.
+
+    A scan proves the copy is gone; it does not prove the survivor is what
+    replaced it. `_final_text` — the agent loop's "what did the model say this
+    turn" walk-back — is the caller the deleted copy had.
+    """
+
+    def test_final_text_reads_content_through_content_text(self, monkeypatch) -> None:
+        from langchain_core.messages import AIMessage
+
+        from openstategraph.compile import node_runtime
+
+        monkeypatch.setattr(node_runtime, "content_text", lambda content: "via the shared reader")
+
+        assert node_runtime._final_text([AIMessage(content="raw")]) == "via the shared reader"

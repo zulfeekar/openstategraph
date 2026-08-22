@@ -144,6 +144,23 @@ plus module helpers. The mass is real, though, and the seams are clean:
    `test_message_content_is_read_the_same_way.py`, whose `SITES` list names
    `compile/node_runtime.py` as a constant, across two files. They stayed, and
    deduplicating them against `openstategraph.messages` is `docs-and-gaps` 14.
+
+   **14 is done** (2026-08-22). `_content_text` was byte-identical to
+   `messages.content_text` — the two function bodies compare equal as ASTs
+   with the docstrings stripped, and agree on all fourteen shapes that were
+   tried, including a block list, a thinking block, an empty message and a
+   non-list non-string. So it was the same *knowledge*, and it is now written
+   once: `node_runtime.py` imports `content_text` and `_final_text` calls it.
+   **3433 lines to 3407.**
+
+   `_final_text` itself stayed in `node_runtime.py`, and that is a decision
+   rather than deferral. It is not the same knowledge as `messages.py` holds:
+   `content_text` knows *what shape a provider sent*, while `_final_text`
+   knows *which message in an agent loop is the answer* — the human floor,
+   the tool-call message, the tool-result message. Those change for different
+   reasons (a new provider content block vs. a new LangGraph message role),
+   which is precisely the case `CLAUDE.md` says to keep apart. It moves in
+   step 3 with the agent family that uses it, if at all.
 2. `compile/context.py` — **done**, 2026-08-22 (`docs-and-gaps` 03), with one
    correction to the membership above. That list mixed two things: functions
    that render *prompt context* from a document and a plan, and functions that
