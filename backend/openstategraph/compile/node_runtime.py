@@ -29,6 +29,13 @@ if TYPE_CHECKING:
     # store, never the filesystem `WorkflowStore` (ticket 12).
     from langgraph.store.base import BaseStore
 
+    # `mounted_graphs` is annotated with it below. The runtime import is
+    # deliberately local to `builder_for` — `compile.composition` imports
+    # back into this module — so the forward reference had nothing to
+    # resolve against and both gates said so: ruff `F821` and mypy
+    # `name-defined` (`organisms-first-class` 47).
+    from openstategraph.compile.composition import MountedGraph
+
 from langgraph.constants import TAG_NOSTREAM
 
 from openstategraph.abc.grader import Grader, Verdict
@@ -48,7 +55,6 @@ from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for  # noqa: F401
 from openstategraph.compile.workflow_compiler import (
     GUARDRAIL_TYPE,
-    ROUTER_TYPE,
     CompiledPlan,
     failure_marker,
     unrun_query_claim,
@@ -67,7 +73,7 @@ from openstategraph.compile.context import (  # noqa: F401
     revision_request,
 )
 from openstategraph import injection
-from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN, transcript_text
+from openstategraph.developer_channel import transcript_text
 from openstategraph.memory import MemorySettings
 from openstategraph.messages import content_text
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort

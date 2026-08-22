@@ -287,7 +287,16 @@ class DeveloperChannel:
     #:
     #: Developer only, like `suggestion`, and for the same reason — a customer
     #: is never offered a tool, and is never told what the canvas lacks.
-    capability_gap: str | None = None
+    #:
+    #: The `noqa` is a **false positive silenced, not a defect hidden**. Ruff
+    #: reads this as redefining the module-level `capability_gap` re-export at
+    #: the top of the file; a class body is its own scope, so it does no such
+    #: thing, and both bindings work. Neither can be renamed to make the linter
+    #: quieter — the function is a published re-export and this field is on the
+    #: `done` frame every developer client reads. Both are pinned in
+    #: `tests/test_two_capability_gaps_share_one_name.py`, which is what keeps
+    #: this line safe to leave silent (`organisms-first-class` 47).
+    capability_gap: str | None = None  # noqa: F811
     #: What each Guardrail node did, as `{node, entity, strategy, count}`.
     #: **Counts and entity types, never values** (guardrails ticket 03).
     #:

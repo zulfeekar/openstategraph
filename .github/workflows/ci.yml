@@ -159,7 +159,9 @@ jobs:
       # MCP transport, deep agents, sqlite. A *consumer* installs the lean core
       # plus one provider extra; `backend/tests/test_distribution_metadata.py`
       # is what keeps that promise honest, since CI cannot see it from here.
-      - run: pip install -e "backend[all,dev]" ruff
+      # No bare `ruff` here: the version is pinned in `backend[dev]`, so the
+      # gate cannot drift with PyPI between two runs of the same commit.
+      - run: pip install -e "backend[all,dev]"
       - if: matrix.python-version == '3.11'
         run: python -m ruff check backend
       # The type gate (ticket 05). Runs from `backend/` because `[tool.mypy]`

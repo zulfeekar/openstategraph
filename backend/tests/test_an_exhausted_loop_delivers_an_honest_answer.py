@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED, NodeRuntime, RunState
+from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
 from conftest import RespondingModel

@@ -26,7 +26,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from nine_provider_cases import absent_case, isolated_environment  # noqa: E402
+from nine_provider_cases import absent_case  # noqa: E402
 
 from openstategraph.providers import provider_catalogue  # noqa: E402
 

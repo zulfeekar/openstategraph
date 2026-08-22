@@ -254,7 +254,6 @@ class CompiledWorkflow:
                 "workflow_slug": self.slug or "",
             },
         }
-        from openstategraph.compile.workflow_compiler import run_health_from_state
 
         from langchain_core.callbacks import get_usage_metadata_callback
 

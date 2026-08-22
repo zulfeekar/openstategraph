@@ -31,7 +31,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-import pytest
 
 from conftest import RespondingModel
 from langchain_core.messages import AIMessage

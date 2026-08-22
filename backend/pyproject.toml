@@ -167,7 +167,19 @@ all = [
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
-    "ruff>=0.6",
+    # **Pinned exactly, and that is a decision.** `ci.yml` installed a bare
+    # `ruff` alongside this extra, so the gate's strictness tracked PyPI: a
+    # green run today and a red one tomorrow with no commit in between, and
+    # the reverse — a new rule's worth of real defects arriving as a mystery
+    # failure. A linter is a gate, and a gate that moves on its own is not one.
+    #
+    # The cost is stated rather than discovered: a pin rots quietly, and
+    # nothing here will tell you a newer ruff has something to say. Raising it
+    # is a deliberate commit, which is the point — the same bargain
+    # `docs/openapi.json` and `public_api.txt` already make by being committed
+    # and checked. `ci.yml` no longer installs ruff separately, so this line is
+    # the single place the version is chosen (`organisms-first-class` 47).
+    "ruff==0.14.10",
     # mypy, not pyright: the backend CI job is Python-only, and pyright would
     # drag Node.js (or a pip shim that downloads a Node bundle at runtime) into
     # a job that has neither. mypy installs as one wheel next to pytest and
@@ -232,6 +244,27 @@ target-version = "py311"
 # unused imports), zero style churn. Widening the select set is a deliberate
 # future step, not a default (ticket 50).
 select = ["E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The pytest fixture-injection idiom, which ruff's F811 is scope-blind to.
+# `test_threads_show_the_resume_line.py` imports the `project` fixture from
+# `test_cli_resume` (the import is required — pytest resolves a fixture by the
+# name bound in the requesting module) and then names a test parameter
+# `project` so pytest injects it. Ruff reads every one of those parameters as a
+# redefinition of the import: nine violations for one correct idiom.
+#
+# Scoped to the one file and the one rule rather than ignored suite-wide, and a
+# `noqa` was tried first — it has to go on nine separate multi-line signatures,
+# which is more noise than the rule is worth. A redundant alias
+# (`import project as project`) was measured and does not help either.
+#
+# The structural fix — move the fixture into `tests/conftest.py`, so no import
+# exists to shadow — is real and was priced: it drags `_document` and
+# `_straight_through` into a suite-wide conftest for two modules' benefit, and
+# `project` rebinds three environment variables including a durable
+# checkpointer path. Not worth the blast radius to satisfy a false positive
+# (`organisms-first-class` 47).
+"tests/test_threads_show_the_resume_line.py" = ["F811"]
 
 # The type gate. Scoped to the shipped package — `tests/` deliberately stays
 # out, because a fixture that lies about a type is how a test proves an error

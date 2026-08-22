@@ -41,7 +41,6 @@ from typing import Any
 import pytest
 
 from openstategraph.abc import BaseTool, NoArgs, ToolResult
-from openstategraph import extensions
 from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_runtime import NodeRuntime, RuntimeServices
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
