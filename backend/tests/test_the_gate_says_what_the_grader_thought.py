@@ -273,6 +273,22 @@ class TestTheCustomerSurfaceShowsIt:
         assert "hitl__verdict" in source
 
     def test_it_draws_nothing_when_there_is_no_verdict(self) -> None:
-        """Absence is a value: no grader judged it, not "the grader said nothing"."""
+        """Absence is a value: no grader judged it, not "the grader said nothing".
+
+        This used to assert the bytes of the page's own ternary — a shape a
+        formatter could move and a rule the page no longer owns. Since
+        `production-ready` 94 the sentence has one spelling, generated into the
+        page from `src/view/ask/graderVerdictLine.ts`, so the rule is asserted
+        where it is written and the drift is gated by
+        `test_one_graders_sentence.py`. What is still worth asserting *here* is
+        that the page draws the paragraph only when there is a sentence to put
+        in it.
+        """
         source = self._source()
-        assert '!verdict\n    ? ""' in source
+        assert 'verdictLine ? `<p class="hitl__verdict">' in source
+
+    def test_the_sentence_is_the_one_the_editor_says(self) -> None:
+        """One judgement, two doors, one spelling (`production-ready` 94)."""
+        source = self._source()
+        assert "graderVerdictLine({" in source
+        assert "GENERATED-BEGIN graderVerdictLine" in source

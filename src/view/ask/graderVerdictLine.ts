@@ -27,11 +27,21 @@
  *   nothing — so the length and the newline are handled before the string
  *   reaches here, and nothing on this side needs to truncate.)
  */
-export function graderVerdictLine(approval: {
+export interface GraderApproval {
   readonly verdict: string;
   readonly reason: string;
   readonly check?: string;
-}): string {
+}
+
+// Everything between these markers is copied verbatim into
+// `backend/openstategraph/api/static/chat.html` by
+// `scripts/render_grader_verdict_line.py`, with this one signature line
+// rewritten to its untyped JavaScript equivalent. So the body below must be
+// valid JavaScript as written: no type annotations, no `as`, no generics, and
+// nothing imported. That constraint is the price of one sentence having one
+// spelling, and it is cheap — the rules here are string handling.
+// GENERATED-SOURCE-BEGIN graderVerdictLine
+export function graderVerdictLine(approval: GraderApproval): string {
   const verdict = approval.verdict.trim();
   if (!verdict) return '';
   const reason = approval.reason.trim();
@@ -52,3 +62,4 @@ export function graderVerdictLine(approval: {
   }
   return reason;
 }
+// GENERATED-SOURCE-END graderVerdictLine
