@@ -63,8 +63,10 @@ EXPLORER_TOPIC_CAP = 8
 #:   data source (and the codebase builder covers first-party code properly).
 #: - ``tool.validate-workflow`` — a compiler check, not a data source.
 #: Everything else that *resolves in the registry* — discovered workflow
-#: tools (``tool.<slug>-*``), web tools, future MCP adapters — is plausibly
-#: data-access and qualifies.
+#: tools (``tool.<slug>-*``), web tools, ``tool.mcp`` — is plausibly
+#: data-access and qualifies. `tool.mcp` qualifies as a *server*, not as a
+#: tool: it is bound through the plural seam like everything else here, so
+#: an MCP node contributes its server's N tools (`organisms-first-class` 50).
 EXPLORER_DENY_PREFIXES = (
     "tool.sql-",
     "tool.chinook-",
@@ -385,6 +387,64 @@ class AgenticKnowledgeBuilder(BaseKnowledgeBuilder):
 # ---------------------------------------------------------------------------
 
 
+def _recording(lc_tool: Any, record: Callable[[str], None]) -> Any:
+    """One LangChain tool, taught to note its own name each time it runs.
+
+    **This is provenance without `on_call`**, and it exists because the two
+    seams do not carry the same hook. `BaseTool.as_langchain_tool` takes an
+    `on_call` and `as_langchain_tools` does not — deliberately, because the
+    plural seam returns tools it did not build (an MCP server's, arriving from
+    the library already wrapped), so there is no single `_call` for the base to
+    thread a hook through. Binding plurally would therefore have traded the
+    capability for the footer's honesty: a provenance footer naming what was
+    *offered* rather than what was *called* is the exact defect
+    `production-ready` 12 removed, and re-earning it would have been a
+    regression wearing a feature's clothes.
+
+    So the explorer records at its own boundary instead of asking the seam to.
+    That is strictly more general than the hook — it covers every tool the
+    plural seam can return, ours and a stranger's alike — and it leaves both
+    published signatures untouched, which keeps `organisms-first-class` 48's
+    substitutability census meaningful rather than merely re-pinned.
+
+    **Both entry points**, for `_wrap_async_tool`'s reason: a `StructuredTool`
+    carries a `func` and a `coroutine` and the caller picks, so instrumenting
+    only the sync one would lose the record under an async agent. Everything
+    else about the tool is carried across unchanged — `response_format` above
+    all, since every MCP tool is `content_and_artifact` and a wrapper that
+    forgot it would hand the model a stringified tuple.
+    """
+    from langchain_core.tools import StructuredTool
+
+    name = getattr(lc_tool, "name", "")
+    inner_func = getattr(lc_tool, "func", None)
+    inner_coroutine = getattr(lc_tool, "coroutine", None)
+
+    def _recorded(inner: Callable[..., Any]) -> Callable[..., Any]:
+        def _call(**kwargs: Any) -> Any:
+            record(name)
+            return inner(**kwargs)
+
+        return _call
+
+    def _recorded_async(inner: Callable[..., Any]) -> Callable[..., Any]:
+        async def _acall(**kwargs: Any) -> Any:
+            record(name)
+            return await inner(**kwargs)
+
+        return _acall
+
+    return StructuredTool(
+        name=name,
+        description=getattr(lc_tool, "description", "") or "",
+        args_schema=lc_tool.args_schema,
+        func=_recorded(inner_func) if inner_func is not None else None,
+        coroutine=_recorded_async(inner_coroutine) if inner_coroutine is not None else None,
+        response_format=getattr(lc_tool, "response_format", "content"),
+        metadata=getattr(lc_tool, "metadata", None),
+    )
+
+
 class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
     """Fallback for unrecognized sources: study them through the workflow's
     OWN wired tools.
@@ -417,11 +477,12 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
 
         registry = build_tool_registry(WorkflowStore(root=workflows_root), workflow_dir.name)
         tools: list[Any] = []
-        labels: list[str] = []
         seen: set[str] = set()
-        #: Names of the tools this exploration actually ran, filled in by the
-        #: `on_call` hook as the agent uses them.
+        #: Names of the tools this exploration actually ran, recorded as the
+        #: agent uses them.
         called: set[str] = set()
+        #: Capabilities that failed to materialise — the plural seam's sink.
+        warnings: list[str] = []
         for node in document.get("nodes") or []:
             node_type = str(node.get("type") or "")
             if not node_type.startswith("tool.") or node_type in seen:
@@ -433,8 +494,20 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
                 continue  # unresolvable — the runtime would warn, we skip
             seen.add(node_type)
             bound = tool.configure(node.get("data") or {})
-            tools.append(bound.as_langchain_tool(on_call=called.add))
-            labels.append(getattr(bound, "name", node_type))
+            # **The plural seam, the one the canvas binds through**
+            # (`organisms-first-class` 50). One node is one tool for every
+            # atom in this repository except `tool.mcp`, where one node is a
+            # whole server and its tools are discovered at bind time. The
+            # singular seam handed the agent that node's *refusal* — a tool
+            # whose every call answers "it is not itself one of them" — in
+            # place of the server's actual tools. `tool.mcp` is not denied
+            # here, so that was reachable from any document carrying one.
+            #
+            # It costs a network call at bind time, for MCP nodes only, and
+            # this builder is build-time only (see the module header), so the
+            # call is where a user is already waiting for discovery.
+            for lc_tool in bound.as_langchain_tools(warnings=warnings):
+                tools.append(_recording(lc_tool, called.add))
         # **Provenance is what was called, never what was offered**
         # (`production-ready` 12). This used to be `labels` — every tool the
         # agent was handed, frozen before the agent ran — so a document written
@@ -447,7 +520,7 @@ class ExplorerKnowledgeBuilder(AgenticKnowledgeBuilder):
         # The codebase builder has always done it this way — its read tools
         # note each file into a shared set — so this is that mechanism applied
         # to tools resolved out of a registry rather than constructed here.
-        return tools, lambda: tuple(f"tool {name}" for name in sorted(called)), []
+        return tools, lambda: tuple(f"tool {name}" for name in sorted(called)), warnings
 
 
 # ---------------------------------------------------------------------------

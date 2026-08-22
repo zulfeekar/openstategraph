@@ -12,8 +12,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
+
+from openstategraph import prebuilt_mcp
+from openstategraph.prebuilt_mcp import KEY_SERVER
 
 from openstategraph.api.knowledge_build import run_build
 from openstategraph.knowledge_builders import (
@@ -21,6 +25,7 @@ from openstategraph.knowledge_builders import (
     GENERATED_MARKER,
     marker_source,
 )
+from tests.test_prebuilt_mcp import fake_discovery, failing_discovery
 from openstategraph.knowledge_explorer import (
     EXPLORER_TOPIC_CAP,
     AgenticKnowledgeBuilder,
@@ -461,3 +466,125 @@ class TestRegistration:
         assert kinds.index("sql") < kinds.index("explorer")
         assert "codebase" in kinds
         assert isinstance(BUILDERS[kinds.index("explorer")], AgenticKnowledgeBuilder)
+
+
+class TestAnMcpNodeContributesItsServersTools:
+    """`organisms-first-class` 50 — the explorer bound the **singular** seam.
+
+    `tool.mcp` is not on `EXPLORER_DENY_PREFIXES`, and one MCP server node
+    stands for N tools discovered at bind time. Calling `as_langchain_tool()`
+    over it handed the agent one tool that refuses when called, in place of
+    the server's actual tools. The plural seam is the one the canvas binds
+    through (`NodeRuntime._bind_tools`), and this pins that the explorer now
+    binds it too — capability, warnings and provenance all intact.
+    """
+
+    def _document(self) -> dict[str, Any]:
+        return {
+            "nodes": [{"id": "m", "type": "tool.mcp", "data": {KEY_SERVER: "LangChain docs"}}],
+            "edges": [],
+        }
+
+    def test_the_agent_is_bound_the_servers_tools_not_one_refusal(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        monkeypatch.setattr(prebuilt_mcp, "_discover_tools", fake_discovery("search", "fetch"))
+        document = self._document()
+        package = _save_workflow(tmp_path, "mcp-flow", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["search", "fetch"]
+        assert warnings == []
+
+    def test_a_bound_mcp_tool_actually_answers_instead_of_refusing(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """The inverse of the defect, at the only layer that can see it: the
+        old binding produced a tool whose every call came back `Error: An MCP
+        server node contributes its server's tools...`."""
+        monkeypatch.setattr(prebuilt_mcp, "_discover_tools", fake_discovery("search"))
+        document = self._document()
+        package = _save_workflow(tmp_path, "mcp-flow", document)
+
+        tools, _prov, _warn = ExplorerKnowledgeBuilder().study_tools(package, document, tmp_path)
+        answer = tools[0].invoke({"q": "vat"})
+
+        assert "is not itself one of them" not in str(answer)
+        assert "ok" in str(answer)
+
+    def test_calling_an_mcp_tool_earns_the_write_and_names_itself_in_the_footer(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """Provenance survives the move. The plural seam takes no `on_call`,
+        so the explorer records at its own boundary instead — and the footer
+        must still name what was *called*, not what was offered."""
+        monkeypatch.setattr(prebuilt_mcp, "_discover_tools", fake_discovery("search", "fetch"))
+        document = self._document()
+        package = _save_workflow(tmp_path, "mcp-flow", document)
+        model = ToolCallingScriptedModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "search", "args": {"q": "vat"}, "id": "c-0"}],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "write_topic",
+                            "args": {
+                                "topic": "uk-vat-rates",
+                                "content": "uk-vat-rates — the standard rate is 20%.",
+                            },
+                            "id": "c-1",
+                        }
+                    ],
+                ),
+                AIMessage(content="NOT covered: reduced rates."),
+            ]
+        )
+
+        report = ExplorerKnowledgeBuilder().explore(package, document, tmp_path, model)
+
+        assert report.written == ["uk-vat-rates"]
+        doc = (package / "knowledge" / "uk-vat-rates.md").read_text()
+        assert "search" in doc
+        assert "fetch" not in doc
+
+    def test_a_server_that_is_down_costs_one_capability_and_says_so(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """The plural seam's `warnings` sink is the channel the explorer
+        already has — `explore` extends `report.warnings` with it."""
+        monkeypatch.setattr(
+            prebuilt_mcp, "_discover_tools", failing_discovery(httpx.ConnectError("refused"))
+        )
+        document = self._document()
+        package = _save_workflow(tmp_path, "mcp-flow", document)
+
+        tools, _prov, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert tools == []
+        assert warnings and "LangChain docs" in warnings[0]
+
+    def test_a_non_mcp_tool_node_binds_exactly_as_before(self, tmp_path: Path) -> None:
+        """The inverse that keeps the move honest: the default plural seam is
+        the singular one with one element, and provenance still works."""
+        document = {
+            "nodes": [{"id": "w", "type": "tool.web-search", "data": {}}],
+            "edges": [],
+        }
+        package = _save_workflow(tmp_path, "web-flow", document)
+
+        tools, provenance, warnings = ExplorerKnowledgeBuilder().study_tools(
+            package, document, tmp_path
+        )
+
+        assert [t.name for t in tools] == ["web_search"]
+        assert warnings == []
+        assert provenance() == ()
