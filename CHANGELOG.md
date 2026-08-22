@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Added
+- **`openstategraph.run_context()` is Tier 1, so a tool can read the run
+  context its workflow declares.** The last of the three read doors: a
+  package's own `tools/` module imports one name and gets the values this
+  caller supplied for `settings.context`, `{}` outside a run and `{}` for a
+  workflow that declares nothing. The accessor is **module-level, not a member
+  on `BaseTool`** — `ITool` is a `Protocol` so a tool need not subclass the
+  base, and the three seams a tool already reaches (`configure(data)`,
+  `get_config()`, `get_store()`) are all module-level. The implementation is
+  unchanged and unmoved (`compile.run_context`); this is a re-export that turns
+  a Tier 2 path into a promised name. The generated-module contract's
+  `run-seams` clause names it and resolves its seam
+  (`organisms-first-class` 73).
 - **Run context reaches a model as a generated Context section, per field and
   by opt-in.** A declared field carrying `"prompt": true` is rendered into the
   system prompt of every prompted node — `agent.llm`, `route.classifier`,

@@ -40,11 +40,11 @@ needs graph state belongs in a node, not a tool.
 
 **The rule, in the words the developer is handed:**
 
-> it takes config through configure(data), the run through langgraph.config.get_config(), and memory through get_store() — a tool cannot read graph state
+> it takes config through configure(data), the run through langgraph.config.get_config(), the run context the workflow declares through openstategraph.run_context(), and memory through get_store() — a tool cannot read graph state
 
-**Why:** The clause this replaced named ToolRuntime, which does not exist in this platform, and seven green tests never noticed because they asked whether the words were present rather than whether the seam was. These three are what prebuilt_session and memory.py actually use.
+**Why:** The clause this replaced named ToolRuntime, which does not exist in this platform, and seven green tests never noticed because they asked whether the words were present rather than whether the seam was. These are what prebuilt_session and memory.py actually use. run_context() joined them in organisms-first-class 73: it is the per-run channel a workflow declares in settings.context, and it is where an API handle belongs, because it reaches a tool without reaching a model unless the author opted that field into the prompt.
 
-**Seams it depends on:** `openstategraph.abc.tool:BaseTool.configure`, `langgraph.config:get_config`, `langgraph.config:get_store`
+**Seams it depends on:** `openstategraph.abc.tool:BaseTool.configure`, `langgraph.config:get_config`, `langgraph.config:get_store`, `openstategraph:run_context`
 
 ## 3. `ladder`
 

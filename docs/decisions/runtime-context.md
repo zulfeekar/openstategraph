@@ -1,6 +1,6 @@
 # A workflow declares what its runs carry
 
-**Status: steps 1 to 6 of 7 built; the rest is prose.** `organisms-first-class/41`,
+**Status: all seven steps built (2026-08-22). The chain is closed.** `organisms-first-class/41`,
 adopted from ticket 19's owner decision (2026-08-15). The build is split into
 seven tickets, listed at the end, in the order they must land.
 
@@ -10,8 +10,9 @@ can say what its runs carry, an ill-formed declaration is refused by
 the four run-identity keys is refused in any casing. Nothing consumes it — no
 schema is minted, no value is supplied and nothing reads one — so a workflow
 declaring run context today behaves exactly as it did yesterday. The sections
-below are marked accordingly: **[BUILT]** for what 67 shipped, and everything
-else is still a plan.
+below are marked accordingly: **[BUILT]** for what 67 shipped. *(That was true
+of 67's own day; every other step has since landed too — see "What this record
+now claims, end to end" below.)*
 
 **Ticket 68 has landed** (2026-08-22) and changed no behaviour at all. The four
 run-identity keys are now spelled in one module,
@@ -46,12 +47,11 @@ This platform passed it nowhere until ticket 69, which mints the class and
 hands it to `StateGraph`. The census that used to assert *nobody* declares one
 now asserts *exactly one place does*
 (`TestOnlyTheCompilerDeclaresAContextSchema`), because the fact worth holding
-was always **where** rather than how many. Nothing supplies a value yet (70)
-and nothing reads one (71), so a workflow declaring run context today still
-behaves as it did — it simply now compiles to a graph that would accept one.
-`generated_module_contract.py` still records the read side's absence, and
-records that a published capability brief promised `ToolRuntime` anyway; 73 is
-what corrects it.
+was always **where** rather than how many. *(As of 69's own day nothing
+supplied a value and nothing read one; 70 to 73 have since closed both sides.)*
+`generated_module_contract.py`'s `run-seams` clause names the read side's
+seams — corrected away from `ToolRuntime` by `251b5a6` on 2026-08-20, and
+extended with `run_context()` by 73.
 
 ## What already exists, measured first
 
@@ -254,7 +254,7 @@ withholds the *whole* schema rather than half of it, and builds. Whether 67's
 declaration validator should refuse it earlier — in both mirrors, so the editor
 says so while you type — is `organisms-first-class/74`.
 
-### The read side is three doors — two built (71, 72), the third prose (73)
+### The read side is three doors — all three built (71, 72, 73)
 
 - **A node** reads it through **`run_context()`**, the sibling of
   `run_identity()` — **[BUILT, ticket 71]**, and *not* through a second
@@ -268,14 +268,10 @@ says so while you type — is `organisms-first-class/74`.
   a context field is a place to put an API handle, and a handle must be able to
   reach a tool without reaching the model. **[BUILT, ticket 72]**, and by a
   composed section rather than a middleware — see below.
-- **A tool** reads it through an accessor on `BaseTool`, not a third argument.
-  `BaseTool.run` validates `**kwargs` into `Args` and calls `_execute(args)`;
-  there is no third parameter and adding one changes every tool in the
-  platform. The accessor mirrors `prebuilt_session._configurable()`, which
-  already solved this exact problem for the identity keys, and it fixes the
-  false clause `generated_module_contract.py` records — *"it reads state,
-  context and memory through `ToolRuntime`"* — by making a true version of it
-  available.
+- **A tool** reads it through **`openstategraph.run_context()`** — the same
+  accessor a node uses, promoted to Tier 1 so a package's own `tools/` can
+  import it. **[BUILT, ticket 73]**, and *not* as a member on `BaseTool`,
+  which is the third thing this section had wrong. See below.
 
 **Ticket 71 has landed** (2026-08-22) and corrected the sentence above.
 
@@ -671,9 +667,82 @@ valueless declared key are left exactly as written, an unmintable key stays
 prose, an agent's instruction is untouched, and the two channels stay separate
 inside one run.
 
-**Prose, unpinned, because it describes a thing that does not exist yet:** the
-tool accessor. It is the last build ticket below, and it carries its own test
-when it lands.
+**Ticket 73 has landed** (2026-08-22) and corrected the sentence above twice
+over — which makes three designs in this chain overturned by measurement, all
+three in the same direction: a mechanism assumed from a library's shape rather
+than measured in this installation.
+
+**`get_runtime()` already worked from inside a tool.** Measured before anything
+was built: the runtime is a contextvar set for the whole agent node, and
+`BaseTool.as_langchain_tool`'s wrapper calls `_execute` inside it, so
+`run_context()` returned the run's values from a tool the day 71 landed. The
+missing thing was never a mechanism — it was a **promised name**.
+`openstategraph.compile` is Tier 2, and a seam that code *we do not write* must
+build on cannot live in a tier we may change in a minor release.
+
+**So the accessor is module-level, and `BaseTool` did not grow.** The brief
+asked for a member "mirroring `prebuilt_session._configurable()`" — and that
+method does not exist: ticket 68 deleted it in favour of the module-level
+`run_identity()`, so the cited precedent argues the opposite way. Three further
+reasons: `5549a1b` priced a `BaseTool` member for one caller and rejected it as
+a Tier 1 surface every future tool author must answer; `ITool` is a `Protocol`
+on purpose, so a tool need not subclass the base; and the three seams a tool
+already reaches (`configure(data)`, `get_config()`, `get_store()`) are all
+module-level. The `_execute(args)` signature is untouched, the substitutability
+census and the public-surface ceiling stayed green unaltered, and no recorded
+exception's member count moved.
+
+**The prompt opt-in does not govern a tool, and that is the feature.** 72's
+default-off rests on *a value sent to a provider cannot be un-sent*, which is a
+statement about the provider; a tool runs in this process and sends nothing.
+Gating the tool on the same flag would make a declared API handle unreadable by
+the one component with a legitimate use for it. So the opt-in is a gate on the
+model door only, and `test_a_tool_reads_the_run_context.py` asserts both halves
+in one run: the handle in the tool's output, and absent from the first message
+list the model was handed.
+
+`backend/tests/test_a_tool_reads_the_run_context.py` (14 tests) pins it against
+a real package with a real `tools/` folder loaded by the real `load_workflow`
+— a supplied value in the tool's output and in the answer, two callers getting
+two answers, a declared default, the handle that never reaches the prompt, and
+`a86b4d8`'s subagent measurement repeated for one of our own `BaseTool`s. The
+inverses: a workflow declaring nothing runs unchanged and its tool reads `{}`,
+a call outside any run is `{}` rather than an exception, and the clause's every
+seam resolves in this installation.
+
+## What this record now claims, end to end
+
+The chain is closed. As of `52ff8e0` + ticket 73, all of this is built and
+pinned by tests rather than by this page:
+
+1. A document **declares** what its runs carry (`settings.context`), and an
+   ill-formed or reserved-key declaration is refused by `openstategraph
+   validate` with a non-zero exit (67).
+2. The four run-identity keys are read through **one** accessor, and a fifth
+   hand-rolled reader fails a census (68).
+3. The compiler **mints** a context schema and hands it to `StateGraph`, in
+   exactly one place (69).
+4. A run **supplies** context by three doors — `ask(context=)`, the HTTP
+   `context` object, `run --context KEY=VALUE` — through one validator of ours
+   (70).
+5. A **node** reads it: `run_context()`, `{{key}}` in the text field the node
+   already had, unresolved left byte-identical (71).
+6. A **prompt** receives only the fields whose author wrote `"prompt": true`,
+   as a generated non-editable **Context** section above the rules, in all five
+   prompted families (72).
+7. A **tool** reads it through the Tier 1 `openstategraph.run_context()`,
+   including inside a subagent, and the generated-module contract tells authors
+   so with a seam that resolves (73).
+
+**What remains filed, and is not claimed here:**
+
+- **74** — a context key that cannot be a field name; a small judgement, no
+  longer gating anything since 72 renders only opted-in keys.
+- **75** — a resumed run loses the context the first half had. Live since 71.
+- **78** — a mount cannot supply a value it does not itself declare; needs the
+  owner, since it is a new serialised field on the mount.
+- **80** — the read-only inspector panel cannot show generated context; the
+  surface half of the prompt law.
 
 ## The build, in the order it must land
 
@@ -685,7 +754,7 @@ when it lands.
 | ~~70~~ | ~~One validator, three supply routes~~ | **Landed 2026-08-22.** `validate_run_context` and `coerce_context_flags` in `compile/run_context.py`, `RunContextError` (Tier 1), `ask(context=)`, `RunRequest.context`, `run --context KEY=VALUE`. Reads nothing, as designed. |
 | ~~71~~ | ~~Nodes read it~~ | **Landed 2026-08-22.** `run_context()` and `render_run_context()` in `compile/run_context.py`, read by `_input` and `_static_text`. `get_runtime()` rather than a second parameter; the prompted families deliberately untouched. |
 | ~~72~~ | ~~The generated prompt **Context** section, and per-field opt-in~~ | **Landed 2026-08-22.** `"prompt": true` on the descriptor (default off), `prompt_context_fields` and `run_context_prompt_section` in `compile/run_context.py`, `context=` on Router / Grader / BaseOrchestrator, composed in all five prompted factories. A composed section rather than a middleware, for the reason recorded above. |
-| 73 | `BaseTool` context accessor, and the generated-module contract clause | Last because it corrects a *published* false clause, which should be corrected against a working mechanism rather than a planned one. |
+| ~~73~~ | ~~The tool accessor, and the generated-module contract clause~~ | **Landed 2026-08-22.** `openstategraph.run_context` promoted to Tier 1 (`__init__`, `public_api.txt`, `docs/stability.md`), the `run-seams` clause and the build door's brief extended with it, and the subagent sentence put in `docs/building-an-atom.md`. **Not** a member on `BaseTool`, for the reason recorded above; the `ToolRuntime` clause it was filed to correct had already been corrected by `251b5a6` two days earlier. |
 
 The editor's inspector surface is deliberately not in this list: it derives
 from 67's field schema and can land beside any of 69–72, but it cannot land

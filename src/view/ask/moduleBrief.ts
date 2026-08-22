@@ -32,8 +32,9 @@
  * construct we do not surface; `docs/decisions/special-agents-2026-08.md`
  * records it as *"new mechanism — flagged, not decided"*. A tool here gets its
  * validated `Args` and nothing else — config through `configure(data)`, the
- * run through `langgraph.config.get_config()`, memory through `get_store()`,
- * and graph state not at all.
+ * run through `langgraph.config.get_config()`, the workflow's declared run
+ * context through `openstategraph.run_context()` (`organisms-first-class` 73),
+ * memory through `get_store()`, and graph state not at all.
  *
  * Seven tests in this file's own spec held that sentence, all green, because
  * every one asked whether the **words** were present. None asked whether the
@@ -85,7 +86,8 @@ export function moduleBrief(gap: string, slug: string | null | undefined): strin
     `- it lives in the ${where} package's own tools/ folder, beside its ` +
       `workflow.json — never in the installed package`,
     '- it takes config through configure(data), the run through ' +
-      'langgraph.config.get_config(), and memory through get_store() — ' +
+      'langgraph.config.get_config(), the run context the workflow declares ' +
+      'through openstategraph.run_context(), and memory through get_store() — ' +
       'a tool cannot read graph state',
     '- it is a concrete leaf on the existing tool ladder — a BaseTool ' +
       'subclass that implements _execute',

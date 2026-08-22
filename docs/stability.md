@@ -32,6 +32,7 @@ from openstategraph import (
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
     ThreadNotResumable,
+    run_context,
 )
 from openstategraph.abc import (
     ITool, BaseTool, ToolResult, NoArgs, Field, ToolField,

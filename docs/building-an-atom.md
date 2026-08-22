@@ -278,14 +278,31 @@ correct for a stateless tool.
 
 ### What a tool can reach — and the checker that says so
 
-Three seams, and no fourth:
+Four seams, and no fifth:
 
 | What | How |
 | --- | --- |
 | its node's config | `configure(data)`, reading the keys its `node_fields` declare |
 | the run — user, session, thread, workflow slug | `langgraph.config.get_config()["configurable"]`, as `prebuilt_session.SessionIdentityTool` does |
+| the run context the workflow declares | `openstategraph.run_context()`, the values a caller supplied for `settings.context` |
 | memory | `langgraph.config.get_store()`, as `memory.py` does |
 | **graph state** | **not available.** `BaseTool.run` validates `**kwargs` into `Args` and calls `_execute(args)`. A design that needs graph state belongs in a node. |
+
+`run_context()` is a plain `dict[str, Any]` and is `{}` in all three of the
+cases a tool cannot act differently on: outside a run, in a workflow that
+declares nothing, and in a run whose caller supplied nothing. It is the
+channel for a per-run API handle, a tenant or a case id — and it reaches your
+tool *without* reaching a model, because a declared field is rendered into a
+prompt only when its author wrote `"prompt": true` on it. `docs/on-the-canvas.md`
+and `docs/decisions/runtime-context.md` carry the declaration side.
+
+**It is workflow-wide, subagents included.** A subagent is isolated from the
+parent's messages and graph state; it is *not* isolated from run context — a
+parent's values reach a tool running inside a subagent unchanged, measured in
+`backend/tests/test_runtime_context_facts.py` and again for a `BaseTool` in
+`backend/tests/test_a_tool_reads_the_run_context.py`. So run context is the
+right home for a value every part of the run legitimately needs, and the wrong
+home for one node's secret: there is no boundary here to hold it at.
 
 This is worth stating flatly because the wrong answer shipped. The "build one
 for this workflow" brief — the door a run offers when nothing in the library

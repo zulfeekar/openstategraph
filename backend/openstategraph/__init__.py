@@ -32,6 +32,12 @@ This package's own import touches neither LangGraph, LangChain nor FastAPI.
   the `workflow.json` document format itself — which is more public than any
   Python symbol we ship, because a document written against schema version *N*
   must load on every release that claims to support *N*.
+  `run_context()` is here rather than under `.compile` for the reason ticket
+  73 found: it is read by code *we do not write* — a package's own `tools/`
+  and `functions/` — and a seam an outside author must build on cannot live
+  in a tier we may change in a minor release. The implementation stays in
+  `compile.run_context` beside the mint and the validator; this is a
+  re-export, never a second reader.
 - **Tier 2, provisional**: `openstategraph.compile`, `.knowledge`,
   `.plugin_interop`, `.prebuilt_*`. Importable and documented; may change in a
   minor release with a changelog note.
@@ -59,6 +65,7 @@ from openstategraph.loader import (
     CompiledWorkflow,
     load_workflow,
 )
+from openstategraph.compile.run_context import run_context
 from openstategraph.results import RunResult
 
 
@@ -98,4 +105,5 @@ __all__ = [
     "Workflows",
     "__version__",
     "load_workflow",
+    "run_context",
 ]

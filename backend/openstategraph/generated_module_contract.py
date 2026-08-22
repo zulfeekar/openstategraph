@@ -32,10 +32,23 @@ Worth stating plainly, because the wrong answer was published for a day:
   its `node_fields` declare;
 - **the run** — `langgraph.config.get_config()["configurable"]`, which is how
   `prebuilt_session.SessionIdentityTool` learns who it is talking to;
+- **the run's declared context** — `openstategraph.run_context()`, the values
+  a caller supplied for the `settings.context` fields the workflow declares
+  (`organisms-first-class` 73). `{}` outside a run and `{}` for a workflow
+  that declares nothing, so a tool never has to ask which it is in;
 - **memory** — `langgraph.config.get_store()`, as `memory.py` does;
 - **graph state — not at all.** `BaseTool.run` validates `**kwargs` into
-  `Args` and calls `_execute(args)`. There is no third argument and no ambient
-  accessor. A design needing graph state belongs in a node, not a tool.
+  `Args` and calls `_execute(args)`. There is no third argument, and the
+  ambient accessors above reach the *run*, never the state flowing between
+  nodes. A design needing graph state belongs in a node, not a tool.
+
+**Run context is workflow-wide, including inside a subagent.** A subagent is
+invoked as a tool and is isolated from the parent's messages and graph state —
+it is *not* isolated from runtime context, measured in
+`tests/test_runtime_context_facts.py` and again for one of our own tools in
+`tests/test_a_tool_reads_the_run_context.py`. So a value one node should hold
+and another should not does not belong in run context: there is no boundary
+here to hold it at.
 
 ## What this checker does not do
 
@@ -137,20 +150,26 @@ CLAUSES: tuple[Clause, ...] = (
         id="run-seams",
         rule=(
             "it takes config through configure(data), the run through "
-            "langgraph.config.get_config(), and memory through get_store() — "
-            "a tool cannot read graph state"
+            "langgraph.config.get_config(), the run context the workflow "
+            "declares through openstategraph.run_context(), and memory "
+            "through get_store() — a tool cannot read graph state"
         ),
         why=(
             "The clause this replaced named ToolRuntime, which does not exist "
             "in this platform, and seven green tests never noticed because "
             "they asked whether the words were present rather than whether the "
-            "seam was. These three are what prebuilt_session and memory.py "
-            "actually use."
+            "seam was. These are what prebuilt_session and memory.py actually "
+            "use. run_context() joined them in organisms-first-class 73: it is "
+            "the per-run channel a workflow declares in settings.context, and "
+            "it is where an API handle belongs, because it reaches a tool "
+            "without reaching a model unless the author opted that field into "
+            "the prompt."
         ),
         seam=(
             "openstategraph.abc.tool:BaseTool.configure",
             "langgraph.config:get_config",
             "langgraph.config:get_store",
+            "openstategraph:run_context",
         ),
     ),
     Clause(
