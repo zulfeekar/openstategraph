@@ -29,6 +29,17 @@ whose `revise`/`rejected` edge caused this lap. So the test drives a real
 compiled graph in both shapes and reads the human turn the node actually
 received — asserting on the helper alone would stay green if the derivation
 were wired to the wrong node.
+
+`organisms-first-class` 55 closed the third arm the same way. The bystander
+role was pinned at the plan and the helper only, because a `human.approval`
+node compiles to `interrupt()` and its sentence reaches a model solely after a
+resume carries a person's refusal back — so the helper-level test stayed green
+with the approval's `rejected` edge removed from the feedback sources
+altogether, which is the run-time seam it was supposed to be about. The live
+case pauses a compiled graph at the gate, resumes with
+`Command(resume={"decision": "reject", ...})` and reads the turn the holding
+agent received. A person's refusal is not a grader's verdict, and the sentence
+it produces says so.
 """
 
 from __future__ import annotations
@@ -235,6 +246,46 @@ def _bystander_document() -> dict[str, Any]:
     }
 
 
+DRAFT = "Sorry your order was late; here is a voucher."
+REFUSAL = "Do not offer a voucher without a manager's sign-off."
+
+
+def _one_rejected_approval(draft: str = DRAFT) -> list[str]:
+    """Drive the bystander shape *live*: pause at the gate, refuse, resume.
+
+    A `human.approval` node compiles to `interrupt()`, so the bystander
+    sentence only reaches a model **after** a resume carries a person's
+    refusal back into the graph — which is why 54 pinned this arm at the plan
+    and the helper instead, and why that is the "green test at the wrong
+    layer" shape this ticket exists to close. `InMemorySaver` is enough: the
+    pause and the resume happen in one process, so nothing here is a claim
+    about durability (`test_cli_resume.py` makes that one, against sqlite).
+
+    Returns the human turns carrying a rejection that a model actually
+    received, in order.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.types import Command
+
+    model = RespondingModel([], default=draft)
+    runtime = NodeRuntime(model=model)
+    document = _bystander_document()
+    graph = WorkflowCompiler().build(
+        document, RunState, runtime.factory(document), checkpointer=InMemorySaver()
+    )
+    config = {"configurable": {"thread_id": "bystander-1"}}
+    paused = graph.invoke(
+        {"question": QUESTION, "attempts": 0, "decisions": {}, "outputs": {}},
+        config,
+    )
+    assert "__interrupt__" in paused, "the gate did not pause; nothing was resumed"
+    before = len(model.calls)
+    graph.invoke(
+        Command(resume={"decision": "reject", "feedback": REFUSAL}), config
+    )
+    return [c for c in model.calls[before:] if "was rejected" in c]
+
+
 class TestABystanderIsNotBlamedEither:
     """Derived at the compiler, not at the node type: the rule is edge shape."""
 
@@ -252,3 +303,49 @@ class TestABystanderIsNotBlamedEither:
         assert "nothing you produced led to it" in text
         assert "Revise it" not in text
         assert "The draft." in text
+
+    def test_a_live_refusal_at_the_gate_reaches_the_holding_agent_unblamed(
+        self,
+    ) -> None:
+        """The seam 54 left open: the interrupt, the resume, and the turn."""
+        prompts = _one_rejected_approval()
+        assert prompts, "the holding agent never saw the person's refusal"
+        assert "nothing you produced led to it" in prompts[0]
+        assert "Revise it" not in prompts[0]
+        assert "You did not write it and nothing you produced led to it" in prompts[0]
+        assert "Your last output was used further down" not in prompts[0]
+        assert "Your previous answer was rejected" not in prompts[0]
+
+    def test_the_refused_draft_and_the_persons_reason_both_travel(self) -> None:
+        prompts = _one_rejected_approval()
+        assert prompts, "the holding agent never saw the person's refusal"
+        assert DRAFT in prompts[0]
+        assert REFUSAL in prompts[0]
+
+    def test_a_refusal_that_refused_nothing_visible_stays_silent_about_it(
+        self,
+    ) -> None:
+        prompts = _one_rejected_approval(draft="")
+        assert prompts, "the holding agent never saw the person's refusal"
+        assert "quoted so you know what it said" not in prompts[0]
+        assert REFUSAL in prompts[0]
+
+    def test_a_granted_approval_says_nothing_about_a_rejection(self) -> None:
+        """The inverse: approving must not deliver a rejection to anybody."""
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.types import Command
+
+        model = RespondingModel([], default=DRAFT)
+        runtime = NodeRuntime(model=model)
+        document = _bystander_document()
+        graph = WorkflowCompiler().build(
+            document, RunState, runtime.factory(document), checkpointer=InMemorySaver()
+        )
+        config = {"configurable": {"thread_id": "bystander-approved"}}
+        graph.invoke(
+            {"question": QUESTION, "attempts": 0, "decisions": {}, "outputs": {}},
+            config,
+        )
+        graph.invoke(Command(resume={"decision": "approve"}), config)
+
+        assert not [c for c in model.calls if "was rejected" in c]
