@@ -155,6 +155,16 @@ describe('the words the field uses', () => {
     expect(copy).toContain(String(STEP_BUDGET_DEFAULT));
   });
 
+  it('says what this number means when the package is mounted', () => {
+    // `organisms-first-class` 61. The field is one number with two effects:
+    // run this package directly and it is the run's budget; mount it inside
+    // another workflow and it can only take LESS than what that run allowed,
+    // never more. A developer who sets 1000 here and mounts the package into
+    // a 50-superstep run gets 50, and nothing on the canvas said so.
+    expect(STEP_BUDGET_HINT).toMatch(/mount/i);
+    expect(STEP_BUDGET_HINT).toMatch(/less/i);
+  });
+
   it('does not teach "make it bigger" as the answer to a loop that will not stop', () => {
     // CLAUDE.md prefers a guard that routes to END over raising the number,
     // and a field that only offers the number teaches the opposite move.

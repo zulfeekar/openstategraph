@@ -37,10 +37,16 @@ if TYPE_CHECKING:
     from openstategraph.compile.composition import MountedGraph
 
 from langgraph.constants import TAG_NOSTREAM
+from langchain_core.runnables.config import ensure_config
 from langgraph.errors import GraphRecursionError
 
 from openstategraph.abc.grader import Grader, Verdict
 from openstategraph.errors import StepBudgetExhausted
+from openstategraph.step_budget import (
+    DEFAULT_STEP_BUDGET,
+    mount_step_budget,
+    workflow_step_budget,
+)
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
@@ -3122,6 +3128,12 @@ class NodeRuntime:
             )
 
         child_graph = None
+        #: The document the child will actually be compiled from, kept only
+        #: so the closure can ask what size it saved for itself
+        #: (`organisms-first-class` 61). `None` when there is no child at all,
+        #: which `mount_step_budget` reads as "saved nothing" — the
+        #: overwhelming majority, and byte-identical to before that ticket.
+        child_sizing_document: dict[str, Any] | None = None
         if slug and self.services.document_loader is not None:
             try:
                 child_document = self.services.document_loader(slug)
@@ -3138,6 +3150,10 @@ class NodeRuntime:
                     self.diagnostics.record(
                         Finding.OVERRIDE_PROBLEM, f"{slug or node_id}: {warning}"
                     )
+                # Taken *after* the overrides above, so a mount that overrode
+                # its way to a different size is sized against what it will
+                # run rather than against the package as it sits on disk.
+                child_sizing_document = child_document
                 # A mount's card shows an outcome its child may have no way to
                 # enforce. Keyed on *an outcome being written* rather than on
                 # the node's type — since v3 there is one mount type, and what
@@ -3319,22 +3335,47 @@ class NodeRuntime:
             #    tests) the child's frames stopped being attributable to the
             #    mount at all, which is precisely why the highlight sat on the
             #    router for the twenty seconds the mounted analyst worked.
-            child_config = {"configurable": {"workflow_slug": slug}} if slug else None
-            # The child spends the RUN's step budget, not one of its own: this
-            # invoke inherits `recursion_limit` through the ambient runnable
-            # config, and `child_config` overrides exactly one `configurable`
-            # key (ticket 02). That is the reading `organisms-first-class` 60
-            # settled — a mount is one isolated step of this run, so it is
-            # budgeted like one — and it is left as it is. What 60 refused was
-            # the *report*: below the slack `56`'s guard needs, the child cannot
-            # stop itself, and LangGraph's own exception used to reach the
-            # caller whole, advising them to increase a limit this product's
-            # pinned copy tells them not to. Translated at the boundary instead,
-            # the way `credential_error_from` translates a vendor's refusal.
-            # Sizing the number against the child's own drawing is the half that
-            # is not settled — a child package's `settings.recursionLimit` is
-            # not consulted here — and is filed as 61 rather than changed
-            # quietly, since it would alter what a saved field means.
+            child_config: dict[str, Any] | None = (
+                {"configurable": {"workflow_slug": slug}} if slug else None
+            )
+            # And the second key this boundary sets, for the first time in
+            # `organisms-first-class` 61: how much of the run's budget this
+            # mount may spend. `recursion_limit` is a STANDALONE `config` key,
+            # not a member of `configurable` — putting it there would set an
+            # ordinary configurable named `recursion_limit` that LangGraph
+            # never reads, and the mount would silently keep the run's number.
+            #
+            # `ensure_config()` is what the ambient runnable context answers
+            # with, so `inherited` is the number this superstep is itself
+            # running under — the run's ceiling as the mount sees it. Never
+            # raised, only lowered; `mount_step_budget` carries the argument
+            # and the two readings it rejects.
+            inherited_budget = int(ensure_config().get("recursion_limit") or DEFAULT_STEP_BUDGET)
+            requested_budget = workflow_step_budget(child_sizing_document)
+            child_budget = mount_step_budget(inherited_budget, child_sizing_document)
+            if child_budget != inherited_budget:
+                child_config = {**(child_config or {}), "recursion_limit": child_budget}
+            # The child's CEILING is the run's; the child may only ask for
+            # less. `organisms-first-class` 60 settled the first half — a mount
+            # is one isolated step of this run, so it is budgeted like one, and
+            # the number arrives through the ambient runnable config with the
+            # `configurable` override of ticket 02 riding beside it. 61 settled
+            # the second: before it, a child package's `settings.recursionLimit`
+            # was consulted nowhere on this path in *either* direction, at any
+            # depth, so a field that reaches every direct door
+            # (`workflow-gallery` 26) was dead the moment the same package was
+            # mounted. It now lowers this one invoke's ceiling and can never
+            # raise it — `mount_step_budget` carries the argument and the two
+            # readings it rejects.
+            #
+            # What 60 refused was the *report*: below the slack `56`'s guard
+            # needs, the child cannot stop itself, and LangGraph's own exception
+            # used to reach the caller whole, advising them to increase a limit
+            # this product's pinned copy tells them not to. Translated at the
+            # boundary instead, the way `credential_error_from` translates a
+            # vendor's refusal — and now carrying, when it is true, the one
+            # thing 61's rule costs a developer: the number they saved and the
+            # smaller one the run could actually give.
             try:
                 final = captured.invoke(
                     {
@@ -3353,6 +3394,18 @@ class NodeRuntime:
                     child_config,
                 )
             except GraphRecursionError as exc:
+                # The field a developer set, and what it could not buy
+                # (`organisms-first-class` 61). Only when the package asked for
+                # MORE than the run allowed — that is the one case the mount
+                # boundary overrules a saved field, and overruling one in
+                # silence is what this ticket refused. A package that asked for
+                # less got exactly what it asked for and there is nothing to
+                # explain, so no sentence is invented for it.
+                overruled = (
+                    f" The mounted workflow saved a step budget of {requested_budget} "
+                    f"supersteps, and a mount may only ask for less than the run's — "
+                    f"this run allowed {inherited_budget}."
+                ) if requested_budget is not None and requested_budget > inherited_budget else ""
                 raise StepBudgetExhausted(
                     f'The mounted workflow "{slug or "no workflow selected"}" '
                     "spent the whole of this run's step budget without producing an "
@@ -3360,7 +3413,7 @@ class NodeRuntime:
                     "step of this run and spends the same budget, and what that buys "
                     "depends on the mounted workflow's own drawing — every node on a "
                     "cycle costs a superstep per lap. A loop that never settles needs a "
-                    "grader that can pass it, not more supersteps."
+                    "grader that can pass it, not more supersteps." + overruled
                 ) from exc
             answer = final.get("answer", "")
             # The child's loop cost is part of the parent's story: without

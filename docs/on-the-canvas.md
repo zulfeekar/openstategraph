@@ -110,11 +110,19 @@ make a loop start crashing again. A mount counts as one superstep like any
 other node, because the mounted workflow runs as a separate graph with a
 counter of its own.
 
-**But the number a mount runs on is the run's, not the mounted package's.** A
-child starts counting from zero and is given the same ceiling as the run that
-mounted it, so a parent of three steps and a child drawn with a loop are
-sharing one number that was probably chosen for the parent — and a step budget
-saved on the mounted package is not consulted at all. When a mounted workflow
+**The ceiling a mount runs under is the run's; the mounted package may only
+ask for less.** A child starts counting from zero and is given the same
+ceiling as the run that mounted it, so a parent of three steps and a child
+drawn with a loop are sharing one number that was probably chosen for the
+parent. A step budget saved on the mounted package *is* consulted, in one
+direction only: it can lower that ceiling for the child, and it can never
+raise it. A package that saved 20 supersteps inside a run given 200 stops
+itself at 20; a package that saved 1000 inside a run given 50 gets 50, and if
+it then runs out the mount says so and names both numbers — the one the
+package saved and the smaller one the run could give. The asymmetry is the
+point: a caller who names a step budget has said what their whole run may
+cost, and a mounted package able to raise it would make that ceiling
+meaningless. When a mounted workflow
 does run out, the two outcomes are the ones above, one level down: with enough
 slack the child's own grader stops the loop and publishes, and the warning
 naming it arrives under the mount (`mount-review/grader1`); with less than the

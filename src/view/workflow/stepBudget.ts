@@ -49,12 +49,23 @@ export const STEP_BUDGET_PLACEHOLDER = String(STEP_BUDGET_DEFAULT);
  * The advice, because a field that only offers a bigger number teaches the
  * move CLAUDE.md argues against: a loop that will not settle wants a grader
  * that stops it, not more room to spin.
+ *
+ * And a fourth sentence, added by `organisms-first-class` 61: what this one
+ * number does on the *other* path. Run this package directly and it is the
+ * run's budget. Mount it inside another workflow and the mounting run's
+ * number is a ceiling — this one may take less of it, never more — because a
+ * caller who named a step budget said what their whole run may cost, and a
+ * mounted package that could raise it would make that ceiling meaningless.
+ * The box is disabled inside a mounted instance, so the only place a reader
+ * meets this number is the child package's own canvas; if the sentence is not
+ * here it is nowhere.
  */
 export const STEP_BUDGET_HINT =
   'Supersteps a run may spend before it stops. Not laps — a loop that fans out ' +
   'spends several supersteps per lap, so this is not a count of laps. Leave it ' +
   'empty for the default, 50. If a loop never settles, a grader that can pass is ' +
-  'the fix; a bigger number only lets it run longer.';
+  'the fix; a bigger number only lets it run longer. When this workflow is ' +
+  'mounted inside another, it may take less than that run allowed but never more.';
 
 /**
  * The budget a document saved, or `null` when it saved none.

@@ -24,12 +24,13 @@ the answer the workflow had already produced was thrown away — with
 LangGraph's own advice to raise the number, which is the opposite of what this
 module's callers tell a user.
 
-**A mount runs on this number too, and does not get one of its own**
-(`organisms-first-class` 60). A mounted child is a separate `invoke` with a
-fresh superstep counter and the *run's* ceiling, inherited through the ambient
-runnable config — so the number is the **run's**, not the workflow's, and a
-child package's own `settings.recursionLimit` is not consulted on that path.
-Sizing it against the child's own drawing is filed as 61. Below the slack the
+**A mount runs on this number too, and may only ask for less**
+(`organisms-first-class` 60 and 61). A mounted child is a separate `invoke`
+with a fresh superstep counter and the *run's* ceiling, inherited through the
+ambient runnable config — so the ceiling is the **run's**, settled by 60. What
+61 added is `mount_step_budget` below: the child's own saved
+`settings.recursionLimit` is consulted at the mount boundary and can *lower*
+that ceiling for the child, never raise it. Below the slack the
 guard above needs, the child cannot stop itself and the exhaustion arrives at
 the mount boundary, where `node_runtime._subgraph` translates it into
 `StepBudgetExhausted` rather than letting LangGraph's advice to raise the
@@ -97,3 +98,36 @@ def resolve_step_budget(explicit: int | None, document: Any) -> int:
     if explicit is not None:
         return explicit
     return workflow_step_budget(document) or DEFAULT_STEP_BUDGET
+
+
+def mount_step_budget(inherited: int, document: Any) -> int:
+    """The ceiling a *mounted* child runs under: the smaller of two numbers.
+
+    `organisms-first-class` 61. `resolve_step_budget` above answers "what does
+    this run get"; this answers "how much of it may this mount spend", and the
+    two differ because the caller is different. A caller of a run *names* a
+    number and means it, higher or lower. The caller of a mount is the run
+    itself, and its number is a **ceiling** — a mount is one isolated step of
+    it. So a child package's saved `settings.recursionLimit` is honoured in
+    exactly one direction:
+
+        min(what the run allows, what the child saved)
+
+    A child asking for **less** gets less, and stops itself gracefully through
+    `56`'s guard instead of spending a caller's budget it declared it did not
+    need. A child asking for **more** gets the run's number, because the
+    alternative — a mounted package saving 1000 inside a `recursion_limit=10`
+    run — is an unbounded run, which is the one thing a step budget exists to
+    prevent. That case is not silent: `node_runtime._subgraph` names both
+    numbers when such a child then runs out.
+
+    Reading the child's number as the *winner* was priced and rejected for
+    that reason; ignoring it entirely was rejected because the downward
+    direction costs a caller nothing. Before this, neither direction had any
+    effect at any depth — a grandchild saving 200 under a mid saving 300 ran
+    on the run's number and neither saved number was consulted.
+    """
+    requested = workflow_step_budget(document)
+    if requested is None:
+        return inherited
+    return min(inherited, requested)
