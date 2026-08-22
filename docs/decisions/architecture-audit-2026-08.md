@@ -116,7 +116,7 @@ mapping). A source-level pin now fails the moment a node update grows a
   (`async`) is acceptable for editor runs. Note for the eventual deploy story.
 - **`maxConnections: Infinity`** (ticket 08) — pre-existing, tracked there.
 
-## node_runtime split — PLANNED, not executed
+## node_runtime split — step 2 executed, the rest still planned
 
 `node_runtime.py` was ~1.5k lines when this was measured (2026-08-09); it is
 well past twice that now — `wc -l` is the number, and `gap-register.md` RC-07
@@ -129,8 +129,16 @@ plus module helpers. The mass is real, though, and the seams are clean:
 
 1. `compile/state.py` — `RESET`, the three reducers, `RunState`. Pure, no
    imports from the rest of the file.
-2. `compile/context.py` — `_thread_question`, `_final_text`, `_upstream_text`,
-   `_text`, `advisor_context` (prompt/state text helpers).
+2. `compile/context.py` — **done**, 2026-08-22 (`docs-and-gaps` 03), with one
+   correction to the membership above. That list mixed two things: functions
+   that render *prompt context* from a document and a plan, and functions that
+   read a **`RunState`**. Only the first belongs here — `context.py` holds
+   `nested_record`, `advisor_context`, `held_tools_context`, `branch_context`,
+   `rejection_feedback`, `revision_request` and the two parsing helpers they
+   need (`_text`, `_branch_entries`), and imports no state at all. The state
+   readers (`_thread_question`, `_final_text`, `_upstream_text`) move with
+   `RunState` in step 1, because a module that reads a state schema is on the
+   far side of that seam, not this one.
 3. `compile/nodes/` package, one module per family, each exporting a
    `build(runtime, node_id, node, plan)` function: `io.py` (input/output/
    passthrough), `agents.py` (`_agent`), `deciders.py` (router/grader/
@@ -146,7 +154,7 @@ plus module helpers. The mass is real, though, and the seams are clean:
    which imports from `node_runtime` heavily, including underscore names —
    never moves.
 
-Why not executed now: the builders are closures over `NodeRuntime` state
+Why the rest is not executed yet: the builders are closures over `NodeRuntime` state
 (`_types`, `_nodes`, `_model_cache`, warning lists, the ambient-knowledge
 memo), so the mechanical move rewrites every `self.` reference in ~900 lines
 during the same session that changed turn-reset and feedback semantics.
@@ -154,3 +162,29 @@ Two behavioural fixes and a structural rewrite in one change set is exactly
 the churn the tests-before-refactor rule exists to prevent. The split is
 mechanical, the seams above are the whole design, and it should be its own
 ticket with zero behavioural diffs.
+
+
+### What executing step 2 measured (2026-08-22)
+
+The numbers in this section were badly stale and are worth replacing with
+measured ones rather than corrected prose. `node_runtime.py` was **4127
+lines**, not the 1639 the `docs-and-gaps` 03 ticket carried. `NodeRuntime`
+itself is **not** a recorded ceiling exception and does not need to be: it
+passes at **8** public members, pinned by name in
+`backend/tests/test_public_surface_ceiling.py`. So the file is a **length**
+problem and not a god-class problem, which changes the order of the remaining
+work: the win is moving mass out, and the safest mass is whatever is already
+pure.
+
+The move itself cost nothing to verify — 4270 passed / 1 skipped before and
+after, **no test file edited**, and a deliberate mutation inside the moved
+`rejection_feedback` turned `test_a_rejection_without_a_note.py` red, proving
+the tests reach the code in its new home.
+
+Two source-scanning tests constrain step 3 and are easy to trip:
+`test_every_run_door_carries_identity.py` asserts `compile/node_runtime.py`
+holds exactly one `configurable` literal (`{"workflow_slug"}`), and
+`test_message_content_is_read_the_same_way.py` scans that same path for
+`str(content)`. Moving the mount builder moves the first assertion's subject;
+both tests name the path as a **constant**, so the module list has to move with
+the code or the guard silently stops guarding.

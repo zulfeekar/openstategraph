@@ -174,7 +174,7 @@ def test_the_runtimes_members_are_each_nameable_without_and() -> None:
         # `names`.
         "machinery_nodes",
         # The seventh, named rather than hidden. Written by `_agent` after it
-        # binds (`node_runtime.py:1459`) so a test can assert the wiring
+        # binds (`node_runtime.py:1910`) so a test can assert the wiring
         # produced the tools without a model — a test seam, and a test seam on
         # the public surface is still on the public surface. It is what the old
         # `vars()`-on-a-fresh-instance pin could not see.
