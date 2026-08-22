@@ -1388,6 +1388,7 @@
         "maxRetries",
         "outcome",
         "overrides",
+        "persistence",
         "timeoutSeconds",
         "workflow"
       ]

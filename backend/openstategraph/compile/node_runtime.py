@@ -3100,10 +3100,19 @@ class NodeRuntime:
         result.
         """
         from openstategraph.compile.composition import MountedGraph
+        from openstategraph.compile.mount_persistence import (
+            carries_the_parents_dialogue,
+            mount_checkpointer,
+            mount_persistence,
+        )
         from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
 
         data = node.get("data") or {}
         slug = _text(data, "workflow").strip()
+        # How long this child's own state lives (`organisms-first-class` 30).
+        # Absent — every document saved before that ticket — is
+        # `per-invocation`, which is what this boundary always did.
+        persistence = mount_persistence(data.get("persistence"))
         upstream = [src for src, dst in plan.edges if dst == node_id]
         # A subgraph fed by a grader's `pass` (or an approval's `approved`)
         # arrives over a *conditional* edge, which `plan.edges` does not
@@ -3216,6 +3225,12 @@ class NodeRuntime:
                     child_document,
                     RunState,
                     child_factory,
+                    # The tri-state, and the first time this boundary has said
+                    # anything at all about it. `None` is the argument it
+                    # always passed by omission, so a mount that did not opt in
+                    # compiles exactly as it did before
+                    # (`compile/mount_persistence.py` carries the rest).
+                    checkpointer=mount_checkpointer(persistence),
                     store=self.services.memory_store,
                 )
                 # Inherited *upwards*, unlike everything else about a child
@@ -3394,7 +3409,20 @@ class NodeRuntime:
                         # with fresh state, so the parent thread's history never
                         # reached it). Graph state stays isolated; the DIALOGUE
                         # is precisely what a routed conversational child needs.
-                        "messages": list(state.get("messages") or []),
+                        #
+                        # Withheld from a **per-thread** child, and only from
+                        # one (`organisms-first-class` 30): that child already
+                        # holds its own history in its own checkpoint, so
+                        # copying the parent's on top of it says every turn
+                        # twice — measured at five messages where four had been
+                        # said. A per-invocation or stateless child has no
+                        # history of its own and this copy is the only
+                        # continuity it can have, so it is unchanged for them.
+                        "messages": (
+                            list(state.get("messages") or [])
+                            if carries_the_parents_dialogue(persistence)
+                            else []
+                        ),
                         "attempts": 0,
                         "decisions": {},
                         "outputs": {},

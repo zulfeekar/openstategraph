@@ -126,3 +126,32 @@ edits the field as JSON with the same validation.
   predictable and matches how the inspector edits fields.
 - **Override by node *title***: titles are display text and not unique; ids
   are the stable contract (same reasoning as the router branch-id decision).
+
+## What is *not* an override: the child's persistence
+
+`organisms-first-class` 30. A mount now also declares **how long its child's own
+state lives** — `data.persistence`, one of `per-invocation` (the default and
+everything saved before that ticket), `per-thread`, or `stateless`, compiling to
+LangGraph's `.compile(checkpointer=None|True|False)`.
+
+**It is a field of its own, and deliberately not an override.** The rule this
+document states is that an override *narrows* a mount: it replaces a value the
+child's own document already declares, on this instance, leaving the package
+unchanged. A persistence mode declares nothing the child's document contains. It
+redefines the child's **lifecycle** — whether its checkpoint survives the call —
+which is a property of the mount's relationship to the run and not a narrowing
+of the package. Routing it through the override editor would have made
+`overrides` mean two different kinds of thing, which is the ambiguity the
+rejected alternatives below were rejected for.
+
+It sits beside the overrides field on the mount card for the same reason
+overrides do: it is per **instance**, not per package. Whether a child should
+remember depends on how it is used — the same analyst package is a one-off
+lookup in one document and a running dialogue in another.
+
+**The warning travels with the field.** Stateful subgraphs write to one
+checkpoint namespace, so parallel calls to the same mount conflict; per-thread
+is the exception a developer reaches for, never the obvious upgrade. And a
+`stateless` mount keeps no checkpoint at all, so an approval anywhere inside the
+child can never pause. Both sentences are on the field's own hint, pinned by
+`src/nodes/compose/persistenceIsAField.test.ts`.

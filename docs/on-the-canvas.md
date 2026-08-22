@@ -217,6 +217,31 @@ that talks to a person needs the dialogue so far, or it re-asks a question that
 was already answered one message ago. Working state is isolated; the
 conversation is shared.
 
+**And what the child keeps between turns is a choice you make on the card.**
+*What the child remembers* has three settings, and the first is what every
+mount has always done:
+
+- **Nothing · a fresh run every time.** The default. The mount is one isolated
+  step: it is handed the task and the conversation so far, and keeps nothing of
+  its own. An approval inside it can still pause and resume *within* one turn.
+- **Its own conversation.** The mounted workflow gets a memory of its own on
+  this thread. It stops being handed the parent's conversation and keeps its
+  own instead, so the second turn picks up where the first left off. Reach for
+  this when the mounted workflow genuinely *is* a running dialogue — and not
+  otherwise: two of these running at the same time write to the same place and
+  conflict. Note what it does and does not carry: the child's own conversation
+  and its records of what each of its nodes produced survive; its per-turn
+  working scratch — the answer it gave, its revision budget — is reset at the
+  start of every turn, exactly as it is for a saved thread of a workflow run on
+  its own.
+- **Nothing, and it cannot pause.** No record is kept at all, so an approval
+  step anywhere inside the mounted workflow can never wait for an answer. Use
+  it only for a child you are sure is a pure function of its task.
+
+This is a different promise from the default one, which is why it is a setting
+and not something inferred: a mount that remembers can answer the same question
+differently depending on what came before it.
+
 ### Workflow or Team?
 
 **There is no longer a choice, because there was never a difference.** Until

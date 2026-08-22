@@ -13,6 +13,9 @@ export const SUBGRAPH_TYPE = 'workflow.subgraph';
 
 const FIELD_WORKFLOW = 'workflow';
 const FIELD_OUTCOME = 'outcome';
+/** The child's lifecycle — `compile/mount_persistence.py` owns the meaning. */
+const FIELD_PERSISTENCE = 'persistence';
+const PER_INVOCATION = 'per-invocation';
 
 /**
  * Another workflow, run as one node of this one — ticket 34.
@@ -170,6 +173,40 @@ export const subgraphNode: INodeDefinition = defineNode(
         hint: 'Shown on the card so a reader knows what this mount is for. It does not constrain the run — enforcement lives in the mounted workflow’s own grader criteria, and the card says so when that grader is missing or never revises.',
         defaultValue: '',
         onCard: true,
+      },
+      {
+        // The child's lifecycle, and the one thing on this card that changes
+        // the promise the description above makes — `organisms-first-class`
+        // 30. LangGraph's `.compile(checkpointer=…)` is a tri-state and this
+        // is it, one option per value.
+        //
+        // **A field, not an override.** `docs/decisions/mount-overrides.md`
+        // says an override *narrows* a mount; a persistence mode redefines the
+        // child's lifecycle, so it does not belong to the overrides editor
+        // sitting beside it.
+        //
+        // **On the mount, not on the package.** Whether a child should
+        // remember depends on how it is used and not on what it is: the same
+        // analyst package is a one-off lookup in one document and a running
+        // conversation in another. `data.overrides` is already per-instance
+        // for the same reason.
+        //
+        // **Deliberately not offered as the upgrade.** The default is first
+        // and is what every document saved before this field already does;
+        // per-thread carries the doc's own warning, which is not decorative —
+        // stateful subgraphs write to one checkpoint namespace, so parallel
+        // calls to the same mount conflict.
+        kind: 'select',
+        key: FIELD_PERSISTENCE,
+        label: 'What the child remembers',
+        defaultValue: PER_INVOCATION,
+        onCard: false,
+        options: [
+          { value: PER_INVOCATION, label: 'Nothing · a fresh run every time (default)' },
+          { value: 'per-thread', label: 'Its own conversation · across turns on this thread' },
+          { value: 'stateless', label: 'Nothing, and it cannot pause · no approvals inside' },
+        ],
+        hint: 'By default this mount is one isolated step: it is handed the task and this conversation so far, and keeps nothing of its own between turns. “Its own conversation” gives the mounted workflow a memory of its own on this thread — it stops being handed this conversation and keeps its own instead, so it can pick up where it left off. Use it for a mounted workflow that is genuinely a running dialogue, and not otherwise: two of these running at the same time write to the same place and conflict. “Nothing, and it cannot pause” keeps no record at all, so an approval step anywhere inside the mounted workflow can never wait for an answer.',
       },
       OVERRIDES_FIELD,
     ],
