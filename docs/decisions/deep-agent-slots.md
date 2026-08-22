@@ -1,8 +1,12 @@
 # What a deep agent can actually offer
 
 **Status: measured, 2026-08-22, against `deepagents 0.7.5` as installed.**
-**Amended 2026-08-22 by `organisms-first-class/84`**, which built §3. The
-amendment is marked in place rather than appended, because a build order whose
+**Believed to hold for the whole `0.7.x` line through `0.7.8` — see
+"Which release this speaks for" immediately below, which is the one section of
+this document written from reading rather than from running.**
+**Amended 2026-08-22 by `organisms-first-class/84`**, which built §3, and again
+by `organisms-first-class/88`, which established the release range. The
+amendments are marked in place rather than appended, because a build order whose
 first shipped item still reads as a plan is the drift this repository has
 corrected in its own prose three times.
 Nothing here is a design. It is the ground the configuration surface will stand
@@ -21,6 +25,70 @@ Every claim below is one of two kinds, and each is labelled:
 The pins are `backend/tests/test_deep_agent_slot_facts.py`. A number in prose
 has no way to fail, so the version, the bare stack, the full stack and the two
 silent gaps are assertions rather than sentences.
+
+## Which release this speaks for
+
+**Read, not executed.** This machine has **0.7.5** (executed:
+`importlib.metadata.version("deepagents")`). CI has **0.7.8**, and that
+disagreement is how `organisms-first-class/88` started: the pin was an equality
+and it fired, which is exactly what it was built to do.
+
+The answer is not a bump. What changed between the two was established by
+comparing the two release tags' **git trees** in
+`langchain-ai/deepagents` — blob sha by blob sha, an untruncated listing, not a
+changelog summary — and under `libs/deepagents/deepagents/` exactly twelve files
+differ:
+
+`_version.py`, `backends/{composite,context_hub,filesystem,protocol,sandbox,state,store,utils}.py`,
+`middleware/{async_subagents,filesystem,summarization}.py`.
+
+**`graph.py` is byte-identical. So are `middleware/skills.py`,
+`middleware/memory.py` and `middleware/subagents.py`.** `graph.py` is the whole
+of the assembly this document inventories, so §"The stack, as the library
+actually builds it", the order constraints, the twelve-versus-eight-versus-five
+count, the absent planning middleware and the in-place name-collision
+replacement are all unmoved by definition.
+
+What the twelve files do change, in the three released patches:
+
+- **0.7.6** — summarization offloads evicted history to a per-invocation
+  `session_id` instead of the run's `thread_id`, so parallel subagents stop
+  sharing one history file. Storage path only; no slot, no assembly.
+- **0.7.7** — `ContextHubBackend` batches concurrent mutations behind a lock,
+  and backend `glob` gets one shared contract (a bare pattern is
+  basename-at-any-depth; a refused pattern is now a `GlobResult(error=...)`
+  rather than a raise). A tool-behaviour change inside the filesystem slot,
+  not a change to which slots exist.
+- **0.7.8** — `FilesystemMiddleware` chooses `AgentState` instead of
+  `FilesystemState` when **no** backend in the tree stores files in state
+  (`_uses_state_backend`). The default `StateBackend` still returns `True`, so
+  §2's executed `files: {'/notes.txt': …}` result is unchanged. **This is the
+  one item with a forward cost**, and it belongs to ticket 82: the day a
+  workflow can choose a `FilesystemBackend`, that agent's state loses the
+  `files` key entirely, so anything reading `state["files"]` must stop assuming
+  it. Filed as `organisms-first-class/89`.
+
+**None of 81's five findings is falsified.** Four of them — the stack, the
+twelve-vs-eight count, the silent `skills=`/`memory=` gap, the absent planning
+middleware — live in files that did not change. The fifth, the summarization
+replacement-in-place, is decided by `.name` matching in `graph.py`, which did
+not change either; 0.7.6 changed what the library's instance *does with its
+output*, not whether ours displaces it.
+
+**So the pin is a range, and the argument for it is this.** An equality fires on
+every upstream patch, and an assertion whose only remedy is to edit the number
+teaches the reader to edit the number — which is the move that turns this
+document back into a story. A floor alone would be worse: it would let `0.8`
+through in silence, and every finding here is about how one function assembles a
+stack. So `0.7.5 <= installed < 0.8`, with the floor load-bearing in its own
+right (a *downgrade* is a machine whose library predates the measurement).
+
+The range is not the pin. **The pin is every other test in the file** — the
+stack is spied out of `create_agent`, the two silent gaps are run, and a new
+assertion pins the eighteen parameters of `create_deep_agent` exactly. That
+last one catches, on purpose, what the equality was catching by accident: a slot
+added inside the tolerated range, which would leave every ticket filed off this
+document reasoning from a short list.
 
 ## The stack, as the library actually builds it
 

@@ -31,8 +31,47 @@ from typing import Any
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
+from packaging.version import Version
 
 deepagents_graph = pytest.importorskip("deepagents.graph")
+
+MEASURED_AGAINST = "0.7.5"
+"""The release every executed claim in the decision record was read from."""
+
+INVENTORY_ASSUMED_THROUGH = "0.8"
+"""The first release the inventory stops claiming to describe."""
+
+
+def inventory_covers(version: str) -> bool:
+    """Whether `docs/decisions/deep-agent-slots.md` still speaks for `version`.
+
+    A range rather than the equality this used to be, and the argument is
+    `organisms-first-class/88`. Equality failed on 0.7.8 — a release whose
+    diff against 0.7.5 touches `backends/` and three middleware modules and
+    leaves `graph.py`, `middleware/skills.py`, `middleware/memory.py` and
+    `middleware/subagents.py` byte-identical, so every sentence of the record
+    was still true and the only thing that had changed was the string. An
+    assertion that fires on every upstream patch teaches the reader to bump it,
+    which is the one move that turns this file into decoration.
+
+    A floor alone would be worse than nothing: it would let 0.8 through in
+    silence, and the record's five findings are all about how one function
+    assembles a stack. So: at least the release it was measured on, and below
+    the next minor, where a harness this opinionated redesigns.
+
+    The floor matters in its own right — a *downgrade* below 0.7.5 is a machine
+    whose library predates the measurement, and the record does not speak for
+    that either.
+
+    This is a range on the *version*, not the pin. The pin is every other test
+    in this file: the stack is spied out of `create_agent`, the gaps are run,
+    and `test_the_offered_slots_are_the_whole_signature` fails on a slot added
+    inside the tolerated range — the exact drift equality was catching only by
+    accident.
+    """
+    return Version(MEASURED_AGAINST) <= Version(version) < Version(
+        INVENTORY_ASSUMED_THROUGH
+    )
 
 
 class _Fake(GenericFakeChatModel):
@@ -76,8 +115,64 @@ def _assembled(**kwargs: Any) -> list[str]:
 
 
 class TestTheInstalledPackage:
-    def test_version(self) -> None:
-        assert metadata.version("deepagents") == "0.7.5"
+    def test_the_installed_version_is_one_this_inventory_speaks_for(self) -> None:
+        installed = metadata.version("deepagents")
+        assert inventory_covers(installed), (
+            f"deepagents {installed} is outside {MEASURED_AGAINST}.."
+            f"<{INVENTORY_ASSUMED_THROUGH}; re-measure "
+            "docs/decisions/deep-agent-slots.md before widening this."
+        )
+
+    def test_the_range_rejects_what_would_make_the_record_false(self) -> None:
+        assert not inventory_covers("0.8.0")
+        assert not inventory_covers("1.0.0")
+        assert not inventory_covers("0.7.4")
+
+    def test_the_range_tolerates_the_patch_line_it_was_widened_for(self) -> None:
+        """0.7.6 offloads summarization history to a per-invocation session id;
+        0.7.7 batches `ContextHubBackend` mutations and makes bare glob
+        patterns recursive; 0.7.8 gives `FilesystemMiddleware` an `AgentState`
+        schema when no backend in the tree stores files in state. Read, not
+        executed — this machine has 0.7.5 and installs nothing. None of the
+        three touches the assembly, and the last one leaves the *default*
+        `StateBackend` on `FilesystemState`, which is what §"the workspace that
+        does exist" measures.
+        """
+        assert inventory_covers("0.7.5")
+        assert inventory_covers("0.7.6")
+        assert inventory_covers("0.7.7")
+        assert inventory_covers("0.7.8")
+
+    def test_the_offered_slots_are_the_whole_signature(self) -> None:
+        """The drift the version equality was catching by accident, caught on
+        purpose: a keyword added to `create_deep_agent` inside 0.7.x is a slot
+        the decision record does not describe, and every ticket filed off that
+        record would be reasoning from a short list.
+        """
+        import inspect
+
+        assert list(
+            inspect.signature(deepagents_graph.create_deep_agent).parameters
+        ) == [
+            "model",
+            "tools",
+            "system_prompt",
+            "middleware",
+            "subagents",
+            "skills",
+            "memory",
+            "permissions",
+            "backend",
+            "interrupt_on",
+            "response_format",
+            "state_schema",
+            "context_schema",
+            "checkpointer",
+            "store",
+            "debug",
+            "name",
+            "cache",
+        ]
 
     def test_there_is_no_planning_middleware(self) -> None:
         """`graph.py`'s module docstring advertises "planning" middleware and
