@@ -1633,6 +1633,40 @@ class NodeRuntime:
             for src, dests in plan.conditional.items()
             if node_id in (dests.get("revise"), dests.get("rejected"))
         ]
+        # Whether THIS node produced the text the rejecting node judged
+        # (`organisms-first-class` 54). A `revise` edge may legally land
+        # upstream of the producer — LangChain's agentic-RAG rewrites the
+        # *question* — and `revision_request`'s preamble was written for the
+        # evaluator-optimizer case where receiver and producer are one node.
+        # Delivered to a rewriter it says "this is the answer that was
+        # rejected ... revise it" about text the rewriter never wrote.
+        #
+        # Derived, never declared: a per-node config field would be a fifth
+        # knob for a fact already in the plan, and a developer who set it
+        # wrong would get this bug back. The rule is edge shape alone, so the
+        # Orchestrator's `feedback` port and a human approval's `rejected`
+        # edge are covered by the same sentence rather than by a name check.
+        # Three roles, not two — the third was found by asking which shipped
+        # packages this changes. `support-triage`'s holding-note agent sits on
+        # a human approval's `rejected` edge, neither authoring the draft nor
+        # feeding the gate: telling it "your last output produced this" would
+        # swap one false sentence for another. So: direct producer, else a
+        # node that can reach the rejector at all, else a bystander.
+        def _role_towards(rejector: str) -> str:
+            direct = {s for s, dst in plan.edges if dst == rejector}
+            if node_id in direct:
+                return "author"
+            seen: set[str] = set()
+            frontier = list(direct)
+            while frontier:
+                current = frontier.pop()
+                if current in seen:
+                    continue
+                seen.add(current)
+                frontier.extend(s for s, dst in plan.edges if dst == current)
+            return "upstream" if node_id in seen else "bystander"
+
+        rejector_roles = {src: _role_towards(src) for src in feedback_sources}
         built: dict[str, Any] = {}
 
         def agent_for(skill: str) -> Any:
@@ -1772,16 +1806,26 @@ class NodeRuntime:
                 # `prompt`, which falls back to the question when the
                 # candidate was empty, and never from `state["answer"]`, which
                 # in a multi-agent document may belong to somebody else.
-                rejected = _upstream_text(
-                    state,
-                    [
-                        src
-                        for src in feedback_sources
-                        if decisions.get(src) in ("revise", "rejected")
-                    ],
+                standing = [
+                    src
+                    for src in feedback_sources
+                    if decisions.get(src) in ("revise", "rejected")
+                ]
+                rejected = _upstream_text(state, standing)
+                # The strongest claim any standing rejector supports, never
+                # the weakest: one rejector this node authored for makes it
+                # the author, whatever the others say. Claiming more than the
+                # graph shows would be a false statement in a preamble no
+                # developer can edit — which is the defect itself.
+                roles = [rejector_roles[src] for src in standing]
+                role = next(
+                    (r for r in ("author", "upstream", "bystander") if r in roles),
+                    "author",
                 )
                 payload.append(
-                    HumanMessage(content=revision_request(rejected, feedback))
+                    HumanMessage(
+                        content=revision_request(rejected, feedback, role=role)
+                    )
                 )
             elif not payload or payload[-1].type != "human" or payload[-1].content != prompt:
                 payload.append(HumanMessage(content=prompt))

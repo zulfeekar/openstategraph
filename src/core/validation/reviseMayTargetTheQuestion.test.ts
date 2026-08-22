@@ -132,10 +132,19 @@ describe('a revise edge may reshape the question (organisms-first-class/37)', ()
       expect(copy).not.toMatch(/wire this to an agent/i);
     });
 
-    it('tells the receiving agent that the choice is its own to declare', () => {
+    // Superseded by `organisms-first-class/54`, deliberately rather than by
+    // deletion. When this was written the compiler said "revise it" to
+    // whoever received the feedback, so the only place the difference could
+    // be declared was the developer's Rules — and this pinned that the copy
+    // said so. The compiler now derives it from the edges, so asking a
+    // developer to declare it would be asking them to correct a preamble
+    // that is no longer wrong. What survives is the half that was never
+    // about Rules: the description still has to name the upstream case.
+    it('tells the receiving agent which of the two it will be asked to do', () => {
       const copy = describeOf(rewrite, 'feedback');
-      expect(copy).toMatch(/Rules/);
-      expect(copy).toMatch(/change the question/i);
+      expect(copy).toMatch(/revise it/i);
+      expect(copy).toMatch(/change what it produces/i);
+      expect(copy).not.toMatch(/Rules/);
     });
   });
 });

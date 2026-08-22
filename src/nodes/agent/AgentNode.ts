@@ -210,11 +210,14 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
           // The rejection is always written *about an answer*, and this agent
           // need not be the one that wrote it (`organisms-first-class/37`): an
           // agent two steps upstream may take the same sentence as a reason to
-          // ask a different question. Nothing in the machinery makes that
-          // choice — the Rules say which it is, so the description says so too.
+          // ask a different question. Which one it is, the compiler derives
+          // from the edges (`organisms-first-class/54`) — an agent that did not
+          // produce the judged text is never told it did, so this no longer
+          // asks the developer to correct the preamble in their Rules.
           description:
-            'A grader’s rejection of the answer. Say in Rules whether to redraft it or ' +
-            'to change the question you produce.',
+            'A grader’s rejection of the answer. If this agent wrote that answer it is ' +
+            'asked to revise it; if it feeds the node that did, it is asked to change ' +
+            'what it produces instead.',
         },
         {
           id: 'result',

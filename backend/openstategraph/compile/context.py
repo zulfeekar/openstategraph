@@ -362,7 +362,7 @@ def rejection_feedback(note: str) -> str:
     return note.strip() or "The reviewer rejected this draft and gave no reason."
 
 
-def revision_request(rejected: str, feedback: str) -> str:
+def revision_request(rejected: str, feedback: str, *, role: str = "author") -> str:
     """What an agent is told when its answer came back over a `revise` edge.
 
     **The rejected answer travels with the complaint, or the lap is a repeat**
@@ -385,13 +385,76 @@ def revision_request(rejected: str, feedback: str) -> str:
     **Silence stays silence.** When the previous attempt genuinely produced
     nothing there is nothing to show, and the sentence is exactly what it was
     — inventing a placeholder here would hand the model a fiction to revise.
+
+    **`role` is the half this was missing** (`organisms-first-class` 54,
+    graduated out of 37). A `revise` edge may legally land *upstream* of the
+    agent that produced the candidate — that is LangChain's agentic-RAG shape,
+    a rewriter that reshapes the question rather than the answer, and
+    `b12afbb` pinned that it has always been legal here. Everything above was
+    written for the evaluator-optimizer case, where the receiver **is** the
+    producer, and it was delivered unchanged to the rewriter. Measured off a
+    live compiled `agentic-rag-rewrite` run, `rewrite1`'s second lap read
+    *"This is the answer that was rejected, in full. Revise it"* — quoting
+    text `retrieve1` wrote. A base-owned, uneditable preamble told a node it
+    authored something it did not, and instructed it to produce the one kind
+    of output its own job forbids.
+
+    The two receivers need different sentences and both are here rather than
+    in two functions, because the difference is one clause in a paragraph
+    whose other clauses must not be allowed to drift apart. Nothing new is
+    asked of the caller beyond a fact the compiler already holds: the receiver
+    is the producer exactly when an edge runs from it into the node whose
+    `revise`/`rejected` edge caused this lap.
+
+    Note what the other wordings must *not* do — they never call the text a
+    draft, never say "revise", and say whose it is before they say anything
+    else, because a model reading a rejected answer with no attribution will
+    assume the obvious thing.
+
+    There are **three** roles, not two, and the third was found by asking
+    which shipped packages the derivation would change. `support-triage`'s
+    holding-note agent sits on a human approval's `rejected` edge and is
+    neither the author nor upstream of the gate — it writes the internal
+    record *about* a refusal. Telling it "your last output produced this"
+    would swap one false sentence for another, so a node that cannot reach the
+    rejector is told the facts and given no instruction to change anything: it
+    was not part of what produced the text and has nothing to do differently.
+    Its prompt, like the rewriter's, had been carrying the correction itself.
     """
-    asked = f"Your previous answer was rejected: {feedback}"
+    if role == "author":
+        asked = f"Your previous answer was rejected: {feedback}"
+        if not rejected.strip():
+            return asked
+        return (
+            f"{asked}\n\n"
+            "This is the answer that was rejected, in full. Revise it — do not "
+            "start again from nothing:\n\n"
+            f"{rejected}"
+        )
+    if role == "upstream":
+        asked = (
+            "Your last output was used further down this workflow, and the "
+            f"answer it produced was rejected: {feedback}"
+        )
+        if not rejected.strip():
+            return asked
+        return (
+            f"{asked}\n\n"
+            "This is that rejected answer. You did not write it — it is what "
+            "your last output produced downstream, quoted so you can see what "
+            "went wrong. Do not revise it and do not try to answer it "
+            "yourself: change what you produce, so that the next answer is a "
+            "different one.\n\n"
+            f"{rejected}"
+        )
+    asked = f"An answer produced earlier in this workflow was rejected: {feedback}"
     if not rejected.strip():
         return asked
     return (
         f"{asked}\n\n"
-        "This is the answer that was rejected, in full. Revise it — do not "
-        "start again from nothing:\n\n"
+        "This is that rejected answer, quoted so you know what it said. You "
+        "did not write it and nothing you produced led to it. Do not revise "
+        "it and do not answer it yourself — do the job your rules describe, "
+        "using this as background.\n\n"
         f"{rejected}"
     )

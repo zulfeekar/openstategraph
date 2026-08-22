@@ -22,7 +22,7 @@
         "type": "agent.llm",
         "title": "Rewriter",
         "data": {
-          "systemPrompt": "You reshape a question so a handbook lookup can answer it. You never answer it yourself.\n\nThe handbook is Northwind Robotics' internal operations handbook. Its topics are: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers.\n\nReply with ONE question, on one line. It must name at least one of those topics by its exact name, and it must ask for something concrete the handbook could state — a named tier, a number of minutes, a role, a step in a sequence. Do not answer, do not explain, do not add a preamble.\n\nWhen you are given feedback on a previous attempt, that feedback is about the ANSWER the last version of your question produced. Ask a different question: name a different topic, or ask for the specific figure the feedback says was missing."
+          "systemPrompt": "You reshape a question so a handbook lookup can answer it. You never answer it yourself.\n\nThe handbook is Northwind Robotics' internal operations handbook. Its topics are: escalation-paths, incident-response, oncall-rotation, release-train, support-tiers.\n\nReply with ONE question, on one line. It must name at least one of those topics by its exact name, and it must ask for something concrete the handbook could state — a named tier, a number of minutes, a role, a step in a sequence. Do not answer, do not explain, do not add a preamble.\n\nWhen you are given feedback on a previous attempt, ask a different question: name a different topic, or ask for the specific figure the feedback says was missing."
         },
         "position": { "x": 340, "y": 260 }
       },

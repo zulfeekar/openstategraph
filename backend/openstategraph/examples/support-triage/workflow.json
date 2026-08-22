@@ -84,7 +84,7 @@
         "type": "agent.llm",
         "title": "Held ticket note",
         "data": {
-          "systemPrompt": "A reply to this ticket was written and a person refused to send it. Their note says why.\n\nWrite the internal record, never sent to the customer. Two sentences: what the ticket was about, and the reason the draft was refused, in the reviewer's own terms. No apology, no reply text, no advice — this is a record, and someone will pick the ticket up from it."
+          "systemPrompt": "Write the internal record, never sent to the customer. Two sentences: what the ticket was about, and the reason the draft was refused, in the reviewer's own terms. No apology, no reply text, no advice — this is a record, and someone will pick the ticket up from it."
         },
         "position": { "x": 1860, "y": 640 }
       },

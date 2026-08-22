@@ -348,11 +348,22 @@ where a grader judges what was retrieved and a rewriter asks a better question.
 whose question was aimed at the wrong topic: feeding the complaint back to the
 producer would re-run the same lookups against the same framing.
 
-The one thing the machinery does not do for you is say *which* it is. The
-feedback is always written about an **answer**, so a node that is meant to
-change the **question** must be told so in its Rules — `agentic-rag-rewrite`'s
-rewriter says it in a sentence, and without that sentence the edge stays legal
-while the two ends mean different things.
+**The machinery says which it is, and it derives that rather than asking**
+(`organisms-first-class/54`). The feedback is always written about an
+**answer**, and a node handed one with no attribution will assume it wrote it —
+so the compiler works out, from the edges alone, whether the receiver produced
+the text the rejecting node judged. The producer is told to revise its draft,
+exactly as before. A node upstream of the producer is told the answer its last
+output *led to* was rejected, is shown that answer, and is told not to revise it
+or answer the question itself but to change what it produces. A node that is
+neither — `support-triage`'s holding-note agent, on a human approval's
+`rejected` edge — is told the facts and asked to change nothing, because it
+caused nothing.
+
+Both shipped examples used to carry that correction in their own Rules, which
+is a developer overruling a base-owned preamble from the one section they
+control. They no longer need to: Rules are for the domain sentence
+(*name a different topic*), not for undoing a false one.
 
 ```mermaid
 graph LR
