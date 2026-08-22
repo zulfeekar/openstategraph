@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLATFORM_TOOL_NODES } from './PlatformToolsNode';
+import { EXECUTION_OVERRIDE_KEYS } from '../../core/model/ModelRegistry';
 
 /**
  * **Every tool the runtime can bind must be drawable, or must stop claiming to
@@ -85,7 +86,7 @@ describe('the tools that had no card', () => {
     // parameters available to every node of every family. They are not the
     // tool's configuration and must not be counted as it.
     const own = (byId.get('tool.validate-workflow')?.fields ?? []).filter(
-      (field) => field.key !== 'maxRetries' && field.key !== 'timeoutSeconds',
+      (field) => !EXECUTION_OVERRIDE_KEYS.includes(field.key),
     );
     expect(own).toHaveLength(0);
   });

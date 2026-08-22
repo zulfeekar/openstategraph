@@ -31,7 +31,34 @@ SPECS = REPO / "backend" / "openstategraph" / "compile" / "port_specs.json"
 #: Keys `defineNode` injects into every standard node — graph-assembly
 #: overrides available to every node of every family, and not this tool's
 #: configuration. Excluded on both sides rather than silently tolerated.
-INJECTED = frozenset({"maxRetries", "timeoutSeconds"})
+#:
+#: Hand-typed as two names until `organisms-first-class/34` added a third
+#: (`cacheTtlSeconds`) and this file, plus four TypeScript ones, failed for a
+#: field none of them is about. It is still written out — the point of the
+#: exclusion is that a reader can see what is excluded — but
+#: `test_the_injected_set_is_what_the_generated_catalogue_shows` below derives
+#: the same set from `port_specs.json` and fails if the two part company. A
+#: list in a comment has no way to fail; this one now does.
+INJECTED = frozenset({"maxRetries", "timeoutSeconds", "cacheTtlSeconds"})
+
+
+def test_the_injected_set_is_what_the_generated_catalogue_shows() -> None:
+    """`INJECTED` must be exactly the keys every standard node type carries.
+
+    "Standard" is read off the catalogue rather than asserted: a node type
+    that carries `maxRetries` is one `defineNode` treated as executable, and
+    the keys *all* of those share are precisely the injected ones.
+    """
+    import functools
+
+    catalogue = json.loads(SPECS.read_text())["node_types"]
+    standard = [
+        set(entry["field_keys"])
+        for entry in catalogue
+        if "maxRetries" in (entry.get("field_keys") or [])
+    ]
+    assert len(standard) > 1, "expected many standard node types in the catalogue"
+    assert functools.reduce(set.intersection, standard) == set(INJECTED)
 
 #: What each tool's `configure()` actually reads. Taken from the source, not
 #: from the card, so the two are independent statements that must agree.

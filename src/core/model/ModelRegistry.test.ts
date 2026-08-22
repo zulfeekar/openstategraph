@@ -61,6 +61,51 @@ describe('defineNode — execution override fields', () => {
     expect(validateFields([schema], { timeoutSeconds: 'abc' })).toHaveProperty('timeoutSeconds');
   });
 
+  /**
+   * `organisms-first-class/34`. The third graph-assembly parameter of
+   * `add_node`, riding the same schema as its two siblings — which is the
+   * point: it needed no new surface, no new command, and no settings panel.
+   */
+  it('every standard node type also gets cacheTtlSeconds, blank by default', () => {
+    const workbench = makeWorkbench();
+    const agent = addNode(workbench, TYPE.agent);
+    expect(agent.definition.fields.map((f) => f.key)).toContain('cacheTtlSeconds');
+    expect(agent.data['cacheTtlSeconds']).toBe('');
+  });
+
+  it('a container node does not get cacheTtlSeconds either — it never runs', () => {
+    const workbench = makeWorkbench();
+    const group = addNode(workbench, TYPE.group);
+    expect(group.definition.fields.map((f) => f.key)).not.toContain('cacheTtlSeconds');
+  });
+
+  it('accepts a positive whole number of seconds for cacheTtlSeconds and nothing else', () => {
+    const workbench = makeWorkbench();
+    const agent = addNode(workbench, TYPE.agent);
+    const schema = agent.definition.fields.find((f) => f.key === 'cacheTtlSeconds')!;
+
+    expect(validateFields([schema], { cacheTtlSeconds: '' })).toEqual({});
+    expect(validateFields([schema], { cacheTtlSeconds: '300' })).toEqual({});
+    // A TTL is `CachePolicy(ttl=int)` — seconds, whole. `0` would read as
+    // "cache forever" to a user and means "no override" to the compiler,
+    // so it is refused rather than given two meanings.
+    expect(validateFields([schema], { cacheTtlSeconds: '0' })).toHaveProperty('cacheTtlSeconds');
+    expect(validateFields([schema], { cacheTtlSeconds: '-5' })).toHaveProperty('cacheTtlSeconds');
+    expect(validateFields([schema], { cacheTtlSeconds: '1.5' })).toHaveProperty('cacheTtlSeconds');
+    expect(validateFields([schema], { cacheTtlSeconds: 'abc' })).toHaveProperty('cacheTtlSeconds');
+  });
+
+  it('the cache field says when caching is safe, never that it is faster', () => {
+    const workbench = makeWorkbench();
+    const agent = addNode(workbench, TYPE.agent);
+    const schema = agent.definition.fields.find((f) => f.key === 'cacheTtlSeconds')!;
+    // The `stepBudget` precedent: a field that only advertises the benefit
+    // teaches the wrong move. This one must carry the condition.
+    expect(schema.hint).toMatch(/same input/i);
+    expect(schema.onCard).toBe(false);
+    expect(schema.advanced).toBe(true);
+  });
+
   it('the override fields are inspector-only, not shown on the compact card', () => {
     const workbench = makeWorkbench();
     const agent = addNode(workbench, TYPE.agent);

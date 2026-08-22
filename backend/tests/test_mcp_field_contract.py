@@ -34,7 +34,26 @@ REGISTRY_CLIENT = ROOT / "src" / "core" / "runtime" / "McpRegistryClient.ts"
 
 #: `StateGraph.add_node` parameters the editor puts on every node. They belong
 #: to the workflow, not to any family, so they are not this atom's to mirror.
-GRAPH_ASSEMBLY_KEYS = {"maxRetries", "timeoutSeconds"}
+#:
+#: **Derived, not typed.** Two names were written here by hand until
+#: `organisms-first-class/34` added `cacheTtlSeconds` and this contract failed
+#: for a key it is not about. "Every standard node" is read off the generated
+#: catalogue: a type carrying `maxRetries` is one `defineNode` treated as
+#: executable, and what all of those share is exactly the injected set.
+def _graph_assembly_keys() -> set[str]:
+    import functools
+
+    catalogue = json.loads(PORT_SPECS.read_text())["node_types"]
+    standard = [
+        set(entry["field_keys"])
+        for entry in catalogue
+        if "maxRetries" in (entry.get("field_keys") or [])
+    ]
+    assert len(standard) > 1, "expected many standard node types in the catalogue"
+    return functools.reduce(set.intersection, standard)
+
+
+GRAPH_ASSEMBLY_KEYS = _graph_assembly_keys()
 
 #: The card's two read-only blocks. `MCP_FIELD` names them because the schema
 #: has to key them; nothing reads them and nothing stores them, so they are

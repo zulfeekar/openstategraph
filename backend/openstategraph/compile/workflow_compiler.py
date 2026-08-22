@@ -50,6 +50,17 @@ try:
 except ImportError:
     TimeoutPolicy = None  # type: ignore[misc,assignment]
 
+#: `CachePolicy` and a cache backend were added in `langgraph>=1.2`. Both
+#: halves are needed or neither is: `cache_policy` names a policy and
+#: `compile(cache=...)` supplies the store it reads, so a policy without a
+#: cache is a field that does nothing (`organisms-first-class/34`).
+try:
+    from langgraph.cache.memory import InMemoryCache
+    from langgraph.types import CachePolicy
+except ImportError:
+    CachePolicy = None  # type: ignore[misc,assignment]
+    InMemoryCache = None  # type: ignore[misc,assignment]
+
 #: `NodeError` was added in `langgraph>=1.2`; gracefully degrade if absent.
 try:
     from langgraph.errors import NodeError
@@ -1032,13 +1043,20 @@ def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
 
     `set_node_defaults` (in `build`, below) already gives every node the
     same graph-wide retry policy — this is the *per-node* override the
-    canvas's `maxRetries`/`timeoutSeconds` fields expose (declared once in
+    canvas's `maxRetries`/`timeoutSeconds`/`cacheTtlSeconds` fields expose (declared once in
     `ModelRegistry.defineNode` on the TS side, inherited by every executable
     node type). Per LangGraph's own docs: "Per-node values still take
     precedence" over `set_node_defaults`, so passing these as `add_node`
     kwargs is the correct override mechanism, not a parallel one.
 
-    Both fields are blank strings by default (`FieldValue` has no `None`
+    `cacheTtlSeconds` has no graph-wide default and deliberately never
+    will: caching is **opt-in per node**, because a node's answer is only
+    reusable when the developer says its inputs determine its output, and
+    most nodes here drive a model. `build` supplies `compile(cache=...)`
+    only when some node opted in, so a document that sets nothing is
+    assembled exactly as it was before this field existed.
+
+    All three fields are blank strings by default (`FieldValue` has no `None`
     default for a `text` field of this shape) — blank means "no override,
     use the graph default", not "zero" or "unbounded". A non-numeric or
     non-positive value is treated the same as blank: the frontend's own
@@ -1047,6 +1065,15 @@ def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     validation being added, not a case to crash on.
     """
     overrides: dict[str, Any] = {}
+
+    cache_ttl = str(data.get("cacheTtlSeconds") or "").strip()
+    if cache_ttl and CachePolicy is not None:
+        try:
+            ttl = int(cache_ttl)
+            if ttl > 0:
+                overrides["cache_policy"] = CachePolicy(ttl=ttl)
+        except ValueError:
+            pass
 
     max_retries = str(data.get("maxRetries") or "").strip()
     if max_retries:
@@ -1412,8 +1439,10 @@ class WorkflowCompiler:
                 ),
             )
 
+        wants_cache = False
         for node_id in plan.nodes:
             overrides = _node_overrides(nodes[node_id].get("data") or {})
+            wants_cache = wants_cache or "cache_policy" in overrides
             if not has_graph_defaults and "retry_policy" not in overrides:
                 # `langgraph<1.2` has no graph-wide defaults, and the earlier
                 # fallback comment here claimed `_node_overrides` covered it —
@@ -1476,6 +1505,10 @@ class WorkflowCompiler:
 
         if not compile_graph:
             return builder
+        if wants_cache and InMemoryCache is not None:
+            # Only when asked. `cache=` on every graph would attach an
+            # unbounded in-process dict to workflows that never opted in.
+            return builder.compile(checkpointer=checkpointer, store=store, cache=InMemoryCache())
         return builder.compile(checkpointer=checkpointer, store=store)
 
     @staticmethod

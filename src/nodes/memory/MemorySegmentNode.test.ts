@@ -12,6 +12,7 @@ import { NODE_TYPE } from '../index';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import { makeWorkbench } from '@core/testing/fixtures';
 import retentionCases from './retentionGrammar.cases.json';
+import { EXECUTION_OVERRIDE_KEYS } from '../../core/model/ModelRegistry';
 
 /**
  * The tollbooth — install-experience ticket 17, built through
@@ -52,7 +53,7 @@ describe('the seam the Python builder is keyed by', () => {
     // than configuration.
     const own = memorySegmentNode.fields
       .map((f) => f.key)
-      .filter((key) => !['maxRetries', 'timeoutSeconds', 'segmentNote'].includes(key));
+      .filter((key) => ![...EXECUTION_OVERRIDE_KEYS, 'segmentNote'].includes(key));
     expect(own.sort()).toEqual(['retention', 'segment']);
   });
 

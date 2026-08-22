@@ -107,9 +107,12 @@ key no field declares. Two consequences when you write a factory:
   the same name on one node: it reads as one thing and behaves as two.
 
 The reverse direction is deliberately not asserted — a declared field the
-factory ignores is often correct, since `maxRetries` and `timeoutSeconds` are
-read by the compiler's graph assembly and a worker's `role` is read by the
-*supervisor's* factory.
+factory ignores is often correct, since `maxRetries`, `timeoutSeconds` and
+`cacheTtlSeconds` are read by the compiler's graph assembly and a worker's
+`role` is read by the *supervisor's* factory. Those three are injected onto
+every standard node type by `defineNode` and are not any atom's to declare or
+to mirror — `EXECUTION_OVERRIDE_KEYS` is the one list, exported so a field
+contract subtracts it rather than retyping it.
 
 ### Ports carry types and cardinality
 

@@ -123,6 +123,7 @@
       "drives_model": true,
       "accepts_skill": true,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "model",
         "reasoningEffort",
@@ -203,6 +204,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "reportTitle",
         "timeoutSeconds"
@@ -258,6 +260,7 @@
       "accepts_skill": false,
       "field_keys": [
         "blockedMessage",
+        "cacheTtlSeconds",
         "maxRetries",
         "policy",
         "timeoutSeconds"
@@ -311,6 +314,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "message",
         "timeoutSeconds"
@@ -340,6 +344,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "content",
         "filename",
         "instruction",
@@ -371,6 +376,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "instruction",
         "maxRetries",
         "skillDescription",
@@ -402,6 +408,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "prompt",
         "timeoutSeconds"
@@ -444,6 +451,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "retention",
         "segment",
@@ -508,6 +516,7 @@
       "drives_model": true,
       "accepts_skill": true,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "maxSubtasks",
         "model",
@@ -575,6 +584,7 @@
       "drives_model": true,
       "accepts_skill": true,
       "field_keys": [
+        "cacheTtlSeconds",
         "default",
         "maxRetries",
         "model",
@@ -609,6 +619,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "format",
         "maxRetries",
         "timeoutSeconds"
@@ -661,6 +672,7 @@
       "accepts_skill": true,
       "field_keys": [
         "branches",
+        "cacheTtlSeconds",
         "fallback",
         "matchMode",
         "maxRetries",
@@ -731,6 +743,7 @@
       "drives_model": true,
       "accepts_skill": true,
       "field_keys": [
+        "cacheTtlSeconds",
         "criteria",
         "maxAttempts",
         "maxRetries",
@@ -766,6 +779,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "maxRows",
         "timeoutSeconds"
@@ -795,6 +809,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -823,6 +838,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -851,6 +867,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds",
         "to"
@@ -880,6 +897,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -908,6 +926,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "servers",
         "timeoutSeconds"
@@ -937,6 +956,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -965,6 +985,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -993,6 +1014,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1021,6 +1043,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1049,6 +1072,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1077,6 +1101,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "subreddit",
         "timeoutSeconds",
@@ -1107,6 +1132,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1135,6 +1161,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "database",
         "maxRetries",
         "timeoutSeconds"
@@ -1164,6 +1191,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "database",
         "maxRetries",
         "timeoutSeconds"
@@ -1193,6 +1221,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "database",
         "maxRetries",
         "maxRows",
@@ -1223,6 +1252,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1251,6 +1281,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1279,6 +1310,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
       ]
@@ -1308,6 +1340,7 @@
       "accepts_skill": false,
       "field_keys": [
         "allowAutoCaptions",
+        "cacheTtlSeconds",
         "language",
         "maxChars",
         "maxRetries",
@@ -1351,6 +1384,7 @@
       "drives_model": false,
       "accepts_skill": false,
       "field_keys": [
+        "cacheTtlSeconds",
         "maxRetries",
         "outcome",
         "overrides",

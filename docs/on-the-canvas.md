@@ -280,6 +280,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **override** | a per-instance setting, stored on the **parent** | an edit to the package |
 | **revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the budget runs out | an agent's internal tool-calling |
 | **step budget** | supersteps a run may take | "max retries" or "iterations" |
+| **cache result for** | seconds a node's answer is reused when its input repeats | a speed setting; a memory |
 | **template** | a starting document; produces a workflow and stops existing | a node type; a live link |
 | **example** | a finished package shipped in the install; you take a **copy** | one of your workflows; something you mount |
 | **organism** | a whole assembly — drawn or mounted | only the things you can drag |

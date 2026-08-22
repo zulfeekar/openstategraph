@@ -25,6 +25,7 @@ import { defaultsFrom, resolveOptions } from '@core/model/contracts/fields';
 import { mcpServerCatalogue } from '@core/runtime/mcpServerCatalogue';
 import type { McpServer } from '@core/runtime/McpRegistryClient';
 import { makeWorkbench } from '@core/testing/fixtures';
+import { EXECUTION_OVERRIDE_KEYS } from '../../core/model/ModelRegistry';
 
 /**
  * `tool.mcp` — mcp-connect ticket 02, built through `skills/atom-forge` as
@@ -57,7 +58,7 @@ const withRows = (...rows: Array<Record<string, unknown>>) => ({
 });
 
 /** Every data key this node owns — graph-assembly overrides subtracted. */
-const GRAPH_ASSEMBLY_KEYS = ['maxRetries', 'timeoutSeconds'];
+const GRAPH_ASSEMBLY_KEYS = EXECUTION_OVERRIDE_KEYS;
 const ownFieldKeys = () =>
   Object.keys(defaultsFrom(mcpServerNode.fields)).filter(
     (key) => !GRAPH_ASSEMBLY_KEYS.includes(key),
@@ -86,7 +87,7 @@ describe('the seam the Python tool is keyed by', () => {
     // side pins the same list in `MCP_NODE_KEYS`, and
     // `test_mcp_field_contract.py` compares the two.
     //
-    // `maxRetries` and `timeoutSeconds` are subtracted because `defineNode`
+    // The execution-override keys are subtracted because `defineNode`
     // puts them on *every* node: they are `StateGraph.add_node` parameters,
     // which CLAUDE.md places on the workflow rather than on any family, so
     // they are not this atom's to declare or to mirror.

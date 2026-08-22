@@ -147,6 +147,7 @@ type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => Abst
  */
 const FIELD_MAX_RETRIES = 'maxRetries';
 const FIELD_TIMEOUT_SECONDS = 'timeoutSeconds';
+const FIELD_CACHE_TTL_SECONDS = 'cacheTtlSeconds';
 
 const positiveIntegerOrEmpty = (value: string): string | null => {
   if (value.trim() === '') return null;
@@ -185,7 +186,37 @@ const EXECUTION_OVERRIDE_FIELDS: readonly FieldSchema[] = [
     advanced: true,
     validate: positiveNumberOrEmpty,
   },
+  {
+    kind: 'text',
+    key: FIELD_CACHE_TTL_SECONDS,
+    label: 'Cache result for, seconds',
+    // Deliberately not "speed this up". Caching is only correct when this
+    // node's inputs decide its output, and most nodes here drive a model,
+    // so the hint names the condition rather than the benefit — the same
+    // reason `stepBudget`'s copy does not simply offer a bigger number.
+    hint: 'Blank means never cached. Only safe when the same input must give the same result.',
+    placeholder: 'e.g. 300',
+    defaultValue: '',
+    onCard: false,
+    group: 'Execution',
+    advanced: true,
+    validate: positiveIntegerOrEmpty,
+  },
 ];
+
+/**
+ * The keys `defineNode` injects onto every standard node type.
+ *
+ * Exported for the field-contract tests, which each subtract these before
+ * comparing an atom's keys against its Python mirror — they are
+ * `StateGraph.add_node` parameters, so no atom declares or mirrors them.
+ * Exported rather than retyped: the list was spelled out by hand in four
+ * test files, so adding `cacheTtlSeconds` (`organisms-first-class/34`)
+ * broke all four at once. Duplication of *knowledge* is the defect.
+ */
+export const EXECUTION_OVERRIDE_KEYS: readonly string[] = EXECUTION_OVERRIDE_FIELDS.map(
+  (f) => f.key,
+);
 
 /**
  * Binds a spec to the concrete model class that implements it.
