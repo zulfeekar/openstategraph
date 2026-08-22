@@ -64,6 +64,21 @@ import { isInstance, type MountAddress } from '@core/model/MountAddress';
  * test.
  */
 
+/**
+ * The audience, in the words a developer already understands, and the one
+ * this module and the publish/unpublish toasts (`view/workflow/consequences.ts`)
+ * share rather than each spelling for itself.
+ *
+ * `ship-it` 52: the toast used to say "/chat picker" and "Auto routing" —
+ * internal surface names — a second after this module's own badge said the
+ * same fact in plain words. `HIDDEN_PACKAGE_NOTE` was corrected for exactly
+ * this shape once already (`workflowCatalogue.ts`): an explanation that needs
+ * an explanation has not been given. One constant, so a reword here reaches
+ * every caller instead of the two spellings drifting apart the way
+ * `production-ready` 94 found.
+ */
+export const CHAT_APP_AUDIENCE = 'people using the chat app';
+
 export type PublishStatus =
   /** No folder on the backend yet — a draft in the most literal sense. */
   | 'unsaved'
@@ -156,7 +171,7 @@ export function publishAffordance(
       status: 'published',
       label: 'Published',
       hint:
-        `Published — people using the chat app can pick this workflow from their list. ` +
+        `Published — ${CHAT_APP_AUDIENCE} can pick this workflow from their list. ` +
         `What they get is the version saved in ${folder}, not unsaved changes on this canvas.`,
       action: 'unpublish',
       actionLabel: 'Unpublish',
@@ -171,7 +186,7 @@ export function publishAffordance(
     status: 'draft',
     label: 'Draft',
     hint:
-      `Draft — people using the chat app never see this workflow in their list. ` +
+      `Draft — ${CHAT_APP_AUDIENCE} never see this workflow in their list. ` +
       `Publishing puts the version saved in ${folder} into it; what is on this canvas goes live only once you Save.`,
     action: 'publish',
     actionLabel: 'Publish',

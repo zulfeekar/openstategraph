@@ -1,3 +1,5 @@
+import { CHAT_APP_AUDIENCE } from '@view/topbar/publishAffordance';
+
 /**
  * What each lifecycle verb actually does, in the words the user reads.
  *
@@ -73,12 +75,24 @@ export function deletedMessage(name: string): string {
  * The toast after a publish.
  *
  * Names the transition, not the new state alone: *what changed* is the thing
- * the canvas could not show. The knowledge reminder stays because publishing
- * deliberately does not rebuild routing as a side effect — Auto routing keeps
- * answering from what it last learned until someone rebuilds it.
+ * the canvas could not show — the badge beside Save already says the steady
+ * state, so repeating it here would be noise, not information. The knowledge
+ * reminder stays because publishing deliberately does not rebuild routing as
+ * a side effect — the workflow keeps being answered from what it last learned
+ * until someone rebuilds its knowledge.
+ *
+ * The audience is `CHAT_APP_AUDIENCE`, the same words `publishAffordance`'s
+ * badge uses (`ship-it` 52) — until this ticket the toast said "/chat picker"
+ * and "Auto routing", internal surface names a second after the badge said
+ * the same fact in plain words. `HIDDEN_PACKAGE_NOTE` was corrected for this
+ * exact shape once already: an explanation that needs an explanation has not
+ * been given.
  */
 export function publishedMessage(name: string): string {
-  return `Published: ${name} — no longer a draft: it is now in the /chat picker for customers. Rebuild knowledge to put it into Auto routing.`;
+  return (
+    `Published: ${name} — no longer a draft: ${CHAT_APP_AUDIENCE} can now find it in their ` +
+    `list. It stays out of automatic answers until you rebuild its knowledge.`
+  );
 }
 
 /**
@@ -86,8 +100,11 @@ export function publishedMessage(name: string): string {
  *
  * The last clause answers the question this verb always raises. Unpublish sits
  * next to Delete in the list, and a user who cannot tell them apart will use
- * neither.
+ * neither. Same shared audience as `publishedMessage`, for the same reason.
  */
 export function unpublishedMessage(name: string): string {
-  return `Unpublished: ${name} — back to draft: it is out of the /chat picker. Nothing is deleted; the folder is untouched.`;
+  return (
+    `Unpublished: ${name} — back to draft: ${CHAT_APP_AUDIENCE} no longer see it in their ` +
+    `list. Nothing is deleted; the folder is untouched.`
+  );
 }

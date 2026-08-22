@@ -61,11 +61,15 @@ describe('deletedMessage', () => {
 });
 
 describe('publishedMessage', () => {
-  it('says what changed: draft, then visible in /chat', () => {
+  it('says what changed: draft, then visible to the chat app', () => {
     const text = publishedMessage('Support Triage');
     expect(text).toContain('Support Triage');
     expect(text).toContain('draft');
-    expect(text).toContain('/chat');
+    // Plain words, the same ones the toolbar badge uses (ship-it 52) — never
+    // the internal surface names the badge was corrected away from.
+    expect(text).toContain('chat app');
+    expect(text).not.toContain('/chat picker');
+    expect(text).not.toContain('Auto routing');
     // Publishing never rebuilds routing knowledge as a side effect, and the
     // one moment somebody cares is this one.
     expect(text).toMatch(/knowledge/i);
@@ -73,10 +77,11 @@ describe('publishedMessage', () => {
 });
 
 describe('unpublishedMessage', () => {
-  it('says the workflow survives and only the /chat surface changed', () => {
+  it('says the workflow survives and only the chat app surface changed', () => {
     const text = unpublishedMessage('Support Triage');
     expect(text).toContain('draft');
-    expect(text).toContain('/chat');
+    expect(text).toContain('chat app');
+    expect(text).not.toContain('/chat picker');
     // The fear this sentence exists to answer: unpublish is not delete.
     expect(text).toMatch(/nothing is deleted|files are untouched|folder is untouched/i);
   });
