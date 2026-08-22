@@ -620,7 +620,7 @@
       "category": "agent",
       "scope": "app",
       "label": "Router",
-      "description": "Classifies the input and sends it down one branch.",
+      "description": "Classifies the input and sends it down one branch — or, in parallel, down every branch that matches.",
       "ports": [
         {
           "id": "question",

@@ -79,7 +79,22 @@ export function createOrchestratorNode(providers: ProviderRegistry): INodeDefini
       description: 'Splits an instruction into subtasks and fans them out to workers.',
       iconId: 'node-orchestrator',
       accent: 'blue',
-      keywords: ['orchestrate', 'fan-out', 'send', 'subtasks', 'plan', 'supervisor', 'split'],
+      // `parallel` and `at once` join the list for `organisms-first-class/39`:
+      // the palette search for either word returned nothing, so the family that
+      // *is* the answer to "run these at once" was unreachable by the words a
+      // developer types. The Router carries them too — the point is that the
+      // search shows both and lets the developer pick.
+      keywords: [
+        'orchestrate',
+        'fan-out',
+        'send',
+        'subtasks',
+        'plan',
+        'supervisor',
+        'split',
+        'parallel',
+        'at once',
+      ],
       defaultSize: { width: 260, height: 200 },
       fields: [
         modelField(providers),

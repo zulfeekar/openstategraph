@@ -111,7 +111,25 @@ graph LR
 expensive one; separate support categories; keep small talk out of a workflow
 that costs money to run.
 
-**Fixed vs dynamic:** the branch *set* is fixed; the *choice* is the model's.
+**One branch, or every branch that matches.** *When several branches match* is
+a field on the node, and it has two values. *Run the best one* is the decision
+tree above and is the default. *Run every match, in parallel* is for a compound
+input — *"what do you know about music? what is your skill?"* genuinely belongs
+to two desks, and running one while the rest of the question is dropped is
+silent data loss (`every-workflow-green` 27). `BaseRouter.normalise` returns the
+matched set, the conditional edge returns a list of destinations, and LangGraph
+runs them in the next superstep.
+
+So **parallelism is not the thing that separates this pattern from the two
+below it.** What separates them is whether the destinations are declared: a
+`route.classifier` only ever reaches branches you drew, and
+`compile_path_map()` hands the compiler all of them up front. When how many
+pieces of work there are is only known during the run — one worker node running
+as many times as the input needs — that is pattern 5, and no number of branches
+gets you there.
+
+**Fixed vs dynamic:** the branch *set* is fixed; the *choice*, and in *Run every
+match* the *number* of branches taken, is the model's.
 
 ---
 

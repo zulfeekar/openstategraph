@@ -162,6 +162,54 @@ export const ROUTER_OUTPUT_CONTRACT =
   'Reply with exactly one branch name from the list above. No punctuation, no ' +
   'explanation, no quotes — the branch name alone.';
 
+/**
+ * The Router's one-line description — its palette row, its palette hover title
+ * and the sentence at the top of its inspector, all from this string.
+ *
+ * It used to read *"Classifies the input and sends it down one branch."* That
+ * was written before `every-workflow-green` 27 and stopped being true when
+ * `matchMode: "all"` shipped: `BaseRouter.normalise` returns a *set* of
+ * branches, `_router_for` returns a list, and LangGraph runs every destination
+ * in the next superstep. A developer who read this sentence and needed
+ * parallelism went looking for another node type, which is
+ * `organisms-first-class/39`.
+ */
+export const ROUTER_DESCRIPTION =
+  'Classifies the input and sends it down one branch — or, in parallel, down ' +
+  'every branch that matches.';
+
+/**
+ * The boundary between this family and the Orchestrator, said where the choice
+ * is actually made.
+ *
+ * The ticket was filed believing the split is one-destination versus many, and
+ * it is not — see above. The property that actually separates them is whether
+ * the destination set is **declared**:
+ *
+ * - a Router chooses among the branches drawn on the node, and
+ *   `compile_path_map()` hands the compiler every one of them up front;
+ * - an Orchestrator decides *how many* pieces of work there are while the run
+ *   is happening, and `_fan_out_router` builds one `Send` per subtask, so one
+ *   worker node runs as many times as the input needs.
+ *
+ * It names the Orchestrator rather than merely describing this field, because
+ * a developer whose count is not known until the run needs somewhere to go —
+ * `2e9c75c`'s precedent of naming who owns the thing.
+ *
+ * **It promises no comparison.** The ticket wanted the developer to learn what
+ * a decision tree *cost* them in parallelism, and this platform cannot show
+ * that: `RunResult.usage` is keyed by model rather than by node, and the HTTP
+ * and MCP doors do not carry it at all. So the copy says what each shape does
+ * and quotes no number.
+ */
+export const ROUTER_MATCH_MODE_HINT =
+  'Either way the destinations are the ones drawn on this node: “Run the best ' +
+  'one” takes a single branch, “Run every match” takes each branch that ' +
+  'matched and they run in parallel. Neither invents a destination. When how ' +
+  'many pieces of work there are is only known during the run — one worker ' +
+  'repeated as many times as the input needs — that is an Orchestrator, which ' +
+  'plans the subtasks and dispatches one per task.';
+
 export class RouterNodeModel extends AbstractNodeModel {
   /** The one part the developer writes. */
   get rules(): string {
@@ -216,10 +264,25 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
       id: ROUTER_TYPE,
       category: CATEGORY.agent,
       label: 'Router',
-      description: 'Classifies the input and sends it down one branch.',
+      description: ROUTER_DESCRIPTION,
       iconId: 'node-router',
       accent: 'violet',
-      keywords: ['route', 'classify', 'branch', 'switch', 'intent', 'supervisor'],
+      // `parallel`, `fan-out` and `at once` are here because the palette search
+      // for each of them returned **no rows at all** — measured in the browser
+      // against the shipped bundle, and the reason a developer arriving from
+      // `multi-agent/router.mdx` never found either family. Both this node and
+      // the Orchestrator answer them now, so the search shows the choice.
+      keywords: [
+        'route',
+        'classify',
+        'branch',
+        'switch',
+        'intent',
+        'supervisor',
+        'parallel',
+        'fan-out',
+        'at once',
+      ],
       defaultSize: { width: 268, height: 210 },
       fields: [
         modelField(providers),
@@ -283,8 +346,17 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
           kind: 'select',
           key: FIELD_MATCH_MODE,
           label: 'When several branches match',
+          hint: ROUTER_MATCH_MODE_HINT,
           defaultValue: 'best',
-          onCard: false,
+          // **On the card** (`organisms-first-class/39`). It was off it, and
+          // the consequence was that a broadcasting Router and a
+          // decision-tree Router were *indistinguishable on the canvas* — the
+          // one field that changes how many nodes a lap runs was the one a
+          // reader could not see without selecting the node. The palette row
+          // and the card subtitle both truncate the description with an
+          // ellipsis, so the card learns this from the control rather than
+          // from the sentence.
+          onCard: true,
           options: [
             { value: 'best', label: 'Run the best one' },
             { value: 'all', label: 'Run every match, in parallel' },
