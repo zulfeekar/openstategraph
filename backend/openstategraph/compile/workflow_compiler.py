@@ -1580,7 +1580,17 @@ class WorkflowCompiler:
                 # Labels, not node names: `add_conditional_edges` is given a
                 # path map, so this function's contract has always been to
                 # return the *label* and let LangGraph resolve it.
-                wired = [key for key in requested if key in destinations]
+                # `isinstance` rather than a cast: `routes` is state, so its
+                # contents are whatever a node wrote. Every candidate is
+                # already resolved against `destinations` — the strict half
+                # of the read-tolerantly rule — and this makes the *type*
+                # say so, which is what `no-any-return` was reporting at the
+                # `return wired[0]` below (`organisms-first-class` 48).
+                wired: list[str] = [
+                    key
+                    for key in requested
+                    if isinstance(key, str) and key in destinations
+                ]
                 if len(wired) > 1:
                     return wired
                 if len(wired) == 1:

@@ -170,7 +170,7 @@ def _is_unedited(existing: Path, shipped: Path) -> bool:
     return _package_digest(existing) == _package_digest(shipped)
 
 
-class CopyResult(tuple):
+class CopyResult(tuple[Path, ...]):
     """`tuple[Path, ...]` — every existing caller keeps working unchanged —
     plus which of those paths were already there, byte-identical to what
     ships, and so were left alone rather than overwritten.

@@ -185,7 +185,12 @@ dev = [
     # a job that has neither. mypy installs as one wheel next to pytest and
     # ruff, and it is what langchain/langgraph themselves type-check with, so
     # the vendored stubs we depend on are the ones it was tested against.
-    "mypy>=1.11",
+    # Pinned exactly, for ruff's reason (`organisms-first-class` 47): a floor
+    # lets the gate move without a commit, and a mypy release that adds a
+    # check turns a clean tree red with nothing in the log to blame. The pin
+    # rots quietly; raising it is a deliberate commit somebody reads, and the
+    # price is that a new check never arrives for free.
+    "mypy==1.19.1",
     # `ignore_missing_imports` does not cover a package that IS installed and
     # simply ships no annotations — that is `import-untyped`, a separate code.
     # PyYAML is such a package, and it arrives transitively with

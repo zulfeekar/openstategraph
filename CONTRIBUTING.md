@@ -113,18 +113,27 @@ deliberate commit.
 `backend/pyproject.toml`, and it is scoped to `openstategraph/` — `tests/` is
 deliberately outside it.
 
-It is **not** clean today: it reports **3 errors**, tracked as
-`organisms-first-class` 48. This paragraph claimed "clean today, so any error it
-reports is yours" while four stood, which is the failure mode this repository
-keeps correcting in its own prose — a number stated in prose has no way to fail.
-Until 48 closes, compare against that count rather than against zero.
+It **is** clean today, so any error it reports is yours — but do not take that
+from this paragraph, which has now been wrong in both directions. It said
+"clean today" while four errors stood, and then said "3 errors" for the two
+hours it took `organisms-first-class` 48 to close them. The claim is pinned in
+`backend/tests/test_the_type_gate_actually_runs.py` instead, which is the only
+version of it that can fail.
 
-The lint gate has the pin prose cannot give it:
+**Both gates now have the pin prose cannot give them.**
 `backend/tests/test_the_lint_gate_actually_runs.py` runs `ruff check backend`
-inside `pytest`, so a violation costs one test run to notice. That exists
-because CI last executed on 2026-08-16 and roughly 180 commits landed behind it
-(`organisms-first-class` 49) — **do not read a green CI badge as a statement
-about the current tree.**
+and `backend/tests/test_the_type_gate_actually_runs.py` runs
+`cd backend && python -m mypy`, both inside `pytest`, so a violation costs one
+test run to notice. They exist because CI last executed on 2026-08-16 and
+roughly 180 commits landed behind it (`organisms-first-class` 49) — **do not
+read a green CI badge as a statement about the current tree.**
+
+The type gate's price, measured rather than guessed: **~46s on a fresh checkout**
+(and a ~310M `.mypy_cache`), **~3.2s warm** against a ~147s suite. **mypy is
+pinned exactly** — `mypy==1.19.1` — for the same reason ruff is.
+
+Run mypy from `backend/`. From the repo root it finds no config, checks nothing
+and exits 0 — the mirror image of ruff's trap, and just as quiet.
 
 TDD is the house style: tests land with (ideally before) the change.
 

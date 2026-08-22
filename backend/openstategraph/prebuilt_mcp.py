@@ -70,7 +70,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Sequence, cast
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.progress import report_progress
@@ -977,7 +977,7 @@ class McpTool(BaseTool):
             )
         return chosen
 
-    def as_langchain_tool(self) -> Any:
+    def as_langchain_tool(self, on_call: Callable[[str], None] | None = None) -> Any:
         """Refuses, and names the plural seam.
 
         "Which one of my server's tools am I?" has no true answer, and this
@@ -986,8 +986,17 @@ class McpTool(BaseTool):
         canvas never takes this path — `NodeRuntime._bind_tools` calls
         `as_langchain_tools` — so the refusal is a guard on the *other*
         callers, not a behaviour anyone should meet.
+
+        **`on_call` is passed straight through, and the override exists only
+        for this docstring.** It was written before the hook did and was never
+        taught about it, so it dropped the parameter — which made this class
+        unsubstitutable for its base (`organisms-first-class` 48) and cost the
+        knowledge explorer a `TypeError` on any document carrying an MCP node,
+        `tool.mcp` not being on `EXPLORER_DENY_PREFIXES`. A refusal that runs
+        is still a run, so the hook fires: the caller asked which tools were
+        used, and this one was.
         """
-        return super().as_langchain_tool()
+        return super().as_langchain_tool(on_call)
 
     def _execute(self, args: Any) -> ToolResult:
         return ToolResult.failure(
