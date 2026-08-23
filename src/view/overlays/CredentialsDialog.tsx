@@ -53,6 +53,12 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
   // Which `.env` the server's own process read — or didn't — in its own
   // words (providers-and-credentials/13). `null` until it answers.
   const [serverEnvironment, setServerEnvironment] = useState<string | null>(null);
+  // What a run through the default provider will do right now, in the
+  // server's own words (providers-and-credentials/14). Replaces this
+  // dialog's own former claim — "runs use mock data" — which stopped being
+  // true when the Run button was rewired to a real backend run and stayed
+  // wrong here for a session anyway.
+  const [runReadiness, setRunReadiness] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     void new RuntimeClient().providers().then((result) => {
@@ -61,10 +67,11 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
       // server, and the picker, the reasoning row and the onboarding hint went
       // on contradicting it from browser-local keys. Every answer this dialog
       // gets is now the answer they read (providers-and-credentials 06).
-      serverReadiness.recordProviders(result.value.rows);
+      serverReadiness.recordProviders(result.value.rows, result.value.runReadiness);
       if (live) {
         setOnServer(result.value.rows);
         setServerEnvironment(result.value.environment);
+        setRunReadiness(result.value.runReadiness);
       }
     });
     return () => {
@@ -121,7 +128,13 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
           ? 'Where each provider gets its key, on the server and in this browser.'
           : serverHasAny
             ? 'The server is configured and runs against real models. Keys here are for the canvas preview only.'
-            : 'No provider is configured on the server, so runs use mock data. Add a key to its .env to use a real model.'
+            : // providers-and-credentials/14: this used to say "runs use mock
+              // data", which stopped being true once Run was rewired to a real
+              // backend request — pressing it on an unconfigured server 500s
+              // instead. `runReadiness` is the server's own sentence for why,
+              // the same one `openstategraph providers` and `openstategraph
+              // serve` print.
+              (runReadiness ?? 'No provider is configured on the server.')
       }
       icon={KeyRound}
       onClose={onClose}

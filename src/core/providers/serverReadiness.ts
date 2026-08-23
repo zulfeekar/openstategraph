@@ -35,6 +35,18 @@ export class ServerReadiness {
   /** Provider ids `/api/providers` called configured, or `null` before it answers. */
   private configuredProviders: ReadonlySet<string> | null = null;
 
+  /**
+   * `/api/providers`'s `run_readiness` — `ProviderCatalogue.elected_default().reason`
+   * in the server's own words, or `null` before it answers.
+   *
+   * providers-and-credentials/14: this is the one place the editor holds that
+   * sentence, so a component that wants to say what a run will do reads it
+   * here rather than composing its own claim. Two components used to do
+   * exactly that — "workflows run against mock data" — on a server whose own
+   * `serve` banner already said every run would fail.
+   */
+  private runReadinessNote: string | null = null;
+
   private readonly listeners = new Set<Listener>();
 
   /** Whether the server can resolve a model at all, or `null` if unasked. */
@@ -70,23 +82,35 @@ export class ServerReadiness {
     this.announce();
   }
 
+  /** What the server said a run will do right now, or `null` before it answers. */
+  runReadiness(): string | null {
+    return this.runReadinessNote;
+  }
+
   /**
    * Records `/api/providers`.
    *
    * Also settles `model_configured`, because the list is the stronger answer:
    * a provider row saying `configured: true` is the same fact health reports,
    * with the name attached. Without this the two could disagree for one poll.
+   *
+   * `runReadiness` is optional so every existing call site — most of them in
+   * tests that do not care about the sentence — keeps compiling; a caller
+   * that omits it simply leaves the note unpublished, same as before this
+   * field existed.
    */
-  recordProviders(statuses: readonly ProviderStatus[]): void {
+  recordProviders(statuses: readonly ProviderStatus[], runReadiness?: string): void {
     const next = new Set(statuses.filter((status) => status.configured).map((s) => s.name));
     const same =
       this.configuredProviders !== null &&
       this.configuredProviders.size === next.size &&
-      [...next].every((name) => this.configuredProviders?.has(name));
+      [...next].every((name) => this.configuredProviders?.has(name)) &&
+      this.runReadinessNote === (runReadiness ?? this.runReadinessNote);
     const anyConfigured = next.size > 0;
     if (same && this.configuredSomewhere === anyConfigured) return;
     this.configuredProviders = next;
     this.configuredSomewhere = anyConfigured;
+    if (runReadiness !== undefined) this.runReadinessNote = runReadiness;
     this.announce();
   }
 
@@ -101,6 +125,7 @@ export class ServerReadiness {
   reset(): void {
     this.configuredSomewhere = null;
     this.configuredProviders = null;
+    this.runReadinessNote = null;
   }
 
   private announce(): void {
@@ -143,6 +168,7 @@ export async function probeServerReadiness(
   if (!health.ok) return false;
   if (health.value) store.recordHealth(health.value.modelConfigured);
   const listed = await client.providers();
-  if (listed.ok && listed.value) store.recordProviders(listed.value.rows);
+  if (listed.ok && listed.value)
+    store.recordProviders(listed.value.rows, listed.value.runReadiness);
   return true;
 }

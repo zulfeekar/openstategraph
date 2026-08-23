@@ -96,6 +96,41 @@ describe('ServerReadiness', () => {
   });
 });
 
+/**
+ * providers-and-credentials/14 — the sentence a wrong-provider banner used to
+ * invent for itself ("workflows run against mock data") now comes from
+ * `/api/providers`'s own `run_readiness` field, the same clause
+ * `openstategraph providers` and `openstategraph serve` print. This is the
+ * one place the editor holds it, so `OnboardingHint` and `CredentialsDialog`
+ * cannot each keep a stale copy.
+ */
+describe('runReadiness', () => {
+  it('says nothing before the server has answered', () => {
+    expect(new ServerReadiness().runReadiness()).toBeNull();
+  });
+
+  it('publishes the sentence `/api/providers` sent', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordProviders(
+      [status('anthropic', false)],
+      'no model provider integration is installed, so every run will fail',
+    );
+
+    expect(readiness.runReadiness()).toBe(
+      'no model provider integration is installed, so every run will fail',
+    );
+  });
+
+  it('is forgotten on reset, like everything else the server told it', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordProviders([status('anthropic', false)], 'set ANTHROPIC_API_KEY');
+
+    readiness.reset();
+
+    expect(readiness.runReadiness()).toBeNull();
+  });
+});
+
 describe('probeServerReadiness', () => {
   it('publishes both answers and reports the runtime reachable', async () => {
     const store = new ServerReadiness();
@@ -108,6 +143,7 @@ describe('probeServerReadiness', () => {
           value: {
             rows: [status('ollama', true)],
             environment: 'No .env file was found near this process.',
+            runReadiness: 'the only provider integration installed, and it has a credential',
           },
         }),
       },
@@ -116,6 +152,9 @@ describe('probeServerReadiness', () => {
 
     expect(reachable).toBe(true);
     expect(store.readinessOf('ollama', false)).toBe('ready');
+    expect(store.runReadiness()).toBe(
+      'the only provider integration installed, and it has a credential',
+    );
   });
 
   it('reports unreachable and records nothing when health fails', async () => {

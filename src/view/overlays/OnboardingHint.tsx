@@ -30,15 +30,35 @@ import './overlays.css';
  * (providers-and-credentials 06). It reads `serverReadiness` now, the same
  * resolver the model picker and the reasoning row read.
  *
+ * **"Falls back to mock data" stopped being true and nobody updated this
+ * file** (providers-and-credentials/14). `MockProvider` is real, but the Run
+ * button has not called the client-side engine that owns it since ticket 03
+ * rewired it to stream a real backend run — `workbench.engine.run()` today
+ * has no caller left outside a test. Pressing Run on an unconfigured server
+ * reaches `/api/runs/stream` and 500s from `NoProviderInstalled`, which is
+ * what `openstategraph serve` already says on the same install. So this
+ * hint now prints the server's own `run_readiness` sentence — the same
+ * clause `openstategraph providers` and `openstategraph serve` print —
+ * instead of inventing a second, incompatible claim.
+ *
  * It waits rather than flashing: `modelConfigured() === null` is "the server
  * has not answered", and a hint that appears for one poll and then admits it
- * was wrong is worse than one that arrives a beat late.
+ * was wrong is worse than one that arrives a beat late. The same wait now
+ * applies to the sentence itself — `runReadiness() === null` until
+ * `/api/providers` has answered — because a hint with no sentence yet is the
+ * same mistake at a smaller scale.
  */
 export function OnboardingHint({ onOpenCredentials }: { onOpenCredentials: () => void }) {
   const [answered, setAnswered] = useState(() => alreadyAnswered(ONBOARDED_KEY));
   const [configured, setConfigured] = useState(() => serverReadiness.modelConfigured());
+  const [reason, setReason] = useState(() => serverReadiness.runReadiness());
 
-  useEffect(() => serverReadiness.onChange(() => setConfigured(serverReadiness.modelConfigured())));
+  useEffect(() =>
+    serverReadiness.onChange(() => {
+      setConfigured(serverReadiness.modelConfigured());
+      setReason(serverReadiness.runReadiness());
+    }),
+  );
 
   const close = () => {
     markAnswered(ONBOARDED_KEY);
@@ -46,18 +66,16 @@ export function OnboardingHint({ onOpenCredentials }: { onOpenCredentials: () =>
   };
 
   // Only on an install that genuinely has no model: not before the server has
-  // answered, and never on one that has.
-  if (answered || configured !== false) return null;
+  // answered, never on one that has, and not before it has said the sentence
+  // to show.
+  if (answered || configured !== false || reason === null) return null;
 
   return (
     <div className="onboarding-hint" role="status">
       <button type="button" className="onboarding-hint__close" aria-label="Dismiss" onClick={close}>
         <Icon glyph={X} size="sm" />
       </button>
-      <p className="onboarding-hint__text">
-        No provider is configured on this server, so workflows run against mock data. Add a key to
-        its <code>.env</code> — Models &amp; credentials names the variable each one wants.
-      </p>
+      <p className="onboarding-hint__text">{reason}</p>
       <Button
         variant="primary"
         size="sm"

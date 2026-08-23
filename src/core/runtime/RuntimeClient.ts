@@ -57,6 +57,14 @@ export interface ProviderStatus {
 export interface ProviderStatusList {
   readonly rows: readonly ProviderStatus[];
   readonly environment: string;
+  /**
+   * What a run through the default provider will do right now — the server's
+   * own words, `ProviderCatalogue.elected_default().reason`
+   * (providers-and-credentials/14). The same clause `openstategraph
+   * providers` prints as its header, so a component that wants to say
+   * whether a run will work reads this instead of composing its own claim.
+   */
+  readonly runReadiness: string;
 }
 
 export interface RunRequest {
@@ -1205,6 +1213,7 @@ export class RuntimeClient implements IRuntimeClient {
           keyHint: typeof row['key_hint'] === 'string' ? row['key_hint'] : null,
         })),
         environment: typeof body['environment'] === 'string' ? body['environment'] : '',
+        runReadiness: typeof body['run_readiness'] === 'string' ? body['run_readiness'] : '',
       });
     } catch {
       return Err('Could not reach the runtime');

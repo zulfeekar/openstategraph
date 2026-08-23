@@ -185,6 +185,17 @@ class ProviderStatusListResponse(BaseModel):
             "reads it automatically (it does not — see the module docstring)."
         )
     )
+    run_readiness: str = Field(
+        description=(
+            "What a run through the default provider will do right now — "
+            "`ProviderCatalogue.elected_default().reason`, the same clause "
+            "`openstategraph providers` prints as its header and, on an "
+            "install with nothing importable, the exact sentence "
+            "`openstategraph serve` prints before it binds a socket. One "
+            "function, three surfaces, so a wiring gap cannot describe the "
+            "same state two incompatible ways (providers-and-credentials/14)."
+        )
+    )
 
 
 class ProviderVerifyResponse(BaseModel):

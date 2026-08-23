@@ -77,6 +77,15 @@ def provider_status() -> ProviderStatusListResponse:
     return ProviderStatusListResponse(
         providers=rows,
         environment=environment_source_note(loaded=False),
+        # providers-and-credentials/14: the editor's "no provider" banner used
+        # to hardcode its own claim ("workflows run against mock data"), and
+        # a run pressed on the strength of it reached `/api/runs/stream` and
+        # 500'd from this same `elected_default()`'s `NoProviderInstalled`.
+        # This is the one place the sentence is composed — `cmd_serve`'s
+        # startup banner reads it through `no_provider_warning`, `openstategraph
+        # providers` reads it as its header — so the editor cannot say
+        # anything the terminal did not already say.
+        run_readiness=provider_catalogue().elected_default().reason,
     )
 
 @router.post(
