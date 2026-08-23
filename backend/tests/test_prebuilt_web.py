@@ -1,6 +1,6 @@
-"""Web tools: keyless search + SSRF-guarded fetch, offline-tested.
+"""Web tools: search ladder + SSRF-guarded fetch, offline-tested.
 
-## Why the search half is shaped the way it is (ticket 26)
+## Why the search half is shaped the way it is (ticket 26, then workflow-gallery 67)
 
 Web Search shipped returning nothing, on every query, while Web Fetch worked.
 The tests here were green throughout, and that is the finding worth keeping:
@@ -11,9 +11,15 @@ page** — real HTML, no `result__a` in it — which the parser read as "zero
 results" and reported to the agent as `No results for '...'`.
 
 Two defects, and the second is the one this project keeps closing: an empty
-result presented as an answer. So the double is now a `(status, body)` pair
-rather than a bare string, and a search whose *transport* failed says so in
-different words from one that genuinely found nothing.
+result presented as an answer. Ticket 26 fixed that for one backend. It
+turned out to be structural, not incidental — the endpoint still refuses
+every request, six days later and again today — so `tool.web-search` is now
+a *ladder* of backends (`search_backends.py`) rather than one hardcoded
+transport, and this file's job narrows to what belongs at this layer: does
+`WebSearchTool` fall through a blocked rung to the next one, and does it
+still fail loudly when every rung refuses? The DuckDuckGo- and
+Tavily-specific parsing/blocking behaviour now belongs to
+`test_search_backends.py`, one layer down, so neither test proves the other.
 """
 
 from __future__ import annotations
@@ -21,95 +27,86 @@ from __future__ import annotations
 import pytest
 
 from openstategraph.prebuilt_web import WebFetchTool, WebSearchTool, _blocked_host
-
-FAKE_RESULTS = '''
-<a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Fpage">Example <b>Title</b></a>
-<a class="result__snippet">A useful snippet about the thing.</a>
-'''
-
-#: What the endpoint actually returned, trimmed: a 202 with a duck-selection
-#: CAPTCHA where the results should be. Copied from a live response rather
-#: than imagined, because imagining it is how the bug survived.
-CHALLENGE_PAGE = (
-    '<!DOCTYPE html><html lang="en"><head><title>DuckDuckGo</title></head><body>'
-    "<p>Unfortunately, bots use DuckDuckGo too. Please complete the following "
-    "challenge to confirm this search was made by a human.</p>"
-    "</body></html>"
-)
+from openstategraph.search_backends import SearchBackendRegistry, SearchHit, SearchOutcome
 
 
-class TestSearch:
-    def test_parses_titles_urls_and_snippets(self) -> None:
-        tool = WebSearchTool(searcher=lambda url, query: (200, FAKE_RESULTS))
+class _FakeBackend:
+    """A minimal `ISearchBackend` — no inheritance needed, per the Protocol's
+    own reasoning (`search_backends.ISearchBackend`'s docstring)."""
+
+    def __init__(self, name: str, outcome: SearchOutcome) -> None:
+        self.name = name
+        self._outcome = outcome
+        self.calls: list[str] = []
+
+    def search(self, query: str, *, max_results: int) -> SearchOutcome:
+        self.calls.append(query)
+        return self._outcome
+
+
+def _registry(*backends: _FakeBackend) -> SearchBackendRegistry:
+    registry = SearchBackendRegistry()
+    for backend in backends:
+        registry.register(backend)
+    return registry
+
+
+class TestSearchLadder:
+    """The orchestration `WebSearchTool` now owns: which rung answers, and
+    what happens when one, or all, refuse."""
+
+    def test_the_first_backends_hits_are_returned(self) -> None:
+        hit = SearchHit(title="Example Title", url="https://example.com/page", snippet="A snippet")
+        first = _FakeBackend("first", SearchOutcome(hits=(hit,)))
+        tool = WebSearchTool(registry=_registry(first))
         result = tool.run(query="anything")
         assert result.error is None
         assert "Example Title" in result.content
         assert "https://example.com/page" in result.content
-        assert "useful snippet" in result.content
+        assert "A snippet" in result.content
 
-    def test_no_results_is_a_readable_failure(self) -> None:
-        tool = WebSearchTool(searcher=lambda url, query: (200, "<html></html>"))
-        assert tool.run(query="zzz").error is not None
+    def test_a_blocked_first_rung_falls_through_to_the_second(self) -> None:
+        hit = SearchHit(title="From Tavily", url="https://example.com/x")
+        blocked = _FakeBackend("duckduckgo", SearchOutcome(blocked_reason="blocked (HTTP 202)"))
+        works = _FakeBackend("tavily", SearchOutcome(hits=(hit,)))
+        result = WebSearchTool(registry=_registry(blocked, works)).run(query="q")
+        assert result.error is None
+        assert "From Tavily" in result.content
+        assert blocked.calls == ["q"] and works.calls == ["q"]
 
-    def test_the_query_reaches_the_transport(self) -> None:
-        """It rides the form body now, not the URL — so it must be passed on.
-
-        The endpoint serves the challenge to GETs and answers its own form's
-        POST; a search that quietly stopped sending the query would look
-        exactly like the bug being fixed.
-        """
-        seen: list[tuple[str, str]] = []
-
-        def searcher(url: str, query: str) -> tuple[int, str]:
-            seen.append((url, query))
-            return 200, FAKE_RESULTS
-
-        WebSearchTool(searcher=searcher).run(query="population of Tokyo")
-        assert seen == [("https://html.duckduckgo.com/html/", "population of Tokyo")]
-
-
-class TestABlockIsNotAnEmptyResult:
-    """The ticket's real defect: a refusal reported as an answer.
-
-    An agent told `No results for 'population of Tokyo'` concludes the web has
-    nothing to say and moves on — which is what the shipped Web Researcher
-    did, honestly and wrongly. A blocked search must read as broken, because
-    it is.
-    """
-
-    def _blocked(self, status: int, body: str = CHALLENGE_PAGE) -> str:
-        result = WebSearchTool(searcher=lambda url, query: (status, body)).run(
-            query="population of Tokyo"
-        )
-        assert result.error is not None
-        return result.error
-
-    def test_a_202_challenge_does_not_read_as_no_results(self) -> None:
-        error = self._blocked(202)
-        assert "No results" not in error
-
-    def test_it_names_the_status_so_the_failure_is_diagnosable(self) -> None:
-        assert "202" in self._blocked(202)
-
-    @pytest.mark.parametrize("status", [403, 429, 500])
-    def test_any_non_200_is_a_refusal_not_a_silence(self, status: int) -> None:
-        assert "No results" not in self._blocked(status, "<html></html>")
-
-    def test_a_genuine_200_with_nothing_in_it_still_says_no_results(self) -> None:
-        """The distinction has to cut both ways to be worth anything."""
-        result = WebSearchTool(searcher=lambda url, query: (200, "<html></html>")).run(
-            query="zzz"
-        )
+    def test_a_successful_rung_with_no_hits_is_a_readable_failure_and_stops_the_ladder(self) -> None:
+        """A backend that genuinely ran and found nothing is a real answer —
+        `ship-it` 26's distinction cuts both ways, so this is `No results`,
+        not a fall-through to the next rung."""
+        ran_but_empty = _FakeBackend("first", SearchOutcome(hits=()))
+        never_called = _FakeBackend("second", SearchOutcome(hits=(SearchHit(title="t", url="https://x"),)))
+        result = WebSearchTool(registry=_registry(ran_but_empty, never_called)).run(query="zzz")
         assert result.error is not None and "No results" in result.error
+        assert never_called.calls == []
 
-    def test_a_challenge_served_with_a_200_is_still_a_block(self) -> None:
-        """Status is the primary signal; the page saying so is the backstop.
+    def test_every_backend_refusing_is_a_refusal_not_a_silence(self) -> None:
+        """The ticket's real defect, generalised: a refusal reported as an
+        answer. An agent told `No results for 'q'` concludes the web has
+        nothing to say and moves on — a blocked search must read as broken,
+        because it is, on every rung."""
+        a = _FakeBackend("duckduckgo", SearchOutcome(blocked_reason="blocked (HTTP 202)"))
+        b = _FakeBackend("tavily", SearchOutcome(blocked_reason="no credential"))
+        result = WebSearchTool(registry=_registry(a, b)).run(query="q")
+        assert result.error is not None
+        assert "No results" not in result.error
+        assert "duckduckgo" in result.error and "blocked (HTTP 202)" in result.error
+        assert "tavily" in result.error and "no credential" in result.error
 
-        The endpoint has changed shape repeatedly, and a 200-with-a-challenge
-        is the next shape it can take without warning.
-        """
-        error = self._blocked(200)
-        assert "No results" not in error
+    def test_a_backend_that_raises_is_treated_as_a_refusal_not_a_crash(self) -> None:
+        class Boom:
+            name = "boom"
+
+            def search(self, query: str, *, max_results: int) -> SearchOutcome:
+                raise RuntimeError("kaboom")
+
+        result = WebSearchTool(registry=_registry(Boom())).run(query="q")
+        assert result.error is not None
+        assert "kaboom" in result.error
 
 
 class TestFetch:

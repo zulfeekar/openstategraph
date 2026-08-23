@@ -116,19 +116,33 @@ class TestWebFetch:
 
 
 class TestWebSearch:
-    def test_it_says_what_it_is_searching_for(self) -> None:
+    def _tool_with_one_blocked_backend(self) -> "object":
+        # workflow-gallery 67: `web_search` is a ladder now, not one
+        # transport — a single fake `ISearchBackend` that reports itself
+        # blocked stands in for "the round trip happened and found nothing
+        # usable", which is all this progress-line test needs.
         from openstategraph.prebuilt_web import WebSearchTool
+        from openstategraph.search_backends import SearchBackendRegistry, SearchOutcome
 
-        tool = WebSearchTool(searcher=lambda _url, _query: (200, ""))
+        class _Blocked:
+            name = "fake"
+
+            def search(self, query: str, *, max_results: int) -> SearchOutcome:
+                return SearchOutcome(blocked_reason="blocked")
+
+        registry = SearchBackendRegistry()
+        registry.register(_Blocked())
+        return WebSearchTool(registry=registry)
+
+    def test_it_says_what_it_is_searching_for(self) -> None:
+        tool = self._tool_with_one_blocked_backend()
         messages = [r.message for r in _inside_a_run(lambda: tool.run(query="compiler design"))]
 
         assert messages == ['Searching the web for "compiler design"']
 
     def test_an_empty_query_reports_nothing(self) -> None:
         # Nothing is going to be slow, because nothing is going to happen.
-        from openstategraph.prebuilt_web import WebSearchTool
-
-        tool = WebSearchTool(searcher=lambda _url, _query: (200, ""))
+        tool = self._tool_with_one_blocked_backend()
 
         assert _inside_a_run(lambda: tool.run(query="   ")) == []
 
