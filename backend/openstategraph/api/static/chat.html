@@ -1195,7 +1195,25 @@ async function stream(path, body, el, signal) {
   const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   if (!resp.ok) {
     finishFlow();
-    answer.hidden = false; answer.innerHTML = `<span class="error">Runtime error (${resp.status}): ${esc(await resp.text())}</span>`;
+    // A door refused before any stream started — no provider installed, a
+    // bad slug, a malformed request. FastAPI's own error shape is
+    // `{"detail": "..."}`, and `detail` is written in the product's own
+    // voice (`NoProviderInstalled`'s `pip install 'openstategraph[...]'`
+    // sentence, `RunContextError`'s named key) — the same sentence
+    // `openstategraph serve` and `openstategraph providers` already print.
+    // Showing it verbatim, with no "Runtime error (503):" wrapper, is what
+    // launch-readiness 16 and providers-and-credentials 15 asked for: a
+    // reader here should see the sentence, not the transport it arrived on.
+    // A body that is not that shape (a proxy's HTML error page, a bare
+    // "Internal Server Error") falls back to the raw text, unchanged from
+    // before.
+    const raw = await resp.text();
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.detail === "string") message = parsed.detail;
+    } catch { /* not JSON — the raw body is the best available message */ }
+    answer.hidden = false; answer.innerHTML = `<span class="error">${esc(message)}</span>`;
     return "http-error";
   }
   const reader = resp.body.getReader(); const dec = new TextDecoder();

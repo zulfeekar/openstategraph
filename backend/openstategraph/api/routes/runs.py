@@ -14,7 +14,7 @@ providers-and-credentials ticket 01 exists for.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -51,6 +51,9 @@ from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import RunContextError
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import resolve_step_budget
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from langchain_core.language_models import BaseChatModel
 
 router = APIRouter()
 
@@ -105,6 +108,47 @@ def _known_slug(services: Any, slug: str | None) -> str | None:
     return slug
 
 
+def _build_model(requested: str | None, document: dict[str, Any]) -> "BaseChatModel":
+    """Resolves and builds the run's model — or fails with the one sentence
+    `openstategraph serve` and `openstategraph providers` already print.
+
+    `resolve_model` raises `NoProviderInstalled` when nothing this install can
+    call is configured, and `build_chat_model` raises `MissingProviderPackage`
+    for the one gap it cannot defer to first use — a provider that declares no
+    `integration_module`, or one whose import fails on something of its own
+    (see `build_chat_model`'s own docstring). Both used to escape every one of
+    the three routes below unguarded: before `validate_run_context`'s `try`,
+    before `compiler.build`'s. FastAPI's default handler turned an exception
+    that already carried `resolve_model`'s own actionable sentence into a
+    bare, bodyless 500 (launch-readiness 16, providers-and-credentials 15).
+
+    **503, not 422 or 502.** The request is not malformed — that is `/api/runs`'
+    `RunContextError` → 422 — and nothing failed to *build* — that is
+    `compiler.build`'s `Exception` → 502. The deployment itself has nothing to
+    run a model with, the same class of fact `editor_assets.editor_missing_html`
+    already reports at 503 for a missing build.
+
+    **One sentence for both audiences, on purpose — this is not what
+    `api/audience.py` splits.** That module withholds content *the graph
+    produced* — capability suggestions, node-naming diagnostics — because a
+    customer cannot act on those and seeing them invites confusion about a
+    workflow they cannot edit. This fires before the graph is even built and
+    names no node, no document and nothing internal — only the same
+    `pip install 'openstategraph[...]'` line six other surfaces already print.
+    `OpenStateGraphError.customer_message()`'s generic default ("... Try
+    again ...") would be actively wrong here, since retrying can never fix a
+    missing provider — so both audiences get the operator-actionable sentence
+    rather than a hidden one.
+    """
+    from openstategraph.chat_model import build_chat_model
+    from openstategraph.errors import MissingProviderPackage, NoProviderInstalled
+
+    try:
+        return build_chat_model(resolve_model(requested or workflow_default_model(document)))
+    except (NoProviderInstalled, MissingProviderPackage) as exc:
+        raise HTTPException(status_code=503, detail=exc.developer_message()) from exc
+
+
 @router.post(
     "/api/runs",
     response_model=RunResponse,
@@ -132,7 +176,6 @@ def run_workflow(
     # model-calling node still runs fine; `init_chat_model` builds a
     # client lazily and nothing calls it until an agent/worker node does.
     from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-    from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
     # Before the document is compiled or a model built: a slug this
@@ -144,9 +187,7 @@ def run_workflow(
     # Model precedence: explicit request > the document's own
     # settings.model > environment default. A workflow that names its
     # model runs the same everywhere it is opened.
-    model = build_chat_model(
-        resolve_model(request.model or workflow_default_model(document))
-    )
+    model = _build_model(request.model, document)
 
     # The caller's run context, refused here or not at all. A 422 rather than
     # a 502: the *request* is wrong — a key this document does not declare, one
@@ -398,16 +439,13 @@ def run_workflow_stream(
     # Ollama cloud is the default (see `resolve_model`) — a model is
     # always resolved, never `None`.
     from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-    from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
     # Same gate as `/api/runs`, and before the same work — see `_known_slug`.
     slug = _known_slug(services, request.workflow_slug)
     # Browser-held keys, fallback-only (see `apply_credentials`).
     apply_credentials(request.credentials)
-    model = build_chat_model(
-        resolve_model(request.model or workflow_default_model(document))
-    )
+    model = _build_model(request.model, document)
 
     # The caller's run context, refused here or not at all. A 422 rather than
     # a 502: the *request* is wrong — a key this document does not declare, one
@@ -518,7 +556,6 @@ def resume_workflow_stream(
     from langgraph.types import Command
 
     from openstategraph.abc.router import BaseRouter  # noqa: F401  (import cost only)
-    from openstategraph.chat_model import build_chat_model
 
     document = normalize_document(request.workflow)
     # A resume binds the same package the run it continues did, so it is
@@ -526,9 +563,7 @@ def resume_workflow_stream(
     slug = _known_slug(services, request.workflow_slug)
     # Browser-held keys, fallback-only (see `apply_credentials`).
     apply_credentials(request.credentials)
-    model = build_chat_model(
-        resolve_model(request.model or workflow_default_model(document))
-    )
+    model = _build_model(request.model, document)
 
     compiler = WorkflowCompiler()
     plan = compiler.plan(document)
