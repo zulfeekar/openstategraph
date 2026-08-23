@@ -138,10 +138,29 @@ describe('routerNode ports', () => {
   it('takes exactly one input — a router classifies one thing at a time', () => {
     // One *flow* input. The `skill` port is a binding, not a stage: it is
     // equipment attached to the step, drawn across the reading axis, and it
-    // carries no text to classify.
-    const ins = portsFor({}).filter((p) => p.direction === 'in' && p.id !== 'skill');
+    // carries no text to classify. `feedback` (`workflow-gallery` 48) is not
+    // a second thing to classify either — it is the signal to re-dispatch
+    // the branch already chosen, never a new question.
+    const ins = portsFor({}).filter(
+      (p) => p.direction === 'in' && p.id !== 'skill' && p.id !== 'feedback',
+    );
     expect(ins).toHaveLength(1);
     expect(maxConnectionsOf(ins[0]!)).toBe(1);
+  });
+
+  it('gains a feedback input so a downstream grader can send it back to re-dispatch', () => {
+    // `workflow-gallery` 48: "feedback follows the branch" (owner's decision,
+    // `docs/decisions/router-feedback-input.md`). A `revise` edge lands here,
+    // never on a branch agent directly — the router replays its own last
+    // decision rather than reclassifying.
+    const feedback = portsFor({}).find((p) => p.id === 'feedback');
+    expect(feedback?.direction).toBe('in');
+    expect(feedback?.type).toBe('feedback');
+    // Default cardinality for an `in` port is 1 (`maxConnectionsOf`) — not
+    // toggled here, per CLAUDE.md's "cardinality belongs to the port, not
+    // the node": this is a new port, not `agent.feedback`'s cardinality
+    // widened into a bus.
+    expect(maxConnectionsOf(feedback!)).toBe(1);
   });
 
   it('uses the stable id for the port id, not the slugified name', () => {

@@ -656,6 +656,17 @@
           "accepts": [
             "skill"
           ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "feedback"
+          ]
         }
       ],
       "dynamic_ports": [

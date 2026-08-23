@@ -1,13 +1,19 @@
 """The long control chain — classify, answer, grade, gate — and where it stops.
 
-Gallery example 19. Four control molecules in one graph, and the two things
-that graph reveals are both about what the vocabulary cannot express:
+Gallery example 19. Four control molecules in one graph, and two things that
+graph used to reveal about what the vocabulary could not express:
 
-- **The grader cannot send it back.** `agent.feedback` is `maxConnections: 1`,
-  so a `revise` edge from one grader onto three branch agents would have to
-  pick one — and a technical failure routed into the billing desk is worse than
-  no loop at all. So the grader has a `pass` edge and nothing else, and this
-  file pins what the compiler then does with a `revise` verdict.
+- **The grader can send it back, through the router.** `agent.feedback` is
+  `maxConnections: 1`, so a `revise` edge from one grader onto three branch
+  agents would have to pick one — and a technical failure routed into the
+  billing desk is worse than no loop at all. `workflow-gallery` 48 settled
+  this: the edge lands on the *router* instead, which re-dispatches to
+  whichever branch its own last decision named rather than reclassifying, so
+  the correction always reaches the desk that actually wrote the rejected
+  draft. `docs/decisions/router-feedback-input.md` is the decision;
+  `test_a_router_re_dispatches_a_revision.py` (backend) is the mechanism,
+  pinned against a live compiled run. This file pins the *shape*: which edge
+  is wired, and where it lands.
 - **The rejection is not a result.** `human.approval.rejected` is a `feedback`
   output, and `output.formatted.result` accepts only `result`/`text`. A
   "rejected sink" therefore cannot be an output node; it is an agent that turns
@@ -71,27 +77,27 @@ def test_the_run_has_two_ends(plan) -> None:
     assert sorted(plan.exits) == ["out-held", "out-sent"]
 
 
-class TestTheGraderCannotSendItBack:
-    def test_the_grader_has_only_a_pass_edge(self, plan) -> None:
-        assert plan.conditional["grader1"] == {"pass": "gate1"}
+class TestTheGraderSendsItBackThroughTheRouter:
+    def test_the_grader_has_a_pass_edge_and_a_revise_edge(self, plan) -> None:
+        assert plan.conditional["grader1"] == {"pass": "gate1", "revise": "router1"}
 
-    def test_a_revise_verdict_routes_to_the_gate_anyway(self, plan) -> None:
-        """The mechanism, pinned rather than assumed.
-
-        `_router_for` falls back to the first declared destination when the
-        recorded decision names no wired branch. Here that is benign and even
-        wanted — the person still sees the draft — but it is a *fallback doing
-        semantic work*, and the same mechanism elsewhere silently ships an
-        answer a grader rejected. Gallery ticket 31.
+    def test_the_revise_edge_lands_on_the_router_not_a_desk(self, doc: dict) -> None:
+        """`workflow-gallery` 48's mechanism, stated as a fact about the file:
+        the revise edge names the router's `feedback` port, never a desk's.
         """
-        route = WorkflowCompiler._router_for("grader1", plan.conditional["grader1"])
-        assert route({"decisions": {"grader1": "revise"}}) == "pass"
+        revise_edge = next(
+            e
+            for e in doc["edges"]
+            if e["source"] == {"nodeId": "grader1", "portId": "revise"}
+        )
+        assert revise_edge["target"] == {"nodeId": "router1", "portId": "feedback"}
 
     def test_no_desk_agent_has_a_feedback_edge(self, doc: dict) -> None:
-        """The reason there is no revise edge, stated as a fact about the file.
-
-        If one is ever added, it lands on exactly one of three desks and this
-        test is where the argument for that choice has to be made.
+        """A desk's own `feedback` port is still never wired directly — the
+        correction reaches it by re-dispatch (the compiler traces the
+        grader's revise edge through the router relay), not by a second edge
+        onto one arbitrarily chosen desk. Choosing one desk to wire directly
+        is exactly the shape `workflow-gallery` 48 rejected.
         """
         desks = {"a-billing", "a-technical", "a-account"}
         feedback_targets = {

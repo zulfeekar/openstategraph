@@ -108,13 +108,24 @@ describe('a revise edge may reshape the question (organisms-first-class/37)', ()
       expect(codes).toContain('cycle');
     });
 
-    it('refuses feedback into a family that declares no feedback input', () => {
-      // A Router shapes input too, but it has no `feedback` port — so the
-      // doc's shape is available to the families that declare one, and
-      // extending it to the rest is a node-family change, not a rule change.
+    it('refuses feedback into an ordinary, non-feedback port', () => {
+      // A Router shapes input too, and `question` is still an ordinary text
+      // port — so the type gate still refuses this, regardless of what else
+      // the Router declares.
       const router = addNode(workbench, TYPE.router);
       expect(validate(grader, 'revise', router, 'question').ok).toBe(false);
-      expect(router.ports.some((port) => port.type === 'feedback')).toBe(false);
+    });
+
+    it('accepts feedback onto the Router’s own feedback input (workflow-gallery/48)', () => {
+      // The one family this rule's comment named as not (yet) declaring a
+      // `feedback` input now does — "feedback follows the branch" (owner's
+      // decision, `docs/decisions/router-feedback-input.md`). The rule needed
+      // no edit: the gate is the port *type*, and a family gaining one is
+      // exactly the "extending it is a node-family change, not a rule change"
+      // this file already predicted.
+      const router = addNode(workbench, TYPE.router);
+      expect(router.ports.some((port) => port.type === 'feedback')).toBe(true);
+      expect(validate(grader, 'revise', router, 'feedback').ok).toBe(true);
     });
   });
   describe('the guidance a developer reads before drawing it', () => {

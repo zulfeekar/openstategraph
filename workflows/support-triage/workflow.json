@@ -370,6 +370,16 @@
       },
       {
         "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "feedback"
+        }
+      },
+      {
+        "source": {
           "nodeId": "hold1",
           "portId": "result"
         },

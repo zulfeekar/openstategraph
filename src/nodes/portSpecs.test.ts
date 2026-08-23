@@ -118,9 +118,11 @@ describe('generated node/port catalogue', () => {
     const router = byType.get('route.classifier');
     // The default five branches must NOT appear as static ports — they are one
     // document's configuration, not the node type's contract.
-    // `skill` is static and declared once for all five prompted types; only
-    // the branch outputs vary with the document.
-    expect(router?.ports.map((port) => port.id)).toEqual(['question', 'skill']);
+    // `skill` is static and declared once for all five prompted types;
+    // `feedback` is static too (`workflow-gallery` 48 — a `revise` edge
+    // re-dispatches to whichever branch this router last chose); only the
+    // branch outputs vary with the document.
+    expect(router?.ports.map((port) => port.id)).toEqual(['question', 'skill', 'feedback']);
     expect(router?.dynamic_ports).toEqual([
       {
         prefix: 'branch:',

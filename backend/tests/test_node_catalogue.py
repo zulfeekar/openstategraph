@@ -120,8 +120,10 @@ class TestTheResolverReadsGeneratedSemantics:
         # A router's five seeded branches are one document's config, not the
         # node type's contract, so they must not appear as static ports.
         # `skill` is static — every prompted node type declares it (ticket 05)
-        # — so only the branch outputs are absent here.
-        assert set(DEFAULT_PORT_SPECS["route.classifier"]) == {"question", "skill"}
+        # — and `feedback` is static too (`workflow-gallery` 48: a `revise`
+        # edge re-dispatches to whichever branch this router last chose) — so
+        # only the branch outputs are absent here.
+        assert set(DEFAULT_PORT_SPECS["route.classifier"]) == {"question", "skill", "feedback"}
 
     def test_an_unknown_node_type_still_defaults_to_control_flow(self) -> None:
         assert default_port_resolver("some.future.node", "in").type == "text"

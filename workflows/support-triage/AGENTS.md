@@ -23,28 +23,47 @@ end at the one that happened.
 Both are about what the current vocabulary cannot express, and both are the
 reason this document is shaped as it is.
 
-### 1. The grader cannot send it back
+### 1. The grader sends it back — through the router
 
 `agent.feedback` is `maxConnections: 1`. Three desk agents, one grader, and a
-`revise` edge would have to pick **one** of them — so a technical failure would
-be redrafted by the billing desk. There is no fan-out feedback port and no
-router-with-a-feedback-input, so the loop is not merely awkward here, it is
-undrawable.
+`revise` edge landing on a desk directly would have to pick **one** of them —
+so a technical failure could be redrafted by the billing desk. Until
+`workflow-gallery` 48 there was no fan-out feedback port and no
+router-with-a-feedback-input, so the loop was undrawable and `grader1` shipped
+`pass` only, advisory: recorded in `decisions`, with the draft going to the
+person either way regardless of the verdict.
 
-So `grader1` has a `pass` edge and nothing else, and its verdict is *advisory*:
-it is recorded in `decisions` and the draft goes to the person either way. That
-works because `_router_for` falls back to the first declared destination when
-the recorded decision names no wired branch:
+**That has changed.** The router gained a `feedback` input, and the decision
+(`docs/decisions/router-feedback-input.md`) was "feedback follows the branch":
+`grader1.revise` now lands on `router1.feedback`, never on a desk. `router1`
+does not reclassify on that edge — it re-dispatches to whichever branch its
+own last decision named, so the correction always reaches the desk that
+actually wrote the rejected draft, never an arbitrary one and never the wrong
+one. The desk's own `feedback` port then receives the grader's rejection text
+through the same trust rule every feedback-consuming node already applies
+(only a source whose revise edge reaches it, directly or via this relay, and
+whose latest decision still stands) — no new plumbing on the desk side.
+
+`grader1` now has both `pass` and `revise` wired
+(`plan.conditional["grader1"] == {"pass": "gate1", "revise": "router1"}`), so
+`_router_for`'s missing-destination fallback no longer applies to this
+grader's verdict — `Finding.UNWIRED_REVISE` does not fire for it. That
+fallback is still real and still worth knowing (gallery ticket 31; the
+fallback itself, and the general hazard of an unwired `revise`, are unchanged
+by this ticket):
 
 ```python
-default = next(iter(destinations))     # {"pass": "gate1"}
+default = next(iter(destinations))     # falls back to the first destination
 return chosen if chosen in destinations else default
 ```
 
-Benign here, and even wanted. **Not benign in general** — the same fallback
-means any grader with an unwired `revise` edge ships an answer its own rubric
-rejected, with no warning at compile time. Gallery ticket 31; `tests/` pins the
-behaviour in both directions.
+`tests/` pins the new shape: the revise edge names `router1.feedback`, and no
+desk carries a direct `feedback` edge — the correction reaches a desk by
+re-dispatch, never by choosing one desk to wire to. The re-dispatch mechanism
+itself — replay instead of reclassify, and the widened feedback-trust check —
+is pinned once, generically, in
+`backend/tests/test_a_router_re_dispatches_a_revision.py`, against a minimal
+two-branch document driven through a real compiled graph.
 
 ### 2. The person is not told what the machine thought
 
@@ -144,6 +163,6 @@ not exist either: organisms-first-class 27.
 
 `tests/` asserts the four molecules are present, the three branches are
 exclusive, both exits exist, that no desk reaches an output without passing the
-gate, that the grader has only a `pass` edge and what a `revise` verdict then
-does, and that the rejected sink is an agent reached by a `feedback` edge. No
-model is called.
+gate, that the grader's `revise` edge lands on the router's `feedback` port
+rather than on any desk, and that the rejected sink is an agent reached by a
+`feedback` edge. No model is called.

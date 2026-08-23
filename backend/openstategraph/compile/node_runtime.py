@@ -166,6 +166,12 @@ MACHINERY_NODE_TYPES: frozenset[str] = frozenset(
     }
 )
 
+#: `workflow_compiler.ROUTER_TYPE`, restated here rather than imported: this
+#: module already spells the literal out at each call site it needs
+#: (`registry.register`, `_agent`'s `conditional_upstream`), so a new use adds
+#: to an existing pattern rather than a new dependency.
+ROUTER_NODE_TYPE = "route.classifier"
+
 
 #: LangGraph's own tag for "run this model, but keep its tokens off the
 #: `messages` stream". Read from the library rather than retyped, because a
@@ -1620,6 +1626,57 @@ class NodeRuntime:
         """
         return run_context_prompt_section(self._prompt_context)
 
+    def _direct_feedback_sources(self, node_id: str, plan: CompiledPlan) -> list[str]:
+        """Graders (or approvals) whose `revise`/`rejected` edge names this
+        node **directly** — the check every feedback-trusting node has always
+        made, factored out so `_feedback_sources` below can widen it in one
+        place instead of two.
+        """
+        return [
+            src
+            for src, dests in plan.conditional.items()
+            if node_id in (dests.get("revise"), dests.get("rejected"))
+        ]
+
+    def _feedback_sources(self, node_id: str, plan: CompiledPlan) -> list[str]:
+        """Graders whose rejection reaches this node — directly, or relayed
+        through a router's re-dispatch of its own branch decision
+        (`workflow-gallery` 48).
+
+        A fan-out of branch agents has no expressible revision loop without
+        this: a router's branches are unlimited going out while
+        `agent.feedback` is `maxConnections: 1` coming in, so a `revise` edge
+        cannot be drawn onto more than one branch agent at once. The owner's
+        decision — feedback follows the branch — puts the edge on the
+        *router* instead. The router does not reclassify on that edge; it
+        replays the branch its own last decision named (`_router` below), and
+        LangGraph's conditional dispatch then invokes only that branch's
+        agent — so the agent that actually receives control this lap is
+        always the one whose feedback should be trusted.
+
+        This is why the widening only ever *adds* graders whose target is a
+        router that can reach `node_id`: it never needs to also check which
+        branch the router chose. Only the chosen branch's node runs at all;
+        an agent this router does not currently route to is simply never
+        invoked, trusted feedback or not.
+        """
+        direct = self._direct_feedback_sources(node_id, plan)
+        relays = [
+            r
+            for r, dests in plan.conditional.items()
+            if self._types.get(r) == ROUTER_NODE_TYPE and node_id in dests.values()
+        ]
+        if not relays:
+            return direct
+        seen = set(direct)
+        widened = list(direct)
+        for relay in relays:
+            for src in self._direct_feedback_sources(relay, plan):
+                if src not in seen:
+                    seen.add(src)
+                    widened.append(src)
+        return widened
+
     def _agent(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """An agent-family loop with the tools the canvas bound to it.
 
@@ -1699,11 +1756,7 @@ class NodeRuntime:
         # the page-analytics dispatcher ran after one grader-revise lap and
         # received "Your previous answer was rejected" instead of the
         # human-approved report.
-        feedback_sources = [
-            src
-            for src, dests in plan.conditional.items()
-            if node_id in (dests.get("revise"), dests.get("rejected"))
-        ]
+        feedback_sources = self._feedback_sources(node_id, plan)
         # Whether THIS node produced the text the rejecting node judged
         # (`organisms-first-class` 54). A `revise` edge may legally land
         # upstream of the producer — LangChain's agentic-RAG rewrites the
@@ -1981,6 +2034,14 @@ class NodeRuntime:
             )
         upstream = [src for src, dst in plan.edges if dst == node_id]
         skills = plan.skill_bindings.get(node_id, [])
+        # `workflow-gallery` 48: a grader downstream of this router's branches
+        # may send a `revise` verdict back here rather than onto a branch
+        # agent directly (`docs/decisions/router-feedback-input.md` — "feedback
+        # follows the branch"). This router is the direct target, so the
+        # unwidened check is right: it does not need `_feedback_sources`'
+        # router-relay case, only the same direct check every feedback-trusting
+        # node has always made.
+        feedback_sources = self._direct_feedback_sources(node_id, plan)
 
         def router_for(skill: str, run_ctx: str = "") -> Router:
             """Built per skill value, for the same reason `_agent` is: the
@@ -2015,6 +2076,28 @@ class NodeRuntime:
             # `should_have_refused` for a run that never touched the database.
             # The branch downstream reads `messages` for its history anyway,
             # so it loses nothing and stops being handed the transcript twice.
+            # A trusted `revise` here does not reclassify: it re-dispatches to
+            # whichever branch this router's own last decision named, which is
+            # the whole mechanism (`workflow-gallery` 48). Skipping
+            # `router.classify()` is not merely an optimisation — a fresh
+            # classification could legally choose a *different* branch than
+            # the one that wrote the rejected draft (the model is not
+            # deterministic), which would hand the grader's correction to a
+            # desk that never saw the question. The same trust rule every
+            # feedback-consuming node already applies: only a source whose
+            # revise/rejected edge names this node AND whose latest decision
+            # still stands.
+            decisions = state.get("decisions") or {}
+            replaying = any(
+                decisions.get(src) in ("revise", "rejected") for src in feedback_sources
+            )
+            replay_branch = decisions.get(node_id) if replaying else None
+            if replay_branch:
+                return {
+                    "decisions": {node_id: replay_branch},
+                    "outputs": {node_id: turn},
+                }
+
             classified = (
                 _thread_question(state) if turn == state.get("question", "") else turn
             )
@@ -2587,11 +2670,7 @@ class NodeRuntime:
         # THIS orchestrator — and whose latest decision is still that label —
         # may be folded into a replan; anything else is a stale rejection (or
         # another branch's) dispatched into every subtask as if it were live.
-        feedback_sources = [
-            src
-            for src, dests in plan.conditional.items()
-            if node_id in (dests.get("revise"), dests.get("rejected"))
-        ]
+        feedback_sources = self._feedback_sources(node_id, plan)
         skills = plan.skill_bindings.get(node_id, [])
 
         def run(state: RunState) -> dict[str, Any]:

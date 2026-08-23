@@ -410,6 +410,31 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
           // A router composes a prompt, so it takes a skill like every other
           // model-driven type — one declaration, in `../skillLayer`.
           { ...SKILL_PORT },
+          {
+            id: 'feedback',
+            direction: 'in',
+            type: PORT.feedback,
+            label: 'feedback',
+            // `workflow-gallery` 48: a fan-out of branch agents has no
+            // expressible revision loop, because a router's branches are
+            // unlimited going out while `agent.feedback` is `maxConnections:
+            // 1` coming in — a `revise` edge downstream of a classifier would
+            // have to pick one desk, and a technical failure redrafted by the
+            // billing desk is worse than no loop. The owner's decision:
+            // feedback follows the branch. Wire a grader's `revise` here
+            // instead of onto a branch agent — the router made the dispatch
+            // choice, so it is the one node that can replay it. It does not
+            // reclassify; it re-emits the exact branch its own last decision
+            // named, so the same desk gets the correction the grader wrote.
+            //
+            // Cardinality belongs to the port, not the node (CLAUDE.md): this
+            // is a new port, not `branch:*`'s cardinality toggled, and not
+            // `agent.feedback` widened into a bus — both were priced and
+            // declined. See `docs/decisions/router-feedback-input.md`.
+            description:
+              'A grader’s rejection, downstream of this router’s branches. Re-dispatches to ' +
+              'whichever branch this router last chose — it does not reclassify.',
+          },
         ];
 
         // Declaration order is preserved, because the order the user typed the
