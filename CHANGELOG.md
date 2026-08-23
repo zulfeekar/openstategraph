@@ -480,6 +480,96 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc2 — 2026-08-23
+The second candidate, and the first with a green CI behind it. Where rc1 added
+capability, rc2 mostly stops surfaces from saying things that are not true —
+which is the work a beta needs before strangers arrive.
+
+### Fixed — a door that stayed quiet
+
+- **The MCP run door reported neither an unrouted grader verdict nor a silent
+  worker.** `run_workflow` built its warnings from the plan alone and never
+  read the finished state, so a grader whose `revise` reached nothing shipped
+  the failure as a pass — on the one door a customer's own LLM calls to run a
+  workflow. It now folds `run_health`'s failures and silences in, like every
+  other door.
+- **A node that ran twice forgot the first lap.** `tool_use` was merged per
+  node id, so a revision loop's later lap replaced the earlier one wholesale
+  and the record of a query disappeared. A new `MERGE_ROWS` reducer unions the
+  list-valued fields instead; `_input`'s turn reset was widened to match.
+- **The editor could validate a package that mounts itself.** `openstategraph
+  validate` refused it; `POST /api/workflows/validate` planned the document in
+  memory, could not dereference a mount, and answered VALID. One validator, two
+  answers, from the canvas that produced the document.
+- **A replaced link vanished without a word.** Wiring a second link into a
+  single-slot input silently dropped the first. The gesture now says which link
+  it took; ordinary connects stay silent.
+
+### Fixed — a sentence that was not true
+
+- **`openstategraph providers` printed `ready` for every configured row**, from
+  a function that only asks whether a variable is set. Rows say `configured`,
+  each names the variable that answered, and `--check` makes one real request
+  per provider when you want the stronger claim.
+- **The CLI and the server read different environments and neither said so.**
+  Only the CLI loads `.env`, so `openstategraph providers` and a running server
+  could describe two different machines. Both now name the environment they are
+  describing, from one shared function.
+- **The editor told a new user that runs use mock data.** They do not: with no
+  provider integration installed a run reaches `/api/runs/stream` and fails,
+  which is what the CLI had always said. The mock provider had been unreachable
+  from the Run button since it was rewired to the backend. `GET /api/providers`
+  now publishes the CLI's own sentence and the editor prints that.
+- **A grader's card taught a dead end.** With a revision loop now expressible
+  behind a fan-out, "this grader records a verdict, it does not gate" described
+  a limitation that had been removed; the card and the compiler finding teach
+  the fix instead.
+
+### Added
+
+- **A fan-out can close a revision loop.** `RouterNode` gains a `feedback`
+  input: a grader's `revise` wires onto the router, which replays its own last
+  branch decision, so the correction reaches whichever agent actually wrote the
+  answer. Previously a router's branches were unlimited going out while an
+  agent's feedback port took one link coming in, so the graph narrowed in a way
+  feedback could not follow. `support-triage` uses it.
+  `docs/decisions/router-feedback-input.md` carries the reasoning, including
+  why widening `agent.feedback` into a bus was rejected.
+- **`tool.web-search` has a second backend.** DuckDuckGo's HTML endpoint began
+  answering a bot challenge, and the one evidenced fallback is rate-limited, so
+  a single scraped endpoint was a single point of failure. Search is now a
+  registry of backends — `ISearchBackend` → `AbstractSearchBackend` →
+  `BaseSearchBackend` → concretes — with DuckDuckGo keyless by default and
+  Tavily behind `TAVILY_API_KEY`. A blocked backend says it was blocked
+  instead of returning nothing.
+- **Push to package.** A mistake found inside a mounted package could only be
+  overridden on that one instance; correcting the package meant leaving,
+  opening it by slug and finding the field again. The field now offers a push
+  that names how many instances it changes, warns which mounts shadow it with
+  their own override, resolves to the end of the mount chain, and points at the
+  package's own tests afterwards.
+
+### Fixed — gates that could not do their job
+
+- **A drift gate that only the machine which built it could satisfy.** The
+  gallery check re-rendered every diagram through headless chromium and
+  compared bytes; mermaid asks the browser how wide each label is, so every
+  coordinate is a font metric and a machine without `Inter` produced a
+  different file with no source change. The gate now compares the graph — node
+  labels, arrow count, arrow labels — and the CI job installs neither node nor
+  chromium.
+- **The ledger could not see a trailer naming a ticket with no file.** Three
+  commits pointed at ticket files that a concurrent revert had taken with no
+  trace. It reports them now, and found a fourth on its first run.
+
+### Notes
+
+- The e2e suite's palette spec had never passed; it asked for a paragraph the
+  palette hides once you type in the search box, which is deliberate.
+- Three claims about model behaviour that had only been proved against scripted
+  models were re-run against real ones and all three held;
+  `docs/decisions/live-model-verification-2026-08-23.md` carries the counts.
+
 ## 0.3.0rc1 — 2026-08-15
 The release train's first ride, on the beta repository, to TestPyPI only. The
 candidate carries everything 0.3.0 below describes plus the work landed since
