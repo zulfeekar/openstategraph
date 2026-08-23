@@ -121,9 +121,61 @@ describe('a suggestion for a tool that is already there', () => {
   });
 
   it('keeps refusing a malformed suggestion the way it always did', () => {
-    expect(suggestionOutcome({ ...raw, nodeType: 'tool.nope' }, facts()).kind).toBe('none');
     expect(suggestionOutcome({ ...raw, attachTo: 'ghost' }, facts()).kind).toBe('none');
     expect(suggestionOutcome(null, facts()).kind).toBe('none');
+  });
+});
+
+/**
+ * `the-agent-asks-for-what-it-cannot-get` 04, half 1 — the ticket's own
+ * table: an unregistered `nodeType` is not the same silence as a malformed
+ * `attachTo`. The first is a developer being told nothing after their agent
+ * correctly named a real gap; the second is genuinely nothing to offer.
+ */
+describe('a suggestion naming a capability nobody has built', () => {
+  const facts: EditorFacts = {
+    nodeTypes: new Set(['tool.web-search']),
+    nodeIds: new Set(['agent-analyst']),
+  };
+
+  it('is reported as a gap rather than dropped silently', () => {
+    const outcome = suggestionOutcome(
+      {
+        nodeType: 'tool.file-a-ticket',
+        attachTo: 'agent-analyst',
+        reason: 'no tool files a support ticket',
+      },
+      facts,
+    );
+    expect(outcome.kind).toBe('gap');
+    if (outcome.kind !== 'gap') throw new Error('expected gap');
+    expect(outcome.reason).toBe('no tool files a support ticket');
+  });
+
+  it('carries an empty reason rather than inventing one when the model gave none', () => {
+    const outcome = suggestionOutcome(
+      { nodeType: 'tool.file-a-ticket', attachTo: 'agent-analyst' },
+      facts,
+    );
+    expect(outcome.kind).toBe('gap');
+    if (outcome.kind !== 'gap') throw new Error('expected gap');
+    expect(outcome.reason).toBe('');
+  });
+
+  it('still drops a registered type wired to a node that does not exist', () => {
+    // The malformed case, unchanged: the type is real, only the wiring is not.
+    const outcome = suggestionOutcome(
+      { nodeType: 'tool.web-search', attachTo: 'agent-ghost', reason: 'irrelevant' },
+      facts,
+    );
+    expect(outcome.kind).toBe('none');
+  });
+
+  it('reports a gap ahead of applicability even when the type name is empty', () => {
+    // An empty nodeType is not a capability the agent asked for — it is a
+    // suggestion nobody filled in, and stays silent.
+    const outcome = suggestionOutcome({ nodeType: '', attachTo: 'agent-analyst' }, facts);
+    expect(outcome.kind).toBe('none');
   });
 });
 

@@ -76,12 +76,22 @@ export function busKey(nodeId: string, portId: string): string {
 export type SuggestionOutcome =
   | { readonly kind: 'apply'; readonly suggestion: CapabilitySuggestion }
   | { readonly kind: 'duplicate'; readonly suggestion: CapabilitySuggestion; readonly message: string }
+  // `the-agent-asks-for-what-it-cannot-get` 04, half 1. An unregistered
+  // `nodeType` is not the same silence as a malformed `attachTo` — the agent
+  // named a real gap, and `null` collapsed it into the case where it named
+  // nothing at all. `reason` carries only what the agent itself said (or ''
+  // when it said nothing), never the invented type name — the card must not
+  // read as if the platform's catalogue has authority handed to the model.
+  | { readonly kind: 'gap'; readonly reason: string }
   | { readonly kind: 'none' };
 
 export function suggestionOutcome(
   raw: Readonly<Record<string, unknown>> | null | undefined,
   facts: EditorFacts,
 ): SuggestionOutcome {
+  const gapReason = capabilityGapReason(raw, facts);
+  if (gapReason !== null) return { kind: 'gap', reason: gapReason };
+
   const suggestion = applicableSuggestion(raw, facts);
   if (suggestion === null) return { kind: 'none' };
 
@@ -132,6 +142,34 @@ export interface FieldReadiness {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * The agent's own `reason`, when the suggestion names a `nodeType` this
+ * editor has never registered — or `null` when there is nothing to report.
+ *
+ * This is the fact `applicableSuggestion` cannot surface without weakening
+ * its own rule: a suggestion that cannot be applied is still not a
+ * suggestion, and `applicableSuggestion` keeps returning `null` for it. But
+ * "the type does not exist" and "the wiring does not exist" are different
+ * situations for a developer reading the panel — one is a dead run with a
+ * real cause, the other is a malformed proposal — and only the caller
+ * (`suggestionOutcome`) needs the distinction, so it lives here rather than
+ * on the function whose contract the ticket protects.
+ *
+ * Checked ahead of `attachTo`, deliberately: an invented type is the
+ * interesting fact regardless of whether the wiring target also exists, and
+ * a raw suggestion with no `nodeType` at all is not "an agent asking for a
+ * capability" — it is silence, and stays silence.
+ */
+function capabilityGapReason(
+  raw: Readonly<Record<string, unknown>> | null | undefined,
+  facts: EditorFacts,
+): string | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const nodeType = asString(raw['nodeType']);
+  if (!nodeType || facts.nodeTypes.has(nodeType)) return null;
+  return asString(raw['reason']);
 }
 
 /**

@@ -935,9 +935,17 @@ export function AskPanel({
         // The suggestion arrives structured, on the run's developer channel —
         // it was never in `result.answer`, because the backend splits it out
         // on every run whatever the audience (`api/audience.py`). All that is
-        // left to decide here is whether *this* canvas can honour it: a type
-        // the registry does not know or an `attachTo` the document does not
-        // contain comes back `none` and no card is offered.
+        // left to decide here is whether *this* canvas can honour it: an
+        // `attachTo` the document does not contain comes back `none` and no
+        // card is offered.
+        //
+        // **A `nodeType` the registry does not know comes back `gap`
+        // instead** (`the-agent-asks-for-what-it-cannot-get` 04, half 1). The
+        // backend already declined to open the "build one" door here, because
+        // it saw a well-formed fence and assumed the editor could place it —
+        // only the browser knows the type does not exist. Route it into the
+        // same `CapabilityGapCard` the compile-side gap uses, so a developer
+        // is told rather than watching the run end with nothing.
         //
         // **And a tool already on that bus comes back `duplicate`** — refused
         // before it is offered rather than after it is pressed
@@ -966,9 +974,15 @@ export function AskPanel({
           pendingApproval: null,
           suggestion: outcomeForCard.kind === 'apply' ? outcomeForCard.suggestion : null,
           // Only when nothing could be placed — a gap with a tool that fits is
-          // a suggestion, not something to build.
+          // a suggestion, not something to build. And an unregistered type is
+          // its own reason to open the door, ahead of whatever the compile
+          // side inferred: the browser knows something the backend does not.
           capabilityGap:
-            outcomeForCard.kind === 'apply' ? null : (result.developer?.capabilityGap ?? null),
+            outcomeForCard.kind === 'apply'
+              ? null
+              : outcomeForCard.kind === 'gap'
+                ? outcomeForCard.reason
+                : (result.developer?.capabilityGap ?? null),
           ...(outcomeForCard.kind === 'duplicate' ? { notice: outcomeForCard.message } : {}),
         });
       } else {
