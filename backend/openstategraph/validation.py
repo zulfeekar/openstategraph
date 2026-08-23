@@ -62,7 +62,16 @@ def mount_targets(document: dict[str, Any]) -> list[tuple[str, str]]:
     handed a list that has already forgotten the difference.
     """
     found: list[tuple[str, str]] = []
-    for node in document.get("nodes") or []:
+    nodes = document.get("nodes")
+    if not isinstance(nodes, list):
+        # Not this function's malformed-document to report — `validate_document`
+        # already turns a non-list `nodes` into its own finding. A caller that
+        # also asks this function must not crash on the document `valid_document`
+        # was built to survive.
+        return found
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
         if str(node.get("type") or "") not in MOUNT_NODE_TYPES:
             continue
         data = node.get("data")

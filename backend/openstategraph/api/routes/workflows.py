@@ -794,11 +794,22 @@ def validate_workflow(services: Services, request: ValidateRequest) -> ValidateR
     an unknown node type on the developer channel and continue, per
     `errors.py`'s "degrade loud, never silent" rule; the MCP door refuses.
     One validator, two policies — see `openstategraph.validation`.
+
+    **Also checks every mount, the way `openstategraph validate` does**
+    (`workflow-gallery` 27). `validate_document` plans the posted document in
+    memory and cannot dereference a mount at all; this door has a workflows
+    root (`services.store.root`, already used two routes up by
+    `reachable_schema`) exactly as the CLI does, so it walks the same
+    `unresolved_mounts` chain the CLI walks — a self-mount, a cycle through
+    another package, a mount naming a package that is not on disk. Without
+    this a document could refuse from the CLI and validate clean from the
+    canvas that produced it.
     """
-    from openstategraph.validation import validate_document
+    from openstategraph.validation import unresolved_mounts, validate_document
 
     valid, findings = validate_document(request.workflow)
-    return ValidateResponse(valid=valid, findings=findings)
+    findings = list(findings) + unresolved_mounts(request.workflow, services.store.root)
+    return ValidateResponse(valid=valid and not findings, findings=findings)
 
 @router.get(
     "/api/workflows/{slug}/graph",
