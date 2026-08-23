@@ -226,8 +226,11 @@ _SENTENCES: dict[Finding, str] = {
     Finding.UNWIRED_REVISE: (
         'Grader "{0}" has no revise edge — a verdict of revise routes to its pass '
         "branch instead, so an answer this grader rejected ships as though it had "
-        "been approved. Wire revise back to the node that should redraft, or read "
-        "this grader as a recorder rather than a gate."
+        "been approved. Wire revise to the node that wrote the answer, or — behind "
+        "a fan-out, where no single branch agent is the one to correct — to the "
+        "router that dispatched to it; the router replays its own branch decision "
+        "(workflow-gallery 48). Read this grader as a recorder only if nothing "
+        "upstream can take feedback."
     ),
     Finding.UNKNOWN_NODE_TYPE: (
         'Node "{1}" has type "{0}", which this build does not implement — the step '

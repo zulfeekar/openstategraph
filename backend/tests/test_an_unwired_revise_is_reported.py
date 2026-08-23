@@ -115,6 +115,20 @@ class TestTheCompilerSaysItBeforeAnythingRuns:
         assert "wire" in sentence.lower()
         assert "Traceback" not in sentence and ".py" not in sentence
 
+    def test_the_sentence_teaches_the_router_relay_now_that_48_built_it(
+        self, monkeypatch: Any
+    ) -> None:
+        """Fix 3, re-derived after `workflow-gallery` 48: a router now has a
+        `feedback` input and replays its own branch decision, so an unwired
+        revise behind a fan-out is a fixable mistake, not only a design
+        choice. The sentence teaches that fix rather than offering "read
+        this grader as a recorder" as an equally fine default."""
+        runtime, _run = _grader(monkeypatch, {"pass": "out1"})
+        matching = [w for w in runtime_warnings(runtime) if "grader1" in w]
+        sentence = matching[0]
+        assert "router" in sentence.lower()
+        assert "fan-out" in sentence.lower() or "dispatch" in sentence.lower()
+
     def test_it_is_loud_and_not_fatal(self, monkeypatch: Any) -> None:
         """A grader used as a recorder is a legal graph that answers questions.
 

@@ -229,9 +229,13 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           label: 'revise',
           branch: true,
           description:
-            'Feedback sent back upstream when the answer falls short. Wire this to any ' +
-            'node with a feedback input — the one that wrote the answer, or one further ' +
-            'upstream that reshapes the question it was asked.',
+            'Feedback sent back upstream when the answer falls short. Wire this to the ' +
+            'node that wrote the answer, or one further upstream that reshapes the ' +
+            'question it was asked. Behind a fan-out, wire it to the router that ' +
+            'dispatched to the answerer instead — it replays its own branch, so the ' +
+            'correction reaches the same desk (`workflow-gallery` 48). Left unwired, a ' +
+            'revise verdict ships as a pass; only leave it that way if nothing upstream ' +
+            'can take feedback.',
         },
       ],
     },

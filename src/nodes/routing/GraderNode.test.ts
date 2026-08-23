@@ -162,6 +162,35 @@ describe('grader criteria — prebuilt and overridable', () => {
 });
 
 /**
+ * `workflow-gallery` 31 fix 3, re-derived after `workflow-gallery` 48 gave a
+ * fan-out shape an expressible revision loop: a router now has a `feedback`
+ * input and replays its own branch decision, so an unwired `revise` is no
+ * longer the fan-out's only option — it is a fixable mistake in the common
+ * case, and the card should teach the fix rather than offer "records, does
+ * not gate" as an equally fine default.
+ */
+describe('the revise port teaches the fix', () => {
+  const revisePort = () =>
+    graderNode.ports({}).find((p) => p.id === 'revise');
+
+  it('tells a developer to wire the router that dispatched to the answerer, behind a fan-out', () => {
+    const description = revisePort()?.description ?? '';
+    expect(description.toLowerCase()).toMatch(/router/);
+    expect(description.toLowerCase()).toMatch(/fan-out|dispatch/);
+  });
+
+  it('still names the direct case — the node that wrote the answer', () => {
+    const description = revisePort()?.description ?? '';
+    expect(description.toLowerCase()).toMatch(/wrote the answer/);
+  });
+
+  it('says what happens if it is left unwired, rather than staying silent', () => {
+    const description = revisePort()?.description ?? '';
+    expect(description.toLowerCase()).toMatch(/unwired|left unwired|ships as/);
+  });
+});
+
+/**
  * The cycle. This is the behaviour ticket 09 designed and ticket 11 found to be
  * unreachable — until the `feedback` port existed, no cycle was drawable at all,
  * so `acyclicRule` was dead code.
