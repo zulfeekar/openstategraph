@@ -34,6 +34,7 @@ from openstategraph.api.schemas import (
     KnowledgeTopicSaveRequest,
     KnowledgeTopicStatusResponse,
     MountDocumentResponse,
+    MountUsageResponse,
     PluginExportResponse,
     PluginToolCapabilityResponse,
     PublishWorkflowRequest,
@@ -338,6 +339,36 @@ def get_mount_document(services: Services, root: str, path: str, inherited: bool
         document=resolved.document,
         warnings=resolved.warnings,
     )
+
+@router.get(
+    "/api/workflows/{slug}/mount-usage",
+    response_model=MountUsageResponse,
+    summary="Who mounts this package, before a field is pushed to it",
+    tags=["Catalogue"],
+)
+def get_mount_usage(
+    services: Services, slug: str, child_node_id: str, key: str
+) -> MountUsageResponse:
+    """What "push to package" needs to ask before it writes — ticket 17.
+
+    `child_node_id`/`key` name one field of `slug`'s own document — the field
+    a "push to package" is about to overwrite. This answers, for the
+    workspace as a whole: how many mounts of `slug` exist (every instance
+    that will pick up the correction), and which of those already carry
+    their own override of this exact field (the ones that will not, because
+    an instance override always wins over the package it narrows).
+
+    404 when `slug` itself is not a real package — the same "this link is
+    stale" reading `get_mount_document` gives a dangling address, since a
+    push aimed at a package that no longer exists has nowhere to land.
+    """
+    if services.store.describe(slug) is None:
+        raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}")
+
+    from openstategraph.api.mount_resolution import find_mount_usages
+
+    usage = find_mount_usages(services.store, slug, child_node_id, key)
+    return MountUsageResponse(count=usage.instance_count, shadowed_hosts=usage.shadowed_hosts)
 
 @router.post(
     "/api/workflows",

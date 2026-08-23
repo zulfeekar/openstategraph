@@ -269,6 +269,22 @@ export interface LoadedMount {
 }
 
 /**
+ * Who mounts a package, before a "push to package" writes it —
+ * `production-ready` ticket 17.
+ *
+ * `count` is every direct mount of the package across the whole workspace,
+ * so the confirmation dialog can name how many instances change.
+ * `shadowedHosts` names the packages whose mount already overrides this
+ * exact field, so the dialog can say those instances will not see the
+ * correction — the shadowing warning the ticket requires, not an
+ * afterthought.
+ */
+export interface MountUsage {
+  readonly count: number;
+  readonly shadowedHosts: readonly string[];
+}
+
+/**
  * What `POST /api/workflows/{slug}/duplicate` answers with (ticket 01).
  *
  * The slug is the part a caller cannot predict and the part it needs next, to
@@ -292,6 +308,8 @@ export interface IWorkflowFileClient {
     address: MountAddress,
     options?: { inherited?: boolean },
   ): Promise<Result<LoadedMount, string>>;
+  /** Who mounts `slug` and would be affected by pushing this field to it. */
+  mountUsage(slug: string, childNodeId: string, key: string): Promise<Result<MountUsage, string>>;
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   /** Create a workflow and receive the slug the backend minted for it. */
   create(name: string, document: unknown): Promise<Result<string, string>>;
@@ -618,6 +636,39 @@ export class WorkflowFileClient
         slug: asString(payload.slug),
         document: payload.document,
         warnings: Array.isArray(payload.warnings) ? payload.warnings.map(asString) : [],
+      });
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
+  /**
+   * Who mounts `slug`, before a "push to package" write lands there — see
+   * `MountUsage`.
+   */
+  async mountUsage(
+    slug: string,
+    childNodeId: string,
+    key: string,
+  ): Promise<Result<MountUsage, string>> {
+    const params = new URLSearchParams({ child_node_id: childNodeId, key });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}/mount-usage?${params.toString()}`,
+      );
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+
+    try {
+      const payload = (await response.json()) as { count?: unknown; shadowed_hosts?: unknown };
+      return Ok({
+        count: typeof payload.count === 'number' ? payload.count : 0,
+        shadowedHosts: Array.isArray(payload.shadowed_hosts)
+          ? payload.shadowed_hosts.map(asString)
+          : [],
       });
     } catch {
       return Err('The runtime returned a response that was not valid JSON');

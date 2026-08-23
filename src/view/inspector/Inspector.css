@@ -194,3 +194,37 @@
   cursor: default;
   opacity: 0.7;
 }
+
+/* "Push to package" (`production-ready` 17) — beside `.field__override`,
+   never the same colour: the revert goes back to the package's value, this
+   one writes a new one *into* the package for every mount that does not
+   already narrow it, and the two must not be mistaken for one control with
+   two labels. */
+.field__push {
+  font: inherit;
+  font-size: var(--font-size-2xs, 0.6875rem);
+  line-height: 1;
+  padding: 0.125rem 0.375rem;
+  margin-left: 0.25rem;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-warning-border, currentColor);
+  background: var(--color-warning-subtle, transparent);
+  color: var(--color-warning-text, inherit);
+  cursor: pointer;
+}
+
+.field__push:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Reported in place — this deep in the tree there is no toast context
+   (`CompositionBody`'s `OpenMount` makes the same call). Pre-line so the
+   confirmation's own blank-line-separated sentences (the instance count,
+   the shadowing warning) stay legible rather than running together. */
+.field__push-result {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--font-size-2xs, 0.6875rem);
+  white-space: pre-line;
+}

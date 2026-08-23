@@ -24,6 +24,7 @@ import {
 } from '@core/model/contracts/fields';
 import type { NodeId } from '@core/model/contracts/node';
 import { useController } from '@app/WorkbenchContext';
+import { PushToPackageButton } from './PushToPackageButton';
 
 interface FieldRendererProps {
   nodeId: NodeId;
@@ -70,25 +71,37 @@ export function FieldRenderer({ nodeId, schema, data, error }: FieldRendererProp
     ...(overridden
       ? {
           labelValue: (
-            <button
-              type="button"
-              className="field__override"
-              // The package's own value, so the badge answers "what would I
-              // get back" without a second click. `knowsInherited` is false
-              // when the inherited document could not be fetched, and then
-              // this must not claim a default it does not have.
-              title={
-                mounts?.knowsInherited
-                  ? `This mount overrides the package. Click to use the package default: ${String(
-                      mounts.inheritedValue(nodeId, schema.key) ?? '(empty)',
-                    ).slice(0, 120)}`
-                  : 'This mount overrides the package.'
-              }
-              disabled={!mounts?.knowsInherited}
-              onClick={revert}
-            >
-              overridden
-            </button>
+            <>
+              <button
+                type="button"
+                className="field__override"
+                // The package's own value, so the badge answers "what would I
+                // get back" without a second click. `knowsInherited` is false
+                // when the inherited document could not be fetched, and then
+                // this must not claim a default it does not have.
+                title={
+                  mounts?.knowsInherited
+                    ? `This mount overrides the package. Click to use the package default: ${String(
+                        mounts.inheritedValue(nodeId, schema.key) ?? '(empty)',
+                      ).slice(0, 120)}`
+                    : 'This mount overrides the package.'
+                }
+                disabled={!mounts?.knowsInherited}
+                onClick={revert}
+              >
+                overridden
+              </button>
+              {/* Beside the reset, never in place of it — CLAUDE.md and the
+                  ticket both say "reachable from inside the mount, beside the
+                  existing reset." The reset says "go back to the package";
+                  this says the opposite thing a mount could not say before:
+                  "this value is right, put it in the package." */}
+              <PushToPackageButton
+                nodeId={nodeId}
+                fieldKey={schema.key}
+                value={data[schema.key] ?? null}
+              />
+            </>
           ),
         }
       : {}),

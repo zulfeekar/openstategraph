@@ -212,11 +212,19 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/runtime/WorkflowFileClient.ts',
     className: 'WorkflowFileClient',
-    members: 17,
-    exception: `Ten reads, six writes and one subscription over the file API — a flat HTTP
-      adapter where every member is its own fetch and there is nothing to
+    members: 18,
+    exception: `Eleven reads, six writes and one subscription over the file API — a flat
+      HTTP adapter where every member is its own fetch and there is nothing to
       delegate to. Width here is the width of the endpoint surface, and the
       class does not get to be narrower than the API it adapts.
+
+      The eighteenth is 'mountUsage' (\`production-ready\` ticket 17,
+      \`GET /api/workflows/{slug}/mount-usage\`) — one more read the "push to
+      package" action needs before it writes: how many mounts of a package
+      exist across the workspace, and which of them already shadow the field
+      about to change. Same shape as every other member here, one fetch, no
+      shared state with its neighbours — the exception's own argument for
+      not splitting the class covers it without adding a new one.
 
       The interesting part is that the split is **already drawn, in the type
       system**: this class declares four interfaces at once

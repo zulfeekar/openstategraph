@@ -784,6 +784,21 @@ class MountDocumentResponse(BaseModel):
     warnings: list[str] = []
 
 
+class MountUsageResponse(BaseModel):
+    """Who else runs this field before a "push to package" writes it.
+
+    `production-ready` ticket 17. `count` is every mount of this package
+    across the workspace, so the confirmation can say how many instances
+    change. `shadowed_hosts` names the packages whose own mount already
+    overrides this exact `(child_node_id, key)` — those instances will keep
+    their own value, and the caller must say so or the push looks like it
+    silently failed.
+    """
+
+    count: int
+    shadowed_hosts: list[str]
+
+
 class ToolCapabilityResponse(BaseModel):
     id: str
     name: str

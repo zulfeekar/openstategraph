@@ -714,6 +714,28 @@
         "title": "MountDocumentResponse",
         "type": "object"
       },
+      "MountUsageResponse": {
+        "description": "Who else runs this field before a \"push to package\" writes it.\n\n`production-ready` ticket 17. `count` is every mount of this package\nacross the workspace, so the confirmation can say how many instances\nchange. `shadowed_hosts` names the packages whose own mount already\noverrides this exact `(child_node_id, key)` \u2014 those instances will keep\ntheir own value, and the caller must say so or the push looks like it\nsilently failed.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "shadowed_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shadowed Hosts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "shadowed_hosts"
+        ],
+        "title": "MountUsageResponse",
+        "type": "object"
+      },
       "NodeContractResponse": {
         "description": "The prompt layers of one model-driven node type that the developer does\nnot type \u2014 served from the Python ladder classes, which are the single\nsource of truth. An editor shows these read-only beside the developer's\neditable rules; a custom editor should do the same rather than restate them.\n\nThree fields, and the third is not a third *locked* one (ticket 39):\n\n- `preamble` \u2014 what this node **is**. Locked, and runs first.\n- `contract` \u2014 the shape of the answer. Locked, and always last, because\n  later instructions win ties.\n- `default_rules` \u2014 what the base already tells the model, which the\n  developer's own rules **extend** unless they choose replace mode. Not\n  locked; showing it under a \"locked\" label would be untrue.\n\nAn agent's `preamble` and `contract` are both empty by design \u2014 it answers\nfree-form \u2014 so `default_rules` is its *only* non-editable layer. Publishing\ntwo fields meant the editor's read-only panel rendered nothing at all for\nthe most-placed node in the product, while 289 characters of honesty and\ntool-discipline rules were prepended to every one of its prompts.",
         "properties": {
@@ -3406,6 +3428,67 @@
         "summary": "Save one knowledge topic, claiming it from the builder",
         "tags": [
           "Knowledge"
+        ]
+      }
+    },
+    "/api/workflows/{slug}/mount-usage": {
+      "get": {
+        "description": "What \"push to package\" needs to ask before it writes \u2014 ticket 17.\n\n`child_node_id`/`key` name one field of `slug`'s own document \u2014 the field\na \"push to package\" is about to overwrite. This answers, for the\nworkspace as a whole: how many mounts of `slug` exist (every instance\nthat will pick up the correction), and which of those already carry\ntheir own override of this exact field (the ones that will not, because\nan instance override always wins over the package it narrows).\n\n404 when `slug` itself is not a real package \u2014 the same \"this link is\nstale\" reading `get_mount_document` gives a dangling address, since a\npush aimed at a package that no longer exists has nowhere to land.",
+        "operationId": "get_mount_usage_api_workflows__slug__mount_usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "child_node_id",
+            "required": true,
+            "schema": {
+              "title": "Child Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MountUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Who mounts this package, before a field is pushed to it",
+        "tags": [
+          "Catalogue"
         ]
       }
     },
