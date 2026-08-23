@@ -52,6 +52,13 @@ export class ConnectionFeature extends PaperFeature {
    */
   private lastRefusal: string | null = null;
   private connectedThisGesture = false;
+  /**
+   * What `EdgeEditor.connect` said about this gesture's connect — `null` for
+   * an ordinary link, a sentence naming what a replacement displaced
+   * (`workflow-gallery/77`). Recorded for the same reason `lastRefusal` is:
+   * said once, at `finish`, not at the moment it is known.
+   */
+  private connectedMessage: string | null = null;
 
   /**
    * @param createMarker how the affordance reaches the canvas. Injected so the
@@ -84,6 +91,7 @@ export class ConnectionFeature extends PaperFeature {
       if (!outcome.ok) this.setRejection(outcome.message ?? 'Invalid connection');
       else {
         this.connectedThisGesture = true;
+        this.connectedMessage = outcome.message ?? null;
         this.setRejection(null);
       }
     }) as never);
@@ -100,10 +108,12 @@ export class ConnectionFeature extends PaperFeature {
       const say = announcementFor({
         connected: this.connectedThisGesture,
         lastRefusal: this.lastRefusal,
+        connectedMessage: this.connectedMessage,
       });
       this.setRejection(say);
       this.lastRefusal = null;
       this.connectedThisGesture = false;
+      this.connectedMessage = null;
     };
     this.onPaper('link:pointerup', finish as never);
     this.onPaper('blank:pointerup', finish as never);

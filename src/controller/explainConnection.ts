@@ -15,11 +15,24 @@ export interface GestureEnd {
   readonly connected: boolean;
   /** The reason the last port under the pointer refused, if one did. */
   readonly lastRefusal: string | null;
+  /**
+   * `workflow-gallery/77`: usually a made link speaks for itself — but a
+   * connect that *replaced* an occupied single-slot input also removed
+   * another link, silently, unless something says so. `EdgeEditor.connect`
+   * already names what it displaced in `ActionOutcome.message`; this is
+   * where that reaches the same channel a refusal uses.
+   */
+  readonly connectedMessage?: string | null;
 }
 
-export function announcementFor({ connected, lastRefusal }: GestureEnd): string | null {
-  // A made link speaks for itself — the edge is on the canvas.
-  if (connected) return null;
+export function announcementFor({
+  connected,
+  lastRefusal,
+  connectedMessage,
+}: GestureEnd): string | null {
+  // A made link usually speaks for itself — the edge is on the canvas — but
+  // says so out loud when connecting it also took something away.
+  if (connected) return connectedMessage ?? null;
   // Released over blank canvas or a card body: no rule refused anything, so
   // there is nothing to explain. Complaining here would turn every abandoned
   // drag into an error.

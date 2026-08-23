@@ -57,13 +57,31 @@ export class EdgeEditor implements IEdgeEditor {
 
     const connect = new ConnectCommand(source, target);
     if (verdict.replaces.length > 0) {
+      const message = this.replacementMessage(verdict.replaces);
       this.commands.execute(
         CompositeCommand.of('Reconnect', [new DisconnectCommand(verdict.replaces), connect]),
       );
-    } else {
-      this.commands.execute(connect);
+      return message ? { ok: true, message } : OK;
     }
+    this.commands.execute(connect);
     return OK;
+  }
+
+  /**
+   * `workflow-gallery/77`: a replacement removes an incumbent link with no
+   * word said about it — `capacityRule`'s `replaces` was always resolved
+   * silently. This names the link a user would recognise (the source
+   * node's title), read *before* `DisconnectCommand` runs so the edge still
+   * exists to ask.
+   */
+  private replacementMessage(replaced: readonly EdgeId[]): string | undefined {
+    const titles = replaced
+      .map((id) => this.ctx.model.edge(id))
+      .filter((edge): edge is NonNullable<typeof edge> => edge != null)
+      .map((edge) => this.ctx.model.node(edge.source.nodeId)?.title)
+      .filter((title): title is string => title != null);
+    if (titles.length === 0) return undefined;
+    return `Replaced the link from ${titles.join(', ')}`;
   }
 
   disconnect(edgeIds: readonly EdgeId[]): ActionOutcome {

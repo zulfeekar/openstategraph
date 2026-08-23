@@ -45,6 +45,24 @@ describe('what to announce when a drag ends', () => {
       announcementFor({ connected: false, lastRefusal: 'A node cannot connect to itself' }),
     ).toBe('A node cannot connect to itself');
   });
+
+  it('says which link a replacement took, workflow-gallery/77', () => {
+    // The one exception to "a made link speaks for itself": connecting also
+    // displaced an incumbent link, which otherwise vanished with no word.
+    expect(
+      announcementFor({
+        connected: true,
+        lastRefusal: null,
+        connectedMessage: 'Replaced the link from Billing desk',
+      }),
+    ).toBe('Replaced the link from Billing desk');
+  });
+
+  it('stays quiet for an ordinary connect with nothing displaced', () => {
+    expect(
+      announcementFor({ connected: true, lastRefusal: null, connectedMessage: null }),
+    ).toBeNull();
+  });
 });
 
 describe('the reasons the rules actually give', () => {
