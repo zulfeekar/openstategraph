@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 #: Bumped in lockstep with `PORT_SPEC_SCHEMA_VERSION` in `src/nodes/portSpecs.ts`.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.

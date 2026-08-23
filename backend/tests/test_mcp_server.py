@@ -139,6 +139,27 @@ class TestNodeVocabulary:
 
         assert KNOWN_NODE_TYPES <= listed
 
+    def test_it_publishes_the_data_schema_for_a_tool_node(self) -> None:
+        """launch-readiness/18: a client must not have to guess config keys.
+
+        `tool.sql-query` requires `database`; the vocabulary must say so
+        directly rather than leave it to the prose description.
+        """
+        by_type = {n["type"]: n for n in NodeVocabulary().describe()["node_types"]}
+
+        fields = {f["key"]: f for f in by_type["tool.sql-query"]["fields"]}
+        assert "database" in fields
+        assert fields["database"]["required"] is True
+        assert fields["database"]["kind"] == "text"
+
+    def test_every_node_type_publishes_a_fields_list(self) -> None:
+        """Pins the fix at the layer that would silently regress: a new node
+        type with no `fields` key at all must fail this, not just be missing
+        from a hand-picked spot check."""
+        for node in NodeVocabulary().describe()["node_types"]:
+            assert "fields" in node, node["type"]
+            assert isinstance(node["fields"], list)
+
     def test_the_guide_enumerates_the_same_types_the_payload_carries(self) -> None:
         """`docs/mcp.md` elides the payload and names every type in a comment.
 

@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "generated_by": "npm run generate:ports",
   "source": "src/nodes/portSpecs.ts",
   "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
@@ -135,6 +135,112 @@
         "tier",
         "timeoutSeconds",
         "tokenBudget"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "tokenBudget",
+          "kind": "slider",
+          "label": "Token budget",
+          "hint": "",
+          "required": false,
+          "defaultValue": 500
+        },
+        {
+          "key": "rubric",
+          "kind": "textarea",
+          "label": "Rubric (self-grading)",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "summarize",
+          "kind": "toggle",
+          "label": "Summarize long context",
+          "hint": "",
+          "required": false,
+          "defaultValue": true
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react"
+        },
+        {
+          "key": "systemPrompt",
+          "kind": "textarea",
+          "label": "System prompt",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend"
+        },
+        {
+          "key": "subagentsNote",
+          "kind": "readonly",
+          "label": "Delegation",
+          "hint": "",
+          "required": false,
+          "defaultValue": "On the deep agent runtime this agent can hand work to a named worker and get one answer back. It already carries one, \"general-purpose\", with this agent's own tools; declare a subagent of that name to replace it. A worker is given a task and reports a result — it never sees this agent's conversation or the workflow's state, though the run's context does reach its tools."
+        },
+        {
+          "key": "subagents",
+          "kind": "repeatable-group",
+          "label": "Subagents",
+          "hint": "Deep agent runtime only. Each subagent is a separate worker: it is given a task and reports a result, and never sees this agent's conversation.",
+          "required": false,
+          "defaultValue": []
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -151,6 +257,24 @@
       "field_keys": [
         "notes",
         "title"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "kind": "text",
+          "label": "Title",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "notes",
+          "kind": "textarea",
+          "label": "Notes",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -166,6 +290,16 @@
       "accepts_skill": false,
       "field_keys": [
         "body"
+      ],
+      "fields": [
+        {
+          "key": "body",
+          "kind": "textarea",
+          "label": "Note",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -209,6 +343,40 @@
         "maxRetries",
         "reportTitle",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "reportTitle",
+          "kind": "text",
+          "label": "Report title",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -265,6 +433,69 @@
         "maxRetries",
         "policy",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "policy",
+          "kind": "repeatable-group",
+          "label": "Policy",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "g1",
+              "entity": "email",
+              "strategy": "redact",
+              "detector": ""
+            },
+            {
+              "id": "g2",
+              "entity": "credit_card",
+              "strategy": "block",
+              "detector": ""
+            }
+          ]
+        },
+        {
+          "key": "policyNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "Detection is LangChain’s: credit cards are Luhn-checked, and this node never runs a pattern of ours. Direction is where you place this node — after Input, or before Output — not a setting. A blocked message leaves by the blocked port; the default refusal names the category and never the value. These shapes are not prompt-injection screening."
+        },
+        {
+          "key": "blockedMessage",
+          "kind": "textarea",
+          "label": "Your refusal message",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -319,6 +550,40 @@
         "maxRetries",
         "message",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "message",
+          "kind": "textarea",
+          "label": "Prompt shown to the reviewer",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -351,6 +616,48 @@
         "instruction",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "filename",
+          "kind": "file",
+          "label": "Markdown file",
+          "hint": "",
+          "required": false,
+          "defaultValue": "agent-skill.md"
+        },
+        {
+          "key": "instruction",
+          "kind": "textarea",
+          "label": "Instruction",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -383,6 +690,56 @@
         "skillDescription",
         "skillName",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "skillName",
+          "kind": "text",
+          "label": "Name",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "skillDescription",
+          "kind": "textarea",
+          "label": "Description",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "instruction",
+          "kind": "textarea",
+          "label": "Instructions",
+          "hint": "",
+          "required": false,
+          "defaultValue": "## Purpose\n\n{{what this skill makes the agent good at}}\n\n## Rules\n\n- {{the first rule the agent must follow}}\n\n## Conventions\n\n{{formats, names, units the agent must always use — delete this section if there are none}}\n"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -413,6 +770,40 @@
         "maxRetries",
         "prompt",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "prompt",
+          "kind": "textarea",
+          "label": "Prompt",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -457,6 +848,56 @@
         "retention",
         "segment",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "segment",
+          "kind": "text",
+          "label": "Segment",
+          "hint": "The same name at several positions is one ledger, shared across every run of this workflow.",
+          "required": false,
+          "defaultValue": "notes"
+        },
+        {
+          "key": "retention",
+          "kind": "text",
+          "label": "Keep the last",
+          "hint": "Entries. Leave empty to keep everything — there is no number here that means unbounded.",
+          "required": false,
+          "defaultValue": "20"
+        },
+        {
+          "key": "segmentNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "Every crossing does three things, in this order: it furnishes what the segment already holds into what flows onward, appends what arrived, and passes it all on. The heading and the numbering of the injected block are the machinery’s. Nothing here calls a model, so a crossing costs no tokens. The ledger is keyed by the segment name and this workflow, so the same name at several positions is one ledger, and it survives a restart. A Guardrail placed after this node scrubs what flows onward, not what was already recorded."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -525,6 +966,72 @@
         "rules",
         "rulesMode",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxSubtasks",
+          "kind": "slider",
+          "label": "Max subtasks",
+          "hint": "",
+          "required": false,
+          "defaultValue": 8
+        },
+        {
+          "key": "rules",
+          "kind": "textarea",
+          "label": "Planning rules",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -593,6 +1100,72 @@
         "role",
         "rulesMode",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "role",
+          "kind": "textarea",
+          "label": "Role",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "default",
+          "kind": "toggle",
+          "label": "Default worker",
+          "hint": "",
+          "required": false,
+          "defaultValue": false
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -624,6 +1197,40 @@
         "format",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "format",
+          "kind": "select",
+          "label": "Format",
+          "hint": "",
+          "required": false,
+          "defaultValue": "markdown"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -694,6 +1301,117 @@
         "rulesMode",
         "tier",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rules",
+          "kind": "textarea",
+          "label": "Routing rules",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend"
+        },
+        {
+          "key": "branches",
+          "kind": "repeatable-group",
+          "label": "Branches",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "b1",
+              "name": "dataquery"
+            },
+            {
+              "id": "b2",
+              "name": "info"
+            },
+            {
+              "id": "b3",
+              "name": "help"
+            },
+            {
+              "id": "b4",
+              "name": "greeting"
+            },
+            {
+              "id": "b5",
+              "name": "off_topic"
+            }
+          ]
+        },
+        {
+          "key": "fallback",
+          "kind": "text",
+          "label": "Fallback branch",
+          "hint": "",
+          "required": false,
+          "defaultValue": "off_topic"
+        },
+        {
+          "key": "matchMode",
+          "kind": "select",
+          "label": "When several branches match",
+          "hint": "Either way the destinations are the ones drawn on this node: “Run the best one” takes a single branch, “Run every match” takes each branch that matched and they run in parallel. Neither invents a destination. When how many pieces of work there are is only known during the run — one worker repeated as many times as the input needs — that is an Orchestrator, which plans the subtasks and dispatches one per task.",
+          "required": false,
+          "defaultValue": "best"
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -765,6 +1483,88 @@
         "rulesMode",
         "tier",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rubric",
+          "kind": "repeatable-group",
+          "label": "Rubric",
+          "hint": "",
+          "required": false,
+          "defaultValue": null
+        },
+        {
+          "key": "criteria",
+          "kind": "textarea",
+          "label": "Your criteria",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend"
+        },
+        {
+          "key": "maxAttempts",
+          "kind": "slider",
+          "label": "Max attempts",
+          "hint": "How many candidates this grader will judge before it passes one through. Its own budget — another grader in the same workflow gets its own. 3 attempts allows 2 revisions.",
+          "required": false,
+          "defaultValue": 3
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -795,6 +1595,40 @@
         "maxRetries",
         "maxRows",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRows",
+          "kind": "slider",
+          "label": "Max rows",
+          "hint": "",
+          "required": false,
+          "defaultValue": 100
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -824,6 +1658,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -853,6 +1713,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -883,6 +1769,40 @@
         "maxRetries",
         "timeoutSeconds",
         "to"
+      ],
+      "fields": [
+        {
+          "key": "to",
+          "kind": "text",
+          "label": "Recipient",
+          "hint": "The fixed destination. Agents cannot re-address the mail.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -912,6 +1832,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -942,6 +1888,67 @@
         "maxRetries",
         "servers",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "servers",
+          "kind": "repeatable-group",
+          "label": "Servers",
+          "hint": "Each row is one server. All of their tools reach whatever this node is wired to.",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "mcp1",
+              "server": "",
+              "url": "",
+              "transport": "streamable_http",
+              "authKind": "none",
+              "authHeaderName": "",
+              "authTokenEnv": "",
+              "tools": ""
+            }
+          ]
+        },
+        {
+          "key": "mcpGuide",
+          "kind": "readonly",
+          "label": "One node, one consumer",
+          "hint": "",
+          "required": false,
+          "defaultValue": "One node per group of servers that share a consumer. Every row’s tools land on the same bus, so an agent wired here can call all of them and choose per task; two agents that need different servers want two of these nodes. Narrow a thirty-tool server with that row’s own filter rather than by splitting it out."
+        },
+        {
+          "key": "mcpNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "The tools this server offers are discovered fresh every time the workflow compiles, so a server that grows a tool needs no edit here. Leave the tool filter empty to bind all of them, now and later; naming even one freezes this node to that list. The credential is read at bind time from the environment variable you name — the name is saved in this workflow, the value never is. A server that is unreachable, that rejects the credential, or that does not speak MCP costs this agent its tools and says so in the run’s warnings; it never fails the compile. Each call reconnects, which costs roughly 0.8 seconds on top of whatever the server itself takes."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -971,6 +1978,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1000,6 +2033,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1029,6 +2088,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1058,6 +2143,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1087,6 +2198,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1118,6 +2255,48 @@
         "subreddit",
         "timeoutSeconds",
         "topicLimit"
+      ],
+      "fields": [
+        {
+          "key": "subreddit",
+          "kind": "text",
+          "label": "Subreddit",
+          "hint": "",
+          "required": false,
+          "defaultValue": "reactjs"
+        },
+        {
+          "key": "topicLimit",
+          "kind": "slider",
+          "label": "Topic limit",
+          "hint": "",
+          "required": false,
+          "defaultValue": 10
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1147,6 +2326,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1177,6 +2382,40 @@
         "database",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1207,6 +2446,40 @@
         "database",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1238,6 +2511,48 @@
         "maxRetries",
         "maxRows",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRows",
+          "kind": "text",
+          "label": "Max rows",
+          "hint": "Ceiling on rows returned. Leave blank for the tool’s own default; a query asking for more is capped at this.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1267,6 +2582,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1296,6 +2637,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1325,6 +2692,32 @@
         "cacheTtlSeconds",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1357,6 +2750,56 @@
         "maxChars",
         "maxRetries",
         "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "language",
+          "kind": "text",
+          "label": "Language",
+          "hint": "Preferred caption language. Falls back to the same language family, then to whatever exists.",
+          "required": false,
+          "defaultValue": "en"
+        },
+        {
+          "key": "allowAutoCaptions",
+          "kind": "toggle",
+          "label": "Auto captions",
+          "hint": "",
+          "required": false,
+          "defaultValue": true
+        },
+        {
+          "key": "maxChars",
+          "kind": "slider",
+          "label": "Max characters",
+          "hint": "",
+          "required": false,
+          "defaultValue": 8000
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     },
     {
@@ -1403,6 +2846,64 @@
         "persistence",
         "timeoutSeconds",
         "workflow"
+      ],
+      "fields": [
+        {
+          "key": "workflow",
+          "kind": "combobox",
+          "label": "Workflow",
+          "hint": "The package to run here, named by its slug — the folder name the backend minted when it was first saved (workflows/<slug>/), which is also what ?w= carries in the address bar. Pick from the list, or type the slug of a package you have not built yet.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "outcome",
+          "kind": "textarea",
+          "label": "Expected outcome (documentation)",
+          "hint": "Shown on the card so a reader knows what this mount is for. It does not constrain the run — enforcement lives in the mounted workflow’s own grader criteria, and the card says so when that grader is missing or never revises.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "persistence",
+          "kind": "select",
+          "label": "What the child remembers",
+          "hint": "By default this mount is one isolated step: it is handed the task and this conversation so far, and keeps nothing of its own between turns. “Its own conversation” gives the mounted workflow a memory of its own on this thread — it stops being handed this conversation and keeps its own instead, so it can pick up where it left off. Use it for a mounted workflow that is genuinely a running dialogue, and not otherwise: two of these running at the same time write to the same place and conflict. “Nothing at all” keeps no record of the mounted workflow’s run. It can still pause for an approval — but because nothing was kept, answering it runs that workflow again from its first step, so every step before the approval happens a second time.",
+          "required": false,
+          "defaultValue": "per-invocation"
+        },
+        {
+          "key": "overrides",
+          "kind": "textarea",
+          "label": "Overrides (this mount only)",
+          "hint": "JSON keyed by child node id. Other mounts keep the package defaults.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
       ]
     }
   ]

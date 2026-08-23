@@ -2,7 +2,7 @@ import { Registry } from '@core/kernel/Registry';
 import { ModelRegistry } from '@core/model/ModelRegistry';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { defaultsFrom } from '@core/model/contracts/fields';
-import type { NodeData } from '@core/model/contracts/fields';
+import type { FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { IPortDescriptor } from '@core/model/contracts/ports';
 import { maxConnectionsOf } from '@core/model/contracts/ports';
@@ -38,7 +38,7 @@ import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 2;
+export const PORT_SPEC_SCHEMA_VERSION = 3;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -133,6 +133,41 @@ export interface GeneratedNodeType {
    * here, so instance four fails a test instead of shipping.
    */
   readonly field_keys: readonly string[];
+
+  /**
+   * The field schema itself — key, kind, required, default, one line of
+   * `hint` — for every field this node type declares.
+   *
+   * `field_keys` above answers "which keys may `data` carry"; this answers
+   * "what does each one mean", which is what a client composing over MCP
+   * needs and did not have (launch-readiness/18: `get_node_vocabulary`
+   * published every port and no `data` schema, so a composing model had to
+   * guess a tool's config — guess wrong and the document still validated
+   * clean).
+   *
+   * Read straight off `definition.fields`, not through `defaultsFrom`: that
+   * helper exists to flatten a `file` field's two written keys into a
+   * defaults record, which is the wrong shape here — a client needs to see
+   * the *field* (one card control) it can set, not the derived keys it
+   * writes.
+   */
+  readonly fields: readonly GeneratedField[];
+}
+
+/**
+ * One field of a node's declared configuration, as a composing client needs
+ * to see it. Deliberately narrower than `FieldSchema`: no `validate`
+ * function (host-language code, unserializable — the portability guardrail
+ * this repo already applies to router predicates), no rendering hints
+ * (`onCard`, `group`, `advanced`) that only matter to the editor's own UI.
+ */
+export interface GeneratedField {
+  readonly key: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly required: boolean;
+  readonly defaultValue: FieldValue;
 }
 
 export interface GeneratedPortType {
@@ -335,6 +370,14 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
         // the data record is what the backend reads and a `file` field writes
         // two keys into it. Sorted so the drift diff is about the catalogue.
         field_keys: Object.keys(defaultsFrom(definition.fields)).sort(),
+        fields: definition.fields.map((field) => ({
+          key: field.key,
+          kind: field.kind,
+          label: field.label ?? '',
+          hint: field.hint ?? '',
+          required: field.required ?? false,
+          defaultValue: field.defaultValue ?? null,
+        })),
       };
     })
     .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));

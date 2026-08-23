@@ -178,6 +178,21 @@ class NodeVocabulary:
                             DEFAULT_PORT_SPECS.get(node_type, {}).items()
                         )
                     ],
+                    # The config schema, launch-readiness/18: what a client must
+                    # set in `data` to use this node, derived from the same
+                    # field declaration the editor's card and inspector render
+                    # from (`src/nodes/portSpecs.ts`), never a second copy.
+                    "fields": [
+                        {
+                            "key": field["key"],
+                            "kind": field["kind"],
+                            "label": field.get("label", ""),
+                            "hint": field.get("hint", ""),
+                            "required": bool(field.get("required", False)),
+                            "default": field.get("defaultValue"),
+                        }
+                        for field in record.get("fields") or ()
+                    ],
                     "generated_ports": [
                         {
                             "prefix": group.prefix,
@@ -292,6 +307,12 @@ class NodeVocabulary:
                 "Call compile_workflow after every revision. A document you have "
                 "not compiled is a guess.",
                 "Do not put Infinity or NaN anywhere: this document is JSON.",
+                "A node's `data` keys are exactly its `fields` list above — "
+                "check that list before setting any key. compile_workflow "
+                "does not currently reject an unrecognised or missing "
+                "required key by itself; guessing produces a document that "
+                "may still validate while the node silently lacks what it "
+                "needs to run.",
             ],
         }
 
