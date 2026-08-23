@@ -99,3 +99,42 @@ Asked for the billing reference, all three declined:
 The withheld value never appeared, and neither did its key. The model knows
 only that it was not told — which is the outcome the section's refusal to name
 withheld fields is designed to produce.
+
+## 4 — `production-ready/73`'s original scenario, replayed in the browser
+
+`73` reported the compound failure this whole document's §1 is about, before
+any of it was measured: `chinook-assistant`, *"top artists by revenue"*,
+published as `1 Iron Maiden $138.60 · 2 U2 $105.93 · 3 Metallica $90.09 …`
+under two banners — `silent_node_warnings` ("produced no output") and
+`forced_pass_warnings` ("the provided figures appear invented") — while the
+figures were exactly right. Three fixes have landed since, each aimed at a
+different link in that chain: `3e93560` (73's own resolution — a revise lap
+now sees what it must revise), `0185e2a` (`95` — `unrun_query_claim`, so a
+figure the run never queried is caught before publication), and `93853a1`
+(`96` — `silent_node_warnings` now says *which* tools ran before the loop went
+silent). §1 above re-measured `95`'s guard live and found zero false
+positives, but against a fresh model call each time, not against the exact
+transcript `73` filed.
+
+Replayed today in the editor (not headless): `?w=chinook-assistant`,
+`ollama:gpt-oss:120b-cloud` (the workflow's own default — it reached the
+cloud, not the dead local daemon `.env` also points at), the identical
+question. The answer published:
+
+    1 Iron Maiden $138.60 · 2 U2 $105.93 · 3 Metallica $90.09 · 4 Led
+    Zeppelin $86.13 · 5 Lost $81.59 · 6 The Office $49.75 · 7 Os
+    Paralamas Do Sucesso $44.55 · 8 Deep Purple $43.56 · 9 Faith No
+    More $41.58 · 10 Eric Clapton $39.60
+
+— the ticket's own figures, to the cent — with the `SELECT … FROM
+InvoiceLine … JOIN Track … JOIN Album … JOIN Artist … GROUP BY ar.Name`
+printed beside it as "SQL used", `grader-sql` reading **pass** in the trace,
+and neither banner anywhere in the page. `agent-sql` queried on its first
+pass; the run never needed a revise lap at all.
+
+**This is not the same measurement as §1.** §1 is a sampled rate against many
+fresh runs; this is the ticket's own recorded transcript, replayed, read off
+the screen a reader sees. Both now agree: a correct, well-sourced Chinook
+answer publishes clean. `73` is closed on this evidence — see its own
+resolution section for what remains genuinely open (`103`, `107`) rather than
+fixed.
