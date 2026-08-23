@@ -1444,6 +1444,13 @@ class NodeRuntime:
                 # above and the same failure if it is forgotten
                 # (`workflow-gallery` 21).
                 "revisions": {RESET: ""},
+                # `tool_use` now accumulates across laps of one run
+                # (`production-ready` 106), which makes this reset load-bearing
+                # in a way it was not before: without it a second turn's first
+                # lap would merge into the first turn's standing row instead of
+                # starting clean, understating what changed and, worse, still
+                # carrying a `queried` claim from a run that is over.
+                "tool_use": {RESET: ""},
             }
             prior = state.get("messages") or []
             already_recorded = bool(

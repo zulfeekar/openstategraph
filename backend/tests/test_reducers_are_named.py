@@ -37,6 +37,7 @@ class TestTheEnum:
         # carry and a second runtime must implement. The ceiling is the point.
         assert {member.value for member in Reducer} == {
             "merge",
+            "merge_rows",
             "max",
             "latest_nonempty",
             "add_messages",
@@ -49,6 +50,29 @@ class TestTheImplementations:
 
         assert merge({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}
         assert merge({"a": 1}, {RESET: "", "b": 2}) == {"b": 2}
+
+    def test_merge_rows_unions_a_repeated_keys_lists_and_clears_on_reset(self) -> None:
+        """`production-ready` 106 — MERGE's own docstring says a node's
+        *newest* row is the one that counts, which is wrong for a key that
+        records what happened rather than what was decided."""
+        merge_rows = reducer_for(Reducer.MERGE_ROWS)
+
+        left = {"n1": {"bound": ["a", "b"], "ran": ["a"]}}
+        right = {"n1": {"bound": ["a", "b"], "ran": ["b"]}, "n2": {"bound": [], "ran": []}}
+        merged = merge_rows(left, right)
+        # Both laps' tools survive — a plain {**left, **right} would have
+        # dropped "a" the moment n1's row appeared on the right.
+        assert merged["n1"]["ran"] == ["a", "b"]
+        assert merged["n2"] == {"bound": [], "ran": []}
+
+        # A field absent from both rows stays absent, not `[]` — `tool_report`
+        # never writes `queried` when nothing was sent, and a present empty
+        # list is a different claim from no claim at all.
+        assert "queried" not in merge_rows(left, right)["n1"]
+
+        assert merge_rows(left, {RESET: "", "n1": {"bound": ["a"], "ran": []}}) == {
+            "n1": {"bound": ["a"], "ran": []}
+        }
 
     def test_max_grows_and_zeroes_on_a_negative_write(self) -> None:
         keep_max = reducer_for(Reducer.MAX)

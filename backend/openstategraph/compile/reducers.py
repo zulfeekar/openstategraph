@@ -49,6 +49,49 @@ def merge_decisions(left: dict[str, Any], right: dict[str, Any]) -> dict[str, An
     return {**left, **right}
 
 
+def merge_rows(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    """Merge two maps like `merge_decisions`, but a key on both sides gets its
+    **row** merged rather than replaced.
+
+    Right for `tool_use` (`production-ready` 106) and wrong for `decisions`:
+    a node re-invoked by a grader's revise loop writes a fresh row each lap,
+    and `merge_decisions`' `{**left, **right}` drops the whole earlier row —
+    the key is the node id, so the newer lap's `{"bound": [...], "ran": []}`
+    silently erased the earlier lap's record of a tool that genuinely ran.
+    `decisions` wants exactly that overwrite (a node's newest decision is the
+    one that counts); this is for state that instead records what happened,
+    and what happened does not un-happen.
+
+    A row's list-valued members are unioned in first-seen order. A member
+    absent from **both** rows stays absent rather than becoming `[]` — the
+    row shape `tool_report` writes leaves `queried` out entirely when nothing
+    was ever sent, and a present-but-empty list is a different claim
+    ("checked, found nothing"). Since the union of "absent" with "absent" is
+    still nothing to add, that absence survives here with no special case.
+    """
+    if RESET in right:
+        return {k: v for k, v in right.items() if k != RESET}
+    result: dict[str, Any] = dict(left)
+    for key, new_row in right.items():
+        old_row = result.get(key)
+        if not isinstance(old_row, dict) or not isinstance(new_row, dict):
+            result[key] = new_row
+            continue
+        merged_row = dict(old_row)
+        for field, new_value in new_row.items():
+            old_value = old_row.get(field)
+            if isinstance(old_value, list) and isinstance(new_value, list):
+                merged = list(old_value)
+                for item in new_value:
+                    if item not in merged:
+                        merged.append(item)
+                merged_row[field] = merged
+            else:
+                merged_row[field] = new_value
+        result[key] = merged_row
+    return result
+
+
 def keep_max(left: int, right: int) -> int:
     """The larger of two counters, with a negative write meaning reset.
 
@@ -90,6 +133,10 @@ class Reducer(str, Enum):
 
     #: Two maps combined; a turn reset clears rather than merges.
     MERGE = "merge"
+    #: Two maps combined like MERGE, but a key present on both sides has its
+    #: *row* merged (list-valued members unioned) rather than replaced. For
+    #: state that records what happened rather than what was last decided.
+    MERGE_ROWS = "merge_rows"
     #: The larger of two numbers.
     MAX = "max"
     #: The newer value unless it is empty; a turn reset clears.
@@ -110,6 +157,7 @@ def reducer_for(name: Reducer) -> Callable[..., Any]:
 
     implementations: dict[Reducer, Callable[..., Any]] = {
         Reducer.MERGE: merge_decisions,
+        Reducer.MERGE_ROWS: merge_rows,
         Reducer.MAX: keep_max,
         Reducer.LATEST_NONEMPTY: keep_latest_nonempty,
         Reducer.ADD_MESSAGES: add_messages,

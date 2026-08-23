@@ -115,9 +115,14 @@ class RunState(TypedDict, total=False):
     #: shape whether or not it was announced.
     #:
     #: Both lists, not a boolean: "no tools bound" and "tools bound, none used"
-    #: are different runs and only the second is offered a door. MERGE, because
-    #: every agent and worker in the document writes its own row.
-    tool_use: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: are different runs and only the second is offered a door. MERGE_ROWS,
+    #: not MERGE: a grader's revise loop re-invokes the same node, and a plain
+    #: per-key MERGE let a later lap's row replace an earlier lap's — the
+    #: record of a tool that genuinely ran, gone (`production-ready` 106).
+    #: `tool_use` records what happened, and what happened does not un-happen,
+    #: so a repeat lap's row is merged into the standing one rather than
+    #: overwriting it.
+    tool_use: Annotated[dict[str, Any], reducer_for(Reducer.MERGE_ROWS)]
     #: router node id -> **every** branch label it matched, when that router
     #: runs in `matchMode: "all"` (`every-workflow-green` 27).
     #:
