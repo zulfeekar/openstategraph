@@ -158,6 +158,65 @@ class TestTheTrailerConvention:
         assert script.TRAILER.findall("This is like production-ready/46 but different\n") == []
 
 
+class TestATrailerNamingATicketThatDoesNotExist:
+    """`production-ready` 104. Three commits (`9c39c4c`, `6aae666`, `578ccec`)
+    carried `Ticket: production-ready/100`, `/101` and `/102` trailers while no
+    file existed at those numbers — `.scratch/` is gitignored, so the tickets
+    those commits resolved left no trace a diff would show. Every check above
+    starts from a ticket *file* and asks what git says about it; none of them
+    asks the reverse question, so a session that numbers its next ticket from
+    `ls tickets/ | tail -1` can silently collide with a commit's own claim and
+    have `ticket_ledger.py` report the new, unrelated, open ticket as already
+    resolved by someone else's work — which is exactly how this was found.
+    """
+
+    def test_a_trailer_naming_no_file_is_reported(self, script: ModuleType) -> None:
+        claimed = {"production-ready/100": ["9c39c4c"]}
+        known: set[str] = {"production-ready/99"}
+
+        assert script.missing_ticket_files(claimed, known) == [
+            ("production-ready/100", ["9c39c4c"])
+        ]
+
+    def test_a_trailer_naming_a_real_ticket_is_not(self, script: ModuleType) -> None:
+        claimed = {"production-ready/46": ["7782285"]}
+        known = {"production-ready/46"}
+
+        assert script.missing_ticket_files(claimed, known) == []
+
+    def test_several_missing_ids_are_all_reported(self, script: ModuleType) -> None:
+        claimed = {
+            "production-ready/100": ["9c39c4c"],
+            "production-ready/101": ["6aae666"],
+            "production-ready/102": ["578ccec"],
+        }
+        known: set[str] = set()
+
+        assert script.missing_ticket_files(claimed, known) == [
+            ("production-ready/100", ["9c39c4c"]),
+            ("production-ready/101", ["6aae666"]),
+            ("production-ready/102", ["578ccec"]),
+        ]
+
+    def test_the_map_filter_narrows_it(self, script: ModuleType) -> None:
+        """A `--map production-ready` run must not report a missing `ship-it`
+        ticket — that ticket is out of scope, not evidence of drift here."""
+        claimed = {"production-ready/100": ["a0eff1a"], "ship-it/03": ["fcfe3c7"]}
+        known: set[str] = set()
+
+        assert script.missing_ticket_files(claimed, known, map_filter="production-ready") == [
+            ("production-ready/100", ["a0eff1a"])
+        ]
+
+    def test_it_runs_end_to_end_against_the_real_repository(self, script: ModuleType) -> None:
+        """`main([])` must not crash wiring this in, and — now that 100-102 are
+        reconstructed — must report zero of these against the live maps."""
+        if not (REPO / ".scratch").is_dir():
+            pytest.skip("no .scratch/ in this checkout — the maps are not committed")
+
+        assert script.main([]) == 0
+
+
 def test_it_runs_against_the_real_maps_without_falling_over(script: ModuleType) -> None:
     """A smoke test, not an assertion about the backlog: exit 0 means it read
     every ticket file in the repository. Whether they *agree* is the report's

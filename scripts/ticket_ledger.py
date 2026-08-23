@@ -193,6 +193,35 @@ def resolving_commits() -> dict[str, list[str]]:
     return claimed
 
 
+def missing_ticket_files(
+    claimed: dict[str, list[str]], known_ids: set[str], map_filter: str | None = None
+) -> list[tuple[str, list[str]]]:
+    """The reverse of ``is_trailer_drift`` — production-ready ticket 104.
+
+    Every other check starts from a ticket *file* and asks what git says about
+    it. Nothing asked the other direction: a commit's trailer can name a
+    ticket id with no file at all, which is exactly what happened to
+    `production-ready/100`, `/101` and `/102` — three commits landed, `.scratch/`
+    ate the ticket files that recorded them (gitignored, so no diff ever showed
+    it), and the next session numbering its ticket from `ls tickets/ | tail -1`
+    silently collided with a commit that already claimed the number.
+
+    ``known_ids`` must be the full universe of ticket ids the repository has
+    files for, **not** filtered to ``map_filter`` — a trailer naming a real
+    ticket in another map is not drift, and checking it against a narrowed set
+    would report it as missing. ``map_filter`` narrows only which *rows get
+    printed*, exactly as the rest of the report is scoped by ``--map``.
+    """
+    missing: list[tuple[str, list[str]]] = []
+    for ticket_id in sorted(claimed):
+        if ticket_id in known_ids:
+            continue
+        if map_filter and not ticket_id.startswith(f"{map_filter}/"):
+            continue
+        missing.append((ticket_id, claimed[ticket_id]))
+    return missing
+
+
 def commit_exists(sha: str) -> bool:
     return (
         subprocess.run(
@@ -217,6 +246,10 @@ def main(argv: list[str] | None = None) -> int:
 
     all_tickets = tickets(args.map_name)
     claimed = resolving_commits()
+    # The full universe, regardless of --map: a trailer naming a real ticket in
+    # another map must not be reported as missing just because this run is
+    # scoped to one map's rows.
+    known_ids = {t.id for t in tickets(None)}
 
     shipped_but_open: list[tuple[Ticket, list[str]]] = []
     body_says_done: list[Ticket] = []
@@ -256,8 +289,15 @@ def main(argv: list[str] | None = None) -> int:
         "Cites a commit this repository does not have",
         [f"{t.id} {t.path.name} → {sha}" for t, sha in phantom_commits],
     )
+    orphan_trailers = missing_ticket_files(claimed, known_ids, args.map_name)
+    report(
+        "A commit's trailer names a ticket that has no file",
+        [f"{tid} ← {', '.join(commits)}" for tid, commits in orphan_trailers],
+    )
 
-    disagreements = len(shipped_but_open) + len(body_says_done) + len(phantom_commits)
+    disagreements = (
+        len(shipped_but_open) + len(body_says_done) + len(phantom_commits) + len(orphan_trailers)
+    )
     if disagreements == 0:
         print("\nThe ledger and git agree.")
     return 1 if (args.strict and disagreements) else 0
