@@ -45,12 +45,7 @@
     { "slug": "youtube-trend-digest", "pattern": "trend, transcript, synthesis" },
     { "slug": "sql-qa", "pattern": "text-to-SQL over a real database" },
     { "slug": "web-research-digest", "pattern": "search, fetch, report" },
-    {
-      "slug": "support-triage",
-      "pattern": "the long control chain",
-      "_comment": "Its grader is a recorder, not a gate — the unwired `revise` edge is deliberate (gallery 31, AGENTS.md). Declared so the gallery build publishes it and still fails on any warning nobody meant.",
-      "expectedFindings": [{ "finding": "unwired_revise", "subjects": ["grader1"] }]
-    },
+    { "slug": "support-triage", "pattern": "the long control chain" },
     { "slug": "morning-brief", "pattern": "many sources, one report" },
     { "slug": "guarded-lookup", "pattern": "one policy, two directions" },
     { "slug": "remembers-across-runs", "pattern": "one ledger, many runs" }

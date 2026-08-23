@@ -982,11 +982,14 @@ def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:
     output with `decisions {"grader1": "revise"}` sitting beside it and
     nothing saying the verdict went nowhere (`workflow-gallery` 31).
 
-    **The fallback is correct and is not changed.** Its own argument holds:
-    for a *missing* decision "a stall here would be a hang, not an error", and
-    `support-triage` relies on it deliberately to reach its human gate. Only
-    the silence is the defect, and only for the case the fallback was never
-    arguing about — a decision that exists and names a branch nobody wired.
+    **The fallback is correct and is not changed.** Its own argument holds
+    for a *missing* decision: "a stall here would be a hang, not an error".
+    (`support-triage` used to rely on it deliberately to reach its human gate;
+    `workflow-gallery` 78 wired its `revise` edge, so it no longer does — the
+    fallback itself is unchanged and still exists for the genuinely-missing
+    case.) Only the silence is the defect, and only for the case the fallback
+    was never arguing about — a decision that exists and names a branch
+    nobody wired.
 
     Its own state key rather than a `decisions` value, for the reason
     `forced_pass_warnings` records: the compiler dispatches on that exact
@@ -1817,9 +1820,9 @@ class WorkflowCompiler:
         second case it never covered** (`workflow-gallery` 31): a decision that
         exists, is understood, and names a branch the author never wired. It
         took the identical silent fallback, so a grader that judged an answer
-        inadequate sent it to the output anyway. The fallback stays — removing
-        it would turn `support-triage`'s deliberate `pass`-only grader into a
-        dead run — but the case is no longer silent. It is reported twice, and
+        inadequate sent it to the output anyway. The fallback stays — a
+        genuinely missing decision would otherwise hang the run rather than
+        error — but the case is no longer silent. It is reported twice, and
         neither report is here: a `path` function returns a label and cannot
         write state, so the honesty is produced where the decision is, in
         `node_runtime._grader` (`Finding.UNWIRED_REVISE` at compile time, the

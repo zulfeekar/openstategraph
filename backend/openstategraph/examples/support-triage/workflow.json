@@ -137,6 +137,10 @@
         "target": { "nodeId": "gate1", "portId": "candidate" }
       },
       {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "router1", "portId": "feedback" }
+      },
+      {
         "source": { "nodeId": "gate1", "portId": "approved" },
         "target": { "nodeId": "out-sent", "portId": "result" }
       },

@@ -7,7 +7,8 @@ left-hand term did not: `CompiledWorkflow.warnings` was one undivided bag of
 authoring findings and all of it counted as *"the run failed"*.
 
 The sharp evidence, measured on the shipped `support-triage` package before
-anything was written:
+anything was written (before `workflow-gallery` 78 wired its `revise` edge —
+see `_report_only_package` below for what this file uses now):
 
     warnings:         ['Grader "grader1" has no revise edge — a verdict of
                        revise routes to its pass branch instead, …']
@@ -31,6 +32,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,33 @@ from openstategraph.compile.diagnostics import REPORT_ONLY, Finding
 from openstategraph.loader import CompiledWorkflow, load_workflow
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "openstategraph" / "examples"
+
+
+def _report_only_package(tmp_path: Path) -> Path:
+    """A grader with its `revise` edge stripped.
+
+    Until `workflow-gallery` 78 this class read the shipped `support-triage`
+    package directly — it carried `Finding.UNWIRED_REVISE` on purpose
+    (gallery 31). 78 wired that edge into the packaged copy to match the fix
+    `48` gave the dev workspace copy, so no shipped package carries the
+    finding any more and this class needs its own synthetic one, built the
+    same way `test_validate_prints_the_compilers_findings.py`'s `report_only`
+    fixture builds it: a real package (`web-research-digest`) whose grader
+    *is* wired, with that edge removed.
+    """
+    package = tmp_path / "report-demo"
+    shutil.copytree(EXAMPLES / "web-research-digest", package)
+    shutil.rmtree(package / "tests", ignore_errors=True)
+    manifest = package / "workflow.json"
+    saved = json.loads(manifest.read_text())
+    document = saved["document"]
+    document["edges"] = [
+        e
+        for e in document["edges"]
+        if e["source"] != {"nodeId": "grader1", "portId": "revise"}
+    ]
+    manifest.write_text(json.dumps(saved))
+    return package
 
 
 class _EmptyAnswerGraph:
@@ -123,32 +152,33 @@ def _exit_code_of_an_empty_run(workflow: CompiledWorkflow) -> int:
 
 
 class TestADrawingWarningDoesNotFailTheRun:
-    """The ticket's own evidence, on the shipped package that carries it."""
+    """The ticket's own evidence, on a synthetic package built to carry it —
+    see `_report_only_package` for why this is no longer the shipped one."""
 
-    def test_support_triage_reports_its_unwired_grader(self) -> None:
-        workflow = load_workflow(EXAMPLES / "support-triage")
+    def test_support_triage_reports_its_unwired_grader(self, tmp_path: Path) -> None:
+        workflow = load_workflow(_report_only_package(tmp_path))
         try:
             assert any("no revise edge" in warning for warning in workflow.warnings)
         finally:
             workflow.close()
 
-    def test_and_does_not_call_it_a_failure(self) -> None:
-        workflow = load_workflow(EXAMPLES / "support-triage")
+    def test_and_does_not_call_it_a_failure(self, tmp_path: Path) -> None:
+        workflow = load_workflow(_report_only_package(tmp_path))
         try:
             assert workflow.failure_warnings == []
         finally:
             workflow.close()
 
-    def test_so_a_run_that_answers_nothing_still_exits_zero(self) -> None:
-        workflow = load_workflow(EXAMPLES / "support-triage")
+    def test_so_a_run_that_answers_nothing_still_exits_zero(self, tmp_path: Path) -> None:
+        workflow = load_workflow(_report_only_package(tmp_path))
         try:
             assert _exit_code_of_an_empty_run(workflow) == cli.EXIT_OK
         finally:
             workflow.close()
 
-    def test_but_the_reader_is_still_told_as_a_warning(self) -> None:
+    def test_but_the_reader_is_still_told_as_a_warning(self, tmp_path: Path) -> None:
         """Demoted from the exit code, never from the report."""
-        workflow = load_workflow(EXAMPLES / "support-triage")
+        workflow = load_workflow(_report_only_package(tmp_path))
         try:
             result = dataclasses.replace(workflow, graph=_EmptyAnswerGraph()).ask("anything")
         finally:

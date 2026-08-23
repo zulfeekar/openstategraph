@@ -89,6 +89,16 @@ grader's actual rejection text addressed to it as the author.
 `router1.feedback`. `Finding.UNWIRED_REVISE` no longer fires for that
 document; the grader is a gate again, not merely a recorder.
 
+That sentence named the dev workspace copy, and it is the **packaged** copy
+(`backend/openstategraph/examples/support-triage`) that `pip install` actually
+ships — the one this decision's own worked example needs to demonstrate the
+feature to an adopter. The two had drifted: `workflow-gallery` 48 built this
+decision into the dev copy only, so the packaged copy still shipped `pass`
+only, still fired `Finding.UNWIRED_REVISE`, and `examples/index.json` still
+called that deliberate — false once this decision landed.
+`workflow-gallery` 78 wired the packaged copy the same way and retired the
+stale `_comment`. Both copies now demonstrate the router relay.
+
 ## What this does not change
 
 - The `_router_for` fallback (an unwired `revise` verdict routes to the first

@@ -12,11 +12,13 @@ this script is free to run.
 An example is refused if it compiles with a warning it did not **declare**
 (``expectedFindings`` in ``examples/index.json``), and equally if it declares
 one it no longer produces. Not "no warnings at all": ``Finding`` exists to say
-a graph is legal and less capable than it looks, and ``support-triage`` ships
-one on purpose — under the old rule this script exited 1 on a clean checkout
-and the committed diagrams went stale (``workflow-gallery`` 55). The same
-comparison runs in ``backend/tests/test_example_warnings_are_declared.py``, so
-a new warning in a broken example fails a suite and not only this script.
+a graph is legal and less capable than it looks, and ``support-triage`` used to
+ship one on purpose — until ``workflow-gallery`` 78 wired its ``revise`` edge,
+no example in the gallery currently declares one, but the mechanism stays: under
+the old "no warnings" rule this script exited 1 on a clean checkout and the
+committed diagrams went stale (``workflow-gallery`` 55). The same comparison
+runs in ``backend/tests/test_example_warnings_are_declared.py``, so a new
+warning in a broken example fails a suite and not only this script.
 
 Every box carries the **title its author gave the node**, not the id the
 compiler used. That is the same relabelling ``workflow-gallery`` 56 wrote for a

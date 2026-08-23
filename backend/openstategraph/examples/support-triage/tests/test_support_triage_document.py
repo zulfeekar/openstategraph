@@ -1,13 +1,21 @@
 """The long control chain — classify, answer, grade, gate — and where it stops.
 
-Gallery example 19. Four control molecules in one graph, and the two things
-that graph reveals are both about what the vocabulary cannot express:
+Gallery example 19. Four control molecules in one graph, and two things that
+graph used to reveal about what the vocabulary could not express:
 
-- **The grader cannot send it back.** `agent.feedback` is `maxConnections: 1`,
-  so a `revise` edge from one grader onto three branch agents would have to
-  pick one — and a technical failure routed into the billing desk is worse than
-  no loop at all. So the grader has a `pass` edge and nothing else, and this
-  file pins what the compiler then does with a `revise` verdict.
+- **The grader can send it back, through the router.** `agent.feedback` is
+  `maxConnections: 1`, so a `revise` edge from one grader onto three branch
+  agents would have to pick one — and a technical failure routed into the
+  billing desk is worse than no loop at all. `workflow-gallery` 48 settled
+  this: the edge lands on the *router* instead, which re-dispatches to
+  whichever branch its own last decision named rather than reclassifying, so
+  the correction always reaches the desk that actually wrote the rejected
+  draft. `docs/decisions/router-feedback-input.md` is the decision;
+  `test_a_router_re_dispatches_a_revision.py` (backend) is the mechanism,
+  pinned against a live compiled run. This file pins the *shape*: which edge
+  is wired, and where it lands. (`workflow-gallery` 78 wired this into the
+  packaged copy the same way `48` had already wired it into the dev workspace
+  copy — the two had drifted.)
 - **The rejection is not a result.** `human.approval.rejected` is a `feedback`
   output, and `output.formatted.result` accepts only `result`/`text`. A
   "rejected sink" therefore cannot be an output node; it is an agent that turns
@@ -24,8 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from openstategraph.compile.diagnostics import Finding
-from openstategraph.compile.node_runtime import NodeRuntime, RunState
+from openstategraph.compile.node_runtime import RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 from openstategraph.package_testing import (
     assert_document_shape,
@@ -73,61 +80,27 @@ def test_the_run_has_two_ends(plan) -> None:
     assert sorted(plan.exits) == ["out-held", "out-sent"]
 
 
-class TestTheGraderCannotSendItBack:
-    def test_the_grader_has_only_a_pass_edge(self, plan) -> None:
-        assert plan.conditional["grader1"] == {"pass": "gate1"}
+class TestTheGraderSendsItBackThroughTheRouter:
+    def test_the_grader_has_a_pass_edge_and_a_revise_edge(self, plan) -> None:
+        assert plan.conditional["grader1"] == {"pass": "gate1", "revise": "router1"}
 
-    def test_a_revise_verdict_routes_to_the_gate_anyway(self, plan) -> None:
-        """The mechanism, pinned rather than assumed.
-
-        `_router_for` falls back to the first declared destination when the
-        recorded decision names no wired branch. Here that is benign and even
-        wanted — the person still sees the draft — but it is a *fallback doing
-        semantic work*, and the same mechanism elsewhere silently ships an
-        answer a grader rejected. Gallery ticket 31.
+    def test_the_revise_edge_lands_on_the_router_not_a_desk(self, doc: dict) -> None:
+        """`workflow-gallery` 48's mechanism, stated as a fact about the file:
+        the revise edge names the router's `feedback` port, never a desk's.
         """
-        route = WorkflowCompiler._router_for("grader1", plan.conditional["grader1"])
-        assert route({"decisions": {"grader1": "revise"}}) == "pass"
-
-    def test_the_compiler_now_says_so_out_loud(self, doc: dict) -> None:
-        """Gallery ticket 31's first fix, asserted on the example that ships
-        the shape. Silence here was what made the two discoveries in that
-        ticket cost anything: `plan.warnings` was `[]` and nothing anywhere
-        said the verdict could not be acted on.
-
-        `Finding`-shaped and not `plan.warnings` — see the test below. This is
-        a document with something worth saying about it, not a broken one.
-        """
-        runtime = NodeRuntime(model=None)
-        WorkflowCompiler().build(
-            doc, RunState, runtime.factory(doc), compile_graph=False
+        revise_edge = next(
+            e
+            for e in doc["edges"]
+            if e["source"] == {"nodeId": "grader1", "portId": "revise"}
         )
-        assert runtime.diagnostics.any(Finding.UNWIRED_REVISE)
-        assert any(
-            "grader1" in warning for warning in runtime.diagnostics.warnings()
-        )
-
-    def test_it_is_a_warning_and_not_a_problem(self, plan) -> None:
-        """`assert_document_shape` requires a warning-free plan and
-        `openstategraph validate` reports `plan.warnings` as PROBLEMS FOUND.
-        This example is deliberate, so the finding must not land there —
-        verified on the CLI: `validate` still answers VALID and exits 0.
-        """
-        assert plan.warnings == []
-
-    def test_the_run_says_it_too(self) -> None:
-        """The second fix. A compile-time warning is read once; a run is read
-        every time, and the run is where the answer a grader rejected actually
-        reaches a person. Its own state key, never a third `decisions` label:
-        the compiler dispatches on that exact value.
-        """
-        assert "unrouted" in RunState.__annotations__
+        assert revise_edge["target"] == {"nodeId": "router1", "portId": "feedback"}
 
     def test_no_desk_agent_has_a_feedback_edge(self, doc: dict) -> None:
-        """The reason there is no revise edge, stated as a fact about the file.
-
-        If one is ever added, it lands on exactly one of three desks and this
-        test is where the argument for that choice has to be made.
+        """A desk's own `feedback` port is still never wired directly — the
+        correction reaches it by re-dispatch (the compiler traces the
+        grader's revise edge through the router relay), not by a second edge
+        onto one arbitrarily chosen desk. Choosing one desk to wire directly
+        is exactly the shape `workflow-gallery` 48 rejected.
         """
         desks = {"a-billing", "a-technical", "a-account"}
         feedback_targets = {

@@ -12,12 +12,18 @@ So an answer the grader rejected reached the output anyway, with
 `decisions {"grader1": "revise"}` sitting beside it and `warnings: []`.
 
 **The fallback is not the defect and is not removed.** Its docstring's argument
-holds for a *missing* decision — "a stall here would be a hang, not an error" —
-and gallery example 19 (`support-triage`) relies on it deliberately: three desk
-agents behind a classifier, `agent.feedback` is `maxConnections: 1`, so a
-`revise` edge would have to pick one desk and a technical failure redrafted by
-the billing desk is worse than no loop. That example ships `pass` only on
-purpose.
+holds for a *missing* decision — "a stall here would be a hang, not an error".
+Gallery example 19 (`support-triage`) used to rely on it deliberately: three
+desk agents behind a classifier, `agent.feedback` is `maxConnections: 1`, so a
+`revise` edge landing on a desk directly would have to pick one and a technical
+failure redrafted by the billing desk is worse than no loop — so it shipped
+`pass` only. `workflow-gallery` 48 gave the router a `feedback` input so the
+edge could land there instead and re-dispatch to the desk that actually wrote
+the draft, and `workflow-gallery` 78 wired that edge into the packaged copy of
+the example (48 had only reached the dev workspace copy). No shipped example
+relies on the fallback for `revise` any more; `web-research-digest` below
+exercises the wired case, and this module now demonstrates the fallback
+against a synthetic stub rather than a gallery example.
 
 What was wrong is that a decision which **exists, is understood, and names a
 branch the author never wired** got the same silence as one that was missing.
@@ -27,8 +33,9 @@ Both halves are reported here, in channels that already exist:
   `UNENFORCED_OUTCOME`: a legal graph that came out less capable than it was
   drawn. Deliberately *not* `plan.warnings`, which
   `package_testing.assert_document_shape` requires to be empty and which
-  `validate_workflow` reports as a PROBLEM — example 19 is not a broken
-  document, it is a document with something worth saying about it.
+  `validate_workflow` reports as a PROBLEM — a document with an unwired
+  `revise` is not a broken one, it is a document with something worth saying
+  about it.
 - **Run time** — `unrouted`, its own state key beside `forced`, turned into a
   sentence by `run_health(...).silent`. Not `decisions`, because the compiler
   dispatches on that exact label and a new value there would change control
@@ -221,23 +228,37 @@ class TestBothDoorsCarryIt:
 
 
 class TestTheShippedExamples:
-    """The two packages the ticket names, asserted from their real documents."""
+    """The packages the ticket names, asserted from their real documents.
+
+    `support-triage` used to be here as the deliberately-unwired case (gallery
+    31): `pass` only, falling back to `pass` on a `revise` verdict. That
+    stopped being true of the *packaged* copy in `workflow-gallery` 78, which
+    wired `grader1.revise -> router1.feedback` into it to match the dev
+    workspace copy `48` had already fixed — so this class now pins the
+    opposite fact about it: the fallback no longer applies, because there is
+    no missing destination left for it to catch.
+    """
 
     def _plan(self, slug: str) -> Any:
         document = json.loads((EXAMPLES / slug / "workflow.json").read_text())
         return WorkflowCompiler().plan(document.get("document", document))
 
-    def test_example_19_still_reaches_its_gate(self) -> None:
-        """`support-triage` ships `pass` only and relies on the fallback. The
-        fallback is untouched, so the human gate is still reached."""
+    def test_example_19_no_longer_needs_the_fallback(self) -> None:
+        """`support-triage` now wires both `pass` and `revise`, so a `revise`
+        verdict routes to the router it actually names — not to `pass` by
+        default."""
         plan = self._plan("support-triage")
-        assert plan.conditional["grader1"] == {"pass": "gate1"}
+        assert plan.conditional["grader1"] == {"pass": "gate1", "revise": "router1"}
         route = WorkflowCompiler._router_for("grader1", plan.conditional["grader1"])
-        assert route({"decisions": {"grader1": "revise"}}) == "pass"
+        # The label, not the destination node — `revise` is itself now a
+        # declared destination, so the fallback (which would return the
+        # first-declared label) never gets a chance to run.
+        assert route({"decisions": {"grader1": "revise"}}) == "revise"
 
     def test_example_19_is_still_a_valid_document(self) -> None:
-        """The finding is a warning, not a problem: `plan.warnings` stays empty
-        so `assert_document_shape` and `openstategraph validate` still pass."""
+        """Wiring the edge cannot introduce a warning: `plan.warnings` stays
+        empty so `assert_document_shape` and `openstategraph validate` still
+        pass."""
         assert self._plan("support-triage").warnings == []
 
     def test_example_18_wired_the_edge_and_is_not_reported(self) -> None:

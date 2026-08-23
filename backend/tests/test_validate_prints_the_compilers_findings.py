@@ -19,8 +19,10 @@ The classification is the substance and both halves are pinned:
 - a **failure**-classed finding (`UNGUARDED_EXIT`) reaches PROBLEMS FOUND and
   moves the exit code to 1 — that is what `failure_warnings()` exists for;
 - a **report-only** one (`UNWIRED_REVISE`) is printed under its own heading and
-  **must not** move the exit code (`8bda508`), which `support-triage` ships on
-  purpose and therefore guards for real;
+  **must not** move the exit code (`8bda508`) — synthesised on a copy of
+  `web-research-digest` with its `revise` edge stripped, since `workflow-gallery`
+  78 wired `support-triage`'s own edge and no shipped package carries this
+  finding on purpose any more;
 - and every one of the 32 shipped packages still exits 0, measured before and
   after.
 """
@@ -82,10 +84,29 @@ def unguarded(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def report_only(tmp_path: Path) -> Path:
-    """`support-triage`, which ships an unwired grader deliberately."""
+    """A grader with its `revise` edge stripped — the report-only finding,
+    synthesised the same way `unguarded` synthesises its failure-classed one.
+
+    Until `workflow-gallery` 78 this copied `support-triage`, which shipped
+    an unwired grader deliberately (gallery 31). 78 wired that edge into the
+    packaged copy to match the fix `48` gave the dev workspace copy, so no
+    shipped package carries `UNWIRED_REVISE` any more — `web-research-digest`
+    is the donor here precisely because it is a real package whose grader
+    *is* wired, so removing the edge is an unambiguous synthetic defect
+    rather than a coincidence of some other package's real shape.
+    """
     package = tmp_path / "report-demo"
-    shutil.copytree(EXAMPLES / "support-triage", package)
+    shutil.copytree(EXAMPLES / "web-research-digest", package)
     shutil.rmtree(package / "tests", ignore_errors=True)
+    manifest = package / "workflow.json"
+    saved = json.loads(manifest.read_text())
+    document = saved["document"]
+    document["edges"] = [
+        e
+        for e in document["edges"]
+        if e["source"] != {"nodeId": "grader1", "portId": "revise"}
+    ]
+    manifest.write_text(json.dumps(saved))
     return package
 
 

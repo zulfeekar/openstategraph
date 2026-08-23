@@ -4,9 +4,10 @@
 compiled with a warning, which was right while every warning meant something
 was wrong. `Finding` changed that: `UNWIRED_REVISE` exists precisely to say
 *this graph is legal and less capable than it looks*, and `support-triage`
-ships one on purpose (`workflow-gallery` 31). So the generator exited 1 on a
-clean checkout for months and the gallery SVGs went stale
-(`workflow-gallery` 55).
+used to ship one on purpose (`workflow-gallery` 31) — until `workflow-gallery`
+78 wired its `revise` edge and the declaration was retired with it, so no
+example currently declares anything. So the generator exited 1 on a clean
+checkout for months and the gallery SVGs went stale (`workflow-gallery` 55).
 
 The rule that replaces "no warnings": **a warning the example declared is
 fine; anything else fails.** A declaration that stopped firing fails too — a
@@ -50,13 +51,27 @@ def test_every_example_warns_only_as_declared(example: Example) -> None:
     )
 
 
-def test_support_triage_is_the_one_that_declares_something() -> None:
-    """The deliberate case, named — so deleting the declaration is a red test."""
+def test_no_example_currently_declares_a_finding() -> None:
+    """`support-triage` was the deliberate case (gallery 31) — its grader
+    shipped `pass` only, and `expectedFindings` said so on purpose.
+    `workflow-gallery` 78 wired its `revise` edge to match the dev workspace
+    copy, so it no longer produces `Finding.UNWIRED_REVISE` and its
+    declaration was removed from `examples/index.json` along with the
+    `_comment` explaining it — a declaration that stopped firing is drift,
+    per this module's own rule, and a stale declaration is worse than none.
+
+    No other package in the gallery currently ships a deliberate, declared
+    warning, so the list is empty rather than naming a replacement. Inventing
+    a new deliberately-unwired example to keep one row on this list was
+    considered and rejected: nothing else in the gallery currently has a
+    reason to leave a `revise` edge unwired, and manufacturing one only to
+    keep this test's premise alive would be exactly the kind of promise
+    `CLAUDE.md` warns against making for its own sake. If the gallery wants a
+    deliberately-unwired example again, add one under its own ticket and this
+    assertion is where it gets named.
+    """
     declaring = [e.slug for e in catalogue() if e.expected_findings]
-    assert declaring == ["support-triage"]
-    assert catalogue()[[e.slug for e in catalogue()].index("support-triage")].expected_findings == (
-        (Finding.UNWIRED_REVISE.value, ("grader1",)),
-    )
+    assert declaring == []
 
 
 def test_an_undeclared_warning_is_drift() -> None:
