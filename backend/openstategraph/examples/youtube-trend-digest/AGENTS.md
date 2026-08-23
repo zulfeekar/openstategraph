@@ -80,10 +80,12 @@ the reader summarise from the title and call it a transcript.
 
 ## The run, and what it cost
 
-Two runs on 2026-08-15, and they have to be read together because the first one
-found the boundary and the second one crossed everything past it.
+Three runs, and they have to be read together because the first one found the
+boundary, the second one crossed everything past it in isolation, and the
+third — after both halves of `workflow-gallery` 34 and its split-out 67
+shipped — crossed it live, unseeded, end to end.
 
-### Run 1 — the whole thing, and where it stopped
+### Run 1 — unseeded, end to end, 2026-08-23
 
 ```
 # it ships in the wheel; copy it into ./workflows once, then run it
@@ -92,15 +94,46 @@ openstategraph run workflows/youtube-trend-digest \
   "What is trending on YouTube right now, and what is the top video actually about?"
 ```
 
-81 seconds, `attempts: 3`, `warnings: []`, and **no digest**. `trend1` came back
-with `{"url":"https://www.noxinfluencer.com/trending"}` — a tool argument, not
-an answer — and `read1` reported, correctly:
+`attempts: 3`, `warnings: []`, and a real digest — no id was seeded, no
+aggregator was named in the question. `trend1` returned the ranking with a
+resolved link:
 
-> I'm unable to retrieve the current YouTube-trending list … the web-search
-> tool is being rate-limited and I don't have a way to fetch the page directly.
+> 1, Avengers: Doomsday | Special Look | In Theaters December 18, Marvel
+> Entertainment, Film & Animation, 33.3M, X1aFkAkFASk,
+> https://www.youtube.com/watch?v=X1aFkAkFASk, lenostube.com
 
-**`tool.web-search` was refusing every request, machine-wide**, and still was
-after an hour and fifty minutes of probing and backing off:
+`read1` fetched the captions for that id and quoted them under `TREND:` /
+`TRANSCRIPT:`; `synth1` produced:
+
+> The top trending video on YouTube right now is Marvel's "Avengers: Doomsday
+> | Special Look" trailer, which has accumulated 33.3 million views. The video
+> focuses on the character Victor, exploring his tragic transformation from
+> "the smartest guy in every room" who "used to be kind" and "caring" into
+> someone broken after losing everything he loved. This emotional character
+> study appears to be a key emotional hook in the marketing for the film,
+> positioning Victor's fall from grace as central to the Doomsday storyline
+> coming to theaters December 18.
+
+152 227 tokens on `gpt-oss:120b` (two unpinned agents, cloud) and 1 731 on
+`claude-haiku-4-5` (the one paid call). This is what changed between the first
+attempt and this one: `trend1`'s first rung is `tool.web-search`, which on
+2026-08-15 was `html.duckduckgo.com` alone and refusing every request
+machine-wide. `workflow-gallery` **67** gave it a second, keyed rung —
+Tavily, behind `TAVILY_API_KEY` — and DuckDuckGo is still the blocked rung
+today (HTTP 202, same challenge, eight days on); the ladder fell through to
+Tavily and the run finished. **`web_fetch`'s link-preserving fetch, the other
+half of ticket 34, is what let the third rung skip search entirely** — the
+same aggregator fetch that once needed a follow-up search now carries the
+`watch?v=` id inline, which is why `trend1` needed only one search call
+(the first rung) rather than the two ticket 01 originally routed.
+
+### Run 2 (superseded) — the boundary this replaced
+
+The original Run 1, 2026-08-15: 81 seconds, `attempts: 3`, `warnings: []`, and
+**no digest**. `trend1` came back with
+`{"url":"https://www.noxinfluencer.com/trending"}` — a tool argument, not an
+answer — and `read1` reported, correctly, that `tool.web-search` was refusing
+every request, machine-wide, after an hour and fifty minutes of probing:
 
 ```
 The search endpoint refused this request (HTTP 202) — it is rate-limiting or
@@ -108,24 +141,19 @@ challenging automated searches, so the web could not be searched at all. This
 is not an empty result: do not conclude anything about what is on the web.
 ```
 
-That is the atom behaving exactly as it should, and it is fatal to this
-example's first step. Ticket 01's route is *`web_search` → `web_fetch` an
-aggregator → `web_search` the title for the `watch?v=` id*, and **two of its
-three rungs are the tool that is down.** `web_fetch` is fine — the aggregator
-came back with today's ranking, 8 013 characters of rank/category/channel/
-title/views — but `_strip_html` deleted attributes with their tags, so the page
-carried no link and no id. Nine other candidate sources were probed and not one
-put a `watch?v=` id in its *text*.
+That was the atom behaving exactly as it should, and it was fatal to this
+example's first step at the time. Ticket 01's route is *`web_search` →
+`web_fetch` an aggregator → `web_search` the title for the `watch?v=` id*, and
+two of its three rungs were the tool that was down. `web_fetch` was fine — the
+aggregator came back with that day's ranking, 8 013 characters of
+rank/category/channel/title/views — but `_strip_html` deleted attributes with
+their tags, so the page carried no link and no id. Both defects are now fixed:
+the link-preserving fetch and the second search rung, both `workflow-gallery`
+34 (split into 67 for the backend decision). Run 1 above is the replacement
+live measurement; this section stays only as the record of the boundary that
+was found.
 
-**That second half is fixed** (`workflow-gallery` 34): `web_fetch` now writes
-each link inline as `text (url)`, so the same `kworb.net/youtube/trending.html`
-fetch measured on 2026-08-21 carries a `watch?v=` id where the day before it
-carried none. **The third rung no longer needs a search at all** — the fetch
-that gets the ranking gets the id with it. The *first* rung still does, and
-`html.duckduckgo.com` was still answering HTTP 202 on 2026-08-21, so a second
-search backend is still owed: gallery ticket **67**.
-
-### Run 2 — seeded at the id, and everything downstream is real
+### Run 3 (superseded) — seeded at the id, and everything downstream is real
 
 To isolate the failure, the same document was run with the trend context in the
 question: today's #2 from that same aggregator fetch — *Total War: WARHAMMER
@@ -160,37 +188,45 @@ title** — which is the whole claim this example makes.
 
 ### Cost, measured rather than estimated
 
-`RunResult` carries no token usage, so the figures below come from wrapping the
-same `ask()` in `langchain_core.callbacks.get_usage_metadata_callback` — an
+`RunResult` carries no token usage, so the figures below come from the CLI's
+own `--json usage` block (Run 1) and, for Run 3, from wrapping the same
+`ask()` in `langchain_core.callbacks.get_usage_metadata_callback` — an
 in-process aggregator, no tracer, no account. That the platform cannot answer
 this itself is gallery ticket 35.
 
 | | in | out | total | $ |
 | --- | --- | --- | --- | --- |
-| `gpt-oss:120b` (two agents, cloud) | 7 456 | 1 765 | **9 221** | — |
-| `claude-haiku-4-5` (one call) | 1 486 | 141 | **1 627** | **$0.0022** |
+| Run 1, `gpt-oss:120b` (two agents, cloud, one extra search rung) | 146 397 | 5 830 | **152 227** | — |
+| Run 1, `claude-haiku-4-5` (one call) | 1 606 | 125 | **1 731** | ~$0.0022 |
+| Run 3, `gpt-oss:120b` (two agents, cloud) | 7 456 | 1 765 | **9 221** | — |
+| Run 3, `claude-haiku-4-5` (one call) | 1 486 | 141 | **1 627** | **$0.0022** |
 
-23.8 seconds end to end. At $1/$5 per MTok that is **a fifth of a US cent**,
-against ticket 01's ~$0.006 estimate — the synthesis input came in at 1 486
-tokens rather than the budgeted 4 800, because the transcript is a 169-second
-trailer.
+Run 1's `gpt-oss:120b` figure is far above both Run 3 and the gallery's
+~24 000-token estimate — it includes the ReAct loop's own back-and-forth
+across `attempts: 3` and the ladder's extra rung (DuckDuckGo blocked, Tavily
+answered), not a fixed per-run cost. The paid call is unchanged either way:
+one Claude call, a fifth of a US cent, because the synthesis input is sized by
+the transcript, not by how the trend was found.
 
-Run 1, by contrast, burned **61 832** cloud tokens producing nothing: three
-laps of an agent retrying a refusing tool. The gallery's ~24 000-token estimate
-for this example is right for a run that works and 2.5× low for one that
-fights. That asymmetry is the argument for ticket 35.
+The original Run 1 (now "Run 2, superseded") burned **61 832** cloud tokens
+producing nothing at all: three laps of an agent retrying a refusing tool with
+no fallback rung to fall to. A ladder that can fall through, even at ~15×
+Run 3's token cost in the worst case measured so far, is strictly better than
+one with no second rung — it still finishes. That asymmetry is the argument
+for ticket 35 (measuring this cost natively) and for keeping the ladder
+short: adding a third, slower rung would raise the worst case further.
 
 ### Against the catalogue's expected shape
 
 > *A short synthesis naming a specific, currently-trending video and quoting
 > from its transcript — not a generic essay.*
 
-**Met on every clause except the discovery of the video, which no atom could
-perform today.** The trend is today's and came from a live fetch; the
-transcript is that video's and was fetched by the atom built for it; the
-synthesis is Claude's, three sentences, quoting the captions. The one thing the
-workflow could not do for itself was turn a title into an id, and that is one
-refusing search backend, named in ticket 34.
+**Met, unseeded, live, 2026-08-23.** The trend is today's and came from a live
+fetch; the video id came from that same fetch's inlined link, `trend1` needed
+only its first search rung; the transcript is that video's and was fetched by
+the atom built for it; the synthesis is Claude's, naming the video and film,
+quoting the trailer's dialogue. `workflow-gallery` 34 and 67 are what closed
+the gap this section used to describe.
 
 ## Tests
 
