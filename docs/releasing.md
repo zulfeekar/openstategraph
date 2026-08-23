@@ -542,3 +542,13 @@ therefore never executed in Actions at all.
 So "CI is green" is a true statement about a five-day-old tree, and it is not
 evidence about the tree a release would be cut from. **Push before you release**,
 and watch that run finish before starting the train.
+
+> **Corrected 2026-08-23.** That push happened. `gallery-diagrams-check` has
+> now executed, and the first thing it did was fail on a commit whose artefact
+> was correct: it re-rendered the diagrams and compared the SVG **bytes**, and
+> mermaid lays a flowchart out from the browser's own font metrics, so a runner
+> without Inter installed cannot agree with a developer who has it. The job now
+> compares the *graph* each committed picture draws, through
+> `scripts/diagram_gate.py`, and installs neither node nor chromium
+> (`workflow-gallery` 80). The paragraph above stands as a record of the state
+> it described; the sentence about never executing does not.

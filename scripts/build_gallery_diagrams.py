@@ -46,8 +46,16 @@ script only rewrites the regions marked
 
     <!--mmd:SLUG--> … <!--/mmd:SLUG-->
 
-leaving every word of prose alone. ``--check`` re-renders and fails if the
-committed page is out of date instead of writing it.
+leaving every word of prose alone.
+
+``--check`` asks whether every committed picture is still **the graph the
+compiler builds** — it compiles, and reads the committed SVG, and compares the
+two through ``scripts/diagram_gate.py``. It does **not** re-render: until
+``workflow-gallery`` 80 it compared the rendered bytes, which is a comparison
+no two machines can pass, because mermaid lays a flowchart out from the
+browser's own font metrics and CI has no Inter installed. That module carries
+the measurements. The consequence worth knowing here: ``--check`` needs neither
+node nor a browser, so the CI job installs neither.
 """
 
 from __future__ import annotations
@@ -58,6 +66,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from diagram_gate import drift  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 EXAMPLES = REPO / "backend" / "openstategraph" / "examples"
@@ -205,14 +217,55 @@ def tidy(svg: str) -> str:
     return svg.strip()
 
 
-def inject(page: str, svgs: dict[str, str]) -> str:
+def regions(page: str) -> dict[str, str]:
+    """What the page currently draws, by slug — the committed SVG of each."""
+    return {
+        match.group(1): match.group(2)
+        for match in re.finditer(
+            r"<!--mmd:([a-z0-9-]+)-->(.*?)<!--/mmd:\1-->", page, flags=re.DOTALL
+        )
+    }
+
+
+def reconcile(page: str, produced: set[str]) -> set[str]:
     wanted = set(re.findall(r"<!--mmd:([a-z0-9-]+)-->", page))
-    missing = wanted - set(svgs)
+    missing = wanted - produced
     if missing:
         raise SystemExit(f"page asks for diagrams that no example produces: {sorted(missing)}")
-    unused = set(svgs) - wanted
+    unused = produced - wanted
     if unused:
         print(f"note: no placeholder on the page for {sorted(unused)}", file=sys.stderr)
+    return wanted
+
+
+def check(sources: dict[str, str], page: str) -> int:
+    """Is every committed picture still the graph the compiler builds?
+
+    Compiling only — no node, no chromium, no font. See ``diagram_gate`` for
+    why the bytes are not what is compared.
+    """
+    wanted = reconcile(page, set(sources))
+    drawn = regions(page)
+    complaints: list[str] = []
+    for slug in sorted(wanted):
+        if slug not in drawn:
+            complaints.append(f"{slug}: the page opens a diagram region it never closes")
+            continue
+        complaints.extend(drift(slug, sources[slug], drawn[slug]))
+    if complaints:
+        print("\n".join(complaints), file=sys.stderr)
+        print(
+            "site/gallery.html no longer draws the graphs it claims to — "
+            "run python3 scripts/build_gallery_diagrams.py",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"{PAGE.relative_to(REPO)} draws the live graph ({len(wanted)} diagrams)")
+    return 0
+
+
+def inject(page: str, svgs: dict[str, str]) -> str:
+    wanted = reconcile(page, set(svgs))
 
     for slug, svg in svgs.items():
         if slug not in wanted:
@@ -235,21 +288,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    svgs = {slug: tidy(svg) for slug, svg in render(mermaid_sources()).items()}
+    sources = mermaid_sources()
     before = PAGE.read_text()
-    after = inject(before, svgs)
 
     if args.check:
-        if before != after:
-            print(
-                "site/gallery.html is out of date — "
-                "run python3 scripts/build_gallery_diagrams.py",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"{PAGE.relative_to(REPO)} is current ({len(svgs)} diagrams)")
-        return 0
+        return check(sources, before)
 
+    svgs = {slug: tidy(svg) for slug, svg in render(sources).items()}
+    after = inject(before, svgs)
     PAGE.write_text(after)
     print(f"wrote {len(svgs)} diagrams into {PAGE.relative_to(REPO)} ({len(after):,} bytes)")
     return 0

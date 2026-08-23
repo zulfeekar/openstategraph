@@ -38,8 +38,19 @@ Like ``build_gallery_diagrams.py``, this rewrites only the regions marked
 
     <!--bts:NAME--> … <!--/bts:NAME-->
 
-and leaves every word of prose alone. ``--check`` re-renders and fails if the
-committed page is out of date instead of writing it.
+and leaves every word of prose alone.
+
+``--check`` compares every region byte for byte **except the rendered graph**,
+which it compares through ``scripts/diagram_gate.py`` instead: mermaid lays a
+flowchart out from the browser's own font metrics, so its SVG differs between
+any two machines with different fonts installed, and a byte comparison of it is
+a gate no CI runner can pass (``workflow-gallery`` 80 — the same defect, found
+first on the gallery). Everything else here is deterministic Python text and is
+still held to the byte. The graph's Mermaid **source** is one of those regions
+(``<!--bts:mermaid-src-->``), so the thing the picture is checked against is
+itself committed and reviewable.
+
+Consequence: ``--check`` needs neither node nor a browser.
 """
 
 from __future__ import annotations
@@ -51,6 +62,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from diagram_gate import drift  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 BACKEND = REPO / "backend"
@@ -296,16 +311,21 @@ def render_svg(source: str) -> str:
 # --- assembly --------------------------------------------------------------- #
 
 
-def regions() -> dict[str, str]:
-    sys.path.insert(0, str(BACKEND))
+def regions(mermaid: str, *, with_svg: bool) -> dict[str, str]:
+    """Every region of the page, rebuilt from the real thing.
+
+    ``with_svg`` is off for ``--check``: the rendered graph is compared through
+    ``diagram_gate`` rather than by its bytes, and rendering it would put a
+    browser back in the path of a gate that no longer needs one.
+    """
     prompts = prompt_sections()
-    mermaid = mermaid_text()
     blocks = {
         "document": json_html(document()),
         "plan": esc(plan_text()),
         "mermaid-src": esc(mermaid),
-        "mermaid": render_svg(mermaid),
     }
+    if with_svg:
+        blocks["mermaid"] = render_svg(mermaid)
     for node_id, entry in prompts.items():
         blocks[f"layers-{node_id}"] = layers_html(entry)
         blocks[f"rendered-{node_id}"] = esc(entry["render"])
@@ -320,9 +340,9 @@ def regions() -> dict[str, str]:
     return blocks
 
 
-def inject(page: str, blocks: dict[str, str]) -> str:
+def inject(page: str, blocks: dict[str, str], exempt: frozenset[str] = frozenset()) -> str:
     wanted = set(re.findall(r"<!--bts:([a-z0-9-]+)-->", page))
-    missing = wanted - set(blocks)
+    missing = wanted - set(blocks) - exempt
     if missing:
         raise SystemExit(f"page asks for regions nothing produces: {sorted(missing)}")
     unused = set(blocks) - wanted
@@ -341,6 +361,29 @@ def inject(page: str, blocks: dict[str, str]) -> str:
     return page
 
 
+def check(mermaid: str, before: str) -> int:
+    """Every region to the byte, except the picture, which is checked as a graph."""
+    blocks = regions(mermaid, with_svg=False)
+    complaints: list[str] = []
+    if before != inject(before, blocks, exempt=frozenset({"mermaid"})):
+        complaints.append("a region other than the diagram no longer matches the real thing")
+    drawn = re.search(r"<!--bts:mermaid-->(.*?)<!--/bts:mermaid-->", before, flags=re.DOTALL)
+    if drawn is None:
+        complaints.append("the page has no diagram region to check")
+    else:
+        complaints.extend(drift("the compiled graph", mermaid, drawn.group(1)))
+    if complaints:
+        print("\n".join(complaints), file=sys.stderr)
+        print(
+            "site/behind-the-scenes.html is out of date — "
+            "run python3 scripts/build_behind_the_scenes.py",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"{PAGE.relative_to(REPO)} is current ({len(blocks) + 1} regions)")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -350,21 +393,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    blocks = regions()
+    sys.path.insert(0, str(BACKEND))
+    mermaid = mermaid_text()
     before = PAGE.read_text()
-    after = inject(before, blocks)
 
     if args.check:
-        if before != after:
-            print(
-                "site/behind-the-scenes.html is out of date — "
-                "run python3 scripts/build_behind_the_scenes.py",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"{PAGE.relative_to(REPO)} is current ({len(blocks)} regions)")
-        return 0
+        return check(mermaid, before)
 
+    blocks = regions(mermaid, with_svg=True)
+    after = inject(before, blocks)
     PAGE.write_text(after)
     print(f"wrote {len(blocks)} regions into {PAGE.relative_to(REPO)} ({len(after):,} bytes)")
     return 0

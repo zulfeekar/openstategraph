@@ -273,16 +273,22 @@ jobs:
   # cost and a different dependency from compiling 23 documents, which is why
   # this lives in its own CI job rather than inside `npm run verify` or
   # `pytest` (workflow-gallery 57's own reasoning, carried from ticket 55).
+  # No node, no chromium, and that is the point rather than a saving.
+  # `--check` used to re-render the diagrams and compare the SVG bytes, which
+  # made this job a test of the runner's installed fonts: mermaid measures every
+  # label in the browser, so the same graph renders to different coordinates on
+  # a machine with Inter installed and one without. It went red on a commit
+  # whose artefact had just been regenerated correctly (run 32659487566,
+  # `workflow-gallery` 80). Both checks now compare the *graph* the picture
+  # draws, through `scripts/diagram_gate.py`, and need only Python. Do not add a
+  # renderer back to this job — a check that renders is a check that cannot pass
+  # twice.
   gallery-diagrams-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: pip install -e "backend[all,dev]"
       - run: python3 scripts/build_gallery_diagrams.py --check
       - run: python3 scripts/build_behind_the_scenes.py --check
