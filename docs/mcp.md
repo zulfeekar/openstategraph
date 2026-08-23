@@ -43,8 +43,9 @@ local MCP client spawns.
 }
 ```
 
-`PYTHONPATH` is how you point at a checkout without installing anything (there
-is no PyPI wheel yet — see [Using OpenStateGraph in your project](adoption.md)).
+`PYTHONPATH` is how you point at a checkout without installing anything (a
+wheel exists — a release candidate on TestPyPI — but the real PyPI upload has
+not happened yet; see [Using OpenStateGraph in your project](adoption.md)).
 If you ran `pip install -e /path/to/openstategraph/backend`, drop the
 `PYTHONPATH` line — but keep the rest of the `env` block. Only `PYTHONPATH` is
 install-dependent; dropping the whole block also drops

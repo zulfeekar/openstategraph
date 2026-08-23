@@ -92,12 +92,20 @@ pip install "openstategraph[ollama]"          # the lean core, no web layer
 openstategraph run ./my-workflow "How many invoices are there?"
 ```
 
-**That upload has not happened yet**, and this file will not print a command
-that silently fails, so until it does you install the identical artifact from a
-checkout: `pip install -e "backend[ollama]"`, or build the wheel with `python3
--m build backend`. CI's `clean-install` job installs that wheel into an empty
-virtualenv **outside** this repository and runs a workflow there, so the path is
-verified rather than assumed. Measured footprint: **36 distributions** for the
+**The real PyPI upload has not happened yet** — the release pipeline
+(`docs/releasing.md`) stops at TestPyPI pending a human approval that has not
+been clicked, and this file will not print a command that silently fails.
+A release candidate **is** on TestPyPI now and installs in ~13 s (measured
+2026-08-23, without the `ollama` extra below): `pip install --index-url
+https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/
+"openstategraph[server,ollama]==0.3.0rc2"` — the `--extra-index-url` is mandatory,
+because TestPyPI carries no `pydantic` 2.x and a naive install fails on that
+dependency with no mention of the missing index. Absent even that, install the
+identical artifact from a checkout: `pip install -e "backend[ollama]"`, or
+build the wheel with `python3 -m build backend`. CI's `clean-install` job
+installs that wheel into an empty virtualenv **outside** this repository and
+runs a workflow there, so the path is verified rather than assumed. Measured
+footprint: **36 distributions** for the
 core, 38 with a provider.
 
 New here and deciding? [**What this is**](docs/what-is-this.md) states plainly
@@ -253,7 +261,13 @@ subgraphs, and `docs/patterns.md` documents the atom, but nothing a first-time
 reader opens does.
 
 Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
-the chat gateway and the build-me-a-workflow flow; `openstategraph new <slug>
+the chat gateway and the build-me-a-workflow flow — **in this checkout.**
+Both live under this repository's `workflows/`, outside `backend/`, so
+neither one is in the wheel: a `pip install` gives you no in-app "describe
+what you want" surface. The same capability for a wheel install is
+[`docs/mcp.md`](docs/mcp.md) §2 — `openstategraph mcp` turns your own MCP
+client's model into the composer, talking to this server as the ground truth
+and the artifact factory. `openstategraph new <slug>
 [--template minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
 `scripts/new_team.py`, which call the same code) scaffolds your own packages
 from templates that ship inside the wheel.
