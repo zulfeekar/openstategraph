@@ -16,11 +16,16 @@ An identity a model can pass as an argument is an identity a prompt-injected
 document can rewrite — and here that would mean reading another person's
 memories, since the memory namespace is keyed on the same value.
 
-This is a *tool*, deliberately not a node type. A node would have to sit
-somewhere in the flow and produce a value into state, which is a second copy
-of a fact the run already carries and one more thing to wire; attaching a
-capability to the agent that needs it is how memory and knowledge already
-work.
+This is a *tool a developer wires by hand*, not a node that produces a value
+into state. A node would have to sit somewhere in the flow and write a second
+copy of a fact the run already carries; attaching a capability to the agent
+that needs it, the way memory and knowledge already work, is enough — the
+agent calls it, reads the answer, and nothing new enters state. It still has
+a real editor card (`tool.session-identity` in `PlatformToolsNode.ts`), so a
+developer can see it in the palette and attach it deliberately, the same as
+any other bindable tool; `production-ready/61` found this file once claiming
+the tool could not be placed on a canvas at all, which was never true — only
+"produces no state" was ever the intent.
 """
 
 from __future__ import annotations

@@ -87,3 +87,28 @@ class TestItIsAvailableToEveryWorkflow:
         registry = build_tool_registry(None, None)
         for tool in SESSION_TOOLS:
             assert registry[tool.node_type].name == tool.name
+
+
+class TestTheDocstringAgreesWithTheDeclaration:
+    """production-ready/61: the module said 'deliberately not a node type'
+    while `node_type` was non-empty. Ticket 61's own 'done when' named this
+    contradiction directly. every-workflow-green/20 resolved which half was
+    the mistake — the declaration, not the docstring: the tool got a real
+    editor card (`tool.session-identity` in `PlatformToolsNode.ts`) rather
+    than being switched to `node_type = ""`. The docstring never caught up.
+    """
+
+    def test_the_tool_is_actually_placeable(self) -> None:
+        # A non-empty node_type is the platform's own contract for
+        # placeable (abc/tool.py: "Empty means 'not placeable on a canvas'").
+        assert SessionIdentityTool.node_type == "tool.session-identity"
+
+    def test_the_module_docstring_no_longer_claims_the_opposite(self) -> None:
+        import openstategraph.prebuilt_session as module
+
+        doc = module.__doc__ or ""
+        assert "deliberately not a node type" not in doc, (
+            "the module still claims this tool cannot be placed on a canvas, "
+            "but it has a real editor card and a non-empty node_type — the "
+            "docstring is stale, not the declaration"
+        )
