@@ -9,11 +9,7 @@ import {
   writeOpenMountHostToDisk,
 } from '@app/diskAutosave';
 import { draftIdForSlug, restoreDraftFor } from '@app/workflowDrafts';
-import {
-  newWriteGuard,
-  saveWorkflow as writeDraft,
-  type KeyValueStore,
-} from '@app/workflowStore';
+import { newWriteGuard, saveWorkflow as writeDraft, type KeyValueStore } from '@app/workflowStore';
 import { recordKnownSavedAt } from '@app/workflowFileWatch';
 import { setOpenAddress } from '@app/openAddress';
 import { saveWorkflow as saveMountOverrides } from '@view/workflow/saveWorkflow';

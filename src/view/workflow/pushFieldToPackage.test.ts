@@ -98,8 +98,9 @@ describe('pushFieldToPackage', () => {
     });
     expect(outcome.kind).toBe('pushed');
     expect(calls.save?.slug).toBe('child');
-    const nodes = (calls.save?.document as { nodes: Array<{ id: string; data: Record<string, unknown> }> })
-      .nodes;
+    const nodes = (
+      calls.save?.document as { nodes: Array<{ id: string; data: Record<string, unknown> }> }
+    ).nodes;
     const written = nodes.find((n) => n.id === 'agent-sql');
     expect(written?.data.rules).toBe('new rules');
   });
@@ -111,9 +112,11 @@ describe('pushFieldToPackage', () => {
     // defect `docs/decisions/mount-overrides.md` rejects fork-on-configure
     // for avoiding. `load` is the only source of the document; asserting it
     // was called is what pins that.
-    const load = vi.fn().mockResolvedValue(
-      Ok({ name: 'Child', nodes: [{ id: 'agent-sql', type: 'agent.llm', data: {} }] }),
-    );
+    const load = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ name: 'Child', nodes: [{ id: 'agent-sql', type: 'agent.llm', data: {} }] }),
+      );
     const { client } = recordingClient({ load });
     await pushFieldToPackage(client, {
       slug: 'child',
@@ -147,7 +150,8 @@ describe('pushFieldToPackage', () => {
     // wrongly claim the source mount "will not see the correction" — the
     // exact opposite of what happens once the caller clears its override.
     const { client } = recordingClient({
-      mountUsage: async () => Ok(USAGE({ count: 2, shadowedHosts: ['front-desk', 'other-parent'] })),
+      mountUsage: async () =>
+        Ok(USAGE({ count: 2, shadowedHosts: ['front-desk', 'other-parent'] })),
     });
     const confirm = vi.fn().mockReturnValue(true);
     const outcome = await pushFieldToPackage(client, {
@@ -195,7 +199,12 @@ describe('pushFieldToPackage', () => {
 
 describe('pushFieldMessage', () => {
   it('points at the package tests after a successful push', () => {
-    const message = pushFieldMessage({ kind: 'pushed', slug: 'child', count: 2, shadowedHosts: [] });
+    const message = pushFieldMessage({
+      kind: 'pushed',
+      slug: 'child',
+      count: 2,
+      shadowedHosts: [],
+    });
     expect(message).toContain('workflows/child/tests');
   });
 

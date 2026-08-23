@@ -103,11 +103,7 @@ export interface SaveDeps {
   readonly confirm: (message: string) => boolean;
 }
 
-export async function saveWorkflow({
-  client,
-  workbench,
-  confirm,
-}: SaveDeps): Promise<SaveOutcome> {
+export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Promise<SaveOutcome> {
   const address = getOpenAddress();
   if (address && isInstance(address)) {
     const mounts = workbench.controller.document.mountContext();

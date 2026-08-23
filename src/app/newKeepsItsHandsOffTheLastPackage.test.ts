@@ -106,9 +106,9 @@ describe('production-ready 77 — New must not write into the last package', () 
     for (let i = 0; i < nodes; i += 1) addNode(bench, TYPE.textInput, { at: { x: i * 200, y: 0 } });
     const writer = newWriteGuard();
     claimSession(local, draftIdForSlug(slug), writer);
-    expect(saveWorkflow(local, draftIdForSlug(slug), bench.model, bench.serializer, writer).ok).toBe(
-      true,
-    );
+    expect(
+      saveWorkflow(local, draftIdForSlug(slug), bench.model, bench.serializer, writer).ok,
+    ).toBe(true);
     setOpenSlug(slug);
     return local.getItem(`openstategraph-workflow-${draftIdForSlug(slug)}`) ?? '';
   }

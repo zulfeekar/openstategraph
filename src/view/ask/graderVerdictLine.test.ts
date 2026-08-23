@@ -8,9 +8,9 @@ describe('graderVerdictLine', () => {
   });
 
   it('reports a revision request with the grader’s own sentence', () => {
-    expect(
-      graderVerdictLine({ verdict: 'revise', reason: "'if appropriate' is a hedge." }),
-    ).toBe("The grader asked for a revision — 'if appropriate' is a hedge.");
+    expect(graderVerdictLine({ verdict: 'revise', reason: "'if appropriate' is a hedge." })).toBe(
+      "The grader asked for a revision — 'if appropriate' is a hedge.",
+    );
   });
 
   it('reports a pass with the grader’s own sentence', () => {
@@ -68,7 +68,9 @@ describe('graderVerdictLine', () => {
       check: 'empty',
     });
     expect(judged).toBe("The grader asked for a revision — 'if appropriate' is a hedge.");
-    expect(skipped).toBe('The grader asked for a revision without a model call — The answer is empty.');
+    expect(skipped).toBe(
+      'The grader asked for a revision without a model call — The answer is empty.',
+    );
     expect(skipped).not.toBe(judged);
   });
 

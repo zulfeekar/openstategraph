@@ -110,15 +110,11 @@ describe('buildTrace ownership (ticket 72)', () => {
       internal('agent-sql'),
       row({ node: 'agent-sql', path: ['agent-sql'], durationMs: 1 }),
     ]);
-    expect(trace.map((s) => s.node)).toEqual([
-      'agent-sql',
-      'grader-sql',
-      'agent-sql',
-    ]);
+    expect(trace.map((s) => s.node)).toEqual(['agent-sql', 'grader-sql', 'agent-sql']);
     expect(trace.map((s) => s.children.length)).toEqual([1, 0, 1]);
   });
 
-  it('collapses a mounted run onto the mount, not onto the child\'s own ids', () => {
+  it("collapses a mounted run onto the mount, not onto the child's own ids", () => {
     // `concierge` mounts `chinook-assistant` at `wf-music`. Every frame from
     // inside the child arrives with the mount at the head of its path — and
     // the child's ids collide with the parent's (`in1`, `router1`, `out1`),
@@ -171,7 +167,12 @@ describe('buildTrace ownership (ticket 72)', () => {
     // (empty) marker would render a judged row for a skipped model call.
     const trace = buildTrace([
       row({ node: 'model', internal: true, path: ['grader-sql'], durationMs: 1 }),
-      row({ node: 'grader-sql', path: ['grader-sql'], check: 'empty', reason: 'The answer is empty.' }),
+      row({
+        node: 'grader-sql',
+        path: ['grader-sql'],
+        check: 'empty',
+        reason: 'The answer is empty.',
+      }),
     ]);
     expect(trace).toHaveLength(1);
     expect(trace[0]!.check).toBe('empty');

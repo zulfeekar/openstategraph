@@ -146,7 +146,6 @@ describe('the workflow list', () => {
     // the client. Both tickets use the one stream.
     expect(manager).toContain('watchCatalogue');
   });
-
 });
 
 /**

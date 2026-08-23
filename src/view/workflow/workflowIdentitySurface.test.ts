@@ -51,7 +51,8 @@ describe('the Workflows drawer', () => {
     expect(saving).toContain('duplicateNameConfirmation');
     // Only on a create. An overwrite of the workflow you already have open is
     // not a collision with anything.
-    const guard = saving.split('const open = getOpenSlug();')[1]?.split('const document =')[0] ?? '';
+    const guard =
+      saving.split('const open = getOpenSlug();')[1]?.split('const document =')[0] ?? '';
     expect(guard).toContain('if (!open)');
     expect(guard).toContain('duplicateNameConfirmation');
     // And neither surface may grow its own copy of the warning.

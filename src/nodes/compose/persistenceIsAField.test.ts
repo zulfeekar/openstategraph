@@ -19,8 +19,7 @@ import { subgraphNode } from './SubgraphNode';
  */
 describe('the mount persistence field', () => {
   const field = subgraphNode.fields.find((entry) => entry.key === 'persistence');
-  const options =
-    field && 'options' in field && Array.isArray(field.options) ? field.options : [];
+  const options = field && 'options' in field && Array.isArray(field.options) ? field.options : [];
   const hint = field && 'hint' in field ? ((field.hint as string) ?? '') : '';
 
   it('offers exactly the three values the backend resolves', () => {

@@ -20,6 +20,9 @@
  * different race and is exactly right here: **the file wins until a person
  * saves on purpose.**
  */
-export function loadWasFaithful(outcome: { readonly ok: boolean; readonly message?: string }): boolean {
+export function loadWasFaithful(outcome: {
+  readonly ok: boolean;
+  readonly message?: string;
+}): boolean {
   return outcome.ok && !outcome.message;
 }

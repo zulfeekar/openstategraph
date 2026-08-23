@@ -15,7 +15,8 @@ import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegis
 import type { FieldSchema } from '@core/model/contracts/fields';
 import { createAgentNode } from './AgentNode';
 
-const fields = (): readonly FieldSchema[] => createAgentNode(new ProviderRegistry(new CredentialStore(false))).fields ?? [];
+const fields = (): readonly FieldSchema[] =>
+  createAgentNode(new ProviderRegistry(new CredentialStore(false))).fields ?? [];
 
 const field = (key: string): FieldSchema | undefined => fields().find((f) => f.key === key);
 

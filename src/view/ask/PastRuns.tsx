@@ -185,13 +185,7 @@ function RunRow({
  * One run, checkpoint by checkpoint — fetched only when a row is opened, so a
  * list of fifty runs costs one request rather than fifty-one.
  */
-function RunHistory({
-  run,
-  names,
-}: {
-  run: PastRun;
-  names?: ReadonlyMap<string, string>;
-}) {
+function RunHistory({ run, names }: { run: PastRun; names?: ReadonlyMap<string, string> }) {
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'ready'; history: PastRunHistory }
@@ -256,9 +250,7 @@ function RunHistory({
                   than `0 ms`, which would be a claim
                   (`memory-and-replay` 37, part 2).
                 */}
-                {stepCost(step) ? (
-                  <span className="past-runs__cost">{stepCost(step)}</span>
-                ) : null}
+                {stepCost(step) ? <span className="past-runs__cost">{stepCost(step)}</span> : null}
                 {step.wrote.length > 0 ? (
                   <span className="past-runs__wrote">wrote {step.wrote.join(', ')}</span>
                 ) : null}

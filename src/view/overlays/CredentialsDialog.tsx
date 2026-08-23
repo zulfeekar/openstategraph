@@ -154,7 +154,9 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
           `.env` files; this is that answer, in the server's own words, so a
           reader with keys in `.env` can tell whether the server they started
           actually has them. */}
-      {serverEnvironment ? <p className="provider__hint">Server environment: {serverEnvironment}</p> : null}
+      {serverEnvironment ? (
+        <p className="provider__hint">Server environment: {serverEnvironment}</p>
+      ) : null}
 
       {workbench.providers.list().map((provider) => {
         // The redacted form is all this component can ever obtain.

@@ -1158,16 +1158,14 @@ export class RuntimeClient implements IRuntimeClient {
             namespace: asPath(row['namespace']),
             node: asString(row['node']),
             wrote: asPath(row['wrote']),
-            toolCalls: (Array.isArray(row['tool_calls']) ? row['tool_calls'] : []).map(
-              (call) => {
-                const entry = asRecordOfUnknown(call);
-                return {
-                  name: asString(entry['name']),
-                  arguments: asString(entry['arguments']),
-                  result: asString(entry['result']),
-                };
-              },
-            ),
+            toolCalls: (Array.isArray(row['tool_calls']) ? row['tool_calls'] : []).map((call) => {
+              const entry = asRecordOfUnknown(call);
+              return {
+                name: asString(entry['name']),
+                arguments: asString(entry['arguments']),
+                result: asString(entry['result']),
+              };
+            }),
             // `?? null` and never `?? 0`: the server withholds a duration it
             // could not measure, and a client that defaults it to zero
             // reinstates exactly the claim the server declined to make.

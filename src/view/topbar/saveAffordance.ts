@@ -32,10 +32,7 @@ export interface SaveAffordance {
   readonly unsaved: boolean;
 }
 
-export function saveAffordance(
-  address = getOpenAddress(),
-  slug = getOpenSlug(),
-): SaveAffordance {
+export function saveAffordance(address = getOpenAddress(), slug = getOpenSlug()): SaveAffordance {
   if (address && isInstance(address)) {
     // The one case where "Save" alone would be a lie: the bytes go to the
     // parent as this mount's overrides, not to the document on screen.

@@ -27,8 +27,14 @@ const SQL_TOOLS = ['tool.sql-list-tables', 'tool.sql-get-schema', 'tool.sql-quer
 
 const SHIPPED = join(
   __dirname,
-  '..', '..', '..',
-  'backend', 'openstategraph', 'examples', 'sql-qa', 'workflow.json',
+  '..',
+  '..',
+  '..',
+  'backend',
+  'openstategraph',
+  'examples',
+  'sql-qa',
+  'workflow.json',
 );
 
 /** A saved package wraps its document in an envelope; the gallery ships bare. */
@@ -109,7 +115,9 @@ describe('the SQL Explorer family is drawable', () => {
   it('covers every SQL node type the shipped sql-qa document actually uses', () => {
     const workbench = makeWorkbench();
     const listed = new Set(workbench.registry.nodeTypes.list().map((d) => d.id));
-    const used = shippedDocument().nodes.map((n) => n.type).filter((t) => t.startsWith('tool.sql-'));
+    const used = shippedDocument()
+      .nodes.map((n) => n.type)
+      .filter((t) => t.startsWith('tool.sql-'));
 
     expect(used.length, 'sql-qa stopped using the SQL explorers').toBeGreaterThan(0);
     for (const type of used) expect(listed, `${type} is not placeable`).toContain(type);

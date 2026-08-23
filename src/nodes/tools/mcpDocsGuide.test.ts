@@ -18,7 +18,7 @@ const REPO = new URL('../../../', import.meta.url);
 const mcpDoc = readFileSync(fileURLToPath(new URL('docs/mcp.md', REPO)), 'utf8');
 
 describe('docs/mcp.md carries the one-card-many-servers guidance', () => {
-  it('quotes the card\'s own grouping guide verbatim, not a paraphrase', () => {
+  it("quotes the card's own grouping guide verbatim, not a paraphrase", () => {
     expect(mcpDoc).toContain(MCP_GROUPING_GUIDE);
   });
 

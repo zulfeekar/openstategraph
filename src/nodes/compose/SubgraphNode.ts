@@ -204,7 +204,10 @@ export const subgraphNode: INodeDefinition = defineNode(
         options: [
           { value: PER_INVOCATION, label: 'Nothing · a fresh run every time (default)' },
           { value: 'per-thread', label: 'Its own conversation · across turns on this thread' },
-          { value: 'stateless', label: 'Nothing at all · an approval inside is answered twice over' },
+          {
+            value: 'stateless',
+            label: 'Nothing at all · an approval inside is answered twice over',
+          },
         ],
         hint: 'By default this mount is one isolated step: it is handed the task and this conversation so far, and keeps nothing of its own between turns. “Its own conversation” gives the mounted workflow a memory of its own on this thread — it stops being handed this conversation and keeps its own instead, so it can pick up where it left off. Use it for a mounted workflow that is genuinely a running dialogue, and not otherwise: two of these running at the same time write to the same place and conflict. “Nothing at all” keeps no record of the mounted workflow’s run. It can still pause for an approval — but because nothing was kept, answering it runs that workflow again from its first step, so every step before the approval happens a second time.',
       },

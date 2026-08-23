@@ -18,7 +18,10 @@ import type { WorkflowModel } from '@core/model/WorkflowModel';
  * DOM or a canvas — `core/` knows nothing of JointJS and this stays on the
  * right side of that line. The caller does the scrolling.
  */
-export function rectOfAdded(model: WorkflowModel, nodeId: string | null): {
+export function rectOfAdded(
+  model: WorkflowModel,
+  nodeId: string | null,
+): {
   readonly x: number;
   readonly y: number;
   readonly width: number;

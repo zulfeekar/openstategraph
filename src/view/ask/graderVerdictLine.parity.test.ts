@@ -88,9 +88,9 @@ describe('the grader’s sentence has one spelling', () => {
     const rendered = CASES.map((c) => graderVerdictLine(c));
     expect(rendered).toContain('');
     expect(rendered.some((line) => line.startsWith('The grader passed this'))).toBe(true);
-    expect(rendered.some((line) => line.includes('asked for a revision without a model call'))).toBe(
-      true,
-    );
+    expect(
+      rendered.some((line) => line.includes('asked for a revision without a model call')),
+    ).toBe(true);
     expect(rendered.some((line) => line === 'something else happened')).toBe(true);
   });
 });

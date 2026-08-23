@@ -174,8 +174,7 @@ const FORBIDS = /\bnever\b|\bnot\b|rather than|instead of|do not|mislabel|misnam
 const DOCUMENT_BANNED: { pattern: RegExp; instead: string }[] = [
   {
     pattern: /instance default/i,
-    instead:
-      '"installation default" — CLAUDE.md fixes *instance* as one mount of a package',
+    instead: '"installation default" — CLAUDE.md fixes *instance* as one mount of a package',
   },
   {
     pattern: /max(?:imum)? (?:iterations|turns)|iteration (?:limit|budget)/i,

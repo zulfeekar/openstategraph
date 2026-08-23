@@ -198,7 +198,6 @@ describe('a mount whose child cannot enforce its outcome says so', () => {
   });
 });
 
-
 describe('the order a census reads in', () => {
   /**
    * `production-ready` 63, found by a red test on main rather than by anyone

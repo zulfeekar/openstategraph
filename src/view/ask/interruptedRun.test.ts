@@ -48,7 +48,9 @@ describe('the run-in-flight mark', () => {
   });
 
   it('treats a half-written value as no run', () => {
-    expect(takeInterruptedRun(fakeStorage({ 'openstategraph.run-in-flight': '{"at":' }))).toBeNull();
+    expect(
+      takeInterruptedRun(fakeStorage({ 'openstategraph.run-in-flight': '{"at":' })),
+    ).toBeNull();
   });
 
   it('survives an unusable store rather than throwing', () => {

@@ -123,7 +123,10 @@ export async function pushFieldToPackage(
 
   const usageResult = await client.mountUsage(slug, childNodeId, key);
   if (!usageResult.ok) {
-    return { kind: 'refused', message: `Could not check who mounts "${slug}": ${usageResult.error}` };
+    return {
+      kind: 'refused',
+      message: `Could not check who mounts "${slug}": ${usageResult.error}`,
+    };
   }
   // See `excludeHost`'s own doc: the source mount always shows up here, and
   // it is about to stop being shadowed by the other half of this act.

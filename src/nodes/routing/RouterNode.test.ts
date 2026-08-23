@@ -3,12 +3,7 @@ import { defaultsFrom } from '@core/model/contracts/fields';
 import { maxConnectionsOf } from '@core/model/contracts/ports';
 import { makeWorkbench } from '@core/testing/fixtures';
 import type { Workbench } from '@app/Workbench';
-import {
-  branchesOf,
-  createRouterNode,
-  ROUTER_TYPE,
-  type RouterNodeModel,
-} from './RouterNode';
+import { branchesOf, createRouterNode, ROUTER_TYPE, type RouterNodeModel } from './RouterNode';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 
 /**

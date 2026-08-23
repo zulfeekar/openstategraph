@@ -153,7 +153,12 @@ const FIRST_STEP = -1;
  * Every step comes out exactly once. Laning is a re-reading, never a filter.
  */
 export function lanes(steps: readonly PastRunStep[]): readonly PastRunLane[] {
-  const found: { node: string; namespace: readonly string[]; occurrence: number; steps: PastRunStep[] }[] = [];
+  const found: {
+    node: string;
+    namespace: readonly string[];
+    occurrence: number;
+    steps: PastRunStep[];
+  }[] = [];
   const openLane = new Map<string, { occurrence: number; steps: PastRunStep[] }>();
   const runsSoFar = new Map<string, number>();
 

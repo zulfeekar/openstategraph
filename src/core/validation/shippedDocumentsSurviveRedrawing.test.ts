@@ -35,8 +35,16 @@ const REPO = join(__dirname, '..', '..', '..');
  * untracked local package must not be able to turn this suite red.
  */
 const SHIPPED_ROOTS = [
-  { label: 'templates', dir: join(REPO, 'backend', 'openstategraph', 'templates'), trackedOnly: false },
-  { label: 'examples', dir: join(REPO, 'backend', 'openstategraph', 'examples'), trackedOnly: false },
+  {
+    label: 'templates',
+    dir: join(REPO, 'backend', 'openstategraph', 'templates'),
+    trackedOnly: false,
+  },
+  {
+    label: 'examples',
+    dir: join(REPO, 'backend', 'openstategraph', 'examples'),
+    trackedOnly: false,
+  },
   { label: 'workflows', dir: join(REPO, 'workflows'), trackedOnly: true },
 ];
 
@@ -47,7 +55,12 @@ function trackedDocuments(): Set<string> | null {
       cwd: REPO,
       encoding: 'utf8',
     });
-    return new Set(out.split('\0').filter(Boolean).map((rel) => join(REPO, rel)));
+    return new Set(
+      out
+        .split('\0')
+        .filter(Boolean)
+        .map((rel) => join(REPO, rel)),
+    );
   } catch {
     return null;
   }

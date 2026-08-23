@@ -169,7 +169,6 @@
   overflow-wrap: anywhere;
 }
 
-
 /* One tool call, one line: `web_fetch({...}) → Error: …`. Monospaced because
    half of it is JSON, and a reader is scanning for a name and an argument. */
 .past-runs__tool {

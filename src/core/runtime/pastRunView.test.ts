@@ -165,21 +165,15 @@ describe('stepTitle', () => {
   });
 
   it('names the superstep and where it came from', () => {
-    expect(stepTitle(titled(3, 'loop'))).toBe(
-      'Step 3 · loop',
-    );
+    expect(stepTitle(titled(3, 'loop'))).toBe('Step 3 · loop');
   });
 
   it('calls the pre-run checkpoint what it is', () => {
-    expect(stepTitle(titled(-1, 'input'))).toBe(
-      'Input · input',
-    );
+    expect(stepTitle(titled(-1, 'input'))).toBe('Input · input');
   });
 
   it('omits an unrecorded source rather than printing an empty tail', () => {
-    expect(stepTitle(titled(1, ''))).toBe(
-      'Step 1',
-    );
+    expect(stepTitle(titled(1, ''))).toBe('Step 1');
   });
 });
 
@@ -278,9 +272,7 @@ describe('lanes', () => {
   });
 
   it('has a name for each lane a reader can act on', () => {
-    expect(laneTitle({ node: '', namespace: [], occurrence: 1, steps: [] })).toBe(
-      'The workflow',
-    );
+    expect(laneTitle({ node: '', namespace: [], occurrence: 1, steps: [] })).toBe('The workflow');
     expect(
       laneTitle({ node: 'worker_web', namespace: ['worker_web'], occurrence: 1, steps: [] }),
     ).toBe('worker_web');
@@ -336,7 +328,6 @@ describe('lanes', () => {
     ).toBe('mount1 › model');
   });
 });
-
 
 describe('toolCallLine', () => {
   /**

@@ -75,7 +75,11 @@ export function busKey(nodeId: string, portId: string): string {
  */
 export type SuggestionOutcome =
   | { readonly kind: 'apply'; readonly suggestion: CapabilitySuggestion }
-  | { readonly kind: 'duplicate'; readonly suggestion: CapabilitySuggestion; readonly message: string }
+  | {
+      readonly kind: 'duplicate';
+      readonly suggestion: CapabilitySuggestion;
+      readonly message: string;
+    }
   // `the-agent-asks-for-what-it-cannot-get` 04, half 1. An unregistered
   // `nodeType` is not the same silence as a malformed `attachTo` — the agent
   // named a real gap, and `null` collapsed it into the case where it named

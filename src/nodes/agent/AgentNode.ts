@@ -39,7 +39,7 @@ const MAX_SUBAGENTS = 8;
 const SUBAGENTS_NOTE =
   'On the deep agent runtime this agent can hand work to a named worker and ' +
   `get one answer back. It already carries one, "${GENERAL_PURPOSE_SUBAGENT}", ` +
-  'with this agent\'s own tools; declare a subagent of that name to replace ' +
+  "with this agent's own tools; declare a subagent of that name to replace " +
   'it. A worker is given a task and reports a result — it never sees this ' +
   "agent's conversation or the workflow's state, though the run's context " +
   'does reach its tools.';

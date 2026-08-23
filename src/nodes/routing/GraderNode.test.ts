@@ -134,7 +134,7 @@ describe('grader criteria — prebuilt and overridable', () => {
     expect(restored.replacesDefaults).toBe(false);
   });
 
-  it('says the budget is this grader\'s own, and counts attempts not revisions', () => {
+  it("says the budget is this grader's own, and counts attempts not revisions", () => {
     // `workflow-gallery` 21. The number is a count of candidates *this* grader
     // judges. It read "Max revisions" over a runtime that checked one
     // graph-wide counter every model node incremented, so the card promised a
@@ -170,8 +170,7 @@ describe('grader criteria — prebuilt and overridable', () => {
  * not gate" as an equally fine default.
  */
 describe('the revise port teaches the fix', () => {
-  const revisePort = () =>
-    graderNode.ports({}).find((p) => p.id === 'revise');
+  const revisePort = () => graderNode.ports({}).find((p) => p.id === 'revise');
 
   it('tells a developer to wire the router that dispatched to the answerer, behind a fan-out', () => {
     const description = revisePort()?.description ?? '';

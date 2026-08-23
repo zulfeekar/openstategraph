@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applicableSuggestion, type EditorFacts,
+import {
+  applicableSuggestion,
+  type EditorFacts,
   suggestionOutcome,
   unreadyFields,
 } from './suggestion';

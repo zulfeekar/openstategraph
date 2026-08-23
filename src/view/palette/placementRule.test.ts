@@ -92,7 +92,9 @@ describe('the palette’s placement rule', () => {
     // mechanical half landed; this half lived in a source comment, so every
     // user met the rule by accident.
     expect(palette).toContain('palette-howto');
-    const howto = collapsedWhitespace(rowSource('Palette').match(/<p className="palette-howto">([\s\S]*?)<\/p>/)?.[1] ?? '');
+    const howto = collapsedWhitespace(
+      rowSource('Palette').match(/<p className="palette-howto">([\s\S]*?)<\/p>/)?.[1] ?? '',
+    );
     expect(howto).toMatch(/Drag any of these onto the canvas/);
     expect(howto).toMatch(/Tab to one and press Enter/);
   });

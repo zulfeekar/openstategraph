@@ -117,19 +117,18 @@ describe('the word a user never reads', () => {
  */
 describe('the number that is not a lap count', () => {
   it('is never called iterations or turns anywhere a person reads', () => {
-    const offences = [
-      ...sourceFiles(join(HERE)),
-      ...sourceFiles(join(HERE, '..', 'core')),
-    ].flatMap((path) => {
-      const source = code(readFileSync(path, 'utf8'));
-      const found: string[] = [];
-      for (const match of source.matchAll(LITERALS)) {
-        const text = match[1] ?? match[2] ?? match[3] ?? '';
-        if (!/max iterations|max turns|maximum iterations/i.test(text)) continue;
-        found.push(`${path}: ${text.trim()}`);
-      }
-      return found;
-    });
+    const offences = [...sourceFiles(join(HERE)), ...sourceFiles(join(HERE, '..', 'core'))].flatMap(
+      (path) => {
+        const source = code(readFileSync(path, 'utf8'));
+        const found: string[] = [];
+        for (const match of source.matchAll(LITERALS)) {
+          const text = match[1] ?? match[2] ?? match[3] ?? '';
+          if (!/max iterations|max turns|maximum iterations/i.test(text)) continue;
+          found.push(`${path}: ${text.trim()}`);
+        }
+        return found;
+      },
+    );
 
     expect(
       offences,

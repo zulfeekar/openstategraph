@@ -72,9 +72,7 @@ describe('who may write to a node', () => {
       'WorkflowModel writes through the seam, so the extractor must find it — if this fails the pattern has gone stale, not the codebase clean',
     ).toBe(true);
 
-    const offenders = writers.filter(
-      (path) => !ALLOWED.some((allowed) => path.endsWith(allowed)),
-    );
+    const offenders = writers.filter((path) => !ALLOWED.some((allowed) => path.endsWith(allowed)));
 
     expect(
       offenders,

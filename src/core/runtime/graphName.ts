@@ -57,9 +57,7 @@ export interface NamedNode {
  *   whole reason for not reversing was that naming the wrong node is the bad
  *   outcome, and first-wins is a reversal with better manners.
  */
-export function displayNamesByGraphName(
-  nodes: readonly NamedNode[],
-): ReadonlyMap<string, string> {
+export function displayNamesByGraphName(nodes: readonly NamedNode[]): ReadonlyMap<string, string> {
   const names = new Map<string, string>();
   const contested = new Set<string>();
   for (const node of nodes) {

@@ -88,9 +88,7 @@ describe('run context declaration', () => {
           { key: 'tenant', type: 'number' },
         ],
       }),
-    ).toEqual([
-      "Run context declares 'tenant' more than once — each key may appear only once.",
-    ]);
+    ).toEqual(["Run context declares 'tenant' more than once — each key may appear only once."]);
   });
 
   it('refuses a non-finite default', () => {

@@ -93,8 +93,7 @@ export const PLATFORM_TOOL_NODES = [
   backendTool({
     id: 'tool.sql-get-schema',
     label: 'Get Schema',
-    description:
-      'Columns, types and foreign keys for one table in the configured SQL database.',
+    description: 'Columns, types and foreign keys for one table in the configured SQL database.',
     keywords: ['sql', 'sqlite', 'schema', 'columns', 'foreign key', 'database'],
     fields: [
       {

@@ -480,6 +480,8 @@ describe('orphanNodeRule', () => {
     expect(workbench.registry.nodeTypes.require('tool.knowledge-lookup').bindsWithoutWiring).toBe(
       true,
     );
-    expect(workbench.registry.nodeTypes.require('tool.web-search').bindsWithoutWiring).toBeUndefined();
+    expect(
+      workbench.registry.nodeTypes.require('tool.web-search').bindsWithoutWiring,
+    ).toBeUndefined();
   });
 });

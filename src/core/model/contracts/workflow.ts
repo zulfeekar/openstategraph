@@ -177,7 +177,9 @@ const fold = (key: string): string => key.toLowerCase().replace(/[^a-z0-9]/g, ''
  * a mistake is cheapest to fix, and a second wording would be a second thing to
  * keep in step.
  */
-export function runContextProblems(settings: Readonly<Record<string, unknown>> | undefined): string[] {
+export function runContextProblems(
+  settings: Readonly<Record<string, unknown>> | undefined,
+): string[] {
   const declared = settings?.[RUN_CONTEXT_SETTING];
   if (declared === undefined || declared === null) return [];
   if (!Array.isArray(declared)) {
@@ -229,7 +231,9 @@ export function runContextProblems(settings: Readonly<Record<string, unknown>> |
       }
     }
     if (seen.has(key)) {
-      problems.push(`Run context declares '${key}' more than once — each key may appear only once.`);
+      problems.push(
+        `Run context declares '${key}' more than once — each key may appear only once.`,
+      );
     }
     seen.add(key);
   });
