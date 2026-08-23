@@ -507,15 +507,29 @@ echo "    exited $code, printing the two-package cycle it walked"
 echo "==> a saved settings.recursionLimit reaches the graph"
 # `5543a90`. The number was held at four layers and read at none, so every run
 # took 50 whatever the document said — a defect with no symptom until a
-# runaway loop costs somebody money. Provable from the wheel because
-# `GraphRecursionError` names the limit it hit, and 10 can only have come from
-# the document: `DEFAULT_STEP_BUDGET` is 50.
+# runaway loop costs somebody money.
 #
 # The loop is a real one — agent, grader, `revise` back to the agent — driven
 # by a fake model that answers `fail` to everything, so the grader never
 # passes and only the budget can stop it. `maxAttempts` is set past the budget
 # on purpose: the grader's own attempt ceiling would otherwise end the loop
 # first and the assertion would be about that instead.
+#
+# **This block used to assert `GraphRecursionError`, and that assertion went
+# stale rather than the feature breaking** (`launch-readiness` 14). Until
+# `organisms-first-class` 56 a starved loop crashed, and the exception printed
+# the limit it hit — so 10 could only have come from the document, and the
+# crash was the whole observable. 56 replaced it with the `RemainingSteps`
+# guard `CLAUDE.md` has asked for since the cycles section was written: the
+# grader force-passes, the wired `pass` edge runs, and the answer is published.
+# The loop still terminates and is still bounded; only the evidence moved.
+#
+# So the proof is now a *comparison*, because publishing an answer is what a
+# run at the default 50 does too. Two runs of the same fixture — the document's
+# number, then `DEFAULT_STEP_BUDGET` — and the saved one must buy strictly
+# fewer attempts. Compared rather than pinned to literals (3 and 23 today), so
+# the claim stays *the document's number was read* rather than *a lap costs
+# exactly this much*, which the floor constant or a node count could move.
 mkdir -p "$PROJECT/workflows/proof-loop"
 cat >"$PROJECT/workflows/proof-loop/workflow.json" <<'LOOP'
 {"version": 1, "name": "Proof Loop", "published": false,
@@ -533,7 +547,6 @@ run python -c "
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langgraph.errors import GraphRecursionError
 from openstategraph import load_workflow
 from openstategraph.step_budget import DEFAULT_STEP_BUDGET
 
@@ -546,15 +559,21 @@ class Fixed(GenericFakeChatModel):
     def bind_tools(self, tools, **kw):
         return self
 
+CAP = 50
 assert DEFAULT_STEP_BUDGET != 10, 'the default moved onto the fixture — pick another number'
 workflow = load_workflow('workflows/proof-loop', model=Fixed('fail\nnever good enough'))
-try:
-    answer = workflow.ask('go')
-except GraphRecursionError as error:
-    assert 'limit of 10' in str(error), str(error)
-    print('    the loop stopped at the document\'s 10, not the default', DEFAULT_STEP_BUDGET)
-else:
-    raise AssertionError('the loop ended on its own: ' + repr(str(answer))[:120])
+saved = workflow.ask('go')
+default = workflow.ask('go', recursion_limit=DEFAULT_STEP_BUDGET)
+
+budget_stop = [line for line in saved.warnings if 'step budget' in line]
+assert budget_stop, 'the run does not say the step budget stopped it: ' + repr(saved.warnings)
+assert not [line for line in saved.warnings if 'ran out of attempts' in line], (
+    'the budget stop is dressed as an attempt cap: ' + repr(saved.warnings))
+assert saved.attempts < CAP, 'the grader hit its own cap, so this proves nothing about the budget: ' + repr(saved.attempts)
+assert saved.attempts < default.attempts, (
+    'the saved 10 bought as many attempts as the default ' + repr(DEFAULT_STEP_BUDGET) +
+    ', so the document was not read: ' + repr((saved.attempts, default.attempts)))
+print('    the document\'s 10 bought', saved.attempts, 'attempts where the default', DEFAULT_STEP_BUDGET, 'buys', default.attempts)
 "
 rm -rf "$PROJECT/workflows/proof-loop"
 
