@@ -592,7 +592,9 @@ class WorkflowLibrary:
             "error": None,
         }
 
-    def save_draft(self, slug: str | None, name: str, document: Any) -> dict[str, Any]:
+    def save_draft(
+        self, slug: str | None, name: str | None, document: Any
+    ) -> dict[str, Any]:
         """Write a DRAFT. Never publishes, never overwrites a published one.
 
         Validate-before-save is enforced here, server-side, rather than trusted
@@ -607,8 +609,36 @@ class WorkflowLibrary:
         `None` asks the store to mint a free slug and reports which one it got.
         Naming a slug still means "this exact package", which is what a client
         updating a draft it created earlier wants.
+
+        **`name` is optional too, and reading it tolerates the shape
+        `compile_workflow` hands back** (launch-readiness 22). Its envelope is
+        `{version, name, savedAt, published, document}` — the same envelope
+        `normalize_document` already unwraps for `document` itself, so a
+        client that passes that envelope straight through as `document` is
+        composing the two tools exactly as their outputs invite. Deriving
+        `name` from that same payload, rather than demanding it a second time
+        as a sibling argument, is what makes the pair actually compose. The
+        precedence — explicit argument, then the envelope's own `name`, then
+        the inner document's `name`, then the slug, then a last-resort default
+        — mirrors `workflow_store._summarize`'s `payload.get("name") or
+        document.get("name") or slug`, the same fallback this codebase already
+        uses when reading a saved `workflow.json` back. This is reading
+        tolerantly, not trusting loosely: what gets written is still whatever
+        `normalize_document` + `_validate` resolve and accept below, exactly
+        as before.
         """
         store = self._services.store
+        envelope = document if isinstance(document, dict) else {}
+        inner = envelope.get("document")
+        inner = inner if isinstance(inner, dict) else {}
+        resolved_name = (
+            name
+            or envelope.get("name")
+            or inner.get("name")
+            or slug
+            or "Untitled workflow"
+        )
+        name = str(resolved_name)
         try:
             resolved = normalize_document(document)
         except DocumentError as exc:
@@ -1006,7 +1036,9 @@ def build_mcp_server(
         return library.plugin_export(slug)
 
     @server.tool(name="save_workflow_draft")
-    def save_workflow_draft(slug: str | None, name: str, document: Any) -> dict[str, Any]:
+    def save_workflow_draft(
+        slug: str | None, document: Any, name: str | None = None
+    ) -> dict[str, Any]:
         """Save a workflow into this deployment's library AS A DRAFT.
 
         Optional — the primary flow keeps the artifact in your own repository
@@ -1021,6 +1053,13 @@ def build_mcp_server(
         `my-workflow`, a second gets its own. Naming a slug means "update this
         exact package"; do that only for one you saved earlier, because a slug
         you derived from a name yourself may belong to somebody else's draft.
+
+        **`document` accepts `compile_workflow`'s own return value.** Pass its
+        `document` field straight through — the envelope
+        `{version, name, savedAt, published, document}` — and this tool reads
+        the name out of it. `name` is only needed here if you want to save
+        under a different title than the one you compiled with, or if you are
+        handing in a bare document that never went through `compile_workflow`.
         """
         return library.save_draft(slug, name, document)
 

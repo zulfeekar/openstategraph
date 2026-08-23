@@ -360,6 +360,80 @@ class TestDraftsOnlyWrites:
         assert payload["published"] is False
         assert payload["document"]["nodes"][0]["id"] == "in1"
 
+    def test_the_compile_envelope_can_be_passed_straight_through_as_document(
+        self, services: WorkflowServices
+    ) -> None:
+        """Ticket 22. `compile_workflow` returns
+        `{version, name, savedAt, published, document}` — the obvious thing to
+        do with that output is hand it straight to `save_workflow_draft` as
+        `document`, without re-supplying `name` a second time. That envelope
+        already carries the name; the save must read it from there."""
+        envelope = WorkflowArtifacts().compile(_linear_document(), name="Linear")["document"]
+        library = WorkflowLibrary(services)
+
+        result = library.save_draft("chinook-questions", None, envelope)
+
+        assert result["saved"] is True, result["findings"]
+        payload = json.loads(
+            (services.store.root / "chinook-questions" / "workflow.json").read_text()
+        )
+        assert payload["name"] == "Linear"
+        assert payload["document"]["nodes"][0]["id"] == "in1"
+
+    def test_an_explicit_name_still_overrides_the_envelopes_own_name(
+        self, services: WorkflowServices
+    ) -> None:
+        envelope = WorkflowArtifacts().compile(_linear_document(), name="Linear")["document"]
+        library = WorkflowLibrary(services)
+
+        result = library.save_draft("chinook-questions", "Renamed", envelope)
+
+        assert result["saved"] is True
+        payload = json.loads(
+            (services.store.root / "chinook-questions" / "workflow.json").read_text()
+        )
+        assert payload["name"] == "Renamed"
+
+    def test_a_malformed_document_inside_the_envelope_shape_is_still_refused(
+        self, services: WorkflowServices
+    ) -> None:
+        """Tolerant reading is not permission to skip validation: an envelope
+        whose inner document is malformed must still be refused, not written
+        because it superficially resembles a compile envelope."""
+        library = WorkflowLibrary(services)
+        fake_envelope = {
+            "version": 1,
+            "name": "Looks legit",
+            "savedAt": "2026-08-24T00:00:00Z",
+            "published": False,
+            "document": {"version": 2, "nodes": []},
+        }
+
+        result = library.save_draft("bad-envelope", None, fake_envelope)
+
+        assert result["saved"] is False
+        assert result["findings"] == ["The document needs a non-empty 'nodes' list."]
+        assert not (services.store.root / "bad-envelope").exists()
+
+    def test_the_mcp_tool_itself_accepts_the_envelope_with_no_name_argument(
+        self, services: WorkflowServices
+    ) -> None:
+        """The exact shape of the reported bug: calling the actual MCP tool
+        (not the library directly) with `slug` and `document` only, the way a
+        client composing `compile_workflow` -> `save_workflow_draft` would,
+        must not raise a pydantic 'name Field required' error."""
+        server = build_mcp_server(services)
+        envelope = WorkflowArtifacts().compile(_linear_document(), name="Linear")["document"]
+
+        result = asyncio.run(
+            server.call_tool(
+                "save_workflow_draft", {"slug": "chinook-questions", "document": envelope}
+            )
+        )
+
+        content = result[1] if isinstance(result, tuple) else result
+        assert content.get("saved") if isinstance(content, dict) else True
+
     def test_omitting_the_slug_mints_one_rather_than_replacing_a_draft(
         self, services: WorkflowServices
     ) -> None:
