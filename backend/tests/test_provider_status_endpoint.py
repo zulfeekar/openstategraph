@@ -27,7 +27,7 @@ CREDENTIALS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_
 def _providers(client: TestClient) -> list[dict]:
     response = client.get("/api/providers")
     assert response.status_code == 200, response.text
-    return response.json()
+    return response.json()["providers"]
 
 
 class TestItReportsWhatTheServerHolds:
@@ -193,6 +193,49 @@ class TestTheHint:
         body = TestClient(create_app()).get("/api/providers").text
         for fragment in ("SECRETBODY", "9999", "sk-ant"):
             assert fragment not in body
+
+
+class TestTheEnvironmentFooter:
+    """`providers-and-credentials/13` — the server names its own source too.
+
+    `openstategraph providers` and this endpoint can read two different
+    environments: the CLI loads `.env` itself before it runs;
+    `create_app` never does. A reader who put keys in `.env` could not tell,
+    from this endpoint alone, whether a server they started actually has
+    them. `environment` is that missing sentence.
+    """
+
+    def test_the_envelope_carries_an_environment_note(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        response = TestClient(create_app()).get("/api/providers")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert isinstance(body, dict)
+        assert isinstance(body["providers"], list)
+        assert isinstance(body["environment"], str)
+        assert body["environment"]
+
+    def test_it_says_this_endpoint_does_not_read_it_itself(self) -> None:
+        body = TestClient(create_app()).get("/api/providers").json()
+        # This route deliberately never calls `load_env_file` — see the
+        # module docstring — so it must never claim to have read the file.
+        assert "(read)" not in body["environment"]
+
+    def test_it_names_a_nearby_env_file_when_one_exists(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-whatever\n")
+        monkeypatch.chdir(tmp_path)
+        body = TestClient(create_app()).get("/api/providers").json()
+        assert str(tmp_path / ".env") in body["environment"]
+
+    def test_no_nearby_file_says_so_plainly(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        body = TestClient(create_app()).get("/api/providers").json()
+        assert "No .env file was found" in body["environment"]
 
 
 class TestVerifyMakesTheRealCall:

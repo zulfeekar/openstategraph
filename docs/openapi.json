@@ -822,6 +822,29 @@
         "title": "PluginToolCapabilityResponse",
         "type": "object"
       },
+      "ProviderStatusListResponse": {
+        "description": "`GET /api/providers` \u2014 every row, plus which environment this server read.\n\n`providers-and-credentials/13`: the CLI and the running server can read\ntwo different environments \u2014 `openstategraph providers` loads `.env`\nitself; `create_app` never does, deliberately (`dotenv.py`'s own\ndocstring). Both answers were honest about the process that produced\nthem and neither said which process that was, so a reader with keys in\n`.env` could not tell from either surface whether a server they started\nactually has them. `environment` is that missing sentence, computed the\nsame way the CLI's own footer is (`dotenv.environment_source_note`).",
+        "properties": {
+          "environment": {
+            "description": "Which .env is nearest this process, and whether this endpoint reads it automatically (it does not \u2014 see the module docstring).",
+            "title": "Environment",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderStatusResponse"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers",
+          "environment"
+        ],
+        "title": "ProviderStatusListResponse",
+        "type": "object"
+      },
       "ProviderStatusResponse": {
         "description": "What **the server** is configured for \u2014 names and booleans only.\n\nDeliberately carries no key material, not even masked. A mask still leaks\nlength, prefix and entropy, and it would contradict\n`chat_model.credential_error_from`, which drops OpenAI's own\n`sk-defin****-key` out of its 401 rather than forwarding it. Naming the\n*variable* is the fact a person can act on; a mask of the value is not.\n\nThis exists because \"Models and credentials\" could only describe the\n**browser's** credential store, and told a QA analyst the product runs\n\"offline against mock data\" on a server with three working keys.",
         "properties": {
@@ -2305,18 +2328,14 @@
     },
     "/api/providers": {
       "get": {
-        "description": "What the **server** can use, so a client stops guessing.\n\nThe editor's \"Models and credentials\" dialog could only read the\n*browser's* credential store, so it told a QA analyst the product\n\"runs offline against mock data\" on a server holding three working\nkeys. `/api/health` answers one boolean for any provider, which is\nenough to light a dot and not enough to say which key is missing.\n\n**Names and booleans only \u2014 never key material, not even masked.** A\nmask leaks length, prefix and entropy, and `credential_error_from`\nalready drops OpenAI's own masked fragment out of its 401 rather than\nforwarding it. What a person can act on is *which variable* did it.\n\nPresence, not validity: a key can be set, well-formed and rejected for\nwant of credit, which is exactly what happened here the day this was\nwritten. Verifying costs a real model call and belongs behind a button\nsomebody presses.",
+        "description": "What the **server** can use, so a client stops guessing.\n\nThe editor's \"Models and credentials\" dialog could only read the\n*browser's* credential store, so it told a QA analyst the product\n\"runs offline against mock data\" on a server holding three working\nkeys. `/api/health` answers one boolean for any provider, which is\nenough to light a dot and not enough to say which key is missing.\n\n**Names and booleans only \u2014 never key material, not even masked.** A\nmask leaks length, prefix and entropy, and `credential_error_from`\nalready drops OpenAI's own masked fragment out of its 401 rather than\nforwarding it. What a person can act on is *which variable* did it.\n\nPresence, not validity: a key can be set, well-formed and rejected for\nwant of credit, which is exactly what happened here the day this was\nwritten. Verifying costs a real model call and belongs behind a button\nsomebody presses.\n\n**`environment` names the second thing a reader could not previously\nsee** (`providers-and-credentials/13`): the rows above answer \"what does\nthis process's environment hold\", and that process reads `.env` only if\nsomething loaded it before this server started \u2014 `create_app` never\ndoes, on purpose. Without this, a reader who put keys in `.env` and\nstarted a bare `uvicorn` line had no way to learn, from this endpoint,\nthat those keys never arrived.",
         "operationId": "provider_status_api_providers_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderStatusResponse"
-                  },
-                  "title": "Response Provider Status Api Providers Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ProviderStatusListResponse"
                 }
               }
             },

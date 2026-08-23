@@ -103,7 +103,10 @@ describe('probeServerReadiness', () => {
     const reachable = await probeServerReadiness(
       {
         health: async () => ({ ok: true, value: { modelConfigured: true } }),
-        providers: async () => ({ ok: true, value: [status('ollama', true)] }),
+        providers: async () => ({
+          ok: true,
+          value: { rows: [status('ollama', true)], environment: 'No .env file was found near this process.' },
+        }),
       },
       store,
     );

@@ -192,6 +192,35 @@ class TestItSaysNothingWasCalled:
         assert _cli(tmp_path).returncode == 0
 
 
+class TestItNamesTheEnvironmentItRead:
+    """`providers-and-credentials/13` — the CLI names its `.env`, so a reader
+    can tell whether a server started some other way has the same keys.
+
+    `_cli` already runs from an empty `tmp_path` with no `.env` in it (that
+    is what keeps the developer's real file out of every other test in this
+    module) — exactly the sandbox this class needs to test the *absence*
+    case, and it writes its own `.env` into that same directory to test the
+    *presence* case.
+    """
+
+    def test_no_env_file_says_so_plainly(self, tmp_path: Path) -> None:
+        out = _cli(tmp_path).stdout
+        assert "No .env file was found" in out, out
+
+    def test_a_found_env_file_is_named_and_marked_read(self, tmp_path: Path) -> None:
+        (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-a\n")
+        out = _cli(tmp_path, ANTHROPIC_API_KEY="sk-a").stdout
+        assert str(tmp_path / ".env") in out, out
+        assert "(read)" in out, out
+
+    def test_it_warns_a_server_started_another_way_does_not_read_it(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-a\n")
+        out = _cli(tmp_path, ANTHROPIC_API_KEY="sk-a").stdout
+        assert "does not read it automatically" in out, out
+
+
 class TestTheOptInCheck:
     """The only certain answer, priced and opt-in.
 

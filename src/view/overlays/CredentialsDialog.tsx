@@ -50,6 +50,9 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
   // it told a QA analyst the product runs "offline against mock data" on a
   // server with three working keys (ticket 04).
   const [onServer, setOnServer] = useState<readonly ProviderStatus[] | null>(null);
+  // Which `.env` the server's own process read — or didn't — in its own
+  // words (providers-and-credentials/13). `null` until it answers.
+  const [serverEnvironment, setServerEnvironment] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     void new RuntimeClient().providers().then((result) => {
@@ -58,8 +61,11 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
       // server, and the picker, the reasoning row and the onboarding hint went
       // on contradicting it from browser-local keys. Every answer this dialog
       // gets is now the answer they read (providers-and-credentials 06).
-      serverReadiness.recordProviders(result.value);
-      if (live) setOnServer(result.value);
+      serverReadiness.recordProviders(result.value.rows);
+      if (live) {
+        setOnServer(result.value.rows);
+        setServerEnvironment(result.value.environment);
+      }
     });
     return () => {
       live = false;
@@ -142,6 +148,13 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
           variable for your provider, and restart the backend.
         </span>
       </p>
+
+      {/* Which environment the rows above describe — providers-and-credentials/13.
+          `openstategraph providers` and this server can read two different
+          `.env` files; this is that answer, in the server's own words, so a
+          reader with keys in `.env` can tell whether the server they started
+          actually has them. */}
+      {serverEnvironment ? <p className="provider__hint">Server environment: {serverEnvironment}</p> : null}
 
       {workbench.providers.list().map((provider) => {
         // The redacted form is all this component can ever obtain.

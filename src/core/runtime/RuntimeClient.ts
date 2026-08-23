@@ -43,6 +43,22 @@ export interface ProviderStatus {
   readonly keyHint: string | null;
 }
 
+/**
+ * `GET /api/providers`'s whole answer — the rows, plus which environment
+ * this server read to produce them.
+ *
+ * Mirrors `ProviderStatusListResponse` (providers-and-credentials/13): the
+ * CLI and a running server can read two different `.env` files —
+ * `openstategraph providers` loads one itself; `create_app` never does. A
+ * reader with keys in `.env` could not tell, from this endpoint alone,
+ * whether a server they started actually has them. `environment` is that
+ * missing sentence, in the server's own words.
+ */
+export interface ProviderStatusList {
+  readonly rows: readonly ProviderStatus[];
+  readonly environment: string;
+}
+
 export interface RunRequest {
   /** A `workflow.json` document, exactly as the serializer emits it. */
   readonly workflow: unknown;
@@ -1175,13 +1191,14 @@ export class RuntimeClient implements IRuntimeClient {
    * Presence, not validity: a key can be set, well-formed and rejected for
    * want of credit. `configured` means "this server has what it needs to try".
    */
-  async providers(): Promise<Result<readonly ProviderStatus[], string>> {
+  async providers(): Promise<Result<ProviderStatusList, string>> {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/api/providers`);
       if (!response.ok) return Err(`Could not read providers (${response.status})`);
-      const rows = (await response.json()) as Record<string, unknown>[];
-      return Ok(
-        rows.map((row) => ({
+      const body = (await response.json()) as Record<string, unknown>;
+      const rows = Array.isArray(body['providers']) ? body['providers'] : [];
+      return Ok({
+        rows: (rows as Record<string, unknown>[]).map((row) => ({
           name: String(row['name'] ?? ''),
           label: String(row['label'] ?? ''),
           configured: row['configured'] === true,
@@ -1189,7 +1206,8 @@ export class RuntimeClient implements IRuntimeClient {
           envVars: Array.isArray(row['env_vars']) ? row['env_vars'].map(String) : [],
           keyHint: typeof row['key_hint'] === 'string' ? row['key_hint'] : null,
         })),
-      );
+        environment: typeof body['environment'] === 'string' ? body['environment'] : '',
+      });
     } catch {
       return Err('Could not reach the runtime');
     }

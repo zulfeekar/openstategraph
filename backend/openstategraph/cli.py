@@ -1797,12 +1797,17 @@ def cmd_providers(args: argparse.Namespace) -> int:
     the same answer to the same question.
     """
     from openstategraph.config_file import find_config_file
+    from openstategraph.dotenv import environment_source_note
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     catalogue = provider_catalogue()
     config = find_config_file()
     default = catalogue.elected_default()
     print(f"config file: {config if config else '(none)'}")
+    # The line providers-and-credentials/13 was filed over: this command reads
+    # `.env` (`console_main` loaded it before this ran) and a server does not,
+    # unless it too was started through `openstategraph providers`/`serve`.
+    print(environment_source_note(loaded=True))
     # The line the list was missing: which provider won, and why. Everything
     # else here answers "what could work"; only this answers the question the
     # reader actually arrived with (install-experience T3).

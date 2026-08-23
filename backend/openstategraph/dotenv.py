@@ -145,4 +145,42 @@ def load_env_file(start: Path | str | None = None) -> Path | None:
     return path
 
 
-__all__ = ["ENV_FILE_NAME", "find_env_file", "load_env_file", "parse_env_file"]
+def environment_source_note(*, loaded: bool, start: Path | str | None = None) -> str:
+    """One sentence naming the `.env` nearest this process — the fact
+    `providers-and-credentials/13` found two surfaces answering without.
+
+    `openstategraph providers` (`loaded=True`) actually populated
+    `os.environ` from this file, via `cli.console_main` before this command
+    ran. `/api/providers` (`loaded=False`) never does — `create_app` does not
+    call `load_env_file`, for the reason this module's own docstring gives —
+    so a nearby file may or may not be the source of this process's
+    environment; that depends entirely on how the server was *started*
+    (`openstategraph serve` loads it the same way the CLI does; a bare
+    `uvicorn` line does not, unless something else exported the variables
+    first).
+
+    Both callers name the same file so a reader can tell whether the two
+    answers describe one environment or two.
+    """
+    path = find_env_file(start)
+    if path is None:
+        return "No .env file was found near this process."
+    if loaded:
+        return (
+            f".env: {path} (read) — a server started outside `openstategraph providers` "
+            "or `openstategraph serve` does not read it automatically."
+        )
+    return (
+        f".env: {path} — found nearby, but this server does not read it itself. It only "
+        "reaches this process if something loaded it before startup, such as "
+        "`openstategraph serve` or `scripts/dev.sh`; a bare `uvicorn` line does not."
+    )
+
+
+__all__ = [
+    "ENV_FILE_NAME",
+    "environment_source_note",
+    "find_env_file",
+    "load_env_file",
+    "parse_env_file",
+]

@@ -165,6 +165,28 @@ class ProviderStatusResponse(BaseModel):
     )
 
 
+class ProviderStatusListResponse(BaseModel):
+    """`GET /api/providers` — every row, plus which environment this server read.
+
+    `providers-and-credentials/13`: the CLI and the running server can read
+    two different environments — `openstategraph providers` loads `.env`
+    itself; `create_app` never does, deliberately (`dotenv.py`'s own
+    docstring). Both answers were honest about the process that produced
+    them and neither said which process that was, so a reader with keys in
+    `.env` could not tell from either surface whether a server they started
+    actually has them. `environment` is that missing sentence, computed the
+    same way the CLI's own footer is (`dotenv.environment_source_note`).
+    """
+
+    providers: list[ProviderStatusResponse]
+    environment: str = Field(
+        description=(
+            "Which .env is nearest this process, and whether this endpoint "
+            "reads it automatically (it does not — see the module docstring)."
+        )
+    )
+
+
 class ProviderVerifyResponse(BaseModel):
     """Did a real call to this provider work, just now.
 

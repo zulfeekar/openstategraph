@@ -9,18 +9,22 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from openstategraph.api.schemas import ProviderStatusResponse, ProviderVerifyResponse
+from openstategraph.api.schemas import (
+    ProviderStatusListResponse,
+    ProviderStatusResponse,
+    ProviderVerifyResponse,
+)
 
 router = APIRouter()
 
 
 @router.get(
     "/api/providers",
-    response_model=list[ProviderStatusResponse],
+    response_model=ProviderStatusListResponse,
     summary="Which providers this server is configured for",
     tags=["Operations"],
 )
-def provider_status() -> list[ProviderStatusResponse]:
+def provider_status() -> ProviderStatusListResponse:
     """What the **server** can use, so a client stops guessing.
 
     The editor's "Models and credentials" dialog could only read the
@@ -38,10 +42,19 @@ def provider_status() -> list[ProviderStatusResponse]:
     want of credit, which is exactly what happened here the day this was
     written. Verifying costs a real model call and belongs behind a button
     somebody presses.
+
+    **`environment` names the second thing a reader could not previously
+    see** (`providers-and-credentials/13`): the rows above answer "what does
+    this process's environment hold", and that process reads `.env` only if
+    something loaded it before this server started — `create_app` never
+    does, on purpose. Without this, a reader who put keys in `.env` and
+    started a bare `uvicorn` line had no way to learn, from this endpoint,
+    that those keys never arrived.
     """
+    from openstategraph.dotenv import environment_source_note
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
-    return [
+    rows = [
         ProviderStatusResponse(
             name=here.spec.name,
             label=here.spec.display,
@@ -61,6 +74,10 @@ def provider_status() -> list[ProviderStatusResponse]:
         )
         for here in map(ProviderEnvironment, provider_catalogue().list())
     ]
+    return ProviderStatusListResponse(
+        providers=rows,
+        environment=environment_source_note(loaded=False),
+    )
 
 @router.post(
     "/api/providers/{name}/verify",

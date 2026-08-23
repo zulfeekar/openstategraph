@@ -1,4 +1,4 @@
-import type { ProviderStatus } from '@core/runtime/RuntimeClient';
+import type { ProviderStatus, ProviderStatusList } from '@core/runtime/RuntimeClient';
 
 /**
  * Whether a model can actually run — the **one** answer three canvas surfaces
@@ -122,7 +122,7 @@ export const serverReadiness = new ServerReadiness();
 /** The two calls that answer "can this install run a model?", in one place. */
 export interface ReadinessSource {
   health(): Promise<{ ok: boolean; value?: { readonly modelConfigured: boolean } }>;
-  providers(): Promise<{ ok: boolean; value?: readonly ProviderStatus[] }>;
+  providers(): Promise<{ ok: boolean; value?: ProviderStatusList }>;
 }
 
 /**
@@ -143,6 +143,6 @@ export async function probeServerReadiness(
   if (!health.ok) return false;
   if (health.value) store.recordHealth(health.value.modelConfigured);
   const listed = await client.providers();
-  if (listed.ok && listed.value) store.recordProviders(listed.value);
+  if (listed.ok && listed.value) store.recordProviders(listed.value.rows);
   return true;
 }
