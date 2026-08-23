@@ -280,6 +280,27 @@ class TestStatelessCompile:
     def test_a_clean_document_warns_about_nothing(self) -> None:
         assert WorkflowArtifacts().compile(_linear_document())["warnings"] == []
 
+    def test_the_shipped_sql_qa_example_is_not_accused_of_missing_tools(self) -> None:
+        """`launch-readiness` 17. `sql-qa`'s three tool nodes
+        (`tool.sql-list-tables`, `tool.sql-get-schema`, `tool.sql-query`) are
+        `SQL_EXPLORER_TOOLS` — process-wide built-ins, not a package-local
+        `tools/` discovery. Resolving them needs no workflow root and no
+        slug, so this stateless door can and must bind them exactly as the
+        CLI's `validate` does, which reports this same document `VALID` with
+        every tool bound. Before the fix, `compile_workflow` bound an empty
+        tool registry and reported all three as unimplemented — an
+        accusation a client model could never satisfy, since the document
+        was correct all along.
+        """
+        from openstategraph import examples
+
+        document = examples.get("sql-qa").document()
+
+        result = WorkflowArtifacts().compile(document)
+
+        assert result["validated"] is True
+        assert not any("No implementation for tool" in w for w in result["warnings"])
+
     def test_compiling_writes_nothing_to_the_workflows_root(
         self, services: WorkflowServices
     ) -> None:

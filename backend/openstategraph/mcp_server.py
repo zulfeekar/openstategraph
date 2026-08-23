@@ -405,17 +405,35 @@ class WorkflowArtifacts:
         The warnings matter more here than anywhere else in the codebase. This
         path is stateless, so it holds no workflow library and no package: a
         `workflow.subgraph` naming a hosted child, or an agent bound to a tool
-        that lives in a package folder, resolves to nothing. The runtime already
-        records exactly that (`unresolved_subgraphs`/`unresolved_tools`), and
-        `runtime_warnings` already spells it out — surfacing it is the whole
-        difference between "your graph is fine" and "your graph is fine here,
-        and will be missing three capabilities when you run it for real".
+        that lives in a package's own `tools/` folder, resolves to nothing.
+        The runtime already records exactly that
+        (`unresolved_subgraphs`/`unresolved_tools`), and `runtime_warnings`
+        already spells it out — surfacing it is the whole difference between
+        "your graph is fine" and "your graph is fine here, and will be
+        missing capabilities when you run it for real".
+
+        **Built-in tools are not in that position, and must not be reported
+        as though they were** (`launch-readiness` 17). `build_tool_registry`
+        layers built-ins and installed plugins under a workflow's own
+        `tools/` — and the first two layers need no slug and no package root
+        at all, exactly like `get_node_vocabulary`'s catalogue. Passing no
+        tools here bound *nothing*, so the shipped `sql-qa` example — three
+        `SQL_EXPLORER_TOOLS` nodes, no package-local tool in sight — came back
+        accused of missing an implementation for all three, forever
+        unsatisfiable by any revision because the document was never wrong.
+        The same `(builtin, discovered)` layer the CLI and the HTTP API bind
+        from is bound here too; only the third, slug-scoped layer is out of
+        reach, because this call carries no slug to scope it to.
         """
-        from openstategraph.api.registries import runtime_warnings
+        from openstategraph.api.registries import build_tool_registry, runtime_warnings
         from openstategraph.compile.node_runtime import NodeRuntime, RunState
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
-        runtime = NodeRuntime(model=None)
+        # No slug: `build_tool_registry` skips the workflow-local layer
+        # entirely and never touches `workflow_store`, so `None` is safe —
+        # this door still has no package root to scope a slug to.
+        tools = build_tool_registry(None, None)
+        runtime = NodeRuntime(model=None, tools=tools)
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
         graph = compiler.build(document, RunState, runtime.factory(document))
