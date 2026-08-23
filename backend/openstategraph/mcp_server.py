@@ -803,6 +803,20 @@ class WorkflowRuns:
             }
 
         from openstategraph.api.registries import runtime_warnings
+        from openstategraph.compile.workflow_compiler import run_health_from_state
+
+        # `run_health_from_state` is the library door's own machinery
+        # (`workflow-gallery` 49): it reads every run-health source off
+        # finished state by name, so a source added there is never missed
+        # here. Until `workflow-gallery` 31's second half, this tool built
+        # `warnings` from `plan.warnings + runtime_warnings(runtime)` alone —
+        # the two *compile-time* channels — and never looked at `final` at
+        # all. A grader whose `revise` verdict reached no wired edge (an
+        # `unrouted` entry, same as a forced pass or a silent node) was
+        # therefore reported on `/api/runs`, `/api/runs/stream` and
+        # `load_workflow`, and shipped silently on the one door a customer's
+        # own LLM actually calls to run a workflow.
+        health = run_health_from_state(final)
 
         return {
             "answer": str(final.get("answer") or ""),
@@ -818,7 +832,9 @@ class WorkflowRuns:
             "mermaid": workflow_mermaid(
                 graph, resolved, runtime=runtime, store=self._services.store
             ),
-            "warnings": list(plan.warnings) + runtime_warnings(runtime),
+            "warnings": (
+                list(plan.warnings) + runtime_warnings(runtime) + health.failures + health.silent
+            ),
             "recursion_limit": limit,
             "error": None,
         }

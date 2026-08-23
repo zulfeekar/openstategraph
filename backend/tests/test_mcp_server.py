@@ -526,3 +526,67 @@ class TestRuns:
 
         assert "run_workflow" not in names
         assert "compile_workflow" in names
+
+    def test_an_unrouted_revise_reaches_this_doors_warnings_too(
+        self, services: WorkflowServices, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`workflow-gallery` 31's run-time channel, and the door it missed.
+
+        `/api/runs`, `/api/runs/stream` and the library door
+        (`load_workflow`) all assemble their `warnings` through
+        `run_health_from_state`, so a grader whose `revise` verdict reached no
+        wired edge is reported on every one of them (`unrouted_decision_
+        warnings`, folded into `RunHealth.silent`). This tool — the one door
+        a customer's own LLM actually calls to run a workflow — builds its
+        `warnings` from `plan.warnings + runtime_warnings(runtime)` alone and
+        never reads `final` at all, so the same silent verdict that is
+        reported everywhere else ships wordlessly here.
+        """
+        import openstategraph.compile.workflow_compiler as wc
+
+        real_build = wc.WorkflowCompiler.build
+
+        def _fake_build(self: Any, *args: Any, **kwargs: Any) -> Any:
+            graph = real_build(self, *args, **kwargs)
+
+            def _invoke(*_a: Any, **_k: Any) -> dict[str, Any]:
+                # What a real run produces when a grader's `revise` verdict
+                # reaches no wired edge: the fallback still ships `pass`, and
+                # `unrouted` is the record that it did (workflow-gallery 31).
+                return {
+                    "answer": "a draft the grader rejected",
+                    "decisions": {"grader1": "revise"},
+                    "outputs": {},
+                    "unrouted": {"grader1": "revise"},
+                }
+
+            graph.invoke = _invoke  # type: ignore[method-assign]
+            return graph
+
+        monkeypatch.setattr(wc.WorkflowCompiler, "build", _fake_build)
+
+        evaluator_optimizer = json.loads(
+            (
+                Path(__file__).resolve().parents[1]
+                / "openstategraph"
+                / "examples"
+                / "evaluator-optimizer"
+                / "workflow.json"
+            ).read_text()
+        )["document"]
+        # The ticket's own repro: the same document with its `revise` edge
+        # removed, so `grader1`'s only wired destination is `pass`.
+        evaluator_optimizer["edges"] = [
+            e
+            for e in evaluator_optimizer["edges"]
+            if e["source"] != {"nodeId": "grader1", "portId": "revise"}
+        ]
+
+        result = WorkflowRuns(services).run(document=evaluator_optimizer, question="hi")
+
+        assert result["error"] is None, result
+        # Deliberately the run-time sentence's own words ("shipped as-is"),
+        # not just "grader1" and "revise" — the compile-time UNWIRED_REVISE
+        # finding already carries both of those through `runtime_warnings`,
+        # so a looser assertion would pass even with `unrouted` never read.
+        assert any("shipped as-is" in w for w in result["warnings"]), result["warnings"]
