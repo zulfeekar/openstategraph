@@ -541,7 +541,7 @@ async function renderFlow(slug) {
   // words; this used to interpolate that empty slug straight into the path —
   // `GET /api/workflows//graph` — and render the 404 as the pane's empty
   // state, so the first minute of every install read "no compiled view: 404".
-  if (!slug) { flow.ready = true; host.textContent = "No workflows are published yet"; return; }
+  if (!slug) { flow.ready = true; host.innerHTML = 'No workflows are published yet — <a href="/">open the editor</a>, open its Workflows panel, and press Publish on one.'; return; }
   host.textContent = "compiling…";
   try {
     // `audience=customer`: the compiler's own names — `__start__`,
