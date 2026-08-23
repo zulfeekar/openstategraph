@@ -590,3 +590,57 @@ class TestRuns:
         # finding already carries both of those through `runtime_warnings`,
         # so a looser assertion would pass even with `unrouted` never read.
         assert any("shipped as-is" in w for w in result["warnings"]), result["warnings"]
+
+    def test_a_silent_worker_reaches_this_doors_warnings_too(
+        self, services: WorkflowServices, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`workflow-gallery` 18/52's fix, on the one door not checked there.
+
+        `run_health_from_state` already folds `silent_node_warnings` into
+        `RunHealth.silent`, and since `workflow-gallery` 31 (`87648b5`) this
+        tool's `warnings` includes `health.silent` — so the member-level
+        sentence a worker's empty answer earns on every other door
+        (`/api/runs`, `/api/runs/stream`, `load_workflow`) should already
+        reach an MCP client too. Nothing here had actually driven a real
+        worker fan-out through this specific door to confirm it.
+        """
+        import openstategraph.chat_model as chat_model
+
+        from conftest import RespondingModel
+
+        def _member(needle: str):
+            return lambda c: "Your role on this team" in c and needle in c
+
+        model = RespondingModel(
+            [
+                (_member("access on day one"), "Badge, laptop, VPN, repo access."),
+                (_member("onboarding agenda"), ""),
+            ],
+            default="",
+        )
+        monkeypatch.setattr(chat_model, "build_chat_model", lambda *a, **k: model)
+
+        document = json.loads(
+            (
+                Path(__file__).resolve().parents[1]
+                / "openstategraph"
+                / "examples"
+                / "archetype-orchestrator-report"
+                / "workflow.json"
+            ).read_text()
+        )["document"]
+
+        result = WorkflowRuns(services).run(
+            document=document,
+            question=(
+                "Research what a new engineer needs access on day one; "
+                "write a 30-minute onboarding agenda for them."
+            ),
+        )
+
+        assert result["error"] is None, result
+        assert any(
+            'Member "task-2" of node "worker-research"' in w
+            and "ended the turn without writing anything" in w
+            for w in result["warnings"]
+        ), result["warnings"]
