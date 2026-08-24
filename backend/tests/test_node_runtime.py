@@ -11,6 +11,7 @@ evaluation, not a unit test.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -567,6 +568,150 @@ class TestPerNodeModelResolution:
         # An unconfigured provider (no API key) must not take the whole run
         # down — the run still produces an answer from the shared default.
         assert runtime._resolve_model({"model": "openai/gpt-4.1-mini"}) is default
+
+
+class TestUnresolvedModelIsReported:
+    """`launch-readiness` 45/62 — the fallback is right, the silence was not.
+
+    All three shapes hit live in the same session: a colon typed by hand
+    (45), an empty per-node field (45's "watch for"), and an
+    `UnconfiguredProvider` from a missing provider extra (62). One shared
+    sentence, one shared source (`NodeRuntime._report_unresolved_model`).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _providers_are_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # See `TestPerNodeModelResolution._providers_are_configured`: without
+        # a key, `build_chat_model` short-circuits to `UnconfiguredProvider`
+        # before ever calling the fake `init_chat_model`.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-a-real-key")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-only-not-a-real-key")
+
+    def test_a_colon_separated_selection_is_now_accepted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        calls: list[str] = []
+        sentinel = object()
+
+        def fake_init_chat_model(key: str) -> Any:
+            calls.append(key)
+            return sentinel
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        runtime = NodeRuntime(model=object())
+        # A colon-joined model id (`gpt-oss:120b-cloud`) inside a
+        # colon-separated selection — the exact string typed by hand in
+        # `launch-readiness` 45.
+        resolved = runtime._resolve_model(
+            {"model": "anthropic:claude-haiku-4-5"}, "agent1"
+        )
+
+        # A human-typed colon reaches the model — not silently discarded
+        # into the shared default.
+        assert calls == ["anthropic:claude-haiku-4-5"]
+        assert resolved is sentinel
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
+
+    def test_an_unparseable_selection_is_reported_by_node_string_and_fallback(
+        self,
+    ) -> None:
+        default = SimpleNamespace(model="claude-haiku-4-5")
+        runtime = NodeRuntime(model=default)
+
+        resolved = runtime._resolve_model({"model": "no-separator-at-all"}, "agent1")
+        assert resolved is default
+        [subjects] = runtime.diagnostics.subjects(Finding.CAPABILITY_FAILED)
+        (sentence,) = subjects
+        assert 'Node "agent1"' in sentence
+        assert "no-separator-at-all" in sentence
+        assert "claude-haiku-4-5" in sentence
+
+    def test_an_empty_selection_stays_silent(self) -> None:
+        default = object()
+        runtime = NodeRuntime(model=default)
+
+        assert runtime._resolve_model({}, "grader1") is default
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
+        assert not runtime.diagnostics.any(Finding.MODEL_SELECTION_DEGRADED)
+
+    def test_mock_stays_silent(self) -> None:
+        default = object()
+        runtime = NodeRuntime(model=default)
+
+        assert runtime._resolve_model({"model": "mock/mock-offline"}, "agent1") is default
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
+        assert not runtime.diagnostics.any(Finding.MODEL_SELECTION_DEGRADED)
+
+    def test_an_unconfigured_provider_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import langchain.chat_models as chat_models
+
+        def fake_init_chat_model(key: str) -> Any:
+            raise ValueError(f"no credentials for {key}")
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        default = SimpleNamespace(model="claude-haiku-4-5")
+        runtime = NodeRuntime(model=default)
+
+        resolved = runtime._resolve_model({"model": "openai/gpt-4.1-mini"}, "grader1")
+
+        assert resolved is default
+        # `MODEL_SELECTION_DEGRADED`, not `CAPABILITY_FAILED`: this is an
+        # installation problem (no credential/package here), not a document
+        # defect, so it must not move `validate`'s exit code
+        # (`launch-readiness` 62 — see `REPORT_ONLY`).
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
+        [subjects] = runtime.diagnostics.subjects(Finding.MODEL_SELECTION_DEGRADED)
+        node_id, string, fallback = subjects
+        assert node_id == "grader1"
+        assert string == "openai/gpt-4.1-mini"
+        assert fallback == "claude-haiku-4-5"
+
+    def test_stays_silent_when_the_shared_default_is_itself_unconfigured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`validate`/`graph` hand `_drawing_only_model()` — an
+        `UnconfiguredProvider` — as the shared default, so it can build a
+        graph with zero credentials on disk. In that mode no model, node's
+        own choice or shared default, is ever actually called: reporting "it
+        ran on X instead" would be noise firing on every real-provider
+        example in exactly the credential-less environment `validate` is
+        promised to work in (`launch-readiness` 45/62's own regression —
+        this suppression is what keeps `youtube-trend-digest` at exit 0 with
+        no key configured).
+        """
+        import langchain.chat_models as chat_models
+        from openstategraph.chat_model import UnconfiguredProvider
+        from openstategraph.errors import MissingProviderKey
+
+        def fake_init_chat_model(key: str) -> Any:
+            raise ValueError(f"no credentials for {key}")
+
+        monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
+
+        drawing_only = UnconfiguredProvider("no credential anywhere", MissingProviderKey)
+        runtime = NodeRuntime(model=drawing_only)
+
+        resolved = runtime._resolve_model({"model": "openai/gpt-4.1-mini"}, "agent1")
+
+        assert resolved is drawing_only
+        assert not runtime.diagnostics.any(Finding.MODEL_SELECTION_DEGRADED)
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
+
+    def test_no_node_id_stays_silent_for_direct_data_callers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Pre-existing direct-`data` tests must not start emitting findings."""
+        default = object()
+        runtime = NodeRuntime(model=default)
+
+        assert runtime._resolve_model({"model": "unparseable"}) is default
+        assert not runtime.diagnostics.any(Finding.CAPABILITY_FAILED)
 
 
 class TestConversationMemory:

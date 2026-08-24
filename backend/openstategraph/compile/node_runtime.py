@@ -329,6 +329,54 @@ class _DeepAgentAsChatModel:
 
 
 
+def _split_model_selection(selection: str) -> tuple[str, str]:
+    """`(provider, model_id)` from either separator the string might carry.
+
+    The canvas writes `provider/modelId` (slash) — `ProviderRegistry.
+    selectionFor`'s own format. `init_chat_model` takes a colon, and that is
+    exactly what a human types by hand, which is how `launch-readiness` 45
+    happened: `ollama:gpt-oss:120b-cloud` partitioned on `/` alone left
+    `model_id` empty, discarded the selection, and ran the shared default in
+    silence. Slash is tried first because it is the canonical, canvas-written
+    form and a model id can itself contain a colon (`gpt-oss:120b-cloud`);
+    trying colon first would cut that id at its own first colon.
+    """
+    if "/" in selection:
+        provider, _, model_id = selection.partition("/")
+    else:
+        provider, _, model_id = selection.partition(":")
+    return provider, model_id
+
+
+def _safe_model_name(model: Any) -> str:
+    """A human name for a fallback model, for a warning message that must not
+    itself blow up.
+
+    `openstategraph.reasoning._model_name` reads `model.model`/`model_name`
+    via `getattr(..., default=None)` — safe for an ordinary `BaseChatModel`,
+    and not safe here: the shared default handed to `validate`/`graph` is
+    `_drawing_only_model()`, an `UnconfiguredProvider` whose `__getattr__`
+    *raises* on every attribute rather than returning one, precisely so a
+    real call surfaces the actionable reason instead of an `AttributeError`.
+    Reading its name to report a **different** node's degraded selection hit
+    exactly that raise and turned a warning into a crash
+    (`launch-readiness` 45/62, found running the shipped examples). Naming an
+    `UnconfiguredProvider` by its own diagnosis is more useful than the
+    generic type name in any case — it already says which credential or
+    package is missing.
+    """
+    from openstategraph.chat_model import UnconfiguredProvider
+
+    if isinstance(model, UnconfiguredProvider):
+        return f"nothing — the shared default is unconfigured too: {model._diagnosis}"
+    try:
+        from openstategraph.reasoning import _model_name
+
+        return _model_name(model)
+    except Exception:
+        return type(model).__name__
+
+
 def _final_text(messages: list[Any]) -> str:
     """What the model said this turn — or "", never something else.
 
@@ -1275,7 +1323,7 @@ class NodeRuntime:
                 ),
                 diagnostics=self.diagnostics,
                 upstream_text=lambda state: _upstream_text(state, upstream),  # type: ignore[arg-type]
-                resolve_model=self._resolve_model,
+                resolve_model=lambda data: self._resolve_model(data, node_id),
             )
             try:
                 return family.build(context)
@@ -1290,7 +1338,7 @@ class NodeRuntime:
 
         return build
 
-    def _resolve_model(self, data: dict[str, Any]) -> Any:
+    def _resolve_model(self, data: dict[str, Any], node_id: str | None = None) -> Any:
         """This node's own model, falling back to the graph's shared default.
 
         Found via a TS-schema-vs-Python-factory diff: every model-calling
@@ -1318,16 +1366,54 @@ class NodeRuntime:
         reasoning` decides whether the value can actually be carried; anything
         it refuses to send is reported through `capability_warnings` rather
         than swallowed — see `_apply_effort`.
-        """
-        return self._apply_effort(self._base_model(data), _text(data, REASONING_EFFORT_KEY))
 
-    def _base_model(self, data: dict[str, Any]) -> Any:
-        """The model itself, before any per-call parameter is applied."""
+        `node_id` names the node in a report when the selection cannot be
+        resolved (`launch-readiness` 45/62) — optional because a handful of
+        tests and the reasoning-effort suite call this directly against a
+        bare `data` dict with no node in scope, and a blank or `mock`
+        selection is not a failure at all, so those callers never need it.
+        """
+        return self._apply_effort(
+            self._base_model(data, node_id), _text(data, REASONING_EFFORT_KEY)
+        )
+
+    def _base_model(self, data: dict[str, Any], node_id: str | None = None) -> Any:
+        """The model itself, before any per-call parameter is applied.
+
+        Falling back to the shared default is right (see `_resolve_model`'s
+        docstring) — but doing it **silently** is not (`launch-readiness`
+        45/62, found the same day, three times, all one defect): a colon
+        instead of a slash, a blank selection on a grader, and an
+        `UnconfiguredProvider` all discarded the node's own choice with no
+        trace beyond a billing error naming a provider nobody had picked.
+
+        The two remaining causes split by what they say about the document.
+        A string with no separator this module recognises is wrong no matter
+        where it runs, knowable with no credential — `_report_unparseable`
+        keeps it on `CAPABILITY_FAILED`, which `validate` turns into an exit
+        code (`launch-readiness` 45). A syntactically valid selection that
+        *this installation* cannot serve — no key, no provider package — says
+        nothing about the document; the identical selection succeeds the
+        moment the credential is added, which is `validate`'s own
+        zero-credential promise applied per node rather than once for the
+        shared default. `_report_degraded` reports it on
+        `MODEL_SELECTION_DEGRADED`, which `REPORT_ONLY` keeps off the exit
+        code (`launch-readiness` 62) — otherwise every shipped package naming
+        a real paid provider would fail `validate` in any environment,
+        CI included, that does not carry that provider's key.
+        """
         selection = _text(data, "model")
         if not selection:
+            # Blank means "use the shared default", and that is deliberate
+            # authoring, not a failure — never reported.
             return self.services.model
-        provider, _, model_id = selection.partition("/")
+        provider, model_id = _split_model_selection(selection)
         if not model_id or provider == "mock":
+            # Mock has no backend equivalent (see the docstring above); that
+            # degrade is as deliberate as a blank selection. Anything else
+            # with no model half is the unparseable-string case.
+            if provider != "mock":
+                self._report_unparseable(node_id, selection, self.services.model)
             return self.services.model
         key = f"{provider}:{model_id}"
         if key not in self._model_cache:
@@ -1342,6 +1428,7 @@ class NodeRuntime:
                 # rather than taking the run down, and a deferred raise would
                 # do the opposite.
                 if isinstance(selected, UnconfiguredProvider):
+                    self._report_degraded(node_id, selection, self.services.model)
                     selected = self.services.model
                 self._model_cache[key] = selected
             except Exception:
@@ -1350,8 +1437,54 @@ class NodeRuntime:
                 # default still produces an answer, just not the node's own
                 # choice. Cached too, so one bad selection does not retry
                 # (and re-fail) on every node that shares it.
+                self._report_degraded(node_id, selection, self.services.model)
                 self._model_cache[key] = self.services.model
         return self._model_cache[key]
+
+    def _report_unparseable(self, node_id: str | None, selection: str, fallback: Any) -> None:
+        """A selection this module cannot even parse — a document defect.
+
+        `node_id` is `None` only for the handful of direct-`data` test
+        callers that predate node-id plumbing; skipping the report there is
+        correct — those tests assert the fallback itself, not this report.
+        """
+        if node_id is None:
+            return
+        self.diagnostics.record(
+            Finding.CAPABILITY_FAILED,
+            f'Node "{node_id}" selected model "{selection}", which could not be '
+            f'parsed. It ran on "{_safe_model_name(fallback)}" instead.',
+        )
+
+    def _report_degraded(self, node_id: str | None, selection: str, fallback: Any) -> None:
+        """A selection this *installation* cannot serve — not a document defect.
+
+        Same `node_id is None` exemption as `_report_unparseable`, plus one
+        more: if `fallback` is itself an `UnconfiguredProvider` — the shared
+        default handed to `validate`/`graph` by `_drawing_only_model()` — no
+        model is ever actually going to run, in this build or any other node's.
+        Reporting "it ran on X instead" when X will never be called is not a
+        finding about the document, it is noise that fires on *every* real
+        provider named in *any* credential-less environment (the shipped
+        examples all compile with no key set, on purpose — `launch-readiness`
+        45/62's own regression: this was first written unconditionally and
+        turned every real-provider example into a spurious warning).
+        `_report_unparseable` has no matching guard: an unparseable string is
+        wrong regardless of environment, which is exactly why `validate` can
+        catch it with no credential at all.
+        """
+        if node_id is None:
+            return
+        from openstategraph.chat_model import UnconfiguredProvider
+
+        if isinstance(fallback, UnconfiguredProvider):
+            return
+        self.diagnostics.record(
+            Finding.MODEL_SELECTION_DEGRADED,
+            node_id,
+            selection,
+            _safe_model_name(fallback),
+        )
 
     def _apply_effort(self, model: Any, effort: str) -> Any:
         """Sets reasoning effort where it is carried; says so where it is not.
@@ -1742,7 +1875,7 @@ class NodeRuntime:
         # because `held_tools_context` overrules the stale sentence, which is
         # precisely why nothing would ever prompt the author to fix it.
         self._report_stale_tool_denial(node_id, data, wired)
-        model = self._resolve_model(data)
+        model = self._resolve_model(data, node_id)
         #: Exposed so a test can assert the wiring produced the tools, without
         #: needing a model to prove it.
         self.last_bound_tools = [t.name for t in lc_tools]
@@ -2038,7 +2171,7 @@ class NodeRuntime:
         """
         data = node.get("data") or {}
         branches = _branch_entries(data.get("branches"))
-        base_model = self._resolve_model(data)
+        base_model = self._resolve_model(data, node_id)
         # A router streams the branch NAME it chose, which QA read glued to the
         # sentence beside it. The fold blanks it for a customer; `nostream`
         # stops it being produced at all (ticket 21). Two spellings because the
@@ -2155,7 +2288,7 @@ class NodeRuntime:
         deep agents.
         """
         data = node.get("data") or {}
-        base_model = self._resolve_model(data)
+        base_model = self._resolve_model(data, node_id)
         # See the router's line: a grader streams `FAIL Include the SQL SELECT
         # statement…` onto the end of a finished answer.
         grading_model = silence_tokens(base_model)
@@ -2622,7 +2755,7 @@ class NodeRuntime:
         # one worker is wired (ticket 37's hybrid routing). A rule-less card
         # with one archetype still makes neither, which is what keeps the
         # deterministic path free.
-        supervisor_model = self._resolve_model(data)
+        supervisor_model = self._resolve_model(data, node_id)
 
         def planner_for(skill: str, run_ctx: str = "") -> BaseOrchestrator:
             return orchestrator_for(
@@ -2845,7 +2978,7 @@ class NodeRuntime:
         # Same statement about a worker as about an agent (ticket 89); a
         # worker writes its prose in `role`.
         self._report_stale_tool_denial(node_id, data, wired)
-        model = self._resolve_model(data)
+        model = self._resolve_model(data, node_id)
         # **The `role` field reaches the worker itself** (ticket 16). It used
         # to reach exactly one place — `_orchestrator`, which packs it into
         # `Archetype.description` for the *supervisor's* labelling call — so

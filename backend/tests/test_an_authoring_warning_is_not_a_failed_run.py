@@ -270,6 +270,17 @@ class TestEveryProducerHasASide:
     #: `OVERRIDE_PROBLEM` never had for the success case. The write already
     #: happened — this sentence is advice about scope, not a claim the run
     #: came out less capable, so it may not move an exit code either.
+    #: `MODEL_SELECTION_DEGRADED` joined it in `launch-readiness` 45/62: a
+    #: node's own model selection was syntactically valid and this
+    #: installation still could not serve it — no key, no provider package.
+    #: The run answers, on the shared default rather than the node's choice,
+    #: which is worth a sentence and never worth failing a build over: the
+    #: identical selection succeeds the moment the credential exists, and
+    #: `validate`'s own docstring promises an answer "on a machine with no
+    #: credential" — a promise that already covered the *shared* default and
+    #: this extends to a *per-node* one. Blocking the exit code here would
+    #: fail every shipped package naming a real paid provider in any
+    #: environment, CI included, that does not carry that provider's key.
     REPORTS = frozenset(
         {
             Finding.UNENFORCED_OUTCOME,
@@ -277,6 +288,7 @@ class TestEveryProducerHasASide:
             Finding.STALE_TOOL_DENIAL,
             Finding.STATELESS_MOUNT_REDOES,
             Finding.OVERRIDE_APPLIED,
+            Finding.MODEL_SELECTION_DEGRADED,
         }
     )
 

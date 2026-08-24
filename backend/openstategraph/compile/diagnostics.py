@@ -212,6 +212,31 @@ class Finding(str, Enum):
     #: untrue — a per-mount supply differs per instance — and
     #: `unsuppliable_context_keys` takes the parameter where that lands.
     UNSUPPLIABLE_CONTEXT = "unsuppliable_context"
+    #: A node's own model selection resolved to something other than what it
+    #: named, as `(node id, the string it could not resolve, the model it
+    #: used instead)` — `launch-readiness` 45/62, the same defect hit three
+    #: times live: a colon typed by hand, an empty per-node field on a
+    #: grader, and an `UnconfiguredProvider` from a missing provider extra.
+    #:
+    #: `CAPABILITY_FAILED` covers the first of those three now that both
+    #: separators parse — an unparseable selection is a document defect,
+    #: knowable with no credential, and stays a failure. This member is for
+    #: the other two: `build_chat_model` refusing a syntactically valid
+    #: selection because *this installation* lacks a key or a provider
+    #: package. That is not a claim the document is wrong — the identical
+    #: selection succeeds the moment the key or the extra is present, which
+    #: is exactly `validate`'s own "on a machine with no credential" promise
+    #: (`cmd_validate`'s docstring) for the *shared* default extended to a
+    #: per-node one. Blocking the exit code on a missing credential would
+    #: fail every shipped package naming a real provider in any environment
+    #: — CI included — that does not carry that provider's paid key, which
+    #: is not what this report is for.
+    #:
+    #: A **report**, not a failure, for that reason — see `REPORT_ONLY`
+    #: below. The run still answers; it answers on a model the author did not
+    #: choose, which is worth a sentence at authoring time and at run time,
+    #: never worth failing a build over.
+    MODEL_SELECTION_DEGRADED = "model_selection_degraded"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -293,6 +318,10 @@ _SENTENCES: dict[Finding, str] = {
         "and the node refuses everything rather than letting text past a policy it "
         "cannot apply. Fix the row or remove it."
     ),
+    Finding.MODEL_SELECTION_DEGRADED: (
+        'Node "{0}" selected model "{1}", which this installation could not '
+        'resolve — it ran on "{2}" instead.'
+    ),
 }
 
 
@@ -355,6 +384,7 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.STALE_TOOL_DENIAL,
         Finding.STATELESS_MOUNT_REDOES,
         Finding.OVERRIDE_APPLIED,
+        Finding.MODEL_SELECTION_DEGRADED,
     }
 )
 
