@@ -1719,7 +1719,15 @@ function updateSendEnabled() {
 $("send").onclick = () => { if (inFlight) inFlight.abort(); else send(); };
 $("msg").addEventListener("input", updateSendEnabled);
 $("msg").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
+  // `e.key` is the modern check, but it is not the only signal a real Return
+  // keypress produces: some input paths (assistive tooling, remote-control
+  // automation, certain IME-adjacent key delivery) fire a keydown whose
+  // `key`/`code` never get populated at all, carrying only `keyCode === 13`.
+  // Reading `e.key` alone silently drops those — the text sits in the box
+  // and nothing is sent, which is exactly launch-readiness/36's report.
+  // Tolerant reading, still strict: accept either signal, but only for the
+  // one code that means Enter.
+  if ((e.key === "Enter" || e.keyCode === 13) && !e.shiftKey) {
     e.preventDefault();
     // Enter never stops a run: a stop is deliberate, and the key people hold
     // down to send should not be able to kill the turn they just started.

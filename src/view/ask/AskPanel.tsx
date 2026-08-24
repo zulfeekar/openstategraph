@@ -1660,7 +1660,14 @@ export function AskPanel({
               // types a newline. `preventDefault` is what stops Enter doing
               // both — sending *and* leaving a blank line in a composer that
               // is about to be cleared anyway.
-              if (event.key === 'Enter' && !event.shiftKey) {
+              //
+              // `event.key` is not the only signal a real Return keypress
+              // produces (launch-readiness/36): some input paths deliver a
+              // keydown whose `key`/`code` never get populated, carrying
+              // only `keyCode === 13`. Reading `key` alone silently drops
+              // those — the composer keeps the text and nothing sends.
+              // `/chat`'s textarea composer takes the same fallback.
+              if ((event.key === 'Enter' || event.keyCode === 13) && !event.shiftKey) {
                 event.preventDefault();
                 void send();
               }

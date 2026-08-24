@@ -52,8 +52,27 @@ describe('the Ask composer', () => {
     // Enter sends: unchanged, and the same answer `/chat`'s textarea composer
     // already ships (`api/static/chat.html`). Shift+Enter must reach the
     // textarea rather than being swallowed, which is how a newline is typed.
-    expect(element).toMatch(/event\.key === 'Enter' && !event\.shiftKey/);
+    //
+    // `event.key` alone is not enough (launch-readiness/36): some input
+    // paths deliver a keydown whose `key` never gets populated, carrying
+    // only `keyCode === 13`, and reading `key` exclusively silently drops
+    // those — nothing sends and the text sits in the box. The check must
+    // accept either signal.
+    expect(element).toMatch(/event\.key === 'Enter' \|\| event\.keyCode === 13/);
+    expect(element).toMatch(/&& !event\.shiftKey/);
     expect(element).toMatch(/preventDefault\(\)/);
+  });
+
+  it('promises Enter in the Send tooltip only where Enter actually sends', () => {
+    // `launch-readiness/31`'s tooltip reads "Type a question above, then
+    // press Send or Enter" — a promise. `launch-readiness/36` found Enter
+    // not sending in `/chat`'s sibling composer, which would have made this
+    // tooltip's promise false the moment the same gap existed here. Both
+    // must hold together: the tooltip text, and a keydown check tolerant
+    // enough to actually catch the Enter it advertises.
+    expect(SOURCE).toContain('Type a question above, then press Send or Enter');
+    const element = composerElement();
+    expect(element).toMatch(/event\.key === 'Enter' \|\| event\.keyCode === 13/);
   });
 
   it('has more lines to hold than a single-line control can carry', () => {
