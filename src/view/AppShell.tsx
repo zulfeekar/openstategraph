@@ -21,7 +21,7 @@ import { McpServersDialog } from './overlays/McpServersDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
-import { panelsMustOverlay, rightOverlayWidth } from './layout/panelFit';
+import { leftOverlayWidth, panelsMustOverlay, rightOverlayWidth } from './layout/panelFit';
 import { useViewportWidth } from './layout/useViewportWidth';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
@@ -431,6 +431,15 @@ export function AppShell() {
               '--canvas-empty-inset-right': `${rightOverlayWidth(mustOverlay, {
                 ask: askOpen,
                 inspector: inspectorOpen,
+              })}px`,
+              // launch-readiness 39: the palette (and the Workflows drawer
+              // beside it) float over the canvas at `left: 0` in overlay
+              // mode too — the empty-state hint needs the same inset on the
+              // left that Ask/Inspector already get on the right (76), or a
+              // narrow window centres it behind the palette.
+              '--canvas-empty-inset-left': `${leftOverlayWidth(mustOverlay, {
+                palette: paletteOpen,
+                workflows: workflowManagerOpen,
               })}px`,
             } as CSSProperties
           }

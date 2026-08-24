@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  leftOverlayWidth,
   MIN_CANVAS_WIDTH,
   PANEL_WIDTH,
   panelsMustOverlay,
@@ -77,6 +78,39 @@ describe('rightOverlayWidth', () => {
   it('sums both while overlaying with ask and inspector both open', () => {
     expect(rightOverlayWidth(true, { ask: true, inspector: true })).toBe(
       PANEL_WIDTH.ask + PANEL_WIDTH.inspector,
+    );
+  });
+});
+
+describe('leftOverlayWidth', () => {
+  // launch-readiness 39: the palette is a left panel exactly like Ask and
+  // Inspector are right panels — when the row cannot hold it, it floats over
+  // the canvas at `left: 0` too (AppShell.css `[data-overlay] > .panel--left`),
+  // and the empty-state copy needs to know how much of the left edge that
+  // covers, the same way `rightOverlayWidth` already tells it about the right.
+  it('is zero when the row has room, regardless of what is open', () => {
+    expect(leftOverlayWidth(false, { palette: true, workflows: true })).toBe(0);
+    expect(leftOverlayWidth(false, {})).toBe(0);
+  });
+
+  it('is zero while overlaying if neither left-hand panel is open', () => {
+    expect(leftOverlayWidth(true, {})).toBe(0);
+  });
+
+  it('is one panel width while overlaying with just the palette open', () => {
+    expect(leftOverlayWidth(true, { palette: true })).toBe(PANEL_WIDTH.palette);
+  });
+
+  it('is one panel width while overlaying with just the workflows drawer open', () => {
+    expect(leftOverlayWidth(true, { workflows: true })).toBe(PANEL_WIDTH.workflows);
+  });
+
+  it('sums both while overlaying with the palette and the drawer both open', () => {
+    // They stand side by side (AppShell.css: the drawer sits at
+    // `left: var(--layout-palette-width)` when the palette is also open),
+    // so together they cover the sum, not just the wider of the two.
+    expect(leftOverlayWidth(true, { palette: true, workflows: true })).toBe(
+      PANEL_WIDTH.palette + PANEL_WIDTH.workflows,
     );
   });
 });

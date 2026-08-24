@@ -480,7 +480,13 @@
 .canvas-empty {
   position: absolute;
   top: 0;
-  left: 0;
+  /* The overlaying palette (and Workflows drawer) sit on top of this element
+     rather than sharing its row when the row can't hold them (55.4), so the
+     canvas is still full width under them; without this the empty state
+     centred behind the palette instead of beside it (launch-readiness 39,
+     the left-edge twin of 76's right-edge fix below). `AppShell` sets this to
+     the width the left panels actually cover, 0 otherwise. */
+  left: var(--canvas-empty-inset-left, 0px);
   bottom: 0;
   /* The overlaying Ask/Inspector panels sit on top of this element rather
      than sharing its row (55.4), so the canvas is still full width under

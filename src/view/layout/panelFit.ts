@@ -75,3 +75,24 @@ export function rightOverlayWidth(
   if (!overlay) return 0;
   return (open.ask ? PANEL_WIDTH.ask : 0) + (open.inspector ? PANEL_WIDTH.inspector : 0);
 }
+
+/**
+ * How much of the canvas's left edge the left-hand panels cover when they
+ * overlay it instead of sharing the row (launch-readiness 39).
+ *
+ * The palette is a `panel--left` exactly like the Workflows drawer, and
+ * `AppShell.css`'s `[data-overlay] > .panel--left` rule floats it at
+ * `left: 0` the same way Ask/Inspector float at `right: 0` — but nothing
+ * told the canvas's empty-state copy about it, so a narrow window left the
+ * hint centred behind the palette instead of beside it. Mirrors
+ * `rightOverlayWidth`: when the palette and the drawer are both open, the
+ * drawer stands beside the palette (`left: var(--layout-palette-width)`), so
+ * together they cover the sum.
+ */
+export function leftOverlayWidth(
+  overlay: boolean,
+  open: Pick<OpenPanels, 'palette' | 'workflows'>,
+): number {
+  if (!overlay) return 0;
+  return (open.palette ? PANEL_WIDTH.palette : 0) + (open.workflows ? PANEL_WIDTH.workflows : 0);
+}
