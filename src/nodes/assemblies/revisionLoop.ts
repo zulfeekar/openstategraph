@@ -65,7 +65,7 @@ export const revisionLoopAssembly: IAssemblyDefinition = {
           // difference between a loop that improves an answer and one that
           // only costs model calls.
           criteria:
-            '- The answer must address the request that was actually made.\n- Every factual claim must come from a tool result or be marked as uncertain — never invented.\n- Say what is wrong specifically enough that the next attempt can fix it.',
+            '- The answer must address the request that was actually made.\n- Every factual claim must carry a citation or be marked as uncertain — never invented.\n- Say what is wrong specifically enough that the next attempt can fix it.',
           rulesMode: 'extend',
           maxAttempts: '2',
         },

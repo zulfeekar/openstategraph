@@ -1513,7 +1513,7 @@
           "key": "criteria",
           "kind": "textarea",
           "label": "Your criteria",
-          "hint": "",
+          "hint": "Judged against the answer text only — the grader cannot see which tools ran, so ask for what the text shows (a citation is present) rather than what only the run knows (the citation was fetched and verified).",
           "required": false,
           "defaultValue": ""
         },

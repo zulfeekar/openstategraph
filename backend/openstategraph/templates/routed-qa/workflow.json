@@ -32,7 +32,7 @@
       "type": "route.grader",
       "title": "Quality gate",
       "data": {
-        "criteria": "- The answer must address the question that was actually asked.\n- Every factual claim must come from a tool result or be marked as uncertain — never invented.",
+        "criteria": "- The answer must address the question that was actually asked.\n- Every factual claim must carry a citation or be marked as uncertain — never invented.",
         "rulesMode": "extend",
         "maxAttempts": 2
       },

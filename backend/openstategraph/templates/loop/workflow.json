@@ -18,7 +18,7 @@
       "type": "route.grader",
       "title": "Review",
       "data": {
-        "criteria": "- The answer must address the request that was actually made.\n- Every factual claim must come from a tool result or be marked as uncertain — never invented.\n- Say what is wrong specifically enough that the next attempt can fix it.",
+        "criteria": "- The answer must address the request that was actually made.\n- Every factual claim must carry a citation or be marked as uncertain — never invented.\n- Say what is wrong specifically enough that the next attempt can fix it.",
         "rulesMode": "extend",
         "maxAttempts": 2
       },

@@ -149,6 +149,18 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           label: 'Your criteria',
           // Criteria only. The preamble and output contract are locked, because a
           // grader whose verdict cannot be parsed is a broken node.
+          //
+          // A criterion must be checkable from the candidate text alone — the
+          // grader never sees the agent's tool calls, so "this claim was
+          // actually verified against the source" is a question it cannot
+          // answer and can only guess at (launch-readiness 26). A correct,
+          // cited answer was rejected three times on exactly that shape of
+          // criterion before this line existed. Ask for a citation to be
+          // *present*, never for it to have been *fetched*.
+          hint:
+            'Judged against the answer text only — the grader cannot see which tools ran, ' +
+            'so ask for what the text shows (a citation is present) rather than what only ' +
+            'the run knows (the citation was fetched and verified).',
           placeholder: '- Must name a specific genre, not an artist.',
           defaultValue: '',
           minRows: 3,
