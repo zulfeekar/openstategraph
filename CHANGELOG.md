@@ -480,6 +480,36 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc6 — 2026-08-24
+Three more from the third stranger run, and the release train's own bug.
+
+### Fixed
+
+- **Enter did not send in either chat composer.** Both had correct-looking code
+  (`e.key === 'Enter' && !e.shiftKey`); the event was malformed. A real Return
+  keypress arrived with `e.key === ""`, `e.code === ""`, `keyCode === 13`, so
+  checking `e.key` alone dropped it silently. Both composers now accept
+  `keyCode === 13` too; Shift+Enter still inserts a newline. rc5's own tooltip
+  had begun promising *"press Send or Enter"*, so this had turned a missing
+  convenience into a false statement.
+- **The rehearsal could not tolerate a slow index.** `v0.3.0rc5` uploaded to
+  TestPyPI successfully and the very next job failed to install it — the index
+  had not caught up. Both causes are handled: a bounded poll
+  (`scripts/lib/pip_retry.sh`, 10 attempts, 15s apart, loud at the ceiling) and
+  `--no-cache-dir` on every index-mode install. A version that never appears
+  still fails; the retry cannot degrade into "skip if missing".
+- **`/chat` probed every wheel install** for a workflow the wheel cannot carry,
+  404ing on each page load.
+
+### Notes
+
+- One finding closed **not reproducible**: the `+ New` button said to offer no
+  shape. A hint naming *Workflows → Examples* has been on any empty canvas
+  since 2026-08-15. Nothing changed, and no commit was made for a defect that
+  is not there.
+- The composer gap remains, stated plainly: a `pip install` user still has no
+  in-product surface that turns a sentence of English into a workflow.
+
 ## 0.3.0rc5 — 2026-08-24
 The third stranger run, answered. `0.3.0rc4` was installed from TestPyPI and
 driven against the Chinook sample database by a session reading only the
