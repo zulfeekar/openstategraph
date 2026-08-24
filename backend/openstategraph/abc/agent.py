@@ -217,13 +217,30 @@ class BaseAgentNode(AbstractAgentNode):
         # has no worker/advisor distinction — so this is the same defect
         # *shape* reappearing on a surface 19 never covered, not a
         # regression of it.
+        #
+        # The fenced-code-block clause is `launch-readiness/35`: `sql-qa`'s
+        # own `rules` already asked for "answer the question in one
+        # sentence... then state the query", and ~1 in 6 live runs still
+        # published the fenced ```sql block with no sentence at all — exit
+        # 0, `warnings: []`, and the reader received a query instead of an
+        # answer. A package-level rule a model can silently skip belongs
+        # exactly nowhere as reliably as the locked contract rendered last,
+        # which is why this is here rather than a stronger sentence in
+        # `sql-qa/workflow.json`. Kept general — "a fenced code block and
+        # nothing else" — because the defect shape is not SQL-specific: any
+        # agent that quotes evidence in a fence can equally forget to say
+        # the answer it is evidence for.
         output_contract=(
             "Give only your final answer. Do not narrate your tool use, your "
             "reasoning process or your own thinking (\"Let me search\", "
             "\"Perfect, I now have...\") — the reader never sees the tool "
             "loop and that text is not the answer. Do not refer to an "
             "earlier attempt, a prior draft, or that this is a retry or a "
-            "correction — answer as if it were the first and only attempt."
+            "correction — answer as if it were the first and only attempt. "
+            "Never answer with a fenced code block and nothing else — a "
+            "query, a snippet or any other fenced code is evidence for your "
+            "answer, not a substitute for it. Always say the answer itself, "
+            "in plain language, before any code fence you include."
         ),
         default_rules=(
             "- Answer the question that was asked, and stop there.\n"

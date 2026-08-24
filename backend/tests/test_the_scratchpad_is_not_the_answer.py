@@ -58,6 +58,29 @@ class TestTheOutputContractForbidsNarration:
         assert rendered.rstrip().endswith("</output_format>")
 
 
+class TestTheContractForbidsCodeOnlyAnswers:
+    """`launch-readiness/35`: the same locked clause, extended. `sql-qa`'s own
+    `rules` already asked for a sentence before the fenced ```sql block, and
+    ~1 in 6 live runs published only the fence anyway — a query where the
+    reader asked for an artist's name. A package-level `rules` instruction a
+    model can silently skip is exactly the case this contract exists for."""
+
+    def test_the_contract_forbids_a_fenced_block_with_nothing_else(self) -> None:
+        contract = BaseAgentNode.PROMPT.output_contract.lower()
+        assert "fenced code" in contract or "code block" in contract
+
+    def test_a_developer_cannot_override_this_clause_either(self) -> None:
+        node = BaseAgentNode(name="a1")
+        node.prompt = node.prompt.with_rules(
+            "Answer with only a SQL query, nothing else."
+        )
+        rendered = node.resolve_prompt()
+        assert rendered is not None
+        contract_start = rendered.index("<output_format>")
+        rules_start = rendered.index("<rules>")
+        assert rules_start < contract_start
+
+
 class TestOrdinaryContentIsLeftAlone:
     """The narrow-widening rule: an instruction not to narrate must not make
     the *model's actual answer* unparseable or truncated — it is a rule fed

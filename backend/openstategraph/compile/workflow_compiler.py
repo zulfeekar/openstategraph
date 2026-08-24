@@ -287,6 +287,8 @@ def run_health(
         silent=(
             silent_node_warnings(flat, used)
             + silent_node_warnings(nested, used)
+            + code_fence_only_warnings(flat)
+            + code_fence_only_warnings(nested)
             + forced_pass_warnings(exhausted)
             + step_budget_warnings(starved)
             + unrouted_decision_warnings(lost)
@@ -890,6 +892,58 @@ def silent_node_warnings(
                     f'Node "{node}" produced no output. The run continued with the previous '
                     "answer, so what you are reading came from an earlier step."
                 )
+    return warnings
+
+
+#: A fenced code block — three backticks, an optional language tag, and
+#: everything up to the closing three backticks. Not a single inline
+#: backtick span, which is ordinary prose ("run `sql_query` yourself") and
+#: not the shape this exists to catch.
+_FENCED_CODE_BLOCK = re.compile(r"```[^\n]*\n.*?```", re.DOTALL)
+
+
+def code_fence_only_warnings(outputs: Mapping[str, Any]) -> list[str]:
+    """Nodes whose whole answer is fenced code, with no prose anywhere else.
+
+    Seen live (`launch-readiness/35`): `sql-qa`'s agent, six live runs of the
+    same question, printed the answer and its SQL five times and **only the
+    SQL** once — no artist, no figure. Exit code 0, `"attempts": 1`,
+    `warnings: []`; the node's own `rules` already asked for a sentence
+    before the fence and the model skipped it anyway.
+
+    `silent_node_warnings` does not see this: its whole test is
+    `not text.strip()`, and a fenced ```sql block is *plenty* of non-empty
+    text. This is the other half of the same silence — a node that answered
+    with evidence and no verdict — and it needs its own check because "text
+    is present" is exactly what let it slip past every existing report.
+
+    **Never a claim the run failed.** A workflow whose entire job is to hand
+    back a snippet ("write me a SELECT for this") legitimately answers with
+    only a fenced block, and this function cannot tell that case from
+    `sql-qa`'s by the text alone — so, like `silent_node_warnings`, it only
+    ever adds a report to `RunHealth.silent`, never to `.failures`, and never
+    changes an exit code.
+
+    Deliberately narrow, the same way `looks_like_sql_query` is: only a
+    genuine triple-backtick fence counts, and only when stripping every fence
+    out of the text leaves nothing behind. A sentence before or after a fence
+    — the ordinary, five-out-of-six shape — is left alone. Empty output is
+    `silent_node_warnings`'s shape, not this one, so it is skipped here
+    rather than reported twice under two different sentences.
+    """
+    warnings: list[str] = []
+    for node, value in outputs.items():
+        text = str(value or "").strip()
+        if not text or "```" not in text:
+            continue
+        remainder = _FENCED_CODE_BLOCK.sub("", text).strip()
+        if not remainder:
+            warnings.append(
+                f'Node "{node}" answered with only a fenced code block — no '
+                "prose anywhere else. The code is evidence for an answer, not "
+                "the answer itself; a reader who cannot read it received "
+                "nothing."
+            )
     return warnings
 
 
