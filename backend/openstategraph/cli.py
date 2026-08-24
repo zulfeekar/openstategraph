@@ -823,6 +823,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     if result.reused_empty:
         print(f"{label}/ exists and is empty — using it")
+    if result.existing_project_warning is not None:
+        print(result.existing_project_warning)
 
     def state(path: Path) -> str:
         return "" if path in result.created else "   (already there — left alone)"

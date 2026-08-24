@@ -193,19 +193,31 @@ class TestTheFourExistingDirectoryCases:
         assert not (target / "workflows").exists()
 
     def test_four_it_exists_and_is_not_ours(self, tmp_path: Path, capsys) -> None:
+        """launch-readiness/32, owner decision: warn, then proceed. A venv/
+        and a .env are exactly what following the README's install steps
+        produces — the refusal used to fire on the most likely directory."""
         target = tmp_path / "my_demo"
         target.mkdir()
-        for index in range(14):
+        (target / "venv").mkdir()
+        (target / ".env").write_text("SECRET=1\n")
+        for index in range(12):
             (target / f"file{index}.txt").write_text("x")
 
         code = cli.main(["init", str(target)])
-        printed = capsys.readouterr().err
+        printed = capsys.readouterr().out
 
-        assert code == cli.EXIT_FAILURE
-        assert "already exists and has 14 files in it" in printed
-        assert "Nothing was written" in printed
-        assert "--force" in printed
-        assert not (target / "openstategraph.yaml").exists()
+        assert code == cli.EXIT_OK
+        assert "already has 14 files in it" in printed
+        assert "this looks like an existing" in printed
+        # The copy names what is actually happening, never a collision that
+        # cannot occur — no overwrite implied.
+        assert "overwrite" not in printed.lower()
+        assert "Adding workflows/ and openstategraph.yaml" in printed
+        assert (target / "openstategraph.yaml").is_file()
+        assert (target / "workflows" / "starter").exists()
+        # What was already there is untouched.
+        assert (target / ".env").read_text() == "SECRET=1\n"
+        assert (target / "venv").is_dir()
 
     def test_the_count_is_singular_when_there_is_one(self, tmp_path: Path, capsys) -> None:
         target = tmp_path / "my_demo"
@@ -214,12 +226,14 @@ class TestTheFourExistingDirectoryCases:
 
         cli.main(["init", str(target)])
 
-        assert "has 1 file in it" in capsys.readouterr().err
+        assert "has 1 file in it" in capsys.readouterr().out
 
-    def test_the_refusals_are_distinguishable(self, tmp_path: Path, capsys) -> None:
-        """Case three and case four send the reader to different next moves —
-        *open it* versus *pick another name* — so they must never collapse into
-        one sentence."""
+    def test_the_refusal_and_the_warning_are_distinguishable(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """An existing OpenStateGraph project still refuses and sends the
+        reader to `serve`; a directory that merely has files in it now warns
+        and proceeds. The two must never collapse into one sentence."""
         ours = tmp_path / "ours"
         ours.mkdir()
         (ours / "openstategraph.yaml").write_text("version: 1\n")
@@ -227,14 +241,15 @@ class TestTheFourExistingDirectoryCases:
         theirs.mkdir()
         (theirs / "README.md").write_text("x")
 
-        cli.main(["init", str(ours)])
+        code_ours = cli.main(["init", str(ours)])
         first = capsys.readouterr().err
-        cli.main(["init", str(theirs)])
-        second = capsys.readouterr().err
+        code_theirs = cli.main(["init", str(theirs)])
+        second = capsys.readouterr().out
 
-        assert first != second
+        assert code_ours == cli.EXIT_FAILURE
+        assert code_theirs == cli.EXIT_OK
         assert "openstategraph serve" in first
-        assert "pick another name" in second
+        assert "this looks like an existing" in second
 
 
 class TestForceAddsAndNeverOverwrites:
@@ -410,26 +425,28 @@ class TestAWorkflowsDirectoryThatWasAlreadyThere:
         assert code == cli.EXIT_OK
         assert (target / "workflows" / "starter").is_dir()
 
-    def test_it_is_distinguishable_from_the_non_empty_refusal(
+    def test_it_is_distinguishable_from_the_non_empty_warning(
         self, tmp_path: Path, capsys
     ) -> None:
-        """Case four sends the reader to *pick another name*; this one sends
-        them to *pick another workflows root*. Different moves, different
-        sentences."""
+        """The non-empty case now warns and proceeds (launch-readiness/32);
+        the shared-workflows-root case still refuses. Different moves,
+        different sentences, different streams."""
         theirs = tmp_path / "theirs"
         theirs.mkdir()
         (theirs / "README.md").write_text("x")
         shared = tmp_path / "shared"
         (shared / "workflows").mkdir(parents=True)
 
-        cli.main(["init", str(theirs)])
-        non_empty = capsys.readouterr().err
-        cli.main(["init", str(shared), "--force"])
+        code_theirs = cli.main(["init", str(theirs)])
+        non_empty = capsys.readouterr().out
+        code_shared = cli.main(["init", str(shared), "--force"])
         collision = capsys.readouterr().err
 
+        assert code_theirs == cli.EXIT_OK
+        assert code_shared == cli.EXIT_FAILURE
         assert non_empty != collision
-        assert "pick another name" in non_empty
-        assert "--workflows-dir" not in non_empty
+        assert "this looks like an existing" in non_empty
+        assert "--workflows-dir" in collision
 
     def test_the_suggested_root_is_never_the_one_that_just_collided(
         self, tmp_path: Path, capsys

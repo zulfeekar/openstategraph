@@ -406,15 +406,26 @@ class InitResult:
     #: Whether the directory existed and was empty — case two, which is a
     #: success with a sentence rather than a refusal.
     reused_empty: bool
+    #: launch-readiness/32: set when the directory was non-empty and not
+    #: already ours — a warning that proceeds, never a refusal. `None` when
+    #: there was nothing to say.
+    existing_project_warning: str | None
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
-    """The four cases of install-experience design §2.3, or `None` to proceed.
+    """The remaining hard-stop cases, or `None` to proceed.
 
-    Two refusals, and they must never collapse into one sentence: an existing
-    OpenStateGraph project sends the reader to `serve`, while somebody else's
-    directory sends them to a different name. A single "directory exists"
-    message would answer neither.
+    launch-readiness/32: the "directory is not empty" case used to live here
+    too, as a third refusal. It never protected anything — `init` writes
+    `openstategraph.yaml` only `if not config.exists()`, never writes `.env`,
+    and a non-empty directory is exactly what following the README's own
+    install steps produces (a `venv/`, a `.env`). Refusing it taught a reader
+    to go and pick a different, wrong directory instead. It is now
+    `_existing_directory_warning`, below: same observation, no exit.
+
+    One refusal is left, and it stays a refusal on purpose: an existing
+    OpenStateGraph project sends the reader to `serve` rather than letting a
+    second `init` silently re-adopt it. `--force` still waives it.
 
     The confirmation is `--force`, a flag, and it appears **inside** the
     refusal so it is never something to go and look up. Not a prompt: exit
@@ -436,19 +447,34 @@ def _existing_directory_refusal(target: Path, label: str) -> str | None:
                 f"  open it:      cd {label} && openstategraph serve\n"
                 f"  start again:  openstategraph init {label} --force"
             )
-
-    entries = list(target.iterdir())
-    if entries:
-        count = len(entries)
-        noun = "file" if count == 1 else "files"
-        return (
-            f"{label}/ already exists and has {count} {noun} in it. Nothing was written.\n"
-            f"  pick another name:  openstategraph init {label}_2\n"
-            f"  use it anyway:      openstategraph init {label} --force\n"
-            f"--force adds openstategraph.yaml, .gitignore and workflows/ to {label}/ and\n"
-            f"overwrites nothing that is already there."
-        )
     return None
+
+
+def _existing_directory_warning(target: Path, label: str, workflows_dir: str) -> str | None:
+    """A non-empty directory that is not already ours — a warning, not a
+    refusal (launch-readiness/32, owner decision 2026-08-24: warn, then
+    proceed).
+
+    Runs regardless of `--force`, because there is nothing left for `--force`
+    to waive here: the command never overwrites or deletes anything this case
+    could be protecting. Says what is actually happening — `workflows/` and
+    `openstategraph.yaml` are being added to what looks like an existing
+    project — rather than implying a collision that cannot happen. The
+    "already ours" case is handled by `_existing_directory_refusal` and never
+    reaches here.
+    """
+    if not target.is_dir() or _looks_like_our_project(target):
+        return None
+    entries = list(target.iterdir())
+    if not entries:
+        return None
+    count = len(entries)
+    noun = "file" if count == 1 else "files"
+    return (
+        f"{label}/ already has {count} {noun} in it — this looks like an existing\n"
+        f"project. Adding {workflows_dir}/ and openstategraph.yaml to it now."
+    )
+
 
 def _looks_like_our_project(target: Path) -> bool:
     """Whether `target` carries an OpenStateGraph config file.
@@ -538,9 +564,12 @@ def init_project(
     message about `my_demo/` is one they can act on; a message about
     `/private/var/folders/…/my_demo` is one they have to decode.
 
-    Raises `ScaffoldError` for the two existing-directory refusals unless
-    `force`, which waives only the "not empty" precondition — never the
-    standing refusal to overwrite a file it did not write.
+    Raises `ScaffoldError` when the target is already an OpenStateGraph
+    project, unless `force`. `force`'s only remaining job is that one waiver
+    — the directory-is-not-empty case (launch-readiness/32) is a warning
+    that always proceeds now, and the shared-workflows-root refusal below has
+    never been forceable at all — so `force` no longer touches either of
+    them.
     """
     from openstategraph.config_file import CONFIG_FILENAMES, render_config_file, render_gitignore
 
@@ -555,6 +584,8 @@ def init_project(
         # `--force` is consent to use a directory that has things in it, not
         # consent to delete a file standing where the directory should be.
         raise ScaffoldError(f"{name} exists and is not a directory. Nothing was written.")
+
+    existing_project_warning = _existing_directory_warning(target, name, workflows_dir)
 
     shared = _shared_workflows_root_refusal(target, workflows_dir, name)
     if shared is not None:
@@ -593,6 +624,7 @@ def init_project(
         starter=package,
         created=frozenset(created),
         reused_empty=reused_empty,
+        existing_project_warning=existing_project_warning,
     )
 
 
