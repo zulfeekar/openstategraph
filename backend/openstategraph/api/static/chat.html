@@ -322,6 +322,20 @@
      as clipping it. A wrapped SELECT is uglier than a scrolled one and is
      the only one of the two a customer can finish reading. */
   .answer pre { display: block; padding: var(--space-2-5) var(--space-3); overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* `launch-readiness` 25 — a grader that ran out of attempts published a
+     candidate it had rejected, and nothing before this told the reader.
+     `--paused` (the same amber a human-approval pause uses) rather than
+     `--danger`: the run did not fail, it is the honest "try again" loop
+     running out, which is a different fact from an error. Sits above
+     `.answer`, not inside it, so it survives whatever markdown renders. */
+  .rejected-banner {
+    display: flex; align-items: center; gap: var(--space-2);
+    background: color-mix(in srgb, var(--paused) 12%, var(--raised));
+    border: 1px solid var(--paused); border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-3); margin-top: var(--space-2);
+    font-size: var(--font-size-13); color: var(--text);
+  }
+  .rejected-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--paused); flex: none; }
   .error { color: var(--danger); }
   .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
 
@@ -1168,7 +1182,10 @@ function turnEl(question) {
   el.innerHTML = `<div class="q"></div><div class="steps"></div>`
     + `<details class="tl" hidden><summary>Timeline · <span class="tl-count"></span> · <span class="tl-total"></span></summary>`
     + `<div class="tl-body"></div><p class="tl-note">Durations are gaps between stream frames, not measured spans.</p></details>`
-    + `<div class="reasoning"></div><div class="thinking"></div><div class="answer" hidden></div>`;
+    + `<div class="reasoning"></div><div class="thinking"></div>`
+    + `<div class="rejected-banner" hidden><span class="dot"></span>`
+    + `<span>The answer below is one our reviewer rejected — we ran out of attempts to improve it.</span></div>`
+    + `<div class="answer" hidden></div>`;
   el.querySelector(".q").textContent = question;
   const empty = $("empty");
   if (empty) empty.remove();
@@ -1179,6 +1196,7 @@ function turnEl(question) {
 
 async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
+  const rejectedBanner = el.querySelector(".rejected-banner");
   const reasoning = el.querySelector(".reasoning");
   /* The one live line in the strip — what a step says about itself while it is
    * still working (`progress`). It is never a step row: a step row records
@@ -1419,6 +1437,11 @@ async function stream(path, body, el, signal) {
             ended = "done";
             finishFlow();
             thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+            // `launch-readiness` 25 — visible on this customer surface even
+            // though the frame carries no `developer` channel: the fact that
+            // a rejected candidate was published must not require asking for
+            // `audience: "developer"`, only the grader's *reason* does.
+            rejectedBanner.hidden = !d.publishedRejected;
             answer.hidden = false;
             answer.innerHTML = md(d.answer || "_no answer_");
             // No warnings rendered here any more, and the frame no longer

@@ -160,6 +160,19 @@ export interface RunResult {
   /** Mermaid text of the graph that actually compiled. */
   readonly mermaid: string;
   /**
+   * True when a grader ran out of attempts and `answer` above is a candidate
+   * it had rejected, published because the loop had to end somewhere.
+   *
+   * Visible on **both** audiences — `launch-readiness` 25: `attempts` alone
+   * proved the loop exhausted itself, but nothing said whether the last
+   * attempt had passed or been forced through, so a rejected answer reached
+   * a customer indistinguishable from one that passed first try. The
+   * grader's *reason* can quote internals and stays on
+   * `developer.warnings`; that the event happened must not be
+   * developer-only.
+   */
+  readonly publishedRejected: boolean;
+  /**
    * The developer channel, or `null` when this run was not entitled to one.
    *
    * `null` is not "nothing was wrong" — it is "this run was a customer's,
@@ -867,6 +880,7 @@ export class RuntimeClient implements IRuntimeClient {
 
         attempts: typeof payload['attempts'] === 'number' ? payload['attempts'] : 0,
         mermaid: asString(payload['mermaid']),
+        publishedRejected: payload['published_rejected'] === true,
         developer,
         warnings: developer ? developer.warnings : [],
       });
@@ -1057,6 +1071,7 @@ export class RuntimeClient implements IRuntimeClient {
 
           attempts: typeof payload['attempts'] === 'number' ? payload['attempts'] : 0,
           mermaid: asString(payload['mermaid']),
+          publishedRejected: payload['publishedRejected'] === true,
           developer,
           warnings: developer ? developer.warnings : [],
         };

@@ -98,7 +98,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
-| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, and `developer` **only for a developer run** |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |
 
 #### Audience: what a customer's run cannot carry
@@ -151,6 +151,14 @@ author gave it, and every mount opened to any depth with the child's own
 document supplying the names inside it (`workflow-gallery` 62). `decisions`,
 `outputs` and `attempts` stay too — they are facts about the customer's own
 turn.
+
+`publishedRejected` stays on both audiences for the same reason
+(`launch-readiness` 25): `attempts` alone proves a grader's loop exhausted
+itself, but not whether the last candidate passed or was force-published
+after rejection, and a customer received the second case indistinguishable
+from the first. The grader's *reason* can quote internals and stays inside
+`developer.warnings`; that the event happened is a fact, not guidance, and is
+`true`/`false` on every run regardless of audience.
 
 #### `outputs`, `decisions` and `nested` — which document a node belongs to
 

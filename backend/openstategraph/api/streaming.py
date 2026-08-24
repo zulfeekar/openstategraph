@@ -759,7 +759,7 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
     "done": (
         "threadId", "answer", "decisions", "outputs",
-        "nested", "attempts", "mermaid", "developer",
+        "nested", "attempts", "mermaid", "developer", "publishedRejected",
     ),
     "error": ("threadId", "detail"),
 }
@@ -1784,6 +1784,11 @@ def _run_frames(
             "mermaid": workflow_mermaid(
                 graph, document, runtime=runtime, audience=audience, store=store
             ),
+            # Both audiences, on purpose — `launch-readiness` 25, the same
+            # fact `RunResponse.published_rejected` carries on `/api/runs`.
+            # The grader's reason stays inside `channel.payload`'s
+            # `developer` block; this is only whether it happened.
+            "publishedRejected": health.published_rejected,
             **channel.payload(audience),
         },
     )

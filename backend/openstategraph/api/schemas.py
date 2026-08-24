@@ -578,6 +578,15 @@ class RunResponse(BaseModel):
     outputs: dict[str, str] = {}
     attempts: int = 0
     mermaid: str = ""
+    #: True when a grader ran out of attempts and the answer above is a
+    #: candidate it had rejected, published because the loop had to end
+    #: somewhere. Visible on **both** audiences on purpose — `launch-readiness`
+    #: 25: `attempts` was already enough to prove the loop exhausted itself,
+    #: but nothing said whether the last attempt had passed or been forced
+    #: through, so a rejected answer reached a customer indistinguishable from
+    #: one that passed first try. The grader's *reason* can quote internals
+    #: and stays on `developer.warnings`; that the event happened must not.
+    published_rejected: bool = False
     #: Present only for `audience: "developer"`. Absent — not empty — for a
     #: customer, so nothing can read "there were no warnings" out of a
     #: response that was never entitled to carry any. `warnings` used to sit

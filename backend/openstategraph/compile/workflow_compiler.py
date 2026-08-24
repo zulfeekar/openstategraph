@@ -237,6 +237,12 @@ class RunHealth:
 
     failures: list[str]
     silent: list[str]
+    #: Whether a grader ran out of attempts and published a candidate it had
+    #: rejected — the fact half of `forced_pass_warnings`, split out because
+    #: the fact belongs on both audience channels while the *reason* (it can
+    #: quote internals) stays developer-only. See `launch-readiness` 25: a
+    #: customer-audience run had no field capable of carrying this at all.
+    published_rejected: bool = False
 
 
 def run_health(
@@ -286,6 +292,7 @@ def run_health(
             + unrouted_decision_warnings(lost)
             + retry_warnings(retried)
         ),
+        published_rejected=bool(exhausted),
     )
 
 

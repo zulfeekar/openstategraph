@@ -367,6 +367,11 @@ def run_workflow(
         decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
         outputs={k: str(clean_output(str(v))) for k, v in visible.items()},
         attempts=int(final.get("attempts") or 0),
+        # Both audiences, on purpose — `launch-readiness` 25: the grader's
+        # reason stays on `developer.warnings` (it can quote internals), but
+        # that a rejected candidate got published anyway is a fact, not
+        # guidance, and belongs beside `attempts` at the top level.
+        published_rejected=health.published_rejected,
         # The composition, in this caller's own vocabulary — never
         # `get_graph().draw_mermaid()` again (`workflow-gallery` 62). This
         # field used to publish `__start__`, `__default_error_handler__` and
