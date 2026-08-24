@@ -15,7 +15,7 @@ import {
   Square,
   TriangleAlert,
 } from 'lucide-react';
-import { Button, Icon, Panel, PanelBody, PanelHeader, TextArea } from '@design/primitives';
+import { Button, Icon, Panel, PanelBody, PanelHeader, TextArea, Tooltip } from '@design/primitives';
 import {
   RuntimeClient,
   isCancelled,
@@ -1669,17 +1669,42 @@ export function AskPanel({
           {/* One control, two meanings — Send becomes Stop while the turn
               streams, rather than a disabled "Running…" that leaves the
               developer with nothing to press. Same slot, so the thing to
-              click never moves. */}
-          <Button
-            variant={running ? 'danger-solid' : 'primary'}
-            className="ask__composer-send"
-            icon={<Icon glyph={running ? Square : Send} size="sm" />}
-            disabled={running ? false : question.trim() === ''}
-            aria-label={running ? 'Stop' : 'Send'}
-            onClick={() => (running ? stop() : void send())}
+              click never moves.
+
+              Wrapped in a Tooltip even while disabled (`launch-readiness`
+              31): an empty composer has nothing to send, so staying disabled
+              is the right refusal — but a disabled button fires no mouse
+              events, and this one had no Tooltip at all, so the refusal was
+              also silent. That is the exact shape `runIntent.ts` names and
+              fixed for the toolbar's Run button (ticket 21): "the tooltip
+              that existed to explain it died with the click." Unlike Run's
+              entry question, there is no workflow-stated fallback to send
+              instead, so this stays `disabled` rather than moving to
+              Run's "always live, explain on press" shape — only the
+              silence around the refusal needed fixing. */}
+          <Tooltip
+            content={
+              running
+                ? 'Stop this run — nothing further is scheduled; steps already dispatched finish and are discarded'
+                : question.trim() === ''
+                  ? 'Type a question above, then press Send or Enter'
+                  : `Send: ${question.trim()}`
+            }
+            multiline
           >
-            {running ? 'Stop' : 'Send'}
-          </Button>
+            <span className="ask__composer-send-anchor">
+              <Button
+                variant={running ? 'danger-solid' : 'primary'}
+                className="ask__composer-send"
+                icon={<Icon glyph={running ? Square : Send} size="sm" />}
+                disabled={running ? false : question.trim() === ''}
+                aria-label={running ? 'Stop' : 'Send'}
+                onClick={() => (running ? stop() : void send())}
+              >
+                {running ? 'Stop' : 'Send'}
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       </PanelBody>
     </Panel>
