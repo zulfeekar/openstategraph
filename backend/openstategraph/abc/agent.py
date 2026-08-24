@@ -195,7 +195,36 @@ class BaseAgentNode(AbstractAgentNode):
     #: replaces this layer for that instance.
     PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
         preamble="",
-        output_contract="",
+        # Locked, and rendered last (`SystemPrompt.render()`) so nothing a
+        # developer writes in `rules` can countermand it — the same seam
+        # Router and Grader already use. Was `""` here: "an agent, unlike a
+        # router, legitimately answers free-form, so the base imposes no
+        # contract" — true of the *shape* of the answer, but silent about
+        # what the answer must not contain. That silence is
+        # `launch-readiness/27`: a customer-audience answer opened "Perfect.
+        # I now have the official documentation." — the model's inner
+        # monologue about its own tool loop, published verbatim, because
+        # nothing told it not to. `content_text` on the agent's final
+        # message *is* the answer (`compile/node_runtime.py`); there is no
+        # separate scratchpad channel to strip this from downstream, so the
+        # only place to stop it is the instruction the model reads before it
+        # writes.
+        #
+        # This is a different mechanism from `every-workflow-green/19`,
+        # which fixed the orchestrator's `_worker` path: a worker with no
+        # tools had no way to say it was stuck, so it narrated instead. That
+        # fix (`advisor_context`) does not apply here — a plain agent node
+        # has no worker/advisor distinction — so this is the same defect
+        # *shape* reappearing on a surface 19 never covered, not a
+        # regression of it.
+        output_contract=(
+            "Give only your final answer. Do not narrate your tool use, your "
+            "reasoning process or your own thinking (\"Let me search\", "
+            "\"Perfect, I now have...\") — the reader never sees the tool "
+            "loop and that text is not the answer. Do not refer to an "
+            "earlier attempt, a prior draft, or that this is a retry or a "
+            "correction — answer as if it were the first and only attempt."
+        ),
         default_rules=(
             "- Answer the question that was asked, and stop there.\n"
             "- Where you hold a tool that can establish a fact, use it. Never answer "
@@ -250,8 +279,10 @@ class BaseAgentNode(AbstractAgentNode):
         point of that layer and it reverses an earlier reading of this method:
         "nothing configured" used to mean "defer to the library", and it now
         means "inherit this node type's own minimum". The ``None`` path
-        survives for a subclass that deliberately blanks that layer
-        (``PROMPT = AbstractAgentNode.PROMPT.with_defaults("")``) — a
+        survives for a subclass that deliberately blanks *both* locked
+        layers — defaults and the anti-narration output contract
+        (``launch-readiness`` 27 made the latter non-empty too) — with a
+        fresh ``SystemPrompt(preamble=..., output_contract="")``: a
         hand-written tier whose harness owns its prompt entirely.
 
         Kept as a method rather than collapsed into ``self.prompt.render()`` at

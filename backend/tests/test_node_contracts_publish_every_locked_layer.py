@@ -49,7 +49,10 @@ class TestEveryFamilyPublishesWhatItLocks:
         assert agent["default_rules"].strip(), "the agent's only non-editable layer"
         # Still empty, and still correct: an agent answers free-form.
         assert agent["preamble"] == ""
-        assert agent["contract"] == ""
+        # No longer empty (`launch-readiness` 27): an agent answers
+        # free-form in *shape*, but must not narrate its own tool loop or a
+        # rejected prior attempt as if that were the answer.
+        assert "narrat" in agent["contract"].lower()
 
     @pytest.mark.parametrize("family", FAMILIES)
     def test_no_family_publishes_three_empty_strings(self, contracts: dict, family: str) -> None:

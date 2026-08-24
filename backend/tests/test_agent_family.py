@@ -24,6 +24,7 @@ from openstategraph.abc.agent import (
     agent_node_for_tier,
 )
 from openstategraph.abc.middleware import MiddlewareSlotTable
+from openstategraph.abc.prompt import SystemPrompt
 
 
 class FakeMiddleware:
@@ -193,11 +194,17 @@ class TestAbstractAgentNode:
 
     def test_a_tier_that_blanks_the_defaults_still_gets_no_prompt(self) -> None:
         """The escape hatch, so the `None` branch is not dead code: a harness
-        that owns its own prompt entirely opts out by declaring a `PROMPT` with
-        no defaults layer."""
+        that owns its own prompt entirely opts out by declaring a fresh
+        `PROMPT` with no defaults layer **and** no output contract.
+
+        `with_defaults("")` alone no longer suffices (`launch-readiness` 27):
+        `BaseAgentNode.PROMPT.output_contract` is now a locked,
+        always-present anti-narration clause, so a tier must blank that too
+        to get a genuinely empty prompt."""
 
         class BareAgentNode(ReactAgentNode):
             PROMPT = ReactAgentNode.PROMPT.with_defaults("")
+            PROMPT = SystemPrompt(preamble=PROMPT.preamble, output_contract="")
 
         assert BareAgentNode(name="a1", model=object()).resolve_prompt() is None
 
@@ -237,6 +244,7 @@ class TestConcreteTiers:
 
         class BareAgentNode(ReactAgentNode):
             PROMPT = ReactAgentNode.PROMPT.with_defaults("")
+            PROMPT = SystemPrompt(preamble=PROMPT.preamble, output_contract="")
 
         recorder = Recorder()
         node = ReactAgentNode(name="a1", model="MODEL")
