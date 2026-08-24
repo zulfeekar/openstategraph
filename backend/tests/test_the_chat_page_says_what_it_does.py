@@ -6,8 +6,10 @@ selected workflow…"* next to an explicit picker in the header.
 
 Both sentences are true of this page, and neither is true all the time. **Auto
 — let OpenStateGraph route** is the picker's first entry *only where the
-`concierge` package is installed* (`hasConcierge()`), and then it is the
-default; on every other install the picker is the whole story. The defect was
+`concierge` package is installed* (`state.hasAuto`, read off the
+`X-Auto-Available` header on the same `?surface=chat` request rather than a
+second probe — launch-readiness 34), and then it is the default; on every
+other install the picker is the whole story. The defect was
 that both lines were unconditional, so exactly one of them was lying at any
 moment, and which one depended on something the reader could not see.
 

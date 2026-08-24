@@ -980,25 +980,18 @@ function renderPicker(list) {
   return gone;
 }
 
-/** Whether this install actually has the routing gateway behind "Auto".
- *
- * One cheap request, once. `summary` answers 404 for a slug that is not on
- * disk, which is exactly the question — and it is the only way to ask it,
- * since a hidden workflow never appears in `?surface=chat`. */
-async function hasConcierge() {
-  try {
-    const resp = await fetch("/api/workflows/concierge/summary");
-    if (!resp.ok) return false;
-    const row = await resp.json();
-    return row != null;
-  } catch {
-    return false;
-  }
-}
-
 async function loadWorkflows() {
-  const list = await (await fetch("/api/workflows?surface=chat")).json();
-  state.hasAuto = await hasConcierge();
+  // launch-readiness 34: this used to be a second request — `GET
+  // /api/workflows/concierge/summary`, read for its 200/404 — issued on
+  // every page load, on every install, including every wheel install,
+  // where `concierge` never ships and the request 404s every single time,
+  // silently. The list endpoint now answers the same question about the
+  // same request it already makes, in an `X-Auto-Available` header, so a
+  // wheel install spends one round trip on `/chat` instead of two, and the
+  // second one is never a guaranteed miss.
+  const resp = await fetch("/api/workflows?surface=chat");
+  const list = await resp.json();
+  state.hasAuto = resp.headers.get("X-Auto-Available") === "true";
   state.workflow = state.hasAuto ? "concierge" : (list[0] && list[0].slug) || "";
   renderPicker(list);
   describeSelection();

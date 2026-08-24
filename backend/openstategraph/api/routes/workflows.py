@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from openstategraph.api.audience import resolve as resolve_audience
 from openstategraph.api.catalogue_events import CatalogueEvent, ChangeReason
@@ -83,7 +83,9 @@ def announce(services: WorkflowServices, reason: ChangeReason, slug: str) -> Non
     summary="List workflows — the first call any client makes",
     tags=["Catalogue"],
 )
-def list_workflows(services: Services, surface: Literal["editor", "chat"] = "editor") -> list[WorkflowSummaryResponse]:
+def list_workflows(
+    services: Services, response: Response, surface: Literal["editor", "chat"] = "editor"
+) -> list[WorkflowSummaryResponse]:
     """Ticket 04 (launch-readiness): the listing is surface-aware.
 
     - ``surface=editor`` (default): everything the developer owns —
@@ -99,11 +101,22 @@ def list_workflows(services: Services, surface: Literal["editor", "chat"] = "edi
     200 by `GET /api/workflows/{slug}`. Ask
     `GET /api/workflows/{slug}/summary` when the question is whether a
     package exists.
+
+    Ticket 34: this response also carries `X-Auto-Available`, answering
+    whether the hidden `concierge` routing gateway exists on this install —
+    the same question `chat.html` used to ask with a second request to
+    `GET /api/workflows/concierge/summary` on every page load, which 404s
+    (silently) on every wheel install, since `concierge` ships only in this
+    repository's own `workflows/`, never in the package. One directory read
+    already happened to build this list; a second HTTP round trip to answer
+    a question this handler can already answer is the thing being removed,
+    not a new capability.
     """
     # The editor is the *developer's* surface, so it sees everything it
     # owns — hidden packages included, each row carrying `hidden` so the
     # UI can mark them rather than pretend they are not there. `hidden`
     # remains absolute for `surface="chat"`, which is the customer's.
+    response.headers["X-Auto-Available"] = "true" if services.store.describe("concierge") is not None else "false"
     return [
         _summary_response(services, s)
         for s in services.store.list(

@@ -950,6 +950,40 @@ class TestPublishLifecycle:
         response = self._client(tmp_path).get("/api/workflows", params={"surface": "nope"})
         assert response.status_code == 422
 
+    def test_the_chat_listing_answers_whether_auto_is_installed_without_a_second_request(
+        self, tmp_path: Path
+    ) -> None:
+        """launch-readiness 34.
+
+        `/chat` used to answer "does this install have the concierge gateway"
+        by requesting `/api/workflows/concierge/summary` and reading its 404 —
+        a second round trip that fails on every wheel install, since
+        `concierge` ships only in this repository's checkout. The list
+        response now carries the answer itself, as an `X-Auto-Available`
+        header, so the client never has to ask a question it can already
+        read off the request it made anyway.
+        """
+        client = self._client(tmp_path)
+        # No packages at all — the honest wheel-install case.
+        bare = client.get("/api/workflows", params={"surface": "chat"})
+        assert bare.headers["x-auto-available"] == "false"
+
+        self._seed(tmp_path, "concierge", hidden=True, published=True)
+        with_gateway = client.get("/api/workflows", params={"surface": "chat"})
+        assert with_gateway.headers["x-auto-available"] == "true"
+
+    def test_auto_available_matches_what_the_summary_endpoint_used_to_answer(
+        self, tmp_path: Path
+    ) -> None:
+        """The header preserves the old probe's exact rule: `describe("concierge")`
+        answers existence, not publish state — a package on disk is 200, absent
+        is 404, and `published` never entered into it. An unpublished `concierge`
+        therefore still counts, exactly as the old `hasConcierge()` fetch did."""
+        self._seed(tmp_path, "concierge", hidden=True, published=False)
+        client = self._client(tmp_path)
+        response = client.get("/api/workflows", params={"surface": "chat"})
+        assert response.headers["x-auto-available"] == "true"
+
     def test_the_summary_endpoint_answers_existence_where_the_listing_answers_visibility(
         self, tmp_path: Path
     ) -> None:

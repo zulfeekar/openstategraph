@@ -470,12 +470,15 @@ class TestTheCustomerSurfaceUsesNamesNotIds:
         # A fresh `pip install` ships no `workflows/`, so `concierge` is not
         # there — and the picker's first and default entry answered
         # "no compiled view: 404". `?surface=chat` never lists a hidden
-        # workflow, so the page has to ask for it directly.
+        # workflow, so the page used to ask for it directly with a second
+        # request; launch-readiness 34 folded the answer into the listing
+        # response's `X-Auto-Available` header instead, so a wheel install
+        # no longer pays for a guaranteed 404 on every load.
         page = self._page()
 
-        assert "hasConcierge(" in page
+        assert "X-Auto-Available" in page
         assert "state.hasAuto" in page
-        assert '/api/workflows/concierge/summary' in page
+        assert 'fetch("/api/workflows/concierge/summary")' not in page
 
     def test_an_install_with_nothing_published_says_so(self) -> None:
         assert "No workflows are published yet" in self._page()
