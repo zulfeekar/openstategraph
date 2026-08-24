@@ -8,6 +8,7 @@ import {
   type GraderNodeModel,
 } from './GraderNode';
 import { HUMAN_APPROVAL_TYPE } from './HumanApprovalNode';
+import { GUARD_CHECK_TYPE } from '../guard/GuardCheckNode';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 
 /**
@@ -285,7 +286,7 @@ describe('the revise loop', () => {
     expect(reloaded.model.edgesOf(grader.id)).toHaveLength(2);
   });
 
-  it('only the grader and the human approval gate can start a feedback edge', () => {
+  it('only the grader, the human approval gate, and the guard can start a feedback edge', () => {
     const workbench2 = makeWorkbench();
     const feedbackSources = workbench2.registry.nodeTypes.list().flatMap((definition) =>
       definition
@@ -296,9 +297,12 @@ describe('the revise loop', () => {
 
     // If anything else could emit feedback, an accidental cycle would become
     // drawable and the type gate would stop being a gate. `human.approval`'s
-    // `rejected` port is the one other deliberate source — a human's reject
+    // `rejected` port is one other deliberate source — a human's reject
     // decision is, like a grader's verdict, a legitimate reason to route
-    // feedback upstream.
-    expect(feedbackSources).toEqual([GRADER_TYPE, HUMAN_APPROVAL_TYPE]);
+    // feedback upstream. `guard.check` (`launch-readiness` 65) is the third:
+    // a grader's mechanical sibling, answering the same pass/revise question
+    // by computation instead of judgement, and it earns the same port rather
+    // than widening what `function.*` may emit.
+    expect(feedbackSources).toEqual([GRADER_TYPE, HUMAN_APPROVAL_TYPE, GUARD_CHECK_TYPE]);
   });
 });

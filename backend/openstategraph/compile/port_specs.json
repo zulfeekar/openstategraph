@@ -380,6 +380,103 @@
       ]
     },
     {
+      "type": "guard.check",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Guard",
+      "description": "Runs a package function against the candidate and routes pass/revise. No model.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "pass",
+          "direction": "out",
+          "type": "result",
+          "label": "pass",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "revise",
+          "direction": "out",
+          "type": "feedback",
+          "label": "revise",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "check",
+        "maxAttempts",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "check",
+          "kind": "text",
+          "label": "Check",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It returns \"\" for pass or a non-empty string for the feedback sent back on `revise`.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxAttempts",
+          "kind": "slider",
+          "label": "Max attempts",
+          "hint": "How many candidates this guard will check before it passes one through regardless. Its own budget, like a grader’s.",
+          "required": false,
+          "defaultValue": 3
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "guard.policy",
       "kind": "standard",
       "category": "agent",

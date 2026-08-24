@@ -1179,6 +1179,7 @@ class NodeRuntime:
         registry.register("route.grader", self._grader)
         registry.register("human.approval", self._human_approval)
         registry.register("guard.policy", self._guardrail)
+        registry.register("guard.check", self._guard_check)
         registry.register("memory.segment", self._memory_segment)
         registry.register("orchestrate.supervisor", self._orchestrator)
         registry.register("orchestrate.worker", self._worker)
@@ -3321,15 +3322,110 @@ class NodeRuntime:
             return self._passthrough(node_id, node, plan)
 
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A function node fed by a grader's `pass` (or a guard's `pass`, or an
+        # approval's `approved`) arrives over a *conditional* edge, which
+        # `plan.edges` does not carry — `_agent`, `_output`, `_guardrail` and
+        # `_subgraph` already close this gap; this handler was the one left
+        # open (`launch-readiness` 66). Without it, a function node placed
+        # behind a routed edge silently read the turn's original question
+        # instead of its wired upstream — found live, with `execute_sql`
+        # reading a natural-language question where SQL should have been, and
+        # nothing reporting it.
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
 
         def run(state: RunState) -> dict[str, Any]:
-            text = _upstream_text(state, upstream) or state.get("question", "")
+            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
             try:
                 result = fn(text)
             except Exception as exc:
                 return {"outputs": {node_id: f"[{node_id} failed: {type(exc).__name__}: {exc}]"}}
             output = result if isinstance(result, str) else str(result)
             return {"outputs": {node_id: output}, "answer": output}
+
+        return run
+
+    def _guard_check(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """A grader's mechanical sibling (`launch-readiness` 65).
+
+        Answers the same `pass`/`revise` question a grader does, over the
+        same conditional-edge shape (`workflow_compiler.py` routes
+        `GUARD_CHECK_TYPE` exactly where it routes `GRADER_TYPE`), but by
+        calling a package function instead of a model — the decision was
+        already made deterministically and for free by
+        e.g. `function.validate_sql`, and this node hands its verdict back
+        without paying for a model call to re-emit it.
+
+        The function contract is the same `fn(text: str) -> str` every
+        `function.*` node already uses (`_discovered_function`): an empty
+        return is a pass, a non-empty return is both the `revise` reason and
+        the feedback text sent upstream. No new contract, no new registry —
+        `check` just names one of the same functions by its short name (the
+        part after `function.`).
+
+        Termination mirrors the grader's own two ceilings exactly, because a
+        guard that always emitted `revise` would violate "a cycle must
+        contain a conditional edge that can end it": `maxAttempts` (this
+        node's own lap budget, forcing a pass once exhausted) and the step
+        budget floor (`step_budget_floor_for`, forcing a pass before the
+        graph's own recursion limit would raise). A mechanical lap is cheaper
+        than a model lap, so a runaway is more likely here, not less — which
+        is exactly why both ceilings apply here unweakened.
+        """
+        data = node.get("data") or {}
+        check_name = _text(data, "check").strip()
+        fn = self.services.functions.get(f"function.{check_name}") if check_name else None
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
+        cap = int(data.get("maxAttempts") or self.services.max_attempts)
+        revise_wired = "revise" in (plan.conditional.get(node_id) or {})
+        if not revise_wired:
+            self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
+        floor = step_budget_floor_for(plan, node_id)
+
+        def run(state: RunState) -> dict[str, Any]:
+            candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
+            if fn is None:
+                self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, f"guard.check:{check_name}")
+                return {
+                    "decisions": {node_id: "pass"},
+                    "outputs": {node_id: candidate},
+                    "feedback": "",
+                }
+
+            try:
+                reason = fn(candidate)
+            except Exception as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+            reason = reason.strip() if isinstance(reason, str) else str(reason or "")
+
+            judged = int((state.get("revisions") or {}).get(node_id, 0)) + 1
+            remaining = state.get("remaining_steps")
+            starved = isinstance(remaining, int) and remaining <= floor
+            exhausted = judged >= cap or starved
+            passed = not reason
+            branch = "pass" if passed or exhausted else "revise"
+
+            return {
+                "decisions": {node_id: branch},
+                "revisions": {node_id: judged},
+                "feedback": "" if branch == "pass" else reason,
+                "outputs": {node_id: candidate},
+                "verdicts": {
+                    node_id: {
+                        "verdict": "pass" if passed else "revise",
+                        "reason": reason,
+                        "check": check_name,
+                    }
+                },
+            }
 
         return run
 

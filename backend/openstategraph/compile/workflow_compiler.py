@@ -97,6 +97,12 @@ HUMAN_APPROVAL_TYPE = "human.approval"
 #: for the same reason the approval's are: `blocked` does not loop back the
 #: way a grader's `revise` does, it takes a different deliberately-wired path.
 GUARDRAIL_TYPE = "guard.policy"
+#: `launch-readiness` 65: a grader's mechanical sibling — same `pass`/`revise`
+#: shape (below), calls a package function instead of a model. Deliberately
+#: routed like `GRADER_TYPE`, not like `GUARDRAIL_TYPE`: a guard's `revise`
+#: loops back upstream the way a grader's does, it does not take a forward
+#: wire the way a blocked guardrail does.
+GUARD_CHECK_TYPE = "guard.check"
 
 #: The port type that marks a fan-out declaration rather than control flow or a
 #: capability binding. An edge landing on a `worker`-typed port means "this is
@@ -1660,8 +1666,11 @@ class WorkflowCompiler:
                 in_control_flow.update((src_id, dst_id))
                 continue
 
-            # --- the grader: pass continues, revise loops back ---
-            if src_type == GRADER_TYPE:
+            # --- the grader, and its mechanical sibling: pass continues,
+            # revise loops back. Same shape, same edge semantics — a guard is
+            # priced as `route.grader` with computation instead of judgement,
+            # not as `GUARDRAIL_TYPE` (`launch-readiness` 65).
+            if src_type in (GRADER_TYPE, GUARD_CHECK_TYPE):
                 label = "revise" if src_port.type == "feedback" else "pass"
                 plan.conditional.setdefault(src_id, {})[label] = dst_id
                 has_outgoing.add(src_id)

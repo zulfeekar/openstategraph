@@ -15,6 +15,7 @@ import { GRADER_TYPE, createGraderNode, graderExecutor } from './routing/GraderN
 import { ROUTER_TYPE, createRouterNode, routerExecutor } from './routing/RouterNode';
 import { humanApprovalExecutor, humanApprovalNode } from './routing/HumanApprovalNode';
 import { GUARDRAIL_TYPE, guardrailExecutor, guardrailNode } from './guard/GuardrailNode';
+import { GUARD_CHECK_TYPE, guardCheckExecutor, guardCheckNode } from './guard/GuardCheckNode';
 import {
   MEMORY_SEGMENT_TYPE,
   memorySegmentExecutor,
@@ -95,6 +96,9 @@ export function registerNodeCatalogue(
       // routing does — it is part of the editor's grammar, not one
       // workflow's tooling.
       guardrailNode,
+      // A grader's mechanical sibling (`launch-readiness` 65): same
+      // pass/revise port shape, calls a package function instead of a model.
+      guardCheckNode,
       // What a workflow keeps between runs, at a drawn position. Global for
       // the same reason routing and policy are: it is grammar, not one
       // workflow's tooling.
@@ -125,6 +129,7 @@ export function registerNodeCatalogue(
     graderExecutor,
     humanApprovalExecutor,
     guardrailExecutor,
+    guardCheckExecutor,
     memorySegmentExecutor,
     orchestratorExecutor,
     workerExecutor,
@@ -155,6 +160,7 @@ export const NODE_TYPE = {
   grader: GRADER_TYPE,
   humanApproval: humanApprovalNode.id,
   guardrail: GUARDRAIL_TYPE,
+  guardCheck: GUARD_CHECK_TYPE,
   memorySegment: MEMORY_SEGMENT_TYPE,
   mcpServer: MCP_SERVER_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,

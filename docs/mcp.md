@@ -113,7 +113,7 @@ The gist of what comes back:
       }
     }
     // …and the rest. The grammar: annotate.group, annotate.note,
-    //  function.format_report, guard.policy, human.approval, input.markdown,
+    //  function.format_report, guard.check, guard.policy, human.approval, input.markdown,
     //  input.skill, input.text, memory.segment, orchestrate.supervisor,
     //  orchestrate.worker, output.formatted, route.classifier, route.grader,
     //  workflow.subgraph.
