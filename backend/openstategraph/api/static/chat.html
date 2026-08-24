@@ -335,6 +335,14 @@
     padding: var(--space-2) var(--space-3); margin-top: var(--space-2);
     font-size: var(--font-size-13); color: var(--text);
   }
+  /* `launch-readiness` 33 — an author rule that sets `display` unconditionally
+     beats the UA stylesheet's `[hidden] { display: none }`, same specificity
+     or not, because author styles always win over UA styles. So toggling the
+     `hidden` attribute in JS (`rejectedBanner.hidden = !d.publishedRejected`)
+     never actually hid this element — it was `display: flex` from the moment
+     `turnEl()` created it, on every turn, grader or none. This guard is what
+     makes `hidden` mean anything here. */
+  .rejected-banner[hidden] { display: none; }
   .rejected-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--paused); flex: none; }
   .error { color: var(--danger); }
   .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
