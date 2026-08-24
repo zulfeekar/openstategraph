@@ -128,6 +128,16 @@ class ValidateWorkflowTool(BaseTool):
         if not plan.exits:
             problems.append("no exit — some node must flow toward the end")
 
+        # `plan.advisories` (launch-readiness/24 — an unrecognised `data` key,
+        # or a dynamically-discovered type this build has no field schema to
+        # check) is deliberately **not** rendered as a "- " bullet here.
+        # `cli.cmd_validate` and `validation.validate_document` both scrape
+        # every "- "-prefixed line out of this text as a *problem*, with no
+        # notion of section — the same shape `Finding.UNWIRED_REVISE` already
+        # has to route around one layer down. `validate_document` reads
+        # `plan.advisories` itself instead, so a report that must never move
+        # VALID to INVALID never rides a channel that cannot tell the
+        # difference.
         report = [
             "VALID" if not problems else "PROBLEMS FOUND:",
             *(f"- {p}" for p in problems),

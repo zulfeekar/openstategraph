@@ -158,6 +158,25 @@ class NodeCatalogue:
             for node in self.nodes
         }
 
+    @property
+    def required_field_keys(self) -> dict[str, frozenset[str]]:
+        """node type -> the `field_keys` its own schema marks `required: true`.
+
+        `field_keys` above answers "may a document write this"; this answers
+        "must it", for `launch-readiness/24`'s hard half — a `required` key
+        absent from `data` means there is no working version of that node, so
+        the document is refused. Read from each record's `fields`, the same
+        source `field_keys` derives from (`launch-readiness/18`), never
+        hand-listed — the ceiling this file already states: node
+        configuration is declared once.
+        """
+        return {
+            str(node["type"]): frozenset(
+                str(f["key"]) for f in (node.get("fields") or ()) if f.get("required")
+            )
+            for node in self.nodes
+        }
+
 
 def load_catalogue(path: Path | None = None) -> NodeCatalogue:
     """Reads and validates the generated artifact.

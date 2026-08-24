@@ -50,7 +50,28 @@ def validate_document(document: dict[str, Any]) -> tuple[bool, list[str]]:
         # A hard failure (unparseable, no nodes) has no bulleted list; the
         # message itself is the single finding.
         findings = [report.strip()]
-    return result.error is None, findings
+    valid = result.error is None
+    if valid:
+        # `plan.advisories` (launch-readiness/24): a `data` key no field
+        # declares, or a node type with no static field schema to check at
+        # all. Read straight from the plan rather than scraped out of
+        # `ValidateWorkflowTool`'s printed report — that report's "- " lines
+        # are read by `cli.cmd_validate` as *problems* with no notion of
+        # section, so an advisory can never ride that text. Appended only
+        # when the document is otherwise VALID: an invalid document already
+        # has its own findings, and a plan that never got past a hard
+        # failure has nothing here worth a second compile to find out.
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        inner = document.get("document", document) if isinstance(document, dict) else document
+        try:
+            findings = findings + WorkflowCompiler().plan(inner).advisories
+        except Exception:
+            # A plan that fails here despite `ValidateWorkflowTool` succeeding
+            # is not this function's failure to report — its own findings
+            # already answered VALID, and this is best-effort advice on top.
+            pass
+    return valid, findings
 
 
 def mount_targets(document: dict[str, Any]) -> list[tuple[str, str]]:

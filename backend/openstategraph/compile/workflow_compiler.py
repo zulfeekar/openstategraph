@@ -1262,6 +1262,16 @@ class CompiledPlan:
     entry: list[str] = field(default_factory=list)
     exits: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: Reports that stay off `warnings` on purpose — `launch-readiness/24`'s
+    #: unknown-`data`-key half, and any dynamically-discovered node type this
+    #: build has no static field schema for at all. `warnings` is the channel
+    #: `package_testing.assert_document_shape` and `ValidateWorkflowTool`'s
+    #: PROBLEMS FOUND both require empty (`Finding.UNWIRED_REVISE`'s
+    #: precedent, `workflow-gallery/31`); an advisory here can never move
+    #: VALID to INVALID, on purpose — refusing a document over a key that
+    #: might belong to a newer field or a plugin is the failure mode the
+    #: owner's decision on 24 was written to prevent.
+    advisories: list[str] = field(default_factory=list)
 
 
 #: How far the budget walk below will follow a chain before it gives up.
@@ -1272,6 +1282,78 @@ class CompiledPlan:
 #: larger than any drawing a person lays out by hand, and small enough that a
 #: pathological one answers in microseconds instead of hanging.
 STEP_BUDGET_WALK_CAP = 32
+
+
+def data_key_findings(
+    nodes: Mapping[str, dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    """`(hard, advisory)` findings for every node's `data` against its own
+    field schema — `launch-readiness/24`.
+
+    **Hard**: a `required` field absent from `data`. There is no working
+    version of that node without it, so accepting the document produces only
+    the silent wrong answer this ticket exists to close — the owner's
+    decision, 2026-08-24.
+
+    **Advisory**: a key `data` carries that no field on that node type
+    declares (and that is not a named `legacy_data_keys` exemption). Probably
+    a typo — the stranger's was `totallyWrongKey` — but it might be a newer
+    version's field or a plugin's, and refusing it would break a document
+    that works today on a guess about intent. Never returned as a hard
+    finding, on the precedent `Finding.UNWIRED_REVISE` set
+    (`workflow-gallery/31`): a report that must not move VALID to INVALID
+    cannot ride the same channel as one that does.
+
+    **A `tool.*`/`function.*` type absent from the generated catalogue is
+    skipped, not guessed at.** Those two prefixes are exactly the ones
+    `<slug>/tools.QueryTool` and a package's own `functions/` mint from
+    Python with no static field schema for this to check against, and
+    pretending one exists would be a false-positive avalanche on the
+    workflow-scoped types CLAUDE.md says are legitimate. The skip still
+    speaks: it is folded into the advisory list below, named, so nothing
+    about *that* node's keys goes unchecked *silently*.
+
+    **Any other type absent from the catalogue is skipped with no advisory
+    at all** — deliberately. That is either an unknown node type, which
+    `ValidateWorkflowTool` already reports on its own loud channel, or a type
+    a plugin registered through `openstategraph.node_families`
+    (`known_node_types()`), which is legitimately known to the runtime and
+    outside this ticket's scope; saying "its data keys were not checked" a
+    second time about a type the validator has already vouched for is noise
+    dressed as caution, not the honesty the tool.*/function.* case needs.
+    """
+    from openstategraph.compile.node_catalogue import CATALOGUE
+
+    hard: list[str] = []
+    advisory: list[str] = []
+    for node_id, node in nodes.items():
+        node_type = str(node.get("type") or "")
+        if node_type not in CATALOGUE.node_types:
+            if node_type.startswith(("tool.", "function.")):
+                advisory.append(
+                    f'Node "{node_id}" has type "{node_type}", which this build has no '
+                    "generated field schema for (a workflow-scoped or plugin-discovered "
+                    "type) — its data keys were not checked."
+                )
+            continue
+        raw_data = node.get("data")
+        data = raw_data if isinstance(raw_data, dict) else {}
+        allowed = CATALOGUE.field_keys.get(node_type, frozenset()) | CATALOGUE.legacy_data_keys
+        for key in sorted(CATALOGUE.required_field_keys.get(node_type, frozenset())):
+            if key not in data:
+                hard.append(
+                    f'Node "{node_id}" ({node_type}) is missing "{key}", which its own '
+                    "field schema marks required — there is no working version of this "
+                    "node without it."
+                )
+        for key in sorted(data):
+            if key not in allowed:
+                advisory.append(
+                    f'Node "{node_id}" ({node_type}) sets "{key}", which no field on '
+                    "this node type declares — probably a typo, but it might be a "
+                    "newer field or a plugin's, so the document stays valid."
+                )
+    return hard, advisory
 
 
 def _plan_destinations(plan: CompiledPlan) -> dict[str, list[str]]:
@@ -1441,6 +1523,10 @@ class WorkflowCompiler:
             for node_id, node in nodes.items()
             if not str(node.get("type", "")).startswith("annotate.")
         }
+
+        hard_data_key_findings, advisory_data_key_findings = data_key_findings(executable)
+        plan.warnings.extend(hard_data_key_findings)
+        plan.advisories.extend(advisory_data_key_findings)
 
         has_incoming: set[str] = set()
         has_outgoing: set[str] = set()
