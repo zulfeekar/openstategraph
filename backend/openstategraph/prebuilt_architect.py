@@ -15,6 +15,7 @@ memory and throws it away. Nothing here can save, run, or mutate.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -37,6 +38,20 @@ KNOWN_NODE_TYPES = frozenset({
 })
 
 KNOWN_PREFIXES = ("tool.", "function.")
+
+#: The shape `discover_tool_registry`/`discover_tools`/`discover_functions`
+#: (`api/capability_discovery.py`) actually mint: one path segment (a
+#: package slug — anything but `/`), then `/tools.` or `/functions.`, then a
+#: class or function name. `validate` has no `workflow_dir`/`slug` to run
+#: discovery against and resolve the id for real (that is `run`'s job, via
+#: `discover_tool_registry`), so this checks the *shape* is the sanctioned
+#: code->canvas channel CLAUDE.md documents ("There is a third direction") —
+#: a permissive pattern, not a fixed list, and pinned by
+#: `test_a_package_local_tool_type_is_not_reported_unknown` /
+#: `test_a_slash_type_that_is_not_tools_or_functions_still_reports_unknown`
+#: in `tests/test_architect.py` so a change to what discovery mints is a red
+#: test here rather than a silent false negative (launch-readiness 43).
+_PACKAGE_LOCAL_CAPABILITY = re.compile(r"^[^/]+/(tools|functions)\.[^.]+$")
 
 
 def known_node_types() -> frozenset[str]:
@@ -114,7 +129,11 @@ class ValidateWorkflowTool(BaseTool):
         known = known_node_types()
         for node in nodes:
             node_type = str(node.get("type", ""))
-            if node_type not in known and not node_type.startswith(KNOWN_PREFIXES):
+            if (
+                node_type not in known
+                and not node_type.startswith(KNOWN_PREFIXES)
+                and not _PACKAGE_LOCAL_CAPABILITY.match(node_type)
+            ):
                 problems.append(f"unknown node type '{node_type}' on '{node.get('id')}'")
 
         try:

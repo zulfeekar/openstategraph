@@ -89,15 +89,23 @@ class TestBoundToolConfiguration:
 
 class TestWorkflowToolDiscovery:
     def test_registry_is_keyed_by_canvas_node_type(self) -> None:
+        """launch-readiness 42: the registry now answers to *both* a tool's
+        declared `node_type` alias and its qualified id
+        (`<slug>/tools.<ClassName>`) — the id `DiscoveredToolNode` actually
+        places on the canvas — so both key spaces are asserted here."""
         registry = discover_tool_registry(CHINOOK, slug="chinook-assistant")
         assert set(registry) == {
             "tool.chinook-get-all-tables",
             "tool.chinook-get-schema",
             "tool.chinook-execute-sql",
+            "chinook-assistant/tools.ListTablesTool",
+            "chinook-assistant/tools.GetTableSchemaTool",
+            "chinook-assistant/tools.ExecuteSqlTool",
         }
         for node_type, tool in registry.items():
             assert isinstance(tool, BaseTool)
-            assert tool.node_type == node_type
+            qualified_id = f"chinook-assistant/tools.{type(tool).__name__}"
+            assert node_type in (tool.node_type, qualified_id)
 
     def test_capabilities_expose_the_node_type_too(self) -> None:
         capabilities = discover_tools(CHINOOK, slug="chinook-assistant")

@@ -56,7 +56,8 @@ class ToolCapability:
     description: str
     args_schema: dict[str, Any]
     #: The canvas node type the tool itself declares (`BaseTool.node_type`).
-    #: Empty when the tool is not placeable on a canvas.
+    #: Empty when the tool declares no alias — it still binds via its
+    #: qualified id (see `discover_tool_registry`).
     node_type: str = ""
 
 
@@ -183,7 +184,7 @@ def discover_tool_instances(
     | declares no `Args` | **surface** — undescribable *and* unbindable (87) |
     | constructor raised | **surface** — names the tool and the exception |
     | duplicate `node_type` | **surface** — names both classes and the winner |
-    | empty `node_type` | **ignore** — documented as "not placeable" |
+    | empty `node_type` | **ignore** — the qualified id still binds it (42) |
 
     `warnings` is an optional sink so no existing caller had to change; a
     caller that passes one gets the findings, a caller that does not still
@@ -283,7 +284,7 @@ def discover_tool_instances(
                 # placeable on a canvas", which is correct for a tool only ever
                 # handed to an agent programmatically. Listable, not bindable.
                 logger.debug(
-                    "Tool %s declares no node_type; listable but not placeable", obj.__name__
+                    "Tool %s declares no node_type; binds via its qualified id only", obj.__name__
                 )
             found.append((f"{slug}/tools.{obj.__name__}", instance))
 
@@ -363,12 +364,26 @@ def discover_tool_registry(
 ) -> dict[str, BaseTool]:
     """The runtime's tool registry: canvas node type → tool instance.
 
-    Keyed by each tool's **own** `node_type` declaration — the single source
-    of truth for wiring identity (ticket 33). A tool that declares none is
-    listable but not placeable, so it is simply absent here.
+    Keyed by the tool's **qualified id** (`<slug>/tools.<ClassName>`) —
+    always — and additionally by its own `node_type` declaration (ticket 33)
+    when it sets one, as an alias for the same instance.
+
+    launch-readiness 42: this used to be keyed by `node_type` alone, on the
+    theory that an empty declaration means "listable but not placeable". That
+    theory was never true on the frontend: `DiscoveredToolNode`
+    (`src/nodes/workflowScoped.ts`) mints a palette card for *every*
+    discovered capability and places it under `capability.id` — the qualified
+    id — with no regard to `node_type`. A package author who never set the
+    field (nothing in the scaffold said to) got a tool that dragged onto the
+    canvas, validated, and then failed at run time with "No implementation
+    for tool" — silently unbound by a channel that was already offering it as
+    bindable. Registering the qualified id unconditionally makes the backend
+    agree with what the editor already does; `node_type` survives as an
+    explicit alias so an existing document naming it keeps resolving.
     """
     registry: dict[str, BaseTool] = {}
-    for _, instance in discover_tool_instances(workflow_dir, slug, warnings=warnings):
+    for qualified_id, instance in discover_tool_instances(workflow_dir, slug, warnings=warnings):
+        registry[qualified_id] = instance
         if instance.node_type:
             registry[instance.node_type] = instance
     return registry

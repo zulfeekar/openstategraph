@@ -153,12 +153,14 @@ class BaseTool(ABC):
 
     name: ClassVar[str]
     description: ClassVar[str]
-    #: The canvas node type this tool answers to (`tool.chinook-execute-sql`).
-    #: The tool declares its own wiring identity — ticket 33 — so the
-    #: runtime registry, the discovery endpoint and the (eventually
-    #: generated) TypeScript node definition all key off one declaration.
-    #: Empty means "not placeable on a canvas", which is legitimate for a
-    #: tool only ever handed to an agent programmatically.
+    #: An explicit *alias* canvas node type (`tool.chinook-execute-sql`) for
+    #: this tool, on top of the qualified id (`<slug>/tools.<ClassName>`)
+    #: discovery always binds it to. Set this for a stable, hand-chosen id
+    #: that survives a class rename, or to match a bundled built-in's
+    #: existing name; a package-local tool needs no `node_type` at all to be
+    #: placeable — launch-readiness 42 found that undocumented requirement
+    #: was producing tools that dragged onto the canvas and then failed to
+    #: bind at run time.
     node_type: ClassVar[str] = ""
     #: Pydantic model describing the arguments. The source of truth for the
     #: generated TypeScript, and for the schema the LLM is shown.

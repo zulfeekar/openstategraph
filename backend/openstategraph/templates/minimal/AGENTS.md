@@ -19,7 +19,7 @@ mistake — it is the place the next thing goes:
 
 | Directory | What lands here |
 | --- | --- |
-| `tools/` | a `BaseTool` subclass per file; it becomes a node you can bind |
+| `tools/` | a `BaseTool` subclass per file; it becomes a node you can bind, placeable under `<this-package>/tools.<ClassName>` — `node_type` is an *optional* alias, not required |
 | `functions/` | plain Python a `function.*` node calls |
 | `middlewares/` | one slot per file, exposing `MIDDLEWARE` |
 | `skills/` | `*.md` prompt context every agent in this package sees |

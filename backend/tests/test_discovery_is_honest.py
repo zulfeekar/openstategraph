@@ -276,16 +276,43 @@ class TestEverySilentSkipHasAVoice:
     def test_a_tool_with_no_node_type_is_listed_and_never_warned_about(
         self, tmp_path: Path
     ) -> None:
-        """Documented-legitimate: `BaseTool.node_type` says empty means "not
-        placeable on a canvas", which is correct for a tool only ever handed to
-        an agent programmatically. It stays discoverable, just not bindable."""
+        """A tool that declares no `node_type` still loads with zero warnings
+        — omitting it is not a mistake by itself.
+
+        (launch-readiness 42): it used to also be unbindable, on the theory
+        that empty `node_type` means "not placeable on a canvas". That theory
+        was already false on the frontend — `DiscoveredToolNode` mints a
+        palette card and places every discovered capability under its
+        *qualified id* (`<slug>/tools.<ClassName>`) regardless of whether
+        `node_type` is set — so a package author who left the field off (which
+        the scaffold never told them to set) got a card that placed onto the
+        canvas and then silently failed to bind at run/validate time. The
+        registry now always answers to the qualified id; `node_type` remains
+        available as an explicit *alias*, e.g. for a stable id that survives a
+        class rename.
+        """
         write(tmp_path / "tools" / "lib.py", GOOD_TOOL.replace('    node_type = "tool.good"\n', ""))
 
         found, warnings = discover(tmp_path)
 
         assert [name for name, _ in found] == ["my-flow/tools.GoodTool"]
         assert warnings == []
-        assert discover_tool_registry(tmp_path, "my-flow") == {}
+        registry = discover_tool_registry(tmp_path, "my-flow")
+        assert set(registry) == {"my-flow/tools.GoodTool"}
+        assert type(registry["my-flow/tools.GoodTool"]).__name__ == "GoodTool"
+
+    def test_the_qualified_id_binds_even_when_node_type_is_also_set(
+        self, tmp_path: Path
+    ) -> None:
+        """`node_type` is an alias, not a replacement — both ids resolve to
+        the same instance, so an existing document naming the explicit
+        `node_type` keeps working unchanged."""
+        write(tmp_path / "tools" / "lib.py", GOOD_TOOL)
+
+        registry = discover_tool_registry(tmp_path, "my-flow")
+
+        assert set(registry) == {"tool.good", "my-flow/tools.GoodTool"}
+        assert registry["tool.good"] is registry["my-flow/tools.GoodTool"]
 
 
 class TestTheHappyPathStaysQuiet:
