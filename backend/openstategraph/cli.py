@@ -600,11 +600,21 @@ def cmd_validate(args: argparse.Namespace) -> int:
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
     from openstategraph.validation import unresolved_mounts, unresolved_tool_bindings
+    from openstategraph.workflows_root import has_project_root, resolve_package
 
-    target = Path(args.target).expanduser().resolve()
+    # A bare slug resolves against `workflows_root()` — the same directory
+    # `new <slug>` (no `--root`) writes into — so the two commands can never
+    # disagree about where one package lives (launch-readiness 29). An
+    # explicit path, relative or absolute, is unchanged: resolved against cwd.
+    target = resolve_package(args.target)
     manifest = target if target.is_file() else target / "workflow.json"
     if not manifest.is_file():
-        return _error(f"no workflow document at {manifest} — is that a workflow package?")
+        hint = (
+            ""
+            if has_project_root()
+            else " — no OpenStateGraph project here; run `openstategraph init` first"
+        )
+        return _error(f"no workflow document at {manifest} — is that a workflow package?{hint}")
 
     try:
         document = normalize_document(json.loads(manifest.read_text()))

@@ -132,6 +132,63 @@ class TestValidate:
         assert cli.main(["validate", str(tmp_path)]) == cli.EXIT_FAILURE
 
 
+class TestValidateResolvesABareSlugLikeNewDoes:
+    """Ticket 29 — the stranger-install defect. `new slug` writes under
+    `workflows_root()`; `validate slug` used to resolve `slug` against cwd
+    instead, so the two commands disagreed about where the same package was.
+
+    `checkout_root` is monkeypatched to `None` (as `test_workflows_root.py`
+    does) to stand in for "installed" — inside this checkout `workflows_root()`
+    always finds the repository's own `workflows/`, which would hide the bug.
+    """
+
+    def _installed_no_project(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        from openstategraph import workflows_root as wr_module
+
+        monkeypatch.setattr(wr_module, "checkout_root", lambda: None)
+        monkeypatch.delenv("OPENSTATEGRAPH_WORKFLOWS_ROOT", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+    def test_a_bare_slug_resolves_to_where_new_wrote_it(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        self._installed_no_project(monkeypatch, tmp_path)
+
+        assert cli.main(["new", "langchain-docs-qa"]) == cli.EXIT_OK
+        assert (tmp_path / "workflows" / "langchain-docs-qa" / "workflow.json").is_file()
+
+        assert cli.main(["validate", "langchain-docs-qa"]) == cli.EXIT_OK
+
+    def test_new_and_validate_agree_from_the_same_cwd(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The cross-command pin: whatever `new` resolves a slug to, `validate`
+        must resolve the same slug to — computed once, from the shared
+        `resolve_package` function, not guessed twice."""
+        from openstategraph.workflows_root import resolve_package
+
+        self._installed_no_project(monkeypatch, tmp_path)
+        cli.main(["new", "my-flow"])
+
+        from openstategraph.scaffold import new_package
+        from openstategraph.workflows_root import workflows_root
+
+        new_target = workflows_root() / "my-flow"
+        assert resolve_package("my-flow") == new_target.resolve()
+        del new_package  # imported only to document the parallel, unused here
+
+    def test_no_project_root_names_init_in_the_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+    ) -> None:
+        self._installed_no_project(monkeypatch, tmp_path)
+
+        code = cli.main(["validate", "some-slug"])
+
+        assert code == cli.EXIT_FAILURE
+        err = capsys.readouterr().err
+        assert "init" in err
+
+
 class TestGraph:
     def test_it_prints_mermaid_text(self, package: Path, capsys) -> None:
         code = cli.main(["graph", str(package)])

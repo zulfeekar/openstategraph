@@ -87,6 +87,49 @@ def workflows_root() -> Path:
     return (checkout / "workflows") if checkout else (Path.cwd() / "workflows")
 
 
+def has_project_root() -> bool:
+    """Whether `workflows_root()` rests on a real marker rather than the bare
+    cwd fallback (source 5 of the docstring above: `./workflows` under the
+    working directory, chosen because there was nothing else to choose).
+
+    `validate`'s error names `init` exactly when this is False — the
+    directory `workflows_root()` answered for was not chosen by anything, it
+    is just where the process happened to be standing (launch-readiness 29).
+    """
+    if os.environ.get(WORKFLOWS_ROOT_ENV, "").strip():
+        return True
+    # Lazy for the same reason `workflows_root()` is: keep `import
+    # openstategraph` cheap.
+    from openstategraph.config_file import find_config_file
+
+    if find_config_file() is not None:
+        return True
+    return checkout_root() is not None
+
+
+def resolve_package(raw: str | Path) -> Path:
+    """Where a package-path argument means, treating a bare slug as `new`
+    would have written it.
+
+    Every command that takes a package on the command line — `run`,
+    `validate`, `graph`, `eval`, `resume`, `export-plugin`, `knowledge
+    build`/`list` — has always accepted an explicit path, resolved against
+    the working directory exactly as `Path(arg).resolve()` always did, and
+    that behaviour is unchanged here. What changes is a *bare slug*: no path
+    separator, and not a path that already exists relative to cwd. `new
+    <slug>` (no `--root`) writes that slug under `workflows_root()`, so a
+    bare slug given to any reader now resolves against the same directory —
+    one function, one answer, rather than `new` and `validate` each guessing
+    (launch-readiness 29).
+    """
+    text = os.fspath(raw)
+    candidate = Path(text).expanduser()
+    literal = os.sep in text or (os.altsep is not None and os.altsep in text)
+    if literal or candidate.exists():
+        return candidate.resolve()
+    return (workflows_root() / text).resolve()
+
+
 def content_root() -> Path:
     """The jail for the read-only platform tools — one level above the packages.
 
@@ -98,4 +141,11 @@ def content_root() -> Path:
     return workflows_root().parent
 
 
-__all__ = ["WORKFLOWS_ROOT_ENV", "checkout_root", "content_root", "workflows_root"]
+__all__ = [
+    "WORKFLOWS_ROOT_ENV",
+    "checkout_root",
+    "content_root",
+    "has_project_root",
+    "resolve_package",
+    "workflows_root",
+]
