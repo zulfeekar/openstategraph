@@ -480,6 +480,66 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc4 — 2026-08-24
+The second stranger run, answered. `0.3.0rc3` was installed from TestPyPI by a
+session allowed to read only the published docs and what was on screen. **It
+reached an answer in 6 minutes 54 seconds** — the number rc2's run could not
+produce — answered two verifiable LangChain API questions correctly, and
+refused honestly when asked about a parameter that does not exist.
+
+Then it was handed a wrong answer as though it were right. That chain is what
+this candidate closes.
+
+### Fixed — the chain that published a wrong answer
+
+Three defects, one story, and any one of them alone would have been survivable.
+
+- **A grader was shipped with a criterion it cannot evaluate.** The default
+  criteria said every claim *"must come from a tool result"* — but
+  `BaseGrader.grade` is handed the candidate text and the question, never
+  `tool_use`. The judge was asked to verify something it has no access to, so a
+  correct answer was rejected three times and the loop exhausted. The criterion
+  is now *"must carry a citation"*, which is checkable from the answer alone;
+  provenance grading is **explicitly unsupported**, recorded rather than left
+  as a silent gap, and the Grader's `criteria` field says so in its own hint.
+- **The customer was never told the grader had said no.** `warnings` is a field
+  of the developer channel only, so a customer-audience response had nowhere to
+  carry it, and `/chat` is a customer surface. A rejected answer arrived
+  indistinguishable from one that passed first try. `published_rejected` is now
+  on `RunResponse` and the streaming `done` frame for **both** audiences — the
+  *reason* stays developer-only, because a reason can quote internals; *that it
+  happened* must not. `/chat` shows it as a banner above the answer.
+- **The agent's scratchpad was published as the answer** — *"Perfect. I now
+  have the official documentation."* The same shape as a fix from an earlier
+  map, on a surface that fix never covered: a plain agent has no worker/advisor
+  split, and its output contract was deliberately empty. The contract now
+  forbids narrating tool use or referring to an earlier attempt, rendered last
+  so a developer's own rules cannot override it.
+
+### Fixed — smaller things a stranger hit
+
+- **`validate` looked where `new` did not write.** `new <slug>` writes under
+  `workflows_root()`; `validate <slug>` resolved a bare slug against the working
+  directory. Every other command that takes a package takes a literal path, so
+  `validate` was the sole outlier; it now shares `new`'s resolution.
+- **The model picker offered models that cannot run.** An option whose provider
+  package is not installed is now disabled and says which extra it needs. A
+  missing *credential* stays selectable on purpose — that one can be fixed from
+  the credentials dialog without leaving the page; a missing package cannot.
+- **An empty composer refused in silence.** The Ask panel's Send button was
+  disabled with no explanation; it now says what is missing.
+
+### Notes
+
+- Two of the run's fourteen findings did **not** survive reproduction, both
+  visual: a canvas said to lose the graph three ways, and a button said to do
+  nothing. Each behaviour was correct and already covered by a passing test.
+  The likely cause is the instrument — a screenshot taken before the repaint
+  photographs a working control as a dead one. Recorded so the next run
+  measures differently; a screenshot is a lead, not a verdict.
+- `docs/decisions/stranger-install-2026-08-24.md` is the log, written during
+  the run rather than after.
+
 ## 0.3.0rc3 — 2026-08-24
 Everything a stranger found. `0.3.0rc2` was the first artefact anyone could
 install, so it was installed — into a clean venv, from TestPyPI, by a session
