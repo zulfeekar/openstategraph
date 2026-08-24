@@ -480,6 +480,92 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc3 — 2026-08-24
+Everything a stranger found. `0.3.0rc2` was the first artefact anyone could
+install, so it was installed — into a clean venv, from TestPyPI, by a session
+allowed to read only the published docs and what was on screen. It never
+reached an answer, and this release is the eight defects that stopped it, plus
+the gate that let them through.
+
+### Fixed — the first thing a new user meets
+
+- **A missing model provider surfaced as a bare `500`.** The product already
+  composes an excellent sentence for that state — the one `openstategraph
+  serve` prints in its startup banner — and threw it away at the moment it was
+  needed. All three `/api/runs*` routes now answer **503** carrying
+  `ProviderCatalogue.elected_default().reason`, the same string
+  `GET /api/providers` publishes, and `/chat` parses `.detail` instead of
+  wrapping the body as raw text. The customer and developer channels say the
+  same thing here on purpose: retrying can never fix a missing provider, so
+  the generic "try again" would be actively wrong.
+- **The onramp ended on an empty room.** `/chat`'s picker said only "No
+  workflows are published yet" on a surface that has no editor. It now names
+  the way out and links to it. Nothing is auto-published on a user's behalf —
+  the gallery is copy-on-use and stays that way.
+- **The README promised a builder the wheel does not carry.** `concierge` and
+  `workflow-architect` live at repo-root `workflows/`, outside `backend/`, so
+  no packaging rule could ever ship them. The README says so and points a
+  wheel reader at `docs/mcp.md` §2, which is that reader's actual path. A test
+  fails if either package moves, or if the paragraph stops saying so.
+- **The install command a reader tries first fails misleadingly** — it blames
+  `pydantic`. Dependencies are not on TestPyPI, so `--extra-index-url` is
+  required; a test now fails if any documented command loses it.
+
+### Fixed — the MCP door, driven as a client for the first time
+
+Four defects on one door, all the same shape: written carefully, never walked
+end to end by a client.
+
+- **`compile_workflow` accused the shipped, working `sql-qa` example** of
+  having tools with no implementation. `_compile_topology` built `NodeRuntime`
+  with an empty tool registry, so every tool node was reported unresolvable
+  regardless. A client model obeying the instructions would have revised a
+  correct document forever. The genuinely unresolvable case — a package-local
+  `tools/` on a door with no slug — still warns, honestly.
+- **`get_node_vocabulary()` published every port and no `data` schema**, so a
+  model had to guess config keys. Each node type now carries its field list,
+  derived from the one declaration the editor's card and inspector already
+  render from.
+- **`save_workflow_draft` rejected the envelope its sibling returns.**
+  `compile_workflow` hands back `{version, name, savedAt, published,
+  document}`; feeding that straight back raised `name Field required`. The
+  parser was wrong, not the shape.
+- The full sequence — vocabulary → compose → compile → validate → save → list
+  → describe — now completes.
+
+### Fixed — a document that could not be wrong
+
+- **A missing required config key, or a key no field declares, validated
+  clean.** Both produced `valid, no findings`; the node then ran with no
+  working config and the agent carried on without it. Now a **required key
+  absent is refused**, and an **unrecognised key warns and stays valid** — the
+  asymmetry is deliberate, because nothing that runs today may start being
+  refused, and an unknown key might be a newer field or a plugin's. All 32
+  shipped packages were swept: none gains a hard finding.
+- Dynamically discovered `tool.*`/`function.*` types have no static schema, so
+  their keys are not checked — and that is said out loud in an advisory rather
+  than skipped silently.
+
+### Fixed — the gate that let all of this through
+
+- **`loop_gate.py` was narrower than CI.** Twenty sessions passed it on
+  2026-08-23 and the push then failed three jobs: the frontend static checks,
+  a generated-artifact drift check, and the clean-install proof — none of which
+  the gate ran. It runs all three now (~60s added) and **names the jobs it
+  still does not run**. `test_loop_gate_ci_coverage.py` parses `ci.yml` and
+  fails when CI gains a job the gate has never heard of, because a list is not
+  a gate.
+
+### Notes
+
+- Measured: **1 min 45 s** from `pip install` to both surfaces rendering, 46
+  distributions. Time to first *answer* is still unmeasured — the stranger run
+  stopped at the credential wall, which is its own recorded finding.
+- `docs/decisions/stranger-install-2026-08-23.md` is the log, written during
+  rather than after.
+- Chinook ground truth, for checkable answers: 59 customers, 412 invoices,
+  3503 tracks.
+
 ## 0.3.0rc2 — 2026-08-23
 The second candidate, and the first with a green CI behind it. Where rc1 added
 capability, rc2 mostly stops surfaces from saying things that are not true —
