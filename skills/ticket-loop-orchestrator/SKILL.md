@@ -204,6 +204,37 @@ reading source is a waste of context; `compile/node_runtime.py` alone is over
 
 ---
 
+## 6.5 Close the ticket before you dispatch the next one
+
+The loop's most common corruption is not a bad session — it is a good session
+whose result never got written down. A ticket verified and then left open reads
+as unstarted to the next orienting session, and the work gets done twice or,
+worse, half-reverted by somebody solving the same symptom differently.
+
+So a ticket is finished only when all of these are true, and you check them
+**before** the next dispatch, never in a batch at the end:
+
+- The **ticket header** carries a single status word — `resolved`, or
+  `partially` when the shipped work is real but the reported symptom survives.
+  Never `resolved (partially)`; the ledger reads the header, and a parenthesis
+  reads as done.
+- The **ticket body** says what changed and names the commit.
+- The **commit** carries `Ticket: <map>/<n>`. The trailer says the work belongs
+  to that ticket — never that the ticket is finished. Those are different
+  claims and conflating them is what produces shipped-but-open drift.
+- **`python3 scripts/ticket_ledger.py`** reports agreement. Run it every time.
+  It is two seconds and it is the only thing that catches the header/body/git
+  disagreements above.
+- **Docs updated** if the change is user-visible, and any **new finding filed**
+  as its own ticket rather than mentioned in a report nobody re-reads.
+- **Today's handoff** amended — done, next, traps. If the date rolled over
+  mid-loop, that is a *new* `.scratch/HANDOFF-<YYYY-MM-DD>.md` carrying the
+  live parts forward, not an edit to yesterday's.
+
+Only then pick the next ticket. Deferring this to "the end of the batch" is how
+twenty tickets came to read `Status: open` for work that had already shipped
+and passed CI — the failure this whole discipline exists to prevent.
+
 ## Done means
 
 - Every unattended-eligible ticket taken, each gate-verified twice
