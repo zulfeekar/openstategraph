@@ -100,7 +100,11 @@ A release candidate **is** on TestPyPI now and installs in ~13 s (measured
 https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/
 "openstategraph[server,ollama]==0.3.0rc2"` — the `--extra-index-url` is mandatory,
 because TestPyPI carries no `pydantic` 2.x and a naive install fails on that
-dependency with no mention of the missing index. Absent even that, install the
+dependency with no mention of the missing index. A version published in the
+last few minutes can hit a second trap: pip caches the simple-index page, so
+it may report the new version as nonexistent even though TestPyPI already
+serves it — add `--no-cache-dir` if a just-published version is reported
+missing. Absent even that, install the
 identical artifact from a checkout: `pip install -e "backend[ollama]"`, or
 build the wheel with `python3 -m build backend`. CI's `clean-install` job
 installs that wheel into an empty virtualenv **outside** this repository and

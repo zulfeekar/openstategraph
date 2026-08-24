@@ -92,6 +92,19 @@ release — once on the wheel this repository built, once on the wheel the index
 served. It answers two different questions, and it is worth knowing which is
 which before trusting a green run.
 
+The index-mode run is racing the index: a version can be genuinely uploaded
+and still be reported as nonexistent for a short while afterwards, from two
+independent causes — the index itself has not finished propagating, or `pip`
+is reading a locally cached copy of the simple-index page fetched before the
+upload (launch-readiness 37; the same trap the README's TestPyPI paragraph
+warns a human about with `--no-cache-dir`). Both `pip download` and the two
+subsequent `pip install` calls (`[ollama]`, `[server]`) go through
+`scripts/lib/pip_retry.sh`'s `pip_retry`, which polls up to `OSG_INDEX_RETRIES`
+times (default 10, `OSG_INDEX_RETRY_DELAY` seconds apart, default 15) and
+passes `--no-cache-dir` on every index-mode call. A version that never
+actually appears still fails the job once the ceiling is reached — this is a
+bounded wait, not a "skip if missing."
+
 **Packaging and wiring.** The wheel carries its package data — the editor
 bundle, `compile/port_specs.json`, every template, the examples including
 `sql-qa`'s database. Installed outside any checkout with `PYTHONPATH` empty,

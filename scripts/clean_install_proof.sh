@@ -38,7 +38,15 @@
 #                           here, NOT in OSG_INDEX_URL — see below)
 #     OSG_PIP_PRE           set to 1 to allow pre-release versions
 #     OSG_INDEX_RETRIES     attempts while the index catches up (default 10,
-#                           15s apart; TestPyPI is not instantly consistent)
+#                           15s apart via OSG_INDEX_RETRY_DELAY; TestPyPI is
+#                           not instantly consistent). Applies to the initial
+#                           download AND to the two `pip install` calls below
+#                           it — a version minutes old can still 404 on any of
+#                           them (launch-readiness 37). Every index-mode pip
+#                           call also passes --no-cache-dir, because a stale
+#                           local copy of the simple index page is a second,
+#                           independent way to get the same wrong "no such
+#                           version" error. See scripts/lib/pip_retry.sh.
 #
 #   Why TestPyPI is the *extra* index and PyPI the primary: TestPyPI carries
 #   stale and squatted copies of ordinary names, and `openstategraph`'s
@@ -54,6 +62,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/pip_retry.sh
+source "$REPO/scripts/lib/pip_retry.sh"
 WORK="${OSG_PROOF_DIR:-${TMPDIR:-/tmp}/osg-clean-install}"
 VENV="$WORK/venv"
 PROJECT="$WORK/project"
@@ -63,9 +73,16 @@ rm -rf "$WORK"
 mkdir -p "$PROJECT"
 
 # Index arguments, empty in build mode so the same `pip` lines serve both.
+# `--no-cache-dir` is load-bearing here, not cosmetic: pip caches the simple
+# index page, so a version published seconds ago can be reported as
+# nonexistent from a page fetched before the upload (launch-readiness 37,
+# "stranger run three" — `--no-cache-dir` alone fixed it there). The
+# `pip_retry` polling below handles the *other* cause, the index itself not
+# having propagated yet; this handles the local one. Both apply.
 INDEX_ARGS=()
 if [ "$SOURCE" = "index" ]; then
   [ -n "${OSG_VERSION:-}" ] || { echo "OSG_SOURCE=index needs OSG_VERSION"; exit 2; }
+  INDEX_ARGS+=(--no-cache-dir)
   INDEX_ARGS+=(--index-url "${OSG_INDEX_URL:-https://pypi.org/simple}")
   # `if`, not `[ … ] && …`: under `set -e` a failing `&&` list at top level
   # exits the script, so the one-liner form would abort whenever the variable
@@ -107,18 +124,10 @@ case "$SOURCE" in
   index)
     echo "==> fetching openstategraph==$OSG_VERSION from the index"
     mkdir -p "$WORK/download"
-    attempt=1
-    until python3 -m pip download --quiet --no-deps --only-binary=:all: \
-            "${INDEX_ARGS[@]}" --dest "$WORK/download" \
-            "openstategraph==$OSG_VERSION"; do
-      if [ "$attempt" -ge "${OSG_INDEX_RETRIES:-10}" ]; then
-        echo "openstategraph==$OSG_VERSION never became installable from the index"
-        exit 1
-      fi
-      echo "    not visible yet (attempt $attempt) — the index is catching up"
-      attempt=$((attempt + 1))
-      sleep 15
-    done
+    pip_retry "openstategraph==$OSG_VERSION" \
+      python3 -m pip download --quiet --no-deps --only-binary=:all: \
+        "${INDEX_ARGS[@]}" --dest "$WORK/download" \
+        "openstategraph==$OSG_VERSION"
     WHEEL="$(ls "$WORK"/download/*.whl)"
     echo "    got $(basename "$WHEEL")"
     ;;
@@ -164,8 +173,9 @@ if [ "$SOURCE" = "index" ]; then
   # The owner's question — "how do you retest before it goes to PyPI" — is
   # answered by this line: resolve and install the way a stranger would,
   # from the index, not from a file we just built.
-  "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
-    "openstategraph[ollama]==$OSG_VERSION"
+  pip_retry "openstategraph[ollama]==$OSG_VERSION" \
+    "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
+      "openstategraph[ollama]==$OSG_VERSION"
 else
   "$VENV/bin/pip" install --quiet "${WHEEL}[ollama]"
 fi
@@ -681,8 +691,9 @@ set -e
 # ---------------------------------------------------------------------------
 echo "==> installing the [server] extra (the exit-3 gate above is now satisfied)"
 if [ "$SOURCE" = "index" ]; then
-  "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
-    "openstategraph[server]==$OSG_VERSION"
+  pip_retry "openstategraph[server]==$OSG_VERSION" \
+    "$VENV/bin/pip" install --quiet "${INDEX_ARGS[@]}" \
+      "openstategraph[server]==$OSG_VERSION"
 else
   "$VENV/bin/pip" install --quiet "${WHEEL}[server]"
 fi
