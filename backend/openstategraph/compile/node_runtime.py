@@ -623,7 +623,10 @@ def _merge_override_maps(existing: Any, incoming: Any) -> tuple[Any, list[str]]:
 
 
 def apply_mount_overrides(
-    child_document: dict[str, Any], overrides: Any
+    child_document: dict[str, Any],
+    overrides: Any,
+    *,
+    applied: list[tuple[str, str]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Per-mount configuration for a shared package (docs/decisions/mount-overrides.md).
 
@@ -634,6 +637,15 @@ def apply_mount_overrides(
     stays one-directional. An unknown child node id warns loudly and runs on
     the package default — a typo degrading audibly beats a run that cannot
     start.
+
+    ``applied``, when passed, is appended to in place with one
+    ``(child_node_id, field_key)`` pair per field this call actually wrote —
+    this is the one place that knows which write succeeded, so it is the one
+    place that can say so (`launch-readiness` 40). An out-parameter rather
+    than a wider return, deliberately: this function is the single owner of
+    the merge (`api/mount_resolution.py`'s docstring says so) and over a dozen
+    call sites destructure a 2-tuple; widening the return would touch every
+    one of them for a fact only the mount-resolution call site needs.
     """
     if not overrides:
         return child_document, []
@@ -680,6 +692,8 @@ def apply_mount_overrides(
                 # may merge rather than replace. See `_merge_override_maps`.
                 data[key], notes = _merge_override_maps(data.get(key), value)
                 warnings += notes
+                if applied is not None:
+                    applied.append((node_id, key))
                 continue
             if value is None:
                 # Applied, not skipped — `None` may be a legitimate value for a
@@ -696,6 +710,8 @@ def apply_mount_overrides(
                     "restore the default"
                 )
             data[key] = value
+            if applied is not None:
+                applied.append((node_id, key))
     return document, warnings
 
 
@@ -3344,12 +3360,33 @@ class NodeRuntime:
                 # Per-mount overrides (docs/decisions/mount-overrides.md):
                 # this mount's own configuration, merged onto a copy of the
                 # shared package before the child compiles.
+                applied_overrides: list[tuple[str, str]] = []
                 child_document, mount_warnings = apply_mount_overrides(
-                    child_document, data.get("overrides")
+                    child_document, data.get("overrides"), applied=applied_overrides
                 )
                 for warning in mount_warnings:
                     self.diagnostics.record(
                         Finding.OVERRIDE_PROBLEM, f"{slug or node_id}: {warning}"
+                    )
+                # The confirmation `OVERRIDE_PROBLEM` never had a counterpart
+                # for (`launch-readiness` 40): an override that DID reach its
+                # target said nothing about which mount reached it. Recorded
+                # here, on THIS document's own diagnostics, keyed by this
+                # mount's own node id — not by `slug` — so two sibling mounts
+                # of the same package (`same-package-twice`) produce two
+                # distinct sentences rather than one `CompileDiagnostics.absorb`
+                # would collapse by package identity. Folding upward through
+                # nested mounts still names the whole path: because the
+                # distinguishing node id is baked into THIS message's own
+                # text, `absorb`'s `through=slug` prefix (this document's own
+                # slug, as seen by whichever document mounts it) only adds a
+                # level rather than erasing one — a grandparent's report reads
+                # `Inside mounted workflow "<mid-slug>": ... "mount-inner" ->
+                # "<leaf-slug>#shorten1.systemPrompt"`, the whole chain.
+                for child_node_id, field in applied_overrides:
+                    self.diagnostics.record(
+                        Finding.OVERRIDE_APPLIED,
+                        f'"{node_id}" -> "{slug}#{child_node_id}.{field}"',
                     )
                 # Taken *after* the overrides above, so a mount that overrode
                 # its way to a different size is sized against what it will

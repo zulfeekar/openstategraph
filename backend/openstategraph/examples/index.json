@@ -38,7 +38,20 @@
     { "slug": "approval-in-the-loop", "pattern": "the human closes the cycle" },
     { "slug": "nested-mounts", "pattern": "composition depth" },
     { "slug": "nested-mounts-mid", "pattern": "composition depth (middle level)" },
-    { "slug": "same-package-twice", "pattern": "one definition, two instances" },
+    {
+      "slug": "same-package-twice",
+      "pattern": "one definition, two instances",
+      "expectedFindings": [
+        {
+          "finding": "override_applied",
+          "subjects": ["\"mount-terse\" -> \"chained-summarizer#shorten1.systemPrompt\""]
+        },
+        {
+          "finding": "override_applied",
+          "subjects": ["\"mount-analogy\" -> \"chained-summarizer#shorten1.systemPrompt\""]
+        }
+      ]
+    },
     { "slug": "delegate-by-mount", "pattern": "delegation" },
     { "slug": "skill-driven-rubric", "pattern": "rules from a file" },
     { "slug": "knowledge-lookup-qa", "pattern": "retrieval, no loop" },

@@ -51,27 +51,30 @@ def test_every_example_warns_only_as_declared(example: Example) -> None:
     )
 
 
-def test_no_example_currently_declares_a_finding() -> None:
-    """`support-triage` was the deliberate case (gallery 31) — its grader
-    shipped `pass` only, and `expectedFindings` said so on purpose.
-    `workflow-gallery` 78 wired its `revise` edge to match the dev workspace
-    copy, so it no longer produces `Finding.UNWIRED_REVISE` and its
-    declaration was removed from `examples/index.json` along with the
-    `_comment` explaining it — a declaration that stopped firing is drift,
-    per this module's own rule, and a stale declaration is worse than none.
+def test_exactly_same_package_twice_currently_declares_a_finding() -> None:
+    """`support-triage` was the deliberate `UNWIRED_REVISE` case (gallery 31)
+    — its grader shipped `pass` only, and `expectedFindings` said so on
+    purpose. `workflow-gallery` 78 wired its `revise` edge to match the dev
+    workspace copy, so it no longer produces that finding and its declaration
+    was removed from `examples/index.json` along with the `_comment`
+    explaining it — a declaration that stopped firing is drift, per this
+    module's own rule, and a stale declaration is worse than none. Between
+    that and `launch-readiness` 40 the list really was empty.
+
+    `same-package-twice` is the new deliberate case: two sibling mounts of
+    `chained-summarizer`, each carrying its own `data.overrides` on purpose —
+    the shipped illustration of "one definition, two instances" — so the two
+    `Finding.OVERRIDE_APPLIED` reports it now compiles with are exactly what
+    the example is *for*, declared rather than left as undeclared drift.
 
     No other package in the gallery currently ships a deliberate, declared
-    warning, so the list is empty rather than naming a replacement. Inventing
-    a new deliberately-unwired example to keep one row on this list was
-    considered and rejected: nothing else in the gallery currently has a
-    reason to leave a `revise` edge unwired, and manufacturing one only to
-    keep this test's premise alive would be exactly the kind of promise
-    `CLAUDE.md` warns against making for its own sake. If the gallery wants a
-    deliberately-unwired example again, add one under its own ticket and this
-    assertion is where it gets named.
+    warning. Inventing one to keep this test's premise alive was considered
+    and rejected the same way the docstring above rejected it for
+    `UNWIRED_REVISE`; if the gallery wants a second one, add it under its own
+    ticket and this assertion is where it gets named.
     """
     declaring = [e.slug for e in catalogue() if e.expected_findings]
-    assert declaring == []
+    assert declaring == ["same-package-twice"]
 
 
 def test_an_undeclared_warning_is_drift() -> None:

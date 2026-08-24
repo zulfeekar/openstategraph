@@ -89,6 +89,20 @@ class Finding(str, Enum):
     UNRESOLVED_SUBGRAPH = "unresolved_subgraph"
     #: A per-mount override problem — unknown child node id, wrong shape.
     OVERRIDE_PROBLEM = "override_problem"
+    #: A per-mount override that DID apply — the report `OVERRIDE_PROBLEM`
+    #: has no counterpart for (`launch-readiness` 40). An override reaching
+    #: the wrong node of a same-named sibling mount, or reaching nothing,
+    #: looked identical to one working correctly: `validate`/`run` were
+    #: silent either way, and the only confirmation available was inferring
+    #: scope from the model's own answer — which only works when the
+    #: override happens to be observable. Recorded once per applied field, at
+    #: the mount that applied it, so `data.overrides` on two sibling mounts
+    #: of the same package (`same-package-twice`) produce two distinct
+    #: sentences rather than one collapsed by package identity the way
+    #: `CompileDiagnostics.absorb` collapses `OVERRIDE_PROBLEM` and friends.
+    #: A **report**: the override still ran, so this is confirmation, not a
+    #: reason to fail a build.
+    OVERRIDE_APPLIED = "override_applied"
     #: A capability that failed to *load* — a tool module that would not
     #: import, an abstract class discovery could not instantiate, a plugin
     #: distribution that half-installed.
@@ -247,6 +261,7 @@ _SENTENCES: dict[Finding, str] = {
         "the step produced nothing."
     ),
     Finding.OVERRIDE_PROBLEM: "Mount override — {0}",
+    Finding.OVERRIDE_APPLIED: "Mount override applied — {0}",
     Finding.CAPABILITY_FAILED: "{0}",
     Finding.UNGUARDED_EXIT: (
         'Output "{0}" has no guardrail upstream of it, but this workflow has one on '
@@ -339,6 +354,7 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.UNWIRED_REVISE,
         Finding.STALE_TOOL_DENIAL,
         Finding.STATELESS_MOUNT_REDOES,
+        Finding.OVERRIDE_APPLIED,
     }
 )
 

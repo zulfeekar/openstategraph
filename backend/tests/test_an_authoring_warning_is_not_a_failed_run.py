@@ -265,12 +265,18 @@ class TestEveryProducerHasASide:
     #: "no grader routes revise" predicate this file's own subject reports one
     #: level down, so keeping the two apart made one fact a failure at the
     #: parent and a report at the child.
+    #: `OVERRIDE_APPLIED` is the fifth (`launch-readiness` 40): confirmation
+    #: that a mount override reached its target, the counterpart
+    #: `OVERRIDE_PROBLEM` never had for the success case. The write already
+    #: happened — this sentence is advice about scope, not a claim the run
+    #: came out less capable, so it may not move an exit code either.
     REPORTS = frozenset(
         {
             Finding.UNENFORCED_OUTCOME,
             Finding.UNWIRED_REVISE,
             Finding.STALE_TOOL_DENIAL,
             Finding.STATELESS_MOUNT_REDOES,
+            Finding.OVERRIDE_APPLIED,
         }
     )
 

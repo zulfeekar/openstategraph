@@ -427,7 +427,7 @@ MULTI_MATCH_PROMPT = """**Twelve and thirteen, not eleven and twelve, and the ex
     when it was public, which is the census working."""
 
 
-FINDING_KINDS = """**An enum of thirteen, and the ceiling is asking the wrong question of it.**
+FINDING_KINDS = """**An enum of fourteen, and the ceiling is asking the wrong question of it.**
     `Finding` has no methods and no state — every member is one *value*, and the
     number of them is the number of ways a compiled graph has been observed to
     come out less capable than it was drawn. There is no "and" to split on: a
@@ -462,14 +462,23 @@ FINDING_KINDS = """**An enum of thirteen, and the ceiling is asking the wrong qu
     the failure side with `UNRESOLVED_SUBGRAPH`, whose class it shares. One
     more way for a graph to come out less capable than it was drawn, which is
     precisely what the module docstring says this list is, so it is a table
-    entry and not a split."""
+    entry and not a split.
+
+    The fourteenth (`OVERRIDE_APPLIED`, `launch-readiness` 40) is the mirror
+    of the split argued at the twelfth: `OVERRIDE_PROBLEM` already reported
+    when a mount override failed to reach its target, and had no counterpart
+    for when it succeeded — an override that DID apply and one that silently
+    missed looked identical on `validate`/`run`, confirmable only by inferring
+    scope from a run's own answer. What it describes is not a lost capability
+    either, so it is `REPORT_ONLY` beside `STATELESS_MOUNT_REDOES` rather than
+    a new drawer — one more table entry, same reasoning, same enum."""
 
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(13, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(14, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
     "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),
