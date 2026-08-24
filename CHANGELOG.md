@@ -480,6 +480,42 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc7 — 2026-08-24
+The fourth stranger run, and the first with nothing dishonest in it.
+
+`0.3.0rc6` was installed from TestPyPI into a clean venv and used to do the one
+thing no earlier run tried: **take a copy of a shipped example and run it**,
+rather than building a workflow from nothing. `nested-mounts` — three documents,
+three levels — copied out of the wheel and run unmodified. **~2 minutes from
+`pip install` to a correct answer.** The mount chain resolved, `graph --xray`
+opened all three levels as real nested subgraphs, and an override written on the
+middle document reached the leaf without touching the leaf's file on disk. Both
+deliberate breaks refused honestly: an unanswerable question got a plain refusal,
+and a mount pointed at a package that does not exist got a named error at
+`validate` and again at `run`, with nothing fabricated.
+
+### Fixed
+
+- **An override through a parent did not say whose node it changed.** It applied
+  correctly and silently. A new report-only finding now names the mount that
+  applied it and the field it reached — keyed by the **mount's own node id**, not
+  the package slug, so the same package mounted twice produces two distinct
+  sentences instead of one collapsed by identity. It surfaces through the channel
+  `validate`'s *Notes* and `run`'s warnings already use.
+- **The empty-canvas hint was clipped by the palette below ~821px.** An earlier
+  change gave the right-hand panels an inset so the hint stays clear of them; the
+  palette never got the mirror, and the hint was pinned to `left: 0`. Measured:
+  10.75px clipped at 800px, none after. That sentence is the whole answer to
+  "I pressed New, now what", so losing it left a first-timer on a narrow window
+  with a blank canvas and no route out.
+
+### Notes
+
+- The composer gap is unchanged and still stated rather than hidden: a
+  `pip install` user has no in-product surface that turns a sentence of English
+  into a workflow. `docs/mcp.md` §2 is their path.
+- `docs/decisions/stranger-install-2026-08-24-run4.md` is the log.
+
 ## 0.3.0rc6 — 2026-08-24
 Three more from the third stranger run, and the release train's own bug.
 
