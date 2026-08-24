@@ -70,6 +70,9 @@ def provider_status() -> ProviderStatusListResponse:
             configured_by=(source[0] if (source := here.credential_source()) else None),
             env_vars=list(here.spec.env_vars),
             default_model=here.model_string(),
+            installed=here.is_installed(),
+            install_hint=here.spec.install_hint,
+            extra=here.spec.extra,
             key_hint=here.key_hint(),
         )
         for here in map(ProviderEnvironment, provider_catalogue().list())

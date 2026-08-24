@@ -36,6 +36,22 @@ export class ServerReadiness {
   private configuredProviders: ReadonlySet<string> | null = null;
 
   /**
+   * Install hint for a provider whose *package* `/api/providers` reported not
+   * installed, keyed by provider id. Absent entirely for one it called
+   * installed, or before it has answered — same "no accusation without
+   * evidence" shape as `configuredProviders`.
+   *
+   * Kept apart from `configuredProviders` on purpose (launch-readiness/28): a
+   * missing credential is fixable from the browser's own credential store, a
+   * missing package is not, and the picker needs to tell the two walls apart
+   * rather than flatten both into "needs key".
+   */
+  private uninstalledProviders: ReadonlyMap<
+    string,
+    { readonly installHint: string; readonly extra: string }
+  > | null = null;
+
+  /**
    * `/api/providers`'s `run_readiness` — `ProviderCatalogue.elected_default().reason`
    * in the server's own words, or `null` before it answers.
    *
@@ -75,6 +91,29 @@ export class ServerReadiness {
     return 'needs key';
   }
 
+  /**
+   * The install line for a provider `/api/providers` reported as not
+   * installed, or `null` when it is installed or the server has not answered.
+   *
+   * `null` is deliberately overloaded with the same meaning `readinessOf`'s
+   * `unknown` carries: nothing here disables a model on no evidence.
+   */
+  packageGapOf(providerId: string): string | null {
+    return this.uninstalledProviders?.get(providerId)?.installHint ?? null;
+  }
+
+  /**
+   * The pip extra's bare name for a provider `/api/providers` reported not
+   * installed, e.g. `openai` — or `null` alongside `packageGapOf`.
+   *
+   * Kept apart from `packageGapOf` so a caller composing its own short label
+   * ("needs openstategraph[openai]") reads the vendor's own extra name rather
+   * than assuming it equals the provider id.
+   */
+  packageExtraOf(providerId: string): string | null {
+    return this.uninstalledProviders?.get(providerId)?.extra ?? null;
+  }
+
   /** Records `/api/health`. Notifies only on a real change. */
   recordHealth(modelConfigured: boolean): void {
     if (this.configuredSomewhere === modelConfigured) return;
@@ -101,14 +140,27 @@ export class ServerReadiness {
    */
   recordProviders(statuses: readonly ProviderStatus[], runReadiness?: string): void {
     const next = new Set(statuses.filter((status) => status.configured).map((s) => s.name));
+    const nextGaps = new Map(
+      statuses
+        .filter((status) => !status.installed)
+        .map((s) => [s.name, { installHint: s.installHint, extra: s.extra }] as const),
+    );
     const same =
       this.configuredProviders !== null &&
       this.configuredProviders.size === next.size &&
       [...next].every((name) => this.configuredProviders?.has(name)) &&
-      this.runReadinessNote === (runReadiness ?? this.runReadinessNote);
+      this.runReadinessNote === (runReadiness ?? this.runReadinessNote) &&
+      this.uninstalledProviders !== null &&
+      this.uninstalledProviders.size === nextGaps.size &&
+      [...nextGaps].every(
+        ([name, gap]) =>
+          this.uninstalledProviders?.get(name)?.installHint === gap.installHint &&
+          this.uninstalledProviders?.get(name)?.extra === gap.extra,
+      );
     const anyConfigured = next.size > 0;
     if (same && this.configuredSomewhere === anyConfigured) return;
     this.configuredProviders = next;
+    this.uninstalledProviders = nextGaps;
     this.configuredSomewhere = anyConfigured;
     if (runReadiness !== undefined) this.runReadinessNote = runReadiness;
     this.announce();
@@ -125,6 +177,7 @@ export class ServerReadiness {
   reset(): void {
     this.configuredSomewhere = null;
     this.configuredProviders = null;
+    this.uninstalledProviders = null;
     this.runReadinessNote = null;
   }
 

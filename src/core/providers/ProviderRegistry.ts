@@ -252,23 +252,41 @@ export class ProviderRegistry {
    * failing only once the workflow is run.
    */
   modelOptions(): readonly FieldOption[] {
-    return this.providers.list().flatMap((provider) =>
-      provider.models.map((model) => ({
-        value: ProviderRegistry.selectionFor(provider.id, model.id),
-        // `provider.isConfigured()` is the **browser's** key store, which is
-        // preview-only and can no longer even be typed into. Asking it alone
-        // suffixed every model with "· needs key" on a server with three
-        // working keys (providers-and-credentials 06). `serverReadiness` is
-        // the one resolver the hint and the reasoning row read too, so the
-        // three cannot disagree again — and it answers `unknown`, which
-        // labels nothing, rather than guessing.
-        label:
-          serverReadiness.readinessOf(provider.id, provider.isConfigured()) === 'needs key'
-            ? `${model.label} · needs key`
-            : model.label,
-        group: provider.label,
-      })),
-    );
+    return this.providers.list().flatMap((provider) => {
+      // A missing **package** and a missing **credential** are different
+      // walls (launch-readiness/28): a key can still be typed into the
+      // credentials dialog from the browser, but no browser action fixes an
+      // `ImportError` on the server. So a package gap is shown disabled and
+      // named — "do not filter them out silently", the ticket's own words —
+      // while a bare missing key stays selectable, exactly as before.
+      const packageGap = serverReadiness.packageGapOf(provider.id);
+      return provider.models.map((model) => {
+        if (packageGap) {
+          const extra = serverReadiness.packageExtraOf(provider.id) ?? provider.id;
+          return {
+            value: ProviderRegistry.selectionFor(provider.id, model.id),
+            label: `${model.label} · needs openstategraph[${extra}]`,
+            group: provider.label,
+            disabled: true,
+          };
+        }
+        return {
+          value: ProviderRegistry.selectionFor(provider.id, model.id),
+          // `provider.isConfigured()` is the **browser's** key store, which is
+          // preview-only and can no longer even be typed into. Asking it alone
+          // suffixed every model with "· needs key" on a server with three
+          // working keys (providers-and-credentials 06). `serverReadiness` is
+          // the one resolver the hint and the reasoning row read too, so the
+          // three cannot disagree again — and it answers `unknown`, which
+          // labels nothing, rather than guessing.
+          label:
+            serverReadiness.readinessOf(provider.id, provider.isConfigured()) === 'needs key'
+              ? `${model.label} · needs key`
+              : model.label,
+          group: provider.label,
+        };
+      });
+    });
   }
 
   setApiKey(providerId: string, key: string | null): void {

@@ -10,8 +10,24 @@ import { AbstractLLMProvider, type ModelDescriptor } from '@core/providers/ILLMP
 import { effortOptionsFor } from '../../nodes/effortField';
 import { MODEL_FIELD_KEY } from '../../nodes/modelField';
 
-function status(name: string, configured: boolean): ProviderStatus {
-  return { name, label: name, configured, configuredBy: null, envVars: [], keyHint: null };
+function status(
+  name: string,
+  configured: boolean,
+  installed = true,
+  installHint = '',
+  extra = '',
+): ProviderStatus {
+  return {
+    name,
+    label: name,
+    configured,
+    configuredBy: null,
+    envVars: [],
+    installed,
+    installHint,
+    extra,
+    keyHint: null,
+  };
 }
 
 class StubProvider extends AbstractLLMProvider {
@@ -82,6 +98,27 @@ describe('ServerReadiness', () => {
     readiness.recordHealth(false);
 
     expect(readiness.readinessOf('anthropic', false)).toBe('needs key');
+  });
+
+  it('says nothing about a missing package before the server has answered', () => {
+    // launch-readiness/28: no accusation without evidence, same rule as `unknown`.
+    expect(new ServerReadiness().packageGapOf('openai')).toBeNull();
+  });
+
+  it('names the install hint for a provider whose integration is not installed', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordProviders([
+      status('openai', false, false, "pip install 'openstategraph[openai]'", 'openai'),
+    ]);
+
+    expect(readiness.packageGapOf('openai')).toBe("pip install 'openstategraph[openai]'");
+  });
+
+  it('says nothing for a provider that is installed, even if unconfigured', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordProviders([status('anthropic', false, true)]);
+
+    expect(readiness.packageGapOf('anthropic')).toBeNull();
   });
 
   it('notifies once per real change and not on a repeat of the same answer', () => {
@@ -255,6 +292,26 @@ describe('the three surfaces on a configured install', () => {
       .map((option) => option.label);
 
     expect(labels).toContain('Claude Opus 5 · needs key');
+    serverReadiness.reset();
+  });
+
+  it('marks a model unselectable and names the extra when its package is not installed', () => {
+    // launch-readiness/28: `gpt-4.1-mini` listed beside `claude-haiku-4-5` on
+    // an install that never `pip install`ed the openai extra — indistinguishable
+    // from "has an extra but no key yet" until the picker reads `installed`.
+    serverReadiness.reset();
+    serverReadiness.recordProviders([
+      status('anthropic', true, true),
+      status('gemini', false, false, "pip install 'openstategraph[gemini]'", 'gemini'),
+    ]);
+
+    const options = registry().modelOptions();
+    const anthropic = options.find((o) => o.label.startsWith('Claude Opus'));
+    const gemini = options.find((o) => o.label.startsWith('Gemini'));
+
+    expect(anthropic?.disabled).toBeFalsy();
+    expect(gemini?.disabled).toBe(true);
+    expect(gemini?.label).toBe('Gemini Flash · needs openstategraph[gemini]');
     serverReadiness.reset();
   });
 

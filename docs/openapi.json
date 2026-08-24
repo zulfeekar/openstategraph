@@ -906,6 +906,21 @@
             "title": "Env Vars",
             "type": "array"
           },
+          "extra": {
+            "description": "The pip extra's bare name, e.g. `openai` \u2014 `ProviderSpec.extra`, for a picker that wants the short `openstategraph[openai]` form without parsing `install_hint`.",
+            "title": "Extra",
+            "type": "string"
+          },
+          "install_hint": {
+            "description": "The exact `pip install` line for this provider's integration, e.g. `pip install 'openstategraph[openai]'` \u2014 the same string `ProviderSpec.install_hint` composes for the CLI, so the picker never invents its own phrasing.",
+            "title": "Install Hint",
+            "type": "string"
+          },
+          "installed": {
+            "description": "Whether this provider's integration package is importable on this server \u2014 `ProviderEnvironment.is_installed()`, the same check `openstategraph providers` reports as \"needs its extra\". Independent of `configured`: a package can be installed with no credential, or a credential can be set for a package nobody installed. A missing credential is fixable from the browser's own credential store; a missing package is not \u2014 which is why the picker treats the two differently (launch-readiness/28).",
+            "title": "Installed",
+            "type": "boolean"
+          },
           "key_hint": {
             "anyOf": [
               {
@@ -933,7 +948,10 @@
           "name",
           "label",
           "configured",
-          "default_model"
+          "default_model",
+          "installed",
+          "install_hint",
+          "extra"
         ],
         "title": "ProviderStatusResponse",
         "type": "object"

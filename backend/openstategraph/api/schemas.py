@@ -154,6 +154,33 @@ class ProviderStatusResponse(BaseModel):
         description="Every variable that would configure it. Any one is enough.",
     )
     default_model: str = Field(description="The model used when none is named.")
+    installed: bool = Field(
+        description=(
+            "Whether this provider's integration package is importable on this "
+            "server — `ProviderEnvironment.is_installed()`, the same check "
+            "`openstategraph providers` reports as \"needs its extra\". "
+            "Independent of `configured`: a package can be installed with no "
+            "credential, or a credential can be set for a package nobody "
+            "installed. A missing credential is fixable from the browser's own "
+            "credential store; a missing package is not — which is why the "
+            "picker treats the two differently (launch-readiness/28)."
+        )
+    )
+    install_hint: str = Field(
+        description=(
+            "The exact `pip install` line for this provider's integration, "
+            "e.g. `pip install 'openstategraph[openai]'` — the same string "
+            "`ProviderSpec.install_hint` composes for the CLI, so the picker "
+            "never invents its own phrasing."
+        )
+    )
+    extra: str = Field(
+        description=(
+            "The pip extra's bare name, e.g. `openai` — `ProviderSpec.extra`, "
+            "for a picker that wants the short `openstategraph[openai]` form "
+            "without parsing `install_hint`."
+        )
+    )
     key_hint: str | None = Field(
         default=None,
         description=(

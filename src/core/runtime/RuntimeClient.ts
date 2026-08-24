@@ -34,6 +34,20 @@ export interface ProviderStatus {
   /** Every variable that would configure it. Any one is enough. */
   readonly envVars: readonly string[];
   /**
+   * Whether the integration package is importable on this server —
+   * `ProviderEnvironment.is_installed()`, the same check `openstategraph
+   * providers` reports as "needs its extra". Independent of `configured`: a
+   * package can be installed with no credential, or a credential can be set
+   * for a package nobody installed. Unlike a missing credential, a missing
+   * package cannot be fixed from the browser's own credential store, which is
+   * why the picker treats the two differently (launch-readiness/28).
+   */
+  readonly installed: boolean;
+  /** The exact `pip install` line for this provider's integration. */
+  readonly installHint: string;
+  /** The pip extra's bare name, e.g. `openai`. */
+  readonly extra: string;
+  /**
    * A glance at what configured it: `sk****` for a secret, the whole value
    * for an address like `OLLAMA_HOST`. `null` when nothing is set.
    *
@@ -1225,6 +1239,9 @@ export class RuntimeClient implements IRuntimeClient {
           configured: row['configured'] === true,
           configuredBy: typeof row['configured_by'] === 'string' ? row['configured_by'] : null,
           envVars: Array.isArray(row['env_vars']) ? row['env_vars'].map(String) : [],
+          installed: row['installed'] === true,
+          installHint: typeof row['install_hint'] === 'string' ? row['install_hint'] : '',
+          extra: typeof row['extra'] === 'string' ? row['extra'] : '',
           keyHint: typeof row['key_hint'] === 'string' ? row['key_hint'] : null,
         })),
         environment: typeof body['environment'] === 'string' ? body['environment'] : '',
