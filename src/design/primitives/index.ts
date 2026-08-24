@@ -25,4 +25,5 @@ export {
   type StatusTone,
 } from './Indicators';
 export { Panel, PanelHeader, PanelBody, PanelFooter, PanelSection, PanelEmpty } from './Panel';
+export { Tabs, type TabDefinition } from './Tabs';
 export { useFloating, type Placement, type Alignment, type FloatingPosition } from './useFloating';

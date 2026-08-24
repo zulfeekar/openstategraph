@@ -22,6 +22,7 @@ import {
   PanelHeader,
   PanelSection,
   Select,
+  Tabs,
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
@@ -52,6 +53,11 @@ import {
 } from './consequences';
 import { examplesShelfStartsOpen, rememberExamplesShelf } from './examplesShelf';
 import { examplesShelfToggleLabel } from './examplesJourney';
+import {
+  DEFAULT_WORKFLOW_MANAGER_TAB,
+  WORKFLOW_MANAGER_TABS,
+  type WorkflowManagerTabId,
+} from './workflowManagerTabs';
 import './WorkflowManager.css';
 
 interface WorkflowManagerProps {
@@ -116,6 +122,18 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       return !wasOpen;
     });
   }, []);
+
+  // Tabs (ticket 41): the panel used to stack New Workflow, Save Current,
+  // Saved Workflows and Examples in one scrolling column. A reader who wants
+  // one of the last two had to scroll past the other. The same signal that
+  // used to start the Examples shelf open — a gesture recorded in
+  // `examplesShelf.ts`, set by the empty-canvas hint's "Browse examples"
+  // action before this panel mounts — now also decides which tab opens on
+  // top, so that hint still lands a reader on Examples in one press rather
+  // than on Saved with a closed shelf to find underneath it.
+  const [activeTab, setActiveTab] = useState<WorkflowManagerTabId>(
+    examplesShelfStartsOpen() ? 'examples' : DEFAULT_WORKFLOW_MANAGER_TAB,
+  );
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
@@ -350,100 +368,106 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         title="Workflows"
         actions={<IconButton label="Close" icon={<Icon glyph={X} size="sm" />} onClick={onClose} />}
       />
+      <Tabs tabs={WORKFLOW_MANAGER_TABS} active={activeTab} onChange={setActiveTab} />
       <PanelBody>
-        <PanelSection heading="New Workflow">
-          <Field label="Name">
-            <TextInput
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="My Workflow"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleNewWorkflow();
-              }}
-            />
-          </Field>
-          {templates.length > 0 && (
-            <Field
-              label="Start from"
-              hint={templates.find((t) => t.name === template)?.summary ?? 'An empty canvas.'}
-            >
-              <Select
-                value={template}
-                onValueChange={setTemplate}
-                options={[
-                  { value: BLANK_TEMPLATE, label: 'Blank canvas' },
-                  // The catalogue's own one-liner, not the bare slug. Every
-                  // template already ships a `summary` in `index.json` and
-                  // nothing rendered it, so the picker read
-                  // "minimal / loop / routed-qa / team" — and "loop" alone is
-                  // exactly the word the lexicon forbids user-facing, since it
-                  // means two different things (reviews-2026-08-14 ticket 06).
-                  ...templates.map((template) => ({
-                    value: template.name,
-                    label: template.summary
-                      ? `${template.name} — ${template.summary}`
-                      : template.name,
-                  })),
-                ]}
-              />
-            </Field>
-          )}
-          <Button
-            variant="primary"
-            onClick={() => void handleNewWorkflow()}
-            icon={<Icon glyph={Plus} size="sm" />}
-            disabled={busy}
-          >
-            Create New
-          </Button>
-        </PanelSection>
+        {activeTab === 'new' && (
+          <>
+            <PanelSection heading="New Workflow">
+              <Field label="Name">
+                <TextInput
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="My Workflow"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleNewWorkflow();
+                  }}
+                />
+              </Field>
+              {templates.length > 0 && (
+                <Field
+                  label="Start from"
+                  hint={templates.find((t) => t.name === template)?.summary ?? 'An empty canvas.'}
+                >
+                  <Select
+                    value={template}
+                    onValueChange={setTemplate}
+                    options={[
+                      { value: BLANK_TEMPLATE, label: 'Blank canvas' },
+                      // The catalogue's own one-liner, not the bare slug. Every
+                      // template already ships a `summary` in `index.json` and
+                      // nothing rendered it, so the picker read
+                      // "minimal / loop / routed-qa / team" — and "loop" alone is
+                      // exactly the word the lexicon forbids user-facing, since it
+                      // means two different things (reviews-2026-08-14 ticket 06).
+                      ...templates.map((template) => ({
+                        value: template.name,
+                        label: template.summary
+                          ? `${template.name} — ${template.summary}`
+                          : template.name,
+                      })),
+                    ]}
+                  />
+                </Field>
+              )}
+              <Button
+                variant="primary"
+                onClick={() => void handleNewWorkflow()}
+                icon={<Icon glyph={Plus} size="sm" />}
+                disabled={busy}
+              >
+                Create New
+              </Button>
+            </PanelSection>
 
-        <PanelSection heading="Save Current">
-          <Button
-            variant="secondary"
-            onClick={() => void handleSave()}
-            icon={<Icon glyph={Save} size="sm" />}
-            disabled={busy}
-          >
-            Save {workbench.model.name}
-          </Button>
-          {/* UX-04, rewritten when autosave-to-disk landed (the-editor-makes-
+            <PanelSection heading="Save Current">
+              <Button
+                variant="secondary"
+                onClick={() => void handleSave()}
+                icon={<Icon glyph={Save} size="sm" />}
+                disabled={busy}
+              >
+                Save {workbench.model.name}
+              </Button>
+              {/* UX-04, rewritten when autosave-to-disk landed (the-editor-makes-
               a-real-package ticket 02). This paragraph used to say edits
               autosave to "this browser only", which was true and is now
               false — a saved workflow's edits reach its folder on their own.
               The one case that still needs the button is the one the text
               leads with, because it is the only one where nothing on disk
               exists to write to yet. */}
-          <p className="workflow-manager__hint">
-            A workflow that has never been saved lives in <strong>this browser only</strong> — save
-            it once to give it a folder. After that, edits autosave to{' '}
-            <code>workflows/&lt;slug&gt;/workflow.json</code> as you make them, so what is on the
-            canvas is what the CLI and the tests run. The browser keeps a draft too, as crash
-            recovery. Saving puts the slug in the address bar, so the URL is a link you can send;
-            the slug is chosen once, from the name, and a second workflow of the same name gets its
-            own.
-          </p>
-        </PanelSection>
+              <p className="workflow-manager__hint">
+                A workflow that has never been saved lives in <strong>this browser only</strong> —
+                save it once to give it a folder. After that, edits autosave to{' '}
+                <code>workflows/&lt;slug&gt;/workflow.json</code> as you make them, so what is on
+                the canvas is what the CLI and the tests run. The browser keeps a draft too, as
+                crash recovery. Saving puts the slug in the address bar, so the URL is a link you
+                can send; the slug is chosen once, from the name, and a second workflow of the same
+                name gets its own.
+              </p>
+            </PanelSection>
+          </>
+        )}
 
-        <PanelSection heading="Saved Workflows">
-          {listError ? (
-            <div className="workflow-manager__empty" role="alert">
-              <p>Runtime unreachable: {listError}</p>
-              <Button size="sm" onClick={() => void refreshList()}>
-                Retry
-              </Button>
-            </div>
-          ) : workflows.length === 0 ? (
-            <p className="workflow-manager__empty">No saved workflows yet. Create one above!</p>
-          ) : (
-            <ul className="workflow-manager__list">
-              {workflows.map((wf) => (
-                <li key={wf.slug} className="workflow-manager__item">
-                  <div className="workflow-manager__info">
-                    <Icon glyph={FileJson} size="sm" />
-                    <span className="workflow-manager__ident">
-                      <span className="workflow-manager__name">{wf.name}</span>
-                      {/* The slug, on every row, because the name is a label
+        {activeTab === 'saved' && (
+          <PanelSection heading="Saved Workflows">
+            {listError ? (
+              <div className="workflow-manager__empty" role="alert">
+                <p>Runtime unreachable: {listError}</p>
+                <Button size="sm" onClick={() => void refreshList()}>
+                  Retry
+                </Button>
+              </div>
+            ) : workflows.length === 0 ? (
+              <p className="workflow-manager__empty">No saved workflows yet. Create one above!</p>
+            ) : (
+              <ul className="workflow-manager__list">
+                {workflows.map((wf) => (
+                  <li key={wf.slug} className="workflow-manager__item">
+                    <div className="workflow-manager__info">
+                      <Icon glyph={FileJson} size="sm" />
+                      <span className="workflow-manager__ident">
+                        <span className="workflow-manager__name">{wf.name}</span>
+                        {/* The slug, on every row, because the name is a label
                           and this is the identity. Two documents saved without
                           renaming both read "AI Workflow" with the same badge
                           and the same date, and nothing in the row — or in the
@@ -453,80 +477,81 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                           Packages palette already prints it unconditionally
                           for the same reason, and a slug that appears only
                           sometimes is a row that changes shape under you. */}
-                      <code className="workflow-manager__slug" title={`workflows/${wf.slug}/`}>
-                        {wf.slug}
-                      </code>
-                    </span>
-                    <span
-                      className={
-                        wf.published
-                          ? 'workflow-manager__badge workflow-manager__badge--published'
-                          : 'workflow-manager__badge'
-                      }
-                      title={rowStatusHint(wf.published)}
-                    >
-                      {wf.published ? 'Published' : 'Draft'}
-                    </span>
-                    <span className="workflow-manager__date">
-                      {wf.savedAt ? new Date(wf.savedAt).toLocaleDateString() : ''}
-                    </span>
-                  </div>
-                  <div className="workflow-manager__actions">
-                    {/* **Open**, not "Load" (ticket 06). This is a list of
+                        <code className="workflow-manager__slug" title={`workflows/${wf.slug}/`}>
+                          {wf.slug}
+                        </code>
+                      </span>
+                      <span
+                        className={
+                          wf.published
+                            ? 'workflow-manager__badge workflow-manager__badge--published'
+                            : 'workflow-manager__badge'
+                        }
+                        title={rowStatusHint(wf.published)}
+                      >
+                        {wf.published ? 'Published' : 'Draft'}
+                      </span>
+                      <span className="workflow-manager__date">
+                        {wf.savedAt ? new Date(wf.savedAt).toLocaleDateString() : ''}
+                      </span>
+                    </div>
+                    <div className="workflow-manager__actions">
+                      {/* **Open**, not "Load" (ticket 06). This is a list of
                         workflows and the verb for picking one is the verb the
                         owner's QA pass used; "load" describes what the editor
                         does, from the editor's point of view. */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void handleLoad(wf.slug)}
-                      icon={<Icon glyph={FolderOpen} size="xs" />}
-                    >
-                      Open
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      // The rule taught where the verb is, rather than after
-                      // the fact: a draft never appears in /chat.
-                      title={rowActionHint(wf.published)}
-                      onClick={() => void handleSetPublished(wf.slug, wf.name, !wf.published)}
-                      icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
-                    >
-                      {wf.published ? 'Unpublish' : 'Publish'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      title={`Copy "${wf.name}" and everything in its folder to a new workflow`}
-                      onClick={() => void handleDuplicate(wf.slug)}
-                      icon={<Icon glyph={Copy} size="xs" />}
-                    >
-                      Duplicate
-                    </Button>
-                    {/* Labelled, like the other three. The one destructive
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleLoad(wf.slug)}
+                        icon={<Icon glyph={FolderOpen} size="xs" />}
+                      >
+                        Open
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        // The rule taught where the verb is, rather than after
+                        // the fact: a draft never appears in /chat.
+                        title={rowActionHint(wf.published)}
+                        onClick={() => void handleSetPublished(wf.slug, wf.name, !wf.published)}
+                        icon={<Icon glyph={wf.published ? GlobeLock : Globe} size="xs" />}
+                      >
+                        {wf.published ? 'Unpublish' : 'Publish'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        title={`Copy "${wf.name}" and everything in its folder to a new workflow`}
+                        onClick={() => void handleDuplicate(wf.slug)}
+                        icon={<Icon glyph={Copy} size="xs" />}
+                      >
+                        Duplicate
+                      </Button>
+                      {/* Labelled, like the other three. The one destructive
                         verb in the row was the only one wearing no word —
                         a bare bin icon beside three captioned buttons reads
                         as decoration until it is pressed once. */}
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      title={`Delete "${wf.name}" and everything in its folder`}
-                      onClick={() => void handleDelete(wf.slug, wf.name, wf.published)}
-                      icon={<Icon glyph={Trash2} size="xs" />}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PanelSection>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        title={`Delete "${wf.name}" and everything in its folder`}
+                        onClick={() => void handleDelete(wf.slug, wf.name, wf.published)}
+                        icon={<Icon glyph={Trash2} size="xs" />}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </PanelSection>
+        )}
 
-        {examples.length > 0 && (
+        {activeTab === 'examples' && examples.length > 0 && (
           <PanelSection heading="Examples">
             {/* Ticket 23. This used to be the digit `23` on a ghost button in
                 the section's `aside` — which says how much is behind the
