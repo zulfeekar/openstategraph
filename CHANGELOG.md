@@ -480,6 +480,47 @@
   package's directory. `create_app(graph_factory=…)` still mounts it, which is
   the condition under which it can answer.
 
+## 0.3.0rc5 — 2026-08-24
+The third stranger run, answered. `0.3.0rc4` was installed from TestPyPI and
+driven against the Chinook sample database by a session reading only the
+published docs and the screen. **It reached a useful answer in 2 minutes 52
+seconds** — down from 6m54s — answered **six of six** questions correctly
+against the database, and **refused four of four** it could not support, with
+no invention. A direct `UPDATE` was refused by the tool itself, not merely
+declined by the model.
+
+Three things it found are fixed here.
+
+### Fixed
+
+- **Every chat answer was branded as rejected**, including every honest
+  refusal, on workflows with no grader at all — while the backend correctly
+  sent `publishedRejected: false`. A regression introduced by rc4's own fix for
+  the opposite defect: rc3's run got a wrong answer treated as right, rc4's got
+  right answers treated as wrong. The cause was neither the field nor the
+  logic but **CSS specificity** — an author rule setting `display` beats the
+  user-agent's `[hidden] { display: none }`, so hiding the banner never hid it.
+  Pinned by a browser test asserting **both** directions, which the original
+  fix never did.
+- **An agent could answer with a fenced code block and nothing else** — one run
+  in six shipped the SQL and dropped the answer, exiting 0 with no warning. The
+  output contract now forbids a fence-only answer, and a new
+  `code_fence_only_warnings` reports it when it happens: the existing
+  silent-node machinery only fired on *empty* text, and a code fence is not
+  empty. A run may still legitimately produce no prose; it may no longer do so
+  in silence.
+- **`/chat` probed every wheel install for a workflow the wheel cannot carry**,
+  404ing on every page load. The capability is now reported by a header on a
+  request that already happens.
+
+### Notes
+
+- The composer gap is **not** fixed and is not pretended away: a `pip install`
+  user still has no in-product surface that turns a sentence of English into a
+  workflow. `concierge` and `workflow-architect` are checkout-only by
+  construction, and `docs/mcp.md` §2 is the wheel user's real path.
+- `docs/decisions/stranger-install-2026-08-24-run3.md` is the log.
+
 ## 0.3.0rc4 — 2026-08-24
 The second stranger run, answered. `0.3.0rc3` was installed from TestPyPI by a
 session allowed to read only the published docs and what was on screen. **It
