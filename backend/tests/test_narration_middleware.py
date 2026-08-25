@@ -244,3 +244,127 @@ class TestSlotTableNoneSilencing:
         table.set("narration", "placeholder")
         table.set("narration", None)
         assert table.flatten() == []
+
+
+class _FakeRuntime:
+    """Stands in for `ToolRuntime` — only `.config` is read by the cache."""
+
+    def __init__(self, thread_id: str | None) -> None:
+        self.config = {"configurable": {"thread_id": thread_id}} if thread_id else {}
+
+
+def _call(
+    middleware: NarrationMiddleware,
+    *,
+    tool_name: str,
+    args: dict[str, Any],
+    thread_id: str | None,
+    result: ToolMessage,
+) -> tuple[Any, bool]:
+    """Invokes `wrap_tool_call` once inside a real graph run (so
+    `report_progress` has a stream to write to) and reports whether the
+    underlying handler actually ran."""
+    request = ToolCallRequest(
+        tool_call={"name": tool_name, "args": args, "id": "call_x"},
+        tool=None,
+        state={},
+        runtime=_FakeRuntime(thread_id),
+    )
+    invoked = {"handler": False}
+    captured: dict[str, Any] = {}
+
+    def handler(_req: ToolCallRequest) -> ToolMessage:
+        invoked["handler"] = True
+        return result
+
+    def node(state: _State, runtime=None):
+        captured["out"] = middleware.wrap_tool_call(request, handler)
+        return {"step": state.get("step", 0) + 1}
+
+    graph = StateGraph(_State).add_node("node", node).add_edge(START, "node").add_edge("node", END).compile()
+    for _ in graph.stream({"step": 0}):
+        pass
+    return captured["out"], invoked["handler"]
+
+
+class TestReadThroughCache:
+    def test_second_call_same_tool_same_args_same_thread_skips_the_handler(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _, invoked1 = _call(
+            mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result
+        )
+        out2, invoked2 = _call(
+            mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result
+        )
+        assert invoked1 is True
+        assert invoked2 is False
+        assert out2 is result
+
+    def test_non_allowlisted_tool_is_always_invoked(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_execute_sql", args={"sql": "select 1"}, thread_id="t1", result=result)
+        _, invoked2 = _call(
+            mw, tool_name="mcp_execute_sql", args={"sql": "select 1"}, thread_id="t1", result=result
+        )
+        assert invoked2 is True
+
+    def test_differing_arguments_miss(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result)
+        _, invoked2 = _call(
+            mw, tool_name="mcp_list_lenses", args={"domain": "gb"}, thread_id="t1", result=result
+        )
+        assert invoked2 is True
+
+    def test_a_different_thread_misses(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result)
+        _, invoked2 = _call(
+            mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t2", result=result
+        )
+        assert invoked2 is True
+
+    def test_reuse_is_narrated(self) -> None:
+        mw = NarrationMiddleware()
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        request = ToolCallRequest(
+            tool_call={"name": "mcp_list_lenses", "args": {"domain": "sm"}, "id": "call_x"},
+            tool=None,
+            state={},
+            runtime=_FakeRuntime("t1"),
+        )
+
+        def handler(_req: ToolCallRequest) -> ToolMessage:
+            return result
+
+        def node(state: _State, runtime=None):
+            middleware_out = mw.wrap_tool_call(request, handler)
+            assert middleware_out is result
+            return {"step": state.get("step", 0) + 1}
+
+        graph = (
+            StateGraph(_State).add_node("node", node).add_edge(START, "node").add_edge("node", END).compile()
+        )
+        # Prime the cache first.
+        for _ in graph.stream({"step": 0}, stream_mode="custom"):
+            pass
+        events = list(graph.stream({"step": 0}, stream_mode="custom"))
+        reports = [progress_report(e) for e in events]
+        messages = [r.message for r in reports if r is not None]
+        assert "Reusing what I already looked up." in messages
+        # A cache hit skips the handler and its normal before/after pair —
+        # only the reuse line should have landed.
+        assert messages == ["Reusing what I already looked up."]
+
+    def test_no_thread_id_never_caches(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id=None, result=result)
+        _, invoked2 = _call(
+            mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id=None, result=result
+        )
+        assert invoked2 is True
