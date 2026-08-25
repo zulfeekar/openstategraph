@@ -297,3 +297,48 @@ here — out of scope for a validator-only change and touching `workflow.json`
 prompt composition was judged too risky for this session's budget.
 
 Ticket: launch-readiness/69
+
+## launch-readiness/74 — the exhausted revision loop leaked internal text
+
+`gate1` (route.grader) force-passes its last-seen candidate when the
+revision loop runs out of attempts — that candidate is `validate1`'s own
+`VALIDATION FAILED` header, which names check ids, lens names and
+fully-qualified columns. That text flowed unchanged through `relay1` and
+`execute1` into `summarize1`'s prompt, and `summarize1`'s own instructions
+told it to "name the reason(s) given (the violations...)" — so the model
+dutifully relayed our internal machinery as if it were the answer.
+
+Fix, deterministic (function layer, guaranteed rather than requested):
+`functions/execute_sql.py` now recognizes a `VALIDATION FAILED` (or a
+warehouse `EXECUTION FAILED`) candidate and translates it through a fixed
+facet-id → plain-English-reason map *before* it ever reaches a model. The
+translated text never contains a check id, a lens name, a table name or a
+column path — only reasons like "the date range in your question could not
+be matched to the right date field." `CLARIFICATION NEEDED` (agent1's own
+plain-language decline/question-back) is left untouched — that path already
+worked and this ticket says reuse it, not rebuild it.
+
+Backup, requested (prompt layer): `summarize1`'s system prompt was updated
+to recognize the new "I could not answer this reliably" prefix and pass it
+through near-verbatim, with an explicit instruction never to add back a
+check id, lens name, table name or column name. This is belt-and-suspenders
+behind the deterministic fix, not the mechanism the guarantee rests on.
+
+Regression, CLI (`openstategraph run`, not the `serve` HTTP path — the
+`serve` subprocess had an unrelated, pre-existing environment issue where
+`prefetch_context`'s Databricks vector search returned empty inside the
+async server process even though it worked standalone; unrelated to this
+change, not investigated further, flagged separately):
+
+- Mongstad control question: still returns the full product/product-group
+  breakdown with real numbers and the SQL used.
+- "Port Vandelay": still a clarification, still no invented answer.
+- "hello": still the fast greeting branch, no warehouse call.
+
+Fujairah anchorage dwell-time, re-run untuned per this ticket's instruction
+(no iterating toward a target number): average dwell 39.1188386670 hours
+across 4,447 idle-event visits, lens `ms_cpl_app_prod.shipping.idle_events_v1r2`,
+no check fired (clean `VALIDATION: PASS`) — bounding-box assumption stated in
+the answer since no Fujairah geofence exists in `shipping.geofences_v3r1`.
+
+Ticket: launch-readiness/74
