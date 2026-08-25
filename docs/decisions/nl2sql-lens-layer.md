@@ -684,3 +684,48 @@ regression gates pass afterward: the Mongstad breakdown (3 attempts, no
 warnings) and trace 3's own follow-up, "get me all vessel details of imo
 from the result", which now returns 27 vessels where it previously
 exhausted its attempts and shrugged (3 attempts, down from 4).
+
+## launch-readiness/101 — a seam for progressive disclosure exists, unwired
+
+Checked before any design, per the ticket: does the deep tier expose a place
+to hand `SkillsMiddleware` its sources? `backend/openstategraph/abc/agent.py`'s
+`DeepAgentNode.build_agent` already establishes the pattern this would follow
+— `subagents` is accepted in `__init__`, stored on `self`, and spliced into
+the `create_deep_agent(...)` kwargs at build time. `skills=` is a first-class
+`create_deep_agent` parameter with the same shape (confirmed against the
+installed `deepagents` signature, not inferred from usage), so the same
+pass-through could carry it.
+
+But the library's `skills=` kwarg assumes its default `StateBackend`, which
+serves skill bodies only from files handed to `invoke(files={...})` at call
+time — nothing in `node_runtime.py` provisions that; a compiled agent node is
+invoked by LangGraph with graph state alone. The alternative that avoids that
+gap is the one already exercised twice in this file for `RubricMiddleware`
+and `SummarizationMiddleware`: build `SkillsMiddleware(backend=FilesystemBackend(...),
+sources=[...])` directly in the `contributions[...]` block (`node_runtime.py`
+~line 1975) and let it ride the existing `resolve_middleware()` slot table,
+never touching `create_deep_agent(skills=...)` at all. That is the real seam
+— it exists, and it is unwired.
+
+Not built this session. Wiring it means: choosing the skills directory a
+`FilesystemBackend` roots at (package-relative, not the CWD), deciding
+whether `FilesystemBackend` changes any other tool's behaviour for this
+agent (it is otherwise unused here — `write_file`/`ls` currently ride
+whatever backend `create_deep_agent` defaults to), converting `cpl-nl2sql`'s
+seven lenses plus the index to sources while keeping the four method files
+(dialect, entity resolution, time windows, answering) always-on per the
+ticket's own reasoning — they are rules that apply to every question, and an
+always-on file that becomes on-demand is a rule the model may now never
+read — and then a recall check per lens against the live warehouse, which the
+remaining session budget did not allow for safely on demo-critical code.
+
+**Risk restated for the record, since nothing shipped to weigh it against:**
+selection can miss. A lens the model does not choose to open is a rule that
+did not apply, and the validator (`tests/test_lenses_match_the_warehouse.py`)
+reads the lens *files* on disk, not the prompt, so its enforcement is
+unaffected by what the model chose to read at inference time — it would still
+catch a schema drift, but not a wrong-lens answer produced because the right
+lens was never opened.
+
+Ticket 101: partially. The seam is found and documented; the conversion is
+not built. No commit touches `~/osg-demo`.
