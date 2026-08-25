@@ -466,7 +466,7 @@ bare `draw_mermaid()` call.
 
 A loop is drawable only where a node declares a typed feedback input (`GraderNode.revise: feedback` → `AgentNode.feedback`). The type system stays the gate, so an *accidental* cycle remains inexpressible while the evaluator-optimizer pattern is two clicks. A cycle must contain at least one conditional edge — an all-static cycle can never terminate.
 
-`recursion_limit` is a **standalone `config` key, not inside `configurable`** (default 1000 in Python since 1.0.6, 25 in JS; raises `GraphRecursionError`). It counts **supersteps, not iterations** — with fan-out, one lap of a loop can cost several supersteps — so never label it "max iterations" in the UI. Prefer generating a `RemainingSteps` guard so a runaway loop routes to `END` instead of crashing.
+`recursion_limit` is a **standalone `config` key, not inside `configurable`** (LangGraph's own default is 1000 in Python since 1.0.6, 25 in JS; raises `GraphRecursionError`). **Ours is 50**, and that is the number actually in force — `DEFAULT_STEP_BUDGET` in `backend/openstategraph/step_budget.py`, `STEP_BUDGET_DEFAULT` in `src/view/workflow/stepBudget.ts`, both pinned by tests. Until 2026-08-25 this paragraph named only the library's numbers, so a reader checking "what is the step budget here" found 1000 and was wrong by twentyfold in the direction that lets a runaway loop run. It counts **supersteps, not iterations** — with fan-out, one lap of a loop can cost several supersteps — so never label it "max iterations" in the UI. Prefer generating a `RemainingSteps` guard so a runaway loop routes to `END` instead of crashing.
 
 ### State flows down; subagents do not receive it
 
