@@ -351,6 +351,7 @@ FAILING_KINDS = {
     "declared-but-nonexistent",     # check 2
     "told-about-nonexistent",       # check 3
     "contradictory-type",           # check 2, unless the declaration documents it
+    "stale-version",                # check 2 — a newer member of the same family exists
 }
 # "existing-but-unplaced" (check 1) is a REPORT: an unplaced infrastructure
 # table is fine, and a check that fails for acceptable reasons gets ignored.
@@ -386,6 +387,82 @@ def _as_list(value) -> list[str]:
 
 
 # --- check 1 --------------------------------------------------------------
+
+
+# --- table families and which member is current ---------------------------
+#
+# This warehouse spells a version `v{major}r{minor}` — `cargoflow_v2r0`,
+# `geofences_v3r1`, `idle_events_v1r2` — alongside a `_latest` alias. Both
+# forms coexist for the same stem, so "the table" is a family and a
+# declaration picks one member of it.
+#
+# The owner's rule, and it is a rule about *intent* rather than about
+# arithmetic: **`_latest` wins; otherwise the highest `v` then the highest
+# `r` wins.** `_latest` is a promise the warehouse maintains, so a
+# declaration naming it is asking to follow the warehouse rather than to
+# freeze. A versioned name is the opposite request, and pointing at anything
+# but the newest is then almost always an oversight.
+#
+# The allowlist blocks a stale table nobody declared. It cannot tell you the
+# table you *did* declare has been superseded — that is what this finds, and
+# it is why the check belongs to a patrol that sees the catalog over time
+# rather than to a validator that sees one query (launch-readiness/89).
+_VERSION_RE = re.compile(r"^(?P<stem>.+?)_(?:(?P<latest>latest)|v(?P<v>\d+)r(?P<r>\d+))$")
+
+
+def _family(full_name: str):
+    """Split `catalog.schema.table` into (family_key, rank) or None.
+
+    rank sorts members: `_latest` above every version, then (v, r).
+    A name matching neither form has no family and is left alone — inventing
+    one would silently regroup unrelated tables, which is worse than the
+    drift going unreported.
+    """
+    head, _, table = full_name.rpartition(".")
+    m = _VERSION_RE.match(table)
+    if not m:
+        return None
+    stem = m.group("stem")
+    if m.group("latest"):
+        rank = (1, 0, 0)
+    else:
+        rank = (0, int(m.group("v")), int(m.group("r")))
+    return f"{head}.{stem}", rank
+
+
+def stale_version_findings(catalog, declared) -> list["Finding"]:
+    """A declared table with a newer sibling in the same family."""
+    members: dict[str, list[tuple[tuple, str]]] = {}
+    for name in catalog:
+        fam = _family(name)
+        if fam:
+            members.setdefault(fam[0], []).append((fam[1], name))
+
+    out: list[Finding] = []
+    for name in sorted(declared):
+        fam = _family(name)
+        if not fam:
+            continue
+        siblings = members.get(fam[0], [])
+        if not siblings:
+            continue
+        best_rank, best_name = max(siblings)
+        if best_name == name:
+            continue
+        others = ", ".join(n for _, n in sorted(siblings, reverse=True) if n != name)
+        out.append(Finding(
+            check=2,
+            kind="stale-version",
+            subject=name,
+            detail=(f"a newer member of this family exists — {best_name} — and the "
+                    f"declaration still names {name}"),
+            evidence=f"family {fam[0]}: {others or '(no siblings)'}",
+            proposal=("confirm deliberately, then retarget or record why not. A newer "
+                      "version may change grain, units or semantics, so this is a "
+                      "decision and not a rename — the patrol will not make it."),
+        ))
+    return out
+
 
 def check_index_vs_skill(catalog, index_named, declared, exempt) -> list[Finding]:
     out: list[Finding] = []
@@ -803,6 +880,7 @@ def main(argv: list[str] | None = None) -> int:
     skipped_checks: set[int] = set()
     findings = check_index_vs_skill(catalog, index_named, declared, exempt)
     findings += check_skill_vs_fact(pkg, catalog, decls)
+    findings += stale_version_findings(catalog, declared)
     f3, skip3 = check_index_vs_fact(catalog, index_named, facts)
     findings += f3
     if skip3:
