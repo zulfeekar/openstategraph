@@ -798,6 +798,24 @@ const describeError = (error: unknown): string => {
 };
 
 /**
+ * One paint, or the closest this module gets to one.
+ *
+ * `requestAnimationFrame` in a browser — the actual thing a narration line
+ * needs, a chance for the screen to update before the next frame's state
+ * overwrites it. `core/` also runs under Vitest's node environment, which has
+ * no `requestAnimationFrame`, so this falls back to a macrotask (`setTimeout`)
+ * there: still a real yield of the event loop, just not tied to a screen.
+ */
+const yieldToPaint = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+
+/**
  * The body every run-shaped request sends.
  *
  * One builder because there were three, and the copies were not equally
@@ -1100,9 +1118,26 @@ export class RuntimeClient implements IRuntimeClient {
 
         let boundary = buffer.indexOf('\n\n');
         while (boundary !== -1) {
-          consumeFrame(buffer.slice(0, boundary));
+          const frame = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
+          const wasProgress = frame.startsWith('event: progress');
+          consumeFrame(frame);
           boundary = buffer.indexOf('\n\n');
+          // `launch-readiness/105`: a tool's narration is real and reaches
+          // this loop, but a fast tool (measured: 66ms) reports its whole
+          // before/after story inside one network chunk — several `progress`
+          // frames arrive here in the same synchronous pass, before React (or
+          // a person watching) ever gets a paint between them. Left alone,
+          // this loop drains the whole chunk and only the *last* state update
+          // survives to be seen — which is indistinguishable from the line
+          // never having arrived, and is exactly what a live poll measured.
+          // Yielding one paint after a `progress` frame, but only when
+          // another frame is already queued behind it, costs nothing on the
+          // common case (one frame per chunk) and turns a blip nobody could
+          // see into a line that was genuinely displayed.
+          if (wasProgress && boundary !== -1) {
+            await yieldToPaint();
+          }
         }
       }
     } catch (error) {

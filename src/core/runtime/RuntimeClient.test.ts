@@ -379,6 +379,55 @@ describe('RuntimeClient.runStream', () => {
     expect(seen).toEqual(['update', 'update', 'token', 'token']);
   });
 
+  /**
+   * `launch-readiness/105`. A live trace showed a fast tool's whole
+   * before/after narration — three `progress` frames — arriving in under a
+   * second, all inside one network read. Every frame reached `onEvent` even
+   * before this ticket (that was never the gap), but nothing separated the
+   * calls: three synchronous state updates in one JS tick collapse in React,
+   * so a person watching (or a poll sampling the UI) never saw the middle
+   * line. This is the delivery-to-the-render-loop half of the fix: proving a
+   * real yield happens between a `progress` frame and whatever queued frame
+   * follows it in the same chunk, so each one gets its own turn to paint.
+   *
+   * `core/` has no `requestAnimationFrame` (it runs under Vitest's node
+   * environment), so the client's fallback is `setTimeout` — this test
+   * spies on that fallback rather than reaching into React, which is the
+   * seam this module actually owns.
+   */
+  it('yields once after a progress frame that is immediately followed by another frame', async () => {
+    const text = sseBody([
+      ['progress', { node: 'tools', message: 'Looking up what is available.' }],
+      ['progress', { node: 'tools', message: 'Calling mcp_list_lenses.' }],
+      ['progress', { node: 'tools', message: '15 results.' }],
+      ['done', { answer: 'a', decisions: {}, outputs: {}, attempts: 0, mermaid: '', warnings: [] }],
+    ]);
+    // All four frames land in one chunk (splitAt beyond the whole body), the
+    // exact burst shape the live trace showed.
+    const client = new RuntimeClient('http://rt', () =>
+      Promise.resolve(streamedResponse(text, text.length)),
+    );
+
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const messages: string[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'progress') messages.push(event.message);
+    });
+
+    // Delivery: every narration line still reaches the caller, in order —
+    // this was already true and must stay true.
+    expect(messages).toEqual([
+      'Looking up what is available.',
+      'Calling mcp_list_lenses.',
+      '15 results.',
+    ]);
+    // Visibility: a yield happened after each progress frame, because each of
+    // the three has another frame already queued behind it in this chunk —
+    // the other two narration lines, then the closing `done` frame.
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
+    setTimeoutSpy.mockRestore();
+  });
+
   it('resolves with the final result from the done frame', async () => {
     const text = sseBody(FRAMES);
     const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 5)));

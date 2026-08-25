@@ -184,6 +184,23 @@
 
 .ask__live::before {
   content: '⋯ ';
+  animation: ask-live-pulse 1.6s ease-in-out infinite;
+}
+
+/* `launch-readiness/105`: a line that sits unchanged for the whole of a slow
+   model call read as frozen — the owner's own words were "stale". The text
+   itself still only changes when the run has something new to say (that is
+   the honesty rule: never invent progress), but the marker in front of it
+   now visibly breathes the whole time, so "no new line yet" reads as "still
+   working" instead of "stopped". */
+@keyframes ask-live-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .ask__views {
