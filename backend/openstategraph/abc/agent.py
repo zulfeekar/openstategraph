@@ -34,6 +34,7 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.abc.middleware import MiddlewareSlotTable
+from openstategraph.abc.narration import build_narration_middleware
 from openstategraph.abc.prompt import SystemPrompt
 
 
@@ -73,6 +74,14 @@ class AbstractAgentNode(ABC):
         # — the slot is only ever filled when a workflow asked for it and the
         # extra is installed (`openstategraph.injection`).
         "injection-screening",
+        # Second — right after screening, and before anything that touches
+        # state or the model request. It has nothing security-sensitive to
+        # order against, only a preference: its `before_model` line should
+        # announce intent before other middleware has acted, and — because
+        # `after_*` hooks run **last to first** — sitting this early means
+        # its `after_model` line lands late, close to last, after most of
+        # the table has already finished (`launch-readiness/104`).
+        "narration",
         "skills",
         "filesystem",
         "subagents",
@@ -108,12 +117,21 @@ class AbstractAgentNode(ABC):
         model: Any = None,
         tools: Any = (),
         middleware: dict[str, Any] | None = None,
+        narrate: bool = True,
     ) -> None:
         self.name = name
         self.model = model
         self.tools = list(tools)
         #: Named slot contributions from config; replacement is by slot name.
         self._middleware_contributions = dict(middleware or {})
+        #: Default **on** (`launch-readiness/104`, owner scope decision): a
+        #: silent model-driving step is a defect on every node, not an
+        #: opt-in per workflow. `False` is the declared way to go quiet — a
+        #: recorded decision on the node, never code someone deleted — and a
+        #: `middleware={"narration": ...}` contribution still wins either
+        #: way, so a package can swap in a sharper narrator without this
+        #: flag at all.
+        self.narrate = narrate
 
     # -- the three resolvers: the single places config becomes a thing ----- #
 
@@ -132,6 +150,13 @@ class AbstractAgentNode(ABC):
         one more thing to read and one more place the order could be decided.
         """
         table = MiddlewareSlotTable(order=self.SLOT_ORDER)
+        # The base's own default filler — "inherit the capability to
+        # compose, not the composition": this calls a factory rather than
+        # hardcoding an instance, so `_middleware_contributions` below can
+        # still replace the slot by name (a sharper narrator, or `None` to
+        # go quiet) without touching this method.
+        if self.narrate:
+            table.set("narration", build_narration_middleware())
         table.merge(self._middleware_contributions)
         return table
 

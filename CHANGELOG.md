@@ -3,6 +3,21 @@
 ## Unreleased
 
 ### Added
+- **Every agent narrates before and after each model call, by default.** A
+  40-second model call inside a real run produced no visible output — the
+  owner watched a glowing border with no way to tell working from stuck.
+  `AbstractAgentNode.resolve_middleware()` now fills a `"narration"` slot
+  (`openstategraph.abc.narration.NarrationMiddleware`), right after
+  `injection-screening` in `SLOT_ORDER`: one generic line via the existing
+  `openstategraph.progress.report_progress()` seam — no tool ids, no
+  internals — before the model call and one after, landing on the same
+  `progress` SSE frame a slow tool already uses, so a live consumer sees it
+  mid-run rather than only in the final message. New constructor kwarg
+  `narrate: bool = True`; `narrate=False` or a `middleware={"narration":
+  None}` contribution is the declared way to go quiet.
+  `MiddlewareSlotTable.set(name, None)` now empties a slot instead of
+  flattening a `None` into `create_agent(middleware=[...])`
+  (`launch-readiness/104`).
 - **`openstategraph.run_context()` is Tier 1, so a tool can read the run
   context its workflow declares.** The last of the three read doors: a
   package's own `tools/` module imports one name and gets the values this

@@ -13,7 +13,7 @@ openstategraph.Workflows = class(object)(root: 'str | Path | None' = None, *, mo
 openstategraph.__version__ = str
 openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
 openstategraph.run_context = def() -> 'dict[str, Any]'
-openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), middleware: 'dict[str, Any] | None' = None) -> 'None'
+openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), middleware: 'dict[str, Any] | None' = None, narrate: 'bool' = True) -> 'None'
 openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
 openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
 openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'

@@ -307,6 +307,23 @@ PROMPT_LADDER = """**Install-experience 19 landed, and this entry is the smaller
     The reduction is measured, not asserted: 19 -> 11, 18 -> 11, 16 -> 9,
     13 -> 9, and five classes off the census."""
 
+#: `launch-readiness/104`: every agent-family node gained one public member,
+#: `narrate`, the declared way to silence the base's default narration
+#: middleware. Added to the counts above rather than folded into
+#: `PROMPT_LADDER`, because it is a different member for a different reason —
+#: the ladder is about prompt composition, this is about a run being
+#: watchable.
+NARRATE_TOGGLE = """`launch-readiness/104`: a silent model-driving step was found to be a defect on
+    every agent, not a per-workflow opt-in — the owner watched a 40-second
+    model call produce nothing visible and could not tell working from stuck.
+    `AbstractAgentNode.resolve_middleware()` now fills a `"narration"` slot by
+    default; `self.narrate` (default `True`) is the flag that turns it off
+    without deleting the middleware, so "this node stays quiet" is a decision
+    on the node rather than code someone removed. One field, on the base
+    every tier already shares — `BaseAgentNode`, `ReactAgentNode` and
+    `DeepAgentNode` each gain exactly one member over the counts `PROMPT_LADDER`
+    argues for."""
+
 #: `BaseKnowledgeBuilder` is at exactly ten, which is the point.
 KNOWLEDGE_BUILDERS = """A recorded exception, and the cheapest kind to defend: the base is at exactly
     the ceiling (`BaseKnowledgeBuilder`, ten), and every concrete builder is
@@ -489,9 +506,9 @@ FINDING_KINDS = """**An enum of fifteen, and the ceiling is asking the wrong que
 #: together.
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(15, FINDING_KINDS),
-    "abc.agent.BaseAgentNode": Recorded(11, PROMPT_LADDER),
-    "abc.agent.ReactAgentNode": Recorded(11, PROMPT_LADDER),
-    "abc.agent.DeepAgentNode": Recorded(12, PROMPT_LADDER),
+    "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
+    "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
+    "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
     "abc.router.BaseRouter": Recorded(12, MULTI_MATCH_PROMPT),
     "abc.router.Router": Recorded(13, MULTI_MATCH_PROMPT),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),

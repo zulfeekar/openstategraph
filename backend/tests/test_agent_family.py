@@ -269,7 +269,11 @@ class TestConcreteTiers:
     def test_middleware_flattens_into_the_constructor_call(self, monkeypatch) -> None:
         recorder = Recorder()
         mine = FakeMiddleware("mine")
-        node = ReactAgentNode(name="a1", model="M", middleware={"mine": mine})
+        # `narrate=False`: this test is about extras flattening, not about
+        # the base's own default narration middleware (covered separately in
+        # `test_narration.py`), so the default filler is turned off to keep
+        # the assertion exact.
+        node = ReactAgentNode(name="a1", model="M", middleware={"mine": mine}, narrate=False)
         monkeypatch.setattr(node, "_constructor", recorder)
         node.build()
         assert recorder.calls[0]["middleware"] == [mine]

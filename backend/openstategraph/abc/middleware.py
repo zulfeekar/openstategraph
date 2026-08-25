@@ -43,7 +43,18 @@ class MiddlewareSlotTable:
         self._extra_order: list[str] = []
 
     def set(self, name: str, middleware: Any) -> None:
-        """Fills (or replaces) one named slot."""
+        """Fills (or replaces) one named slot.
+
+        ``None`` empties it instead of filling it — the declared way a
+        contribution silences a slot the base fills by default (the
+        ``"narration"`` slot, `launch-readiness/104`). Without this, a
+        contribution of ``None`` would flatten straight into
+        ``create_agent(middleware=[...])`` and crash on a non-middleware
+        item; "the honest way to go quiet" has to actually go quiet.
+        """
+        if middleware is None:
+            self.remove(name)
+            return
         if name not in self._slots and name not in self._order:
             self._extra_order.append(name)
         self._slots[name] = middleware
