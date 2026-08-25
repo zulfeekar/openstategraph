@@ -198,6 +198,7 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     "compile/node_runtime.py": "writer",
     "memory.py": "accessor-caller",
     "api/streaming.py": "accessor-caller",
+    "abc/narration.py": "accessor-caller",
     "api/schemas.py": "transport",
     "cli.py": "transport",
     "api/threads.py": "checkpoint",
@@ -215,6 +216,7 @@ ACCESSOR_CALLERS: tuple[str, ...] = (
     "memory.py",
     "api/streaming.py",
     "prebuilt_session.py",
+    "abc/narration.py",
 )
 
 

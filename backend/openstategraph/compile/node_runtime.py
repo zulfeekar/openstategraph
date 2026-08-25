@@ -88,10 +88,12 @@ from openstategraph.compile.context import (  # noqa: F401
     held_tools_context,
     nested_record,
     rejection_feedback,
+    retry_inventory,
     revision_request,
 )
 from openstategraph.compile.subagents import subagent_specs
 from openstategraph import injection
+from openstategraph.run_identity import run_identity
 from openstategraph.developer_channel import transcript_text
 from openstategraph.memory import MemorySettings
 from openstategraph.messages import content_text
@@ -1942,6 +1944,13 @@ class NodeRuntime:
 
         rejector_roles = {src: _role_towards(src) for src in feedback_sources}
         built: dict[tuple[str, str], Any] = {}
+        # `launch-readiness/106`: the `NarrationMiddleware` instance behind
+        # each built agent, kept here because this is the compiler that made
+        # it — exactly as `rubric` and `summarization` above are built here
+        # and nowhere else. A retry reads this dict rather than the node,
+        # so the node's public surface never grows for it. Keyed identically
+        # to `built`; `None` where narration was silenced for this key.
+        narration_by_key: dict[tuple[str, str], Any] = {}
 
         def agent_for(skill: str, run_ctx: str = "") -> Any:
             # Keyed by the run-context block as well as the wired skill
@@ -2011,6 +2020,17 @@ class NodeRuntime:
                         trigger=_summarize_trigger(model),
                         keep=SUMMARIZE_KEEP,
                     )
+                # `launch-readiness/106`: built here, the same way `rubric`
+                # and `summarization` are — never on the node — so this
+                # compiler keeps the one reference a retry needs. A workflow
+                # that already named "narration" in `contributions` (the
+                # declared way to silence or replace the slot) is left alone;
+                # this only fills the slot when nothing already has.
+                if "narration" not in contributions:
+                    from openstategraph.abc.narration import build_narration_middleware
+
+                    contributions["narration"] = build_narration_middleware()
+                narration_mw = contributions.get("narration")
                 tier_cls = agent_family.agent_node_for_tier(_text(data, "tier"))
                 # Delegation (`organisms-first-class/84`). The pass-through has
                 # existed since `DeepAgentNode` was written and nothing ever
@@ -2025,7 +2045,7 @@ class NodeRuntime:
                     specs = subagent_specs(data)
                     if specs:
                         tier_kwargs["subagents"] = specs
-                built[key] = tier_cls(
+                node_instance = tier_cls(
                     name=f"agent_{node_id}",
                     model=model,
                     tools=lc_tools,
@@ -2070,7 +2090,9 @@ class NodeRuntime:
                     ),
                     middleware=contributions,
                     **tier_kwargs,
-                ).build()
+                )
+                built[key] = node_instance.build()
+                narration_by_key[key] = narration_mw
             return built[key]
 
         def run(state: RunState) -> dict[str, Any]:
@@ -2130,6 +2152,23 @@ class NodeRuntime:
                         content=revision_request(rejected, feedback, role=role)
                     )
                 )
+                # `launch-readiness/106`: a retry gets pointed at what this
+                # run's own findings store already holds, not merely at what
+                # was wrong. `narration_by_key` holds the exact instance this
+                # compiler built for this skill/run-context key — never a
+                # fresh one, and never one fetched back off the agent — so
+                # the inventory reflects the store the retry's own tool calls
+                # will read and write.
+                retry_narration_mw = narration_by_key.get(
+                    (skill, self._run_context_section())
+                )
+                inventory_fn = getattr(retry_narration_mw, "findings_inventory", None)
+                if inventory_fn is not None:
+                    thread_id = run_identity().get("thread_id", "")
+                    if thread_id:
+                        inventory_text = retry_inventory(inventory_fn(thread_id))
+                        if inventory_text:
+                            payload.append(HumanMessage(content=inventory_text))
             elif not payload or payload[-1].type != "human" or payload[-1].content != prompt:
                 payload.append(HumanMessage(content=prompt))
             invocation: dict[str, Any] = {"messages": payload}

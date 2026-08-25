@@ -458,3 +458,36 @@ def revision_request(rejected: str, feedback: str, *, role: str = "author") -> s
         "using this as background.\n\n"
         f"{rejected}"
     )
+
+
+def retry_inventory(entries: list[str]) -> str:
+    """`launch-readiness/106`: what this run's own findings store already
+    holds, named so a retry reads it instead of re-fetching it.
+
+    This is the part `revision_request` never carried: it tells an agent
+    what was wrong, not what it already knows. Composed **alongside**
+    `revision_request`'s message rather than folded into it, because the
+    two say different things to two different failure modes — one is about
+    the rejected answer, this one is about the agent's own tool history —
+    and a machinery-owned message survives even when a developer's `rules`
+    say nothing about checking a store, which is the whole point: tonight an
+    *instruction* to check the store before calling a tool did not stop two
+    identical calls in one thread. This is not an instruction — it is a
+    fact, stated so the agent does not have to rediscover it.
+
+    `entries` is `NarrationMiddleware.findings_inventory()`'s list: `name` or
+    `name(args)`, no result content, so nothing measurement-shaped ever
+    passes through here — only the allowlisted, structure-only entries the
+    store was ever allowed to hold. `""` for an empty list, so a first
+    attempt (nothing on record yet) adds no text at all.
+    """
+    if not entries:
+        return ""
+    lines = "\n".join(f"- {entry}" for entry in entries)
+    return (
+        "This run already looked some of this up. Before calling a tool "
+        "again, check whether it is already here:\n"
+        f"{lines}\n"
+        "If what you need is one of these, use what you already have "
+        "instead of calling the tool again."
+    )

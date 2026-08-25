@@ -322,7 +322,15 @@ NARRATE_TOGGLE = """`launch-readiness/104`: a silent model-driving step was foun
     on the node rather than code someone removed. One field, on the base
     every tier already shares — `BaseAgentNode`, `ReactAgentNode` and
     `DeepAgentNode` each gain exactly one member over the counts `PROMPT_LADDER`
-    argues for."""
+    argues for.
+
+    `launch-readiness/106`'s retry inventory does **not** add a member here:
+    the compiler (`compile/node_runtime.py`) builds the `NarrationMiddleware`
+    instance itself — exactly as it already does for `rubric` and
+    `summarization` — and keeps its own reference alongside the contribution
+    it hands the node. The node never needs a second address for middleware
+    it already resolves through the slot table; the retry path reads the
+    instance the compiler made, not one fetched back off the agent."""
 
 #: `BaseKnowledgeBuilder` is at exactly ten, which is the point.
 KNOWLEDGE_BUILDERS = """A recorded exception, and the cheapest kind to defend: the base is at exactly

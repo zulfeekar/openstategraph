@@ -47,6 +47,7 @@ from langchain.agents.middleware.types import AgentMiddleware, AgentState, ToolC
 from langgraph.runtime import Runtime
 
 from openstategraph.progress import report_progress
+from openstategraph.run_identity import run_identity
 
 # `launch-readiness/105`: a read-through cache for tool calls that return
 # STRUCTURE — a lens list, a table schema, a canonical spelling — never a
@@ -183,12 +184,43 @@ class NarrationMiddleware(AgentMiddleware):
             report_progress(self._before_tool_text(request))
         result = handler(request)
         if thread_id is not None:
+            # `thread_id` is only ever set (line above) when `cache_key` is
+            # not `None` — this assert is for mypy's narrowing, not a new
+            # runtime possibility.
+            assert cache_key is not None
             self._findings.setdefault(thread_id, {})[cache_key] = result
         if not self._quiet:
             text = self._after_tool_text(result)
             if text is not None:
                 report_progress(text)
         return result
+
+    def findings_inventory(self, thread_id: str) -> list[str]:
+        """`launch-readiness/106`: what this thread already knows, named —
+        never re-derived, and never re-classified.
+
+        One line per finding on record, `tool(args)` — the call that was
+        made, never the result it returned. That silence is the point: a
+        result can be a schema (safe to trust again) or a row count (stale
+        the instant a new attempt asks), and this store was never asked to
+        tell those apart on the way *out* — `_cache_key` already told them
+        apart on the way *in*. Only an allowlisted, STRUCTURE-returning tool
+        is ever written to `self._findings` (`launch-readiness/105`'s
+        allowlist, reused rather than re-derived); a measurement is never
+        cached at all, so there is nothing measurement-shaped in here to
+        exclude. Reusing that allowlist is the whole answer to "how are
+        measurements excluded" — there is no second gate.
+
+        `[]` when the thread has nothing on record (a first attempt, or an
+        empty store) — the caller's cue to add no inventory at all.
+        """
+        bucket = self._findings.get(thread_id)
+        if not bucket:
+            return []
+        return [
+            f"{name}({args_key})" if args_key not in ("{}", "") else name
+            for name, args_key in sorted(bucket)
+        ]
 
     @staticmethod
     def _cache_key(request: ToolCallRequest) -> tuple[str, str] | None:
@@ -206,16 +238,18 @@ class NarrationMiddleware(AgentMiddleware):
 
     @staticmethod
     def _thread_id(request: ToolCallRequest) -> str | None:
-        """The per-thread scope, read from the same `config.configurable`
-        LangGraph already threads through every run. `None` (never cached)
+        """The per-thread scope, read through the one accessor
+        (`openstategraph.run_identity.run_identity`) rather than hand-rolled
+        here — a second `configurable.get("thread_id")` is exactly the drift
+        `run_identity` exists to make impossible. `None` (never cached)
         outside a run or when no thread id was set, rather than guessing a
         shared bucket across unrelated callers."""
         try:
             config = request.runtime.config or {}
-            thread_id = (config.get("configurable") or {}).get("thread_id")
         except Exception:  # noqa: BLE001 — a cache lookup must never fail a run
             return None
-        return str(thread_id) if thread_id else None
+        thread_id = run_identity(config).get("thread_id", "")
+        return thread_id or None
 
     @staticmethod
     def _before_tool_text(request: ToolCallRequest) -> str:

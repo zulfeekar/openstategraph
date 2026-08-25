@@ -368,3 +368,35 @@ class TestReadThroughCache:
             mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id=None, result=result
         )
         assert invoked2 is True
+
+
+class TestFindingsInventory:
+    """`launch-readiness/106`: the retry-facing read of the same store."""
+
+    def test_empty_thread_returns_nothing(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        assert mw.findings_inventory("t1") == []
+
+    def test_lists_what_was_cached_by_name(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_describe_table", args={"table": "dim_vessel"}, thread_id="t1", result=result)
+        entries = mw.findings_inventory("t1")
+        assert len(entries) == 1
+        assert entries[0].startswith("mcp_describe_table(")
+        assert "table" in entries[0] and "dim_vessel" in entries[0]
+
+    def test_a_measurement_tool_never_appears(self) -> None:
+        """`mcp_execute_sql` is never cached at all (not on the allowlist),
+        so it can never be offered back on a retry — the same allowlist that
+        keeps it out of the store keeps it out of the inventory."""
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_execute_sql", args={"sql": "select 1"}, thread_id="t1", result=result)
+        assert mw.findings_inventory("t1") == []
+
+    def test_a_different_thread_sees_nothing(self) -> None:
+        mw = NarrationMiddleware(quiet=True)
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
+        _call(mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result)
+        assert mw.findings_inventory("t2") == []
