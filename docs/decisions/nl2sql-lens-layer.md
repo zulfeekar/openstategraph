@@ -342,3 +342,90 @@ no check fired (clean `VALIDATION: PASS`) — bounding-box assumption stated in
 the answer since no Fujairah geofence exists in `shipping.geofences_v3r1`.
 
 Ticket: launch-readiness/74
+
+---
+
+## launch-readiness/76 and 77 — conversation, not a form
+
+Two related defects, both the router judging one turn on too little
+information, plus a mid-verification scope widening from the owner.
+
+**76 — a follow-up that looks like a greeting.** `router1`'s branch
+definitions were a topic enumeration ("greeting" = these words, "offtopic" =
+those words), which cannot account for position in a thread: the same short
+word is a greeting on turn one and a continuation on turn five. Rewritten as
+one governing question — does answering this turn need the warehouse? — plus
+an explicit rule that a short, otherwise contentless message inside an
+already-open thread continues that thread rather than opening a new one.
+`greet1`'s own prompt was made continuation-aware so a mid-thread pure
+greeting (if one still lands there) doesn't re-introduce the assistant like a
+stranger.
+
+**77 — it cannot say what day it is.** "What is today" was declining as
+off-topic. Fixed by folding date/freshness questions into the data-question
+path, answered from the warehouse's own clock rather than the model's guess:
+`agent1` composes `SELECT CURRENT_DATE() ... FROM <table> LIMIT 1`. Caught
+live on the first attempt: a bare `SELECT CURRENT_DATE()` with no table
+reference is refused by `execute_sql`'s `ms_cpl_app_prod.*` guard
+(`functions/execute_sql.py`) before it ever reaches the warehouse — the fix
+had to attach a real table and `LIMIT 1`. The `typical_lag_days` framing the
+ticket asked for ("cargo data typically runs about five days behind") is
+instructed in `agent1`'s prompt but was not exercised by the live turn that
+was verified, since that turn asked about the date standalone rather than
+about a specific lens's freshness — left as partially resolved on that
+account.
+
+**Mid-task scope widening, from the owner, in three messages while this was
+in flight.** The original tickets asked only to stop misrouting a follow-up
+and a date question. The owner's own words, relayed partway through: *"user
+can ask say hello whatever not decline but reply naturally, maybe hey tell me
+a joke — can tell a joke; where is middle east — of course, very generic."*
+Then, correctly, a course-correction on the correction: *"you cannot write a
+rule for each and every use case... exactly like someone chatting on
+Claude."* The rules text went through an enumerate-then-collapse cycle inside
+one session — cases named (joke, geography, weather, date, follow-ups) then
+deliberately deleted in favor of one principle, because a case list is a list
+of the cases somebody thought of, and it stiffens exactly where a
+conversation needs to bend:
+
+> A fact about the world may come from the model. A fact about the CPL data
+> must come from the data — a query runs, or the assistant says plainly it
+> could not.
+
+This retired the flat off-topic decline (`decline1`) — it now answers
+ordinary chat and general-knowledge questions directly instead of reciting
+four domains — and rewrote `skills/answering.md`'s intro to state the same
+boundary as a rule about *sources*, not *topics*. `router1`'s four branches
+(`data_query`, `followup`, `greeting`, `offtopic`) were kept as-is
+structurally; only what each one *means* changed. The owner flagged that the
+real fix is collapsing four topic branches into one binary "does this need
+the data" decision, but said explicitly not to restructure the graph under
+this ticket — that collapse is deliberately left as a future ticket rather
+than attempted here.
+
+Verified live as one conversation thread against the running server
+(`openstategraph serve`, `/api/runs`, same `thread_id` across turns):
+
+1. Mongstad control question — full product/product-group breakdown, real
+   numbers, SQL shown. (regression, holds)
+2. "hi" — classified `followup`, not `greeting`; re-answered the same
+   breakdown rather than resetting to a stranger's greeting.
+3. "what about Rotterdam?" — continued, same breakdown shape, different port.
+4. "what is today?" — "Today is 2026-08-25", backed by the executed
+   `SELECT CURRENT_DATE()` query, not a guess.
+
+Additional gates, separate threads: first-turn "hello" — fast greeting
+branch, no warehouse call (regression, holds). "Port Vandelay" — still asks,
+invents nothing (regression, holds). "tell me a joke" — an actual joke, no
+decline. "where is the Middle East?" — answered plainly, no scope recitation.
+"how much crude moved through Hormuz last month?" — ran a real query against
+`cargoflow_latest`, returned a number backed by SQL with filters and
+assumptions stated, never a remembered figure. Weather-in-Oslo decline (the
+original ticket's gate 3) was explicitly withdrawn by the owner mid-task and
+replaced by the Hormuz gate above, since the flat-decline behavior it
+protected was the thing being removed.
+
+`~/osg-demo` commit `ae327f5`.
+
+Ticket: launch-readiness/76
+Ticket: launch-readiness/77
