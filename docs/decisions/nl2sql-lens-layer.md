@@ -82,3 +82,74 @@ routing is better but still a declinable prompt rule, no validator enforces
 it. All required invariants (router 4-branch, revision loop, 12 skill
 edges) verified intact in `workflow.json` before and after. Server restarted
 and healthy at the end.
+
+## Update 2026-08-25 (2): entity resolution turned into a guarantee — ticket 70
+
+**Part 1 verdict: tools ARE reachable via the API/SSE path.** Posted
+`/api/runs` with a question forcing a lookup ("exact spelling of the port
+name that includes Fujairah"); `agent1`'s output showed `DistinctValuesTool`
+actually ran (`SELECT DISTINCT geofence_name ... WHERE geofence_name LIKE
+'%Fujairah%'`, zero rows, correctly reported as absent). So yesterday's
+guessed literal was the model declining to use an available tool, not a
+wiring gap — Part 2 was the right lever, no new "tools unreachable" ticket
+filed.
+
+**Live failure surfaced mid-session (real question, lowercase `mongstad`)
+found three defects, all fixed:**
+
+1. `DistinctValuesTool`'s `like` handling (`tools/databricks_explore.py`)
+   built `WHERE {column} LIKE '{like}'` — case-sensitive, so lowercase
+   `mongstad` missed `'Mongstad [NO]'`. Changed to
+   `LOWER(column) LIKE LOWER('{like}')`.
+2. A deliberate refusal (no fenced SQL) was rendered `VALIDATION FAILED` by
+   `functions/validate_sql.py`, indistinguishable from a real validator
+   rejection. Renamed that branch's header to `CLARIFICATION NEEDED`;
+   `functions/execute_sql.py` now gates on either header.
+3. `agent1`'s refusal prose offered "allow a substring/LIKE filter" as a
+   workaround — exactly the defect this ticket removes. Added rule B5 to
+   `agent1`'s systemPrompt in `workflow.json`: phrase a refusal as a question
+   about the user's intent, never offer LIKE/wildcard as an out.
+
+**Part 2 — `tools/sql_validator.py` `validate()` gained a
+`resolve_before_filter` check**, TDD'd in `tests/test_sql_validator.py`
+(7 new cases, fake distinct-values provider, no network):
+
+- Reads `resolve_before_filter` from every `skills/lenses/*.md` YAML block
+  at runtime (`_load_resolve_before_filter`), unioned, never hardcoded.
+- Case-insensitive match, tolerant of the `'Mongstad [NO]'` bracket-suffix
+  convention (`_literal_matches_known_value`).
+- No match → hard violation naming column, literal, and `difflib`-nearest
+  real values.
+- Lookup failure (exception from the distinct-values call) → warning only,
+  proceeds — same doctrine as `Grader.normalise` and the sqlglot
+  parse-failure path.
+- `LIKE` on a `resolve_before_filter` column → hard violation unconditionally,
+  independent of the existing cardinality facet.
+- A column absent from every lens's list is untouched.
+- In-process cache keyed by `(table, column)` (`_distinct_values_cache`),
+  module-level, so repeated attempts in one process cost at most one lookup
+  per column.
+
+**Verification, live, both against the running server:**
+
+- *Owner's exact question*, lowercase, verbatim — "How many vessels departed
+  from mongstad last week broken down by product and product group":
+  resolved `mongstad` → `load_port = 'Mongstad [NO]'` on the first attempt
+  (`gate1: pass`, no revision loop needed), returned a real product/product-group
+  breakdown (Crude 9, Gasoline/Blending Components 8, Diesel/Gasoil 5, ... —
+  `SELECT ... FROM ms_cpl_app_prod.shipping.cargoflow_latest WHERE
+  load_port = 'Mongstad [NO]' AND load_date >= DATE_SUB(CURRENT_DATE, 7)
+  GROUP BY \`group\`, group_product`).
+- *Made-up port* — "How many vessels departed from Port Vandelay last week":
+  no invented answer. Response is `CLARIFICATION NEEDED`, agent draft asks
+  "Which exact port value did you mean... or would you like me to show a
+  short list of nearby load_port distinct values" — a question about intent,
+  no LIKE offered.
+
+Invariants reverified in `workflow.json` before and after: 31 edges, 12
+`agent1.skill` edges, `in1 -> router1`, `gate1.revise -> agent1.feedback`
+intact. Server restarted at the end, healthy.
+
+Ticket 70 closed — both the tool-availability suspicion (ruled out) and the
+validator enforcement now hold under the owner's own real failing question,
+not just synthetic ones.
