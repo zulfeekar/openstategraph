@@ -79,7 +79,7 @@
           "type": "skill",
           "label": "skill",
           "required": false,
-          "max_connections": 1,
+          "max_connections": null,
           "accepts": [
             "skill"
           ]
@@ -1034,7 +1034,7 @@
           "type": "skill",
           "label": "skill",
           "required": false,
-          "max_connections": 1,
+          "max_connections": null,
           "accepts": [
             "skill"
           ]
@@ -1156,7 +1156,7 @@
           "type": "skill",
           "label": "skill",
           "required": false,
-          "max_connections": 1,
+          "max_connections": null,
           "accepts": [
             "skill"
           ]
@@ -1356,7 +1356,7 @@
           "type": "skill",
           "label": "skill",
           "required": false,
-          "max_connections": 1,
+          "max_connections": null,
           "accepts": [
             "skill"
           ]
@@ -1537,7 +1537,7 @@
           "type": "skill",
           "label": "skill",
           "required": false,
-          "max_connections": 1,
+          "max_connections": null,
           "accepts": [
             "skill"
           ]

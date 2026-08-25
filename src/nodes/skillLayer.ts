@@ -63,6 +63,23 @@ export const SKILL_PORT: IPortDescriptor = Object.freeze({
   type: PORT.skill,
   label: 'skill',
   description: 'A Markdown skill file whose rules shape this step’s prompt.',
+  // A bus, like `tools` on the same node — and `null` rather than `Infinity`
+  // because a non-finite number does not survive JSON.
+  //
+  // Left unset, this inherited the single-connection input default, and the
+  // canvas refused a second skill onto an agent. The compiler had never
+  // agreed: `skill` is a binding port type, each binding edge appends to
+  // `plan.skill_bindings[dst]`, and `_wired_skill` joins the whole list.
+  // Many skills per node is what the runtime does.
+  //
+  // The disagreement stayed invisible until a package needed the shape —
+  // twelve Markdown files on one agent, seven per-table lenses plus an index
+  // plus four cross-cutting method files. The canvas could not draw it; a
+  // hand-edited document compiled all twelve with no error, warning or
+  // truncation. A limit enforced only where a developer works, and absent
+  // where the work happens, is the worst shape a limit can take: it costs
+  // the editor and guarantees nothing (launch-readiness/72).
+  maxConnections: null,
 });
 
 /** The key the backend's `_replaces_rules(data)` reads first. */
