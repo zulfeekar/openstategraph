@@ -2175,6 +2175,20 @@ class NodeRuntime:
             rubric_text = _text(data, "rubric").strip()
             if rubric_text:
                 invocation["rubric"] = rubric_text
+            # `launch-readiness/106`: a `DeepAgentNode`'s compiled agent is a
+            # bare `Runnable`, invoked here with no config and no
+            # checkpointer of its own — its `StateBackend` keeps `files` in
+            # *that* invocation's state only, so without this the agent's own
+            # `ls`/`write_file` tools saw a blank store on every call,
+            # including a retry lap of this same node in the same turn (the
+            # write always landed in a dict nobody read again). `agent_files`
+            # on the outer `RunState` — which the workflow's own checkpointer
+            # does persist — is the store both calls actually share: seed the
+            # sub-agent's `files` from what this node wrote last time, then
+            # write back whatever it holds after this call.
+            prior_files = (state.get("agent_files") or {}).get(node_id) or {}
+            if prior_files:
+                invocation["files"] = dict(prior_files)
             result = agent.invoke(invocation)
             # `_final_text`, not `messages[-1]`: a loop can legitimately end on
             # a message with no content — a dangling tool call, or a provider
@@ -2190,10 +2204,12 @@ class NodeRuntime:
             # for one ticket, did not have it (36). `bound` and `ran` are the
             # shape `capability_door` reads when the model said nothing about
             # being blocked (`every-workflow-green` 35).
+            new_files = result.get("files")
             return {
                 "outputs": {node_id: answer},
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
+                **({"agent_files": {node_id: new_files}} if new_files else {}),
                 **tool_report(node_id, result.get("messages") or [], wired),
             }
 

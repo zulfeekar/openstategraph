@@ -179,6 +179,28 @@ class RunState(TypedDict, total=False):
     #: reducer because two graders can exhaust in one run — `feedback` is
     #: `LATEST_NONEMPTY` and would keep only the last.
     forced: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: agent node id -> the deep-agent filesystem tools' `files` dict, as it
+    #: stood after that node's last invocation (`launch-readiness/106`).
+    #:
+    #: `DeepAgentNode`'s compiled agent is invoked fresh — `agent.invoke({...})`
+    #: with no config, no checkpointer — every time this node's `run()` runs,
+    #: because the compiled sub-agent graph is a plain `Runnable`, not the
+    #: thread the outer workflow graph checkpoints. Its own `StateBackend`
+    #: keeps files in *that* invocation's state only ("Files persist within a
+    #: conversation thread but not across threads" — `deepagents`'s own
+    #: docstring), so a write on one call and an `ls` on the next each got a
+    #: blank slate: the write always "succeeded" into a dict nobody read
+    #: again, and `ls` always found nothing, including on a retry lap of the
+    #: very same node in the very same turn. This channel is the carry: `run()`
+    #: seeds `invocation["files"]` from here before calling `agent.invoke` and
+    #: writes `result.get("files")` back after, so the outer `RunState` — which
+    #: *is* checkpointed — is the one store both calls actually share.
+    #:
+    #: Keyed by node id and MERGE'd rather than a single dict, for the same
+    #: reason `revisions`/`forced` are: several deep-agent nodes in one
+    #: document must not share a findings store, and a node writes only its
+    #: own key.
+    agent_files: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: grader node id -> the branch label it chose that no edge carries
     #: (`workflow-gallery` 31). Written only when the decision reached nothing,
     #: so its presence *is* the signal — the same shape as `forced` above.

@@ -74,7 +74,7 @@ export function ToolResults({ results }: { results: readonly ToolResult[] }) {
   return (
     <div className="ask__tools">
       {results.map((result, index) => (
-        <details key={`${result.callId}-${index}`} className="ask__tool" open>
+        <details key={`${result.callId}-${index}`} className="ask__tool">
           <summary className="ask__tool-name">{result.tool}</summary>
           <pre className="ask__tool-body">{result.text}</pre>
         </details>
