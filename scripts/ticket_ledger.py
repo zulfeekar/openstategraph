@@ -83,7 +83,16 @@ HASH = re.compile(r"\b([0-9a-f]{7,40})\b")
 
 #: Words a header uses for "this is finished". `partially resolved` is
 #: deliberately *not* here — a partial is open work with a note.
-CLOSED_WORDS = ("resolved", "closed", "done", "backlog", "superseded", "declined")
+#: `withdrawn` is here because a ticket can end by being *wrong* rather than by
+#: being fixed, and that ending needs a word. `launch-readiness/80` reported a
+#: product defect that turned out to be a broken test harness — the finding was
+#: retracted, the ticket carries the retraction and the lesson, and no commit
+#: will ever "resolve" it. Without the word it read as shipped-but-open drift
+#: forever, which teaches the two dishonest moves this file exists to prevent:
+#: mark it resolved, or quietly drop the trailer.
+CLOSED_WORDS = (
+    "resolved", "closed", "done", "backlog", "superseded", "declined", "withdrawn",
+)
 
 #: A section heading that only a finished ticket would carry.
 RESOLUTION_HEADING = re.compile(r"^##+\s*(resolution|what was done|outcome)\b", re.MULTILINE | re.IGNORECASE)
