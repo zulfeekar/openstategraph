@@ -574,3 +574,29 @@ The answering rule added alongside it stays, because it is correct on its own
 terms: **ask about the user's intent, which only they know; never ask
 permission for mechanics you can settle by looking.** It was simply not the fix
 for a bug that did not exist.
+
+## `launch-readiness/63` — a failed statement is not a zero-row statement
+
+Third instance of one defect, found by grepping every call site rather than
+trusting that the one caught live (`launch-readiness/12`) was the only one.
+`functions/execute_sql.py` and two lookups in `tools/sql_validator.py`
+(`_default_distinct_values`, `_default_value_exists`) already checked
+`resp.status.state` before this session, enum-safely (`str(getattr(state,
+"value", state)).rsplit(".", 1)[-1].upper()`, because a bare `str(state)` on
+the SDK's enum reads `"StatementState.SUCCEEDED"` and never equals
+`"SUCCEEDED"`). Three more call sites in the same package read
+`execute_statement`'s result the same unchecked way `_default_distinct_values`
+originally did:
+
+- `tools/databricks_nl2sql.py`'s `DatabricksSqlQueryTool._execute`
+- `tools/databricks_explore.py`'s `DistinctValuesTool._execute`
+- `tools/sql_validator.py`'s `_default_geofence_names`
+
+All three now make succeeded-with-rows, succeeded-with-no-rows ("no data",
+said plainly), and did-not-succeed (a named error) mutually distinguishable,
+using the same enum-safe check rather than a re-derived one. Judged
+package-author responsibility per the ticket's own suggested fix — no
+platform code or docs changed. `cpl-nl2sql` commit `d1e1f8e`, tests in
+`tests/test_statement_failure_visibility.py` (mocked `statement_execution`,
+no warehouse call). Both regression gates (Mongstad breakdown, Fujairah
+median/mean) still pass afterward.
