@@ -231,6 +231,32 @@ export function supersedeDraftAfterHostWrite(
   deleteWorkflow(store, draftIdForSlug(root));
 }
 
+/**
+ * Drop this browser's draft of a package that was just deleted on the
+ * backend — **`launch-readiness` 95**.
+ *
+ * ## The orphan
+ *
+ * A draft is keyed `slug-<slug>` (`draftIdForSlug`), and deleting a workflow
+ * from the Workflows panel only ever called the backend's `remove(slug)` — it
+ * never touched this browser's own copy. The key survived the delete, sitting
+ * in `localStorage` under the exact name the *next* workflow with that slug
+ * would mint, because slugs are derived from titles and re-using a title
+ * (`"Chinook Assistant"`, say) re-mints the same slug. So a re-created
+ * workflow of the same name silently inherited a stranger's leftover draft —
+ * the shape of the stale-draft symptom that motivated this sweep, minus one
+ * step: no rename was even needed, deletion alone was enough.
+ *
+ * Called once, from the Workflows panel's delete handler, mirroring
+ * `supersedeDraftAfterHostWrite`'s one-call-site discipline.
+ */
+export function discardDraftAfterDelete(
+  slug: string,
+  store: KeyValueStore = browserStore(),
+): void {
+  deleteWorkflow(store, draftIdForSlug(slug));
+}
+
 /** Whether this browser holds a draft for `subject` (a slug or an address). */
 export function hasDraftFor(subject: string | null, store?: KeyValueStore): boolean {
   return (

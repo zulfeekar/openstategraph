@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Workbench } from '@app/Workbench';
 import { addNode, TYPE } from '@core/testing/fixtures';
 import { newWriteGuard, saveWorkflow, type KeyValueStore } from '@app/workflowStore';
-import { draftIdForSlug, restoreDraftFor } from '@app/workflowDrafts';
+import { discardDraftAfterDelete, draftIdForSlug, restoreDraftFor } from '@app/workflowDrafts';
 
 /** An in-memory `Storage`, so this runs in the node environment like `core/`. */
 class FakeStore implements KeyValueStore {
@@ -141,5 +141,33 @@ describe('per-slug drafts', () => {
 
     expect(restoreDraftFor('concierge', other, store).restored).toBe(false);
     expect(other.controller.document.exportJSON()).toBe(fromFile);
+  });
+
+  it('drops this browser draft when the backend workflow is deleted, so a later same-slug workflow cannot adopt it', () => {
+    const editing = editorHolding('Chinook Assistant');
+    addNode(editing, TYPE.markdownFile, { at: { x: 40, y: 40 } });
+    saveWorkflow(
+      store,
+      draftIdForSlug('chinook-assistant'),
+      editing.model,
+      editing.serializer,
+      newWriteGuard(),
+    );
+    expect(store.getItem(`openstategraph-workflow-${draftIdForSlug('chinook-assistant')}`)).not.toBe(
+      null,
+    );
+
+    discardDraftAfterDelete('chinook-assistant', store);
+
+    expect(store.getItem(`openstategraph-workflow-${draftIdForSlug('chinook-assistant')}`)).toBe(
+      null,
+    );
+
+    // A workflow later re-created under the same slug (e.g. the same title)
+    // must not inherit a stranger's draft.
+    const recreated = editorHolding('Chinook Assistant');
+    const fromFile = recreated.controller.document.exportJSON();
+    expect(restoreDraftFor('chinook-assistant', recreated, store).restored).toBe(false);
+    expect(recreated.controller.document.exportJSON()).toBe(fromFile);
   });
 });

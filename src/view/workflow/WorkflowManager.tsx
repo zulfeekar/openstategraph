@@ -27,6 +27,7 @@ import {
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { forgetKnownSavedAt } from '@app/workflowFileWatch';
+import { discardDraftAfterDelete } from '@app/workflowDrafts';
 import { clearOpenSlug, getOpenSlug } from '@app/openWorkflow';
 import {
   WorkflowFileClient,
@@ -351,6 +352,10 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         // deliberately.
         if (getOpenSlug() === slug) clearOpenSlug();
         forgetKnownSavedAt(slug);
+        // Otherwise this browser's own draft of the deleted workflow survives
+        // under `slug-<slug>` and is silently adopted by the next workflow
+        // minted with the same slug (`launch-readiness` 95).
+        discardDraftAfterDelete(slug);
         onNotify(deletedMessage(name));
         void refreshList();
       } else {
