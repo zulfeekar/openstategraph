@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain.agents.middleware.types import ToolCallRequest
+from langchain_core.messages import ToolMessage
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
@@ -79,6 +81,126 @@ class TestNarrationMiddleware:
     def test_builder_is_the_bases_default_filler(self) -> None:
         mw = build_narration_middleware()
         assert isinstance(mw, NarrationMiddleware)
+
+
+def _drive_tool_hook_through_a_real_graph(
+    middleware: NarrationMiddleware, *, tool_name: str, result: ToolMessage
+) -> list[dict[str, Any]]:
+    """Same proof as `_drive_hooks_through_a_real_graph`, for `wrap_tool_call`:
+    runs it inside a real LangGraph run and collects what actually landed on
+    `stream_mode="custom"` — the channel `api/streaming.py` turns into the
+    `progress` SSE frame. A test that only asserts `report_progress` was
+    *called* proves the call, not that anything downstream would ever see it;
+    this drives the real custom-stream machinery instead, same as the
+    model-hook tests above.
+    """
+    request = ToolCallRequest(
+        tool_call={"name": tool_name, "args": {"value": "mongstad"}, "id": "call_abc123"},
+        tool=None,
+        state={},
+        runtime=None,
+    )
+
+    order: list[str] = []
+
+    def handler(_req: ToolCallRequest) -> ToolMessage:
+        order.append("handler")
+        return result
+
+    def node(state: _State, runtime=None):
+        order.append("before")
+        out = middleware.wrap_tool_call(request, handler)
+        assert out is result
+        return {"step": state.get("step", 0) + 1}
+
+    graph = StateGraph(_State).add_node("node", node).add_edge(START, "node").add_edge("node", END).compile()
+
+    events: list[dict[str, Any]] = []
+    for chunk in graph.stream({"step": 0}, stream_mode="custom"):
+        events.append(chunk)
+    # The before-line must be emitted (and therefore streamed) ahead of the
+    # handler running, not flushed only once the tool has already returned —
+    # a before-line that arrives after the call is a log entry, not progress.
+    assert order[0] == "before"
+    return events
+
+
+class TestNarrationMiddlewareToolCalls:
+    def test_fires_before_and_after(self) -> None:
+        result = ToolMessage(content=[{"id": 1}, {"id": 2}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_list_lenses", result=result
+        )
+        assert len(events) == 2
+
+    def test_before_line_is_derived_from_the_call_known_tool(self) -> None:
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_list_lenses", result=result
+        )
+        reports = [progress_report(e) for e in events]
+        assert reports[0] is not None
+        assert reports[0].message == "Looking up what is available."
+
+    def test_after_line_counts_a_list_result(self) -> None:
+        result = ToolMessage(content=[{"id": 1}, {"id": 2}, {"id": 3}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_list_lenses", result=result
+        )
+        reports = [progress_report(e) for e in events]
+        assert reports[1] is not None
+        assert reports[1].message == "3 results."
+
+    def test_after_line_reports_no_rows_on_empty_result(self) -> None:
+        result = ToolMessage(content=[], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_query_chinook", result=result
+        )
+        reports = [progress_report(e) for e in events]
+        assert reports[1] is not None
+        assert reports[1].message == "No rows."
+
+    def test_unknown_tool_falls_back_without_printing_its_id(self) -> None:
+        result = ToolMessage(content="some free-text answer", tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="totally_novel_mcp_tool_xyz", result=result
+        )
+        reports = [progress_report(e) for e in events]
+        assert reports[0] is not None
+        assert reports[0].message == "Calling a tool."
+        # An unparseable-shape result (free text) is omitted rather than
+        # guessed at, per the honesty clause — only the before-line lands.
+        assert len(events) == 1
+
+    def test_no_tool_id_or_internal_name_in_any_emitted_text(self) -> None:
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_lookup_canonical_value", result=result
+        )
+        for e in events:
+            report = progress_report(e)
+            assert report is not None
+            text = report.message
+            assert "call_abc123" not in text
+            assert "mcp_lookup_canonical_value" not in text
+            assert "mongstad" not in text
+
+    def test_narrate_off_emits_nothing_for_tools(self) -> None:
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(quiet=True), tool_name="mcp_list_lenses", result=result
+        )
+        assert events == []
+
+    def test_emitted_lines_stay_a_sane_length(self) -> None:
+        result = ToolMessage(content=[{"id": 1}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_a_real_graph(
+            NarrationMiddleware(), tool_name="mcp_list_lenses", result=result
+        )
+        for e in events:
+            report = progress_report(e)
+            assert report is not None
+            assert len(report.message) <= 80
 
 
 class TestSlotWiring:
