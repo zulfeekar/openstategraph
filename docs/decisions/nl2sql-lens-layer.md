@@ -777,3 +777,39 @@ attempt after the fix:
   cf_imos.vessel_imo = v.imo`.
 
 Ticket 98: resolved.
+
+## Ticket 87 — the forward-curve grain trap (2026-08-26)
+
+`silver_forward_curves_metadata_v1` has 57,280 rows and 57,280 distinct
+`metadata_id`, but only 151 distinct `curve_name` (verified 2026-08-25,
+recounted live during this ticket). The hidden dimension is `applicable_at`,
+the snapshot date a curve was published — one curve name carries hundreds of
+snapshots, each its own `metadata_id`. Filtering or grouping by `curve_name`
+alone silently joins every historical snapshot and averages a curve against
+its own past revisions, with nothing in the answer saying which snapshot was
+used. `skills/lenses/forward_curves.md` never mentioned `applicable_at`.
+
+Fixed the way 98 (fans-out) and 78 (duration) were fixed: a new optional lens
+field, `grain_trap: {guarded_column, required_column, table, note}`, declared
+once on `forward_curves`. `tools/sql_validator.py` gained check 4d: when a
+lens declares `grain_trap` and the SQL filters or groups by the guarded
+column resolved to the declared table, a column named the required column
+must appear *somewhere* in the query, or it is a certain rejection naming the
+fix (pin the latest `applicable_at` via a `MAX(...)` subquery). This does not
+judge whether the required-column predicate is *correct* — only that one
+exists — same shallow-but-certain shape as `quantity_aggregation` and
+`fans_out_join`. A lens with no `grain_trap` field is outside the check
+entirely, never a violation — same doctrine as the other optional per-lens
+checks.
+
+8 new tests added (`test_sql_validator.py`, section "4d. grain trap"); full
+suite 68/68 passing. Live-verified against the running demo: "What was the
+forward curve price for BRENT on the most recent snapshot?" produced
+`m.applicable_at = (SELECT MAX(applicable_at) FROM ...metadata_v1 WHERE
+curve_name = ... AND is_main_curve = true)` — the trap is now honored by the
+agent's own SQL, not just by the validator. Regression check ("vessels
+departed from Mongstad last week by product/product group") untouched — full
+breakdown, no vessel join in that query so neither this check nor the 98
+fans-out check fires.
+
+Ticket 87: resolved.
