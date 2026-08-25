@@ -55,3 +55,30 @@ connection while the compiler supports many). Router's 4 branches and
 ## Gap filed
 
 `.scratch/launch-readiness/tickets/72-skill-port-max-connections-mismatch.md`
+
+## Update 2026-08-25: the coordinate box was not removable
+
+Ticket 67 asked to kill the hand-typed Fujairah bounding box in
+`skills/entity-dictionary.md` and make named places resolve against
+`geofences_v3r1`. Queried the real table directly first (58 distinct
+`geofence_name` values; searched for `fujairah`, `fuj`, `uae`, `emirates`,
+`anchorage`): **no Fujairah geofence exists.** The box is a genuine data-gap
+workaround, not an unnecessary shortcut, so it stays — now annotated in
+`entity-dictionary.md` as verified against the live table rather than
+asserted from world knowledge.
+
+Strengthened `skills/lenses/INDEX.md` and `skills/entity-resolution.md`
+instead: a named-place dwell-time question routes to `geofence_dwell` by
+rule, with the coordinate box reserved for a confirmed gap. Verified live
+via `/api/runs`: `router1` now picks the `geofence_dwell` branch for the
+Fujairah question (previously `vessel_idle_periods`).
+
+The control number is still unresolved. This run's agent never invoked its
+SQL-execution tool and guessed a literal `GEOFENCE = 'Fujairah anchorage'`
+value instead — a separate tool-availability gap in this run path, not new
+evidence about the 14.3–23.9h vs 39.12h/39.67h discrepancy. Ticket 67 stays
+open with this evidence added; ticket 69 stays `partially resolved` — lens
+routing is better but still a declinable prompt rule, no validator enforces
+it. All required invariants (router 4-branch, revision loop, 12 skill
+edges) verified intact in `workflow.json` before and after. Server restarted
+and healthy at the end.
